@@ -62,6 +62,9 @@ typedef struct Dwfl_Module Dwfl_Module;
 /* Handle describing a line record.  */
 typedef struct Dwfl_Line Dwfl_Line;
 
+/* Handle for a register map.  */
+typedef struct Dwfl_Register_Map Dwfl_Register_Map;
+
 /* Callbacks.  */
 typedef struct
 {
@@ -337,6 +340,21 @@ extern int dwfl_linux_proc_find_elf (Dwfl_Module *mod, void **userdata,
 				     const char *module_name, Dwarf_Addr base,
 				     char **file_name, Elf **);
 
+
+/* Examine an open ET_CORE file to guess the modules used in the crashed
+   process.  When the core file appears to contain whole or partial images
+   of loaded ELF files, those are identified as modules.  When the core
+   image contains enough information, module names may match DSO SONAMEs.  */
+extern int dwfl_core_file_report (Dwfl *dwfl, Elf *core);
+
+/* Special find_elf callback for use with dwfl_core_file_report.  When the
+   core file contains a complete ELF image, this will use it directly.
+   Otherwise, it may find enough information to offer a file name.  */
+extern int dwfl_core_file_find_elf (Dwfl_Module *mod, void **userdata,
+				    const char *module_name, Dwarf_Addr base,
+				    char **file_name, Elf **);
+
+
 /* Standard argument parsing for using a standard callback set.  */
 struct argp;
 extern const struct argp *dwfl_standard_argp (void) __attribute__ ((const));
@@ -510,6 +528,84 @@ extern int dwfl_module_register_names (Dwfl_Module *mod,
 							const char *regname,
 							int bits, int type),
 				       void *arg);
+
+
+/*** Register map handling functions ***/
+
+/* Create an empty register map object.  */
+extern Dwfl_Register_Map *dwfl_register_map_begin (void);
+
+/* Clean up and free a register map object.  */
+extern void dwfl_register_map_end (Dwfl_Register_Map *);
+
+/* Populate the given register map with one set of registers you
+   have access to.  REF supplies the machine backend that recognizes
+   the note formats.  N_TYPE is the field from GElf_Nhdr for a core
+   file note that would contain this register data.  OFFSET is the
+   byte offset into the note contents corresponding to the register
+   data you have, and SIZE is the number of bytes of that data.
+
+   Returns -1 for unexpected errors.  Returns 0 if N_TYPE is
+   recognized but has no DWARF registers or is wholly redundant.
+   Otherwise, returns one more than the highest DWARF register number
+   now described in MAP.  SETNO will be returned by dwfl_register_map
+   to refer to this register set.  */
+
+extern int dwfl_register_map_populate (Dwfl_Register_Map *map, Dwfl *ref,
+				       int setno,
+				       GElf_Word n_type,
+				       GElf_Word offset,
+				       GElf_Word size);
+
+/* Look up a DWARF register number in the given register map.
+
+   Returns -1 if REGNO is not described in MAP.  Otherwise, returns
+   the register set number containing REGNO and sets *OFFSET to its
+   byte position within that register set's data.  */
+
+extern int dwfl_register_map (Dwfl_Register_Map *map, int regno,
+			      GElf_Word *offset)
+  __nonnull_attribute__ (3);
+
+
+/* Create and populate a register map from note types found in a core file,
+   previously opened using dwfl_core_file_report.  Returns the number of
+   register sets used in the map, or -1 for errors.
+
+   On success, OFFSET is filled with the location in the core file
+   of the first note providing thread register information, and
+   LIMIT is filled with the location after the last such note.  */
+
+extern int dwfl_core_file_register_map (Dwfl *dwfl, Dwfl_Register_Map **result,
+					GElf_Off *offset, GElf_Off *limit)
+  __nonnull_attribute__ (2, 3, 4);
+
+/* Examine notes starting at OFFSET and not exceeding LIMIT that
+   provide register data for one thread.  Returns -1 for errors.
+
+   On success, OFFSETS[] and SIZES[] are filled with the file
+   locations of the note data for the NSETS register sets described
+   by MAP.  IDENT_SETNO, IDENT_POS, and IDENT_TYPE are filled to
+   describe where in register set data to find a moniker for this
+   thread.  NEW_OFFSET is filled with the file position following
+   those notes.  NEXT and DESC_OFFSET are filled to describe the
+   next note at *NEW_OFFSET.  Returns 1 if there may be additional
+   threads in following notes.  Returns 0 if following notes (if
+   any) have only non-thread data.  */
+
+extern int dwfl_core_file_read_note (Dwfl *dwfl, Dwfl_Register_Map *map,
+				     GElf_Off offset, GElf_Off limit,
+				     int nsets,
+				     GElf_Off offsets[nsets],
+				     GElf_Word sizes[nsets],
+				     int *ident_setno,
+				     GElf_Word *ident_pos,
+				     Elf_Type *ident_type,
+				     // XXX non-reg info?
+				     GElf_Off *new_offset,
+				     GElf_Nhdr *next, GElf_Off *desc_offset)
+  __nonnull_attribute__ (6, 7, 8, 9, 10, 11, 12, 13);
+
 
 
 #ifdef __cplusplus

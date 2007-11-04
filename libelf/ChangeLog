@@ -1,3 +1,28 @@
+2007-03-12  Roland McGrath  <roland@redhat.com>
+
+	* gelf_begin_embedded.c: New file.
+	* Makefile.am (libelf_a_SOURCES): Add it.
+	* libelf.map (ELFUTILS_1.3): Add gelf_begin_embedded.
+	* gelf.h: Declare it.
+
+	* elf_begin.c (dup_elf): Renamed to ...
+	(__libelf_dup_elf): ... here, made global.
+	Take two new args with offset, size of image embedded in REF.
+	(elf_begin): Update callers.
+	* libelfP.h: Declare it.
+
+	* libelfP.h (struct Elf): Move ar.children member out of union.
+	* elf_readall.c (set_address): Work on nonarchives with children.
+	* common.h (libelf_acquire_all, libelf_release_all): Likewise.
+	* elf_end.c (elf_end): Likewise, and handle non-archive parent.
+
+2007-03-09  Roland McGrath  <roland@redhat.com>
+
+	* gelf_getdata_memory.c: New file.
+	* Makefile.am (libelf_a_SOURCES): Add them.
+	* gelf.h: Declare those functions.
+	* libelf.map (ELFUTILS_1.3): Add them.
+
 2007-11-03  Roland McGrath  <roland@redhat.com>
 
 	* libelf.h (Elf_Data): Comment fix.

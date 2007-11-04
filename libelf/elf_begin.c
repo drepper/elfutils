@@ -938,8 +938,10 @@ __libelf_next_arhdr (elf)
 /* We were asked to return a clone of an existing descriptor.  This
    function must be called with the lock on the parent descriptor
    being held. */
-static Elf *
-dup_elf (int fildes, Elf_Cmd cmd, Elf *ref)
+Elf *
+internal_function
+__libelf_dup_elf (int fildes, Elf_Cmd cmd, Elf *ref,
+		  GElf_Off start_offset, GElf_Off maximum_size)
 {
   struct Elf *result;
 
@@ -969,31 +971,36 @@ dup_elf (int fildes, Elf_Cmd cmd, Elf *ref)
   /* Now it is time to distinguish between reading normal files and
      archives.  Normal files can easily be handled be incrementing the
      reference counter and return the same descriptor.  */
-  if (ref->kind != ELF_K_AR)
+  if (ref->kind != ELF_K_AR && start_offset == 0)
     {
       ++ref->ref_count;
       return ref;
     }
 
-  /* This is an archive.  We must create a descriptor for the archive
-     member the internal pointer of the archive file desriptor is
-     pointing to.  First read the header of the next member if this
-     has not happened already.  */
-  if (ref->state.ar.elf_ar_hdr.ar_name == NULL
-      && __libelf_next_arhdr (ref) != 0)
-    /* Something went wrong.  Maybe there is no member left.  */
-    return NULL;
+  if (ref->kind == ELF_K_AR)
+    {
+      /* This is an archive.  We must create a descriptor for the archive
+	 member the internal pointer of the archive file desriptor is
+	 pointing to.  First read the header of the next member if this
+	 has not happened already.  */
+      if (ref->state.ar.elf_ar_hdr.ar_name == NULL
+	  && __libelf_next_arhdr (ref) != 0)
+	/* Something went wrong.  Maybe there is no member left.  */
+	return NULL;
+
+      start_offset = ref->state.ar.offset + sizeof (struct ar_hdr);
+      maximum_size = ref->state.ar.elf_ar_hdr.ar_size;
+    }
 
   /* We have all the information we need about the next archive member.
      Now create a descriptor for it.  */
-  result = read_file (fildes, ref->state.ar.offset + sizeof (struct ar_hdr),
-		      ref->state.ar.elf_ar_hdr.ar_size, cmd, ref);
+  result = read_file (fildes, start_offset, maximum_size, cmd, ref);
 
   /* Enlist this new descriptor in the list of children.  */
   if (result != NULL)
     {
-      result->next = ref->state.ar.children;
-      ref->state.ar.children = result;
+      result->next = ref->children;
+      ref->children = result;
     }
 
   return result;
@@ -1075,7 +1082,7 @@ elf_begin (fildes, cmd, ref)
     case ELF_C_READ_MMAP:
       if (ref != NULL)
 	/* Duplicate the descriptor.  */
-	retval = dup_elf (fildes, cmd, ref);
+	retval = __libelf_dup_elf (fildes, cmd, ref, 0, 0);
       else
 	/* Create descriptor for existing file.  */
 	retval = read_file (fildes, 0, ~((size_t) 0), cmd, NULL);
@@ -1097,7 +1104,7 @@ elf_begin (fildes, cmd, ref)
 	    }
 	  else
 	    /* Duplicate this descriptor.  */
-	    retval = dup_elf (fildes, cmd, ref);
+	    retval = __libelf_dup_elf (fildes, cmd, ref, 0, 0);
 	}
       else
 	/* Create descriptor for existing file.  */

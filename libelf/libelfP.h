@@ -308,6 +308,7 @@ struct Elf
   int ref_count;
 
   struct Elf *next;             /* Used in list of archive descriptors.  */
+  struct Elf *children;	/* List of all descriptors pointing to this one. */
 
   union
   {
@@ -400,7 +401,6 @@ struct Elf
       char ar_name[16];		/* NUL terminated ar_name of elf_ar_hdr.  */
       char raw_name[17];	/* This is a buffer for the NUL terminated
 				   named raw_name used in the elf_ar_hdr.  */
-      struct Elf *children;	/* List of all descriptors for this archive. */
     } ar;
   } state;
 
@@ -465,6 +465,11 @@ extern size_t __elf32_msize (Elf_Type __type, size_t __count,
 extern size_t __elf64_msize (Elf_Type __type, size_t __count,
 			     unsigned int __version);
 
+
+/* Create Elf descriptor from image embedded in reference file.  */
+extern Elf *__libelf_dup_elf (int fildes, Elf_Cmd cmd, Elf *ref,
+			      GElf_Off start_offset, GElf_Off maximum_size)
+  internal_function;
 
 /* Create Elf descriptor from memory image.  */
 extern Elf *__libelf_read_mmaped_file (int fildes, void *map_address,
@@ -574,6 +579,10 @@ extern GElf_Sym *__gelf_getsym_internal (Elf_Data *__data, int __ndx,
 
 extern uint32_t __libelf_crc32 (uint32_t crc, unsigned char *buf, size_t len)
      attribute_hidden;
+
+INTDECL (gelf_rawchunk);
+INTDECL (gelf_freechunk);
+INTDECL (gelf_getdata_memory);
 
 
 /* We often have to update a flag iff a value changed.  Make this

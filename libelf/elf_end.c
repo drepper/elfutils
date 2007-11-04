@@ -92,10 +92,10 @@ elf_end (elf)
       if (elf->state.ar.ar_sym != (Elf_Arsym *) -1l)
 	free (elf->state.ar.ar_sym);
       elf->state.ar.ar_sym = NULL;
-
-      if (elf->state.ar.children != NULL)
-	return 0;
     }
+
+  if (elf->children != NULL)
+    return 0;
 
   /* Remove this structure from the children list.  */
   parent = elf->parent;
@@ -110,11 +110,11 @@ elf_end (elf)
       rwlock_rdlock (parent->lock);
       rwlock_wrlock (elf->lock);
 
-      if (parent->state.ar.children == elf)
-	parent->state.ar.children = elf->next;
+      if (parent->children == elf)
+	parent->children = elf->next;
       else
 	{
-	  struct Elf *child = parent->state.ar.children;
+	  struct Elf *child = parent->children;
 
 	  while (child->next != elf)
 	    child = child->next;

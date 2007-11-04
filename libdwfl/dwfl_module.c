@@ -104,6 +104,12 @@ __libdwfl_module_free (Dwfl_Module *mod)
   if (mod->build_id_bits != NULL)
     free (mod->build_id_bits);
 
+
+  if (mod->build_id_bits != NULL)
+    free (mod->build_id_bits);
+
+  if (mod->cb_data != NULL)
+    free (mod->cb_data);
   free (mod->name);
   free (mod);
 }

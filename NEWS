@@ -27,6 +27,14 @@ readelf: new options --hex-dump (or -x), --strings (or -p)
 
 addr2line: new option --symbols (or -S)
 
+libelf: new functions gelf_begin_embedded, gelf_rawnote,
+	gelf_getdata_memory, gelf_getdata_rawchunk, gelf_getdata_freedata,
+	gelf_getauxv, gelf_update_auxv; new Elf_Type value ELF_T_AUXV
+
+libdwfl: new functions dwfl_core_file_report, dwfl_core_file_find_elf;
+	 dwfl_standard_argp supports new option --core-file;
+	 support dynamic symbol tables found via phdrs
+
 Version 0.128:
 
 new program: unstrip

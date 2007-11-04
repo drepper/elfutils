@@ -343,6 +343,21 @@ extern size_t gelf_getnote (Elf_Data *__data, size_t __offset,
 			    size_t *__name_offset, size_t *__desc_offset);
 
 
+/* Return descriptor for ELF file found embedded at OFFSET for SIZE bytes
+   in another open ELF file, to work according to CMD.  */
+extern Elf *gelf_begin_embedded (Elf_Cmd __cmd, Elf *__elf,
+				 GElf_Off __offset, GElf_Off __size);
+
+
+/* Get data of SIZE bytes from RAWCHUNK, translated as section data would
+   be for TYPE.  If BUFFER is nonnull, it will be used for the translated
+   copy if necessary.  If the result's d_buf != BUFFER, it was not used.
+   The resulting Elf_Data pointer is valid until elf_end (ELF) is called.  */
+extern Elf_Data *gelf_getdata_memory (Elf *__elf,
+				      const char *__rawchunk, size_t __size,
+				      Elf_Type __type, void *__buffer);
+
+
 /* Compute simple checksum from permanent parts of the ELF file.  */
 extern long int gelf_checksum (Elf *__elf);
 

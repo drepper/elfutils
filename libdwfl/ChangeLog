@@ -1,3 +1,47 @@
+2007-08-04  Roland McGrath  <roland@redhat.com>
+
+	* core-file.c (dwfl_core_file_report): Use dwfl_module_report_build_id.
+	(dwfl_core_file_find_elf): Use dwfl_build_id_find_elf.
+
+2007-05-03  Roland McGrath  <roland@redhat.com>
+
+	* core-file.c (no_module_overlaps): Renamed to ...
+	(module_overlapping): ... here.  Return pointer instead of bool.
+	Take new bool argument REORDER; if true, move found module to end.
+	(offset_from_addr): New function.
+	(string_from_offset): New function.
+	(string_from_memory): New function.
+	(getdata_core): New function.
+	(addr_from_memory): New function.
+	(report_link_map, report_r_debug, find_dt_debug): New functions.
+	(dwfl_core_file_report): Use string_from_offset for soname extraction.
+	Notice DT_DEBUG in found PT_DYNAMIC sections.
+	Failing that, look for it in modules previously reported explicitly.
+	Use report_r_debug to follow link_map list from DT_DEBUG.
+	(dwfl_find_elf_by_build_id): Free old *FILE_NAME before setting it.
+
+2007-04-29  Roland McGrath  <roland@redhat.com>
+
+	* core-file.c (no_module_overlaps): New function.
+	(dwfl_core_file_report): Use it to exclude duplicate modules.
+
+	* dwfl_module.c (__libdwfl_module_free): Free MOD->cb_data.
+
+	* argp-std.c (corefile_callbacks): Variable removed.
+	(offline_callbacks): Use its .find_elf here.
+	(parse_opt): Permit -e and --core together.
+
+2007-04-08  Roland McGrath  <roland@redhat.com>
+
+	* register-map.c: New file.
+	* core-file-register-map.c: New file.
+	* Makefile.am (libdwfl_a_SOURCES): Add them.
+	* libdwfl.h (Dwfl_Register_Map): New opaque typedef.
+	Declare dwfl_register_map_* functions, dwfl_core_file_register_map,
+	and dwfl_core_file_read_note.
+	* libdwflP.h (struct Dwfl_Register_Map): New type.
+	(struct map_register): New type.
+
 2007-10-23  Roland McGrath  <roland@redhat.com>
 
 	* linux-kernel-modules.c (report_kernel_archive): Reorder the kernel
@@ -197,10 +241,6 @@
 	build_id_len, build_id_vaddr.  Declare __libdwfl_find_build_id.
 	* dwfl_module.c (__libdwfl_module_free): Free MOD->build_id_bits.
 
-	* dwfl_module_getdwarf.c (find_offsets): New function.
-	(find_dynsym): New function, calls that.
-	(find_symtab): Call it.
-
 2007-09-11  Roland McGrath  <roland@redhat.com>
 
 	* dwfl_module_addrsym.c: Prefer a later global symbol at the same
@@ -286,6 +326,18 @@
 
 2007-03-12  Roland McGrath  <roland@redhat.com>
 
+	* argp-std.c (OPT_COREFILE): New macro.
+	(corefile_callbacks): New const variable.
+	(parse_opt, options): Add --core option.
+
+	* core-file.c: New file.
+	* Makefile.am (libdwfl_a_SOURCES): Add it.
+	* libdwfl.h: Declare dwfl_core_file_report, dwfl_core_file_find_elf.
+	* libdwflP.h: Add INTDECLs.
+
+	* libdwflP.h (struct Dwfl): New member `cb_data'.
+	(struct Dwfl_Module): Likewise.
+
 	* dwfl_module.c (dwfl_report_begin_add): New function broken out of ...
 	(dwfl_report_begin): ... here.  Call it.
 	* libdwfl.h: Declare it.
@@ -294,6 +346,11 @@
 	* elf-from-memory.c (elf_from_remote_memory): Fix 32/64 typo.
 
 	* offline.c: Comment typo fix.
+
+2007-03-10  Roland McGrath  <roland@redhat.com>
+
+	* linux-proc-maps.c (find_sysinfo_ehdr): Rewritten to use
+	gelf_getdata_memory and gelf_getauxv.
 
 2007-03-04  Roland McGrath  <roland@redhat.com>
 

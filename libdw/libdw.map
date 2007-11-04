@@ -176,3 +176,19 @@ ELFUTILS_0.130 {
   local:
     *;
 } ELFUTILS_0.127;
+
+ELFUTILS_0.131 {
+  global:
+    dwfl_register_map;
+    dwfl_register_map_begin;
+    dwfl_register_map_end;
+    dwfl_register_map_populate;
+
+    dwfl_core_file_report;
+    dwfl_core_file_find_elf;
+    dwfl_core_file_register_map;
+    dwfl_core_file_read_note;
+
+  local:
+    *;
+} ELFUTILS_0.130;

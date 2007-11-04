@@ -122,4 +122,7 @@ ELFUTILS_1.3 {
     gelf_getauxv;
     gelf_update_auxv;
     gelf_getnote;
+    gelf_getdata_memory;
+    gelf_getdata_rawchunk;
+    gelf_begin_embedded;
 };

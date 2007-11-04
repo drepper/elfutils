@@ -106,6 +106,9 @@ struct Dwfl
 {
   const Dwfl_Callbacks *callbacks;
 
+  /* Data hook for library-supplied reporting calls and find_elf hooks.  */
+  void *cb_data;
+
   Dwfl_Module *modulelist;    /* List in order used by full traversals.  */
 
   Dwfl_Module **modules;
@@ -132,6 +135,7 @@ struct Dwfl_Module
   Dwfl *dwfl;
   struct Dwfl_Module *next;	/* Link on Dwfl.modulelist.  */
 
+  void *cb_data;		/* For reporting calls' find_elf hooks.  */
   void *userdata;
 
   char *name;			/* Iterator name for this module.  */
@@ -222,6 +226,26 @@ struct dwfl_arange
   size_t arange;		/* Index in Dwarf_Aranges.  */
 };
 
+
+struct Dwfl_Register_Map
+{
+  int ident_setno;		/* Biased by 1.  */
+  GElf_Word ident_pos;
+  Elf_Type ident_type;
+
+  int nsets;
+  GElf_Word *types;
+
+  int first;
+  int limit;
+  struct map_register *regs;
+};
+
+struct map_register
+{
+  Dwarf_Half setno:13;		/* Biased by 1.  */
+  Dwarf_Half offset;
+};
 
 
 extern void __libdwfl_module_free (Dwfl_Module *mod) internal_function;
@@ -337,6 +361,8 @@ INTDECL (dwfl_linux_kernel_report_modules)
 INTDECL (dwfl_linux_kernel_report_offline)
 INTDECL (dwfl_offline_section_address)
 INTDECL (dwfl_module_relocate_address)
+INTDECL (dwfl_core_file_report)
+INTDECL (dwfl_core_file_find_elf)
 
 /* Leading arguments standard to callbacks passed a Dwfl_Module.  */
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr

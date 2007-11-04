@@ -1,7 +1,6 @@
-/* Read all of the file associated with the descriptor.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2005, 2007 Red Hat, Inc.
+/* Return converted data from raw chunk supplied in memory.
+   Copyright (C) 2007 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Contributed by Ulrich Drepper <drepper@redhat.com>, 1998.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -53,98 +52,91 @@
 #endif
 
 #include <errno.h>
+#include <stddef.h>
+#include <string.h>
 #include <unistd.h>
 
-#include <system.h>
 #include "libelfP.h"
+#include <system.h>
 #include "common.h"
+#include "elf-knowledge.h"
 
-
-static void
-set_address (Elf *elf, size_t offset)
-{
-  Elf *child = elf->children;
-
-  while (child != NULL)
-    {
-      if (child->map_address == NULL)
-	{
-	  child->map_address = elf->map_address;
-	  child->start_offset -= offset;
-	  if (child->kind == ELF_K_AR)
-	    child->state.ar.offset -= offset;
-
-	  set_address (child, offset);
-	}
-
-      child = child->next;
-    }
-}
-
-
-char *
-__libelf_readall (elf)
+Elf_Data *
+gelf_getdata_memory (elf, rawchunk, size, type, buffer)
      Elf *elf;
+     const char *rawchunk;
+     size_t size;
+     Elf_Type type;
+     void *buffer;
 {
-  /* Get the file.  */
-  rwlock_wrlock (elf->lock);
+  if (elf == NULL || elf->kind != ELF_K_ELF)
+    return NULL;
 
-  if (elf->map_address == NULL && unlikely (elf->fildes == -1))
+  if (type >= ELF_T_NUM)
     {
-      __libelf_seterrno (ELF_E_INVALID_HANDLE);
-      rwlock_unlock (elf->lock);
+      __libelf_seterrno (ELF_E_UNKNOWN_TYPE);
       return NULL;
     }
 
-  /* If the file is not mmap'ed and not previously loaded, do it now.  */
-  if (elf->map_address == NULL)
+  size_t align = __libelf_type_align (elf->class, type);
+
+  int flags = 0;
+  inline bool check_buffer (void)
     {
-      char *mem;
-
-      /* If this is an archive and we have derived descriptors get the
-	 locks for all of them.  */
-      libelf_acquire_all (elf);
-
-      /* Allocate all the memory we need.  */
-      mem = (char *) malloc (elf->maximum_size);
-      if (mem != NULL)
+      if (buffer == NULL)
 	{
-	  /* Read the file content.  */
-	  if (unlikely ((size_t) pread_retry (elf->fildes, mem,
-					      elf->maximum_size,
-					      elf->start_offset)
-			!= elf->maximum_size))
-	    {
-	      /* Something went wrong.  */
-	      __libelf_seterrno (ELF_E_READ_ERROR);
-	      free (mem);
-	    }
-	  else
-	    {
-	      /* Remember the address.  */
-	      elf->map_address = mem;
-
-	      /* Also remember that we allocated the memory.  */
-	      elf->flags |= ELF_F_MALLOCED;
-
-	      /* Propagate the information down to all children and
-		 their children.  */
-	      set_address (elf, elf->start_offset);
-
-	      /* Correct the own offsets.  */
-	      if (elf->kind == ELF_K_AR)
-		elf->state.ar.offset -= elf->start_offset;
-	      elf->start_offset = 0;
-	    }
+	  buffer = malloc (size);
+	  if (buffer == NULL)
+	    return true;
+	  flags = ELF_F_MALLOCED;
 	}
-      else
-	__libelf_seterrno (ELF_E_NOMEM);
-
-      /* Free the locks on the children.  */
-      libelf_release_all (elf);
+      return false;
     }
 
-  rwlock_unlock (elf->lock);
+  if (elf->state.elf32.ehdr->e_ident[EI_DATA] == MY_ELFDATA)
+    {
+      if (((uintptr_t) rawchunk & (align - 1)) == 0)
+	/* No need to copy, we can use the raw data.  */
+	buffer = (void *) rawchunk;
+      else
+	{
+	  if (check_buffer ())
+	    goto nomem;
 
-  return (char *) elf->map_address;
+	  /* The copy will be appropriately aligned for direct access.  */
+	  memcpy (buffer, rawchunk, size);
+	}
+    }
+  else
+    {
+      if (check_buffer ())
+	goto nomem;
+
+      /* Call the conversion function.  */
+      (*__elf_xfctstom[LIBELF_EV_IDX][LIBELF_EV_IDX][elf->class - 1][type])
+	(buffer, rawchunk, size, 0);
+    }
+
+  Elf_Data_Chunk *chunk = calloc (1, sizeof *chunk);
+  if (chunk == NULL)
+    {
+    nomem:
+      __libelf_seterrno (ELF_E_NOMEM);
+      return NULL;
+    }
+
+  chunk->dummy_scn.elf = elf;
+  chunk->dummy_scn.flags = flags;
+  chunk->data.s = &chunk->dummy_scn;
+  chunk->data.d.d_buf = buffer;
+  chunk->data.d.d_size = size;
+  chunk->data.d.d_type = type;
+  chunk->data.d.d_align = align;
+  chunk->data.d.d_version = __libelf_version;
+
+  chunk->next = elf->state.elf.rawchunks;
+  elf->state.elf.rawchunks = chunk;
+
+  return &chunk->data.d;
 }
+INTDEF (gelf_getdata_memory)

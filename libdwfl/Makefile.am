@@ -58,7 +58,9 @@ libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    argp-std.c find-debuginfo.c \
 		    dwfl_build_id_find_elf.c \
 		    dwfl_build_id_find_debuginfo.c \
-		    linux-kernel-modules.c linux-proc-maps.c \
+		    dwfl_build_id_find_elf.c \
+		    dwfl_build_id_find_debuginfo.c \
+		    linux-kernel-modules.c linux-proc-maps.c core-file.c \
 		    dwfl_addrmodule.c dwfl_addrdwarf.c \
 		    cu.c dwfl_module_nextcu.c dwfl_nextcu.c dwfl_cumodule.c \
 		    dwfl_module_addrdie.c dwfl_addrdie.c \
@@ -72,7 +74,8 @@ libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    dwfl_module_getsym.c \
 		    dwfl_module_addrname.c dwfl_module_addrsym.c \
 		    dwfl_module_return_value_location.c \
-		    dwfl_module_register_names.c
+		    dwfl_module_register_names.c \
+		    register-map.c core-file-register-map.c
 
 
 if MUDFLAP

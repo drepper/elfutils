@@ -162,8 +162,28 @@ print_func (Dwarf_Die *func, void *arg)
   return DWARF_CB_OK;
 }
 
+static void
+print_module_build_id (Dwfl_Module *mod, const char *name)
+{
+  const unsigned char *bits;
+  GElf_Addr vaddr;
+  int len = dwfl_module_build_id (mod, &bits, &vaddr);
+  if (len < 0)
+    error (0, 0, "dwfl_module_build_id: %s: %s", name, dwfl_errmsg (-1));
+  if (len > 0)
+    {
+      fputs ("\tID: ", stdout);
+      while (len-- > 0)
+	printf ("%02" PRIx8, *bits++);
+      if (vaddr == 0)
+	putchar ('\n');
+      else
+	printf (" @ %#" PRIx64 "\n", vaddr);
+    }
+}
+
 static int
-list_module (Dwfl_Module *mod __attribute__ ((unused)),
+list_module (Dwfl_Module *mod,
 	     void **userdata __attribute__ ((unused)),
 	     const char *name, Dwarf_Addr base,
 	     void *arg __attribute__ ((unused)))
@@ -178,11 +198,12 @@ list_module (Dwfl_Module *mod __attribute__ ((unused)),
     abort ();
   printf ("module: %30s %08" PRIx64 "..%08" PRIx64 " %s %s\n",
 	  name, start, end, file, debug);
+  print_module_build_id (mod, name);
   return DWARF_CB_OK;
 }
 
 static int
-print_module (Dwfl_Module *mod __attribute__ ((unused)),
+print_module (Dwfl_Module *mod,
 	      void **userdata __attribute__ ((unused)),
 	      const char *name, Dwarf_Addr base,
 	      Dwarf *dw, Dwarf_Addr bias,
@@ -190,6 +211,7 @@ print_module (Dwfl_Module *mod __attribute__ ((unused)),
 {
   printf ("module: %30s %08" PRIx64 " %s %" PRIx64 " (%s)\n",
 	  name, base, dw == NULL ? "no" : "DWARF", bias, dwfl_errmsg (-1));
+  print_module_build_id (mod, name);
 
   if (dw != NULL && *(const bool *) arg)
     {

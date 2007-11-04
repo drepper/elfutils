@@ -65,6 +65,7 @@
 #define PROCMAPSFMT	"/proc/%d/maps"
 #define PROCMEMFMT	"/proc/%d/mem"
 #define PROCAUXVFMT	"/proc/%d/auxv"
+#define PROCEXEFMT	"/proc/%d/exe"
 
 
 /* Search /proc/PID/auxv for the AT_SYSINFO_EHDR tag.  */
@@ -81,47 +82,87 @@ find_sysinfo_ehdr (pid_t pid, GElf_Addr *sysinfo_ehdr)
   if (fd < 0)
     return errno == ENOENT ? 0 : errno;
 
-  ssize_t nread;
-  do
+  /* Read the whole file.  */
+  char buffer[1024];
+  ssize_t nread = read (fd, buffer, sizeof buffer);
+  char *buf = buffer;
+  if (nread == sizeof buffer)
+    {
+      size_t size = sizeof buffer;
+      buf = NULL;
+      do
+	{
+	  free (buf);
+	  size *= 2;
+	  buf = malloc (size);
+	  if (buf == NULL)
+	    nread = -1;
+	  else
+	    nread = pread64 (fd, buf, size, 0);
+	} while ((size_t) nread == size);
+    }
+  close (fd);
+
+  if (nread > 0)
     {
       union
       {
-	char buffer[sizeof (long int) * 2 * 64];
-	Elf64_auxv_t a64[sizeof (long int) * 2 * 64 / sizeof (Elf64_auxv_t)];
-	Elf32_auxv_t a32[sizeof (long int) * 2 * 32 / sizeof (Elf32_auxv_t)];
-      } d;
-      nread = read (fd, &d, sizeof d);
-      if (nread > 0)
+	Elf64_Ehdr e64;
+	Elf32_Ehdr e32;
+	char ident[EI_NIDENT];
+      } u;
+      Elf *elf;
+
+      /* We need a representative ELF header to set the format of things.  */
+      if (asprintf (&fname, PROCEXEFMT, pid) < 0)
+	elf = NULL;
+      else
 	{
-	  switch (sizeof (long int))
+	  fd = open64 (fname, O_RDONLY);
+	  free (fname);
+	  if (fd < 0)
+	    elf = NULL;
+	  memset (&u, 0, sizeof u);
+	  ssize_t hdr_read = read (fd, u.ident, sizeof u.ident);
+	  close (fd);
+	  if (hdr_read < (ssize_t) sizeof u.ident)
+	    elf = NULL;
+	  else
+	    elf = elf_memory (u.ident, sizeof u);
+	}
+
+      if (elf == NULL)
+	nread = -1;
+      else
+	{
+	  Elf_Data *data = gelf_getdata_memory (elf, buf, nread,
+						ELF_T_AUXV, NULL);
+	  if (data == NULL)
+	    nread = -1;
+	  else
 	    {
-	    case 4:
-	      for (size_t i = 0; (char *) &d.a32[i] < &d.buffer[nread]; ++i)
-		if (d.a32[i].a_type == AT_SYSINFO_EHDR)
-		  {
-		    *sysinfo_ehdr = d.a32[i].a_un.a_val;
-		    nread = 0;
-		    break;
-		  }
-	      break;
-	    case 8:
-	      for (size_t i = 0; (char *) &d.a64[i] < &d.buffer[nread]; ++i)
-		if (d.a64[i].a_type == AT_SYSINFO_EHDR)
-		  {
-		    *sysinfo_ehdr = d.a64[i].a_un.a_val;
-		    nread = 0;
-		    break;
-		  }
-	      break;
-	    default:
-	      abort ();
-	      break;
+	      size_t nauxv = data->d_size / gelf_fsize (elf, ELF_T_AUXV, 1,
+							EV_CURRENT);
+	      for (size_t i = 0; i < nauxv; ++i)
+		{
+		  GElf_auxv_t auxv_mem;
+		  GElf_auxv_t *auxv = gelf_getauxv (data, i, &auxv_mem);
+		  if (auxv != NULL && auxv->a_type == AT_SYSINFO_EHDR)
+		    {
+		      *sysinfo_ehdr = auxv->a_un.a_val;
+		      break;
+		    }
+		}
+
+	      //gelf_freedata (data);
 	    }
+
+	  elf_end (elf);
 	}
     }
-  while (nread > 0);
 
-  close (fd);
+  if (buf != buffer)
+    free (buf);
 
   return nread < 0 ? errno : 0;
 }

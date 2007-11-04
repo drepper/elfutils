@@ -1,5 +1,5 @@
 /* Common definitions for handling files in memory or only on disk.
-   Copyright (C) 1998, 1999, 2000, 2002, 2005 Red Hat, Inc.
+   Copyright (C) 1998, 1999, 2000, 2002, 2005, 2007 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -116,16 +116,13 @@ libelf_acquire_all (Elf *elf)
 {
   rwlock_wrlock (elf->lock);
 
-  if (elf->kind == ELF_K_AR)
-    {
-      Elf *child = elf->state.ar.children;
+  Elf *child = elf->children;
 
-      while (child != NULL)
-	{
-	  if (child->ref_count != 0)
-	    libelf_acquire_all (child);
-	  child = child->next;
-	}
+  while (child != NULL)
+    {
+      if (child->ref_count != 0)
+	libelf_acquire_all (child);
+      child = child->next;
     }
 }
 
@@ -133,16 +130,13 @@ libelf_acquire_all (Elf *elf)
 static void
 libelf_release_all (Elf *elf)
 {
-  if (elf->kind == ELF_K_AR)
-    {
-      Elf *child = elf->state.ar.children;
+  Elf *child = elf->children;
 
-      while (child != NULL)
-	{
-	  if (child->ref_count != 0)
-	    libelf_release_all (child);
-	  child = child->next;
-	}
+  while (child != NULL)
+    {
+      if (child->ref_count != 0)
+	libelf_release_all (child);
+      child = child->next;
     }
 
   rwlock_unlock (elf->lock);

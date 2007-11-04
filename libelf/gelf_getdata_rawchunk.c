@@ -1,7 +1,6 @@
-/* Read all of the file associated with the descriptor.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2005, 2007 Red Hat, Inc.
+/* Return converted data from raw chunk of ELF file.
+   Copyright (C) 2007 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Contributed by Ulrich Drepper <drepper@redhat.com>, 1998.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,99 +51,44 @@
 # include <config.h>
 #endif
 
-#include <errno.h>
-#include <unistd.h>
-
-#include <system.h>
+#include <assert.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include "libelfP.h"
-#include "common.h"
 
-
-static void
-set_address (Elf *elf, size_t offset)
-{
-  Elf *child = elf->children;
-
-  while (child != NULL)
-    {
-      if (child->map_address == NULL)
-	{
-	  child->map_address = elf->map_address;
-	  child->start_offset -= offset;
-	  if (child->kind == ELF_K_AR)
-	    child->state.ar.offset -= offset;
-
-	  set_address (child, offset);
-	}
-
-      child = child->next;
-    }
-}
-
-
-char *
-__libelf_readall (elf)
+Elf_Data *
+gelf_getdata_rawchunk (elf, offset, size, type)
      Elf *elf;
+     GElf_Off offset;
+     GElf_Word size;
+     Elf_Type type;
 {
-  /* Get the file.  */
-  rwlock_wrlock (elf->lock);
+  /* Get the raw bytes from the file.  */
+  char *rawchunk = INTUSE(gelf_rawchunk) (elf, offset, size);
+  if (rawchunk == NULL)
+    return NULL;
 
-  if (elf->map_address == NULL && unlikely (elf->fildes == -1))
+  /* We'll reuse the buffer if we didn't map the file directly.  */
+  bool alloced = (rawchunk < (char *) elf->map_address + elf->start_offset
+		  || rawchunk >= ((char *) elf->map_address + elf->start_offset
+				  + elf->maximum_size));
+
+  Elf_Data *data = INTUSE(gelf_getdata_memory) (elf, rawchunk, size, type,
+						alloced ? rawchunk : NULL);
+
+  if (data != NULL)
     {
-      __libelf_seterrno (ELF_E_INVALID_HANDLE);
-      rwlock_unlock (elf->lock);
-      return NULL;
-    }
-
-  /* If the file is not mmap'ed and not previously loaded, do it now.  */
-  if (elf->map_address == NULL)
-    {
-      char *mem;
-
-      /* If this is an archive and we have derived descriptors get the
-	 locks for all of them.  */
-      libelf_acquire_all (elf);
-
-      /* Allocate all the memory we need.  */
-      mem = (char *) malloc (elf->maximum_size);
-      if (mem != NULL)
+      Elf_Data_Chunk *chunk = (Elf_Data_Chunk *) data;
+      if (alloced)
 	{
-	  /* Read the file content.  */
-	  if (unlikely ((size_t) pread_retry (elf->fildes, mem,
-					      elf->maximum_size,
-					      elf->start_offset)
-			!= elf->maximum_size))
-	    {
-	      /* Something went wrong.  */
-	      __libelf_seterrno (ELF_E_READ_ERROR);
-	      free (mem);
-	    }
-	  else
-	    {
-	      /* Remember the address.  */
-	      elf->map_address = mem;
-
-	      /* Also remember that we allocated the memory.  */
-	      elf->flags |= ELF_F_MALLOCED;
-
-	      /* Propagate the information down to all children and
-		 their children.  */
-	      set_address (elf, elf->start_offset);
-
-	      /* Correct the own offsets.  */
-	      if (elf->kind == ELF_K_AR)
-		elf->state.ar.offset -= elf->start_offset;
-	      elf->start_offset = 0;
-	    }
+	  /* It should have been converted in place.
+	     elf_end will free our original RAWCHUNK pointer.  */
+	  assert (chunk->dummy_scn.flags == 0);
+	  chunk->dummy_scn.flags = ELF_F_MALLOCED;
 	}
-      else
-	__libelf_seterrno (ELF_E_NOMEM);
-
-      /* Free the locks on the children.  */
-      libelf_release_all (elf);
     }
+  else if (alloced)
+    free (rawchunk);
 
-  rwlock_unlock (elf->lock);
-
-  return (char *) elf->map_address;
+  return data;
 }
