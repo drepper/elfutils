@@ -1,7 +1,6 @@
-/* Release debugging handling context.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+/* Get CFI from DWARF file.
+   Copyright (C) 2006, 2007 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,65 +51,49 @@
 # include <config.h>
 #endif
 
-#include <search.h>
-#include <stdlib.h>
-
 #include "libdwP.h"
 #include "unwindP.h"
+#include <dwarf.h>
 
-
-static void
-noop_free (void *arg __attribute__ ((unused)))
+Dwarf_CFI *
+dwarf_getcfi (dbg)
+     Dwarf *dbg;
 {
-}
+  if (dbg == NULL)
+    return NULL;
 
-
-static void
-cu_free (void *arg)
-{
-  struct Dwarf_CU *p = (struct Dwarf_CU *) arg;
-
-  Dwarf_Abbrev_Hash_free (&p->abbrev_hash);
-
-  tdestroy (p->locs, noop_free);
-}
-
-
-int
-dwarf_end (dwarf)
-     Dwarf *dwarf;
-{
-  if (dwarf != NULL)
+  if (dbg->cfi == NULL && (dbg->sectiondata[IDX_debug_frame] != NULL
+			   || dbg->sectiondata[IDX_eh_frame] != NULL))
     {
-      if (dwarf->cfi != NULL)
-	/* Clean up the CFI cache.  */
-	__libdw_destroy_frame_cache (dwarf->cfi);
+      Dwarf_CFI *cfi = libdw_typed_alloc (dbg, Dwarf_CFI);
 
-      /* The search tree for the CUs.  NB: the CU data itself is
-	 allocated separately, but the abbreviation hash tables need
-	 to be handled.  */
-      tdestroy (dwarf->cu_tree, cu_free);
+      cfi->eh_frame = dbg->sectiondata[IDX_debug_frame] == NULL;
+      cfi->data = *dbg->sectiondata[cfi->eh_frame ? IDX_eh_frame
+				    : IDX_debug_frame];
+      cfi->rawchunk = false;
+      cfi->elf = dbg->elf;
 
-      struct libdw_memblock *memp = dwarf->mem_tail;
-      /* The first block is allocated together with the Dwarf object.  */
-      while (memp->prev != NULL)
-	{
-	  struct libdw_memblock *prevp = memp->prev;
-	  free (memp);
-	  memp = prevp;
-	}
+      cfi->search_table = NULL;
+      cfi->search_table_vaddr = 0;
+      cfi->search_table_rawchunk = NULL;
+      cfi->search_table_entries = 0;
+      cfi->search_table_encoding = DW_EH_PE_omit;
 
-      /* Free the pubnames helper structure.  */
-      free (dwarf->pubnames_sets);
+      cfi->frame_vaddr = 0;
+      cfi->textrel = 0;
+      cfi->datarel = 0;
+      if (cfi->eh_frame)
+	cfi->frame_vaddr = -1; // XXX .eh_frame sh_addr
 
-      /* Free the ELF descriptor if necessary.  */
-      if (dwarf->free_elf)
-	elf_end (dwarf->elf);
+      cfi->e_ident = (unsigned char *) elf_getident (dbg->elf, NULL);
+      cfi->other_byte_order = dbg->other_byte_order;
 
-      /* Free the context descriptor.  */
-      free (dwarf);
+      cfi->next_offset = 0;
+      cfi->cie_tree = cfi->fde_tree = cfi->expr_tree = NULL;
+
+      dbg->cfi = cfi;
     }
 
-  return 0;
+  return dbg->cfi;
 }
-INTDEF(dwarf_end)
+INTDEF (dwarf_getcfi)

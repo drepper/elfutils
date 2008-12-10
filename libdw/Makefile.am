@@ -47,7 +47,7 @@ noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
 endif
 
 include_HEADERS = dwarf.h
-pkginclude_HEADERS = libdw.h
+pkginclude_HEADERS = libdw.h unwind.h
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \
@@ -83,7 +83,14 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_func_inline.c dwarf_getsrc_file.c \
 		  libdw_findcu.c libdw_form.c libdw_alloc.c memory-access.c \
 		  libdw_visit_scopes.c \
-		  dwarf_entry_breakpoints.c
+		  dwarf_entry_breakpoints.c \
+		  dwarf_next_cfi.c \
+		  cie.c fde.c unwind.c frame-cache.c \
+		  dwarf_frame_cfa.c dwarf_frame_register.c \
+		  dwarf_frame_return_address_register.c \
+		  dwarf_cfi_addrframe.c \
+		  dwarf_getcfi.c dwarf_getcfi_elf.c \
+		  dwarf_cfi_setebl.c dwarf_cfi_end.c
 
 if !MUDFLAP
 libdw_pic_a_SOURCES =
@@ -126,7 +133,8 @@ endif
 
 libdw_a_LIBADD = $(addprefix ../libdwfl/,$(shell $(AR) t ../libdwfl/libdwfl.a))
 
-noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h
+noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
+		 unwindP.h encoded-value.h
 
 EXTRA_DIST = libdw.map
 

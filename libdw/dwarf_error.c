@@ -1,5 +1,5 @@
 /* Retrieve ELF descriptor used for DWARF access.
-   Copyright (C) 2002, 2003, 2004, 2005 Red Hat, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -143,6 +143,7 @@ static const char *errmsgs[] =
     [DWARF_E_NO_FLAG] = N_("no flag value"),
     [DWARF_E_INVALID_OFFSET] = N_("invalid offset"),
     [DWARF_E_NO_DEBUG_RANGES] = N_(".debug_ranges section missing"),
+    [DWARF_E_INVALID_CFI] = N_("invalid CFI section"),
   };
 #define nerrmsgs (sizeof (errmsgs) / sizeof (errmsgs[0]))
 

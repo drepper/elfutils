@@ -59,6 +59,7 @@ i386_init (elf, machine, eh, ehlen)
   HOOK (eh, syscall_abi);
   HOOK (eh, auxv_info);
   HOOK (eh, disasm);
+  HOOK (eh, abi_cfi);
 
   return MODVERSION;
 }

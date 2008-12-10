@@ -1,3 +1,12 @@
+2007-01-18  Roland McGrath  <roland@redhat.com>
+
+	* ebl-hooks.h: Add abi_cfi hook.
+	* eblopenbackend.c (default_abi_cfi): New function.
+	(fill_defaults): Add initializer.
+	* eblabicfi.c: New file.
+	* Makefile.am (gen_SOURCES): Add it.
+	* libebl.h: Declare ebl_abi_cfi.
+
 2008-08-01  Roland McGrath  <roland@redhat.com>
 
 	* eblcorenotetypename.c: Handle NT_386_IOPERM.

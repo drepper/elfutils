@@ -167,6 +167,8 @@ int EBLHOOK(disasm) (const uint8_t **startp, const uint8_t *end,
 		     GElf_Addr addr, const char *fmt, DisasmOutputCB_t outcb,
 		     DisasmGetSymCB_t symcb, void *outcbarg, void *symcbarg);
 
+/* Supply the machine-specific state of CFI before CIE initial programs.  */
+int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

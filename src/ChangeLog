@@ -1,3 +1,18 @@
+2007-02-17  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (parse_opt): Take "frames" as alias for "frame" in
+	--debug-dump argument, matching bintuils readelf.
+	(print_debug_frame_section): Implemented.
+	(print_debug): Call it on .eh_frame section even dwarf_begin_elf fails.
+
+	* readelf.c (print_debug): Pass section name as new parameter to
+	print_debug_*_section functions.
+	(print_debug_abbrev_section): Take new argument.
+	(print_debug_aranges_section, print_debug_ranges_section)
+	(print_debug_info_section, print_debug_line_section): Likewise.
+	(print_debug_loc_section, print_debug_macinfo_section): Likewise.
+	(print_debug_pubnames_section, print_debug_str_section): Likewise.
+
 2008-12-02  Roland McGrath  <roland@redhat.com>
 
 	* readelf.c (count_dwflmod, process_file): Don't presume encoding of

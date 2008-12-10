@@ -62,6 +62,7 @@
 #include <string.h>
 
 #include "../libdw/libdwP.h"	/* We need its INTDECLs.  */
+#include "../libdw/unwind.h"	/* XXX */
 
 /* gettext helper macros.  */
 #define _(Str) dgettext ("elfutils", Str)
@@ -179,6 +180,9 @@ struct Dwfl_Module
 
   struct dwfl_arange *aranges;	/* Mapping of addresses in module to CUs.  */
   unsigned int naranges;
+
+  Dwarf_CFI *cfi;		/* Cached CFI for this module.  */
+  bool cfi_elf;			/* cfi is from dwarf_getcfi_elf.  */
 
   int segment;			/* Index of first segment table entry.  */
   bool gc;			/* Mark/sweep flag.  */
@@ -403,6 +407,7 @@ INTDECL (dwfl_linux_kernel_report_modules)
 INTDECL (dwfl_linux_kernel_report_offline)
 INTDECL (dwfl_offline_section_address)
 INTDECL (dwfl_module_relocate_address)
+INTDECL (dwfl_module_getcfi)
 
 /* Leading arguments standard to callbacks passed a Dwfl_Module.  */
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr

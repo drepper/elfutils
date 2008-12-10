@@ -1,7 +1,6 @@
-/* Release debugging handling context.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+/* DW_EH_PE_* support for libdw unwinder.
+   Copyright (C) 2007 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -48,69 +47,128 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#ifndef _ENCODED_VALUE_H
+#define _ENCODED_VALUE_H 1
 
-#include <search.h>
+#include <dwarf.h>
 #include <stdlib.h>
+#include "unwind.h"		/* XXX */
 
-#include "libdwP.h"
-#include "unwindP.h"
-
-
-static void
-noop_free (void *arg __attribute__ ((unused)))
+static size_t __attribute__ ((unused))
+encoded_value_size (const Elf_Data *data, const unsigned char e_ident[],
+		    uint8_t encoding, const uint8_t *p)
 {
-}
+  if (encoding == DW_EH_PE_omit)
+    return 0;
 
-
-static void
-cu_free (void *arg)
-{
-  struct Dwarf_CU *p = (struct Dwarf_CU *) arg;
-
-  Dwarf_Abbrev_Hash_free (&p->abbrev_hash);
-
-  tdestroy (p->locs, noop_free);
-}
-
-
-int
-dwarf_end (dwarf)
-     Dwarf *dwarf;
-{
-  if (dwarf != NULL)
+  switch (encoding & 0x07)
     {
-      if (dwarf->cfi != NULL)
-	/* Clean up the CFI cache.  */
-	__libdw_destroy_frame_cache (dwarf->cfi);
+    case DW_EH_PE_udata2:
+      return 2;
+    case DW_EH_PE_udata4:
+      return 4;
+    case DW_EH_PE_udata8:
+      return 8;
 
-      /* The search tree for the CUs.  NB: the CU data itself is
-	 allocated separately, but the abbreviation hash tables need
-	 to be handled.  */
-      tdestroy (dwarf->cu_tree, cu_free);
+    case DW_EH_PE_absptr:
+      return e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
 
-      struct libdw_memblock *memp = dwarf->mem_tail;
-      /* The first block is allocated together with the Dwarf object.  */
-      while (memp->prev != NULL)
+    case DW_EH_PE_uleb128:
+      if (p != NULL)
 	{
-	  struct libdw_memblock *prevp = memp->prev;
-	  free (memp);
-	  memp = prevp;
+	  const uint8_t *end = p;
+	  while (end < (uint8_t *) data->d_buf + data->d_size)
+	    if (*end++ & 0x80u)
+	      return end - p;
 	}
 
-      /* Free the pubnames helper structure.  */
-      free (dwarf->pubnames_sets);
+    default:
+      abort ();
+      return 0;
+    }
+}
 
-      /* Free the ELF descriptor if necessary.  */
-      if (dwarf->free_elf)
-	elf_end (dwarf->elf);
+static Dwarf_Addr __attribute__ ((unused))
+read_encoded_value (const Dwarf_CFI *cache,
+		    uint8_t encoding, const uint8_t **p)
+{
+  Dwarf_Addr base = 0;
+  switch (encoding & 0x70)
+    {
+    case DW_EH_PE_absptr:
+      break;
+    case DW_EH_PE_pcrel:
+      base = cache->frame_vaddr + (*p - (const uint8_t *) cache->data.d_buf);
+      break;
+    case DW_EH_PE_textrel:
+      // ia64: segrel
+      base = cache->textrel;
+      break;
+    case DW_EH_PE_datarel:
+      // i386: GOTOFF
+      // ia64: gprel
+      base = cache->datarel;
+      break;
+    case DW_EH_PE_funcrel:	/* XXX */
+      break;
+    case DW_EH_PE_aligned:
+      {
+	const size_t address_size
+	  = cache->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
+	size_t align = ((cache->frame_vaddr
+			 + (*p - (const uint8_t *) cache->data.d_buf))
+			& (address_size - 1));
+	if (align != 0)
+	  *p += address_size - align;
+	break;
+      }
 
-      /* Free the context descriptor.  */
-      free (dwarf);
+    default:
+      abort ();
     }
 
-  return 0;
+  Dwarf_Addr value;
+  switch (encoding & 0x0f)
+    {
+    case DW_EH_PE_udata2:
+      value = read_2ubyte_unaligned_inc (cache, *p);
+      break;
+    case DW_EH_PE_udata4:
+      value = read_4ubyte_unaligned_inc (cache, *p);
+      break;
+    case DW_EH_PE_udata8:
+      value = read_8ubyte_unaligned_inc (cache, *p);
+      break;
+
+    case DW_EH_PE_sdata2:
+      value = read_2sbyte_unaligned_inc (cache, *p);
+      break;
+    case DW_EH_PE_sdata4:
+      value = read_4sbyte_unaligned_inc (cache, *p);
+      break;
+    case DW_EH_PE_sdata8:
+      value = read_8sbyte_unaligned_inc (cache, *p);
+      break;
+
+    case DW_EH_PE_absptr:
+      if (cache->e_ident[EI_CLASS] == ELFCLASS32)
+	value = read_4ubyte_unaligned_inc (cache, *p);
+      else
+	value = read_8ubyte_unaligned_inc (cache, *p);
+      break;
+
+    case DW_EH_PE_uleb128:
+      get_uleb128 (value, *p);
+      break;
+    case DW_EH_PE_sleb128:
+      get_sleb128 (value, *p);
+      break;
+
+    default:
+      abort ();
+    }
+
+  return base + value;
 }
-INTDEF(dwarf_end)
+
+#endif	/* encoded-value.h */

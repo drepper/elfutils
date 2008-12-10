@@ -73,8 +73,8 @@ libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    dwfl_module_return_value_location.c \
 		    dwfl_module_register_names.c \
 		    dwfl_segment_report_module.c \
-		    link_map.c core-file.c
-
+		    link_map.c core-file.c \
+		    dwfl_module_getcfi.c dwfl_addrframe.c
 
 if MUDFLAP
 libdwfl = libdwfl.a $(libdw) $(libebl) $(libelf) $(libeu)

@@ -1,7 +1,6 @@
-/* Release debugging handling context.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+/* Return ABI-specific DWARF CFI details.
+   Copyright (C) 2006 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,65 +51,13 @@
 # include <config.h>
 #endif
 
-#include <search.h>
-#include <stdlib.h>
-
-#include "libdwP.h"
-#include "unwindP.h"
-
-
-static void
-noop_free (void *arg __attribute__ ((unused)))
-{
-}
-
-
-static void
-cu_free (void *arg)
-{
-  struct Dwarf_CU *p = (struct Dwarf_CU *) arg;
-
-  Dwarf_Abbrev_Hash_free (&p->abbrev_hash);
-
-  tdestroy (p->locs, noop_free);
-}
+#include <libeblP.h>
 
 
 int
-dwarf_end (dwarf)
-     Dwarf *dwarf;
+ebl_abi_cfi (ebl, abi_info)
+     Ebl *ebl;
+     Dwarf_CIE *abi_info;
 {
-  if (dwarf != NULL)
-    {
-      if (dwarf->cfi != NULL)
-	/* Clean up the CFI cache.  */
-	__libdw_destroy_frame_cache (dwarf->cfi);
-
-      /* The search tree for the CUs.  NB: the CU data itself is
-	 allocated separately, but the abbreviation hash tables need
-	 to be handled.  */
-      tdestroy (dwarf->cu_tree, cu_free);
-
-      struct libdw_memblock *memp = dwarf->mem_tail;
-      /* The first block is allocated together with the Dwarf object.  */
-      while (memp->prev != NULL)
-	{
-	  struct libdw_memblock *prevp = memp->prev;
-	  free (memp);
-	  memp = prevp;
-	}
-
-      /* Free the pubnames helper structure.  */
-      free (dwarf->pubnames_sets);
-
-      /* Free the ELF descriptor if necessary.  */
-      if (dwarf->free_elf)
-	elf_end (dwarf->elf);
-
-      /* Free the context descriptor.  */
-      free (dwarf);
-    }
-
-  return 0;
+  return ebl == NULL ? -1 : ebl->abi_cfi (ebl, abi_info);
 }
-INTDEF(dwarf_end)

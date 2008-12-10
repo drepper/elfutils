@@ -1,7 +1,6 @@
 ELFUTILS_0 { };
 ELFUTILS_0.122 {
-  global:
-    dwarf_abbrevhaschildren;
+  global:  dwarf_abbrevhaschildren;
     dwarf_addrdie;
     dwarf_arrayorder;
     dwarf_attr;
@@ -185,3 +184,19 @@ ELFUTILS_0.136 {
   local:
     *;
 } ELFUTILS_0.130;
+
+ELFUTILS_0.138_UNWIND {
+  global:
+    # XXX new unwind stuff not decided yet
+    dwarf_next_cfi;
+    dwarf_getcfi;
+    dwarf_getcfi_elf;
+    dwarf_cfi_addrframe;
+    dwarf_cfi_end;
+    dwarf_cfi_setebl;
+    dwarf_frame_cfa;
+    dwarf_frame_register;
+    dwarf_frame_return_address_register;
+    dwfl_addrframe;
+    dwfl_module_getcfi;
+} ELFUTILS_0.136;

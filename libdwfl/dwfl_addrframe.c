@@ -1,7 +1,6 @@
-/* Release debugging handling context.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+/*
+   Copyright (C) 2006 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -48,69 +47,23 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#include <search.h>
-#include <stdlib.h>
-
-#include "libdwP.h"
-#include "unwindP.h"
-
-
-static void
-noop_free (void *arg __attribute__ ((unused)))
-{
-}
-
-
-static void
-cu_free (void *arg)
-{
-  struct Dwarf_CU *p = (struct Dwarf_CU *) arg;
-
-  Dwarf_Abbrev_Hash_free (&p->abbrev_hash);
-
-  tdestroy (p->locs, noop_free);
-}
-
+#include "libdwflP.h"
+#include "../libdw/unwindP.h"	/* XXX */
 
 int
-dwarf_end (dwarf)
-     Dwarf *dwarf;
+dwfl_addrframe (dwfl, address, frame)
+     Dwfl *dwfl;
+     Dwarf_Addr address;
+     Dwarf_Frame **frame;
 {
-  if (dwarf != NULL)
-    {
-      if (dwarf->cfi != NULL)
-	/* Clean up the CFI cache.  */
-	__libdw_destroy_frame_cache (dwarf->cfi);
+  Dwarf_Addr dwbias;
+  Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (dwfl, address);
+  Dwarf_CFI *cfi = INTUSE(dwfl_module_getcfi) (mod, &dwbias);
+  if (cfi == NULL)
+    return -1;
 
-      /* The search tree for the CUs.  NB: the CU data itself is
-	 allocated separately, but the abbreviation hash tables need
-	 to be handled.  */
-      tdestroy (dwarf->cu_tree, cu_free);
-
-      struct libdw_memblock *memp = dwarf->mem_tail;
-      /* The first block is allocated together with the Dwarf object.  */
-      while (memp->prev != NULL)
-	{
-	  struct libdw_memblock *prevp = memp->prev;
-	  free (memp);
-	  memp = prevp;
-	}
-
-      /* Free the pubnames helper structure.  */
-      free (dwarf->pubnames_sets);
-
-      /* Free the ELF descriptor if necessary.  */
-      if (dwarf->free_elf)
-	elf_end (dwarf->elf);
-
-      /* Free the context descriptor.  */
-      free (dwarf);
-    }
-
-  return 0;
+  int result = INTUSE(dwarf_cfi_addrframe) (cfi, address - dwbias, frame);
+  if (result != 0)
+    __libdwfl_seterrno (DWFL_E_LIBDW);
+  return result;
 }
-INTDEF(dwarf_end)

@@ -1,3 +1,9 @@
+2007-02-10  Roland McGrath  <roland@redhat.com>
+
+	* addrcfi.c: New file.
+	* Makefile.am (noinst_PROGRAMS): Add it.
+	(addrcfi_LDADD): New variable.
+
 2008-11-26  Roland McGrath  <roland@redhat.com>
 
 	* dwfl-bug-getmodules.c: New file.

@@ -1,7 +1,6 @@
-/* Release debugging handling context.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+/* Get CFA expression for frame.
+   Copyright (C) 2006, 2007 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,65 +51,50 @@
 # include <config.h>
 #endif
 
-#include <search.h>
+#include "unwindP.h"
+#include <dwarf.h>
 #include <stdlib.h>
 
-#include "libdwP.h"
-#include "unwindP.h"
-
-
-static void
-noop_free (void *arg __attribute__ ((unused)))
-{
-}
-
-
-static void
-cu_free (void *arg)
-{
-  struct Dwarf_CU *p = (struct Dwarf_CU *) arg;
-
-  Dwarf_Abbrev_Hash_free (&p->abbrev_hash);
-
-  tdestroy (p->locs, noop_free);
-}
-
-
 int
-dwarf_end (dwarf)
-     Dwarf *dwarf;
+dwarf_frame_cfa (fs, ops)
+     Dwarf_Frame *fs;
+     Dwarf_Op **ops;
 {
-  if (dwarf != NULL)
+  /* Maybe there was a previous error.  */
+  if (fs == NULL)
+    return -1;
+
+  switch (fs->cfa_rule)
     {
-      if (dwarf->cfi != NULL)
-	/* Clean up the CFI cache.  */
-	__libdw_destroy_frame_cache (dwarf->cfi);
+    case cfa_undefined:
+      *ops = NULL;
+      return 0;
 
-      /* The search tree for the CUs.  NB: the CU data itself is
-	 allocated separately, but the abbreviation hash tables need
-	 to be handled.  */
-      tdestroy (dwarf->cu_tree, cu_free);
+    case cfa_offset:
+      /* The Dwarf_Op was already fully initialized by execute_cfi.  */
+      *ops = &fs->cfa_data.offset;
+      return 1;
 
-      struct libdw_memblock *memp = dwarf->mem_tail;
-      /* The first block is allocated together with the Dwarf object.  */
-      while (memp->prev != NULL)
-	{
-	  struct libdw_memblock *prevp = memp->prev;
-	  free (memp);
-	  memp = prevp;
-	}
+    case cfa_expr:
+      {
+	unsigned int address_size = (fs->cache->e_ident[EI_CLASS] == ELFCLASS32
+				     ? 4 : 8);
+	size_t nops;
 
-      /* Free the pubnames helper structure.  */
-      free (dwarf->pubnames_sets);
+	/* Parse the expression into internal form.  */
+	int result = __libdw_intern_expression (NULL,
+						fs->cache->other_byte_order,
+						address_size,
+						&fs->cache->expr_tree,
+						&fs->cfa_data.expr,
+						ops, &nops);
+	return result ?: (int) nops;
+      }
 
-      /* Free the ELF descriptor if necessary.  */
-      if (dwarf->free_elf)
-	elf_end (dwarf->elf);
-
-      /* Free the context descriptor.  */
-      free (dwarf);
+    default:
+      abort ();
     }
 
-  return 0;
+  /*NOTREACHED*/
+  return -1;
 }
-INTDEF(dwarf_end)

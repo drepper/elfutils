@@ -94,4 +94,10 @@ typedef const char *(*ebl_bhinit_t) (Elf *, GElf_Half, Ebl *, size_t);
 #undef _
 #define _(Str) dgettext ("elfutils", Str)
 
+
+/* LEB128 constant helper macros.  */
+#define ULEB128_7(x)	(BUILD_BUG_ON_ZERO ((x) >= (1U << 7)) + (x))
+
+#define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
+
 #endif	/* libeblP.h */

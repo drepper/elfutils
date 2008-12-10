@@ -1,7 +1,6 @@
-/* Release debugging handling context.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+/* Get register location expression for frame.
+   Copyright (C) 2006, 2007 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,65 +51,93 @@
 # include <config.h>
 #endif
 
-#include <search.h>
-#include <stdlib.h>
-
-#include "libdwP.h"
 #include "unwindP.h"
-
-
-static void
-noop_free (void *arg __attribute__ ((unused)))
-{
-}
-
-
-static void
-cu_free (void *arg)
-{
-  struct Dwarf_CU *p = (struct Dwarf_CU *) arg;
-
-  Dwarf_Abbrev_Hash_free (&p->abbrev_hash);
-
-  tdestroy (p->locs, noop_free);
-}
-
+#include <dwarf.h>
 
 int
-dwarf_end (dwarf)
-     Dwarf *dwarf;
+dwarf_frame_register (fs, regno, ops_mem, ops, nops)
+     Dwarf_Frame *fs;
+     int regno;
+     Dwarf_Op ops_mem[2];
+     Dwarf_Op **ops;
+     size_t *nops;
 {
-  if (dwarf != NULL)
+  /* Maybe there was a previous error.  */
+  if (fs == NULL)
+    return -1;
+
+  if (unlikely (regno < 0))
     {
-      if (dwarf->cfi != NULL)
-	/* Clean up the CFI cache.  */
-	__libdw_destroy_frame_cache (dwarf->cfi);
-
-      /* The search tree for the CUs.  NB: the CU data itself is
-	 allocated separately, but the abbreviation hash tables need
-	 to be handled.  */
-      tdestroy (dwarf->cu_tree, cu_free);
-
-      struct libdw_memblock *memp = dwarf->mem_tail;
-      /* The first block is allocated together with the Dwarf object.  */
-      while (memp->prev != NULL)
-	{
-	  struct libdw_memblock *prevp = memp->prev;
-	  free (memp);
-	  memp = prevp;
-	}
-
-      /* Free the pubnames helper structure.  */
-      free (dwarf->pubnames_sets);
-
-      /* Free the ELF descriptor if necessary.  */
-      if (dwarf->free_elf)
-	elf_end (dwarf->elf);
-
-      /* Free the context descriptor.  */
-      free (dwarf);
+      __libdw_seterrno (DWARF_E_INVALID_ACCESS);
+      return -1;
     }
 
-  return 0;
+  int result = 0;		/* A location, not a value.  */
+
+  if (unlikely ((size_t) regno >= fs->nregs))
+    goto default_rule;
+
+  const struct dwarf_frame_register *reg = &fs->regs[regno];
+
+  switch (reg->rule)
+    {
+    case reg_unspecified:
+    default_rule:
+      /* Use the default rule for registers not yet mentioned in CFI.  */
+      if (fs->cache->default_same_value)
+	goto same_value;
+      /*FALLTHROUGH*/
+    case reg_undefined:
+      /* The value is known to be unavailable.  */
+      result = 1;
+      /*FALLTHROUGH*/
+    case reg_same_value:
+    same_value:
+      /* The location is not known here, but the caller might know it.  */
+      *ops = NULL;
+      *nops = 0;
+      break;
+
+    case reg_val_offset:
+      result = 1;		/* A value, not a location.  */
+      /*FALLTHROUGH*/
+    case reg_offset:
+      ops_mem[0] = (Dwarf_Op) { .atom = DW_OP_call_frame_cfa };
+      ops_mem[1] = (Dwarf_Op) { .atom = DW_OP_plus_uconst,
+				.number = reg->value };
+      *ops = ops_mem;
+      *nops = reg->value == 0 ? 1 : 2;
+      break;
+
+    case reg_register:
+      ops_mem[0] = (Dwarf_Op) { .atom = DW_OP_regx, .number = reg->value };
+      *ops = ops_mem;
+      *nops = 1;
+      break;
+
+    case reg_val_expression:
+      result = 1;		/* A value, not a location.  */
+      /*FALLTHROUGH*/
+    case reg_expression:
+      {
+	unsigned int address_size = (fs->cache->e_ident[EI_CLASS] == ELFCLASS32
+				     ? 4 : 8);
+
+	Dwarf_Block block;
+	const uint8_t *p = fs->cache->data.d_buf + reg->value;
+	get_uleb128 (block.length, p);
+	block.data = (void *) p;
+
+	/* Parse the expression into internal form.  */
+	if (__libdw_intern_expression (NULL,
+				       fs->cache->other_byte_order,
+				       address_size,
+				       &fs->cache->expr_tree,
+				       &block, ops, nops) < 0)
+	  result = -1;
+	break;
+      }
+    }
+
+  return result;
 }
-INTDEF(dwarf_end)
