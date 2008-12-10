@@ -26,6 +26,7 @@
 ##
 DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H $(YYDEBUG) -DDEBUGPRED=@DEBUGPRED@ \
        -DSRCDIR=\"$(shell cd $(srcdir);pwd)\" -DOBJDIR=\"$(shell pwd)\"
+WEXTRA = @WEXTRA@
 if MUDFLAP
 AM_CFLAGS = -fmudflap
 else
@@ -33,7 +34,7 @@ AM_CFLAGS =
 endif
 AM_CFLAGS += -Wall -Wshadow -std=gnu99 $(native_ld_cflags) \
 	     $(if $($(*F)_no_Werror),,-Werror) \
-	     $(if $($(*F)_no_Wunused),,-Wunused -Wextra) \
+	     $(if $($(*F)_no_Wunused),,-Wunused $(WEXTRA)) \
 	     $(if $($(*F)_no_Wformat),,-Wformat=2) $(CFLAGS_$(*F))
 
 INCLUDES = -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
@@ -110,6 +111,9 @@ size_no_Wformat = yes
 strings_no_Wformat = yes
 # XXX While the file is not finished, don't warn about this
 ldgeneric_no_Wunused = yes
+
+# Buggy old compilers.
+readelf_no_Werror = yes
 
 readelf_LDADD = $(libdw) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 nm_LDADD = $(libdw) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl

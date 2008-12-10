@@ -63,6 +63,8 @@
 
 2008-01-21  Roland McGrath  <roland@redhat.com>
 
+	* line2addr.c (main): Revert last change.
+
 	* testfile45.S.bz2: Add tests for cltq, cqto.
 	* testfile45.expect.bz2: Adjust.
 
@@ -770,6 +772,11 @@
 	* run-elflint-test.sh: New file.
 	* Makefile.am (TESTS): Add run-elflint-test.sh.
 	(EXTRA_DIST): Add run-elflint-test.sh and testfile18.bz2.
+
+2005-05-31  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
 
 2005-05-24  Ulrich Drepper  <drepper@redhat.com>
 

@@ -58,6 +58,11 @@
 	* asm_error.c: Add new error ASM_E_IOERROR.
 	* libasmP.h: Add ASM_E_IOERROR definition.
 
+2005-05-31  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
+
 2005-02-15  Ulrich Drepper  <drepper@redhat.com>
 
 	* Makefile.am (AM_CFLAGS): Add -Wunused -Wextra -Wformat=2.

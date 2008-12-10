@@ -25,6 +25,7 @@
 ## <http://www.openinventionnetwork.com>.
 ##
 DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H -DIS_LIBDW
+WEXTRA = @WEXTRA@
 if MUDFLAP
 AM_CFLAGS = -fmudflap
 else
@@ -33,7 +34,7 @@ endif
 if BUILD_STATIC
 AM_CFLAGS += -fpic
 endif
-AM_CFLAGS += -Wall -Werror -Wshadow -Wunused -Wformat=2 -Wextra -std=gnu99
+AM_CFLAGS += -Wall -Werror -Wshadow -Wunused -Wformat=2 $(WEXTRA) -std=gnu99
 INCLUDES = -I. -I$(srcdir) -I$(srcdir)/../libelf -I.. -I$(srcdir)/../lib
 VERSION = 1
 

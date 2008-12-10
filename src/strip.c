@@ -52,6 +52,12 @@
 #include <libebl.h>
 #include <system.h>
 
+#ifdef HAVE_FUTIMES
+# define FUTIMES(fd, fname, tvp) futimes (fd, tvp)
+#else
+# define FUTIMES(fd, fname, tvp) utimes (fname, tvp)
+#endif
+
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
@@ -300,8 +306,18 @@ process_file (const char *fname)
 
       /* If we have to preserve the timestamp, we need it in the
 	 format utimes() understands.  */
+#ifdef HAVE_STRUCT_STAT_ST_ATIM
       TIMESPEC_TO_TIMEVAL (&tv[0], &pre_st.st_atim);
+#else
+      tv[0].tv_sec = pre_st.st_atime;
+      tv[0].tv_usec = 0;
+#endif
+#ifdef HAVE_STRUCT_STAT_ST_MTIM
       TIMESPEC_TO_TIMEVAL (&tv[1], &pre_st.st_mtim);
+#else
+      tv[1].tv_sec = pre_st.st_atime;
+      tv[1].tv_usec = 0;
+#endif
     }
 
   /* Open the file.  */
@@ -1745,7 +1761,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
   /* If requested, preserve the timestamp.  */
   if (tvp != NULL)
     {
-      if (futimes (fd, tvp) != 0)
+      if (FUTIMES (fd, output_fname, tvp) != 0)
 	{
 	  error (0, errno, gettext ("\
 cannot set access and modification date of '%s'"),
@@ -1802,7 +1818,7 @@ handle_ar (int fd, Elf *elf, const char *prefix, const char *fname,
 
   if (tvp != NULL)
     {
-      if (unlikely (futimes (fd, tvp) != 0))
+      if (unlikely (FUTIMES (fd, fname, tvp) != 0))
 	{
 	  error (0, errno, gettext ("\
 cannot set access and modification date of '%s'"), fname);

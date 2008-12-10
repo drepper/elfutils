@@ -488,7 +488,11 @@ ptrcompare (const void *p1, const void *p2)
 
 
 static void
-check_rel (size_t nsegments, struct segments segments[nsegments],
+check_rel (size_t nsegments, struct segments segments[
+#if __GNUC__ >= 4
+						      nsegments
+#endif
+	   ],
 	   GElf_Addr addr, Elf *elf, Elf_Scn *symscn, Dwarf *dw,
 	   const char *fname, bool more_than_one, void **knownsrcs)
 {

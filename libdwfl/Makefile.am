@@ -27,12 +27,13 @@
 ## <http://www.openinventionnetwork.com>.
 ##
 DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H
+WEXTRA = @WEXTRA@
 if MUDFLAP
 AM_CFLAGS = -fmudflap
 else
 AM_CFLAGS =
 endif
-AM_CFLAGS += -Wall -Werror -Wshadow -Wunused -Wformat=2 -Wextra -std=gnu99
+AM_CFLAGS += -Wall -Werror -Wshadow -Wunused -Wformat=2 $(WEXTRA) -std=gnu99
 INCLUDES = -I. -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 	   -I$(srcdir)/../libdw -I.. -I$(srcdir)/../lib
 VERSION = 1

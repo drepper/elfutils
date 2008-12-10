@@ -160,7 +160,7 @@ libelf_release_all (Elf *elf)
   (Var) = (sizeof (Var) == 1						      \
 	   ? (unsigned char) (Var)					      \
 	   : (sizeof (Var) == 2						      \
-	      ? bswap_16 (Var)						      \
+	      ? (unsigned short int) bswap_16 (Var)			      \
 	      : (sizeof (Var) == 4					      \
 		 ? bswap_32 (Var)					      \
 		 : bswap_64 (Var))))
@@ -169,7 +169,7 @@ libelf_release_all (Elf *elf)
   (Dst) = (sizeof (Var) == 1						      \
 	   ? (unsigned char) (Var)					      \
 	   : (sizeof (Var) == 2						      \
-	      ? bswap_16 (Var)						      \
+	      ? (unsigned short int) bswap_16 (Var)			      \
 	      : (sizeof (Var) == 4					      \
 		 ? bswap_32 (Var)					      \
 		 : bswap_64 (Var))))

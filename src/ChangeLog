@@ -66,6 +66,11 @@
 	that matches its PT_LOAD's p_flags &~ PF_W.  On sparc, PF_X really
 	is valid in RELRO.
 
+2008-03-01  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (dump_archive_index): Tweak portability hack
+	to match [__GNUC__ < 4] too.
+
 2008-02-29  Roland McGrath  <roland@redhat.com>
 
 	* readelf.c (print_attributes): Add a cast.
@@ -316,6 +321,8 @@
 2007-10-16  Roland McGrath  <roland@redhat.com>
 
 	* readelf.c (hex_dump): Fix rounding error in whitespace calculation.
+
+	* Makefile.am (readelf_no_Werror): New variable.
 
 2007-10-15  Roland McGrath  <roland@redhat.com>
 
@@ -756,6 +763,10 @@
 	* elflint.c (valid_e_machine): Add EM_ALPHA.
 	Reported by Christian Aichinger <Greek0@gmx.net>.
 
+	* strings.c (map_file): Define POSIX_MADV_SEQUENTIAL to
+	MADV_SEQUENTIAL if undefined.  	Don't call posix_madvise
+	if neither is defined.
+
 2006-08-08  Ulrich Drepper  <drepper@redhat.com>
 
 	* elflint.c (check_dynamic): Don't require DT_HASH for DT_SYMTAB.
@@ -831,6 +842,10 @@
 
 	* Makefile.am: Add hacks to create dependency files for non-generic
 	linker.
+
+2006-04-05  Roland McGrath  <roland@redhat.com>
+
+	* strings.c (MAP_POPULATE): Define to 0 if undefined.
 
 2006-06-12  Ulrich Drepper  <drepper@redhat.com>
 
@@ -1179,6 +1194,11 @@
 
 	* readelf.c (print_debug_loc_section): Fix indentation for larger
 	address size.
+
+2005-05-31  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
 
 2005-05-30  Roland McGrath  <roland@redhat.com>
 

@@ -51,6 +51,10 @@
 
 #include <system.h>
 
+#ifndef MAP_POPULATE
+# define MAP_POPULATE 0
+#endif
+
 
 /* Prototypes of local functions.  */
 static int read_fd (int fd, const char *fname, off64_t fdlen);
@@ -491,8 +495,13 @@ map_file (int fd, off64_t start_off, off64_t fdlen, size_t *map_sizep)
 		    fd, start_off);
       if (mem != MAP_FAILED)
 	{
+#if !defined POSIX_MADV_SEQUENTIAL && defined MADV_SEQUENTIAL
+# define POSIX_MADV_SEQUENTIAL MADV_SEQUENTIAL
+#endif
+#ifdef POSIX_MADV_SEQUENTIAL
 	  /* We will go through the mapping sequentially.  */
 	  (void) posix_madvise (mem, map_size, POSIX_MADV_SEQUENTIAL);
+#endif
 	  break;
 	}
       if (errno != EINVAL && errno != ENOMEM)

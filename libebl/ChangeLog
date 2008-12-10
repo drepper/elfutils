@@ -558,6 +558,11 @@
 	* Makefile.am (libebl_*_so_SOURCES): Set to $(*_SRCS) so dependency
 	tracking works right.
 
+2005-05-31  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
+
 2005-05-21  Ulrich Drepper  <drepper@redhat.com>
 
 	* libebl_x86_64.map: Add x86_64_core_note.

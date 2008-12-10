@@ -325,6 +325,11 @@
 	* sparc_init.c: Likewise.
 	* x86_64_init.c: Likewise.
 
+2005-11-22  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (LD_AS_NEEDED): New variable, substituted by configure.
+	(libebl_%.so rule): Use it in place of -Wl,--as-needed.
+
 2005-11-19  Roland McGrath  <roland@redhat.com>
 
 	* ppc64_reloc.def: REL30 -> ADDR30.
@@ -346,6 +351,9 @@
 
 	* Makefile.am (uninstall): Don't try to remove $(pkgincludedir).
 	(CLEANFILES): Add libebl_$(m).so.
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
 
 	* ppc_reloc.def: Update bits per Alan Modra <amodra@bigpond.net.au>.
 	* ppc64_reloc.def: Likewise.

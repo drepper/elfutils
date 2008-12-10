@@ -25,6 +25,7 @@
 ## <http://www.openinventionnetwork.com>.
 ##
 DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H
+WEXTRA = @WEXTRA@
 if MUDFLAP
 AM_CFLAGS = -fmudflap
 else
@@ -33,7 +34,7 @@ endif
 if BUILD_STATIC
 AM_CFLAGS += -fpic
 endif
-AM_CFLAGS += -Wall -Wshadow -Werror -Wunused -Wextra -Wformat=2 -std=gnu99 \
+AM_CFLAGS += -Wall -Wshadow -Werror -Wunused $(WEXTRA) -Wformat=2 -std=gnu99 \
 	     $($(*F)_CFLAGS)
 INCLUDES = -I$(srcdir) -I$(top_srcdir)/lib -I..
 GCC_INCLUDE = -I$(shell $(CC) -print-file-name=include)

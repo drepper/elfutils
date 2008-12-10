@@ -39,6 +39,10 @@
 	* configure.ac: Add dummy automake conditional to get dependencies
 	for non-generic linker right.  See src/Makefile.am.
 
+2005-11-22  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac: Check for --as-needed linker option.
+
 2005-11-18  Roland McGrath  <roland@redhat.com>
 
 	* Makefile.am (DISTCHECK_CONFIGURE_FLAGS): New variable.
@@ -85,6 +89,17 @@
 
 	* Makefile.am (all_SUBDIRS): Add libdwfl.
 	* configure.ac: Write libdwfl/Makefile.
+
+2005-05-31  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (WEXTRA): Check for -Wextra and set this substitution.
+
+	* configure.ac: Check for struct stat st_?tim members.
+	* src/strip.c (process_file): Use st_?time if st_?tim are not there.
+
+	* configure.ac: Check for futimes function.
+	* src/strip.c (handle_elf) [! HAVE_FUTIMES]: Use utimes instead.
+	(handle_ar) [! HAVE_FUTIMES]: Likewise.
 
 2005-05-19  Roland McGrath  <roland@redhat.com>
 

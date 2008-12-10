@@ -74,6 +74,34 @@ CFLAGS="$old_CFLAGS"])
 AS_IF([test "x$ac_cv_c99" != xyes],
       AC_MSG_ERROR([gcc with C99 support required]))
 
+AC_CACHE_CHECK([for -Wextra option to $CC], ac_cv_cc_wextra, [dnl
+old_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -Wextra"
+AC_COMPILE_IFELSE([void foo (void) { }],
+		  ac_cv_cc_wextra=yes, ac_cv_cc_wextra=no)
+CFLAGS="$old_CFLAGS"])
+AC_SUBST(WEXTRA)
+AS_IF([test "x$ac_cv_cc_wextra" = xyes], [WEXTRA=-Wextra], [WEXTRA=-W])
+
+AC_CACHE_CHECK([for --as-needed linker option],
+	       ac_cv_as_needed, [dnl
+cat > conftest.c <<EOF
+int main (void) { return 0; }
+EOF
+if AC_TRY_COMMAND([${CC-cc} $CFLAGS $CPPFLAGS $LDFLAGS
+			    -fPIC -shared -o conftest.so conftest.c
+			    -Wl,--as-needed 1>&AS_MESSAGE_LOG_FD])
+then
+  ac_cv_as_needed=yes
+else
+  ac_cv_as_needed=no
+fi
+rm -f conftest*])
+AS_IF([test "x$ac_cv_as_needed" = xyes],
+      [LD_AS_NEEDED=-Wl,--as-needed], [LD_AS_NEEDED=])
+AC_SUBST(LD_AS_NEEDED)
+
+
 LOCALEDIR=$datadir
 AC_SUBST(LOCALEDIR)
 AC_DEFINE_UNQUOTED(LOCALEDIR, "$LOCALEDIR")

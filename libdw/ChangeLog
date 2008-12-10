@@ -495,6 +495,11 @@
 
 2005-05-31  Roland McGrath  <roland@redhat.com>
 
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
+
+2005-05-31  Roland McGrath  <roland@redhat.com>
+
 	* dwarf_formref_die.c (dwarf_formref_die): Add CU header offset to
 	formref offset.
 

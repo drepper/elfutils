@@ -25,12 +25,13 @@
 ## <http://www.openinventionnetwork.com>.
 ##
 DEFS = -DHAVE_CONFIG_H -D_GNU_SOURCE
+WEXTRA = @WEXTRA@
 if MUDFLAP
-AM_CFLAGS = -Wall -Werror -Wextra -std=gnu99 -fmudflap\
+AM_CFLAGS = -Wall -Werror $(WEXTRA) -std=gnu99 -fmudflap\
 	    $(if $($(*F)_no_Wformat),-Wno-format,-Wformat=2)
 BUILD_RPATH = \$$ORIGIN/../backends
 else
-AM_CFLAGS = -Wall -Werror -Wextra -std=gnu99 \
+AM_CFLAGS = -Wall -Werror $(WEXTRA) -std=gnu99 \
 	    $(if $($(*F)_no_Wformat),-Wno-format,-Wformat=2)
 BUILT_RPATH = \$$ORIGIN/../libasm:\$$ORIGIN/../libdw:\$$ORIGIN/../backends:\$$ORIGIN/../libelf
 endif

@@ -41,6 +41,11 @@
 	* Makefile.am (libeu_a_SOURCES): Add it.
 	* system.h: Declare crc32_file.
 
+2005-02-07  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
+
 2005-04-30  Ulrich Drepper  <drepper@redhat.com>
 
 	* Makefile.am: Use -ffunction-sections for xmalloc.c.

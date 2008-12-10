@@ -912,6 +912,11 @@
 
 2005-07-21  Roland McGrath  <roland@redhat.com>
 
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
+
+2005-07-21  Roland McGrath  <roland@redhat.com>
+
 	* Makefile.am (noinst_HEADERS): Add loc2c.c.
 
 	* test2.c (main): Check sscanf result to quiet warning.

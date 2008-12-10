@@ -6424,7 +6424,7 @@ dump_archive_index (Elf *elf, const char *fname)
 	  if (unlikely (elf_rand (elf, as_off) == 0)
 	      || unlikely ((subelf = elf_begin (-1, ELF_C_READ_MMAP, elf))
 			   == NULL))
-#if __GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 7)
+#if __GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 7) || __GNUC__ < 4
 	    while (1)
 #endif
 	      error (EXIT_FAILURE, 0,

@@ -265,6 +265,11 @@
 	* defs/i386.doc: New file.
 	* defs/x86_64: New file.
 
+2005-04-04  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it instead of -Wextra.
+
 2005-02-15  Ulrich Drepper  <drepper@redhat.com>
 
 	* Makefile (AM_CFLAGS): Add -Wunused -Wextra -Wformat=2.
