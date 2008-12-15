@@ -64,16 +64,6 @@ nofree (void *arg __attribute__ ((unused)))
 {
 }
 
-static void
-free_file (struct dwfl_file *file)
-{
-  free (file->name);
-
-  /* Close the fd only on the last reference.  */
-  if (file->elf != NULL && elf_end (file->elf) == 0 && file->fd != -1)
-    close (file->fd);
-}
-
 void
 internal_function
 __libdwfl_module_free (Dwfl_Module *mod)
@@ -91,18 +81,15 @@ __libdwfl_module_free (Dwfl_Module *mod)
       free (mod->cu);
     }
 
-  if (mod->dw != NULL)
-    INTUSE(dwarf_end) (mod->dw);
+  if (mod->debug.shared != NULL && mod->debug.shared != mod->main.shared)
+    __libdwfl_close_file (&mod->debug);
+  mod->debug.name = NULL;
 
-  if (mod->ebl != NULL)
-    ebl_closebackend (mod->ebl);
+  __libdwfl_close_file (&mod->main);
+  mod->main.name = NULL;
 
-  if (mod->debug.elf != mod->main.elf)
-    free_file (&mod->debug);
-  free_file (&mod->main);
-
-  if (mod->build_id_bits != NULL)
-    free (mod->build_id_bits);
+  if (BUILD_ID_PTR (mod->build_id))
+    free (mod->build_id);
 
   free (mod->name);
   free (mod);

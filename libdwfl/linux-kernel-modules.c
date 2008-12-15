@@ -593,7 +593,7 @@ dwfl_linux_kernel_find_elf (Dwfl_Module *mod,
 			    Dwarf_Addr base __attribute__ ((unused)),
 			    char **file_name, Elf **elfp)
 {
-  if (mod->build_id_len > 0)
+  if (BUILD_ID_PTR (mod->build_id))
     {
       int fd = INTUSE(dwfl_build_id_find_elf) (mod, NULL, NULL, 0,
 					       file_name, elfp);

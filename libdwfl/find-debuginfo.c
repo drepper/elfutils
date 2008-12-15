@@ -91,27 +91,27 @@ check_crc (int fd, GElf_Word debuglink_crc)
 }
 
 static bool
-validate (Dwfl_Module *mod, int fd, bool check, GElf_Word debuglink_crc)
+validate (struct dwfl_build_id **build_idp, GElf_Addr bias,
+	  int fd, bool check, GElf_Word debuglink_crc)
 {
   /* If we have a build ID, check only that.  */
-  if (mod->build_id_len > 0)
+  if (BUILD_ID_PTR (*build_idp))
     {
       /* We need to open an Elf handle on the file so we can check its
-	 build ID note for validation.  Backdoor the handle into the
-	 module data structure since we had to open it early anyway.  */
-      mod->debug.elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (likely (__libdwfl_find_build_id (mod, false, mod->debug.elf) == 2))
-	/* Also backdoor the gratuitous flag.  */
-	mod->debug.valid = true;
-      else
-	{
-	  /* A mismatch!  */
-	  elf_end (mod->debug.elf);
-	  mod->debug.elf = NULL;
-	  mod->debug.valid = false;
-	}
+	 build ID note for validation.
+	 XXX: Maybe backdoor the handle into the module data structure
+	 since we had to open it early anyway?  */
 
-      return mod->debug.valid;
+      Elf * elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
+      if (unlikely (__libdwfl_find_build_id (build_idp, bias,
+					     false, elf) != 2))
+	{
+	  free (*build_idp);
+	  *build_idp = NULL;
+	}
+      elf_end (elf);
+
+      return *build_idp != NULL;
     }
 
   return !check || check_crc (fd, debuglink_crc);
@@ -203,7 +203,9 @@ find_debuginfo_in_path (Dwfl_Module *mod, const char *file_name,
 	  default:
 	    return -1;
 	  }
-      if (validate (mod, fd, check, debuglink_crc))
+
+      if (validate (&mod->main.shared->build_id, mod->bias,
+		    fd, check, debuglink_crc))
 	{
 	  *debuginfo_file_name = fname;
 	  return fd;

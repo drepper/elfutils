@@ -29,6 +29,13 @@
 	* testfile47.bz2: New data file.
 	* Makefile.am (TESTS, EXTRA_DIST): Add them.
 
+2008-04-29  Petr Machata  <pmachata@redhat.com>
+
+	* run-debuginfo.sh: New file.
+	* debuginfo.c: New file.
+	* Makefile.am (noinst_PROGRAMS, TESTS, EXTRA_DIST): Add them.
+	(debuginfo_LDADD): New variable.
+
 2008-03-31  Roland McGrath  <roland@redhat.com>
 
 	* run-early-offscn.sh: New file.
@@ -39,6 +46,20 @@
 2008-03-19  Roland McGrath  <roland@redhat.com>
 
 	* run-addrname-test.sh: Add a new case.
+
+2008-03-13  Petr Machata  <pmachata@redhat.com>
+
+	* run-relocate.sh: New test.
+	* relocate.c: New file.
+
+2008-03-13  Petr Machata  <pmachata@redhat.com>
+
+	* sharing1.c: Test feeding bogus file to libdwfl.
+	* run-sharing1.sh: Adjust to above.
+
+2008-03-05  Petr Machata  <pmachata@redhat.com>
+
+	* sharing1.c: Adjust for changes in libdwfl.
 
 2008-02-22  Roland McGrath  <roland@redhat.com>
 
@@ -162,6 +183,12 @@
 2007-12-15  Roland McGrath  <roland@redhat.com>
 
 	* run-allregs.sh: Change expected output for powerpc spefscr.
+
+2007-12-10  Petr Machata  <pmachata@redhat.com>
+
+	* run-sharing1.sh: New file.
+	* sharing1.c: New file.
+	* Makefile.am (noinst_PROGRAMS, EXTRA_DIST, TESTS): Add it.
 
 2007-10-20  Roland McGrath  <roland@redhat.com>
 

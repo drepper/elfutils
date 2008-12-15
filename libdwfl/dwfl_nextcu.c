@@ -75,7 +75,7 @@ dwfl_nextcu (Dwfl *dwfl, Dwarf_Die *lastcu, Dwarf_Addr *bias)
 
       if (cu != NULL)
 	{
-	  *bias = mod->debug.bias;
+	  *bias = DWBIAS (mod);
 	  return &cu->die;
 	}
 
@@ -88,12 +88,12 @@ dwfl_nextcu (Dwfl *dwfl, Dwarf_Die *lastcu, Dwarf_Addr *bias)
 	    return NULL;
 
 	  if (mod->dwerr == DWFL_E_NOERROR
-	      && (mod->dw != NULL
+	      && ((mod->debug.shared != NULL && mod->debug.shared->dw != NULL)
 		  || INTUSE(dwfl_module_getdwarf) (mod, bias) != NULL))
 	    break;
 	}
       while (mod->dwerr == DWFL_E_NO_DWARF);
-      error = mod->dwerr;
+      error = mod->dwerr ?: mod->debug.shared->dwerr;
     }
   while (error == DWFL_E_NOERROR);
 

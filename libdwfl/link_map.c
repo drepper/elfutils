@@ -399,7 +399,7 @@ report_r_debug (uint_fast8_t elfclass, uint_fast8_t elfdata,
 	     name will be the fallback when no build ID match is found.
 	     XXX hook for sysroot */
 	  if (name != NULL
-	      && mod->main.elf == NULL
+	      && mod->main.shared == NULL
 	      && mod->main.name == NULL)
 	    mod->main.name = strdup (name);
 	}
@@ -448,7 +448,7 @@ consider_executable (Dwfl_Module *mod, GElf_Addr at_phdr, GElf_Addr at_entry,
 		     void *memory_callback_arg)
 {
   GElf_Ehdr ehdr;
-  if (unlikely (gelf_getehdr (mod->main.elf, &ehdr) == NULL))
+  if (unlikely (gelf_getehdr (mod->main.shared->elf, &ehdr) == NULL))
     return 0;
 
   if (at_entry != 0)
@@ -478,7 +478,7 @@ consider_executable (Dwfl_Module *mod, GElf_Addr at_phdr, GElf_Addr at_entry,
   for (uint_fast16_t i = 0; i < ehdr.e_phnum; ++i)
     {
       GElf_Phdr phdr_mem;
-      GElf_Phdr *phdr = gelf_getphdr (mod->main.elf, i, &phdr_mem);
+      GElf_Phdr *phdr = gelf_getphdr (mod->main.shared->elf, i, &phdr_mem);
       if (phdr == NULL)
 	break;
 
@@ -517,11 +517,11 @@ consider_executable (Dwfl_Module *mod, GElf_Addr at_phdr, GElf_Addr at_entry,
 
 	      /* If we're changing the module's address range,
 		 we've just invalidated the module lookup table.  */
-	      if (bias != mod->main.bias)
+	      if (bias != mod->bias)
 		{
-		  mod->low_addr -= mod->main.bias;
-		  mod->high_addr -= mod->main.bias;
-		  mod->main.bias = bias;
+		  mod->low_addr -= mod->bias;
+		  mod->high_addr -= mod->bias;
+		  mod->bias = bias;
 		  mod->low_addr += bias;
 		  mod->high_addr += bias;
 
@@ -533,11 +533,12 @@ consider_executable (Dwfl_Module *mod, GElf_Addr at_phdr, GElf_Addr at_entry,
 
       if (phdr->p_type == PT_DYNAMIC)
 	{
-	  Elf_Data *data = elf_getdata_rawchunk (mod->main.elf, phdr->p_offset,
+	  Elf_Data *data = elf_getdata_rawchunk (mod->main.shared->elf,
+						 phdr->p_offset,
 						 phdr->p_filesz, ELF_T_DYN);
 	  if (data == NULL)
 	    continue;
-	  const size_t entsize = gelf_fsize (mod->main.elf,
+	  const size_t entsize = gelf_fsize (mod->main.shared->elf,
 					     ELF_T_DYN, 1, EV_CURRENT);
 	  const size_t n = data->d_size / entsize;
 	  for (size_t j = 0; j < n; ++j)
@@ -556,7 +557,7 @@ consider_executable (Dwfl_Module *mod, GElf_Addr at_phdr, GElf_Addr at_entry,
   if (d_val_vaddr != 0)
     {
       /* Now we have the final address from which to read &r_debug.  */
-      d_val_vaddr += mod->main.bias;
+      d_val_vaddr += mod->bias;
 
       void *buffer = NULL;
       size_t buffer_available = addrsize (ehdr.e_ident[EI_CLASS]);
@@ -613,7 +614,7 @@ find_executable (Dwfl *dwfl, GElf_Addr at_phdr, GElf_Addr at_entry,
 		 void *memory_callback_arg)
 {
   for (Dwfl_Module *mod = dwfl->modulelist; mod != NULL; mod = mod->next)
-    if (mod->main.elf != NULL)
+    if (mod->main.shared != NULL)
       {
 	GElf_Addr r_debug_vaddr = consider_executable (mod, at_phdr, at_entry,
 						       elfclass, elfdata,
@@ -763,7 +764,7 @@ dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
 	       presupplied ET_EXEC, then look for a presupplied module,
 	       which might be a PIE (ET_DYN) that needs its bias adjusted.  */
 	    r_debug_vaddr = ((phdr_mod == NULL
-			      || phdr_mod->main.elf == NULL
+			      || phdr_mod->main.shared == NULL
 			      || phdr_mod->e_type != ET_EXEC)
 			     ? find_executable (dwfl, phdr, entry,
 						&elfclass, &elfdata,

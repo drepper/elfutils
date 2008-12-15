@@ -59,7 +59,7 @@ dwfl_module_getsrc_file (Dwfl_Module *mod,
   if (mod == NULL)
     return -1;
 
-  if (mod->dw == NULL)
+  if (mod->debug.shared->dw == NULL)
     {
       Dwarf_Addr bias;
       if (INTUSE(dwfl_module_getdwarf) (mod, &bias) == NULL)

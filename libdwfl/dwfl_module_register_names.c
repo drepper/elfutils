@@ -61,7 +61,8 @@ dwfl_module_register_names (mod, func, arg)
   if (unlikely (mod == NULL))
     return -1;
 
-  if (unlikely (mod->ebl == NULL))
+  if (unlikely (mod->main.shared == NULL
+		|| mod->main.shared->ebl == NULL))
     {
       Dwfl_Error error = __libdwfl_module_getebl (mod);
       if (error != DWFL_E_NOERROR)
@@ -71,7 +72,8 @@ dwfl_module_register_names (mod, func, arg)
 	}
     }
 
-  int nregs = ebl_register_info (mod->ebl, -1, NULL, 0,
+  int nregs = ebl_register_info (mod->main.shared->ebl, -1,
+				 NULL, 0,
 				 NULL, NULL, NULL, NULL);
   int result = 0;
   for (int regno = 0; regno < nregs && likely (result == 0); ++regno)
@@ -81,7 +83,8 @@ dwfl_module_register_names (mod, func, arg)
       const char *prefix = NULL;
       int bits = -1;
       int type = -1;
-      ssize_t len = ebl_register_info (mod->ebl, regno, name, sizeof name,
+      ssize_t len = ebl_register_info (mod->main.shared->ebl, regno,
+				       name, sizeof name,
 				       &prefix, &setname, &bits, &type);
       if (unlikely (len < 0))
 	{

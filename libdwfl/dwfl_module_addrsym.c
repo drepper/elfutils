@@ -71,10 +71,10 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
       /* Figure out what section ADDR lies in.  */
       if (addr_shndx == SHN_UNDEF)
 	{
-	  GElf_Addr mod_addr = addr - mod->symfile->bias;
+	  GElf_Addr mod_addr = addr - SYMBIAS (mod);
 	  Elf_Scn *scn = NULL;
 	  addr_shndx = SHN_ABS;
-	  while ((scn = elf_nextscn (mod->symfile->elf, scn)) != NULL)
+	  while ((scn = elf_nextscn (mod->symfile->shared->elf, scn)) != NULL)
 	    {
 	      GElf_Shdr shdr_mem;
 	      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);

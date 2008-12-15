@@ -226,33 +226,42 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
   Dwfl_Module *m = INTUSE(dwfl_report_module) (dwfl, name, start, end);
   if (m != NULL)
     {
-      if (m->main.name == NULL)
+      if (m->main.shared == NULL)
 	{
-	  m->main.name = strdup (file_name);
-	  m->main.fd = fd;
-	}
-      else if ((fd >= 0 && m->main.fd != fd)
+	  Dwfl_Error err = __libdwfl_open_file (&m->main, file_name, fd, elf);
+
+	  /* Some code here duplicate to dwfl_module_getdwarf.c. */
+	  m->bias = ((m->low_addr & -m->main.shared->align)
+		     - (m->main.shared->start & -m->main.shared->align));
+
+	  m->e_type = ehdr->e_type;
+
+	  if (m->e_type == ET_EXEC
+	      && m->bias != 0)
+	    m->e_type = ET_DYN;
+
+
+	  if (unlikely (err != DWFL_E_NOERROR))
+	    {
+	      __libdwfl_seterrno (err);
+	      return NULL;
+	    }
+	  else if (bias != m->bias)
+	    {
+	      __libdwfl_seterrno (DWFL_E_OVERLAP);
+	      m = NULL;
+	    }
+    	}
+      else if (m->bias != base
+	       || (fd >= 0 && m->main.shared->fd >= 0 && m->main.shared->fd != fd)
 	       || strcmp (m->main.name, file_name))
+	/* This module has already been reported before, but with
+	   different bias/fd/name. */
 	{
 	  elf_end (elf);
-	overlap:
 	  m->gc = true;
 	  __libdwfl_seterrno (DWFL_E_OVERLAP);
 	  m = NULL;
-	}
-
-      /* Preinstall the open ELF handle for the module.  */
-      if (m->main.elf == NULL)
-	{
-	  m->main.elf = elf;
-	  m->main.bias = bias;
-	  m->e_type = ehdr->e_type;
-	}
-      else
-	{
-	  elf_end (elf);
-	  if (m->main.bias != base)
-	    goto overlap;
 	}
     }
   return m;

@@ -56,7 +56,7 @@
 static inline Dwarf_Arange *
 dwar (Dwfl_Module *mod, unsigned int idx)
 {
-  return &mod->dw->aranges->info[mod->aranges[idx].arange];
+  return &mod->debug.shared->dw->aranges->info[mod->aranges[idx].arange];
 }
 
 
@@ -68,7 +68,7 @@ addrarange (Dwfl_Module *mod, Dwarf_Addr addr, struct dwfl_arange **arange)
       struct dwfl_arange *aranges = NULL;
       Dwarf_Aranges *dwaranges = NULL;
       size_t naranges;
-      if (INTUSE(dwarf_getaranges) (mod->dw, &dwaranges, &naranges) != 0)
+      if (INTUSE(dwarf_getaranges) (mod->debug.shared->dw, &dwaranges, &naranges) != 0)
 	return DWFL_E_LIBDW;
 
       /* If the module has no aranges (when no code is included) we
@@ -106,7 +106,7 @@ addrarange (Dwfl_Module *mod, Dwarf_Addr addr, struct dwfl_arange **arange)
     }
 
   /* The address must be inside the module to begin with.  */
-  addr -= mod->debug.bias;
+  addr -= DWBIAS (mod);
 
   /* The ranges are sorted by address, so we can use binary search.  */
   size_t l = 0, u = mod->naranges;
@@ -132,8 +132,9 @@ addrarange (Dwfl_Module *mod, Dwarf_Addr addr, struct dwfl_arange **arange)
 	  else
 	    {
 	      /* It might be in the last range.  */
+	      Dwarf *dw = mod->debug.shared->dw;
 	      const Dwarf_Arange *last
-		= &mod->dw->aranges->info[mod->dw->aranges->naranges - 1];
+		= &dw->aranges->info[dw->aranges->naranges - 1];
 	      if (addr > last->addr + last->length)
 		break;
 	    }
@@ -196,7 +197,8 @@ intern_cu (Dwfl_Module *mod, Dwarf_Off cuoff, struct dwfl_cu **result)
 
   if (*found == &key || *found == NULL)
     {
-      if (unlikely (cuoff + 4 >= mod->dw->sectiondata[IDX_debug_info]->d_size))
+      Dwarf * dw = mod->debug.shared->dw;
+      if (unlikely (cuoff + 4 >= dw->sectiondata[IDX_debug_info]->d_size))
 	{
 	  /* This is the EOF marker.  Now we have interned all the CUs.
 	     One increment in MOD->lazycu counts not having hit EOF yet.  */
@@ -218,7 +220,7 @@ intern_cu (Dwfl_Module *mod, Dwarf_Off cuoff, struct dwfl_cu **result)
 	  cu->lines = NULL;
 
 	  /* XXX use non-searching lookup */
-	  Dwarf_Die *die = INTUSE(dwarf_offdie) (mod->dw, cuoff, &cu->die);
+	  Dwarf_Die *die = INTUSE(dwarf_offdie) (dw, cuoff, &cu->die);
 	  if (die == NULL)
 	    return DWFL_E_LIBDW;
 	  assert (die == &cu->die);
@@ -272,8 +274,9 @@ __libdwfl_nextcu (Dwfl_Module *mod, struct dwfl_cu *lastcu,
     {
       size_t cuhdrsz;
       Dwarf_Off nextoff;
-      int end = INTUSE(dwarf_nextcu) (mod->dw, cuoff, &nextoff, &cuhdrsz,
-					NULL, NULL, NULL);
+      int end = INTUSE(dwarf_nextcu) (mod->debug.shared->dw, cuoff,
+				      &nextoff, &cuhdrsz,
+				      NULL, NULL, NULL);
       if (end < 0)
 	return DWFL_E_LIBDW;
       if (end > 0)
@@ -302,7 +305,8 @@ arangecu (Dwfl_Module *mod, struct dwfl_arange *arange, struct dwfl_cu **cu)
 {
   if (arange->cu == NULL)
     {
-      const Dwarf_Arange *dwarange = &mod->dw->aranges->info[arange->arange];
+      Dwarf *dw = mod->debug.shared->dw;
+      const Dwarf_Arange *dwarange = &dw->aranges->info[arange->arange];
       Dwfl_Error result = intern_cu (mod, dwarange->offset, &arange->cu);
       if (result != DWFL_E_NOERROR)
 	return result;

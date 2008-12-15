@@ -58,14 +58,16 @@ dwfl_module_report_build_id (Dwfl_Module *mod,
   if (mod == NULL)
     return -1;
 
-  if (mod->main.elf != NULL)
+  if (mod->main.shared != NULL)
     {
       /* Once we know about a file, we won't take any lies about
 	 its contents.  The only permissible call is a no-op.  */
 
-      if ((size_t) mod->build_id_len == len
-	  && (mod->build_id_vaddr == vaddr || vaddr == 0)
-	  && !memcmp (bits, mod->build_id_bits, len))
+      struct dwfl_build_id *build_id = mod->main.shared->build_id;
+      if (BUILD_ID_PTR (build_id)
+	  && (size_t) build_id->len == len
+	  && (build_id->vaddr == vaddr || vaddr == 0)
+	  && !memcmp (bits, build_id->bits, len))
 	return 0;
 
       __libdwfl_seterrno (DWFL_E_ALREADY_ELF);
@@ -78,24 +80,12 @@ dwfl_module_report_build_id (Dwfl_Module *mod,
       return -1;
     }
 
-  void *copy = NULL;
-  if (len > 0)
-    {
-      copy = malloc (len);
-      if (unlikely (copy == NULL))
-	{
-	  __libdwfl_seterrno (DWFL_E_NOMEM);
-	  return -1;
-	}
-      memcpy (copy, bits, len);
-    }
+  struct dwfl_build_id *orig_build_id = mod->build_id;
 
-  free (mod->build_id_bits);
+  if (__libdwfl_found_build_id (&mod->build_id, true, bits, len, vaddr) < 0)
+    return -1;
 
-  mod->build_id_bits = copy;
-  mod->build_id_len = len;
-  mod->build_id_vaddr = vaddr;
-
+  free (orig_build_id);
   return 0;
 }
 INTDEF (dwfl_module_report_build_id)

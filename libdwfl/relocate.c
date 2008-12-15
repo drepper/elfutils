@@ -101,100 +101,6 @@ __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf, size_t *shstrndx,
 }
 
 
-/* Cache used by relocate_getsym.  */
-struct reloc_symtab_cache
-{
-  Elf *symelf;
-  Elf_Data *symdata;
-  Elf_Data *symxndxdata;
-  Elf_Data *symstrdata;
-  size_t symshstrndx;
-  size_t strtabndx;
-};
-#define RELOC_SYMTAB_CACHE(cache)	\
-  struct reloc_symtab_cache cache =	\
-    { NULL, NULL, NULL, NULL, SHN_UNDEF, SHN_UNDEF }
-
-/* This is just doing dwfl_module_getsym, except that we must always use
-   the symbol table in RELOCATED itself when it has one, not MOD->symfile.  */
-static Dwfl_Error
-relocate_getsym (Dwfl_Module *mod,
-		 Elf *relocated, struct reloc_symtab_cache *cache,
-		 int symndx, GElf_Sym *sym, GElf_Word *shndx)
-{
-  if (cache->symdata == NULL)
-    {
-      if (mod->symfile == NULL || mod->symfile->elf != relocated)
-	{
-	  /* We have to look up the symbol table in the file we are
-	     relocating, if it has its own.  These reloc sections refer to
-	     the symbol table in this file, and a symbol table in the main
-	     file might not match.  However, some tools did produce ET_REL
-	     .debug files with relocs but no symtab of their own.  */
-	  Elf_Scn *scn = NULL;
-	  while ((scn = elf_nextscn (relocated, scn)) != NULL)
-	    {
-	      GElf_Shdr shdr_mem, *shdr = gelf_getshdr (scn, &shdr_mem);
-	      if (shdr != NULL)
-		switch (shdr->sh_type)
-		  {
-		  default:
-		    continue;
-		  case SHT_SYMTAB:
-		    cache->symelf = relocated;
-		    cache->symdata = elf_getdata (scn, NULL);
-		    cache->strtabndx = shdr->sh_link;
-		    if (unlikely (cache->symdata == NULL))
-		      return DWFL_E_LIBELF;
-		    break;
-		  case SHT_SYMTAB_SHNDX:
-		    cache->symxndxdata = elf_getdata (scn, NULL);
-		    if (unlikely (cache->symxndxdata == NULL))
-		      return DWFL_E_LIBELF;
-		    break;
-		  }
-	      if (cache->symdata != NULL && cache->symxndxdata != NULL)
-		break;
-	    }
-	}
-      if (cache->symdata == NULL)
-	{
-	  /* We might not have looked for a symbol table file yet,
-	     when coming from __libdwfl_relocate_section.  */
-	  if (unlikely (mod->symfile == NULL)
-	      && unlikely (INTUSE(dwfl_module_getsymtab) (mod) < 0))
-	    return dwfl_errno ();
-
-	  /* The symbol table we have already cached is the one from
-	     the file being relocated, so it's what we need.  Or else
-	     this is an ET_REL .debug file with no .symtab of its own;
-	     the symbols refer to the section indices in the main file.  */
-	  cache->symelf = mod->symfile->elf;
-	  cache->symdata = mod->symdata;
-	  cache->symxndxdata = mod->symxndxdata;
-	  cache->symstrdata = mod->symstrdata;
-	}
-    }
-
-  if (unlikely (gelf_getsymshndx (cache->symdata, cache->symxndxdata,
-				  symndx, sym, shndx) == NULL))
-    return DWFL_E_LIBELF;
-
-  if (sym->st_shndx != SHN_XINDEX)
-    *shndx = sym->st_shndx;
-
-  switch (*shndx)
-    {
-    case SHN_ABS:
-    case SHN_UNDEF:
-    case SHN_COMMON:
-      return DWFL_E_NOERROR;
-    }
-
-  return __libdwfl_relocate_value (mod, cache->symelf, &cache->symshstrndx,
-				   *shndx, &sym->st_value);
-}
-
 /* Handle an undefined symbol.  We really only support ET_REL for Linux
    kernel modules, and offline archives.  The behavior of the Linux module
    loader is very simple and easy to mimic.  It only matches magically
@@ -202,27 +108,16 @@ relocate_getsym (Dwfl_Module *mod,
    answer except when the module's symbols are undefined and would prevent
    it from being loaded.  */
 static Dwfl_Error
-resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
+resolve_symbol (Dwfl_Module *referer, struct dwfl_shared_file *symfile,
 		GElf_Sym *sym, GElf_Word shndx)
 {
   /* First we need its name.  */
   if (sym->st_name != 0)
     {
-      if (symtab->symstrdata == NULL)
-	{
-	  /* Cache the strtab for this symtab.  */
-	  assert (referer->symfile == NULL
-		  || referer->symfile->elf != symtab->symelf);
-	  symtab->symstrdata = elf_getdata (elf_getscn (symtab->symelf,
-							symtab->strtabndx),
-					    NULL);
-	  if (unlikely (symtab->symstrdata == NULL))
-	    return DWFL_E_LIBELF;
-	}
-      if (unlikely (sym->st_name >= symtab->symstrdata->d_size))
+      if (unlikely (sym->st_name >= symfile->symstrdata->d_size))
 	return DWFL_E_BADSTROFF;
 
-      const char *name = symtab->symstrdata->d_buf;
+      const char *name = symfile->symstrdata->d_buf;
       name += sym->st_name;
 
       for (Dwfl_Module *m = referer->dwfl->modulelist; m != NULL; m = m->next)
@@ -231,15 +126,21 @@ resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
 	    /* Get this module's symtab.
 	       If we got a fresh error reading the table, report it.
 	       If we just have no symbols in this module, no harm done.  */
-	    if (m->symdata == NULL
-		&& m->symerr == DWFL_E_NOERROR
-		&& INTUSE(dwfl_module_getsymtab) (m) < 0
-		&& m->symerr != DWFL_E_NO_SYMTAB)
-	      return m->symerr;
-
-	    for (size_t ndx = 1; ndx < m->syments; ++ndx)
+	    if (m->symfile == NULL
+		&& m->main.cberr == DWFL_E_NOERROR
+		&& m->debug.cberr == DWFL_E_NOERROR
+		&& INTUSE(dwfl_module_getsymtab) (m) < 0)
 	      {
-		sym = gelf_getsymshndx (m->symdata, m->symxndxdata,
+		Dwfl_Error err = m->main.cberr ?: m->debug.cberr;
+		if (err != DWFL_E_NO_SYMTAB)
+		  return err;
+	      }
+
+	    struct dwfl_shared_file *m_shared = m->symfile->shared;
+	    for (size_t ndx = 1; ndx < m_shared->syments; ++ndx)
+	      {
+		sym = gelf_getsymshndx (m_shared->symdata,
+					m_shared->symxndxdata,
 					ndx, sym, &shndx);
 		if (unlikely (sym == NULL))
 		  return DWFL_E_LIBELF;
@@ -253,9 +154,9 @@ resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
 		  continue;
 
 		/* Get this candidate symbol's name.  */
-		if (unlikely (sym->st_name >= m->symstrdata->d_size))
+		if (unlikely (sym->st_name >= m_shared->symstrdata->d_size))
 		  return DWFL_E_BADSTROFF;
-		const char *n = m->symstrdata->d_buf;
+		const char *n = m_shared->symstrdata->d_buf;
 		n += sym->st_name;
 
 		/* Does the name match?  */
@@ -269,7 +170,7 @@ resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
 		/* In an ET_REL file, the symbol table values are relative
 		   to the section, not to the module's load base.  */
 		size_t symshstrndx = SHN_UNDEF;
-		return __libdwfl_relocate_value (m, m->symfile->elf,
+		return __libdwfl_relocate_value (m, m_shared->elf,
 						 &symshstrndx,
 						 shndx, &sym->st_value);
 	      }
@@ -280,19 +181,21 @@ resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
 }
 
 static Dwfl_Error
-relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
-		  size_t shstrndx, struct reloc_symtab_cache *reloc_symtab,
+relocate_section (Dwfl_Module *mod,
+		  struct dwfl_shared_file *relocated,
+		  struct dwfl_shared_file *symfile,
+		  const GElf_Ehdr *ehdr, size_t shstrndx,
 		  Elf_Scn *scn, GElf_Shdr *shdr,
 		  Elf_Scn *tscn, bool debugscn, bool partial)
 {
   /* First, fetch the name of the section these relocations apply to.  */
   GElf_Shdr tshdr_mem;
   GElf_Shdr *tshdr = gelf_getshdr (tscn, &tshdr_mem);
-  const char *tname = elf_strptr (relocated, shstrndx, tshdr->sh_name);
+  const char *tname = elf_strptr (relocated->elf, shstrndx, tshdr->sh_name);
   if (tname == NULL)
     return DWFL_E_LIBELF;
 
-  if (debugscn && ! ebl_debugscn_p (mod->ebl, tname))
+  if (debugscn && ! ebl_debugscn_p (mod->main.shared->ebl, tname))
     /* This relocation section is not for a debugging section.
        Nothing to do here.  */
     return DWFL_E_NOERROR;
@@ -308,7 +211,7 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
   {
     /* First see if this is a reloc we can handle.
        If we are skipping it, don't bother resolving the symbol.  */
-    Elf_Type type = ebl_reloc_simple_type (mod->ebl, rtype);
+    Elf_Type type = ebl_reloc_simple_type (mod->main.shared->ebl, rtype);
     if (unlikely (type == ELF_T_NUM))
       return DWFL_E_BADRELTYPE;
 
@@ -327,18 +230,37 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
       {
 	GElf_Sym sym;
 	GElf_Word shndx;
-	Dwfl_Error error = relocate_getsym (mod, relocated, reloc_symtab,
-					    symndx, &sym, &shndx);
-	if (unlikely (error != DWFL_E_NOERROR))
-	  return error;
 
-	if (shndx == SHN_UNDEF || shndx == SHN_COMMON)
+	if (unlikely (gelf_getsymshndx (symfile->symdata,
+					symfile->symxndxdata,
+					symndx, &sym, &shndx) == NULL))
+	  return DWFL_E_LIBELF;
+
+	if (sym.st_shndx != SHN_XINDEX)
+	  shndx = sym.st_shndx;
+
+	Dwfl_Error err = DWFL_E_NOERROR;
+	switch (shndx)
 	  {
-	    /* Maybe we can figure it out anyway.  */
-	    error = resolve_symbol (mod, reloc_symtab, &sym, shndx);
-	    if (error != DWFL_E_NOERROR)
-	      return error;
+	  case SHN_ABS:
+	    break;
+	  case SHN_UNDEF:
+	  case SHN_COMMON:
+	    {
+	      /* Maybe we can figure it out anyway.  */
+	      err = resolve_symbol (mod, symfile, &sym, shndx);
+	      break;
+	    }
+	  default:
+	    {
+	      err = __libdwfl_relocate_value (mod, relocated->elf, &shstrndx,
+					      shndx, &sym.st_value);
+	      break;
+	    }
 	  }
+
+	if (unlikely (err != DWFL_E_NOERROR))
+	  return err;
 
 	value = sym.st_value;
       }
@@ -401,7 +323,7 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
     else
       {
 	/* Extract the original value and apply the reloc.  */
-	Elf_Data *d = gelf_xlatetom (relocated, &tmpdata, &rdata,
+	Elf_Data *d = gelf_xlatetom (relocated->elf, &tmpdata, &rdata,
 				     ehdr->e_ident[EI_DATA]);
 	if (d == NULL)
 	  return DWFL_E_LIBELF;
@@ -422,7 +344,7 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
     /* Now convert the relocated datum back to the target
        format.  This will write into rdata.d_buf, which
        points into the raw section data being relocated.  */
-    Elf_Data *s = gelf_xlatetof (relocated, &rdata, &tmpdata,
+    Elf_Data *s = gelf_xlatetof (relocated->elf, &rdata, &tmpdata,
 				 ehdr->e_ident[EI_DATA]);
     if (s == NULL)
       return DWFL_E_LIBELF;
@@ -444,7 +366,7 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
     if (first_badreltype)
       {
 	first_badreltype = false;
-	if (ebl_get_elfmachine (mod->ebl) == EM_NONE)
+	if (ebl_get_elfmachine (mod->main.shared->ebl) == EM_NONE)
 	  /* This might be because ebl_openbackend failed to find
 	     any libebl_CPU.so library.  Diagnose that clearly.  */
 	  result = DWFL_E_UNKNOWN_MACHINE;
@@ -560,29 +482,50 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
   return result;
 }
 
+static Dwfl_Error
+find_relocation_symfile (Dwfl_Module *mod,
+			 struct dwfl_shared_file *relocated,
+			 struct dwfl_shared_file **symfile)
+{
+  Dwfl_Error err = __libdwfl_find_symtab (relocated);
+  if (err == DWFL_E_NOERROR)
+    *symfile = relocated;
+  else if (err == DWFL_E_NO_SYMTAB)
+    {
+      err = __libdwfl_find_symtab (mod->main.shared);
+      if (err == DWFL_E_NOERROR)
+	*symfile = relocated;
+    }
+
+  return err;
+}
+
 Dwfl_Error
 internal_function
-__libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile, bool debug)
+__libdwfl_relocate (Dwfl_Module *mod, struct dwfl_shared_file *debugfile,
+		    bool debug)
 {
   assert (mod->e_type == ET_REL);
 
   GElf_Ehdr ehdr_mem;
-  const GElf_Ehdr *ehdr = gelf_getehdr (debugfile, &ehdr_mem);
+  const GElf_Ehdr *ehdr = gelf_getehdr (debugfile->elf, &ehdr_mem);
   if (ehdr == NULL)
     return DWFL_E_LIBELF;
 
   size_t d_shstrndx;
-  if (elf_getshstrndx (debugfile, &d_shstrndx) < 0)
+  if (elf_getshstrndx (debugfile->elf, &d_shstrndx) < 0)
     return DWFL_E_LIBELF;
 
-  RELOC_SYMTAB_CACHE (reloc_symtab);
+  struct dwfl_shared_file *symfile;
+  Dwfl_Error result = find_relocation_symfile (mod, debugfile, &symfile);
+  if (result != DWFL_E_NOERROR)
+    return result;
 
   /* Look at each section in the debuginfo file, and process the
      relocation sections for debugging sections.  */
-  Dwfl_Error result = DWFL_E_NOERROR;
   Elf_Scn *scn = NULL;
   while (result == DWFL_E_NOERROR
-	 && (scn = elf_nextscn (debugfile, scn)) != NULL)
+	 && (scn = elf_nextscn (debugfile->elf, scn)) != NULL)
     {
       GElf_Shdr shdr_mem;
       GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
@@ -592,12 +535,13 @@ __libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile, bool debug)
 	{
 	  /* It's a relocation section.  */
 
-	  Elf_Scn *tscn = elf_getscn (debugfile, shdr->sh_info);
+	  Elf_Scn *tscn = elf_getscn (debugfile->elf, shdr->sh_info);
 	  if (unlikely (tscn == NULL))
 	    result = DWFL_E_LIBELF;
 	  else
-	    result = relocate_section (mod, debugfile, ehdr, d_shstrndx,
-				       &reloc_symtab, scn, shdr, tscn,
+	    result = relocate_section (mod, debugfile, symfile,
+				       ehdr, d_shstrndx,
+				       scn, shdr, tscn,
 				       debug, !debug);
 	}
     }
@@ -607,22 +551,29 @@ __libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile, bool debug)
 
 Dwfl_Error
 internal_function
-__libdwfl_relocate_section (Dwfl_Module *mod, Elf *relocated,
+__libdwfl_relocate_section (Dwfl_Module *mod,
+			    struct dwfl_shared_file *relocated,
 			    Elf_Scn *relocscn, Elf_Scn *tscn, bool partial)
 {
   GElf_Ehdr ehdr_mem;
   GElf_Shdr shdr_mem;
 
-  RELOC_SYMTAB_CACHE (reloc_symtab);
-
   size_t shstrndx;
-  if (elf_getshstrndx (relocated, &shstrndx) < 0)
+  if (elf_getshstrndx (relocated->elf, &shstrndx) < 0)
     return DWFL_E_LIBELF;
 
-  return (__libdwfl_module_getebl (mod)
-	  ?: relocate_section (mod, relocated,
-			       gelf_getehdr (relocated, &ehdr_mem), shstrndx,
-			       &reloc_symtab,
-			       relocscn, gelf_getshdr (relocscn, &shdr_mem),
-			       tscn, false, partial));
+  Dwfl_Error error = __libdwfl_module_getebl (mod);
+  if (error != DWFL_E_NOERROR)
+    return error;
+
+  struct dwfl_shared_file *symfile;
+  Dwfl_Error result = find_relocation_symfile (mod, relocated, &symfile);
+  if (result != DWFL_E_NOERROR)
+    return result;
+
+  return relocate_section (mod, relocated, symfile,
+			   gelf_getehdr (relocated->elf, &ehdr_mem),
+			   shstrndx,
+			   relocscn, gelf_getshdr (relocscn, &shdr_mem),
+			   tscn, false, partial);
 }

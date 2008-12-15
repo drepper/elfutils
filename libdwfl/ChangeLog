@@ -125,10 +125,90 @@
 	* linux-kernel-modules.c (check_module_notes): Use FTS_LOGICAL so
 	we accept symlinks.
 
+2008-04-30  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_module_getdwarf.c
+	(find_debuginfo): Use mod->debug.cberr to record failure.
+
 2008-04-27  Roland McGrath  <roland@redhat.com>
 
 	* linux-kernel-modules.c (report_kernel): Fix crash when
 	dwfl_report_elf fails.
+
+2008-04-22  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h: Move Module.ebl to dwfl_shared_file.
+	* dwfl_module_getdwarf.c: Adjust to change above.  Module.main's
+	ebl is always used.
+	* dwfl_module_register_names.c: Likewise.
+	* dwfl_module_return_value_location.c: Likewise.
+	* relocate.c: Likewise.
+	* dwfl_module.c: Move ebl_closebackend...
+	* dwfl_file.c: ... here.
+
+2008-04-22  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h: Add dwerr to dwfl_shared_file.  Module.dwerr was
+	retained to record errors in establishing shared debug file.
+	* dwfl_nextcu.c: Adjust to above change.
+	* dwfl_module_getdwarf.c: Likewise.
+	(find_dw): Now returns Dwfl_Error.
+
+2008-04-22  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h: Move Module.dw to struct dwfl_shared_file
+	* cu.c: Adjust to above change.
+	* derelocate.c: Likewise.
+	* dwfl_module_getdwarf.c: Likewise.
+	* dwfl_module_getsrc_file.c: Likewise.
+	* dwfl_nextcu.c: Likewise.
+	* dwfl_module.c: Move dwarf_ending of dw...
+	* dwfl_file.c: ... here.
+
+2008-04-17  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_file.c (__libdwfl_open_file): Handle synthetic
+	ELF (non-null ELF handle, but fd==-1).  Key it with all zeroes.
+
+2008-04-16  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_build_id_find_elf.c (open_and_check): New function, opens a
+	file and checks its build ID.
+	(__libdwfl_open_by_build_id): Change prototype.
+	(dwfl_build_id_find_elf): Only call __libdwfl_open_by_build_id.
+	* dwfl_module_build_id.c (__libdwfl_find_build_id): Pass build_id
+	pointer instead of dwfl Module argument.
+	(dwfl_module_build_id): Adjust to above: pass NULL instead of true.
+	* libdwflP.h: Adjust to changes above.
+	* dwfl_build_id_find_debuginfo.c
+	(dwfl_build_id_find_debuginfo): Call __libdwfl_open_file_build_id
+	to open file and check build ID.
+	* dwfl_module_getdwarf.c (find_file): Only open file if callback
+	didn't open it via __libdwfl_open_file_build_id already.
+	(find_debuginfo): Likewise.
+
+2008-04-14  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_build_id_find_elf.c (dwfl_build_id_find_elf):
+	Cache build_id if it is found to be valid.
+
+2008-04-11  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_module_build_id.c (found_build_id): Renamed to
+	__libdwfl_found_build_id, exported.
+	Now allocates struct build_id on the heap.
+	* libdwflP.h: Export above.
+	(BUILD_ID_NOT_FOUND): New macro holds value of cached
+	build-id-not-found pointer.
+	(BUILD_ID_PTR): Predicate of validity of build ID pointer.
+	(struct dwfl_shared_file, struct Dwfl_Module): Make struct
+	dwfl_build_id heap-allocated.
+	* dwfl_module_build_id.c (dwfl_module_report_build_id): Call
+	__libdwfl_found_build_id instead of duplicating the work.
+	Adjust to above changes.
+	* dwfl_build_id_find_elf.c, dwfl_file.c, dwfl_module.c,
+	dwfl_module_getdwarf.c, find-debuginfo.c, linux-kernel-modules.c:
+	Adjust to above changes.
 
 2008-04-05  Roland McGrath  <roland@redhat.com>
 
@@ -157,6 +237,84 @@
 	prototype to avoid older compiler's complaint about reuse of the name.
 	(__libdwfl_canon_error): Likewise.
 
+2008-03-14  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h (Dwfl_Module.symerr): Delete field.
+	* dwfl_module_getdwarf.c: Adjust to above.
+	* relocate.c: Likewise.
+
+2008-03-14  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h (Dwfl_Module.elferr): Delete field.
+	(dwfl_file.cberr): New field.
+	* dwfl_module_getdwarf.c: Adjust to above.
+
+2008-03-13  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h (dwfl_shared_file.elferr): New field.
+	* dwfl_file.c: When reading of the Elf file failed, keep the cache
+	entry around to cache the failure.
+	* derelocate.c: Adjust to above.
+	* dwfl_module_getdwarf.c: Likewise.
+	* dwfl_module_info.c: Likewise.
+	* offline.c: Likewise.
+
+2008-03-07  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h
+	(struct dwfl_build_id): New structure.
+	(dwfl_shared_file.valid): Dropped.
+	(dwfl_shared_file.build_id): New field.
+	(Dwfl_Module.build_id_*): Dropped.
+	(Dwfl_Module.build_id): New field.
+	* dwfl_file.c
+	(__libdwfl_close_file): Always free filename.  Also free build id.
+	* dwfl_module_report_build_id.c: Adjust to above.
+	* linux-kernel-modules.c: Likewise.
+	* dwfl_build_id_find_debuginfo.c: Drop validation.
+	* dwfl_build_id_find_elf.c: Adjust to above, drop validation.
+	* dwfl_module_build_id.c
+	(found_build_id): Take dwfl_build_id arg instead of Dwfl_Module.
+	(check_notes): Likewise.
+	(__libdwfl_find_build_id): Use appropriate build_id cache
+	Adjust the rest to above changes.
+	(dwfl_module_build_id): Likewise.
+	* find-debuginfo.c: Adjust to above.
+	(validate): Drop ELF backdooring for now.
+
+2008-03-07  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_file.c (__libdwfl_open_file): Call elf_cntl ELF_C_FDREAD if
+	possible, and consume fd right away.
+	* dwfl_module_getdwarf.c (load_dw): Remove ELF_C_FDREAD hack.
+	* offline.c (process_elf): Likewise.
+	* dwfl_report_elf.c (__libdwfl_report_elf): Return error instead
+	of asserting.
+
+2008-03-05  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h
+	(dwfl_shared_file): Renamed from dwfl_file.
+	(dwfl_file): New structure.
+	(DWBIAS, SYMBIAS): Adjust code to above change.
+	* delrelocate.c: Likewise.
+	* dwfl_build_id_find_debuginfo.c: Likewise.
+	* dwfl_build_id_find_elf.c: Likewise.
+	* dwfl_module.c: Likewise.
+	* dwfl_module_addrsym.c: Likewise.
+	* dwfl_module_build_id.c: Likewise.
+	* dwfl_module_getdwarf.c: Likewise.
+	* dwfl_module_getsym.c: Likewise.
+	* dwfl_module_info.c: Likewise.
+	* dwfl_module_report_build_id.c: Likewise.
+	* dwfl_report_elf.c: Likewise.
+	* dwfl_symtab.c: Likewise.
+	* find-debuginfo.c: Likewise.
+	* offline.c: Likewise.
+	* relocate.c: Likewise.
+	* dwfl_file.c: Likewise.
+	(__libdwfl_open_file): Consume passed-in Elf on cache hit.
+
 2008-02-19  Roland McGrath  <roland@redhat.com>
 
 	* relocate.c (relocate_section): Check for an unhandled relocation
@@ -173,10 +331,121 @@
 	* dwfl_build_id_find_elf.c (__libdwfl_open_by_build_id): Don't clear
 	incoming *FILE_NAME at the start.
 
+2008-01-23  Petr Machata  <pmachata@redhat.com>
+
+	* relocate.c (find_relocation_symfile): New function.
+	(relocate_section): Take additional argument SYMFILE.
+	(__libdwfl_relocate, __libdwfl_relocate_section): Use above.
+
+2008-01-22  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_module_getdwarf.c (load_dw): Remove useless call to
+	find_symfile.
+
+2008-01-18  Petr Machata  <pmachata@redhat.com>
+
+	* relocate.c:
+	(struct reloc_symtab_cache): Drop.
+	(#define RELOC_SYMTAB_CACHE): Drop.
+	(relocate_getsym): Drop most of the code, inline the rest.
+	(resolve_symbol): Drop loading of symstrdata, that's already done
+	in __libdwfl_find_symtab.
+	(relocate_section): Inlined the rest of relocate_getsym.
+	(__libdwfl_relocate): Take dwfl_file instead of Elf.
+	(__libdwfl_relocate_section): Likewise.
+	* derelocate.c: Adjust to above.
+	* dwfl_module_getdwarf.c: Likewise.
+	* libdwflP.h (__libdwfl_relocate): Adjust prototype.
+	(__libdwfl_relocate_section): Likewise.
+
+2008-01-18  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_symtab.c: New file.
+	(__libdwfl_find_symtab): New function.
+	* Makefile.am: Add dwfl_symtab.c to the build process.
+	* dwfl_module_getdwarf.c
+	(load_symtab, find_offsets, find_dynsym): Move to dwfl_symtab.c
+	* libdwflP.h (struct dwfl_file.is_symtab): New field.
+	(struct dwfl_file.symerr): Likekwise.
+
+2008-01-14  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_file.c (__libdwfl_open_file): close the file descriptor
+	when reusing the node, and even when it was passed in by the caller.
+	(__libdwfl_close_file): Unconditionally close fd and call elf_end.
+	* dwfl_module_build_id.c: Formatting change.
+	* dwfl_module_getdwarf.c
+	(find_file): Return Dwfl_Error instead of void; adjust to changes
+	in __libdwfl_open_file.
+	(find_symtab): Take advantage from find_file returning Dwfl_Error.
+	(__libdwfl_module_getebl, find_dw, dwfl_module_getelf): Likewise.
+
 2008-01-08  Roland McGrath  <roland@redhat.com>
 
 	* Makefile.am (euinclude): Variable removed.
 	(pkginclude_HEADERS): Set this instead of euinclude_HEADERS.
+
+2007-12-11  Petr Machata  <pmachata@redhat.com>
+
+	* libdwflP.h
+	(struct dwfl_file.bias): Moved to struct Dwfl_Module.
+	(struct dwfl_file.align): New field.
+	(struct dwfl_file.start): New field.
+	(#define DWBIAS): New macro.
+	(#define SYMBIAS): New macro.
+	* cu.c: Use SYMBIAS/DWBIAS instead of main/debug->bias.
+	* derelocate.c: Likewise.
+	* dwfl_lineinfo.c: Likewise.
+	* dwfl_module_addrsym.c: Likewise.
+	* dwfl_module_build_id.c: Likewise.
+	* dwfl_module_getsym.c: Likewise.
+	* dwfl_module_info.c: Likewise.
+	* dwfl_nextcu.c: Likewise.
+	* dwfl_report_elf.c: Likewise.
+	* dwfl_module_getdwarf.c: Likewise.
+
+2007-12-10  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_file.c: Use likely/unlikely where possible.
+	* libdwflP.h (struct Dwfl_Module): Move symdata, syments,
+	symstrdata, symxndxdata, to struct dwfl_file.
+	* dwfl_module_getdwarf.c: Adjust to above changes.
+	(load_symtab): Drop the parameter `syments'.
+	(find_symtab): Use module->main or module->debug to initialize
+	module->symfile when possible.
+	* dwfl_module_getsym.c: Adjust to above changes.
+	* dwfl_report_elf.c: Likewise.
+	* relocate.c: Likewise.
+
+2007-12-05  Petr Machata  <pmachata@redhat.com>
+
+	* dwfl_file.c: New file.
+	* Makefile.am (libdwfl_a_SOURCES): Add dwfl_file.c.
+	* libdwflP.h
+	(__libdwfl_open_file): New internal function.
+	(__libdwfl_close_file): New internal function.
+	* cu.c: Adjust to the above change.
+	* derelocate.c: Likewise.
+	* dwfl_build_id_find_debuginfo.c: Likewise.
+	* dwfl_build_id_find_elf.c: Likewise.
+	* dwfl_lineinfo.c: Likewise.
+	* dwfl_module.c: Likewise.
+	* dwfl_module_build_id.c: Likewise.
+	* dwfl_module_getdwarf.c: Likewise.
+	* dwfl_module_info.c: Likewise.
+	* dwfl_module_report_build_id.c: Likewise.
+	* dwfl_nextcu.c: Likewise.
+	* dwfl_report_elf.c: Likewise.
+	* find-debuginfo.c: Likewise.
+	* offline.c: Likewise.
+
+	* dwfl_module.c (free_file): Code moved to dwfl_file.c.
+	(__libdwfl_module_free): Call __libdwfl_release_file.
+	* dwfl_module_getdwarf.c (open_elf): Code moved to dwfl_file.c.
+	(find_file): Call __libdwfl_open_file.
+	(find_debuginfo): Likewise.
+	(find_dw): Call __libdwfl_retain_file instead of copying members.
+	* dwfl_report_elf.c (__libdwfl_report_elf): Call __libdwfl_open_file.
 
 2007-10-23  Roland McGrath  <roland@redhat.com>
 

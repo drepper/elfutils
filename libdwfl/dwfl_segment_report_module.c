@@ -638,8 +638,14 @@ dwfl_segment_report_module (Dwfl *dwfl, int ndx, const char *name,
   if (elf != NULL)
     {
       /* Install the file in the module.  */
-      mod->main.elf = elf;
-      mod->main.bias = bias;
+      if (__libdwfl_open_file (&mod->main, NULL, -1, elf))
+	{
+	  ndx = -1;
+	  return finish ();
+	}
+      mod->main.shared->start = start;
+      mod->bias = ((mod->low_addr & -mod->main.shared->align)
+		   - (mod->main.shared->start & -mod->main.shared->align));
     }
 
   return finish ();

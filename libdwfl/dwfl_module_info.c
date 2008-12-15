@@ -66,9 +66,12 @@ dwfl_module_info (Dwfl_Module *mod, void ***userdata,
     *end = mod->high_addr;
 
   if (dwbias)
-    *dwbias = mod->debug.elf == NULL ? (Dwarf_Addr) -1 : mod->debug.bias;
+    *dwbias = (mod->debug.shared == NULL
+	       || mod->debug.shared->elf == NULL)
+      ? (Dwarf_Addr) -1 : DWBIAS (mod);
+
   if (symbias)
-    *symbias = mod->symfile == NULL ? (Dwarf_Addr) -1 : mod->symfile->bias;
+    *symbias = mod->symfile == NULL ? (Dwarf_Addr) -1 : SYMBIAS (mod);
 
   if (mainfile)
     *mainfile = mod->main.name;

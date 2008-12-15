@@ -70,7 +70,8 @@ dwfl_offline_section_address (Dwfl_Module *mod,
   assert (shdr->sh_addr == 0);
   assert (shdr->sh_flags & SHF_ALLOC);
 
-  if (mod->debug.elf == NULL)
+  if (mod->debug.shared == NULL
+      || mod->debug.shared->elf == NULL)
     /* We are only here because sh_addr is zero even though layout is complete.
        The first section in the first file under -e is placed at 0.  */
     return 0;
@@ -78,10 +79,11 @@ dwfl_offline_section_address (Dwfl_Module *mod,
   /* The section numbers might not match between the two files.
      The best we can rely on is the order of SHF_ALLOC sections.  */
 
-  Elf_Scn *ourscn = elf_getscn (mod->debug.elf, shndx);
+  Elf *debug_elf = mod->debug.shared->elf;
+  Elf_Scn *ourscn = elf_getscn (debug_elf, shndx);
   Elf_Scn *scn = NULL;
   uint_fast32_t skip_alloc = 0;
-  while ((scn = elf_nextscn (mod->debug.elf, scn)) != ourscn)
+  while ((scn = elf_nextscn (debug_elf, scn)) != ourscn)
     {
       assert (scn != NULL);
       GElf_Shdr shdr_mem;
@@ -93,7 +95,7 @@ dwfl_offline_section_address (Dwfl_Module *mod,
     }
 
   scn = NULL;
-  while ((scn = elf_nextscn (mod->main.elf, scn)) != NULL)
+  while ((scn = elf_nextscn (mod->main.shared->elf, scn)) != NULL)
     {
       GElf_Shdr shdr_mem;
       GElf_Shdr *main_shdr = gelf_getshdr (scn, &shdr_mem);
@@ -161,13 +163,6 @@ process_elf (Dwfl *dwfl, const char *name, const char *file_name, int fd,
 	   || mod->low_addr - dwfl->offline_next_address < OFFLINE_REDZONE)
 	  && dwfl->offline_next_address < mod->high_addr + OFFLINE_REDZONE)
 	dwfl->offline_next_address = mod->high_addr + OFFLINE_REDZONE;
-
-      /* Don't keep the file descriptor around.  */
-      if (mod->main.fd != -1 && elf_cntl (mod->main.elf, ELF_C_FDREAD) == 0)
-	{
-	  close (mod->main.fd);
-	  mod->main.fd = -1;
-	}
     }
 
   return mod;
@@ -237,7 +232,7 @@ process_archive_member (Dwfl *dwfl, const char *name, const char *file_name,
 	}
     }
 
-  /* We let __libdwfl_report_elf cache the fd in mod->main.fd,
+  /* We let __libdwfl_report_elf cache the fd in mod->main->fd,
      though it's the same fd for all the members.
      On module teardown we will close it only on the last Elf reference.  */
   *mod = process_file (dwfl, name, member_name, fd, member, predicate);

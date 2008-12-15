@@ -49,34 +49,41 @@
 
 #include "libdwflP.h"
 
-static int
-found_build_id (Dwfl_Module *mod, bool set,
-		const void *bits, int len, GElf_Addr vaddr)
+int
+internal_function
+__libdwfl_found_build_id (struct dwfl_build_id **build_idp, bool set,
+			  const void *bits, int len, GElf_Addr vaddr)
 {
+  struct dwfl_build_id *build_id = *build_idp;
+
   if (!set)
     /* When checking bits, we do not compare VADDR because the
        address found in a debuginfo file may not match the main
        file as modified by prelink.  */
-    return 1 + (mod->build_id_len == len
-		&& !memcmp (bits, mod->build_id_bits, len));
+    return 1 + (build_id != NULL
+		&& build_id->len == len
+		&& !memcmp (bits, build_id->bits, len));
 
-  void *copy = malloc (len);
-  if (unlikely (copy == NULL))
+  build_id = malloc (offsetof (struct dwfl_build_id, bits[len]));
+  if (unlikely (build_id == NULL))
     {
       __libdwfl_seterrno (DWFL_E_NOMEM);
       return -1;
     }
 
-  mod->build_id_bits = memcpy (copy, bits, len);
-  mod->build_id_vaddr = vaddr;
-  mod->build_id_len = len;
+  memcpy (build_id->bits, bits, len);
+  build_id->vaddr = vaddr;
+  build_id->len = len;
+
+  *build_idp = build_id;
   return len;
 }
 
 #define NO_VADDR	((GElf_Addr) -1l)
 
 static int
-check_notes (Dwfl_Module *mod, bool set, Elf_Data *data, GElf_Addr data_vaddr)
+check_notes (struct dwfl_build_id **build_idp, bool set,
+	     Elf_Data *data, GElf_Addr data_vaddr)
 {
   size_t pos = 0;
   GElf_Nhdr nhdr;
@@ -84,21 +91,25 @@ check_notes (Dwfl_Module *mod, bool set, Elf_Data *data, GElf_Addr data_vaddr)
   size_t desc_pos;
   while ((pos = gelf_getnote (data, pos, &nhdr, &name_pos, &desc_pos)) > 0)
     if (nhdr.n_type == NT_GNU_BUILD_ID
-	&& nhdr.n_namesz == sizeof "GNU" && !memcmp (data->d_buf + name_pos,
-						     "GNU", sizeof "GNU"))
-      return found_build_id (mod, set,
-			     data->d_buf + desc_pos, nhdr.n_descsz,
-			     data_vaddr == NO_VADDR ? 0
-			     : data_vaddr + desc_pos);
+	&& nhdr.n_namesz == sizeof "GNU"
+	&& !memcmp (data->d_buf + name_pos, "GNU", sizeof "GNU"))
+      return __libdwfl_found_build_id (build_idp, set,
+				       data->d_buf + desc_pos,
+				       nhdr.n_descsz,
+				       data_vaddr == NO_VADDR
+				         ? 0 : data_vaddr + desc_pos);
   return 0;
 }
 
 int
 internal_function
-__libdwfl_find_build_id (Dwfl_Module *mod, bool set, Elf *elf)
+__libdwfl_find_build_id (struct dwfl_build_id **build_idp, GElf_Addr bias,
+			 bool set, Elf *elf)
 {
-  int result = 0;
+  if (*build_idp == BUILD_ID_NOT_FOUND) /* Cached failure. */
+    return -1;
 
+  int result = 0;
   Elf_Scn *scn = elf_nextscn (elf, NULL);
 
   if (scn == NULL)
@@ -116,12 +127,12 @@ __libdwfl_find_build_id (Dwfl_Module *mod, bool set, Elf *elf)
 	  GElf_Phdr phdr_mem;
 	  GElf_Phdr *phdr = gelf_getphdr (elf, i, &phdr_mem);
 	  if (likely (phdr != NULL) && phdr->p_type == PT_NOTE)
-	    result = check_notes (mod, set,
+	    result = check_notes (build_idp, set,
 				  elf_getdata_rawchunk (elf,
 							phdr->p_offset,
 							phdr->p_filesz,
 							ELF_T_NHDR),
-				  phdr->p_vaddr + mod->main.bias);
+				  phdr->p_vaddr + bias);
 	}
     }
   else
@@ -130,11 +141,16 @@ __libdwfl_find_build_id (Dwfl_Module *mod, bool set, Elf *elf)
 	GElf_Shdr shdr_mem;
 	GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
 	if (likely (shdr != NULL) && shdr->sh_type == SHT_NOTE)
-	  result = check_notes (mod, set, elf_getdata (scn, NULL),
+	  result = check_notes (build_idp, set,
+				elf_getdata (scn, NULL),
 				(shdr->sh_flags & SHF_ALLOC)
-				? shdr->sh_addr + mod->main.bias : NO_VADDR);
+				? shdr->sh_addr + bias : NO_VADDR);
       }
     while (result == 0 && (scn = elf_nextscn (elf, scn)) != NULL);
+
+  /* Cache negative result. */
+  if (result <= 0)
+    *build_idp = BUILD_ID_NOT_FOUND;
 
   return result;
 }
@@ -146,22 +162,28 @@ dwfl_module_build_id (Dwfl_Module *mod,
   if (mod == NULL)
     return -1;
 
-  if (mod->build_id_len == 0 && mod->main.elf != NULL)
+  struct dwfl_build_id *build_id;
+  if (mod->main.shared == NULL)
+    build_id = mod->build_id;
+  else if (mod->main.shared->build_id != NULL)
+    build_id = mod->main.shared->build_id;
+  else if (mod->main.shared->elf != NULL)
     {
       /* We have the file, but have not examined it yet.  */
-      int result = __libdwfl_find_build_id (mod, true, mod->main.elf);
-      if (result <= 0)
-	{
-	  mod->build_id_len = -1;	/* Cache negative result.  */
-	  return result;
-	}
+      __libdwfl_find_build_id (&mod->main.shared->build_id, mod->bias,
+			       true, mod->main.shared->elf);
+      build_id = mod->main.shared->build_id;
     }
+  else
+    return -1;
 
-  if (mod->build_id_len <= 0)
+  if (build_id == NULL)
     return 0;
+  else if (build_id == BUILD_ID_NOT_FOUND)
+    return -1;
 
-  *bits = mod->build_id_bits;
-  *vaddr = mod->build_id_vaddr;
-  return mod->build_id_len;
+  *bits = build_id->bits;
+  *vaddr = build_id->vaddr;
+  return build_id->len;
 }
 INTDEF (dwfl_module_build_id)

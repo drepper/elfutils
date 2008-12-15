@@ -56,7 +56,7 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
   if (unlikely (mod == NULL))
     return NULL;
 
-  if (unlikely (mod->symdata == NULL))
+  if (unlikely (mod->symfile == NULL))
     {
       int result = INTUSE(dwfl_module_getsymtab) (mod);
       if (result < 0)
@@ -64,7 +64,9 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
     }
 
   GElf_Word shndx;
-  sym = gelf_getsymshndx (mod->symdata, mod->symxndxdata, ndx, sym, &shndx);
+  sym = gelf_getsymshndx (mod->symfile->shared->symdata,
+			  mod->symfile->shared->symxndxdata,
+			  ndx, sym, &shndx);
   if (unlikely (sym == NULL))
     {
       __libdwfl_seterrno (DWFL_E_LIBELF);
@@ -90,9 +92,9 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
 	  /* In an ET_REL file, the symbol table values are relative
 	     to the section, not to the module's load base.  */
 	  size_t symshstrndx = SHN_UNDEF;
-	  Dwfl_Error result = __libdwfl_relocate_value (mod, mod->symfile->elf,
-							&symshstrndx,
-							shndx, &sym->st_value);
+	  Dwfl_Error result
+	    = __libdwfl_relocate_value (mod, mod->symfile->shared->elf,
+					&symshstrndx, shndx, &sym->st_value);
 	  if (unlikely (result != DWFL_E_NOERROR))
 	    {
 	      __libdwfl_seterrno (result);
@@ -100,15 +102,15 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
 	    }
 	}
       /* Apply the bias to the symbol value.  */
-      sym->st_value += mod->symfile->bias;
+      sym->st_value += SYMBIAS (mod);
       break;
     }
 
-  if (unlikely (sym->st_name >= mod->symstrdata->d_size))
+  if (unlikely (sym->st_name >= mod->symfile->shared->symstrdata->d_size))
     {
       __libdwfl_seterrno (DWFL_E_BADSTROFF);
       return NULL;
     }
-  return (const char *) mod->symstrdata->d_buf + sym->st_name;
+  return (const char *) mod->symfile->shared->symstrdata->d_buf + sym->st_name;
 }
 INTDEF (dwfl_module_getsym)

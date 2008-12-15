@@ -59,7 +59,8 @@ dwfl_module_return_value_location (mod, functypedie, locops)
   if (mod == NULL)
     return -1;
 
-  if (mod->ebl == NULL)
+  if (mod->main.shared == NULL
+      || mod->main.shared->ebl == NULL)
     {
       Dwfl_Error error = __libdwfl_module_getebl (mod);
       if (error != DWFL_E_NOERROR)
@@ -69,7 +70,8 @@ dwfl_module_return_value_location (mod, functypedie, locops)
 	}
     }
 
-  int nops = ebl_return_value_location (mod->ebl, functypedie, locops);
+  int nops = ebl_return_value_location (mod->main.shared->ebl,
+					functypedie, locops);
   if (unlikely (nops < 0))
     {
       if (nops == -1)

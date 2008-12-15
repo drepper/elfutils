@@ -240,7 +240,8 @@ core_file_read_eagerly (Dwfl_Module *mod,
     requires find_elf hook re-doing the magic to fall back if no file found
   */
 
-  if (mod->build_id_len > 0)
+  if (mod->build_id != NULL
+      || (mod->main.shared != NULL && mod->main.shared->build_id != NULL))
     /* There is a build ID that could help us find the whole file,
        which might be more useful than what we have.
        We'll just rely on that.  */

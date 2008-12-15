@@ -61,32 +61,15 @@ dwfl_build_id_find_debuginfo (Dwfl_Module *mod,
 			      GElf_Word crc __attribute__ ((unused)),
 			      char **debuginfo_file_name)
 {
-  int fd = -1;
   const unsigned char *bits;
   GElf_Addr vaddr;
-  if (INTUSE(dwfl_module_build_id) (mod, &bits, &vaddr) > 0)
-    fd = __libdwfl_open_by_build_id (mod, true, debuginfo_file_name);
-  if (fd >= 0)
-    {
-      /* We need to open an Elf handle on the file so we can check its
-	 build ID note for validation.  Backdoor the handle into the
-	 module data structure since we had to open it early anyway.  */
-      mod->debug.elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (likely (__libdwfl_find_build_id (mod, false, mod->debug.elf) == 2))
-	/* Also backdoor the gratuitous flag.  */
-	mod->debug.valid = true;
-      else
-	{
-	  /* A mismatch!  */
-	  elf_end (mod->debug.elf);
-	  mod->debug.elf = NULL;
-	  close (fd);
-	  fd = -1;
-	  free (*debuginfo_file_name);
-	  *debuginfo_file_name = NULL;
-	  errno = 0;
-	}
-    }
-  return fd;
+
+  if (INTUSE(dwfl_module_build_id) (mod, &bits, &vaddr) > 0
+      && !__libdwfl_open_by_build_id (mod->dwfl->callbacks,
+				      &mod->debug, mod->main.shared->build_id,
+				      mod->bias, true, debuginfo_file_name))
+    errno = 0;
+
+  return -1;
 }
 INTDEF (dwfl_build_id_find_debuginfo)

@@ -53,18 +53,44 @@
 #include <unistd.h>
 
 
-int
+static bool
+open_and_check (struct dwfl_file *file,
+		const struct dwfl_build_id *build_id,
+		GElf_Addr bias,
+		char *file_name, int fd)
+{
+  if (__libdwfl_open_file (file, file_name,
+			   fd, NULL) != DWFL_E_NOERROR)
+    return false;
+
+  /* For the "check" (set==false) call, we can safely cast away const
+     and take stack pointer. */
+  if (__libdwfl_find_build_id ((struct dwfl_build_id **)&build_id,
+			       bias, false, file->shared->elf) != 2)
+    {
+      __libdwfl_close_file (file);
+      return false;
+    }
+
+  return true;
+}
+
+bool
 internal_function
-__libdwfl_open_by_build_id (Dwfl_Module *mod, bool debug, char **file_name)
+__libdwfl_open_by_build_id (const Dwfl_Callbacks *const cb,
+			    struct dwfl_file *file,
+			    const struct dwfl_build_id *build_id,
+			    GElf_Addr bias,
+			    bool debug, char **file_name)
 {
   /* If *FILE_NAME was primed into the module, leave it there
      as the fallback when we have nothing to offer.  */
   errno = 0;
-  if (mod->build_id_len <= 0)
+  if (!BUILD_ID_PTR (build_id))
     return -1;
 
-  const size_t id_len = mod->build_id_len;
-  const uint8_t *id = mod->build_id_bits;
+  const size_t id_len = build_id->len;
+  const uint8_t *id = build_id->bits;
 
   /* Search debuginfo_path directories' .build-id/ subdirectories.  */
 
@@ -83,7 +109,6 @@ __libdwfl_open_by_build_id (Dwfl_Module *mod, bool debug, char **file_name)
     strcpy (&id_name[sizeof "/.build-id/" - 1 + 3 + (id_len - 1) * 2],
 	    ".debug");
 
-  const Dwfl_Callbacks *const cb = mod->dwfl->callbacks;
   char *path = strdupa ((cb->debuginfo_path ? *cb->debuginfo_path : NULL)
 			?: DEFAULT_DEBUGINFO_PATH);
 
@@ -126,7 +151,17 @@ __libdwfl_open_by_build_id (Dwfl_Module *mod, bool debug, char **file_name)
   if (fd < 0 && errno == ENOENT)
     errno = 0;
 
-  return fd;
+  if (fd >= 0)
+    {
+      char *fn = *file_name;
+      *file_name = open_and_check (file, build_id, bias, fn, fd)
+	? file->name : NULL;
+
+      if (fn != *file_name)
+	free (fn); /* Failure, or strdup in __libdwfl_open_file. */
+    }
+
+  return *file_name != NULL;
 }
 
 int
@@ -137,24 +172,17 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
 			char **file_name, Elf **elfp)
 {
   *elfp = NULL;
-  int fd = __libdwfl_open_by_build_id (mod, false, file_name);
-  if (fd >= 0)
+  if (__libdwfl_open_by_build_id (mod->dwfl->callbacks,
+				  &mod->main, mod->build_id,
+				  mod->bias, false, file_name)
+      && mod->main.shared->build_id == NULL)
     {
-      *elfp = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (__libdwfl_find_build_id (mod, false, *elfp) == 2)
-	/* This is a backdoor signal to short-circuit the ID refresh.  */
-	mod->main.valid = true;
-      else
-	{
-	  /* This file does not contain the ID it should!  */
-	  elf_end (*elfp);
-	  *elfp = NULL;
-	  close (fd);
-	  fd = -1;
-	  free (*file_name);
-	  *file_name = NULL;
-	}
+      /* Move build ID bits into the cache. */
+      mod->build_id->vaddr -= mod->bias;
+      mod->main.shared->build_id = mod->build_id;
+      mod->build_id = NULL;
     }
-  return fd;
+
+  return -1;
 }
 INTDEF (dwfl_build_id_find_elf)

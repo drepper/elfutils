@@ -93,8 +93,12 @@ cache_sections (Dwfl_Module *mod)
   struct secref *refs = NULL;
   size_t nrefs = 0;
 
+  assert (mod->main.shared != NULL
+	  && mod->main.shared->elf != NULL);
+  Elf *main_elf = mod->main.shared->elf;
+
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (mod->main.elf, &shstrndx) < 0))
+  if (unlikely (elf_getshstrndx (main_elf, &shstrndx) < 0))
     {
     elf_error:
       __libdwfl_seterrno (DWFL_E_LIBELF);
@@ -103,7 +107,7 @@ cache_sections (Dwfl_Module *mod)
 
   bool check_reloc_sections = false;
   Elf_Scn *scn = NULL;
-  while ((scn = elf_nextscn (mod->main.elf, scn)) != NULL)
+  while ((scn = elf_nextscn (main_elf, scn)) != NULL)
     {
       GElf_Shdr shdr_mem;
       GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
@@ -113,7 +117,7 @@ cache_sections (Dwfl_Module *mod)
       if ((shdr->sh_flags & SHF_ALLOC) && shdr->sh_addr == 0)
 	{
 	  /* This section might not yet have been looked at.  */
-	  if (__libdwfl_relocate_value (mod, mod->main.elf, &shstrndx,
+	  if (__libdwfl_relocate_value (mod, main_elf, &shstrndx,
 					elf_ndxscn (scn),
 					&shdr->sh_addr) != DWFL_E_NOERROR)
 	    continue;
@@ -124,7 +128,7 @@ cache_sections (Dwfl_Module *mod)
 
       if (shdr->sh_flags & SHF_ALLOC)
 	{
-	  const char *name = elf_strptr (mod->main.elf, shstrndx,
+	  const char *name = elf_strptr (main_elf, shstrndx,
 					 shdr->sh_name);
 	  if (unlikely (name == NULL))
 	    goto elf_error;
@@ -133,7 +137,7 @@ cache_sections (Dwfl_Module *mod)
 	  newref->scn = scn;
 	  newref->relocs = NULL;
 	  newref->name = name;
-	  newref->start = shdr->sh_addr + mod->main.bias;
+	  newref->start = shdr->sh_addr + mod->bias;
 	  newref->end = newref->start + shdr->sh_size;
 	  newref->next = refs;
 	  refs = newref;
@@ -148,7 +152,7 @@ cache_sections (Dwfl_Module *mod)
 	  if (shdr->sh_info < elf_ndxscn (scn))
 	    {
 	      /* We've already looked at the section these relocs apply to.  */
-	      Elf_Scn *tscn = elf_getscn (mod->main.elf, shdr->sh_info);
+	      Elf_Scn *tscn = elf_getscn (main_elf, shdr->sh_info);
 	      if (likely (tscn != NULL))
 		for (struct secref *sec = refs; sec != NULL; sec = sec->next)
 		  if (sec->scn == tscn)
@@ -194,7 +198,7 @@ cache_sections (Dwfl_Module *mod)
 	 possible target sections we care about.  */
 
       scn = NULL;
-      while ((scn = elf_nextscn (mod->main.elf, scn)) != NULL)
+      while ((scn = elf_nextscn (main_elf, scn)) != NULL)
 	{
 	  GElf_Shdr shdr_mem;
 	  GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
@@ -204,7 +208,7 @@ cache_sections (Dwfl_Module *mod)
       	  if (shdr->sh_size != 0
 	      && (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA))
 	    {
-	      Elf_Scn *tscn = elf_getscn (mod->main.elf, shdr->sh_info);
+	      Elf_Scn *tscn = elf_getscn (main_elf, shdr->sh_info);
 	      if (likely (tscn != NULL))
 		for (size_t i = 0; i < nrefs; ++i)
 		  if (mod->reloc_info->refs[i].scn == tscn)
@@ -238,7 +242,9 @@ dwfl_module_relocations (Dwfl_Module *mod)
       return 1;
 
     case ET_EXEC:
-      assert (mod->debug.bias == 0);
+      assert (mod->debug.shared != NULL
+	      && mod->debug.shared->elf != NULL);
+      assert (DWBIAS (mod) == 0);
       break;
     }
 
@@ -296,7 +302,8 @@ check_module (Dwfl_Module *mod)
 	}
     }
 
-  if (mod->dw == NULL)
+  if (mod->debug.shared == NULL
+      || mod->debug.shared->dw == NULL)
     {
       Dwarf_Addr bias;
       if (INTUSE(dwfl_module_getdwarf) (mod, &bias) == NULL)
@@ -358,7 +365,7 @@ dwfl_module_relocate_address (Dwfl_Module *mod, Dwarf_Addr *addr)
 
   if (mod->e_type != ET_REL)
     {
-      *addr -= mod->debug.bias;
+      *addr -= DWBIAS (mod);
       return 0;
     }
 
@@ -383,7 +390,7 @@ dwfl_module_address_section (Dwfl_Module *mod, Dwarf_Addr *address,
 
       Elf_Scn *tscn = mod->reloc_info->refs[idx].scn;
       Elf_Scn *relocscn = mod->reloc_info->refs[idx].relocs;
-      Dwfl_Error result = __libdwfl_relocate_section (mod, mod->main.elf,
+      Dwfl_Error result = __libdwfl_relocate_section (mod, mod->main.shared,
 						      relocscn, tscn, true);
       if (likely (result == DWFL_E_NOERROR))
 	mod->reloc_info->refs[idx].relocs = NULL;
@@ -394,7 +401,7 @@ dwfl_module_address_section (Dwfl_Module *mod, Dwarf_Addr *address,
 	}
     }
 
-  *bias = mod->main.bias;
+  *bias = mod->bias;
   return mod->reloc_info->refs[idx].scn;
 }
 INTDEF (dwfl_module_address_section)

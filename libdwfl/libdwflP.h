@@ -128,15 +128,43 @@ struct Dwfl
 
 #define OFFLINE_REDZONE		0x10000
 
-struct dwfl_file
+struct dwfl_build_id
 {
-  char *name;
+  GElf_Addr vaddr;		/* Address where they reside. */
+  int len;
+  unsigned char bits[0];	/* malloc'd copy of build ID bits.  */
+};
+
+struct dwfl_shared_file
+{
   int fd;
-  bool valid;			/* The build ID note has been matched.  */
   bool relocated;		/* Partial relocation of all sections done.  */
 
   Elf *elf;
-  GElf_Addr bias;		/* Actual load address - p_vaddr.  */
+  GElf_Addr start;		/* p_vaddr */
+  Dwfl_Error elferr;		/* Previous failure to get Elf handle. */
+
+  Elf_Data *symdata;		/* Data in the ELF symbol table section.  */
+  size_t syments;		/* sh_size / sh_entsize of that section.  */
+  Elf_Data *symstrdata;		/* Data for its string table.  */
+  Elf_Data *symxndxdata;	/* Data in the extended section index table. */
+  GElf_Addr align;		/* Alignment requirements. */
+  bool is_symtab;		/* Whether the symfile has a .symtab or a .dynsym. */
+  Dwfl_Error symerr;		/* Previous failure to load symbols.  */
+
+  struct dwfl_build_id *build_id;
+
+  Dwarf *dw;			/* libdw handle for its debugging info.  */
+  Dwfl_Error dwerr;		/* Previous failure to load debuginfo.  */
+  Ebl *ebl;
+};
+
+struct dwfl_file
+{
+  char *name;
+  struct dwfl_shared_file *shared;	/* Shared portion of file. */
+  Dwfl_Error cberr;	/* Error related to use of find_elf (main.cberr)
+			   or find_debuginfo (debug.cberr) callbacks.  */
 };
 
 struct Dwfl_Module
@@ -149,26 +177,20 @@ struct Dwfl_Module
   char *name;			/* Iterator name for this module.  */
   GElf_Addr low_addr, high_addr;
 
-  void *build_id_bits;		/* malloc'd copy of build ID bits.  */
-  GElf_Addr build_id_vaddr;	/* Address where they reside, 0 if unknown.  */
-  int build_id_len;		/* -1 for prior failure, 0 if unset.  */
-
-  struct dwfl_file main, debug;
-  Ebl *ebl;
+  struct dwfl_file main;
+  struct dwfl_file debug;
   GElf_Half e_type;		/* GElf_Ehdr.e_type cache.  */
-  Dwfl_Error elferr;		/* Previous failure to open main file.  */
+
+  GElf_Addr bias;		/* Actual load address - p_vaddr of main. */
+
+  struct dwfl_build_id *build_id; /* Build ID data are stored here
+				     before we have main file. */
 
   struct dwfl_relocation *reloc_info; /* Relocatable sections.  */
 
-  struct dwfl_file *symfile;	/* Either main or debug.  */
-  Elf_Data *symdata;		/* Data in the ELF symbol table section.  */
-  size_t syments;		/* sh_size / sh_entsize of that section.  */
-  Elf_Data *symstrdata;		/* Data for its string table.  */
-  Elf_Data *symxndxdata;	/* Data in the extended section index table. */
-  Dwfl_Error symerr;		/* Previous failure to load symbols.  */
+  struct dwfl_file *symfile;	/* Points either to main or debug.  */
 
-  Dwarf *dw;			/* libdw handle for its debugging info.  */
-  Dwfl_Error dwerr;		/* Previous failure to load info.  */
+  Dwfl_Error dwerr;		/* Previous failure to load debuginfo.  */
 
   /* Known CU's in this module.  */
   struct dwfl_cu *first_cu, **cu;
@@ -241,18 +263,21 @@ extern void __libdwfl_module_free (Dwfl_Module *mod) internal_function;
 
 
 /* Process relocations in debugging sections in an ET_REL file.
-   FILE must be opened with ELF_C_READ_MMAP_PRIVATE or ELF_C_READ,
+   FILE->elf must be opened with ELF_C_READ_MMAP_PRIVATE or ELF_C_READ,
    to make it possible to relocate the data in place (or ELF_C_RDWR or
    ELF_C_RDWR_MMAP if you intend to modify the Elf file on disk).  After
    this, dwarf_begin_elf on FILE will read the relocated data.
 
    When DEBUG is false, apply partial relocation to all sections.  */
-extern Dwfl_Error __libdwfl_relocate (Dwfl_Module *mod, Elf *file, bool debug)
+extern Dwfl_Error __libdwfl_relocate (Dwfl_Module *mod,
+				      struct dwfl_shared_file *file,
+				      bool debug)
   internal_function;
 
 /* Process (simple) relocations in arbitrary section TSCN of an ET_REL file.
    RELOCSCN is SHT_REL or SHT_RELA and TSCN is its sh_info target section.  */
-extern Dwfl_Error __libdwfl_relocate_section (Dwfl_Module *mod, Elf *relocated,
+extern Dwfl_Error __libdwfl_relocate_section (Dwfl_Module *mod,
+					      struct dwfl_shared_file *relocated,
 					      Elf_Scn *relocscn, Elf_Scn *tscn,
 					      bool partial)
   internal_function;
@@ -284,16 +309,25 @@ extern Dwfl_Error __libdwfl_addrcu (Dwfl_Module *mod, Dwarf_Addr addr,
 extern Dwfl_Error __libdwfl_cu_getsrclines (struct dwfl_cu *cu)
   internal_function;
 
-/* Look in ELF for an NT_GNU_BUILD_ID note.  If SET is true, store it
-   in MOD and return its length.  If SET is false, instead compare it
-   to that stored in MOD and return 2 if they match, 1 if they do not.
-   Returns -1 for errors, 0 if no note is found.  */
-extern int __libdwfl_find_build_id (Dwfl_Module *mod, bool set, Elf *elf)
+/* Look in ELF for an NT_GNU_BUILD_ID note.  If CHECK is NULL, store
+   it in MOD and return its length.  If CHECK is non-NULL, instead
+   compare it to build ID stored there and return 2 if they match, 1
+   if they do not.  Returns -1 for errors, 0 if no note is found.  */
+extern int __libdwfl_find_build_id (struct dwfl_build_id **build_idp,
+				    GElf_Addr bias, bool set, Elf *elf)
+  internal_function;
+
+extern int __libdwfl_found_build_id (struct dwfl_build_id **build_idp, bool set,
+				     const void *bits, int len, GElf_Addr vaddr)
   internal_function;
 
 /* Open a main or debuginfo file by its build ID, returns the fd.  */
-extern int __libdwfl_open_by_build_id (Dwfl_Module *mod, bool debug,
-				       char **file_name) internal_function;
+extern bool __libdwfl_open_by_build_id (const Dwfl_Callbacks *const cb,
+					struct dwfl_file *file,
+					const struct dwfl_build_id *build_id,
+					GElf_Addr bias,
+					bool debug, char **file_name)
+  internal_function;
 
 extern uint32_t __libdwfl_crc32 (uint32_t crc, unsigned char *buf, size_t len)
   attribute_hidden;
@@ -362,6 +396,33 @@ extern int dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
 /* Examine an ET_CORE file and report modules based on its contents.  */
 extern int dwfl_core_file_report (Dwfl *dwfl, Elf *elf, const GElf_Ehdr *ehdr);
 
+/* Allocate dwfl_shared_file from path FILE_NAME.  When successful,
+   fills in TGT structure.  Caches previous lookups and will use the
+   same TGT->shared when the same file is asked for several times.
+
+   FD may be -1 to open FILE_NAME, or you can provide pre-opened FD.
+   In both cases FD is consumed, and FILE_NAME is used to initialize
+   TGT->name.
+
+   The case when FD is -1 and ELF is non-NULL is handled specially.
+   Such an ELF is considered to have no file backing, and is not
+   shared.
+
+   Optional parameter ELF is used to initialize TGT->shared->elf
+   member; if NULL is provided instead, new Elf file is allocated via
+   elf_begin.  In both cases ELF is consumed. */
+extern Dwfl_Error __libdwfl_open_file (struct dwfl_file *tgt,
+				       const char *file_name,
+				       int fd, Elf *elf)
+  internal_function;
+
+/* Close the file. */
+extern void __libdwfl_close_file (struct dwfl_file *file)
+  internal_function;
+
+extern Dwfl_Error __libdwfl_find_symtab (struct dwfl_shared_file *file)
+  internal_function;
+
 
 /* Avoid PLT entries.  */
 INTDECL (dwfl_begin)
@@ -408,6 +469,17 @@ INTDECL (dwfl_module_relocate_address)
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr
 #define CBFAIL		(errno ? DWFL_E (ERRNO, errno) : DWFL_E_CB);
 
+/* The addresses in an ET_EXEC file are absolute.  The lowest p_vaddr
+   of the main file can differ from that of the debug file due to
+   prelink.  But that doesn't not change addresses that symbols,
+   debuginfo, or sh_addr of any program sections refer to.  */
+#define DWBIAS(mod)							\
+  (((mod)->e_type == ET_EXEC) ? 0					\
+   : (mod)->bias - (mod)->main.shared->start + (mod)->debug.shared->start)
+#define SYMBIAS(mod) ((mod)->bias - (mod)->main.shared->start + (mod)->symfile->shared->start)
+
+#define BUILD_ID_NOT_FOUND ((void *) -1L)
+#define BUILD_ID_PTR(ptr) ((ptr) != NULL && (ptr) != BUILD_ID_NOT_FOUND)
 
 /* The default used by dwfl_standard_find_debuginfo.  */
 #define DEFAULT_DEBUGINFO_PATH ":.debug:/usr/lib/debug"
