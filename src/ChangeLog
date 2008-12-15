@@ -1,3 +1,7 @@
+2008-12-15  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c: New file.
+
 2008-12-11  Roland McGrath  <roland@redhat.com>
 
 	* nm.c (sym_name): New function.
