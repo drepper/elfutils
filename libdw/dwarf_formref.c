@@ -56,7 +56,7 @@
 #include "libdwP.h"
 
 int
-__libdw_formref (attr, return_offset)
+__libdw_formref_rdlock (attr, return_offset)
      Dwarf_Attribute *attr;
      Dwarf_Off *return_offset;
 {
@@ -113,5 +113,9 @@ dwarf_formref (attr, return_offset)
   if (attr == NULL)
     return -1;
 
-  return __libdw_formref (attr, return_offset);
+  rwlock_rdlock (attr->cu->dbg->lock);
+  int retval = __libdw_formref_rdlock (attr, return_offset);
+  rwlock_unlock (attr->cu->dbg->lock);
+
+  return retval;
 }

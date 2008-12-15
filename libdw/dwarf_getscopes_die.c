@@ -86,10 +86,13 @@ dwarf_getscopes_die (Dwarf_Die *die, Dwarf_Die **scopes)
   if (die == NULL)
     return -1;
 
+  rwlock_rdlock (die->cu->dbg->lock);
   struct Dwarf_Die_Chain cu = { .die = CUDIE (die->cu), .parent = NULL };
   void *info = die->addr;
   int result = __libdw_visit_scopes (1, &cu, &scope_visitor, NULL, &info);
   if (result > 0)
     *scopes = info;
+  rwlock_unlock (die->cu->dbg->lock);
+
   return result;
 }

@@ -78,8 +78,11 @@ pc_match (unsigned int depth, struct Dwarf_Die_Chain *die, void *arg)
       /* dwarf_haspc returns an error if there are no appropriate attributes.
 	 But we use it indiscriminantly instead of presuming which tags can
 	 have PC attributes.  So when it fails for that reason, treat it just
-	 as a nonmatching return.  */
-      int result = INTUSE(dwarf_haspc) (&die->die, a->pc);
+	 as a nonmatching return.
+
+	 This call can relock, but we don't mind that here.
+	 visit_scopes assumes that callbacks may relock.  */
+      int result = __libdw_haspc_rdlock (&die->die, a->pc);
       if (result < 0)
 	{
 	  int error = INTUSE(dwarf_errno) ();
@@ -94,7 +97,7 @@ pc_match (unsigned int depth, struct Dwarf_Die_Chain *die, void *arg)
     	die->prune = true;
 
       if (!die->prune
-	  && INTUSE (dwarf_tag) (&die->die) == DW_TAG_inlined_subroutine)
+	  && __libdw_tag_rdlock (&die->die) == DW_TAG_inlined_subroutine)
 	a->inlined = depth;
     }
 
@@ -172,12 +175,15 @@ pc_record (unsigned int depth, struct Dwarf_Die_Chain *die, void *arg)
 	 Record its abstract_origin pointer.  */
       Dwarf_Die *const inlinedie = &a->scopes[depth - a->inlined];
 
-      assert (INTUSE (dwarf_tag) (inlinedie) == DW_TAG_inlined_subroutine);
+      /* This may relock, but if it would, it would already have
+	 happened during the __libdw_child_rdlock called from
+	 __libdw_visit_scopes.  */
+      assert (__libdw_tag_rdlock (inlinedie) == DW_TAG_inlined_subroutine);
       Dwarf_Attribute attr_mem;
-      Dwarf_Attribute *attr = INTUSE (dwarf_attr) (inlinedie,
+      Dwarf_Attribute *attr = __libdw_attr_rdlock (inlinedie,
 						   DW_AT_abstract_origin,
 						   &attr_mem);
-      if (INTUSE (dwarf_formref_die) (attr, &a->inlined_origin) == NULL)
+      if (__libdw_formref_die_rdlock (attr, &a->inlined_origin) == NULL)
 	return -1;
       return 0;
     }
@@ -210,6 +216,7 @@ dwarf_getscopes (Dwarf_Die *cudie, Dwarf_Addr pc, Dwarf_Die **scopes)
   struct Dwarf_Die_Chain cu = { .parent = NULL, .die = *cudie };
   struct args a = { .pc = pc };
 
+  rwlock_rdlock (cudie->cu->dbg->lock);
   int result = __libdw_visit_scopes (0, &cu, &pc_match, &pc_record, &a);
 
   if (result == 0 && a.scopes != NULL)
@@ -217,6 +224,8 @@ dwarf_getscopes (Dwarf_Die *cudie, Dwarf_Addr pc, Dwarf_Die **scopes)
 
   if (result > 0)
     *scopes = a.scopes;
+
+  rwlock_unlock (cudie->cu->dbg->lock);
 
   return result;
 }

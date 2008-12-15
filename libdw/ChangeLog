@@ -1,3 +1,177 @@
+2008-12-04  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_getattrs.c (dwarf_getattrs): Unlock before handing the
+	control over to the callback.
+	* dwarf_getfuncs.c (dwarf_getfuncs): Lock around the function
+	body, unlock before handing the control over to the callback.
+	* dwarf_getmacros.c (dwarf_getmacros): Likewise.
+	* TODO.threads: new file with temporary notes
+
+2008-12-03  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_child.c (find_attr): Replace one call with its _rdlock
+	equivalent.
+	* dwarf_offdie.c (dwarf_offdie): Likewise.
+	* dwarf_func_inline.c (scope_visitor): Replace calls with their
+	_rdlock equivalents.  Unlock before handing the control over to
+	callback, relock when it returns.  Document that potential relock
+	in __libdw_tag_rdlock is not a problem.
+	(dwarf_func_inline_instances): Lock around the body.
+	* dwarf_getabbrev.c (static getabbrev): New function with guts
+	from __libdw_getabbrev.  Take extra argument WRLOCKED.  Relock if
+	necessary before writing to cache.
+	(__libdw_getabbrev, __libdw_getabbrev_rdlock): Make them wrappers
+	of static getabbrev.
+	(dwarf_getabbrev): Lock around the body.
+	* dwarf_getpubnames.c (dwarf_getpubnames): Document that we can
+	take wrlock in advance only in this special case.
+	* dwarf_getscopes.c (pc_match): Replace calls with their _rdlock
+	equivalents.  Document that we don't mind the potential relocks.
+	(pc_record): Likewise.
+	(dwarf_getscopes): Lock around the body.
+	* dwarf_getscopes_die.c (dwarf_getscopes_die): Lock around the body
+	* dwarf_hasattr.c (dwarf_hasattr): Split into
+	__libdw_hasattr_rdlock.
+	* dwarf_haschildren.c (dwarf_haschildren): Split into
+	__libdw_haschildren_rdlock, lock around the body.
+	* dwarf_haspc.c (dwarf_haspc): Split into __libdw_haspc_rdlock,
+	lock around the body.
+	* dwarf_nextcu.c (dwarf_nextcu): Split into __libdw_nextcu_rdlock.
+	* dwarf_offabbrev.c (dwarf_offabbrev): Lock around the body.
+	* dwarf_siblingof.c (dwarf_siblingof): Split into
+	__libdw_siblingof_rdlock.
+	* dwarf_tag.c (static findabbrev): New function with guts from
+	__libdw_findabbrev.  Take extra argument WRLOCKED.  Replace calls
+	with their _rdlock and _wrlock equivalents.
+	(__libdw_findabbrev, __libdw_findabbrev_wrlock): Make them
+	wrappers of static findabbrev.
+	(dwarf_tag): Split into __libdw_tag_rdlock.  Lock around the body.
+	* libdw_findcu.c: Same as dwarf_tag.c, but for __libdw_findcu.
+	* libdw_visit_scopes.c (libdw_visit_scopes): Replace calls with
+	their _rdlock equivalents.  Document that potential relocks are
+	not a problem.
+	* libdwP.h: Document all the changes described above.  Document
+	which functions may relock.
+
+
+2008-11-28  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_filesrc.c (dwarf_filesrc): rdlock around the body.
+	* dwarf_formblock.c (dwarf_formblock): Split into
+	__libdw_formblock_rdlock.
+	* dwarf_formref_die.c (dwarf_formref_die): Split into
+	__libdw_formref_die_rdlock.
+	* dwarf_child.c (dwarf_child): Split into
+	__libdw_child_rdlock and __libdw_child_wrlock.
+
+2008-11-27  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_ranges.c (dwarf_ranges): Split into __libdw_ranges_rdlock.
+	* dwarf_entry_breakpoints.c (dwarf_entry_breakpoints): Lock around
+	the body, replace calls with _rdlock equivalents.
+
+2008-11-27  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_entrypc.c (dwarf_entrypc): Split into
+	__libdw_entrypc_rdlock.
+	* dwarf_highpc.c (dwarf_highpc): Split into
+	__libdw_highpc_rdlock.
+	* dwarf_lowpc.c (dwarf_lowpc): Split into
+	__libdw_lowpc_rdlock.
+
+2008-11-27  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_formaddr.c (dwarf_formaddr): Split into
+	__libdw_formaddr_rdlock.
+
+2008-11-26  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_diecu.c (dwarf_diecu): rdlock around the body.
+	* dwarf_dieoffset (dwarf_dieoffset): Likewise.
+
+2008-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_decl_file.c (dwarf_decl_file): rdlock or wrlock around the
+	body.  Replace various internal calls with _rdlock/_wrlock calls.
+
+2008-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_getsrclines.c (dwarf_getsrclines): Split into
+	__libdw_getsrclines_rdlock, __libdw_getsrclines_wrlock, and static
+	getsrclines.  Replace various internal calls with _rdlock/_wrlock
+	calls.
+
+2008-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_formstring.c (dwarf_formstring): Split into
+	__libdw_formstring_rdlock.
+
+2008-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_formudata.c (dwarf_formudata): Split into
+	__libdw_formudata_rdlock.
+
+2008-11-24  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_formsdata.c (dwarf_formsdata): Split into
+	__libdw_formsdata_rdlock.
+
+2008-11-21  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_attr.c (dwarf_attr): rdlock around the body, split into
+	__libdw_attr_rdlock and __libdw_attr_wrlock.
+
+2008-11-21  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_cuoffset.c (dwarf_cuoffset): rdlock around the body.
+
+2008-11-11  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_getpubnames.c (dwarf_getpubnames): Lock around the body.
+
+2008-11-11  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_nextcu.c (dwarf_nextcu): rdlock around the body.
+
+2008-11-11  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_formaddr.c (dwarf_formaddr): rdlock around the body.
+	* dwarf_formblock.c (dwarf_formblock): Likewise.
+	* dwarf_formflag.c (dwarf_formflag): Likewise.
+	* dwarf_formsdata.c (dwarf_formsdata): Likewise.
+	* dwarf_formudata.c (dwarf_formudata): Likewise.
+	* dwarf_formref.c (dwarf_formref): Likewise.
+	(__libdw_formref): Rename to __libdw_formref_rdlock.
+	* dwarf_offdie.c (dwarf_offdie): Rename to __libdw_offdie_rdlock.
+	(dwarf_offdie): New function that's thin locking wrapper of above.
+	* dwarf_formref_die.c (dwarf_formref_die): rdlock around the body.
+	Call __libdw_formref_rdlock, __libdw_offdie_rdlock.
+	* dwarf_siblingof.c (dwarf_siblingof): Call __libdw_formref_rdlock.
+	* libdwP.h: Reflect above changes.
+
+2008-11-07  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (__libdw_form_val_len): Rename to _rdlock.
+	(__libdw_find_attr): Likewise.
+	* dwarf_attr.c (dwarf_attr),
+	* dwarf_child.c (dwarf_child),
+	* dwarf_getattrs.c (warf_getattrs),
+	* dwarf_hasattr.c (dwarf_hasattr),
+	* dwarf_siblingof.c (dwarf_siblingof) Lock around bodies of
+	functions.  Call appropriate _rdlock functions per the renaming
+	above.  Replace returns with `goto out'.
+	* libdw_form.c (__libdw_form_val_len): Rename per the above.  Call
+	__libdw_form_val_len_rdlock.
+	* dwarf_child.c (__libdw_find_attr): Split into
+	__libdw_find_attr_rdlock and __libdw_find_attr_wrlock.  Upgrade
+	the lock to wrlock if necessary to initialize the cache.
+
+2008-11-05  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (struct Dwarf): Add lock.
+	* dwarf_begin.c (dwarf_begin): Initialize it.
+	* dwarf_end.c (dwarf_end): Destroy it.
+
 2008-08-15  Roland McGrath  <roland@redhat.com>
 
 	* libdw.map (ELFUTILS_0.136): New version set, inherits from

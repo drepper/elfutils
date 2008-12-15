@@ -82,6 +82,8 @@ dwarf_end (dwarf)
 {
   if (dwarf != NULL)
     {
+      rwlock_wrlock (dwarf->lock);
+
       /* The search tree for the CUs.  NB: the CU data itself is
 	 allocated separately, but the abbreviation hash tables need
 	 to be handled.  */
@@ -102,6 +104,9 @@ dwarf_end (dwarf)
       /* Free the ELF descriptor if necessary.  */
       if (dwarf->free_elf)
 	elf_end (dwarf->elf);
+
+      /* Free the lock. */
+      rwlock_fini (dwarf->lock);
 
       /* Free the context descriptor.  */
       free (dwarf);

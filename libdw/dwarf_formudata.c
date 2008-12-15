@@ -57,7 +57,7 @@
 
 
 int
-dwarf_formudata (attr, return_uval)
+__libdw_formudata_rdlock (attr, return_uval)
      Dwarf_Attribute *attr;
      Dwarf_Word *return_uval;
 {
@@ -100,5 +100,20 @@ dwarf_formudata (attr, return_uval)
     }
 
   return 0;
+}
+
+int
+dwarf_formudata (attr, return_uval)
+     Dwarf_Attribute *attr;
+     Dwarf_Word *return_uval;
+{
+  if (attr == NULL)
+    return -1;
+
+  rwlock_rdlock (attr->cu->dbg->lock);
+  int retval = __libdw_formudata_rdlock (attr, return_uval);
+  rwlock_unlock (attr->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_formudata)

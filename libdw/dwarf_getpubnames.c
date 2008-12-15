@@ -179,16 +179,34 @@ dwarf_getpubnames (dbg, callback, arg, offset)
       return -1l;
     }
 
+  /* If we are going to call get_offsets, we will likely need write
+     lock.  Take it right away so that we don't have to go through the
+     fuss of lock upgrading later.  That means we need to read from
+     dbg before having locked, but we need to do that for dbg->lock
+     anyway.  The worst that can happen is we accidentally take wrlock
+     where rdlock would have sufficed.
+
+     Note that we can do so specifically in this case, where we don't
+     call anything that would downgrade the lock back to rdlock.  */
+  if (dbg->pubnames_nsets == 0)
+    rwlock_wrlock (dbg->lock);
+  else
+    rwlock_rdlock (dbg->lock);
+  ptrdiff_t retval = 0l;
+
   /* Make sure it is a valid offset.  */
   if (unlikely (dbg->sectiondata[IDX_debug_pubnames] == NULL
 		|| ((size_t) offset
 		    >= dbg->sectiondata[IDX_debug_pubnames]->d_size)))
     /* No (more) entry.  */
-    return 0;
+    goto out;
 
   /* If necessary read the set information.  */
   if (dbg->pubnames_nsets == 0 && unlikely (get_offsets (dbg) != 0))
-    return -1l;
+    {
+      retval = -1l;
+      goto out;
+    }
 
   /* Find the place where to start.  */
   size_t cnt;
@@ -238,12 +256,16 @@ dwarf_getpubnames (dbg, callback, arg, offset)
 	  readp = (unsigned char *) rawmemchr (gl.name, '\0') + 1;
 
 	  /* We found name and DIE offset.  Report it.  */
+	  /* Give up the lock, so that the callback can use official
+	     (locking) API.  We can afford to do that: references
+	     above are to write-once caches.  */
+	  rwlock_unlock (dbg->lock);
 	  if (callback (dbg, &gl, arg) != DWARF_CB_OK)
-	    {
-	      /* The user wants us to stop.  Return the offset of the
-		 next entry.  */
-	      return readp - startp;
-	    }
+	    /* The user wants us to stop.  Return the offset of the
+	       next entry.  */
+	    return readp - startp;
+	  /* rdlock is enough at this point.  */
+	  rwlock_rdlock (dbg->lock);
 	}
 
       if (++cnt == dbg->pubnames_nsets)
@@ -255,5 +277,7 @@ dwarf_getpubnames (dbg, callback, arg, offset)
     }
 
   /* We are done.  No more entries.  */
-  return 0;
+ out:
+  rwlock_unlock (dbg->lock);
+  return retval;
 }

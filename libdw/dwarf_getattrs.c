@@ -62,6 +62,14 @@ dwarf_getattrs (Dwarf_Die *die, int (*callback) (Dwarf_Attribute *, void *),
   if (die == NULL)
     return -1l;
 
+  /* Do not return 0 on success - there would be no way to distinguish
+     this value from the attribute at offset 0.  Instead we return +1
+     which would never be a valid offset of an attribute.  */
+  ptrdiff_t retval = 1l;
+
+  Dwarf *dbg = die->cu->dbg;
+  rwlock_rdlock (dbg->lock);
+
   const unsigned char *die_addr = die->addr;
 
   /* Get the abbreviation code.  */
@@ -73,17 +81,12 @@ dwarf_getattrs (Dwarf_Die *die, int (*callback) (Dwarf_Attribute *, void *),
     die->abbrev = __libdw_findabbrev (die->cu, u128);
 
   if (unlikely (die->abbrev == DWARF_END_ABBREV))
-    {
-    invalid_dwarf:
-      __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return -1l;
-    }
+    goto invalid_dwarf;
 
   /* This is where the attributes start.  */
   const unsigned char *attrp = die->abbrev->attrp + offset;
 
   /* Go over the list of attributes.  */
-  Dwarf *dbg = die->cu->dbg;
   while (1)
     {
       /* Are we still in bounds?  */
@@ -102,36 +105,46 @@ dwarf_getattrs (Dwarf_Die *die, int (*callback) (Dwarf_Attribute *, void *),
 
       /* We can stop if we found the attribute with value zero.  */
       if (attr.code == 0 && attr.form == 0)
-	/* Do not return 0 here - there would be no way to
-	   distinguish this value from the attribute at offset 0.
-	   Instead we return +1 which would never be a valid
-	   offset of an attribute.  */
-        return 1l;
+	goto out;
 
       /* Fill in the rest.  */
       attr.valp = (unsigned char *) die_addr;
       attr.cu = die->cu;
 
+      /* Unlock so that the callback can use official API.  */
+      rwlock_unlock (dbg->lock);
       /* Now call the callback function.  */
       if (callback (&attr, arg) != DWARF_CB_OK)
 	/* Return the offset of the start of the attribute, so that
 	   dwarf_getattrs() can be restarted from this point if the
 	   caller so desires.  */
 	return remembered_attrp - die->abbrev->attrp;
+      rwlock_rdlock (dbg->lock);
 
       /* Skip over the rest of this attribute (if there is any).  */
       if (attr.form != 0)
 	{
-	  size_t len = __libdw_form_val_len (dbg, die->cu, attr.form,
-					     die_addr);
+	  size_t len = __libdw_form_val_len_rdlock (dbg, die->cu, attr.form,
+						    die_addr);
 
 	  if (unlikely (len == (size_t) -1l))
-	    /* Something wrong with the file.  */
-	    return -1l;
+	    {
+	      /* Something wrong with the file.  */
+	      // XXX Shouldn't this be invalid_dwarf?
+	      retval = -1l;
+	      goto out;
+	    }
 
 	  // XXX We need better boundary checks.
 	  die_addr += len;
 	}
     }
   /* NOTREACHED */
+
+ invalid_dwarf:
+  __libdw_seterrno (DWARF_E_INVALID_DWARF);
+  retval = -1l;
+ out:
+  rwlock_unlock (dbg->lock);
+  return retval;
 }

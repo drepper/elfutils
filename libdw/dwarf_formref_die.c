@@ -56,12 +56,14 @@
 
 
 Dwarf_Die *
-dwarf_formref_die (attr, die_mem)
+__libdw_formref_die_rdlock (attr, die_mem)
      Dwarf_Attribute *attr;
      Dwarf_Die *die_mem;
 {
   if (attr == NULL)
     return NULL;
+
+  Dwarf *dbg = attr->cu->dbg;
 
   Dwarf_Off offset;
   if (attr->form == DW_FORM_ref_addr)
@@ -73,18 +75,33 @@ dwarf_formref_die (attr, die_mem)
 			  : attr->cu->offset_size);
 
       if (ref_size == 8)
-	offset = read_8ubyte_unaligned (attr->cu->dbg, attr->valp);
+	offset = read_8ubyte_unaligned (dbg, attr->valp);
       else
-	offset = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
+	offset = read_4ubyte_unaligned (dbg, attr->valp);
     }
   else
     {
       /* Other forms produce an offset from the CU.  */
-      if (unlikely (__libdw_formref (attr, &offset) != 0))
+      if (unlikely (__libdw_formref_rdlock (attr, &offset) != 0))
 	return NULL;
       offset += attr->cu->start;
     }
 
-  return INTUSE(dwarf_offdie) (attr->cu->dbg, offset, die_mem);
+  return __libdw_offdie_rdlock (dbg, offset, die_mem);
+}
+
+Dwarf_Die *
+dwarf_formref_die (attr, die_mem)
+     Dwarf_Attribute *attr;
+     Dwarf_Die *die_mem;
+{
+  if (attr == NULL)
+    return NULL;
+
+  rwlock_rdlock (attr->cu->dbg->lock);
+  Dwarf_Die *retval = __libdw_formref_die_rdlock (attr, die_mem);
+  rwlock_unlock (attr->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF (dwarf_formref_die)

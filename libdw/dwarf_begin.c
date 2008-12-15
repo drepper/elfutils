@@ -117,5 +117,8 @@ dwarf_begin (fd, cmd)
 	result->free_elf = true;
     }
 
+  if (result != NULL)
+    rwlock_init (result->lock);
+
   return result;
 }

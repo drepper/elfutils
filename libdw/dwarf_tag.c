@@ -55,9 +55,8 @@
 #include "libdwP.h"
 
 
-Dwarf_Abbrev *
-internal_function
-__libdw_findabbrev (struct Dwarf_CU *cu, unsigned int code)
+static Dwarf_Abbrev *
+findabbrev (struct Dwarf_CU *cu, unsigned int code, int wrlocked)
 {
   Dwarf_Abbrev *abb;
 
@@ -70,8 +69,10 @@ __libdw_findabbrev (struct Dwarf_CU *cu, unsigned int code)
 
 	/* Find the next entry.  It gets automatically added to the
 	   hash table.  */
-	abb = __libdw_getabbrev (cu->dbg, cu, cu->last_abbrev_offset, &length,
-				 NULL);
+	abb = (wrlocked
+	       ? __libdw_getabbrev_wrlock
+	       : __libdw_getabbrev) (cu->dbg, cu, cu->last_abbrev_offset,
+				     &length, NULL);
 	if (abb == NULL || abb == DWARF_END_ABBREV)
 	  {
 	    /* Make sure we do not try to search for it again.  */
@@ -89,9 +90,22 @@ __libdw_findabbrev (struct Dwarf_CU *cu, unsigned int code)
   return abb;
 }
 
+Dwarf_Abbrev *
+internal_function
+__libdw_findabbrev_wrlock (struct Dwarf_CU *cu, unsigned int code)
+{
+  return findabbrev (cu, code, 1);
+}
+
+Dwarf_Abbrev *
+internal_function
+__libdw_findabbrev (struct Dwarf_CU *cu, unsigned int code)
+{
+  return findabbrev (cu, code, 0);
+}
 
 int
-dwarf_tag (die)
+__libdw_tag_rdlock (die)
      Dwarf_Die *die;
 {
   /* Do we already know the abbreviation?  */
@@ -113,5 +127,17 @@ dwarf_tag (die)
     }
 
   return die->abbrev->tag;
+}
+
+
+int
+dwarf_tag (die)
+     Dwarf_Die *die;
+{
+  rwlock_rdlock (die->cu->dbg->lock);
+  int retval = __libdw_tag_rdlock (die);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_tag)

@@ -60,8 +60,8 @@
 
 size_t
 internal_function
-__libdw_form_val_len (Dwarf *dbg, struct Dwarf_CU *cu, unsigned int form,
-		      const unsigned char *valp)
+__libdw_form_val_len_rdlock (Dwarf *dbg, struct Dwarf_CU *cu, unsigned int form,
+			     const unsigned char *valp)
 {
   const unsigned char *saved;
   Dwarf_Word u128;
@@ -136,7 +136,7 @@ __libdw_form_val_len (Dwarf *dbg, struct Dwarf_CU *cu, unsigned int form,
       saved = valp;
       get_uleb128 (u128, valp);
       // XXX Is this really correct?
-      result = __libdw_form_val_len (dbg, cu, u128, valp);
+      result = __libdw_form_val_len_rdlock (dbg, cu, u128, valp);
       if (result != (size_t) -1)
 	result += valp - saved;
       break;

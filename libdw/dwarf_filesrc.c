@@ -59,8 +59,14 @@ const char *
 dwarf_filesrc (Dwarf_Files *file, size_t idx, Dwarf_Word *mtime,
 	       Dwarf_Word *length)
 {
-  if (file == NULL || idx >= file->nfiles)
+  if (file == NULL)
     return NULL;
+
+  const char *retval = NULL;
+  rwlock_rdlock (file->dbg->lock);
+
+  if (idx >= file->nfiles)
+    goto out;
 
   if (mtime != NULL)
     *mtime = file->info[idx].mtime;
@@ -68,5 +74,9 @@ dwarf_filesrc (Dwarf_Files *file, size_t idx, Dwarf_Word *mtime,
   if (length != NULL)
     *length = file->info[idx].length;
 
-  return file->info[idx].name;
+  retval = file->info[idx].name;
+
+ out:
+  rwlock_unlock (file->dbg->lock);
+  return retval;
 }

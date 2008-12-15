@@ -56,6 +56,43 @@
 #include "libdwP.h"
 
 
+static Dwarf_Attribute *
+attr (die, search_name, result, wrlocked)
+     Dwarf_Die *die;
+     unsigned int search_name;
+     Dwarf_Attribute *result;
+     int wrlocked;
+{
+  /* Search for the attribute with the given name.  */
+  result->valp = (wrlocked
+		  ? __libdw_find_attr_wrlock
+		  : __libdw_find_attr_rdlock)
+    (die, search_name, &result->code, &result->form);
+
+  /* Always fill in the CU information.  */
+  result->cu = die->cu;
+
+  return result->code == search_name ? result : NULL;
+}
+
+Dwarf_Attribute *
+__libdw_attr_rdlock (die, search_name, result)
+     Dwarf_Die *die;
+     unsigned int search_name;
+     Dwarf_Attribute *result;
+{
+  return attr (die, search_name, result, 0);
+}
+
+Dwarf_Attribute *
+__libdw_attr_wrlock (die, search_name, result)
+     Dwarf_Die *die;
+     unsigned int search_name;
+     Dwarf_Attribute *result;
+{
+  return attr (die, search_name, result, 1);
+}
+
 Dwarf_Attribute *
 dwarf_attr (die, search_name, result)
      Dwarf_Die *die;
@@ -65,12 +102,10 @@ dwarf_attr (die, search_name, result)
   if (die == NULL)
     return NULL;
 
-  /* Search for the attribute with the given name.  */
-  result->valp = __libdw_find_attr (die, search_name, &result->code,
-				    &result->form);
-  /* Always fill in the CU information.  */
-  result->cu = die->cu;
+  rwlock_rdlock (die->cu->dbg->lock);
+  Dwarf_Attribute *retval = __libdw_attr_rdlock (die, search_name, result);
+  rwlock_unlock (die->cu->dbg->lock);
 
-  return result->code == search_name ? result : NULL;
+  return retval;
 }
 INTDEF(dwarf_attr)

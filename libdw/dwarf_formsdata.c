@@ -57,7 +57,7 @@
 
 
 int
-dwarf_formsdata (attr, return_sval)
+__libdw_formsdata_rdlock (attr, return_sval)
      Dwarf_Attribute *attr;
      Dwarf_Sword *return_sval;
 {
@@ -100,5 +100,20 @@ dwarf_formsdata (attr, return_sval)
     }
 
   return 0;
+}
+
+int
+dwarf_formsdata (attr, return_sval)
+     Dwarf_Attribute *attr;
+     Dwarf_Sword *return_sval;
+{
+  if (attr == NULL)
+    return -1;
+
+  rwlock_rdlock (attr->cu->dbg->lock);
+  int retval = __libdw_formsdata_rdlock (attr, return_sval);
+  rwlock_unlock (attr->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_formsdata)

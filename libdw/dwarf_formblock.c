@@ -57,13 +57,14 @@
 
 
 int
-dwarf_formblock (attr, return_block)
+__libdw_formblock_rdlock (attr, return_block)
      Dwarf_Attribute *attr;
      Dwarf_Block *return_block;
 {
   if (attr == NULL)
     return -1;
 
+  Dwarf *dbg = attr->cu->dbg;
   const unsigned char *datap;
 
   switch (attr->form)
@@ -74,12 +75,12 @@ dwarf_formblock (attr, return_block)
       break;
 
     case DW_FORM_block2:
-      return_block->length = read_2ubyte_unaligned (attr->cu->dbg, attr->valp);
+      return_block->length = read_2ubyte_unaligned (dbg, attr->valp);
       return_block->data = attr->valp + 2;
       break;
 
     case DW_FORM_block4:
-      return_block->length = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
+      return_block->length = read_4ubyte_unaligned (dbg, attr->valp);
       return_block->data = attr->valp + 4;
       break;
 
@@ -95,8 +96,8 @@ dwarf_formblock (attr, return_block)
     }
 
   if (return_block->data + return_block->length
-      > ((unsigned char *) attr->cu->dbg->sectiondata[IDX_debug_info]->d_buf
-	 + attr->cu->dbg->sectiondata[IDX_debug_info]->d_size))
+      > ((unsigned char *) dbg->sectiondata[IDX_debug_info]->d_buf
+	 + dbg->sectiondata[IDX_debug_info]->d_size))
     {
       /* Block does not fit.  */
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
@@ -104,5 +105,20 @@ dwarf_formblock (attr, return_block)
     }
 
   return 0;
+}
+
+int
+dwarf_formblock (attr, return_block)
+     Dwarf_Attribute *attr;
+     Dwarf_Block *return_block;
+{
+  if (attr == NULL)
+    return -1;
+
+  rwlock_rdlock (attr->cu->dbg->lock);
+  int retval = __libdw_formblock_rdlock (attr, return_block);
+  rwlock_unlock (attr->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_formblock)

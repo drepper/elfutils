@@ -58,7 +58,7 @@
 
 
 int
-dwarf_siblingof (die, result)
+__libdw_siblingof_rdlock (die, result)
      Dwarf_Die *die;
      Dwarf_Die *result;
 {
@@ -76,6 +76,7 @@ dwarf_siblingof (die, result)
 
   /* Copy of the current DIE.  */
   Dwarf_Die this_die = *die;
+
   /* Temporary attributes we create.  */
   Dwarf_Attribute sibattr;
   /* Copy of the CU in the request.  */
@@ -92,13 +93,13 @@ dwarf_siblingof (die, result)
   do
     {
       /* Find the end of the DIE or the sibling attribute.  */
-      addr = __libdw_find_attr (&this_die, DW_AT_sibling, &sibattr.code,
-				&sibattr.form);
+      addr = __libdw_find_attr_rdlock (&this_die, DW_AT_sibling, &sibattr.code,
+				       &sibattr.form);
       if (sibattr.code == DW_AT_sibling)
 	{
 	  Dwarf_Off offset;
 	  sibattr.valp = addr;
-	  if (unlikely (__libdw_formref (&sibattr, &offset) != 0))
+	  if (unlikely (__libdw_formref_rdlock (&sibattr, &offset) != 0))
 	    /* Something went wrong.  */
 	    return -1;
 
@@ -157,5 +158,24 @@ dwarf_siblingof (die, result)
   result->cu = sibattr.cu;
 
   return 0;
+}
+
+
+int
+dwarf_siblingof (die, result)
+     Dwarf_Die *die;
+     Dwarf_Die *result;
+{
+  /* Ignore previous errors.  */
+  if (die == NULL)
+    return -1;
+
+  if (result == NULL)
+    return -1;
+
+  rwlock_rdlock (die->cu->dbg->lock);
+  int retval = __libdw_siblingof_rdlock (die, result);
+  rwlock_unlock (die->cu->dbg->lock);
+  return retval;
 }
 INTDEF(dwarf_siblingof)

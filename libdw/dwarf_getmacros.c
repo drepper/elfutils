@@ -65,15 +65,25 @@ dwarf_getmacros (die, callback, arg, offset)
      void *arg;
      ptrdiff_t offset;
 {
-  /* Get the appropriate attribute.  */
+  ptrdiff_t retval = 0;
+
+  rwlock_rdlock (die->cu->dbg->lock);
+
+  /* Get the appropriate attribute.  This may upgrade the lock to wrlock.  */
   Dwarf_Attribute attr;
-  if (INTUSE(dwarf_attr) (die, DW_AT_macro_info, &attr) == NULL)
-    return -1;
+  if (__libdw_attr_rdlock (die, DW_AT_macro_info, &attr) == NULL)
+    {
+      retval = -1;
+      goto out;
+    }
 
   /* Offset into the .debug_macinfo section.  */
   Dwarf_Word macoff;
-  if (INTUSE(dwarf_formudata) (&attr, &macoff) != 0)
-    return -1;
+  if (__libdw_formudata_rdlock (&attr, &macoff) != 0)
+    {
+      retval = -1;
+      goto out;
+    }
 
   const unsigned char *readp
     = die->cu->dbg->sectiondata[IDX_debug_macinfo]->d_buf + offset;
@@ -81,7 +91,7 @@ dwarf_getmacros (die, callback, arg, offset)
     = readp + die->cu->dbg->sectiondata[IDX_debug_macinfo]->d_size;
 
   if (readp == readendp)
-    return 0;
+    goto out;
 
   if (*readp != DW_MACINFO_start_file)
     goto invalid;
@@ -127,7 +137,7 @@ dwarf_getmacros (die, callback, arg, offset)
 
 	case 0:
 	  /* Nothing more to do.  */
-	  return 0;
+	  goto out;
 
 	default:
 	  goto invalid;
@@ -141,15 +151,22 @@ dwarf_getmacros (die, callback, arg, offset)
       else
 	mac.param2.s = str;
 
+      /* Relock so that the callback can use the official API.  */
+      rwlock_unlock (die->cu->dbg->lock);
       if (callback (&mac, arg) != DWARF_CB_OK)
 	return (readp
 		- ((unsigned char *) die->cu->dbg->sectiondata[IDX_debug_macinfo]->d_buf
 		   + offset));
+      rwlock_rdlock (die->cu->dbg->lock);
     }
 
   /* If we come here the termination of the data for the CU is not
      present.  */
  invalid:
   __libdw_seterrno (DWARF_E_INVALID_DWARF);
-  return -1;
+  retval = -1;
+
+ out:
+  rwlock_rdlock (die->cu->dbg->lock);
+  return retval;
 }

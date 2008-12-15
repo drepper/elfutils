@@ -64,13 +64,18 @@ dwarf_formflag (attr, return_bool)
   if (attr == NULL)
     return -1;
 
+  Dwarf *dbg = attr->cu->dbg;
+  rwlock_rdlock (dbg->lock);
+  int retval = 0;
+
   if (unlikely (attr->form != DW_FORM_flag))
     {
       __libdw_seterrno (DWARF_E_NO_FLAG);
-      return -1;
+      retval = -1;
     }
+  else
+    *return_bool = *attr->valp != 0;
 
-  *return_bool = *attr->valp != 0;
-
-  return 0;
+  rwlock_unlock (dbg->lock);
+  return retval;
 }

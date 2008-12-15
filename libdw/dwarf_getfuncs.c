@@ -60,35 +60,49 @@ ptrdiff_t
 dwarf_getfuncs (Dwarf_Die *cudie, int (*callback) (Dwarf_Die *, void *),
 		void *arg, ptrdiff_t offset)
 {
-  if (unlikely (cudie == NULL
-		|| INTUSE(dwarf_tag) (cudie) != DW_TAG_compile_unit))
+  if (unlikely (cudie == NULL))
     return -1;
+
+  ptrdiff_t retval = 0;
+
+  rwlock_rdlock (cudie->cu->dbg->lock);
+
+  if (unlikely (__libdw_tag_rdlock (cudie) != DW_TAG_compile_unit))
+    {
+      retval = -1;
+      goto out;
+    }
 
   Dwarf_Die die_mem;
   Dwarf_Die *die;
 
   int res;
   if (offset == 0)
-    res = INTUSE(dwarf_child) (cudie, &die_mem);
+    res = __libdw_child_rdlock (cudie, &die_mem);
   else
     {
-      die = INTUSE(dwarf_offdie) (cudie->cu->dbg, offset, &die_mem);
-      res = INTUSE(dwarf_siblingof) (die, &die_mem);
+      die = __libdw_offdie_rdlock (cudie->cu->dbg, offset, &die_mem);
+      res = __libdw_siblingof_rdlock (die, &die_mem);
     }
   die = res != 0 ? NULL : &die_mem;
 
   while (die != NULL)
     {
-      if (INTUSE(dwarf_tag) (die) == DW_TAG_subprogram)
+      if (__libdw_tag_rdlock (die) == DW_TAG_subprogram)
 	{
+	  /* Relock so that the callback can use the official API.  */
+	  rwlock_unlock (cudie->cu->dbg->lock);
 	  if (callback (die, arg) != DWARF_CB_OK)
 	    return INTUSE(dwarf_dieoffset) (die);
+	  rwlock_rdlock (cudie->cu->dbg->lock);
 	}
 
-      if (INTUSE(dwarf_siblingof) (die, &die_mem) != 0)
+      if (__libdw_siblingof_rdlock (die, &die_mem) != 0)
 	break;
     }
 
   /* That's all.  */
-  return 0;
+ out:
+  rwlock_unlock (cudie->cu->dbg->lock);
+  return retval;
 }

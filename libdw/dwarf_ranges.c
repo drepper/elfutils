@@ -57,16 +57,16 @@
 
 
 ptrdiff_t
-dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
-	      Dwarf_Addr *startp, Dwarf_Addr *endp)
+__libdw_ranges_rdlock (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
+		       Dwarf_Addr *startp, Dwarf_Addr *endp)
 {
   if (die == NULL)
     return -1;
 
   if (offset == 0
       /* Usually there is a single contiguous range.  */
-      && INTUSE(dwarf_highpc) (die, endp) == 0
-      && INTUSE(dwarf_lowpc) (die, startp) == 0)
+      && __libdw_highpc_rdlock (die, endp) == 0
+      && __libdw_lowpc_rdlock (die, startp) == 0)
     /* A offset into .debug_ranges will never be 1, it must be at least a
        multiple of 4.  So we can return 1 as a special case value to mark
        there are no ranges to look for on the next call.  */
@@ -86,15 +86,17 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 
   if (offset == 0)
     {
+      /* If this could upgrade to wrlock, it would already have
+	 happened above after the initial check for offset == 0.  */
       Dwarf_Attribute attr_mem;
-      Dwarf_Attribute *attr = INTUSE(dwarf_attr) (die, DW_AT_ranges,
-						  &attr_mem);
+      Dwarf_Attribute *attr = __libdw_attr_rdlock (die, DW_AT_ranges,
+						   &attr_mem);
       if (attr == NULL)
 	return -1;
 
       /* Must have the form data4 or data8 which act as an offset.  */
       Dwarf_Word start_offset;
-      if (INTUSE(dwarf_formudata) (attr, &start_offset) != 0)
+      if (__libdw_formudata_rdlock (attr, &start_offset) != 0)
 	return -1;
 
       offset = start_offset;
@@ -108,11 +110,11 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 	 the base address could be overridden by DW_AT_entry_pc.  It's
 	 been removed, but GCC emits DW_AT_entry_pc and not DW_AT_lowpc
 	 for compilation units with discontinuous ranges.  */
-      if (unlikely (INTUSE(dwarf_lowpc) (&cudie, basep) != 0)
-	  && INTUSE(dwarf_formaddr) (INTUSE(dwarf_attr) (&cudie,
-							 DW_AT_entry_pc,
-							 &attr_mem),
-				     basep) != 0)
+      if (unlikely (__libdw_lowpc_rdlock (&cudie, basep) != 0)
+	  && __libdw_formaddr_rdlock (__libdw_attr_rdlock (&cudie,
+							   DW_AT_entry_pc,
+							   &attr_mem),
+				      basep) != 0)
 	{
 	  if (INTUSE(dwarf_errno) () == 0)
 	    {
@@ -165,5 +167,20 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
   *startp = *basep + begin;
   *endp = *basep + end;
   return readp - (unsigned char *) d->d_buf;
+}
+
+
+ptrdiff_t
+dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
+	      Dwarf_Addr *startp, Dwarf_Addr *endp)
+{
+  if (die == NULL)
+    return -1;
+
+  rwlock_rdlock (die->cu->dbg->lock);
+  ptrdiff_t retval = __libdw_ranges_rdlock (die, offset, basep, startp, endp);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF (dwarf_ranges)

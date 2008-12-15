@@ -57,7 +57,7 @@
 
 
 int
-dwarf_hasattr (die, search_name)
+__libdw_hasattr_rdlock (die, search_name)
      Dwarf_Die *die;
      unsigned int search_name;
 {
@@ -66,8 +66,23 @@ dwarf_hasattr (die, search_name)
 
   /* Search for the attribute with the given name.  */
   unsigned int code;
-  (void) __libdw_find_attr (die, search_name, &code, NULL);
+  (void) __libdw_find_attr_rdlock (die, search_name, &code, NULL);
 
   return code == search_name;
+}
+
+int
+dwarf_hasattr (die, search_name)
+     Dwarf_Die *die;
+     unsigned int search_name;
+{
+  if (die == NULL)
+    return 0;
+
+  rwlock_rdlock (die->cu->dbg->lock);
+  int retval = __libdw_hasattr_rdlock (die, search_name);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF (dwarf_hasattr)

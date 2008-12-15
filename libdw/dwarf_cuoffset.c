@@ -60,9 +60,14 @@ Dwarf_Off
 dwarf_cuoffset (die)
      Dwarf_Die *die;
 {
-  return (die == NULL
-	  ? (Dwarf_Off) -1l
-	  : (die->addr
-	     - die->cu->dbg->sectiondata[IDX_debug_info]->d_buf
-	     - die->cu->start));
+  if (die == NULL)
+    return (Dwarf_Off) -1l;
+
+  rwlock_rdlock (die->cu->dbg->lock);
+  Dwarf_Off retval = (die->addr
+		      - die->cu->dbg->sectiondata[IDX_debug_info]->d_buf
+		      - die->cu->start);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }

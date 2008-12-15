@@ -55,9 +55,8 @@
 #include <dwarf.h>
 #include "libdwP.h"
 
-
 int
-dwarf_formaddr (attr, return_addr)
+__libdw_formaddr_rdlock (attr, return_addr)
      Dwarf_Attribute *attr;
      Dwarf_Addr *return_addr;
 {
@@ -76,5 +75,20 @@ dwarf_formaddr (attr, return_addr)
     *return_addr = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
 
   return 0;
+}
+
+int
+dwarf_formaddr (attr, return_addr)
+     Dwarf_Attribute *attr;
+     Dwarf_Addr *return_addr;
+{
+  if (attr == NULL)
+    return -1;
+
+  rwlock_rdlock (attr->cu->dbg->lock);
+  int retval = __libdw_formaddr_rdlock (attr, return_addr);
+  rwlock_unlock (attr->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_formaddr)

@@ -57,12 +57,11 @@
 
 
 int
-dwarf_haschildren (die)
+__libdw_haschildren_rdlock (die)
      Dwarf_Die *die;
 {
   /* Find the abbreviation entry.  */
-  Dwarf_Abbrev *abbrevp = die->abbrev;
-  if (abbrevp != DWARF_END_ABBREV)
+  if (die->abbrev != DWARF_END_ABBREV)
     {
       const unsigned char *readp = (unsigned char *) die->addr;
 
@@ -71,7 +70,7 @@ dwarf_haschildren (die)
       unsigned int abbrev_code;
       get_uleb128 (abbrev_code, readp);
 
-      abbrevp = __libdw_findabbrev (die->cu, abbrev_code);
+      Dwarf_Abbrev *abbrevp = __libdw_findabbrev (die->cu, abbrev_code);
       die->abbrev = abbrevp ?: DWARF_END_ABBREV;
     }
   if (unlikely (die->abbrev == DWARF_END_ABBREV))
@@ -81,5 +80,16 @@ dwarf_haschildren (die)
     }
 
   return die->abbrev->has_children;
+}
+
+int
+dwarf_haschildren (die)
+     Dwarf_Die *die;
+{
+  rwlock_rdlock (die->cu->dbg->lock);
+  int retval = __libdw_haschildren_rdlock (die);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF (dwarf_haschildren)

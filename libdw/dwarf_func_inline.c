@@ -66,24 +66,33 @@ scope_visitor (unsigned int depth __attribute__ ((unused)),
 {
   struct visitor_info *const v = arg;
 
-  if (INTUSE(dwarf_tag) (&die->die) != DW_TAG_inlined_subroutine)
+  /* This may relock for cache update.  But we give up the lock before
+     handing over to a callback anyway, so it's not a big deal,
+     performance-wise, that a couple functions that follow may do the
+     relock again unnecessarily.  Correctness-wise, we cache no
+     volatile data that would go invalid while the lock is not ours.
+     (__libdw_visit_scopes assumes the visitor may relock.)  */
+  if (__libdw_tag_rdlock (&die->die) != DW_TAG_inlined_subroutine)
     return DWARF_CB_OK;
 
   Dwarf_Attribute attr_mem;
-  Dwarf_Attribute *attr = INTUSE(dwarf_attr) (&die->die, DW_AT_abstract_origin,
-					      &attr_mem);
+  Dwarf_Attribute *attr = __libdw_attr_rdlock (&die->die, DW_AT_abstract_origin,
+					       &attr_mem);
   if (attr == NULL)
     return DWARF_CB_OK;
 
   Dwarf_Die origin_mem;
-  Dwarf_Die *origin = INTUSE(dwarf_formref_die) (attr, &origin_mem);
+  Dwarf_Die *origin = __libdw_formref_die_rdlock (attr, &origin_mem);
   if (origin == NULL)
     return DWARF_CB_ABORT;
 
   if (origin->addr != v->die_addr)
     return DWARF_CB_OK;
 
-  return (*v->callback) (&die->die, v->arg);
+  rwlock_unlock (die->die.cu->dbg->lock);
+  int retval = (*v->callback) (&die->die, v->arg);
+  rwlock_rdlock (die->die.cu->dbg->lock);
+  return retval;
 }
 
 int
@@ -115,7 +124,11 @@ dwarf_func_inline_instances (Dwarf_Die *func,
 			     int (*callback) (Dwarf_Die *, void *),
 			     void *arg)
 {
+  rwlock_rdlock (func->cu->dbg->lock);
   struct visitor_info v = { func->addr, callback, arg };
   struct Dwarf_Die_Chain cu = { .die = CUDIE (func->cu), .parent = NULL };
-  return __libdw_visit_scopes (0, &cu, &scope_visitor, NULL, &v);
+  int retval = __libdw_visit_scopes (0, &cu, &scope_visitor, NULL, &v);
+  rwlock_unlock (func->cu->dbg->lock);
+
+  return retval;
 }

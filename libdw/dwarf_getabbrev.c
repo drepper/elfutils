@@ -57,14 +57,14 @@
 #include "libdwP.h"
 
 
-Dwarf_Abbrev *
-internal_function
-__libdw_getabbrev (dbg, cu, offset, lengthp, result)
+static Dwarf_Abbrev *
+getabbrev (dbg, cu, offset, lengthp, result, wrlocked)
      Dwarf *dbg;
      struct Dwarf_CU *cu;
      Dwarf_Off offset;
      size_t *lengthp;
      Dwarf_Abbrev *result;
+     int wrlocked;
 {
   /* Don't fail if there is not .debug_abbrev section.  */
   if (dbg->sectiondata[IDX_debug_abbrev] == NULL)
@@ -103,12 +103,24 @@ __libdw_getabbrev (dbg, cu, offset, lengthp, result)
   unsigned int code;
   get_uleb128 (code, abbrevp);
 
+  inline void relock (void)
+    {
+      if (!wrlocked)
+	{
+	  rwlock_unlock (dbg->lock);
+	  rwlock_wrlock (dbg->lock);
+	}
+    }
+
   /* Check whether this code is already in the hash table.  */
   bool foundit = false;
   Dwarf_Abbrev *abb = NULL;
   if (cu == NULL
       || (abb = Dwarf_Abbrev_Hash_find (&cu->abbrev_hash, code, NULL)) == NULL)
     {
+      /* Relock here, we will need write lock eventually even if the
+	 user passed the result pointer.  */
+      relock ();
       if (result == NULL)
 	abb = libdw_typed_alloc (dbg, Dwarf_Abbrev);
       else
@@ -123,6 +135,9 @@ __libdw_getabbrev (dbg, cu, offset, lengthp, result)
       /* If the caller doesn't need the length we are done.  */
       if (lengthp == NULL)
 	goto out;
+
+      /* We will need to update the hash table. */
+      relock ();
     }
 
   /* If there is already a value in the hash table we are going to
@@ -157,6 +172,29 @@ __libdw_getabbrev (dbg, cu, offset, lengthp, result)
   return abb;
 }
 
+Dwarf_Abbrev *
+internal_function
+__libdw_getabbrev (dbg, cu, offset, lengthp, result)
+     Dwarf *dbg;
+     struct Dwarf_CU *cu;
+     Dwarf_Off offset;
+     size_t *lengthp;
+     Dwarf_Abbrev *result;
+{
+  return getabbrev (dbg, cu, offset, lengthp, result, 0);
+}
+
+Dwarf_Abbrev *
+internal_function
+__libdw_getabbrev_wrlock (dbg, cu, offset, lengthp, result)
+     Dwarf *dbg;
+     struct Dwarf_CU *cu;
+     Dwarf_Off offset;
+     size_t *lengthp;
+     Dwarf_Abbrev *result;
+{
+  return getabbrev (dbg, cu, offset, lengthp, result, 1);
+}
 
 Dwarf_Abbrev *
 dwarf_getabbrev (die, offset, lengthp)
@@ -164,7 +202,12 @@ dwarf_getabbrev (die, offset, lengthp)
      Dwarf_Off offset;
      size_t *lengthp;
 {
-  return __libdw_getabbrev (die->cu->dbg, die->cu,
-			    die->cu->orig_abbrev_offset + offset, lengthp,
-			    NULL);
+  rwlock_rdlock (die->cu->dbg->lock);
+  Dwarf_Abbrev *retval
+    = __libdw_getabbrev (die->cu->dbg, die->cu,
+			 die->cu->orig_abbrev_offset + offset,
+			 lengthp, NULL);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }

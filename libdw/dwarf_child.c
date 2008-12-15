@@ -59,10 +59,10 @@
 #define INVALID 0xffffe444
 
 
-unsigned char *
-internal_function
-__libdw_find_attr (Dwarf_Die *die, unsigned int search_name,
-		   unsigned int *codep, unsigned int *formp)
+static unsigned char *
+find_attr (Dwarf_Die *die, unsigned int search_name,
+	   unsigned int *codep, unsigned int *formp,
+	   int wrlocked)
 {
   Dwarf *dbg = die->cu->dbg;
   const unsigned char *readp = (unsigned char *) die->addr;
@@ -76,8 +76,19 @@ __libdw_find_attr (Dwarf_Die *die, unsigned int search_name,
   Dwarf_Abbrev *abbrevp = die->abbrev;
   if (abbrevp == NULL)
     {
-      abbrevp = __libdw_findabbrev (die->cu, abbrev_code);
-      die->abbrev = abbrevp ?: DWARF_END_ABBREV;
+      /* Relock for cache update. */
+      if (!wrlocked)
+	{
+	  rwlock_unlock (dbg->lock);
+	  rwlock_wrlock (dbg->lock);
+	}
+
+      /* Still no data? */
+      if ((abbrevp = die->abbrev) == NULL)
+	{
+	  abbrevp = __libdw_findabbrev_wrlock (die->cu, abbrev_code);
+	  die->abbrev = abbrevp ?: DWARF_END_ABBREV;
+	}
     }
   if (unlikely (die->abbrev == DWARF_END_ABBREV))
     {
@@ -125,7 +136,8 @@ __libdw_find_attr (Dwarf_Die *die, unsigned int search_name,
       /* Skip over the rest of this attribute (if there is any).  */
       if (attr_form != 0)
 	{
-	  size_t len = __libdw_form_val_len (dbg, die->cu, attr_form, readp);
+	  size_t len = __libdw_form_val_len_rdlock (dbg, die->cu,
+						    attr_form, readp);
 
 	  if (unlikely (len == (size_t) -1l))
 	    {
@@ -148,10 +160,28 @@ __libdw_find_attr (Dwarf_Die *die, unsigned int search_name,
 }
 
 
-int
-dwarf_child (die, result)
+unsigned char *
+internal_function
+__libdw_find_attr_rdlock (Dwarf_Die *die, unsigned int search_name,
+			  unsigned int *codep, unsigned int *formp)
+{
+  return find_attr (die, search_name, codep, formp, 0);
+}
+
+unsigned char *
+internal_function
+__libdw_find_attr_wrlock (Dwarf_Die *die, unsigned int search_name,
+			  unsigned int *codep, unsigned int *formp)
+{
+  return find_attr (die, search_name, codep, formp, 1);
+}
+
+
+static int
+child (die, result, wrlocked)
      Dwarf_Die *die;
      Dwarf_Die *result;
+     int wrlocked;
 {
   /* Ignore previous errors.  */
   if (die == NULL)
@@ -160,10 +190,15 @@ dwarf_child (die, result)
   /* Skip past the last attribute.  */
   void *addr = NULL;
 
+  /* RESULT can be the same as DIE.  So preserve what we need.  */
+  struct Dwarf_CU *cu = die->cu;
+
   /* If we already know there are no children do not search.  */
   if (die->abbrev != DWARF_END_ABBREV
       && (die->abbrev == NULL || die->abbrev->has_children))
-    addr = __libdw_find_attr (die, INVALID, NULL, NULL);
+    addr = (wrlocked
+	    ? __libdw_find_attr_wrlock
+	    : __libdw_find_attr_rdlock) (die, INVALID, NULL, NULL);
   if (unlikely (die->abbrev == (Dwarf_Abbrev *) -1l))
     return -1;
 
@@ -184,9 +219,6 @@ dwarf_child (die, result)
   if (unlikely (*code == '\0'))
     return 1;
 
-  /* RESULT can be the same as DIE.  So preserve what we need.  */
-  struct Dwarf_CU *cu = die->cu;
-
   /* Clear the entire DIE structure.  This signals we have not yet
      determined any of the information.  */
   memset (result, '\0', sizeof (Dwarf_Die));
@@ -198,5 +230,39 @@ dwarf_child (die, result)
   result->cu = cu;
 
   return 0;
+}
+
+int
+__libdw_child_rdlock (die, result)
+     Dwarf_Die *die;
+     Dwarf_Die *result;
+{
+  return child (die, result, 0);
+}
+
+int
+__libdw_child_wrlock (die, result)
+     Dwarf_Die *die;
+     Dwarf_Die *result;
+{
+  return child (die, result, 1);
+}
+
+int
+dwarf_child (die, result)
+     Dwarf_Die *die;
+     Dwarf_Die *result;
+{
+  if (die == NULL)
+    return -1;
+
+  /* RESULT can be the same as DIE.  So preserve what we need.  */
+  struct Dwarf_CU *cu = die->cu;
+
+  rwlock_rdlock (cu->dbg->lock);
+  int retval = __libdw_child_rdlock (die, result);
+  rwlock_unlock (cu->dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_child)

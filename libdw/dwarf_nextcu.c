@@ -57,8 +57,8 @@
 
 
 int
-dwarf_nextcu (dwarf, off, next_off, header_sizep, abbrev_offsetp,
-	      address_sizep, offset_sizep)
+__libdw_nextcu_rdlock (dwarf, off, next_off, header_sizep, abbrev_offsetp,
+		       address_sizep, offset_sizep)
      Dwarf *dwarf;
      Dwarf_Off off;
      Dwarf_Off *next_off;
@@ -171,5 +171,29 @@ dwarf_nextcu (dwarf, off, next_off, header_sizep, abbrev_offsetp,
   *next_off = off + 2 * offset_size - 4 + length;
 
   return 0;
+}
+
+int
+dwarf_nextcu (dwarf, off, next_off, header_sizep, abbrev_offsetp,
+	      address_sizep, offset_sizep)
+     Dwarf *dwarf;
+     Dwarf_Off off;
+     Dwarf_Off *next_off;
+     size_t *header_sizep;
+     Dwarf_Off *abbrev_offsetp;
+     uint8_t *address_sizep;
+     uint8_t *offset_sizep;
+{
+  /* Maybe there has been an error before.  */
+  if (dwarf == NULL)
+    return -1;
+
+  rwlock_rdlock (dwarf->lock);
+  int retval = __libdw_nextcu_rdlock (dwarf, off, next_off, header_sizep,
+				      abbrev_offsetp, address_sizep,
+				      offset_sizep);
+  rwlock_unlock (dwarf->lock);
+
+  return retval;
 }
 INTDEF(dwarf_nextcu)

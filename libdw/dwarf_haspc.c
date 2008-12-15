@@ -56,7 +56,7 @@
 
 
 int
-dwarf_haspc (Dwarf_Die *die, Dwarf_Addr pc)
+__libdw_haspc_rdlock (Dwarf_Die *die, Dwarf_Addr pc)
 {
   if (die == NULL)
     return -1;
@@ -65,11 +65,24 @@ dwarf_haspc (Dwarf_Die *die, Dwarf_Addr pc)
   Dwarf_Addr begin;
   Dwarf_Addr end;
   ptrdiff_t offset = 0;
-  while ((offset = INTUSE(dwarf_ranges) (die, offset, &base,
-					 &begin, &end)) > 0)
+  while ((offset = __libdw_ranges_rdlock (die, offset, &base,
+					  &begin, &end)) > 0)
     if (pc >= begin && pc < end)
       return 1;
 
   return offset;
+}
+
+int
+dwarf_haspc (Dwarf_Die *die, Dwarf_Addr pc)
+{
+  if (die == NULL)
+    return -1;
+
+  rwlock_rdlock (die->cu->dbg->lock);
+  int retval = __libdw_haspc_rdlock (die, pc);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF (dwarf_haspc)

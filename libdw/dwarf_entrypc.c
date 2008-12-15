@@ -56,16 +56,27 @@
 
 
 int
-dwarf_entrypc (die, return_addr)
+__libdw_entrypc_rdlock (die, return_addr)
      Dwarf_Die *die;
      Dwarf_Addr *return_addr;
 {
   Dwarf_Attribute attr_mem;
+  return __libdw_formaddr_rdlock (__libdw_attr_rdlock (die, DW_AT_entry_pc,
+						       &attr_mem)
+				  ?: __libdw_attr_rdlock (die, DW_AT_low_pc,
+							  &attr_mem),
+				  return_addr);
+}
 
-  return INTUSE(dwarf_formaddr) (INTUSE(dwarf_attr) (die, DW_AT_entry_pc,
-						     &attr_mem)
-				 ?: INTUSE(dwarf_attr) (die, DW_AT_low_pc,
-							&attr_mem),
-				 return_addr);
+int
+dwarf_entrypc (die, return_addr)
+     Dwarf_Die *die;
+     Dwarf_Addr *return_addr;
+{
+  rwlock_rdlock (die->cu->dbg->lock);
+  int retval = __libdw_entrypc_rdlock (die, return_addr);
+  rwlock_unlock (die->cu->dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_entrypc)

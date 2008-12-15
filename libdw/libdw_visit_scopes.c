@@ -58,7 +58,7 @@ enum die_class { ignore, match, match_inline, walk, imported };
 static enum die_class
 classify_die (Dwarf_Die *die)
 {
-  switch (INTUSE(dwarf_tag) (die))
+  switch (__libdw_tag_rdlock (die))
     {
       /* DIEs with addresses we can try to match.  */
     case DW_TAG_compile_unit:
@@ -75,7 +75,9 @@ classify_die (Dwarf_Die *die)
       /* This might be a concrete out-of-line instance of an inline, in
 	 which case it is not guaranteed to be owned by the right scope and
 	 we will search for its origin as for DW_TAG_inlined_subroutine.  */
-      return (INTUSE(dwarf_hasattr) (die, DW_AT_abstract_origin)
+      /* This may relock, but if it would, it would already have
+	 happened in __libdw_child call from __libdw_visit_scopes.  */
+      return (__libdw_hasattr_rdlock (die, DW_AT_abstract_origin)
 	      ? match_inline : match);
 
       /* DIEs without addresses that can own DIEs with addresses.  */
@@ -106,7 +108,13 @@ __libdw_visit_scopes (depth, root, previsit, postvisit, arg)
   struct Dwarf_Die_Chain child;
 
   child.parent = root;
-  if (INTUSE(dwarf_child) (&root->die, &child.die) != 0)
+
+  /* This function doesn't have any real state itself.  So while some
+     of the following functions may need to relock to upgrade the
+     cache (e.g. __libdw_child_rdlock), or to hand the control over to
+     external callback (e.g. PREVISIT and POSTVISIT), we don't really
+     care.  */
+  if (__libdw_child_rdlock (&root->die, &child.die) != 0)
     return -1;
 
   inline int recurse (void)
@@ -132,7 +140,9 @@ __libdw_visit_scopes (depth, root, previsit, postvisit, arg)
 	  case match:
 	  case match_inline:
 	  case walk:
-	    if (INTUSE(dwarf_haschildren) (&child.die))
+	    /* This may relock, but if it would, it would already have
+	       happened above in __libdw_child call.  */
+	    if (__libdw_haschildren_rdlock (&child.die))
 	      {
 		int result = recurse ();
 		if (result != DWARF_CB_OK)
@@ -148,10 +158,9 @@ __libdw_visit_scopes (depth, root, previsit, postvisit, arg)
 		 recording it as an inner scoping level.  */
 
 	      Dwarf_Attribute attr_mem;
-	      Dwarf_Attribute *attr = INTUSE(dwarf_attr) (&child.die,
-							  DW_AT_import,
-							  &attr_mem);
-	      if (INTUSE(dwarf_formref_die) (attr, &child.die) != NULL)
+	      Dwarf_Attribute *attr
+		= __libdw_attr_rdlock (&child.die, DW_AT_import, &attr_mem);
+	      if (__libdw_formref_die_rdlock (attr, &child.die) != NULL)
 		{
 		  int result = recurse ();
 		  if (result != DWARF_CB_OK)
@@ -171,7 +180,7 @@ __libdw_visit_scopes (depth, root, previsit, postvisit, arg)
 	    return result;
 	}
     }
-  while (INTUSE(dwarf_siblingof) (&child.die, &child.die) == 0);
+  while (__libdw_siblingof_rdlock (&child.die, &child.die) == 0);
 
   return 0;
 }

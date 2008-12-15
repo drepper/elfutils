@@ -55,16 +55,26 @@
 #include <dwarf.h>
 #include "libdwP.h"
 
+int
+__libdw_highpc_rdlock (die, return_addr)
+     Dwarf_Die *die;
+     Dwarf_Addr *return_addr;
+{
+  Dwarf_Attribute attr_mem;
+  return __libdw_formaddr_rdlock (__libdw_attr_rdlock (die, DW_AT_high_pc,
+						       &attr_mem),
+				  return_addr);
+}
 
 int
 dwarf_highpc (die, return_addr)
      Dwarf_Die *die;
      Dwarf_Addr *return_addr;
 {
-  Dwarf_Attribute attr_mem;
+  rwlock_rdlock (die->cu->dbg->lock);
+  int retval = __libdw_highpc_rdlock (die, return_addr);
+  rwlock_unlock (die->cu->dbg->lock);
 
-  return INTUSE(dwarf_formaddr) (INTUSE(dwarf_attr) (die, DW_AT_high_pc,
-						     &attr_mem),
-				 return_addr);
+  return retval;
 }
 INTDEF(dwarf_highpc)

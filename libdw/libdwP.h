@@ -188,6 +188,9 @@ struct Dwarf
 
   /* Registered OOM handler.  */
   Dwarf_OOM oom_handler;
+
+  /* Lock to handle multithreaded programs.  */
+  rwlock_define (,lock);
 };
 
 
@@ -330,7 +333,8 @@ struct Dwarf_Macro_s
 extern void __libdw_seterrno (int value) internal_function;
 
 
-/* Memory handling, the easy parts.  This macro does not do any locking.  */
+/* Memory handling, the easy parts.
+   Callers need to hold a write lock.  */
 #define libdw_alloc(dbg, type, tsize, cnt) \
   ({ struct libdw_memblock *_tail = (dbg)->mem_tail;			      \
      size_t _required = (tsize) * (cnt);				      \
@@ -348,6 +352,7 @@ extern void __libdw_seterrno (int value) internal_function;
        }								      \
      _result; })
 
+/* Callers need to hold a write lock.  */
 #define libdw_typed_alloc(dbg, type) \
   libdw_alloc (dbg, type, sizeof (type), 1)
 
@@ -359,36 +364,95 @@ extern void *__libdw_allocate (Dwarf *dbg, size_t minsize, size_t align)
 extern void __libdw_oom (void) __attribute ((noreturn, visibility ("hidden")));
 
 /* Find CU for given offset.  */
-extern struct Dwarf_CU *__libdw_findcu (Dwarf *dbg, Dwarf_Off offset)
+extern struct Dwarf_CU *__libdw_findcu_rdlock (Dwarf *dbg, Dwarf_Off offset)
      __nonnull_attribute__ (1) internal_function;
 
+// XXX Maybe not useful and should be ditched.
+extern struct Dwarf_CU *__libdw_findcu_wrlock (Dwarf *dbg, Dwarf_Off offset)
+     __nonnull_attribute__ (1) internal_function;
+
+extern int __libdw_nextcu_rdlock (Dwarf *dwarf, Dwarf_Off off,
+				  Dwarf_Off *next_off,
+				  size_t *header_sizep,
+				  Dwarf_Off *abbrev_offsetp,
+				  uint8_t *address_sizep,
+				  uint8_t *offset_sizep)
+     __nonnull_attribute__ (3) internal_function;
+
 /* Return tag of given DIE.  */
+/* May relock via getabbrev. */
 extern Dwarf_Abbrev *__libdw_findabbrev (struct Dwarf_CU *cu,
 					 unsigned int code)
      __nonnull_attribute__ (1) internal_function;
+extern Dwarf_Abbrev *__libdw_findabbrev_wrlock (struct Dwarf_CU *cu,
+						unsigned int code)
+     __nonnull_attribute__ (1) internal_function;
 
 /* Get abbreviation at given offset.  */
+/* XXX perhaps rename to __libdw_getabbrev_rdlock.  */
+/* May relock. */
 extern Dwarf_Abbrev *__libdw_getabbrev (Dwarf *dbg, struct Dwarf_CU *cu,
 					Dwarf_Off offset, size_t *lengthp,
 					Dwarf_Abbrev *result)
      __nonnull_attribute__ (1) internal_function;
 
+extern Dwarf_Abbrev *__libdw_getabbrev_wrlock (Dwarf *dbg, struct Dwarf_CU *cu,
+					       Dwarf_Off offset,
+					       size_t *lengthp,
+					       Dwarf_Abbrev *result)
+     __nonnull_attribute__ (1) internal_function;
+
 /* Helper functions for form handling.  */
-extern size_t __libdw_form_val_len (Dwarf *dbg, struct Dwarf_CU *cu,
-				    unsigned int form,
-				    const unsigned char *valp)
+extern size_t __libdw_form_val_len_rdlock (Dwarf *dbg, struct Dwarf_CU *cu,
+					   unsigned int form,
+					   const unsigned char *valp)
      __nonnull_attribute__ (1, 2, 4) internal_function;
 
-/* Helper function for DW_FORM_ref* handling.  */
-extern int __libdw_formref (Dwarf_Attribute *attr, Dwarf_Off *return_offset)
-     __nonnull_attribute__ (1, 2) internal_function;
+/* Helper function for DW_FORM_* handling.  */
+extern int __libdw_formaddr_rdlock (Dwarf_Attribute *attr,
+				    Dwarf_Addr *return_addr)
+     __nonnull_attribute__ (2) internal_function;
+
+extern int __libdw_formref_rdlock (Dwarf_Attribute *attr,
+				   Dwarf_Off *return_offset)
+     __nonnull_attribute__ (2) internal_function;
+
+extern Dwarf_Die *__libdw_formref_die_rdlock (Dwarf_Attribute *attr,
+					      Dwarf_Die *die_mem)
+     __nonnull_attribute__ (2) internal_function;
+
+extern int __libdw_formsdata_rdlock (Dwarf_Attribute *attr,
+				     Dwarf_Sword *return_sval)
+     __nonnull_attribute__ (2) internal_function;
+extern int __libdw_formudata_rdlock (Dwarf_Attribute *attr,
+				     Dwarf_Word *return_uval)
+     __nonnull_attribute__ (2) internal_function;
+extern const char * __libdw_formstring_rdlock (Dwarf_Attribute *attrp)
+     internal_function;
 
 
-/* Helper function to locate attribute.  */
-extern unsigned char *__libdw_find_attr (Dwarf_Die *die,
-					 unsigned int search_name,
-					 unsigned int *codep,
-					 unsigned int *formp)
+/* Variants of dwarf_attr for cases where caller holds the right lock.
+   Note that _rdlock may need to relock to initialize the cache.  */
+extern Dwarf_Attribute *__libdw_attr_rdlock (Dwarf_Die *die,
+					     unsigned int search_name,
+					     Dwarf_Attribute *result)
+     __nonnull_attribute__ (3) internal_function;
+extern Dwarf_Attribute *__libdw_attr_wrlock (Dwarf_Die *die,
+					     unsigned int search_name,
+					     Dwarf_Attribute *result)
+
+/* Helper functions to locate attribute.
+   Note that _rdlock may need to relock to initialize the cache.  */
+     __nonnull_attribute__ (3) internal_function;
+extern unsigned char *__libdw_find_attr_rdlock (Dwarf_Die *die,
+						unsigned int search_name,
+						unsigned int *codep,
+						unsigned int *formp)
+     __nonnull_attribute__ (1) internal_function;
+extern unsigned char *__libdw_find_attr_wrlock (Dwarf_Die *die,
+						unsigned int search_name,
+						unsigned int *codep,
+						unsigned int *formp)
      __nonnull_attribute__ (1) internal_function;
 
 /* Helper function to access integer attribute.  */
@@ -402,6 +466,15 @@ struct Dwarf_Die_Chain
   struct Dwarf_Die_Chain *parent;
   bool prune;			/* The PREVISIT function can set this.  */
 };
+
+/* PREVISIT and POSTVISIT are assumed to relock.  Some of them also
+   unlock to hand the control over to external callbacks, and then
+   relock to rdlock (i.e. may actually downgrade the lock).  The
+   caller of functions that call visit_scopens have to take this into
+   account, and assume that their wrlock might have been lost, and
+   need to be regained.
+
+   XXX document the above at callers.  */
 extern int __libdw_visit_scopes (unsigned int depth,
 				 struct Dwarf_Die_Chain *root,
 				 int (*previsit) (unsigned int depth,
@@ -412,6 +485,67 @@ extern int __libdw_visit_scopes (unsigned int depth,
 						   void *arg),
 				 void *arg)
   __nonnull_attribute__ (2, 3) internal_function;
+
+/* Helper function to return DIE at given offset.  */
+extern Dwarf_Die *__libdw_offdie_rdlock (Dwarf *dbg, Dwarf_Off offset,
+					 Dwarf_Die *result)
+  __nonnull_attribute__ (3) internal_function;
+
+/* Variants of getsrclines if the caller holds the right lock.  Note
+   that _rdlock may need to relock to initialize the cache.  */
+extern int __libdw_getsrclines_rdlock (Dwarf_Die *cudie,
+				       Dwarf_Lines **lines,
+				       size_t *nlines)
+   __nonnull_attribute__ (2, 3) internal_function;
+extern int __libdw_getsrclines_wrlock (Dwarf_Die *cudie,
+				       Dwarf_Lines **lines,
+				       size_t *nlines)
+   __nonnull_attribute__ (2, 3) internal_function;
+
+/* The following three may relock to wrlock via __libdw_attr.  */
+extern int __libdw_entrypc_rdlock (Dwarf_Die *die, Dwarf_Addr *return_addr)
+     __nonnull_attribute__ (2) internal_function;
+extern int __libdw_highpc_rdlock (Dwarf_Die *die, Dwarf_Addr *return_addr)
+     __nonnull_attribute__ (2) internal_function;
+extern int __libdw_lowpc_rdlock (Dwarf_Die *die, Dwarf_Addr *return_addr)
+     __nonnull_attribute__ (2) internal_function;
+
+extern int __libdw_formblock_rdlock (Dwarf_Attribute *attr, Dwarf_Block *return_block)
+     __nonnull_attribute__ (2) internal_function;
+
+/* May upgrade lock to _wrlock via dwarf_attr call. */
+extern ptrdiff_t __libdw_ranges_rdlock (Dwarf_Die *die, ptrdiff_t offset,
+					Dwarf_Addr *basep,
+					Dwarf_Addr *startp, Dwarf_Addr *endp)
+  internal_function;
+
+/* May upgrade lock to _wrlock via dwarf_attr call. */
+extern int __libdw_child_rdlock (Dwarf_Die *die, Dwarf_Die *result)
+     __nonnull_attribute__ (2) internal_function;
+
+extern int __libdw_child_wrlock (Dwarf_Die *die, Dwarf_Die *result)
+     __nonnull_attribute__ (2) internal_function;
+
+/* May relock due to find_attr.  */
+extern int __libdw_siblingof_rdlock (Dwarf_Die *die, Dwarf_Die *result)
+     __nonnull_attribute__ (2) internal_function;
+
+/* May upgrade lock to _wrlock via dwarf_ranges call. */
+extern int __libdw_haspc_rdlock (Dwarf_Die *die, Dwarf_Addr pc)
+  internal_function;
+
+/* May relock to wrlock via find_attr.   */
+extern int __libdw_hasattr_rdlock (Dwarf_Die *die, unsigned int search_name)
+  internal_function;
+
+/* May relock via findabbrev */
+extern int __libdw_haschildren_rdlock (Dwarf_Die *die)
+  internal_function;
+
+/* May relock via findabbrev. */
+extern int __libdw_tag_rdlock (Dwarf_Die *die)
+  __nonnull_attribute__ (1) internal_function;
+
 
 /* Return error code of last failing function call.  This value is kept
    separately for each thread.  */

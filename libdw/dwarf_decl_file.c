@@ -63,19 +63,26 @@ dwarf_decl_file (Dwarf_Die *die)
   Dwarf_Attribute attr_mem;
   Dwarf_Sword idx = 0;
 
-  if (INTUSE(dwarf_formsdata) (INTUSE(dwarf_attr) (die, DW_AT_decl_file,
-						   &attr_mem), &idx) != 0)
-    return NULL;
+  const char *retval = NULL;
+  struct Dwarf_CU *cu = die->cu;
+
+  if (cu->lines == NULL)
+    rwlock_wrlock (cu->dbg->lock);
+  else
+    rwlock_rdlock (cu->dbg->lock);
+
+  if (__libdw_formsdata_rdlock (__libdw_attr_rdlock (die, DW_AT_decl_file,
+						     &attr_mem), &idx) != 0)
+    goto out;
 
   /* Zero means no source file information available.  */
   if (idx == 0)
     {
       __libdw_seterrno (DWARF_E_NO_ENTRY);
-      return NULL;
+      goto out;
     }
 
   /* Get the array of source files for the CU.  */
-  struct Dwarf_CU *cu = die->cu;
   if (cu->lines == NULL)
     {
       Dwarf_Lines *lines;
@@ -83,7 +90,8 @@ dwarf_decl_file (Dwarf_Die *die)
 
       /* Let the more generic function do the work.  It'll create more
 	 data but that will be needed in an real program anyway.  */
-      (void) INTUSE(dwarf_getsrclines) (&CUDIE (cu), &lines, &nlines);
+      /* We have the strongest lock necessary, so just call _wrlock. */
+      (void) __libdw_getsrclines_wrlock (&CUDIE (cu), &lines, &nlines);
       assert (cu->lines != NULL);
     }
 
@@ -92,7 +100,7 @@ dwarf_decl_file (Dwarf_Die *die)
       /* If the file index is not zero, there must be file information
 	 available.  */
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return NULL;
+      goto out;
     }
 
   assert (cu->files != NULL && cu->files != (void *) -1l);
@@ -100,8 +108,12 @@ dwarf_decl_file (Dwarf_Die *die)
   if (idx >= cu->files->nfiles)
     {
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return NULL;
+      goto out;
     }
 
-  return cu->files->info[idx].name;
+  retval = cu->files->info[idx].name;
+
+ out:
+  rwlock_unlock (cu->dbg->lock);
+  return retval;
 }

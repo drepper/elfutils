@@ -84,10 +84,11 @@ findcu_cb (const void *arg1, const void *arg2)
 }
 
 
-struct Dwarf_CU *
-__libdw_findcu (dbg, start)
+static struct Dwarf_CU *
+findcu (dbg, start, wrlocked)
      Dwarf *dbg;
      Dwarf_Off start;
+     int wrlocked;
 {
   /* Maybe we already know that CU.  */
   struct Dwarf_CU fake = { .start = start, .end = 0 };
@@ -110,8 +111,8 @@ __libdw_findcu (dbg, start)
       uint8_t offset_size;
       Dwarf_Off abbrev_offset;
 
-      if (INTUSE(dwarf_nextcu) (dbg, oldoff, &dbg->next_cu_offset, NULL,
-				&abbrev_offset, &address_size, &offset_size)
+      if (__libdw_nextcu_rdlock (dbg, oldoff, &dbg->next_cu_offset, NULL,
+				 &abbrev_offset, &address_size, &offset_size)
 	  != 0)
 	/* No more entries.  */
 	return NULL;
@@ -124,6 +125,14 @@ __libdw_findcu (dbg, start)
       /* We only know how to handle the DWARF version 2 and 3 formats.  */
       if (unlikely (version != 2) && unlikely (version != 3))
 	goto invalid;
+
+      /* Relock for memory alloc, if necessary.  */
+      if (!wrlocked)
+	{
+	  rwlock_unlock (dbg->lock);
+	  rwlock_wrlock (dbg->lock);
+	  wrlocked = 1;
+	}
 
       /* Create an entry for this CU.  */
       struct Dwarf_CU *newp = libdw_typed_alloc (dbg, struct Dwarf_CU);
@@ -154,4 +163,20 @@ __libdw_findcu (dbg, start)
 	return newp;
     }
   /* NOTREACHED */
+}
+
+struct Dwarf_CU *
+__libdw_findcu_rdlock (dbg, start)
+     Dwarf *dbg;
+     Dwarf_Off start;
+{
+  return findcu (dbg, start, 0);
+}
+
+struct Dwarf_CU *
+__libdw_findcu_wrlock (dbg, start)
+     Dwarf *dbg;
+     Dwarf_Off start;
+{
+  return findcu (dbg, start, 1);
 }

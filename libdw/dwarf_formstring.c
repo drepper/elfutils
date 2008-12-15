@@ -57,19 +57,19 @@
 
 
 const char *
-dwarf_formstring (attrp)
+__libdw_formstring_rdlock (attrp)
      Dwarf_Attribute *attrp;
 {
   /* Ignore earlier errors.  */
   if (attrp == NULL)
     return NULL;
 
+  Dwarf *dbg = attrp->cu->dbg;
+
   /* We found it.  Now determine where the string is stored.  */
   if (attrp->form == DW_FORM_string)
     /* A simple inlined string.  */
     return (const char *) attrp->valp;
-
-  Dwarf *dbg = attrp->cu->dbg;
 
   if (unlikely (attrp->form != DW_FORM_strp)
       || dbg->sectiondata[IDX_debug_str] == NULL)
@@ -90,5 +90,21 @@ dwarf_formstring (attrp)
     goto invalid_error;
 
   return (const char *) dbg->sectiondata[IDX_debug_str]->d_buf + off;
+}
+
+const char *
+dwarf_formstring (attrp)
+     Dwarf_Attribute *attrp;
+{
+  /* Ignore earlier errors.  */
+  if (attrp == NULL)
+    return NULL;
+
+  Dwarf *dbg = attrp->cu->dbg;
+  rwlock_rdlock (dbg->lock);
+  const char *retval = __libdw_formstring_rdlock (attrp);
+  rwlock_unlock (dbg->lock);
+
+  return retval;
 }
 INTDEF(dwarf_formstring)

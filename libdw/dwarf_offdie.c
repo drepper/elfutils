@@ -57,7 +57,7 @@
 
 
 Dwarf_Die *
-dwarf_offdie (dbg, offset, result)
+__libdw_offdie_rdlock (dbg, offset, result)
      Dwarf *dbg;
      Dwarf_Off offset;
      Dwarf_Die *result;
@@ -78,7 +78,7 @@ dwarf_offdie (dbg, offset, result)
   result->addr = (char *) dbg->sectiondata[IDX_debug_info]->d_buf + offset;
 
   /* Get the CU.  */
-  result->cu = __libdw_findcu (dbg, offset);
+  result->cu = __libdw_findcu_rdlock (dbg, offset);
   if (result->cu == NULL)
     {
       /* This should never happen.  The input file is malformed.  */
@@ -88,4 +88,21 @@ dwarf_offdie (dbg, offset, result)
 
   return result;
 }
+
+Dwarf_Die *
+dwarf_offdie (dbg, offset, result)
+     Dwarf *dbg;
+     Dwarf_Off offset;
+     Dwarf_Die *result;
+{
+  if (dbg == NULL)
+    return NULL;
+
+  rwlock_rdlock (dbg->lock);
+  Dwarf_Die *retval = __libdw_offdie_rdlock (dbg, offset, result);
+  rwlock_unlock (dbg->lock);
+
+  return retval;
+}
+
 INTDEF(dwarf_offdie)

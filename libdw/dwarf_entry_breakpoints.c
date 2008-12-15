@@ -83,20 +83,29 @@ dwarf_entry_breakpoints (die, bkpts)
   inline int entrypc_bkpt (void)
     {
       Dwarf_Addr pc;
-      return INTUSE(dwarf_entrypc) (die, &pc) < 0 ? -1 : add_bkpt (pc);
+      return __libdw_entrypc_rdlock (die, &pc) < 0 ? -1 : add_bkpt (pc);
     }
+
+  rwlock_rdlock (die->cu->dbg->lock);
 
   /* Fetch the CU's line records to look for this DIE's addresses.  */
   Dwarf_Die cudie = CUDIE (die->cu);
   Dwarf_Lines *lines;
   size_t nlines;
-  if (INTUSE(dwarf_getsrclines) (&cudie, &lines, &nlines) < 0)
+  int retval = -1;
+
+  /* getsrclines may upgrade the lock to wrlock, but we don't mind.  */
+  if (__libdw_getsrclines_rdlock (&cudie, &lines, &nlines) < 0)
     {
       int error = INTUSE (dwarf_errno) ();
       if (error == DWARF_E_NO_DEBUG_LINE)
-	return entrypc_bkpt ();
-      __libdw_seterrno (error);
-      return -1;
+	retval = entrypc_bkpt ();
+      else
+	{
+	  __libdw_seterrno (error);
+	  retval = -1;
+	}
+      goto out;
     }
 
   /* Search a contiguous PC range for prologue-end markers.
@@ -143,13 +152,18 @@ dwarf_entry_breakpoints (die, bkpts)
   Dwarf_Addr base;
   Dwarf_Addr begin;
   Dwarf_Addr end;
-  ptrdiff_t offset = INTUSE(dwarf_ranges) (die, 0, &base, &begin, &end);
+  /* If this could upgrade to wrlock, it would already have happened
+     above in the getsrclines call.  */
+  ptrdiff_t offset = __libdw_ranges_rdlock (die, 0, &base, &begin, &end);
   if (offset < 0)
-    return -1;
+    goto out;
 
   /* Most often there is a single contiguous PC range for the DIE.  */
   if (offset == 1)
-    return search_range (begin, end, true, true) ?: entrypc_bkpt ();
+    {
+      retval = search_range (begin, end, true, true) ?: entrypc_bkpt ();
+      goto out;
+    }
 
   Dwarf_Addr lowpc = (Dwarf_Addr) -1l;
   Dwarf_Addr highpc = (Dwarf_Addr) -1l;
@@ -157,7 +171,7 @@ dwarf_entry_breakpoints (die, bkpts)
     {
       /* We have an address range entry.  */
       if (search_range (begin, end, true, false) < 0)
-	return -1;
+	goto out;
 
       if (begin < lowpc)
 	{
@@ -165,14 +179,18 @@ dwarf_entry_breakpoints (die, bkpts)
 	  highpc = end;
 	}
 
-      offset = INTUSE(dwarf_ranges) (die, offset, &base, &begin, &end);
+      offset = __libdw_ranges_rdlock (die, offset, &base, &begin, &end);
     }
 
   /* If we didn't find any proper DWARF markers, then look in the
      lowest-addressed range for an ad hoc marker.  Failing that,
      fall back to just using the entrypc value.  */
-  return (nbkpts
-	  ?: (lowpc == (Dwarf_Addr) -1l ? 0
-	      : search_range (lowpc, highpc, false, true))
-	  ?: entrypc_bkpt ());
+  retval = (nbkpts
+	    ?: (lowpc == (Dwarf_Addr) -1l ? 0
+		: search_range (lowpc, highpc, false, true))
+	    ?: entrypc_bkpt ());
+
+ out:
+  rwlock_unlock (die->cu->dbg->lock);
+  return retval;
 }

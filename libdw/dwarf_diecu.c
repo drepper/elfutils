@@ -69,6 +69,8 @@ dwarf_diecu (die, result, address_sizep, offset_sizep)
      determined any of the information.  */
   memset (result, '\0', sizeof (Dwarf_Die));
 
+  rwlock_rdlock (die->cu->dbg->lock);
+
   result->addr = ((char *) die->cu->dbg->sectiondata[IDX_debug_info]->d_buf
  		  + DIE_OFFSET_FROM_CU_OFFSET (die->cu->start,
 					       die->cu->offset_size));
@@ -78,6 +80,8 @@ dwarf_diecu (die, result, address_sizep, offset_sizep)
     *address_sizep = die->cu->address_size;
   if (offset_sizep != NULL)
     *offset_sizep = die->cu->offset_size;
+
+  rwlock_rdlock (die->cu->dbg->lock);
 
   return result;
 }
