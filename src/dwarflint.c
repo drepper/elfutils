@@ -82,12 +82,18 @@ process_file (int fd, Dwarf *dwarf, const char *fname,
 	      size_t size, bool only_one);
 
 /* Report an error.  */
-#define ERROR(str, args...) \
-  do {									      \
-    printf (str, ##args);						      \
-    ++error_count;							      \
+#define ERROR(str, args...)			\
+  do {						\
+    printf (str, ##args);			\
+    ++error_count;				\
   } while (0)
 static unsigned int error_count;
+
+#define WARNING(str, args...)			\
+  do {						\
+    printf ("warning: "str, ##args);		\
+  } while (0)
+
 
 /* True if we should perform very strict testing.  */
 static bool be_strict;
@@ -231,6 +237,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
 struct read_ctx {
   Dwarf *dbg;
+  Elf_Data *data;
   const unsigned char *ptr;
   const unsigned char *begin;
   const unsigned char *end;
@@ -238,15 +245,16 @@ struct read_ctx {
 
 
 static void read_ctx_init (struct read_ctx *ctx, Dwarf *dbg,
-			   const unsigned char *begin,
-			   const unsigned char *end);
-static void read_ctx_init_elf (struct read_ctx *ctx, Dwarf *dbg,
-			       Elf_Data *data);
+			   Elf_Data *data);
+static void read_ctx_init_sub (struct read_ctx *ctx, Dwarf *dbg,
+			       Elf_Data *data,
+			       const unsigned char *begin,
+			       const unsigned char *end);
 static off64_t read_ctx_get_offset (struct read_ctx *ctx);
 static bool read_ctx_need_data (struct read_ctx *ctx, size_t length);
 static bool read_ctx_read_ubyte (struct read_ctx *ctx, unsigned char *ret);
-static bool read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret);
-static bool read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret);
+static int read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret);
+static int read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret);
 static bool read_ctx_read_2ubyte (struct read_ctx *ctx, uint16_t *ret);
 static bool read_ctx_read_4ubyte (struct read_ctx *ctx, uint32_t *ret);
 static bool read_ctx_read_8ubyte (struct read_ctx *ctx, uint64_t *ret);
@@ -342,7 +350,7 @@ static void check_debug_info_structural (struct read_ctx *ctx,
 					 Elf_Data *strings);
 static int read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 			   struct AbbrevTable *abbrevs, Elf_Data *strings,
-			   bool dwarf_64, bool addr_64, int allow_null,
+			   bool dwarf_64, bool addr_64, int in_section,
 			   struct addr_record **die_addrs,
 			   struct addr_record **die_refs,
 			   struct addr_record **die_loc_refs,
@@ -367,10 +375,10 @@ process_file (int fd __attribute__((unused)),
 
   struct read_ctx ctx;
 
-  read_ctx_init_elf (&ctx, dwarf, dwarf->sectiondata[IDX_debug_abbrev]);
+  read_ctx_init (&ctx, dwarf, dwarf->sectiondata[IDX_debug_abbrev]);
   struct AbbrevTable *abbrev_chain = abbrev_table_load (&ctx);
 
-  read_ctx_init_elf (&ctx, dwarf, dwarf->sectiondata[IDX_debug_info]);
+  read_ctx_init (&ctx, dwarf, dwarf->sectiondata[IDX_debug_info]);
   check_debug_info_structural (&ctx, abbrev_chain,
 			       dwarf->sectiondata[IDX_debug_str]);
 
@@ -378,22 +386,26 @@ process_file (int fd __attribute__((unused)),
 }
 
 static void
-read_ctx_init (struct read_ctx *ctx, Dwarf *dbg,
-	  const unsigned char *begin, const unsigned char *end)
-{
-  ctx->dbg = dbg;
-  ctx->begin = begin;
-  ctx->end = end;
-  ctx->ptr = begin;
-}
-
-static void
-read_ctx_init_elf (struct read_ctx *ctx, Dwarf *dbg, Elf_Data *data)
+read_ctx_init (struct read_ctx *ctx, Dwarf *dbg, Elf_Data *data)
 {
   if (data == NULL)
     abort ();
 
-  read_ctx_init (ctx, dbg, data->d_buf, data->d_buf + data->d_size);
+  read_ctx_init_sub (ctx, dbg, data, data->d_buf, data->d_buf + data->d_size);
+}
+
+static void
+read_ctx_init_sub (struct read_ctx *ctx, Dwarf *dbg, Elf_Data *data,
+		   const unsigned char *begin, const unsigned char *end)
+{
+  if (data == NULL)
+    abort ();
+
+  ctx->dbg = dbg;
+  ctx->data = data;
+  ctx->begin = begin;
+  ctx->end = end;
+  ctx->ptr = begin;
 }
 
 static off64_t
@@ -418,59 +430,96 @@ read_ctx_read_ubyte (struct read_ctx *ctx, unsigned char *ret)
   return true;
 }
 
-static bool
+static int
 read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret)
 {
   uint64_t result = 0;
   int shift = 0;
   int size = 8 * sizeof (result);
+  bool zero_tail = false;
 
   while (1)
     {
       uint8_t byte;
       if (!read_ctx_read_ubyte (ctx, &byte))
-	return false;
+	return -1;
 
-      result |= (uint64_t)(byte & 0x7f) << shift;
+      uint8_t payload = byte & 0x7f;
+      zero_tail = payload == 0 && shift > 0;
+      result |= (uint64_t)payload << shift;
       shift += 7;
       if (shift > size)
-	return false;
+	return -1;
       if ((byte & 0x80) == 0)
 	break;
     }
 
   *ret = result;
-  return true;
+  return zero_tail ? 1 : 0;
 }
 
-static bool
+#define CHECKED_READ_ULEB128(CTX, RET, FMT, WHAT, ARGS...)		\
+  (__extension__ ({							\
+      int __st = read_ctx_read_uleb128 (CTX, RET);			\
+      bool __ret = false;						\
+      if (__st < 0)							\
+	ERROR (FMT ": can't read %s.\n", ##ARGS, WHAT);			\
+      else if (__st > 0)						\
+	WARNING (FMT ": unnecessarily long encoding of %s.\n", ##ARGS, WHAT); \
+      else								\
+	__ret = true;							\
+      __ret;								\
+    }))
+
+static int
 read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret)
 {
   int64_t result = 0;
   int shift = 0;
   int size = 8 * sizeof (result);
+  bool zero_tail = false;
+  bool sign = false;
 
   while (1)
     {
       uint8_t byte;
       if (!read_ctx_read_ubyte (ctx, &byte))
-	return false;
+	return -1;
 
-      result |= (int64_t)(byte & 0x7f) << shift;
+      uint8_t payload = byte & 0x7f;
+      zero_tail = shift > 0 && ((payload == 0x7f && sign)
+				|| (payload == 0 && !sign));
+      sign = (byte & 0x40) != 0; /* Set sign for rest of loop & next round.  */
+      result |= (int64_t)payload << shift;
       shift += 7;
       if ((byte & 0x80) == 0)
 	{
-	  if (shift < size && (byte & 0x40))
+	  if (shift < size && sign)
 	    result |= -((int64_t)1 << shift);
 	  break;
 	}
       if (shift > size)
-	return false;
+	return -1;
     }
 
   *ret = result;
-  return true;
+  return zero_tail ? 1 : 0;
 }
+
+#define CHECKED_READ_SLEB128(CTX, RET, FMT, WHAT, ARGS...)		\
+  (__extension__ ({							\
+      int __st = read_ctx_read_sleb128 (CTX, RET);			\
+      bool __ret = true;						\
+      if (__st < 0)							\
+	{								\
+	  ERROR (FMT ": can't read %s.\n", ##ARGS, WHAT);		\
+	  __ret = false;						\
+	}								\
+      else if (__st > 0)						\
+	WARNING (FMT ": unnecessarily long encoding of %s.\n",		\
+		 ##ARGS, WHAT);						\
+      __ret;								\
+    }))
 
 static bool
 read_ctx_read_2ubyte (struct read_ctx *ctx, uint16_t *ret)
@@ -586,11 +635,10 @@ abbrev_table_load (struct read_ctx *ctx)
       uint64_t abbr_code, abbr_tag;
 
       /* Abbreviation code.  */
-      if (!read_ctx_read_uleb128 (ctx, &abbr_code))
-	{
-	  ERROR (PRI_ABBR ": can't read abbrev code.\n", abbr_off);
-	  goto free_and_out;
-	}
+      if (!CHECKED_READ_ULEB128 (ctx, &abbr_code,
+				 PRI_ABBR, "abbrev code", abbr_off))
+	goto free_and_out;
+
       if (abbr_code == 0)
 	{
 	  /* It is legal to use one or more null abbrevs at the end of
@@ -605,12 +653,14 @@ abbrev_table_load (struct read_ctx *ctx)
 	}
       else
 	{
-	  last_was_nul = false;
 	  if (expect_section_end)
-	    {
-	      ERROR (PRI_ABBR ": non-null follows several null abbrevs.\n", abbr_off);
-	      expect_section_end = false;
-	    }
+	    /* XXX That would technically be an empty section, make it
+	       a warning?  */
+	    ERROR (PRI_ABBR
+		   ": non-NULL abbrev follows several NULL abbrevs.\n",
+		   abbr_off);
+
+	  last_was_nul = expect_section_end = false;
 	}
 
       /* Make a room for new abbreviation.  */
@@ -636,11 +686,10 @@ abbrev_table_load (struct read_ctx *ctx)
       cur->code = abbr_code;
 
       /* Abbreviation tag.  */
-      if (!read_ctx_read_uleb128 (ctx, &abbr_tag))
-	{
-	  ERROR (PRI_ABBR ": can't read abbrev tag.\n", abbr_off);
-	  goto free_and_out;
-	}
+      if (!CHECKED_READ_ULEB128 (ctx, &abbr_tag,
+				 PRI_ABBR, "abbrev tag", abbr_off))
+	goto free_and_out;
+
       if (!valid_tag (abbr_tag))
 	{
 	  ERROR (PRI_ABBR ": invalid abbrev tag 0x%" PRIx64 ".\n",
@@ -669,17 +718,15 @@ abbrev_table_load (struct read_ctx *ctx)
 	  uint64_t attrib_name, attrib_form;
 
 	  /* Load attribute name and form.  */
-	  if (!read_ctx_read_uleb128 (ctx, &attrib_name))
-	    {
-	      ERROR (PRI_ABBR_ATTR ": can't read name.\n", abbr_off, attr_off);
-	      goto free_and_out;
-	    }
+	  if (!CHECKED_READ_ULEB128 (ctx, &attrib_name,
+				     PRI_ABBR_ATTR, "attribute name",
+				     abbr_off, attr_off))
+	    goto free_and_out;
 
-	  if (!read_ctx_read_uleb128 (ctx, &attrib_form))
-	    {
-	      ERROR (PRI_ABBR_ATTR ": can't read form.\n", abbr_off, attr_off);
-	      goto free_and_out;
-	    }
+	  if (!CHECKED_READ_ULEB128 (ctx, &attrib_form,
+				     PRI_ABBR_ATTR, "attribute form",
+				     abbr_off, attr_off))
+	    goto free_and_out;
 
 	  null_attrib = attrib_name == 0 && attrib_form == 0;
 
@@ -712,6 +759,14 @@ abbrev_table_load (struct read_ctx *ctx)
 	  acur->offset = attr_off;
 	}
       while (!null_attrib);
+    }
+
+  if (expect_section_end)
+    {
+      /* More than one NULL abbrev should only be necessary for
+	 alignment purposes.  */
+      if (((uintptr_t)ctx->ptr & -ctx->data->d_align) != 0)
+	WARNING ("Abbreviation section unnecessarily terminated with sequance of NULL abbrevs.\n");
     }
 
   return section_chain;
@@ -971,7 +1026,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	 offsets are computed correctly.  */
       struct read_ctx cu_ctx;
       const unsigned char *cu_end = ctx->ptr + size;
-      read_ctx_init (&cu_ctx, ctx->dbg, cu_begin, cu_end);
+      read_ctx_init_sub (&cu_ctx, ctx->dbg, ctx->data, cu_begin, cu_end);
       cu_ctx.ptr = ctx->ptr;
 
       check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
@@ -1004,9 +1059,12 @@ check_debug_info_structural (struct read_ctx *ctx,
     {
       void hole (uint64_t begin, uint64_t end)
       {
-	ERROR ("Unreferenced portion of .debug_str: "
-	       "0x%" PRIx64 "..0x%" PRIx64 ".\n",
-	       begin, end);
+	/* XXX only report holes of non-zero bytes.  Be quiet about
+	   zero bytes that seem to be present for alignment
+	   purposes.  */
+	WARNING ("Unreferenced portion of .debug_str: "
+		 "0x%" PRIx64 "..0x%" PRIx64 ".\n",
+		 begin, end);
       }
 
       coverage_find_holes (strings_coverage, hole);
@@ -1021,15 +1079,17 @@ check_debug_info_structural (struct read_ctx *ctx,
  *      terminating zero die.
  *   +1 in case some dies were actually loaded
  *
- * ALLOW_NULL:
- *   +0 if NUL DIEs are not allowed
- *   +1 if single NUL DIE is allowed
- *   +2 if a sequence of _zero_ or more NUL DIEs is allowed
+ * SECTION parameter:
+ *   +0 not checking a section chain (NUL die termination required)
+ *   +1 reading a section chain (only one DIE is allowed, NUL die
+ *      termination is excessive)
+ *   +2 reading a section chain of last section (one DIE, but NUL die
+ *      termination is OK if done for padding purposes)
  */
 static int
 read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		struct AbbrevTable *abbrevs, Elf_Data *strings,
-		bool dwarf_64, bool addr_64, int allow_null,
+		bool dwarf_64, bool addr_64, int in_section,
 		struct addr_record **die_addrsp,
 		struct addr_record **die_refsp,
 		struct addr_record **die_loc_refsp,
@@ -1039,7 +1099,8 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
   struct addr_record *die_refs = *die_refsp;
   struct addr_record *die_loc_refs = *die_loc_refsp;
 
-  void stop_recording (void) {
+  void stop_recording (void)
+  {
     *die_addrsp = die_addrs = NULL;
     *die_refsp = die_refs = NULL;
     *die_loc_refsp = die_loc_refs = NULL;
@@ -1048,30 +1109,25 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 
   bool got_null = false;
   bool got_die = false;
+  const unsigned char *begin = ctx->ptr;
   while (ctx->ptr < ctx->end)
     {
       uint64_t die_off = read_ctx_get_offset (ctx);
       uint64_t abbrev_code;
 
       /* Abbrev code.  */
-      if (!read_ctx_read_uleb128 (ctx, &abbrev_code))
-	{
-	  ERROR (PRI_CU_DIE ": can't read abbrev code.\n", cu_off, die_off);
-	  return -1;
-	}
+      if (!CHECKED_READ_ULEB128 (ctx, &abbrev_code,
+				 PRI_CU_DIE, "abbrev code",
+				 cu_off, die_off))
+	return -1;
 
       if (abbrev_code == 0)
 	{
 	  got_null = true;
-	  if (allow_null == 2)
-	    continue;
-	  else if (allow_null == 1)
-	    goto done;
+	  if (in_section != 2)
+	    break;
 	  else
-	    {
-	      assert (allow_null == 0);
-	      ERROR (PRI_CU_DIE ": invalid NULL DIE.\n", cu_off, die_off);
-	    }
+	    continue;
 	}
       else if (got_null)
 	ERROR (PRI_CU_DIE ": invalid non-NULL DIE after sequence of NULL DIEs.\n",
@@ -1125,16 +1181,16 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	  if (it->form == DW_FORM_indirect)
 	    {
 	      uint64_t value;
-	      if (!read_ctx_read_uleb128 (ctx, &value))
-		{
-		cant_read:
-		  ERROR (PRI_CU_DIE_ABBR_ATTR ": can't read value.\n",
-			 cu_off, die_off, abbrev->code, it->offset);
-		  return -1;
-		}
+	      if (!CHECKED_READ_ULEB128 (ctx, &value, PRI_CU_DIE_ABBR_ATTR,
+					 "indirect attribute form",
+					 cu_off, die_off, abbrev->code,
+					 it->offset))
+		return -1;
+
 	      if (!attrib_form_valid (value))
 		{
-		  ERROR (PRI_CU_DIE_ABBR_ATTR ": invalid form 0x%" PRIx64 ".\n",
+		  ERROR (PRI_CU_DIE_ABBR_ATTR
+			 ": invalid indirect form 0x%" PRIx64 ".\n",
 			 cu_off, die_off, abbrev->code, it->offset, value);
 		  return -1;
 		}
@@ -1148,7 +1204,13 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	    {
 	      uint64_t addr;
 	      if (!read_ctx_read_offset (ctx, dwarf_64, &addr))
-		goto cant_read;
+		{
+		cant_read:
+		  ERROR (PRI_CU_DIE_ABBR_ATTR
+			 ": can't read attribute value.\n",
+			 cu_off, die_off, abbrev->code, it->offset);
+		  return -1;
+		}
 
 	      if (strings == NULL)
 		ERROR (PRI_CU_DIE_ABBR_ATTR
@@ -1158,15 +1220,17 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		ERROR (PRI_CU_DIE_ABBR_ATTR
 		       ": Invalid offset outside .debug_str: 0x%" PRIx64 ".",
 		       cu_off, die_off, abbrev->code, it->offset, addr);
+	      else
+		{
+		  /* Record used part of .debug_str.  */
+		  const char *strp = (const char *)strings->d_buf + addr;
+		  uint64_t end = addr + strlen (strp);
 
-	      /* XXX check encoding? DW_AT_use_UTF8. */
+		  if (strings_coverage != NULL)
+		    coverage_add (strings_coverage, addr, end);
 
-	      /* Record used part of .debug_str.  */
-	      const char *strp = (const char *)strings->d_buf + addr;
-	      uint64_t end = addr + strlen (strp);
-
-	      if (strings_coverage != NULL)
-		coverage_add (strings_coverage, addr, end);
+		  /* XXX check encoding? DW_AT_use_UTF8. */
+		}
 
 	      break;
 	    }
@@ -1200,8 +1264,12 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	  case DW_FORM_ref_udata:
 	    {
 	      uint64_t value;
-	      if (!read_ctx_read_uleb128 (ctx, &value))
-		goto cant_read;
+	      if (!CHECKED_READ_ULEB128 (ctx, &value, PRI_CU_DIE_ABBR_ATTR,
+					 "attribute value",
+					 cu_off, die_off, abbrev->code,
+					 it->offset))
+		return -1;
+
 	      if (it->form == DW_FORM_ref_udata)
 		record_ref (value, true);
 	      break;
@@ -1255,8 +1323,11 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	  case DW_FORM_sdata:
 	    {
 	      int64_t value;
-	      if (!read_ctx_read_sleb128 (ctx, &value))
-		goto cant_read;
+	      if (!CHECKED_READ_SLEB128 (ctx, &value, PRI_CU_DIE_ABBR_ATTR,
+					 "attribute value",
+					 cu_off, die_off, abbrev->code,
+					 it->offset))
+		return -1;
 	      break;
 	    }
 
@@ -1280,8 +1351,11 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	    process_DW_FORM_block:
 	      if (width == 0)
 		{
-		  if (!read_ctx_read_uleb128 (ctx, &length))
-		    goto cant_read;
+		  if (!CHECKED_READ_ULEB128 (ctx, &length, PRI_CU_DIE_ABBR_ATTR,
+					     "attribute value",
+					     cu_off, die_off, abbrev->code,
+					     it->offset))
+		    return -1;
 		}
 	      else if (!read_ctx_read_var (ctx, width, &length))
 		goto cant_read;
@@ -1308,27 +1382,38 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
       if (abbrev->has_children)
 	{
 	  int st = read_die_chain (ctx, cu_off, abbrevs, strings,
-				   dwarf_64, addr_64, 1,
+				   dwarf_64, addr_64, 0,
 				   die_addrsp, die_refsp, die_loc_refsp,
 				   strings_coverage);
 	  if (st == -1)
 	    return -1;
-	  else if (st == 0)
-	    ERROR (PRI_CU_DIE
-		   ": Abbrev has_children, but the chain was empty.\n",
-		   cu_off, die_off);
+	  else if (st == 0 && be_strict)
+	    WARNING (PRI_CU_DIE
+		     ": Abbrev has_children, but the chain was empty.\n",
+		     cu_off, die_off);
 	}
     }
 
- done:
-  if (got_null || allow_null != 1)
-    return got_die ? 1 : 0;
-  else
+  /* NULL DIEs are excessive if: we check non-final section, or we
+     check final section and the NULL DIEs are not used for alignment
+     purposes.  */
+  if (!got_null && !in_section)
+    ERROR (PRI_CU
+	   ": Sequence of DIEs at %p not terminated with NUL die.\n",
+	   cu_off, begin);
+  else if (got_null && in_section == 2)
     {
-      ERROR (PRI_CU ": DIE chain ends without terminating NUL entry.\n",
-	     cu_off);
-      return -1;
+      if (ctx->data->d_align < 2
+	  || ((uintptr_t)ctx->ptr & -ctx->data->d_align) != 0)
+	goto excessive;
     }
+  else if (got_null && in_section == 1)
+  excessive:
+    WARNING (PRI_CU
+	     ": Sequence of DIEs at %p unnecessarily terminated with NUL die.\n",
+	     cu_off, begin);
+
+  return got_die ? 1 : 0;
 }
 
 static void
@@ -1402,7 +1487,7 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
     }
 
   if (read_die_chain (ctx, cu_off, abbrevs, strings,
-		      dwarf_64, address_size == 8, last_section ? 2 : 0,
+		      dwarf_64, address_size == 8, last_section ? 2 : 1,
 		      die_addrsp, die_refsp, &die_loc_refs,
 		      strings_coverage) >= 0)
     {
