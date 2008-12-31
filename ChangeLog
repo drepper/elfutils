@@ -1,3 +1,18 @@
+2008-12-30  Ulrich Drepper  <drepper@redhat.com>
+
+	* configure.ac: We need automake 1.8 now.
+
+2008-12-24  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac: Use automake flags dist-bzip2 no-dist-gzip,
+	distribute only in .tar.bz2 form now.
+
+2008-12-16  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (pkginclude_HEADERS): New variable, install version.h.
+	* configure.ac: Create it, substituting @eu_version@ with
+	PACKAGE_VERSION canonicalized to four digits of decimal.
+
 2008-08-25  Roland McGrath  <roland@redhat.com>
 
 	* configure.ac (--enable-tls): Set AM_CONDITIONAL USE_TLS too.
