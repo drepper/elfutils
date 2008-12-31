@@ -16,7 +16,7 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; if not, write to the Free Software Foundation,
 dnl Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 dnl
-AC_INIT([Red Hat elfutils],[0.137],[http://bugzilla.redhat.com/bugzilla/],
+AC_INIT([Red Hat elfutils],[0.138],[http://bugzilla.redhat.com/bugzilla/],
 	[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
@@ -26,7 +26,7 @@ AC_COPYRIGHT([Copyright (C) 1996-2007, 2008 Red Hat, Inc.])
 AC_PREREQ(2.59)			dnl Minimum Autoconf version required.
 
 dnl We use GNU make extensions; automake 1.10 defaults to -Wportability.
-AM_INIT_AUTOMAKE([gnits 1.7 -Wno-portability])
+AM_INIT_AUTOMAKE([gnits 1.8 -Wno-portability dist-bzip2 no-dist-gzip])
 AM_MAINTAINER_MODE
 
 dnl Unique ID for this build.
@@ -228,5 +228,16 @@ AM_PO_SUBDIRS
 dnl Appended to the config.h file.
 dnl We hide all kinds of configuration magic in lib/eu-config.h.
 AH_BOTTOM([#include <eu-config.h>])
+
+dnl Version compatibility header.
+AC_CONFIG_FILES([version.h:config/version.h.in])
+AC_SUBST([eu_version])
+case $PACKAGE_VERSION in
+0.???) eu_version=${PACKAGE_VERSION#0.} ;;
+?.???) eu_version=${PACKAGE_VERSION/./} ;;
+?.??)  eu_version=${PACKAGE_VERSION/./}0 ;;
+?.?)   eu_version=${PACKAGE_VERSION/./}00 ;;
+*)     AC_MSG_ERROR([confused by version number '$PACKAGE_VERSION']) ;;
+esac
 
 AC_OUTPUT
