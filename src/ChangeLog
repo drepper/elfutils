@@ -1,3 +1,14 @@
+2009-01-01  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c: Tweaks across the code:
+	- Memory allocation now done with xrealloc, xcalloc functions.  As
+	a consequence, backoff for out of memory conditions was turned off.
+	- Coding style was improved on many places.
+	- Abbrev tag and name validation changed, everything up to the
+	hi_user is now accepted.
+	- Ambiguous references to NULL DIEs and Abbrevs were changed to
+	explicitly mention DIE with zero code and similar.
+
 2008-12-15  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: New file.
