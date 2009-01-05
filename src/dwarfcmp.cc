@@ -40,6 +40,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <cstdint>
+#include "../libdw/libdwP.h"	// XXX
+
 #include "../libdw++/dwarf"
 
 using namespace elfutils;
@@ -61,6 +64,8 @@ static const struct argp_option options[] =
 {
   { NULL, 0, NULL, 0, N_("Control options:"), 0 },
   { "quiet", 'q', NULL, 0, N_("Output nothing; yield exit status only"), 0 },
+  { "ignore-missing", 'i', NULL, 0,
+    N_("Don't complain if both files have no DWARF at all"), 0 },
 
   { NULL, 0, NULL, 0, N_("Miscellaneous:"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
@@ -85,19 +90,26 @@ static struct argp argp =
 /* Nonzero if only exit status is wanted.  */
 static bool quiet;
 
+/* Nonzero if missing DWARF is equal DWARF.  */
+static bool missing_ok;
+
 
 static Dwarf *
 open_file (const char *fname, int *fdp)
 {
   int fd = open (fname, O_RDONLY);
   if (unlikely (fd == -1))
-    error (EXIT_FAILURE, errno, gettext ("cannot open '%s'"), fname);
+    error (2, errno, gettext ("cannot open '%s'"), fname);
   Dwarf *dw = dwarf_begin (fd, DWARF_C_READ);
-  if (dw == NULL)
-    error (EXIT_FAILURE, 0,
-	   gettext ("cannot create DWARF descriptor for '%s': %s"),
-	   fname, dwarf_errmsg (-1));
   *fdp = fd;
+  if (dw == NULL)
+    {
+      int code = dwarf_errno ();
+      if (code != DWARF_E_NO_DWARF || !missing_ok)
+	error (2, 0,
+	       gettext ("cannot create DWARF descriptor for '%s': %s"),
+	       fname, dwarf_errmsg (code));
+    }
   return dw;
 }
 
@@ -267,16 +279,33 @@ main (int argc, char *argv[])
   int fd2;
   Dwarf *dw2 = open_file (fname2, &fd2);
 
-  elfutils::dwarf file1 (dw1);
-  elfutils::dwarf file2 (dw2);
-
   int result = 0;
 
-  if (quiet)
-    result = !(file1 == file2);
+  if (dw1 == NULL || dw2 == NULL)
+    {
+      result = (dw1 == NULL) != (dw2 == NULL);
+      if (result != 0 && !quiet)
+	{
+	  if (dw1 == NULL)
+	    cout << "unexpectedly has DWARF";
+	  else
+	    cout << "has no DWARF";
+	}
+    }
   else
-    result = describe_mismatch (file1.compile_units (), file2.compile_units (),
-				context ());
+    {
+
+      elfutils::dwarf file1 (dw1);
+      elfutils::dwarf file2 (dw2);
+
+
+      if (quiet)
+	result = !(file1 == file2);
+      else
+	result = describe_mismatch (file1.compile_units (),
+				    file2.compile_units (),
+				    context ());
+    }
 
   return result;
 }
@@ -304,6 +333,10 @@ parse_opt (int key, char *arg,
     {
     case 'q':
       quiet = true;
+      break;
+
+    case 'i':
+      missing_ok = true;
       break;
 
     default:
