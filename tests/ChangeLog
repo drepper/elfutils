@@ -1,3 +1,8 @@
+2009-01-05  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarfcmp-self.sh: New file.
+	* Makefile.am (TESTS): Add it.
+
 2008-12-31  Ulrich Drepper  <drepper@redhat.com>
 
 	* testfile44.S.bz2: Add tests for dppd, dpps, insertps, movntdqa,
