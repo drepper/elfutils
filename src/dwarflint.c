@@ -597,6 +597,29 @@ attrib_form_valid (uint64_t form)
   return form > 0 && form <= DW_FORM_indirect;
 }
 
+static int
+check_sibling_form (uint64_t form)
+{
+  switch (form)
+    {
+    case DW_FORM_indirect:
+      /* Tolerate this in abbrev loading, even during the DIE loading.
+	 We check that dereferenced indirect form yields valid form.  */
+    case DW_FORM_ref1:
+    case DW_FORM_ref2:
+    case DW_FORM_ref4:
+    case DW_FORM_ref8:
+    case DW_FORM_ref_udata:
+      return 0;
+
+    case DW_FORM_ref_addr:
+      return -1;
+
+    default:
+      return -2;
+    };
+}
+
 static struct abbrev_table *
 abbrev_table_load (struct read_ctx *ctx)
 {
@@ -688,6 +711,7 @@ abbrev_table_load (struct read_ctx *ctx)
       cur->has_children = has_children == DW_CHILDREN_yes;
 
       bool null_attrib;
+      uint64_t sibling_attr = 0;
       do
 	{
 	  uint64_t attr_off = read_ctx_get_offset (ctx);
@@ -720,7 +744,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	      if (!attrib_form_valid (attrib_form))
 		{
 		  ERROR (PRI_ABBR_ATTR ": invalid form 0x%" PRIx64 ".\n",
-			 attr_off, attr_off, attrib_form);
+			 abbr_off, attr_off, attrib_form);
 		  goto free_and_out;
 		}
 	    }
@@ -729,6 +753,44 @@ abbrev_table_load (struct read_ctx *ctx)
 
 	  struct abbrev_attrib *acur = cur->attribs + cur->size++;
 	  memset (acur, 0, sizeof (*acur));
+
+	  /* We do structural checking of sibling attribute, so make
+	     sure our assumptions in actual DIE-loading code are
+	     right.  We expect at most one DW_AT_sibling attribute,
+	     with form from reference class, but only CU-local, not
+	     DW_FORM_ref_addr.  */
+	  if (attrib_name == DW_AT_sibling)
+	    {
+	      if (sibling_attr != 0)
+		ERROR (PRI_ABBR_ATTR
+		       ": Another DW_AT_sibling attribute in one abbreviation. "
+		       "(First was 0x%" PRIx64 ".)\n",
+		       abbr_off, attr_off, sibling_attr);
+	      else
+		{
+		  assert (attr_off > 0);
+		  sibling_attr = attr_off;
+
+		  if (!cur->has_children && be_strict)
+		    ERROR (PRI_ABBR_ATTR
+			   ": Excessive DW_AT_sibling attribute at childless abbrev.\n",
+			   abbr_off, attr_off);
+		}
+
+	      switch (check_sibling_form (attrib_form))
+		{
+		case -1:
+		  WARNING (PRI_ABBR_ATTR
+			   ": DW_AT_sibling attribute with form DW_FORM_ref_addr.\n",
+			   abbr_off, attr_off);
+		  break;
+
+		case -2:
+		  ERROR (PRI_ABBR_ATTR
+			 ": DW_AT_sibling attribute with non-reference form 0x%" PRIx64 ".\n",
+			 abbr_off, attr_off, attrib_form);
+		};
+	    }
 
 	  acur->name = attrib_name;
 	  acur->form = attrib_form;
@@ -1059,10 +1121,24 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
   bool got_null = false;
   bool got_die = false;
   const unsigned char *begin = ctx->ptr;
+  uint64_t sibling_addr = 0;
+  uint64_t last_die_off = 0;
+
   while (ctx->ptr < ctx->end)
     {
       uint64_t die_off = read_ctx_get_offset (ctx);
       uint64_t abbrev_code;
+
+      if (sibling_addr != 0)
+	{
+	  if (sibling_addr != die_off)
+	    ERROR (PRI_CU_DIE
+		   ": This DIE should have had its sibling at 0x%"
+		   PRIx64 ", but it's at 0x%" PRIx64 " instead.\n",
+		   cu_off, last_die_off, sibling_addr, die_off);
+	  sibling_addr = 0;
+	}
+      last_die_off = die_off;
 
       /* Abbrev code.  */
       if (!CHECKED_READ_ULEB128 (ctx, &abbrev_code,
@@ -1126,8 +1202,8 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	      addr_record_add (record, addr);
 	  }
 
-	  uint8_t form;
-	  if (it->form == DW_FORM_indirect)
+	  uint8_t form = it->form;
+	  if (form == DW_FORM_indirect)
 	    {
 	      uint64_t value;
 	      if (!CHECKED_READ_ULEB128 (ctx, &value, PRI_CU_DIE_ABBR_ATTR,
@@ -1144,9 +1220,23 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		  return -1;
 		}
 	      form = value;
+
+	      if (it->name == DW_AT_sibling)
+		switch (check_sibling_form (form))
+		  {
+		  case -1:
+		    WARNING (PRI_CU_DIE_ABBR_ATTR
+			     ": DW_AT_sibling attribute with (indirect) form DW_FORM_ref_addr.\n",
+			     cu_off, die_off, abbrev->code, it->offset);
+		    break;
+
+		  case -2:
+		    /* XXX write form name  */
+		    ERROR (PRI_CU_DIE_ABBR_ATTR
+			   ": DW_AT_sibling attribute with non-reference (indirect) form 0x%" PRIx64 ".\n",
+			   cu_off, die_off, abbrev->code, it->offset, value);
+		  };
 	    }
-	  else
-	    form = it->form;
 
 	  switch (form)
 	    {
@@ -1178,8 +1268,6 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 
 		    if (strings_coverage != NULL)
 		      coverage_add (strings_coverage, addr, end);
-
-		    /* XXX check encoding? DW_AT_use_UTF8. */
 		  }
 
 		break;
@@ -1222,7 +1310,9 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 					   it->offset))
 		  return -1;
 
-		if (it->form == DW_FORM_ref_udata)
+		if (it->name == DW_AT_sibling)
+		  sibling_addr = value;
+		else if (it->form == DW_FORM_ref_udata)
 		  record_ref (value, true);
 		break;
 	      }
@@ -1234,7 +1324,10 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		uint8_t value;
 		if (!read_ctx_read_ubyte (ctx, &value))
 		  goto cant_read;
-		if (it->form == DW_FORM_ref1)
+
+		if (it->name == DW_AT_sibling)
+		  sibling_addr = value;
+		else if (it->form == DW_FORM_ref1)
 		  record_ref (value, true);
 		break;
 	      }
@@ -1245,7 +1338,10 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		uint16_t value;
 		if (!read_ctx_read_2ubyte (ctx, &value))
 		  goto cant_read;
-		if (it->form == DW_FORM_ref2)
+
+		if (it->name == DW_AT_sibling)
+		  sibling_addr = value;
+		else if (it->form == DW_FORM_ref2)
 		  record_ref (value, true);
 		break;
 	      }
@@ -1256,7 +1352,10 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		uint32_t value;
 		if (!read_ctx_read_4ubyte (ctx, &value))
 		  goto cant_read;
-		if (it->form == DW_FORM_ref4)
+
+		if (it->name == DW_AT_sibling)
+		  sibling_addr = value;
+		else if (it->form == DW_FORM_ref4)
 		  record_ref (value, true);
 		break;
 	      }
@@ -1267,7 +1366,10 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		uint64_t value;
 		if (!read_ctx_read_8ubyte (ctx, &value))
 		  goto cant_read;
-		if (it->form == DW_FORM_ref8)
+
+		if (it->name == DW_AT_sibling)
+		  sibling_addr = value;
+		else if (it->form == DW_FORM_ref8)
 		  record_ref (value, true);
 		break;
 	      }
@@ -1345,6 +1447,12 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		     cu_off, die_off);
 	}
     }
+
+  if (sibling_addr != 0)
+    ERROR (PRI_CU_DIE
+	   ": This DIE should have had its sibling at 0x%"
+	   PRIx64 ", but the DIE chain ended.\n",
+	   cu_off, last_die_off, sibling_addr);
 
   /* DIEs with zero abbreviation code are excessive if: we check
      non-final section, or we check final section and these DIEs are
