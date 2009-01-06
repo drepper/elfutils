@@ -1,6 +1,6 @@
 %{
 /* Parser for i386 CPU description.
-   Copyright (C) 2004, 2005, 2007, 2008 Red Hat, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008, 2009 Red Hat, Inc.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -37,6 +37,7 @@
 #include <math.h>
 #include <obstack.h>
 #include <search.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -145,6 +146,7 @@ struct argstring
 {
   char *str;
   int idx;
+  int off;
 };
 
 
@@ -1066,15 +1068,29 @@ compare_suf (const void *p1, const void *p2)
 
 
 static int count_op_str;
+static int off_op_str;
 static void
 print_op_str (const void *nodep, VISIT value,
 	      int level __attribute__ ((unused)))
 {
   if (value == leaf || value == postorder)
     {
-      fprintf (outfile, "  \"%s\",\n", (*(struct argstring **) nodep)->str);
+      const char *str = (*(struct argstring **) nodep)->str;
+      fprintf (outfile, "%s\n  \"%s",
+	       count_op_str == 0 ? "" : "\\0\"", str);
       (*(struct argstring **) nodep)->idx = ++count_op_str;
+      (*(struct argstring **) nodep)->off = off_op_str;
+      off_op_str += strlen (str) + 1;
     }
+}
+
+
+static void
+print_op_str_idx (const void *nodep, VISIT value,
+		  int level __attribute__ ((unused)))
+{
+  if (value == leaf || value == postorder)
+    printf ("  %d,\n", (*(struct argstring **) nodep)->off);
 }
 
 
@@ -1149,7 +1165,8 @@ instrtable_out (void)
     {
       /* Functions.  */
       count_op_str = 0;
-      fprintf (outfile, "static opfct_t op%d_fct[] =\n{\n  NULL,\n", i + 1);
+      fprintf (outfile, "static const opfct_t op%d_fct[] =\n{\n  NULL,\n",
+	       i + 1);
       twalk (fct_names[i], print_op_fct);
       fputs ("};\n", outfile);
 
@@ -1157,9 +1174,14 @@ instrtable_out (void)
       if (nbitstr[i] != 0)
 	{
 	  count_op_str = 0;
-	  fprintf (outfile, "static const char *op%d_str[] =\n{\n  NULL,\n",
-		   i + 1);
+	  off_op_str = 0;
+	  fprintf (outfile, "static const char op%d_str[] =", i + 1);
 	  twalk (strs[i], print_op_str);
+	  fputs ("\";\n", outfile);
+
+	  fprintf (outfile, "static const uint8_t op%d_str_idx[] = {\n",
+		   i + 1);
+	  twalk (strs[i], print_op_str_idx);
 	  fputs ("};\n", outfile);
 	}
     }
@@ -1227,6 +1249,8 @@ instrtable_out (void)
       /* First count the number of bytes.  */
       size_t totalbits = 0;
       size_t zerobits = 0;
+      bool leading_p = true;
+      size_t leadingbits = 0;
       struct bitvalue *b = instr->bytes;
       while (b != NULL)
 	{
@@ -1234,6 +1258,8 @@ instrtable_out (void)
 	    {
 	      ++totalbits;
 	      zerobits = 0;
+	      if (leading_p)
+		++leadingbits;
 	    }
 	  else
 	    {
@@ -1243,13 +1269,15 @@ instrtable_out (void)
 		zerobits = 0;
 	      else
 		zerobits += b->field->bits;
+	      leading_p = false;
 	    }
 	  b = b->next;
 	}
       size_t nbytes = (totalbits - zerobits + 7) / 8;
       assert (nbytes > 0);
+      size_t leadingbytes = leadingbits / 8;
 
-      fprintf (outfile, "  %#zx,", nbytes);
+      fprintf (outfile, "  %#zx,", nbytes | (leadingbytes << 4));
 
       /* Now create the mask and byte values.  */
       uint8_t byte = 0;
@@ -1264,7 +1292,15 @@ instrtable_out (void)
 	      mask = (mask << 1) | 1;
 	      if (++nbits == 8)
 		{
-		  fprintf (outfile, " %#" PRIx8 ", %#" PRIx8 ",", mask, byte);
+		  if (leadingbytes > 0)
+		    {
+		      assert (mask == 0xff);
+		      fprintf (outfile, " %#" PRIx8 ",", byte);
+		      --leadingbytes;
+		    }
+		  else
+		    fprintf (outfile, " %#" PRIx8 ", %#" PRIx8 ",",
+			     mask, byte);
 		  byte = mask = nbits = 0;
 		  if (--nbytes == 0)
 		    break;
@@ -1272,6 +1308,8 @@ instrtable_out (void)
 	    }
 	  else
 	    {
+	      assert (leadingbytes == 0);
+
 	      unsigned long int remaining = b->field->bits;
 	      while (nbits + remaining > 8)
 		{
@@ -1296,7 +1334,7 @@ instrtable_out (void)
 	  b = b->next;
 	}
 
-      fprintf (outfile, " %#zx, %#zx,\n", cnt & 0xff, cnt >> 8);
+      fputc_unlocked ('\n', outfile);
     }
   fputs ("};\n", outfile);
 }

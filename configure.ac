@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl Configure input file for elfutils.                     -*-autoconf-*-
 dnl
-dnl Copyright (C) 1996-2002, 2003, 2004, 2005, 2006, 2007, 2008 Red Hat, Inc.
+dnl Copyright (C) 1996-2009 Red Hat, Inc.
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; if not, write to the Free Software Foundation,
 dnl Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 dnl
-AC_INIT([Red Hat elfutils],[0.137],[http://bugzilla.redhat.com/bugzilla/],
+AC_INIT([Red Hat elfutils],[0.138],[http://bugzilla.redhat.com/bugzilla/],
 	[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
@@ -26,7 +26,7 @@ AC_COPYRIGHT([Copyright (C) 1996-2007, 2008 Red Hat, Inc.])
 AC_PREREQ(2.59)			dnl Minimum Autoconf version required.
 
 dnl We use GNU make extensions; automake 1.10 defaults to -Wportability.
-AM_INIT_AUTOMAKE([gnits 1.7 -Wno-portability])
+AM_INIT_AUTOMAKE([gnits 1.8 -Wno-portability dist-bzip2 no-dist-gzip])
 AM_MAINTAINER_MODE
 
 dnl Unique ID for this build.
@@ -182,6 +182,29 @@ AC_SUBST([LIBEBL_SUBDIR])
 AC_DEFINE_UNQUOTED(LIBEBL_SUBDIR, "$LIBEBL_SUBDIR")
 AH_TEMPLATE([LIBEBL_SUBDIR], [$libdir subdirectory containing libebl modules.])
 
+m4_defun([eu_ZIPLIB], [with_[$1]lib=default
+AC_ARG_WITH([[$1]lib],
+AC_HELP_STRING([--with-[$1]lib], [support g[$1]ip compression in libdwfl]))
+if test $with_[$1]lib != no; then
+  AC_SEARCH_LIBS([$4], [$3], [with_[$1]lib=yes],
+  	         [test $with_[$1]lib = default ||
+		  AC_MSG_ERROR([missing -l[$3] for --with-[$1]lib])])
+fi
+AM_CONDITIONAL([$2]LIB, test $with_[$1]lib = yes)
+if test $with_[$1]lib = yes; then
+  AC_DEFINE(USE_[$2]LIB)
+fi
+AH_TEMPLATE(USE_[$2]LIB, [Support $5 decompression via -l$3.])
+])
+
+save_LIBS="$LIBS"
+LIBS=
+eu_ZIPLIB(z,Z,z,gzdopen,gzip)
+eu_ZIPLIB(bz,BZ,bz2,BZ2_bzdopen,bzip2)
+zip_LIBS="$LIBS"
+LIBS="$save_LIBS"
+AC_SUBST([zip_LIBS])
+
 dnl The directories with content.
 
 dnl Documentation.
@@ -228,5 +251,16 @@ AM_PO_SUBDIRS
 dnl Appended to the config.h file.
 dnl We hide all kinds of configuration magic in lib/eu-config.h.
 AH_BOTTOM([#include <eu-config.h>])
+
+dnl Version compatibility header.
+AC_CONFIG_FILES([version.h:config/version.h.in])
+AC_SUBST([eu_version])
+case $PACKAGE_VERSION in
+0.???) eu_version=${PACKAGE_VERSION#0.} ;;
+?.???) eu_version=${PACKAGE_VERSION/./} ;;
+?.??)  eu_version=${PACKAGE_VERSION/./}0 ;;
+?.?)   eu_version=${PACKAGE_VERSION/./}00 ;;
+*)     AC_MSG_ERROR([confused by version number '$PACKAGE_VERSION']) ;;
+esac
 
 AC_OUTPUT

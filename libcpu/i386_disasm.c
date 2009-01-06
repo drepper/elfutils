@@ -1,5 +1,5 @@
 /* Disassembler for x86.
-   Copyright (C) 2007, 2008 Red Hat, Inc.
+   Copyright (C) 2007, 2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2007.
 
@@ -184,6 +184,73 @@ static const char *prefix_str[] =
 #endif
 
 
+static const char amd3dnowstr[] =
+#define MNE_3DNOW_PAVGUSB 1
+  "pavgusb\0"
+#define MNE_3DNOW_PFADD (MNE_3DNOW_PAVGUSB + 8)
+  "pfadd\0"
+#define MNE_3DNOW_PFSUB (MNE_3DNOW_PFADD + 6)
+  "pfsub\0"
+#define MNE_3DNOW_PFSUBR (MNE_3DNOW_PFSUB + 6)
+  "pfsubr\0"
+#define MNE_3DNOW_PFACC (MNE_3DNOW_PFSUBR + 7)
+  "pfacc\0"
+#define MNE_3DNOW_PFCMPGE (MNE_3DNOW_PFACC + 6)
+  "pfcmpge\0"
+#define MNE_3DNOW_PFCMPGT (MNE_3DNOW_PFCMPGE + 8)
+  "pfcmpgt\0"
+#define MNE_3DNOW_PFCMPEQ (MNE_3DNOW_PFCMPGT + 8)
+  "pfcmpeq\0"
+#define MNE_3DNOW_PFMIN (MNE_3DNOW_PFCMPEQ + 8)
+  "pfmin\0"
+#define MNE_3DNOW_PFMAX (MNE_3DNOW_PFMIN + 6)
+  "pfmax\0"
+#define MNE_3DNOW_PI2FD (MNE_3DNOW_PFMAX + 6)
+  "pi2fd\0"
+#define MNE_3DNOW_PF2ID (MNE_3DNOW_PI2FD + 6)
+  "pf2id\0"
+#define MNE_3DNOW_PFRCP (MNE_3DNOW_PF2ID + 6)
+  "pfrcp\0"
+#define MNE_3DNOW_PFRSQRT (MNE_3DNOW_PFRCP + 6)
+  "pfrsqrt\0"
+#define MNE_3DNOW_PFMUL (MNE_3DNOW_PFRSQRT + 8)
+  "pfmul\0"
+#define MNE_3DNOW_PFRCPIT1 (MNE_3DNOW_PFMUL + 6)
+  "pfrcpit1\0"
+#define MNE_3DNOW_PFRSQIT1 (MNE_3DNOW_PFRCPIT1 + 9)
+  "pfrsqit1\0"
+#define MNE_3DNOW_PFRCPIT2 (MNE_3DNOW_PFRSQIT1 + 9)
+  "pfrcpit2\0"
+#define MNE_3DNOW_PMULHRW (MNE_3DNOW_PFRCPIT2 + 9)
+  "pmulhrw";
+
+#define AMD3DNOW_LOW_IDX 0x0d
+#define AMD3DNOW_HIGH_IDX (sizeof (amd3dnow) + AMD3DNOW_LOW_IDX - 1)
+#define AMD3DNOW_IDX(val) ((val) - AMD3DNOW_LOW_IDX)
+static const unsigned char amd3dnow[] =
+  {
+    [AMD3DNOW_IDX (0xbf)] = MNE_3DNOW_PAVGUSB,
+    [AMD3DNOW_IDX (0x9e)] = MNE_3DNOW_PFADD,
+    [AMD3DNOW_IDX (0x9a)] = MNE_3DNOW_PFSUB,
+    [AMD3DNOW_IDX (0xaa)] = MNE_3DNOW_PFSUBR,
+    [AMD3DNOW_IDX (0xae)] = MNE_3DNOW_PFACC,
+    [AMD3DNOW_IDX (0x90)] = MNE_3DNOW_PFCMPGE,
+    [AMD3DNOW_IDX (0xa0)] = MNE_3DNOW_PFCMPGT,
+    [AMD3DNOW_IDX (0xb0)] = MNE_3DNOW_PFCMPEQ,
+    [AMD3DNOW_IDX (0x94)] = MNE_3DNOW_PFMIN,
+    [AMD3DNOW_IDX (0xa4)] = MNE_3DNOW_PFMAX,
+    [AMD3DNOW_IDX (0x0d)] = MNE_3DNOW_PI2FD,
+    [AMD3DNOW_IDX (0x1d)] = MNE_3DNOW_PF2ID,
+    [AMD3DNOW_IDX (0x96)] = MNE_3DNOW_PFRCP,
+    [AMD3DNOW_IDX (0x97)] = MNE_3DNOW_PFRSQRT,
+    [AMD3DNOW_IDX (0xb4)] = MNE_3DNOW_PFMUL,
+    [AMD3DNOW_IDX (0xa6)] = MNE_3DNOW_PFRCPIT1,
+    [AMD3DNOW_IDX (0xa7)] = MNE_3DNOW_PFRSQIT1,
+    [AMD3DNOW_IDX (0xb6)] = MNE_3DNOW_PFRCPIT2,
+    [AMD3DNOW_IDX (0xb7)] = MNE_3DNOW_PMULHRW
+  };
+
+
 struct output_data
 {
   GElf_Addr addr;
@@ -289,6 +356,9 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 	prefixes |= ((*data++) & 0xf) | has_rex;
 #endif
 
+      bufcnt = 0;
+      size_t cnt = 0;
+
       const uint8_t *curr = match_data;
       const uint8_t *const match_end = match_data + sizeof (match_data);
 
@@ -302,79 +372,61 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 	  goto do_ret;
 	}
 
-      if (0)
-	{
-	  /* Resize the buffer.  */
-	  char *oldbuf;
-	enomem:
-	  oldbuf = buf;
-	  if (buf == initbuf)
-	    buf = malloc (2 * bufsize);
-	  else
-	    buf = realloc (buf, 2 * bufsize);
-	  if (buf == NULL)
-	    {
-	      buf = oldbuf;
-	      retval = ENOMEM;
-	      goto do_ret;
-	    }
-	  bufsize *= 2;
-
-	  output_data.bufp = buf;
-	  output_data.bufsize = bufsize;
-	}
-      bufcnt = 0;
-
-      size_t cnt = 0;
+    next_match:
       while (curr < match_end)
 	{
-	  const uint8_t *start = curr;
-
 	  uint_fast8_t len = *curr++;
+	  uint_fast8_t clen = len >> 4;
+	  len &= 0xf;
+	  const uint8_t *next_curr = curr + clen + (len - clen) * 2;
 
 	  assert (len > 0);
-	  assert (curr + 2 * len + 2 <= match_end);
+	  assert (curr + clen + 2 * (len - clen) <= match_end);
 
 	  const uint8_t *codep = data;
-	  size_t avail = len;
 	  int correct_prefix = 0;
 	  int opoff = 0;
 
-	  if (data > begin && codep[-1] == curr[1] && curr[0] == 0xff)
+	  if (data > begin && codep[-1] == *curr && clen > 0)
 	    {
 	      /* We match a prefix byte.  This is exactly one byte and
 		 is matched exactly, without a mask.  */
-	      --avail;
-
 	      --len;
-	      start += 2;
+	      --clen;
 	      opoff = 8;
 
-	      curr += 2;
-	      assert (avail > 0);
+	      ++curr;
 
 	      assert (last_prefix_bit != 0);
 	      correct_prefix = last_prefix_bit;
 	    }
 
-	  do
+	  size_t avail = len;
+	  while (clen > 0)
+	    {
+	      if (*codep++ != *curr++)
+		goto not;
+	      --avail;
+	      --clen;
+	      if (codep == end && avail > 0)
+		goto do_ret;
+	    }
+
+	  while (avail > 0)
 	    {
 	      uint_fast8_t masked = *codep++ & *curr++;
 	      if (masked != *curr++)
-		break;
+		{
+		not:
+		  curr = next_curr;
+		  ++cnt;
+		  bufcnt = 0;
+		  goto next_match;
+		}
 
 	      --avail;
 	      if (codep == end && avail > 0)
 		goto do_ret;
-	    }
-	  while (avail > 0);
-
-	  if (avail != 0)
-	    {
-	    not:
-	      curr = start + 1 + 2 * len + 2;
-	      ++cnt;
-	      continue;
 	    }
 
 	  if (len > end - data)
@@ -386,6 +438,41 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 	  assert (correct_prefix == 0
 		  || (prefixes & correct_prefix) != 0);
 	  prefixes ^= correct_prefix;
+
+	  if (0)
+	    {
+	      /* Resize the buffer.  */
+	      char *oldbuf;
+	    enomem:
+	      oldbuf = buf;
+	      if (buf == initbuf)
+		buf = malloc (2 * bufsize);
+	      else
+		buf = realloc (buf, 2 * bufsize);
+	      if (buf == NULL)
+		{
+		  buf = oldbuf;
+		  retval = ENOMEM;
+		  goto do_ret;
+		}
+	      bufsize *= 2;
+
+	      output_data.bufp = buf;
+	      output_data.bufsize = bufsize;
+	      bufcnt = 0;
+
+	      if (data == end)
+		{
+		  assert (prefixes != 0);
+		  goto print_prefix;
+		}
+
+	      /* gcc is not clever enough to see the following variables
+		 are not used uninitialized.  */
+	      asm (""
+		   : "=mr" (opoff), "=mr" (correct_prefix), "=mr" (codep),
+		     "=mr" (next_curr), "=mr" (len));
+	    }
 
 	  size_t prefix_size = 0;
 
@@ -460,6 +547,23 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 		case prefix_lock:
 		  ADD_STRING ("lock");
 		  break;
+#ifdef X86_64
+		case 0x40 ... 0x4f:
+		  ADD_STRING ("rex");
+		  if (byte != 0x40)
+		    {
+		      ADD_CHAR ('.');
+		      if (byte & 0x8)
+			ADD_CHAR ('w');
+		      if (byte & 0x4)
+			ADD_CHAR ('r');
+		      if (byte & 0x3)
+			ADD_CHAR ('x');
+		      if (byte & 0x1)
+			ADD_CHAR ('b');
+		    }
+		  break;
+#endif
 		default:
 		  /* Cannot happen.  */
 		  puts ("unknown prefix");
@@ -625,6 +729,24 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 			  break;
 
 			case 0x0f:
+			  if (data[1] == 0x0f)
+			    {
+			      /* AMD 3DNOW.  We need one more byte.  */
+			      if (param_start >= end)
+				goto not;
+			      if (*param_start < AMD3DNOW_LOW_IDX
+				  || *param_start > AMD3DNOW_HIGH_IDX)
+				goto not;
+			      unsigned int idx
+				= amd3dnow[AMD3DNOW_IDX (*param_start)];
+			      if (idx == 0)
+				goto not;
+			      str = amd3dnowstr + idx - 1;
+			      /* Eat the immediate byte indicating the
+				 operation.  */
+			      ++param_start;
+			      break;
+			    }
 #ifdef X86_64
 			  if (data[1] == 0xc7)
 			    {
@@ -765,7 +887,8 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 		    {
 		      /* First parameter.  */
 		      if (instrtab[cnt].str1 != 0)
-			ADD_STRING (op1_str[instrtab[cnt].str1]);
+			ADD_STRING (op1_str
+				    + op1_str_idx[instrtab[cnt].str1 - 1]);
 
 		      output_data.opoff1 = (instrtab[cnt].off1_1
 					    + OFF1_1_BIAS - opoff);
@@ -785,7 +908,8 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 		    {
 		      /* Second parameter.  */
 		      if (instrtab[cnt].str2 != 0)
-			ADD_STRING (op2_str[instrtab[cnt].str2]);
+			ADD_STRING (op2_str
+				    + op2_str_idx[instrtab[cnt].str2 - 1]);
 
 		      output_data.opoff1 = (instrtab[cnt].off2_1
 					    + OFF2_1_BIAS - opoff);
@@ -805,7 +929,8 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 		    {
 		      /* Third parameter.  */
 		      if (instrtab[cnt].str3 != 0)
-			ADD_STRING (op3_str[instrtab[cnt].str3]);
+			ADD_STRING (op3_str
+				    + op3_str_idx[instrtab[cnt].str3 - 1]);
 
 		      output_data.opoff1 = (instrtab[cnt].off3_1
 					    + OFF3_1_BIAS - opoff);
@@ -872,8 +997,7 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 			r = snprintf (&buf[bufcnt], bufavail, "# %#" PRIx64,
 				      (uint64_t) symaddr);
 
-		      if (r < 0)
-			goto not;
+		      assert (r >= 0);
 		      if ((size_t) r >= bufavail)
 			goto enomem;
 		      bufcnt += r;

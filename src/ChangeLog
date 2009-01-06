@@ -1,3 +1,24 @@
+2009-01-06  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c: Implement call frame debug section dumping.
+
+2009-01-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* addr2line.c: Update copyright year.
+	* ar.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* ld.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+	* size.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+
 2009-01-01  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: Tweaks across the code:

@@ -1,5 +1,5 @@
-/* Find the debuginfo file for a module from its build ID.
-   Copyright (C) 2007, 2009 Red Hat, Inc.
+/* Version information about elfutils development libraries.
+   Copyright (C) 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -47,52 +47,12 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "libdwflP.h"
-#include <unistd.h>
+#ifndef _ELFUTILS_VERSION_H
+#define _ELFUTILS_VERSION_H	1
 
+#define _ELFUTILS_VERSION	@eu_version@
 
-int
-dwfl_build_id_find_debuginfo (Dwfl_Module *mod,
-			      void **userdata __attribute__ ((unused)),
-			      const char *modname __attribute__ ((unused)),
-			      Dwarf_Addr base __attribute__ ((unused)),
-			      const char *file __attribute__ ((unused)),
-			      const char *debuglink __attribute__ ((unused)),
-			      GElf_Word crc __attribute__ ((unused)),
-			      char **debuginfo_file_name)
-{
-  int fd = -1;
-  const unsigned char *bits;
-  GElf_Addr vaddr;
-  if (INTUSE(dwfl_module_build_id) (mod, &bits, &vaddr) > 0)
-    fd = __libdwfl_open_by_build_id (mod, true, debuginfo_file_name);
-  if (fd >= 0)
-    {
-      /* We need to open an Elf handle on the file so we can check its
-	 build ID note for validation.  Backdoor the handle into the
-	 module data structure since we had to open it early anyway.  */
-      Dwfl_Error error = __libdw_open_file (&fd, &mod->debug.elf, true, false);
-      if (error != DWFL_E_NOERROR)
-	__libdwfl_seterrno (error);
-      else if (likely (__libdwfl_find_build_id (mod, false,
-						mod->debug.elf) == 2))
-	{
-	  /* Also backdoor the gratuitous flag.  */
-	  mod->debug.valid = true;
-	  return fd;
-	}
-      else
-	{
-	  /* A mismatch!  */
-	  elf_end (mod->debug.elf);
-	  mod->debug.elf = NULL;
-	  close (fd);
-	  fd = -1;
-	}
-      free (*debuginfo_file_name);
-      *debuginfo_file_name = NULL;
-      errno = 0;
-    }
-  return fd;
-}
-INTDEF (dwfl_build_id_find_debuginfo)
+#define _ELFUTILS_PREREQ(major, minor) \
+  (_ELFUTILS_VERSION >= ((major) * 1000 + (minor)))
+
+#endif	/* elfutils/version.h */
