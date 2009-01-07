@@ -630,45 +630,45 @@ abbrev_table_load (struct read_ctx *ctx)
   struct abbrev_table *section_chain = NULL;
   struct abbrev_table *section = NULL;
 
-  /* Disallow null abbrev at the beginning of the section.  */
-  bool last_was_nul = true;
-  bool expect_section_end = false;
+#define SECTION_ENDS (ctx->ptr >= ctx->end)
 
-  while (ctx->ptr < ctx->end)
+  while (!SECTION_ENDS)
     {
-      uint64_t abbr_off = read_ctx_get_offset (ctx);
-      uint64_t abbr_code, abbr_tag;
+      uint64_t abbr_off, prev_abbr_off = (uint64_t)-1;
+      uint64_t abbr_code, prev_abbr_code = (uint64_t)-1;
+      uint64_t abbr_tag;
+      uint64_t zero_seq_off = (uint64_t)-1;
 
-      /* Abbreviation code.  */
-      if (!CHECKED_READ_ULEB128 (ctx, &abbr_code,
-				 PRI_ABBR, "abbrev code", abbr_off))
-	goto free_and_out;
-
-      if (abbr_code == 0)
+      while (!SECTION_ENDS)
 	{
-	  /* It is legal to use one or more null abbrevs at the end of
-	     the last section, e.g. for padding purposes.  However
-	     mid-section, allow at most one delimiting abbrev.  */
-	  if (last_was_nul)
-	    expect_section_end = true;
+	  abbr_off = read_ctx_get_offset (ctx);
 
-	  section = NULL;
-	  last_was_nul = true;
-	  continue;
-	}
-      else
-	{
-	  if (expect_section_end)
-	    /* XXX That would technically be an empty section, make it
-	       a warning?  */
-	    ERROR (PRI_ABBR
-		   ": abbrev with non-zero code follows several abbrevs with zero code.\n",
-		   abbr_off);
+	  /* Abbreviation code.  */
+	  if (!CHECKED_READ_ULEB128 (ctx, &abbr_code,
+				     PRI_ABBR, "abbrev code", abbr_off))
+	    goto free_and_out;
 
-	  last_was_nul = expect_section_end = false;
+	  if (abbr_code == 0 && prev_abbr_code == 0
+	      && zero_seq_off == (uint64_t)-1)
+	    zero_seq_off = prev_abbr_off;
+
+	  if (abbr_code != 0)
+	    break;
+	  else
+	    section = NULL;
+
+	  prev_abbr_code = abbr_code;
+	  prev_abbr_off = abbr_off;
 	}
 
-      /* Make a room for new abbreviation.  */
+      if (zero_seq_off != (uint64_t)-1)
+	WARNING (PRI_ABBR": unnecessary zero padding.\n", zero_seq_off);
+
+      if (SECTION_ENDS)
+	break;
+
+#undef SECTION_ENDS
+
       if (section == NULL)
 	{
 	  section = xcalloc (1, sizeof (*section));
@@ -676,7 +676,6 @@ abbrev_table_load (struct read_ctx *ctx)
 	  section->next = section_chain;
 	  section_chain = section;
 	}
-
       REALLOC (section, abbr);
 
       struct abbrev *cur = section->abbr + section->size++;
@@ -775,10 +774,10 @@ abbrev_table_load (struct read_ctx *ctx)
 		  assert (attr_off > 0);
 		  sibling_attr = attr_off;
 
-		  if (!cur->has_children && be_strict)
-		    ERROR (PRI_ABBR_ATTR
-			   ": Excessive DW_AT_sibling attribute at childless abbrev.\n",
-			   abbr_off, attr_off);
+		  if (!cur->has_children)
+		    WARNING (PRI_ABBR_ATTR
+			     ": Excessive DW_AT_sibling attribute at childless abbrev.\n",
+			     abbr_off, attr_off);
 		}
 
 	      switch (check_sibling_form (attrib_form))
@@ -801,17 +800,6 @@ abbrev_table_load (struct read_ctx *ctx)
 	  acur->offset = attr_off;
 	}
       while (!null_attrib);
-    }
-
-  if (expect_section_end)
-    {
-      /* More than one abbrev with zero code should only be necessary
-	 for alignment purposes.  */
-      /* XXX Check zero abbrevs are not excessive, i.e. if it's not
-	 possible to achieve that alignment with fewer zero abbrevs.  */
-      if (((uintptr_t)ctx->ptr & -ctx->data->d_align) != 0)
-	WARNING ("Abbreviation section unnecessarily terminated with sequence "
-		 "of abbrevs with code 0.\n");
     }
 
   return section_chain;
