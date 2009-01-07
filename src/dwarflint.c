@@ -51,6 +51,7 @@
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 #define ARGP_strict	300
+#define ARGP_gnu	301
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -59,6 +60,9 @@ static const struct argp_option options[] =
   { "strict", ARGP_strict, NULL, 0,
     N_("Be extremely strict, flag level 2 features."), 0 },
   { "quiet", 'q', NULL, 0, N_("Do not print anything if successful"), 0 },
+  { "gnu", ARGP_gnu, NULL, 0,
+    N_("Binary has been created with GNU toolchain and is therefore known to be \
+broken in certain ways"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -98,6 +102,9 @@ static bool be_strict;
 
 /* True if no message is to be printed if the run is succesful.  */
 static bool be_quiet;
+
+/* True if binary is assumed to be generated with GNU toolchain.  */
+static bool assume_gnu;
 
 int
 main (int argc, char *argv[])
@@ -183,6 +190,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
     {
     case ARGP_strict:
       be_strict = true;
+      break;
+
+    case ARGP_gnu:
+      assume_gnu = true;
       break;
 
     case 'q':
@@ -661,7 +672,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	  prev_abbr_off = abbr_off;
 	}
 
-      if (zero_seq_off != (uint64_t)-1)
+      if (!assume_gnu && zero_seq_off != (uint64_t)-1)
 	WARNING (PRI_ABBR": unnecessary padding with zero bytes.\n", zero_seq_off);
 
       if (SECTION_ENDS)

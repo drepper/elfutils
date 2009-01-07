@@ -1,5 +1,10 @@
 2009-01-07  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Add --gnu option.  Don't warn about unnecessary
+	padding when --gnu was on command line.
+
+2009-01-07  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: More checking DW_AT_sibling correctness.
 	- Rewrite abbrev_table_load logic for detecting sequences of
 	zeroes inside abbreviation section.
