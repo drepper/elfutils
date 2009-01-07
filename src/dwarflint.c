@@ -662,7 +662,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	}
 
       if (zero_seq_off != (uint64_t)-1)
-	WARNING (PRI_ABBR": unnecessary zero padding.\n", zero_seq_off);
+	WARNING (PRI_ABBR": unnecessary padding with zero bytes.\n", zero_seq_off);
 
       if (SECTION_ENDS)
 	break;
@@ -1114,12 +1114,13 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
   bool got_die = false;
   const unsigned char *begin = ctx->ptr;
   uint64_t sibling_addr = 0;
-  uint64_t last_die_off = 0;
+  uint64_t die_off, prev_die_off = 0;
+  struct abbrev *abbrev, *prev_abbrev = NULL;
 
   while (ctx->ptr < ctx->end)
     {
-      uint64_t die_off = read_ctx_get_offset (ctx);
       uint64_t abbrev_code;
+      die_off = read_ctx_get_offset (ctx);
 
       if (sibling_addr != 0)
 	{
@@ -1127,10 +1128,15 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	    ERROR (PRI_CU_DIE
 		   ": This DIE should have had its sibling at 0x%"
 		   PRIx64 ", but it's at 0x%" PRIx64 " instead.\n",
-		   cu_off, last_die_off, sibling_addr, die_off);
+		   cu_off, prev_die_off, sibling_addr, die_off);
 	  sibling_addr = 0;
 	}
-      last_die_off = die_off;
+      else if (prev_abbrev != NULL && prev_abbrev->has_children)
+	ERROR (PRI_CU_DIE
+	       ": This DIE had children, but no DW_AT_sibling attribute.\n",
+	       cu_off, prev_die_off);
+
+      prev_die_off = die_off;
 
       /* Abbrev code.  */
       if (!CHECKED_READ_ULEB128 (ctx, &abbrev_code,
@@ -1154,8 +1160,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 
       got_die = true;
 
-      struct abbrev *abbrev = abbrev_table_find_abbrev (abbrevs, abbrev_code);
-      abbrev->used = true;
+      abbrev = abbrev_table_find_abbrev (abbrevs, abbrev_code);
       if (abbrev == NULL)
 	{
 	  ERROR (PRI_CU_DIE ": abbrev section at 0x%" PRIx64
@@ -1163,6 +1168,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		 cu_off, die_off, abbrevs->offset, abbrev_code);
 	  return -1;
 	}
+      abbrev->used = true;
 
       if (die_addrs != NULL)
 	addr_record_add (die_addrs, cu_off + die_off);
@@ -1444,7 +1450,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
     ERROR (PRI_CU_DIE
 	   ": This DIE should have had its sibling at 0x%"
 	   PRIx64 ", but the DIE chain ended.\n",
-	   cu_off, last_die_off, sibling_addr);
+	   cu_off, prev_die_off, sibling_addr);
 
   /* DIEs with zero abbreviation code are excessive if: we check
      non-final section, or we check final section and these DIEs are
