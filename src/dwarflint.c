@@ -1133,9 +1133,19 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
       uint64_t abbrev_code;
       die_off = read_ctx_get_offset (ctx);
 
+      /* Abbrev code.  */
+      if (!CHECKED_READ_ULEB128 (ctx, &abbrev_code,
+				 PRI_CU_DIE, "abbrev code",
+				 cu_off, die_off))
+	return -1;
+
       if (sibling_addr != 0)
 	{
-	  if (sibling_addr != die_off)
+	  if (abbrev_code == 0)
+	    ERROR (PRI_CU_DIE
+		   ": is the last sibling in chain, but has a DW_AT_sibling attribute.\n",
+		   cu_off, prev_die_off);
+	  else if (sibling_addr != die_off)
 	    ERROR (PRI_CU_DIE
 		   ": This DIE should have had its sibling at 0x%"
 		   PRIx64 ", but it's at 0x%" PRIx64 " instead.\n",
@@ -1148,12 +1158,6 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	       cu_off, prev_die_off);
 
       prev_die_off = die_off;
-
-      /* Abbrev code.  */
-      if (!CHECKED_READ_ULEB128 (ctx, &abbrev_code,
-				 PRI_CU_DIE, "abbrev code",
-				 cu_off, die_off))
-	return -1;
 
       if (abbrev_code == 0)
 	{

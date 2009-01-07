@@ -1,5 +1,10 @@
 2009-01-07  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Check that the sibling doesn't point to the
+	terminating DIE (the one with the code of 0).
+
+2009-01-07  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Add --gnu option.  Don't warn about unnecessary
 	padding when --gnu was on command line.
 
