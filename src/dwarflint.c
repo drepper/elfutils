@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2008 Red Hat, Inc.
+   Copyright (C) 2008,2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Petr Machata <pmachata@redhat.com>, 2008.
 
@@ -560,26 +560,30 @@ read_ctx_read_offset (struct read_ctx *ctx, bool dwarf64, uint64_t *ret)
 static bool
 read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret)
 {
-  if (width == 4 || width == 8)
-    return read_ctx_read_offset (ctx, width == 8, ret);
-  else if (width == 2)
+  switch (width)
     {
-      uint16_t val;
-      if (!read_ctx_read_2ubyte (ctx, &val))
-	return false;
-      *ret = val;
-      return true;
-    }
-  else if (width == 1)
-    {
-      uint8_t val;
-      if (!read_ctx_read_ubyte (ctx, &val))
-	return false;
-      *ret = val;
-      return true;
-    }
-
-  return false;
+    case 4:
+    case 8:
+      return read_ctx_read_offset (ctx, width == 8, ret);
+    case 2:
+      {
+	uint16_t val;
+	if (!read_ctx_read_2ubyte (ctx, &val))
+	  return false;
+	*ret = val;
+	return true;
+      }
+    case 1:
+      {
+	uint8_t val;
+	if (!read_ctx_read_ubyte (ctx, &val))
+	  return false;
+	*ret = val;
+	return true;
+      }
+    default:
+      return false;
+    };
 }
 
 static bool
