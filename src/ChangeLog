@@ -1,5 +1,10 @@
 2009-01-09  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Sort the abbrev tables and look up abbreviations
+	with bisect search.
+
+2009-01-09  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Better checking for zero padding and unreferenced
 	bytes.  A bug fixed, and CU size and padding at the end of CU are
 	now checked.  Error messages made more uniform.

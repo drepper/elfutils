@@ -815,6 +815,20 @@ abbrev_table_load (struct read_ctx *ctx)
       while (!null_attrib);
     }
 
+  for (section = section_chain; section != NULL; section = section->next)
+    {
+      int cmp_abbrs (const void *a, const void *b)
+      {
+	struct abbrev *aa = (struct abbrev *)a;
+	struct abbrev *bb = (struct abbrev *)b;
+	return aa->code - bb->code;
+      }
+
+      /* The array is most likely already sorted in the file, but just
+	 to be sure...  */
+      qsort (section->abbr, section->size, sizeof (*section->abbr), cmp_abbrs);
+    }
+
   return section_chain;
 
  free_and_out:
@@ -840,9 +854,23 @@ abbrev_table_free (struct abbrev_table *abbr)
 static struct abbrev *
 abbrev_table_find_abbrev (struct abbrev_table *abbrevs, uint64_t abbrev_code)
 {
-  for (size_t i = 0; i < abbrevs->size; ++i)
-    if (abbrevs->abbr[i].code == abbrev_code)
-      return abbrevs->abbr + i;
+  size_t a = 0;
+  size_t b = abbrevs->size;
+  struct abbrev *ab = NULL;
+
+  while (a < b)
+    {
+      size_t i = (a + b) / 2;
+      ab = abbrevs->abbr + i;
+
+      if (ab->code > abbrev_code)
+	b = i;
+      else if (ab->code < abbrev_code)
+	a = i + 1;
+      else
+	return ab;
+    }
+
   return NULL;
 }
 
@@ -1107,7 +1135,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
 			       dwarf_64, die_addrs, die_refs, strings_coverage);
 	  if (cu_ctx.ptr != cu_ctx.end && !check_zero_padding (&cu_ctx))
-	    WARNING (PRI_CU "%" PRIx64 "..%" PRIx64
+	    WARNING (PRI_CU ": 0x%" PRIx64 "..0x%" PRIx64
 		     ": unreferenced data.\n",
 		     cu_off, read_ctx_get_offset (ctx), size);
 	}
@@ -1201,9 +1229,9 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	  sibling_addr = 0;
 	}
       else if (prev_abbrev != NULL && prev_abbrev->has_children)
-	ERROR (PRI_CU_DIE
-	       ": This DIE had children, but no DW_AT_sibling attribute.\n",
-	       cu_off, prev_die_off);
+	WARNING (PRI_CU_DIE
+		 ": This DIE had children, but no DW_AT_sibling attribute.\n",
+		 cu_off, prev_die_off);
 
       /* The section ended.  */
       if (read_ctx_eof (ctx) || abbr_code == 0)
