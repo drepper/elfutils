@@ -1,3 +1,9 @@
+2009-01-09  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c: Better checking for zero padding and unreferenced
+	bytes.  A bug fixed, and CU size and padding at the end of CU are
+	now checked.  Error messages made more uniform.
+
 2009-01-07  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: Check that the sibling doesn't point to the

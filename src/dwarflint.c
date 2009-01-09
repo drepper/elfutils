@@ -265,6 +265,7 @@ static bool read_ctx_read_offset (struct read_ctx *ctx, bool dwarf64,
 			     uint64_t *ret);
 static bool read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret);
 static bool read_ctx_skip (struct read_ctx *ctx, uint64_t len);
+static bool read_ctx_eof (struct read_ctx *ctx);
 
 
 /* Functions and data structures related to raw (i.e. unassisted by
@@ -328,7 +329,7 @@ static void addr_record_free (struct addr_record *ar);
 
 
 /* Functions and data structures for handling of address range
-   coverage.  We use that to find holes of unused byts in DWARF string
+   coverage.  We use that to find holes of unused bytes in DWARF string
    table.  */
 
 typedef uint_fast32_t coverage_emt_type;
@@ -356,7 +357,7 @@ static void check_debug_info_structural (struct read_ctx *ctx,
 					 Elf_Data *strings);
 static int read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 			   struct abbrev_table *abbrevs, Elf_Data *strings,
-			   bool dwarf_64, bool addr_64, int in_section,
+			   bool dwarf_64, bool addr_64,
 			   struct addr_record *die_addrs,
 			   struct addr_record *die_refs,
 			   struct addr_record *die_loc_refs,
@@ -364,7 +365,6 @@ static int read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 static void check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
 				 struct abbrev_table *abbrev_chain,
 				 Elf_Data *strings, bool dwarf_64,
-				 bool last_section,
 				 struct addr_record *die_addrs,
 				 struct addr_record *die_refs,
 				 struct coverage *strings_coverage);
@@ -607,6 +607,12 @@ read_ctx_skip (struct read_ctx *ctx, uint64_t len)
 }
 
 static bool
+read_ctx_eof (struct read_ctx *ctx)
+{
+  return !read_ctx_need_data (ctx, 1);
+}
+
+static bool
 attrib_form_valid (uint64_t form)
 {
   return form > 0 && form <= DW_FORM_indirect;
@@ -641,16 +647,13 @@ abbrev_table_load (struct read_ctx *ctx)
   struct abbrev_table *section_chain = NULL;
   struct abbrev_table *section = NULL;
 
-#define SECTION_ENDS (ctx->ptr >= ctx->end)
-
-  while (!SECTION_ENDS)
+  while (!read_ctx_eof (ctx))
     {
       uint64_t abbr_off, prev_abbr_off = (uint64_t)-1;
       uint64_t abbr_code, prev_abbr_code = (uint64_t)-1;
-      uint64_t abbr_tag;
       uint64_t zero_seq_off = (uint64_t)-1;
 
-      while (!SECTION_ENDS)
+      while (!read_ctx_eof (ctx))
 	{
 	  abbr_off = read_ctx_get_offset (ctx);
 
@@ -675,10 +678,8 @@ abbrev_table_load (struct read_ctx *ctx)
       if (!assume_gnu && zero_seq_off != (uint64_t)-1)
 	WARNING (PRI_ABBR": unnecessary padding with zero bytes.\n", zero_seq_off);
 
-      if (SECTION_ENDS)
+      if (read_ctx_eof (ctx))
 	break;
-
-#undef SECTION_ENDS
 
       if (section == NULL)
 	{
@@ -695,6 +696,7 @@ abbrev_table_load (struct read_ctx *ctx)
       cur->code = abbr_code;
 
       /* Abbreviation tag.  */
+      uint64_t abbr_tag;
       if (!CHECKED_READ_ULEB128 (ctx, &abbr_tag,
 				 PRI_ABBR, "abbrev tag", abbr_off))
 	goto free_and_out;
@@ -1029,7 +1031,7 @@ check_debug_info_structural (struct read_ctx *ctx,
       strings_coverage = &strings_coverage_mem;
     }
 
-  while (ctx->ptr < ctx->end)
+  while (!read_ctx_eof (ctx))
     {
       const unsigned char *cu_begin = ctx->ptr;
       uint64_t cu_off = read_ctx_get_offset (ctx);
@@ -1037,12 +1039,36 @@ check_debug_info_structural (struct read_ctx *ctx,
       uint64_t size;
       bool dwarf_64 = false;
 
+      inline bool check_zero_padding (struct read_ctx *a_ctx)
+      {
+	assert (a_ctx->ptr != a_ctx->end);
+	const unsigned char *save_ptr = a_ctx->ptr;
+	while (!read_ctx_eof (a_ctx))
+	  if (*a_ctx->ptr++ != 0)
+	    {
+	      a_ctx->ptr = save_ptr;
+	      return false;
+	    }
+
+	WARNING (PRI_CU ": unnecessary padding with zero bytes.\n", cu_off);
+	return true;
+      }
+
+      /* Reading CU header is a bit tricky, because we don't know if
+	 we have run into (superfluous but allowed) zero padding.  */
+      if (!read_ctx_need_data (ctx, 4)
+	  && check_zero_padding (ctx))
+	break;
+
       /* CU length.  */
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
 	  ERROR (PRI_CU ": can't read CU length.\n", cu_off);
 	  return;
 	}
+      if (size32 == 0 && check_zero_padding (ctx))
+	break;
+
       if (size32 != DWARF3_LENGTH_64_BIT)
 	size = size32;
       else
@@ -1056,21 +1082,41 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  dwarf_64 = true;
 	}
 
-      /* Make CU context begin just before the CU length, so that DIE
-	 offsets are computed correctly.  */
-      struct read_ctx cu_ctx;
-      const unsigned char *cu_end = ctx->ptr + size;
-      read_ctx_init_sub (&cu_ctx, ctx->dbg, ctx->data, cu_begin, cu_end);
-      cu_ctx.ptr = ctx->ptr;
+      if (!read_ctx_need_data (ctx, size))
+	{
+	  ERROR (PRI_CU ": section doesn't have enough data"
+		 " to read CU of size %" PRIx64 ".\n", cu_off, size);
+	  ctx->ptr = ctx->end;
+	  break;
+	}
 
-      check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
-			   dwarf_64, cu_end == ctx->end,
-			   die_addrs, die_refs, strings_coverage);
+      /* version + debug_abbrev_offset + address_size */
+      uint64_t cu_header_size = 2 + (dwarf_64 ? 8 : 4) + 1;
+      if (size < cu_header_size)
+	ERROR (PRI_CU ": claimed length of %" PRIx64
+	       " doesn't even cover CU header.\n", cu_off, size);
+      else
+	{
+	  /* Make CU context begin just before the CU length, so that DIE
+	     offsets are computed correctly.  */
+	  struct read_ctx cu_ctx;
+	  const unsigned char *cu_end = ctx->ptr + size;
+	  read_ctx_init_sub (&cu_ctx, ctx->dbg, ctx->data, cu_begin, cu_end);
+	  cu_ctx.ptr = ctx->ptr;
+
+	  check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
+			       dwarf_64, die_addrs, die_refs, strings_coverage);
+	  if (cu_ctx.ptr != cu_ctx.end && !check_zero_padding (&cu_ctx))
+	    WARNING (PRI_CU "%" PRIx64 "..%" PRIx64
+		     ": unreferenced data.\n",
+		     cu_off, read_ctx_get_offset (ctx), size);
+	}
+
       ctx->ptr += size;
     }
 
   if (ctx->ptr != ctx->end)
-    ERROR ("Suspicious: CU lengths don't exactly match Elf_Data contents.");
+    WARNING ("Suspicious: CU lengths don't exactly match Elf_Data contents.");
 
   if (recording)
     {
@@ -1083,13 +1129,22 @@ check_debug_info_structural (struct read_ctx *ctx,
     {
       void hole (uint64_t begin, uint64_t end)
       {
-	/* XXX only report holes of non-zero bytes.  Be quiet about
-	   zero bytes that seem to be present for alignment purposes.
-	   Check that zeroes are not excessive, i.e. it's not possible
-	   to achieve that alignment with fewer zero bytes.  */
-	WARNING ("Unreferenced portion of .debug_str: "
-		 "0x%" PRIx64 "..0x%" PRIx64 ".\n",
-		 begin, end);
+	bool all_zeroes = true;
+	for (uint64_t i = begin; i <= end; ++i)
+	  if (((char*)strings->d_buf)[i] != 0)
+	    {
+	      all_zeroes = false;
+	      break;
+	    }
+
+	if (all_zeroes)
+	  WARNING (".debug_str: 0x%" PRIx64 "..0x%" PRIx64
+		   ": unnecessary padding with zero bytes\n",
+		   begin, end);
+	else
+	  WARNING (".debug_str: 0x%" PRIx64 "..0x%" PRIx64
+		   ": unreferenced non-zero bytes\n",
+		   begin, end);
       }
 
       coverage_find_holes (strings_coverage, hole);
@@ -1104,44 +1159,37 @@ check_debug_info_structural (struct read_ctx *ctx,
     +0 in case of no error, but the chain only consisted of a
        terminating zero die.
     +1 in case some dies were actually loaded
-
-  SECTION parameter:
-    +0 not checking a section chain (NUL die termination required)
-    +1 reading a section chain (only one DIE is allowed, NUL die
-       termination is excessive)
-    +2 reading a section chain of last section (one DIE, but NUL die
-       termination is OK if done for padding purposes)
  */
 static int
 read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		struct abbrev_table *abbrevs, Elf_Data *strings,
-		bool dwarf_64, bool addr_64, int in_section,
+		bool dwarf_64, bool addr_64,
 		struct addr_record *die_addrs,
 		struct addr_record *die_refs,
 		struct addr_record *die_loc_refs,
 		struct coverage *strings_coverage)
 {
-  bool got_null = false;
   bool got_die = false;
   const unsigned char *begin = ctx->ptr;
   uint64_t sibling_addr = 0;
   uint64_t die_off, prev_die_off = 0;
   struct abbrev *abbrev, *prev_abbrev = NULL;
 
-  while (ctx->ptr < ctx->end)
+  while (!read_ctx_eof (ctx))
     {
-      uint64_t abbrev_code;
-      die_off = read_ctx_get_offset (ctx);
+      uint64_t abbr_code;
 
-      /* Abbrev code.  */
-      if (!CHECKED_READ_ULEB128 (ctx, &abbrev_code,
+      prev_die_off = die_off;
+      die_off = read_ctx_get_offset (ctx);
+      if (!CHECKED_READ_ULEB128 (ctx, &abbr_code,
 				 PRI_CU_DIE, "abbrev code",
 				 cu_off, die_off))
 	return -1;
 
+      /* Check sibling value advertised last time through the loop.  */
       if (sibling_addr != 0)
 	{
-	  if (abbrev_code == 0)
+	  if (abbr_code == 0)
 	    ERROR (PRI_CU_DIE
 		   ": is the last sibling in chain, but has a DW_AT_sibling attribute.\n",
 		   cu_off, prev_die_off);
@@ -1157,30 +1205,26 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	       ": This DIE had children, but no DW_AT_sibling attribute.\n",
 	       cu_off, prev_die_off);
 
-      prev_die_off = die_off;
-
-      if (abbrev_code == 0)
+      /* The section ended.  */
+      if (read_ctx_eof (ctx) || abbr_code == 0)
 	{
-	  got_null = true;
-	  if (in_section != 2)
-	    break;
-	  else
-	    continue;
+	  if (abbr_code != 0)
+	    ERROR (PRI_CU
+		   ": DIE chain at %p not terminated with DIE with zero abbrev code.\n",
+		   cu_off, begin);
+	  break;
 	}
-      else if (got_null)
-	ERROR (PRI_CU_DIE
-	       ": invalid DIE with non-zero abbrev code after sequence "
-	       "of DIEs with abbrev code 0.\n",
-	       cu_off, die_off);
 
+      prev_die_off = die_off;
       got_die = true;
 
-      abbrev = abbrev_table_find_abbrev (abbrevs, abbrev_code);
+      /* Find the abbrev matching the code.  */
+      abbrev = abbrev_table_find_abbrev (abbrevs, abbr_code);
       if (abbrev == NULL)
 	{
 	  ERROR (PRI_CU_DIE ": abbrev section at 0x%" PRIx64
 		 " doesn't contain code %" PRIu64 ".\n",
-		 cu_off, die_off, abbrevs->offset, abbrev_code);
+		 cu_off, die_off, abbrevs->offset, abbr_code);
 	  return -1;
 	}
       abbrev->used = true;
@@ -1449,7 +1493,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
       if (abbrev->has_children)
 	{
 	  int st = read_die_chain (ctx, cu_off, abbrevs, strings,
-				   dwarf_64, addr_64, 0,
+				   dwarf_64, addr_64,
 				   die_addrs, die_refs, die_loc_refs,
 				   strings_coverage);
 	  if (st == -1)
@@ -1467,35 +1511,13 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	   PRIx64 ", but the DIE chain ended.\n",
 	   cu_off, prev_die_off, sibling_addr);
 
-  /* DIEs with zero abbreviation code are excessive if: we check
-     non-final section, or we check final section and these DIEs are
-     not used for alignment purposes.  */
-  if (!got_null && !in_section)
-    ERROR (PRI_CU
-	   ": Sequence of DIEs at %p not terminated with DIE with zero abbrev code.\n",
-	   cu_off, begin);
-  else if (got_null && in_section == 2)
-    {
-      /* XXX Check that zero-abbrev DIEs are not excessive, i.e. if
-	 it's not possible to achieve that alignment with fewer DIEs
-	 with zero abbrev code.  */
-      if (ctx->data->d_align < 2
-	  || ((uintptr_t)ctx->ptr & -ctx->data->d_align) != 0)
-	goto excessive;
-    }
-  else if (got_null && in_section == 1)
-  excessive:
-    WARNING (PRI_CU
-	     ": Sequence of DIEs at %p unnecessarily terminated with NUL die.\n",
-	     cu_off, begin);
-
   return got_die ? 1 : 0;
 }
 
 static void
 check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
 		     struct abbrev_table *abbrev_chain,
-		     Elf_Data *strings, bool dwarf_64, bool last_section,
+		     Elf_Data *strings, bool dwarf_64,
 		     struct addr_record *die_addrs,
 		     struct addr_record *die_refs,
 		     struct coverage *strings_coverage)
@@ -1563,7 +1585,7 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
     }
 
   if (read_die_chain (ctx, cu_off, abbrevs, strings,
-		      dwarf_64, address_size == 8, last_section ? 2 : 1,
+		      dwarf_64, address_size == 8,
 		      die_addrs, die_refs, die_loc_refs,
 		      strings_coverage) >= 0)
     {
