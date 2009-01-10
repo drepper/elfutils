@@ -46,6 +46,7 @@
 
 #include "../libdw/dwarf.h"
 #include "../libdw/libdwP.h"
+#include "dwarfstrings.h"
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
@@ -86,25 +87,103 @@ static void
 process_file (int fd, Dwarf *dwarf, const char *fname,
 	      size_t size, bool only_one);
 
+enum message_category
+{
+  mc_none      = 0,
+
+  /* Severity: */
+  mc_impact_1  = 0x0001, // no impact on the consumer
+  mc_impact_2  = 0x0002, // still no impact, but suspicious or worth mentioning
+  mc_impact_3  = 0x0004, // some impact
+  mc_impact_4  = 0x0008, // high impact
+  mc_impact_all= 0x000f, // all severity levels
+  mc_impact_2p = 0x000e, // 2+
+  mc_impact_3p = 0x000c, // 3+
+
+  /* Accuracy:  */
+  mc_acc_bloat     = 0x0010, // unnecessary constructs (e.g. unreferenced strings)
+  mc_acc_suboptimal= 0x0020, // suboptimal construct (e.g. lack of siblings)
+  mc_acc_all       = 0x00f0, // all accuracy options
+
+  /* Area: */
+  mc_leb128    = 0x0100, // ULEB/SLEB storage
+  mc_abbrevs   = 0x0200, // abbreviations and abbreviation tables
+  mc_die_siblings = 0x0400, // DIE sibling relationship
+  mc_die_children = 0x0800, // DIE parent/child relationship
+  mc_die_other = 0x1000, // messages related to DIEs and .debug_info tables, but not covered above
+  mc_die_all   = 0x1c00, // includes all above DIE categories
+  mc_strings   = 0x2000, // string table
+  mc_other     = 0x4000, // messages unrelated to any of the above
+  mc_all       = 0xff00, // all areas
+};
+
+struct message_criteria
+{
+  enum message_category accept; /* cat & accept must be != 0  */
+  enum message_category reject; /* cat & reject must be == 0  */
+};
+
+static bool
+accept_message (struct message_criteria *crit, enum message_category cat)
+{
+  assert (crit != NULL);
+  return (crit->accept & cat) != 0
+    && (crit->reject & cat) == 0;
+}
+
+static struct message_criteria warning_criteria = {mc_all & ~mc_strings, mc_none};
+static struct message_criteria error_criteria = {mc_impact_4, mc_none};
+
+static bool
+check_category (enum message_category cat)
+{
+  return accept_message (&warning_criteria, cat);
+}
+
 /* Report an error.  */
 #define ERROR(str, args...)			\
   do {						\
+    fputs ("error: ", stdout);			\
     printf (str, ##args);			\
     ++error_count;				\
   } while (0)
 static unsigned int error_count;
 
 #define WARNING(str, args...)			\
-  printf ("warning: "str, ##args)
+  do {						\
+    fputs ("warning: ", stdout);		\
+    printf (str, ##args);			\
+    ++error_count;				\
+  } while (0)
 
-/* True if we should perform very strict testing.  */
-static bool be_strict;
+#define MESSAGE(category, str, args...)			   \
+  do {							   \
+    if (accept_message (&warning_criteria, category))	   \
+      {							   \
+	if (accept_message (&error_criteria, category))	   \
+	  ERROR (str, ##args);				   \
+	else						   \
+	  WARNING (str, ##args);			   \
+      }							   \
+  } while (0)
+
+/* mc_acc_bloat | mc_impact_1 is automatically attached.  */
+#define MESSAGE_PADDING_0(CAT, FMT, START, END, ARGS...)	\
+  MESSAGE (((CAT) | mc_acc_bloat | mc_impact_1),		\
+	   FMT ": 0x%" PRIx64 "..0x%" PRIx64			\
+	   ": unnecessary padding with zero bytes.\n",		\
+	   ##ARGS, (START), (END))
+
+/* mc_acc_bloat | mc_impact_2 is automatically attached.  */
+#define MESSAGE_PADDING_N0(CAT, FMT, START, END, ARGS...)	\
+  MESSAGE (((CAT) | mc_acc_bloat | mc_impact_2),		\
+	   FMT ": 0x%" PRIx64 "..0x%" PRIx64			\
+	   ": unreferenced non-zero bytes.\n",			\
+	   ##ARGS, (START), (END))
+
 
 /* True if no message is to be printed if the run is succesful.  */
 static bool be_quiet;
-
-/* True if binary is assumed to be generated with GNU toolchain.  */
-static bool assume_gnu;
 
 int
 main (int argc, char *argv[])
@@ -189,11 +268,11 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
   switch (key)
     {
     case ARGP_strict:
-      be_strict = true;
+      warning_criteria.accept |= mc_strings;
       break;
 
     case ARGP_gnu:
-      assume_gnu = true;
+      warning_criteria.reject |= mc_acc_bloat;
       break;
 
     case 'q':
@@ -471,7 +550,9 @@ read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret)
       if (__st < 0)							\
 	ERROR (FMT ": can't read %s.\n", ##ARGS, WHAT);			\
       else if (__st > 0)						\
-	WARNING (FMT ": unnecessarily long encoding of %s.\n", ##ARGS, WHAT); \
+	MESSAGE (mc_leb128 | mc_acc_bloat | mc_impact_3,		\
+		 FMT ": unnecessarily long encoding of %s.\n",		\
+		 ##ARGS, WHAT);						\
       else								\
 	__ret = true;							\
       __ret;								\
@@ -522,7 +603,8 @@ read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret)
 	  __ret = false;						\
 	}								\
       else if (__st > 0)						\
-	WARNING (FMT ": unnecessarily long encoding of %s.\n",		\
+	MESSAGE (mc_leb128 | mc_acc_bloat | mc_impact_3,		\
+		 FMT ": unnecessarily long encoding of %s.\n",		\
 		 ##ARGS, WHAT);						\
       __ret;								\
   })
@@ -646,6 +728,7 @@ abbrev_table_load (struct read_ctx *ctx)
 {
   struct abbrev_table *section_chain = NULL;
   struct abbrev_table *section = NULL;
+  uint64_t section_off = 0;
 
   while (!read_ctx_eof (ctx))
     {
@@ -675,8 +758,9 @@ abbrev_table_load (struct read_ctx *ctx)
 	  prev_abbr_off = abbr_off;
 	}
 
-      if (!assume_gnu && zero_seq_off != (uint64_t)-1)
-	WARNING (PRI_ABBR": unnecessary padding with zero bytes.\n", zero_seq_off);
+      if (zero_seq_off != (uint64_t)-1)
+	MESSAGE_PADDING_0 (mc_abbrevs, PRI_ABBR,
+			   zero_seq_off, prev_abbr_off - 1, section_off);
 
       if (read_ctx_eof (ctx))
 	break;
@@ -687,6 +771,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	  section->offset = abbr_off;
 	  section->next = section_chain;
 	  section_chain = section;
+	  section_off = abbr_off;
 	}
       REALLOC (section, abbr);
 
@@ -788,7 +873,8 @@ abbrev_table_load (struct read_ctx *ctx)
 		  sibling_attr = attr_off;
 
 		  if (!cur->has_children)
-		    WARNING (PRI_ABBR_ATTR
+		    MESSAGE (mc_die_siblings | mc_acc_bloat | mc_impact_1,
+			     PRI_ABBR_ATTR
 			     ": Excessive DW_AT_sibling attribute at childless abbrev.\n",
 			     abbr_off, attr_off);
 		}
@@ -796,15 +882,16 @@ abbrev_table_load (struct read_ctx *ctx)
 	      switch (check_sibling_form (attrib_form))
 		{
 		case -1:
-		  WARNING (PRI_ABBR_ATTR
+		  MESSAGE (mc_die_siblings | mc_impact_2,
+			   PRI_ABBR_ATTR
 			   ": DW_AT_sibling attribute with form DW_FORM_ref_addr.\n",
 			   abbr_off, attr_off);
 		  break;
 
 		case -2:
 		  ERROR (PRI_ABBR_ATTR
-			 ": DW_AT_sibling attribute with non-reference form 0x%" PRIx64 ".\n",
-			 abbr_off, attr_off, attrib_form);
+			 ": DW_AT_sibling attribute with non-reference form %s.\n",
+			 abbr_off, attr_off, dwarf_form_string (attrib_form));
 		};
 	    }
 
@@ -1053,7 +1140,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 
   struct coverage strings_coverage_mem;
   struct coverage *strings_coverage = NULL;
-  if (be_strict)
+  if (check_category (mc_strings))
     {
       coverage_init (&strings_coverage_mem, strings->d_size);
       strings_coverage = &strings_coverage_mem;
@@ -1078,7 +1165,9 @@ check_debug_info_structural (struct read_ctx *ctx,
 	      return false;
 	    }
 
-	WARNING (PRI_CU ": unnecessary padding with zero bytes.\n", cu_off);
+	MESSAGE_PADDING_0 (mc_abbrevs, PRI_CU,
+			   (uint64_t)(save_ptr - a_ctx->begin),
+			   (uint64_t)(a_ctx->end - a_ctx->begin), cu_off);
 	return true;
       }
 
@@ -1135,16 +1224,16 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
 			       dwarf_64, die_addrs, die_refs, strings_coverage);
 	  if (cu_ctx.ptr != cu_ctx.end && !check_zero_padding (&cu_ctx))
-	    WARNING (PRI_CU ": 0x%" PRIx64 "..0x%" PRIx64
-		     ": unreferenced data.\n",
-		     cu_off, read_ctx_get_offset (ctx), size);
+	    MESSAGE_PADDING_N0 (mc_die_other,
+				PRI_CU, read_ctx_get_offset (ctx), size, cu_off);
 	}
 
       ctx->ptr += size;
     }
 
   if (ctx->ptr != ctx->end)
-    WARNING ("Suspicious: CU lengths don't exactly match Elf_Data contents.");
+    MESSAGE (mc_die_other | mc_impact_4,
+	     ".debug_info: CU lengths don't exactly match Elf_Data contents.");
 
   if (recording)
     {
@@ -1166,13 +1255,11 @@ check_debug_info_structural (struct read_ctx *ctx,
 	    }
 
 	if (all_zeroes)
-	  WARNING (".debug_str: 0x%" PRIx64 "..0x%" PRIx64
-		   ": unnecessary padding with zero bytes\n",
-		   begin, end);
+	  MESSAGE_PADDING_0 (mc_strings, ".debug_str", begin, end);
 	else
-	  WARNING (".debug_str: 0x%" PRIx64 "..0x%" PRIx64
-		   ": unreferenced non-zero bytes\n",
-		   begin, end);
+	  /* XXX: This is actually lying in case that the unreferenced
+	     portion is composed of sequences of zeroes and non-zeroes.  */
+	  MESSAGE_PADDING_N0 (mc_strings, ".debug_str", begin, end);
       }
 
       coverage_find_holes (strings_coverage, hole);
@@ -1229,7 +1316,11 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	  sibling_addr = 0;
 	}
       else if (prev_abbrev != NULL && prev_abbrev->has_children)
-	WARNING (PRI_CU_DIE
+	/* Even if it has children, the DIE can't have a sibling
+	   attribute if it's the last DIE in chain.  That's the reason
+	   we can't simply check this when loading abbrevs.  */
+	MESSAGE (mc_die_siblings | mc_acc_suboptimal | mc_impact_4,
+		 PRI_CU_DIE
 		 ": This DIE had children, but no DW_AT_sibling attribute.\n",
 		 cu_off, prev_die_off);
 
@@ -1310,16 +1401,17 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		switch (check_sibling_form (form))
 		  {
 		  case -1:
-		    WARNING (PRI_CU_DIE_ABBR_ATTR
+		    MESSAGE (mc_die_siblings | mc_impact_2,
+			     PRI_CU_DIE_ABBR_ATTR
 			     ": DW_AT_sibling attribute with (indirect) form DW_FORM_ref_addr.\n",
 			     cu_off, die_off, abbrev->code, it->offset);
 		    break;
 
 		  case -2:
-		    /* XXX write form name  */
 		    ERROR (PRI_CU_DIE_ABBR_ATTR
-			   ": DW_AT_sibling attribute with non-reference (indirect) form 0x%" PRIx64 ".\n",
-			   cu_off, die_off, abbrev->code, it->offset, value);
+			   ": DW_AT_sibling attribute with non-reference (indirect) form %s.\n",
+			   cu_off, die_off, abbrev->code, it->offset,
+			   dwarf_form_string (value));
 		  };
 	    }
 
@@ -1526,8 +1618,9 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 				   strings_coverage);
 	  if (st == -1)
 	    return -1;
-	  else if (st == 0 && be_strict)
-	    WARNING (PRI_CU_DIE
+	  else if (st == 0)
+	    MESSAGE (mc_die_children | mc_acc_suboptimal | mc_impact_3,
+		     PRI_CU_DIE
 		     ": Abbrev has_children, but the chain was empty.\n",
 		     cu_off, die_off);
 	}

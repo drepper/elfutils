@@ -1,5 +1,14 @@
 2009-01-10  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Implement fine-grained message selection.  Each
+	message has a category, which is bitwise OR of category options.
+	There are acceptance and rejection criteria for warnings and
+	errors, which can be tuned using command-line options (currently
+	--strict and --gnu).
+	Use dwarfstrings.h in two messages.
+
+2009-01-10  Petr Machata  <pmachata@redhat.com>
+
 	* readelf.c: Extract functions that format dwarf enums into a file
 	of its own, so it can be shared with dwarflint.
 	* dwarfstrings.h: That file.
@@ -11,9 +20,8 @@
 
 2009-01-09  Petr Machata  <pmachata@redhat.com>
 
-	* dwarflint.c: Better checking for zero padding and unreferenced
-	bytes.  A bug fixed, and CU size and padding at the end of CU are
-	now checked.  Error messages made more uniform.
+	* dwarflint.c: Checking for zero padding and unreferenced bytes.
+	CU size and padding at the end of CU are now checked.
 
 2009-01-07  Petr Machata  <pmachata@redhat.com>
 
@@ -22,14 +30,7 @@
 
 2009-01-07  Petr Machata  <pmachata@redhat.com>
 
-	* dwarflint.c: Add --gnu option.  Don't warn about unnecessary
-	padding when --gnu was on command line.
-
-2009-01-07  Petr Machata  <pmachata@redhat.com>
-
 	* dwarflint.c: More checking DW_AT_sibling correctness.
-	- Rewrite abbrev_table_load logic for detecting sequences of
-	zeroes inside abbreviation section.
 
 2009-01-06  Petr Machata  <pmachata@redhat.com>
 
