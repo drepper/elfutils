@@ -1,3 +1,7 @@
+2009-01-10  Petr Machata  <pmachata@redhat.com>
+
+	* run-dwarflint-self.sh: Pass new option --no-debug to dwarflint.
+
 2009-01-10  Roland McGrath  <roland@redhat.com>
 
 	* run-dwarflint-self.sh: New file.

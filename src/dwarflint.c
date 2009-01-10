@@ -53,6 +53,7 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 #define ARGP_strict	300
 #define ARGP_gnu	301
+#define ARGP_nodebug	302
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -61,6 +62,8 @@ static const struct argp_option options[] =
   { "strict", ARGP_strict, NULL, 0,
     N_("Be extremely strict, flag level 2 features."), 0 },
   { "quiet", 'q', NULL, 0, N_("Do not print anything if successful"), 0 },
+  { "no-debug", ARGP_nodebug, NULL, 0,
+    N_("Accept silently if no debug info is available."), 0 },
   { "gnu", ARGP_gnu, NULL, 0,
     N_("Binary has been created with GNU toolchain and is therefore known to be \
 broken in certain ways"), 0 },
@@ -82,6 +85,9 @@ static struct argp argp =
 {
   options, parse_opt, args_doc, doc, NULL, NULL, NULL
 };
+
+/* If true, we accept silently files without debuginfo.  */
+static bool tolerate_nodebug = false;
 
 static void
 process_file (int fd, Dwarf *dwarf, const char *fname,
@@ -223,9 +229,11 @@ main (int argc, char *argv[])
 	  unsigned int prev_error_count = error_count;
 	  Dwarf *dwarf = dwarf_begin_elf (elf, DWARF_C_READ, NULL);
 	  if (dwarf == NULL)
-	    ERROR (gettext ("cannot generate Dwarf descriptor: %s\n"),
-		   dwarf_errmsg (-1));
-
+	    {
+	      if (!tolerate_nodebug)
+		ERROR (gettext ("cannot generate Dwarf descriptor: %s\n"),
+		       dwarf_errmsg (-1));
+	    }
 	  else
 	    {
 	      struct stat64 st;
@@ -273,6 +281,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case ARGP_gnu:
       warning_criteria.reject |= mc_acc_bloat;
+      break;
+
+    case ARGP_nodebug:
+      tolerate_nodebug = true;
       break;
 
     case 'q':
