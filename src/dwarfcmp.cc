@@ -161,7 +161,7 @@ struct context
 
   void values (int name) const
   {
-    location () << "different values for attribute 0x" << name << endl;
+    location () << "different values for attribute 0x" << hex << name << endl;
   }
 };
 
@@ -233,8 +233,9 @@ describe_mismatch (const dwarf::compile_unit &a, const dwarf::compile_unit &b,
 }
 
 template<>
-int describe_mismatch (const dwarf::attribute &a, const dwarf::attribute &b,
-		       const context &say)
+int
+describe_mismatch (const dwarf::attribute &a, const dwarf::attribute &b,
+		   const context &say)
 {
   int result = a.first != b.first;
   if (result != 0)
@@ -294,10 +295,8 @@ main (int argc, char *argv[])
     }
   else
     {
-
       elfutils::dwarf file1 (dw1);
       elfutils::dwarf file2 (dw2);
-
 
       if (quiet)
 	result = !(file1 == file2);
