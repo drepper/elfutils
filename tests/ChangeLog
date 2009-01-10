@@ -1,7 +1,12 @@
+2009-01-10  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarflint-self.sh: New file.
+	* Makefile.am (TESTS, EXTRA_DIST) Add it.
+
 2009-01-05  Roland McGrath  <roland@redhat.com>
 
 	* run-dwarfcmp-self.sh: New file.
-	* Makefile.am (TESTS): Add it.
+	* Makefile.am (TESTS, EXTRA_DIST) Add it.
 
 2008-12-31  Ulrich Drepper  <drepper@redhat.com>
 

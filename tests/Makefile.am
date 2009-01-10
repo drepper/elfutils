@@ -87,7 +87,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh \
-	run-dwarfcmp-self.sh
+	run-dwarfcmp-self.sh run-dwarflint-self.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -120,7 +120,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-find-prologues.sh run-allregs.sh run-native-test.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
-	     run-dwarfcmp-self.sh \
+	     run-dwarfcmp-self.sh run-dwarflint-self.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
