@@ -47,7 +47,8 @@ noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
 endif
 
 include_HEADERS = dwarf.h
-pkginclude_HEADERS = libdw.h
+pkginclude_HEADERS = libdw.h \
+		     c++/dwarf
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \

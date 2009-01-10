@@ -1,3 +1,8 @@
+2009-01-10  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf: New file.
+	* Makefile.am (pkginclude_HEADERS): Add it.
+
 2008-01-06  Roland McGrath  <roland@redhat.com>
 
 	* libdwP.h (struct Dwarf_Abbrev): Change type of 'has_children' to bool.

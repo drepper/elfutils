@@ -43,7 +43,7 @@
 #include <cstdint>
 #include "../libdw/libdwP.h"	// XXX
 
-#include "../libdw++/dwarf"
+#include "c++/dwarf"
 
 using namespace elfutils;
 using namespace std;
