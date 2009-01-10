@@ -56,8 +56,7 @@ base_cpu = @base_cpu@
 
 bin_PROGRAMS = readelf nm size strip ld elflint findtextrel addr2line \
 	       elfcmp objdump ranlib strings ar unstrip \
-	       dwarfcmp
-
+	       dwarflint dwarfcmp
 
 ld_dsos = libld_elf_i386_pic.a
 if NATIVE_LD
@@ -132,13 +131,14 @@ elflint_LDADD  = $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 findtextrel_LDADD = $(libdw) $(libelf) $(libmudflap)
 addr2line_LDADD = $(libdw) $(libmudflap)
 elfcmp_LDADD = $(libebl) $(libelf) $(libmudflap) -ldl
-dwarfcmp_LDADD = $(libdw) $(libmudflap) -ldl
 objdump_LDADD  = $(libasm) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 ranlib_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 strings_LDADD = $(libelf) $(libeu) $(libmudflap)
 ar_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 CFLAGS_ar = -DAR=\"$(shell echo ar|sed '$(transform)')\"
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
+dwarfcmp_LDADD = $(libdw) $(libmudflap) -ldl
+dwarflint_LDADD  = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
 
 ldlex.o: ldscript.c
 ldlex_no_Werror = yes
