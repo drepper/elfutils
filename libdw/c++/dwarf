@@ -486,7 +486,9 @@ namespace elfutils
       return attr.first == ::DW_AT_sibling;
     }
 
-    typedef skipping_wrapper<class debug_info_entry::raw_attributes,
+    // Circumvent C++ namespace lookup.
+    typedef class debug_info_entry::raw_attributes debug_info_entry_raw_attributes;
+    typedef skipping_wrapper<debug_info_entry_raw_attributes,
 			     attribute, attribute, skip_sibling>
     attributes_base;
 
