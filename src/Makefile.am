@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+## Copyright (C) 1996-2002,2003,2004,2005,2006,2007,2009 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -40,6 +40,9 @@ INCLUDES = -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwfl \
 	   -I$(srcdir)/../libasm -I$(srcdir)/../lib -I..
 
+AM_CXXFLAGS = $(AM_CFLAGS:gnu99=gnu++0x) \
+	      -Wno-unused-parameter
+
 AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 
 YACC = @YACC@ -d
@@ -52,7 +55,8 @@ native_ld = @native_ld@
 base_cpu = @base_cpu@
 
 bin_PROGRAMS = readelf nm size strip ld elflint findtextrel addr2line \
-	       elfcmp objdump ranlib strings ar unstrip
+	       elfcmp objdump ranlib strings ar unstrip \
+	       dwarfcmp
 
 
 ld_dsos = libld_elf_i386_pic.a
@@ -77,6 +81,8 @@ ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 	     versionhash.c
 
 libar_a_SOURCES = arlib.c arlib2.c
+
+dwarfcmp_SOURCES = dwarfcmp.cc
 
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
 		 ldscript.h xelf.h unaligned.h
@@ -110,6 +116,7 @@ size_no_Wformat = yes
 strings_no_Wformat = yes
 # XXX While the file is not finished, don't warn about this
 ldgeneric_no_Wunused = yes
+dwarfcmp_no_Wformat = yes
 
 readelf_LDADD = $(libdw) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 nm_LDADD = $(libdw) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
@@ -125,6 +132,7 @@ elflint_LDADD  = $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 findtextrel_LDADD = $(libdw) $(libelf) $(libmudflap)
 addr2line_LDADD = $(libdw) $(libmudflap)
 elfcmp_LDADD = $(libebl) $(libelf) $(libmudflap) -ldl
+dwarfcmp_LDADD = $(libdw) $(libmudflap) -ldl
 objdump_LDADD  = $(libasm) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 ranlib_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 strings_LDADD = $(libelf) $(libeu) $(libmudflap)

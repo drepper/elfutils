@@ -1,3 +1,7 @@
+2009-01-10  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac: Add AC_PROG_CXX.
+
 2009-01-08  Roland McGrath  <roland@redhat.com>
 
 	* configure.ac (eu_ZIPLIB): Moved to m4/zip.am.

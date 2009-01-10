@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2002, 2003, 2004, 2005, 2006, 2007, 2008 Red Hat, Inc.
+## Copyright (C) 1996-2009 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -86,7 +86,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	dwfl-bug-fd-leak dwfl-bug-report \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
-	run-early-offscn.sh
+	run-early-offscn.sh \
+	run-dwarfcmp-self.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -119,6 +120,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-find-prologues.sh run-allregs.sh run-native-test.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
+	     run-dwarfcmp-self.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \

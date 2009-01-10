@@ -63,6 +63,7 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
+AC_PROG_CXX
 
 AC_CACHE_CHECK([for gcc with C99 support], ac_cv_c99, [dnl
 old_CFLAGS="$CFLAGS"

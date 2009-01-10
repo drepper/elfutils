@@ -1,0 +1,1107 @@
+/* -*- C++ -*- interfaces for libdw.
+   Copyright (C) 2009 Red Hat, Inc.
+   This file is part of Red Hat elfutils.
+
+   Red Hat elfutils is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by the
+   Free Software Foundation; version 2 of the License.
+
+   Red Hat elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License along
+   with Red Hat elfutils; if not, write to the Free Software Foundation,
+   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
+
+   In addition, as a special exception, Red Hat, Inc. gives You the
+   additional right to link the code of Red Hat elfutils with code licensed
+   under any Open Source Initiative certified open source license
+   (http://www.opensource.org/licenses/index.php) which requires the
+   distribution of source code with any binary distribution and to
+   distribute linked combinations of the two.  Non-GPL Code permitted under
+   this exception must only link to the code of Red Hat elfutils through
+   those well defined interfaces identified in the file named EXCEPTION
+   found in the source code files (the "Approved Interfaces").  The files
+   of Non-GPL Code may instantiate templates or use macros or inline
+   functions from the Approved Interfaces without causing the resulting
+   work to be covered by the GNU General Public License.  Only Red Hat,
+   Inc. may make changes or additions to the list of Approved Interfaces.
+   Red Hat's grant of this exception is conditioned upon your not adding
+   any new exceptions.  If you wish to add a new Approved Interface or
+   exception, please contact Red Hat.  You must obey the GNU General Public
+   License in all respects for all of the Red Hat elfutils code and other
+   code used in conjunction with Red Hat elfutils except the Non-GPL Code
+   covered by this exception.  If you modify this file, you may extend this
+   exception to your version of the file, but you are not obligated to do
+   so.  If you do not wish to provide this exception without modification,
+   you must delete this exception statement from your version and license
+   this file solely under the GPL without exception.
+
+   Red Hat elfutils is an included package of the Open Invention Network.
+   An included package of the Open Invention Network is a package for which
+   Open Invention Network licensees cross-license their patents.  No patent
+   license is granted, either expressly or impliedly, by designation as an
+   included package.  Should you wish to participate in the Open Invention
+   Network licensing program, please visit www.openinventionnetwork.com
+   <http://www.openinventionnetwork.com>.  */
+
+#ifndef _ELFUTILS_DWARF
+#define _ELFUTILS_DWARF	1
+
+#include "libdw.h"
+#include "dwarf.h"
+#include <stdexcept>
+#include <iterator>
+
+#include <cstring>
+#include <iostream>
+#include <sstream>
+#include <list>
+#include <map>
+#include <stack>
+#include <algorithm>
+#include <functional>
+
+// DWARF reader interfaces: front end to <libdw.h> routines
+namespace elfutils
+{
+  template<typename key1, typename value1, class pair2>
+  inline bool operator== (const std::pair<key1, value1> &a, const pair2 &b)
+  {
+    return a.first == b.first && a.second == b.second;
+  }
+
+  // One DWARF object file.
+  class dwarf
+  {
+  private:
+    template<const char *lookup_known (int)>
+    static inline std::string known_name (int code)
+    {
+      const char *known = lookup_known (code);
+      if (known != NULL)
+	return std::string (known);
+      std::ostringstream os;
+      os.setf(std::ios::hex, std::ios::basefield);
+      os << code;
+      return os.str ();
+    }
+
+  public:
+    static const char *known_attribute (int);
+    static const char *known_tag (int);
+
+    static inline std::string attribute_name (int code)
+    {
+      return known_name<known_attribute> (code);
+    }
+    static inline std::string tag_name (int code)
+    {
+      return known_name<known_tag> (code);
+    }
+
+    template<class attribute>
+    static inline std::string attribute_name (const attribute &attr)
+    {
+      int code = attr.first;
+      return attribute_name (code);
+    }
+
+  private:
+    // XXX make this an instance method to include irritant context
+    static void throw_libdw (void) // XXX raises (...)
+    {
+      throw std::runtime_error(::dwarf_errmsg (-1));
+    }
+    static inline void xif (bool fail)
+    {
+      if (unlikely (fail))
+	throw_libdw ();
+    }
+
+    template<class raw, typename raw_element, typename element,
+	     bool skip (const raw_element &)>
+    class skipping_wrapper
+    {
+    protected:
+      typedef typename raw::const_iterator raw_iterator;
+
+      raw _m_raw;
+
+    public:
+      inline skipping_wrapper (raw raw) : _m_raw (raw) {}
+
+    public:
+      /*
+	iterator: wraps raw iterator, skips DW_AT_sibling
+	size/empty: search for DW_AT_sibling, adjust raw size
+      */
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, element>
+      {
+	friend class skipping_wrapper<raw, raw_element, element, skip>;
+      private:
+	raw_iterator _m_raw;
+	const raw_iterator _m_end;
+
+	inline void jiggle ()
+	{
+	  while (_m_raw != _m_end && unlikely (skip (*_m_raw)))
+	    ++_m_raw;
+	}
+
+      public:
+
+	// Start at the raw position and skip as necessary.
+	const_iterator (const raw_iterator &begin, const raw_iterator &end)
+	  : _m_raw (begin), _m_end (end)
+	{
+	  jiggle ();
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_raw = other._m_raw;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_raw == other._m_raw;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  ++_m_raw;
+	  jiggle ();
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+
+	inline element operator* () const
+	{
+	  return static_cast<element> (*_m_raw);
+	}
+      };
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (_m_raw.begin (), _m_raw.end ());
+      }
+      inline const_iterator end () const
+      {
+	const raw_iterator raw_end = _m_raw.end ();
+	return const_iterator (raw_end, raw_end);
+      }
+    };
+
+  public:
+    /*
+      getstring
+    */
+
+    class attribute;
+    class attr_value;
+
+    class debug_info_entry
+    {
+    private:
+      ::Dwarf_Die _m_die;
+      inline ::Dwarf_Die *thisdie () const
+      {
+	return const_cast< ::Dwarf_Die *> (&_m_die);
+      }
+
+      friend class dwarf;
+    protected:
+
+      inline debug_info_entry ()
+      {
+	memset (&_m_die, 0, sizeof _m_die);
+      }
+
+      inline debug_info_entry (::Dwarf *dw, ::Dwarf_Off off)
+      {
+	xif (::dwarf_offdie (dw, off, &_m_die) == NULL);
+      }
+
+    public:
+      // Containers, see class definitions below.
+      class children;
+      inline children children () const;
+      class raw_attributes;
+      raw_attributes raw_attributes () const;
+      class attributes;
+      attributes attributes () const;
+
+      inline int tag () const
+      {
+	int t = ::dwarf_tag (thisdie ());
+	xif (t <= 0);
+	return t;
+      }
+
+      bool has_children () const
+      {
+	int has = ::dwarf_haschildren (thisdie ());
+	xif (has < 0);
+	return has != 0;
+      }
+
+      /*
+	const char *tag_name () const
+	const_string tag_name () const // "name" or "0x123"
+      */
+
+      template<class die>
+      bool operator== (const die &other) const
+      {
+	return (attributes () == other.attributes ()
+		&& children () == other.children ());
+      }
+      template<class die>
+      bool operator!= (const die &other) const
+      {
+	return !(*this == other);
+      }
+
+      ::Dwarf_Off offset () const
+      {
+	return ::dwarf_dieoffset (thisdie ());
+      }
+    };
+
+    // Container for list of child DIEs, intended to be a compatible with
+    // a read-only, unidirectional subset of std::list<debug_info_entry>.
+    class debug_info_entry::children
+    {
+      friend class debug_info_entry;
+    protected:
+      const debug_info_entry &_m_die;
+
+      inline children (const debug_info_entry &die) : _m_die (die) {}
+
+    public:
+
+      bool empty () const
+      {
+	return begin () == end ();
+      }
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, debug_info_entry>
+      {
+	friend class debug_info_entry;
+      private:
+	debug_info_entry _m_die;
+
+	inline const_iterator () {}
+	inline const_iterator (const debug_info_entry &parent)
+	{
+	  int result = ::dwarf_child (parent.thisdie (), &_m_die._m_die);
+	  xif (result < 0);
+	}
+
+      public:
+
+	inline const debug_info_entry &operator* () const
+	{
+	  return _m_die;
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_die._m_die.addr == other._m_die._m_die.addr;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  int result = ::dwarf_siblingof (&_m_die._m_die, &_m_die._m_die);
+	  xif (result < 0);
+	  if (result > 0)	// Hit the end.
+	    *this = const_iterator ();
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+      const_iterator begin () const
+      {
+	return const_iterator (_m_die);
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator ();
+      }
+
+      template<class other_children>
+      bool operator== (const other_children &other) const
+      {
+	return std::equal (begin (), end (), other.begin ());
+      }
+      template<class other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    // Container for list of raw attributes as (name, value) pairs,
+    // intended to be compatible with a read-only, unidirectional
+    // subset of std::list<std::pair<int, attr_value>>.
+    class debug_info_entry::raw_attributes
+    {
+      friend class debug_info_entry;
+    private:
+      const debug_info_entry &_m_die;
+
+      raw_attributes (const debug_info_entry &die) : _m_die (die) {}
+
+    public:
+
+      size_t size () const;
+      inline bool empty () const
+      {
+	return size () == 0;
+      }
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, attribute>
+      {
+	friend class raw_attributes;
+      private:
+	debug_info_entry _m_die;
+	ptrdiff_t _m_offset; // Offset for next iteration in dwarf_getattrs.
+	::Dwarf_Attribute _m_attr;
+
+	/* We get called up to twice per iteration.  The first time, we
+	   store *ATTR in the instance variable and return DWARF_CB_OK so
+	   that we might be called again.  The second time, we return
+	   DWARF_CB_ABORT so that the iteration will stop at the next
+	   attribute's offset.  */
+	static int getattrs_callback (Dwarf_Attribute *attr, void *arg)
+	{
+	  const_iterator *i = static_cast<const_iterator *> (arg);
+	  if (i->_m_attr.valp == NULL)
+	    {
+	      i->_m_attr = *attr;
+	      return DWARF_CB_OK;
+	    }
+	  return DWARF_CB_ABORT;
+	}
+
+	inline const_iterator (const debug_info_entry &die, ptrdiff_t offset)
+	  : _m_die (die), _m_offset (offset) {}
+
+      public:
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  _m_offset = other._m_offset;
+	  _m_attr = other._m_attr;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return (_m_die._m_die.addr == other._m_die._m_die.addr
+		  && _m_offset == other._m_offset);
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  _m_attr.valp = NULL;
+	  int result = ::dwarf_getattrs (&_m_die._m_die, &getattrs_callback,
+					 (void *) this, _m_offset);
+	  xif (result < 0);
+	  _m_offset = result;
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+
+	inline attribute operator* () const
+	{
+	  return attribute (_m_attr);
+	}
+      };
+      inline const_iterator begin () const
+      {
+	const_iterator i = const_iterator (_m_die, 0);
+	return ++i;
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator (_m_die, 1);
+      }
+
+      // XXX can do faster internal (?)
+      inline const_iterator find (int name) const
+      {
+	const_iterator i = begin ();
+	while (i != end () && (*i).first != name)
+	  ++i;
+	return i;
+      }
+    };
+
+  private:
+    static inline bool skip_sibling (const attribute &attr)
+    {
+      return attr.first == ::DW_AT_sibling;
+    }
+
+    typedef skipping_wrapper<class debug_info_entry::raw_attributes,
+			     attribute, attribute, skip_sibling>
+    attributes_base;
+
+  public:
+    // Container for attributes, indexed by name, intended to be compatible
+    // with a read-only subset of std::unordered_map<int, attr_value>.
+    // This excludes DW_AT_sibling.
+    class debug_info_entry::attributes : public attributes_base
+    {
+      friend class dwarf;
+    private:
+      inline attributes (class raw_attributes raw) : attributes_base (raw) {}
+
+    public:
+      typedef attributes_base::const_iterator const_iterator;
+
+      /*
+	iterator: wraps raw_attributes iterator, skips DW_AT_sibling
+	size/empty: search for DW_AT_sibling, adjust raw_attributes size
+       */
+
+      inline const_iterator find (int name) const
+      {
+	if (unlikely (name == ::DW_AT_sibling))
+	  return end ();
+	return const_iterator (_m_raw.find (name), _m_raw.end ());
+      }
+
+      inline const attr_value at (int name)
+      {
+	const_iterator i = find (name);
+	if (unlikely (i == end ()))
+	  throw std::out_of_range ("XXX");
+	return (*i).second;
+      }
+      inline const attr_value operator[] (int name)
+      {
+	return at (name);
+      }
+
+      // We are rvalue-coercible into a std::map, which is sorted by name.
+      inline operator std::map<int, attr_value> () const
+      {
+	return std::map<int, attr_value> (begin (), end ());
+      }
+
+      template<class attrs>
+      bool operator== (const attrs &other) const
+      {
+	/* Our container is unordered (i.e., in file order).  A set of
+	   attributes is conceptually equal if all the pairs match,
+	   regardless of the order.  But the std::equal algorithm will
+	   compare corresponding elements in order.  So we need an ordered
+	   map of our attributes for the comparison.  */
+	const std::map<int, attr_value> mine = *this;
+	const std::map<int, attr_value> &his = other;
+	return mine == his;
+      }
+      template<class attrs>
+      bool operator!= (const attrs &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    // This describes the value of an attribute.
+    // XXX dummy for now
+    class attr_value
+    {
+    public:
+      inline bool operator== (const attr_value &other) const
+      {
+	return true;		// XXX dummy value comparison always true
+      }
+      inline bool operator!= (const attr_value &other) const
+      {
+	return !(*this == other);
+      }
+
+      debug_info_entry ref () const
+      {
+	return debug_info_entry (); // XXX dummy hack
+      }
+    };
+
+    // This describes one attribute, equivalent to pair<const int, attr_value>.
+    class attribute
+    {
+      friend class debug_info_entry::raw_attributes::const_iterator;
+    private:
+      const ::Dwarf_Attribute _m_attr;
+      inline ::Dwarf_Attribute *thisattr () const
+      {
+	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
+      }
+
+      class lhs
+      {
+	friend class attribute;
+      private:
+	const attribute &_m_attr;
+
+	lhs (attribute &attr) : _m_attr (attr) {}
+
+      public:
+	operator int () const
+	{
+	  return ::dwarf_whatattr (_m_attr.thisattr ());
+	}
+      };
+
+      attribute (const ::Dwarf_Attribute &attr)
+	: _m_attr (attr), first (*this) {}
+
+    public:
+      lhs first;
+      attr_value second;
+
+      // This lets pair<...> x = (attribute) y work.
+      operator std::pair<const int, attr_value> () const
+      {
+	return std::make_pair (static_cast<int> (first), second);
+      }
+
+      template<typename pair>
+      inline bool operator== (const pair &other) const
+      {
+	return first == other.first && second == other.second;
+      }
+      template<typename pair>
+      inline bool operator!= (const pair &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    class raw_compile_unit : public debug_info_entry
+    {
+    public:
+      inline raw_compile_unit (const debug_info_entry &die)
+	: debug_info_entry (die) {}
+
+      /*
+	containers/iterators:
+
+	lines
+	macros
+
+	abbrevs (punt)
+
+      */
+    };
+
+    // Same as raw_compile_unit, but the compile_unit::children
+    // container flattens DW_TAG_imported_unit children.
+    class compile_unit : public raw_compile_unit
+    {
+    public:
+      compile_unit (raw_compile_unit raw) : raw_compile_unit (raw) {}
+
+      class children : public raw_compile_unit::children
+      {
+	friend class compile_unit;
+      private:
+
+	inline children (const compile_unit &cu)
+	  : raw_compile_unit::children::children (cu) {}
+
+      public:
+
+	class const_iterator
+	  : public std::iterator<std::input_iterator_tag, debug_info_entry>
+	{
+	  friend class children;
+	private:
+
+	  typedef raw_compile_unit::children::const_iterator raw_iterator;
+	  std::stack<raw_iterator> _m_stack;
+	  const raw_iterator _m_end;
+
+	  /* Push and pop until either _m_stack.top () == _m_end or
+	     it's looking at a DIE other than DW_TAG_imported_unit.  */
+	  inline void jiggle ()
+	  {
+	    while (true)
+	      {
+		raw_iterator &i = _m_stack.top ();
+
+		if (i == _m_end)
+		  {
+		    /* We're at the end of this raw_compile_unit.
+		       Pop out to the iterator on the importing unit.  */
+		    _m_stack.pop ();
+
+		    if (_m_stack.empty ())
+		      // That was the outermost unit, this is the end.
+		      break;
+
+		    continue;
+		  }
+
+		if ((*i).tag () == ::DW_TAG_imported_unit)
+		  // We have an imported unit.  Look at its referent.
+		  _m_stack.push ((*i).attributes ().at (::DW_AT_import)
+				 .ref ().children ().begin ());
+		else
+		  // This is some other DIE.  Iterate on it.
+		  break;
+	      }
+	  }
+
+	  inline const_iterator (const raw_iterator &end) : _m_end (end) {}
+
+	  inline const_iterator (const raw_iterator &end, const raw_iterator &i)
+	    : _m_end (end)
+	  {
+	    _m_stack.push (i);
+	    jiggle ();
+	  }
+
+	public:
+
+	  inline const_iterator &operator= (const const_iterator &other)
+	  {
+	    _m_stack = other._m_stack;
+	    return *this;
+	  }
+
+	  inline bool operator== (const_iterator &other) const
+	  {
+	    return _m_stack == other._m_stack;
+	  }
+	  inline bool operator!= (const_iterator &other) const
+	  {
+	    return !(*this == other);
+	  }
+
+	  inline const debug_info_entry &operator* () const
+	  {
+	    return *_m_stack.top ();
+	  }
+
+	  inline const_iterator &operator++ () // prefix
+	  {
+	    ++_m_stack.top ();
+	    jiggle ();
+	    return *this;
+	  }
+	  inline const_iterator operator++ (int) // postfix
+	  {
+	    const_iterator prev = *this;
+	    ++*this;
+	    return prev;
+	  }
+	};
+
+	const_iterator begin () const
+	{
+	  return const_iterator (_m_die.children ().end (),
+				 _m_die.children ().begin ());
+	}
+	const_iterator end () const
+	{
+	  return const_iterator (_m_die.children ().end ());
+	}
+
+	template<class other_children>
+	bool operator== (const other_children &other) const
+	{
+	  return std::equal (begin (), end (), other.begin ());
+	}
+	template<class other_children>
+	bool operator!= (const other_children &other) const
+	{
+	  return !(*this == other);
+	}
+      };
+      inline children children () const
+      {
+	return children::children (*this);
+      }
+    };
+
+    // Container for raw CUs in file order, intended to be compatible
+    // with a read-only subset of std::list<raw_compile_unit>.
+    class raw_compile_units
+    {
+      friend class dwarf;
+    private:
+      const dwarf &_m_file;
+
+      raw_compile_units (const dwarf &file) : _m_file (file) {}
+
+    public:
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, raw_compile_unit>
+      {
+	friend class raw_compile_units;
+      private:
+	debug_info_entry _m_die;
+	const dwarf *_m_file;	// XXX
+	::Dwarf_Off _m_next;	// XXX
+
+	inline const_iterator ()
+	  : _m_file (NULL), _m_next (-1) {} // end () value
+	inline const_iterator (const dwarf &file) : _m_file (&file), _m_next (0)
+	{
+	  ++*this;
+	}
+
+      public:
+
+	inline const debug_info_entry &operator* () const
+	{
+	  return _m_die;
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  _m_next = other._m_next;
+	  _m_file = other._m_file; // XXX
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_next == other._m_next;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  // XXX should be rewritten to use libdw_findcu internals
+	  // slow way for first crack to avoid DSO issues
+	  _m_next = _m_file->nextcu (_m_next, _m_die.thisdie ());
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      const_iterator begin () const
+      {
+	return const_iterator (_m_file);
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator ();
+      }
+    };
+    inline raw_compile_units raw_compile_units () const
+    {
+      return raw_compile_units::raw_compile_units (*this);
+    }
+
+  private:
+    static inline bool skip_partial_unit (const raw_compile_unit &unit)
+    {
+      switch (unit.tag ())
+	{
+	case ::DW_TAG_partial_unit:
+	  return true;
+	case ::DW_TAG_compile_unit:
+	  return false;
+	default:
+	  throw std::exception(); // XXX invalid dwarf
+	}
+    }
+
+    typedef skipping_wrapper<class raw_compile_units,
+			     raw_compile_unit, compile_unit,
+			     skip_partial_unit> compile_units_base;
+
+  public:
+
+    // Container for logical CUs in file order, intended to be compatible
+    // with a read-only subset of std::list<compile_unit>.
+    class compile_units : public compile_units_base
+    {
+      friend class dwarf;
+    private:
+      compile_units (class raw_compile_units raw) : compile_units_base (raw) {}
+
+    public:
+
+      template<class units>
+      bool operator== (const units &other) const
+      {
+	return std::equal (begin (), end (), other.begin ());
+      }
+      template<class units>
+      bool operator!= (const units &other) const
+      {
+	return !(*this == other);
+      }
+    };
+    inline class compile_units compile_units () const
+    {
+      return compile_units::compile_units (raw_compile_units ());
+    }
+
+    /*
+      raw CU: compile_unit or partial_unit, raw DIE children
+      logical CU: compile_unit, DIE children with imported_unit replaced
+
+      containers/iterators:
+      raw CU in file order
+      pubnames: list of (CU, DIE, FQ name string)
+      aranges: list of (start, len, CU file offset)
+      raw CU by addr (getarange_addr)
+
+      logical CU in file order
+      logical CU by addr
+
+    */
+
+  private:
+    ::Dwarf *_m_dw;
+
+  public:
+    // XXX temp hack
+    inline ::Dwarf_Off nextcu (::Dwarf_Off offset, ::Dwarf_Die *die) const
+    {
+      ::Dwarf_Off next;
+      ::size_t header_size;
+      int result = ::dwarf_nextcu (_m_dw, offset, &next, &header_size,
+				   NULL, NULL, NULL);
+      xif (result < 0);
+      if (result == 0)
+	xif (::dwarf_offdie (_m_dw, offset + header_size, die) == NULL);
+      else
+	memset (die, 0, sizeof *die);
+      return next;
+    }
+
+    dwarf (::Dwarf *dw) : _m_dw (dw) {};
+
+    template<class file>
+    inline bool operator== (const file &other) const
+    {
+      return compile_units () == other.compile_units ();
+    }
+    template<class file>
+    inline bool operator!= (const file &other) const
+    {
+      return !(*this == other);
+    }
+  };
+
+  inline class dwarf::debug_info_entry::children
+  dwarf::debug_info_entry::children () const
+  {
+    return children::children (*this);
+  }
+
+  inline class dwarf::debug_info_entry::raw_attributes
+  dwarf::debug_info_entry::raw_attributes () const
+  {
+    return raw_attributes::raw_attributes (*this);
+  }
+
+  inline class dwarf::debug_info_entry::attributes
+  dwarf::debug_info_entry::attributes () const
+  {
+    return attributes::attributes (raw_attributes ());
+  }
+};
+
+// DWARF writer interfaces (pure object construction)
+namespace elfutils
+{
+  class dwarf_output
+  {
+  public:
+    class compile_units;
+
+    class attr_value : public dwarf::attr_value {}; // XXX later
+
+    class debug_info_entry
+    {
+    public:
+      class children : public std::list<debug_info_entry>
+      {
+	friend class debug_info_entry;
+      private:
+        children () {}
+
+	template<class childrens>
+	children (const childrens &other)
+	  : std::list<debug_info_entry>  (other.begin (), other.end ()) {}
+      };
+      class attributes : public std::map<int, attr_value>
+      {
+	friend class debug_info_entry;
+      private:
+	attributes () {}
+
+	template<class attrs>
+	attributes (const attrs &other)
+	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
+      };
+
+    private:
+      const int _m_tag;
+      attributes _m_attributes;
+      children _m_children;
+
+    public:
+      debug_info_entry (int t) : _m_tag (t)
+      {
+	if (unlikely (t <= 0))
+	  throw std::invalid_argument ("invalid tag");
+      }
+
+      /* The template constructor lets us copy in from any class that has
+	 compatibly iterable containers for attributes and children.  */
+      template<class die>
+      debug_info_entry (const die &die)
+	: _m_tag (die.tag ()),
+	  _m_attributes (die.attributes ()),
+	  _m_children (die.children ())
+      {}
+
+      inline int tag () const
+      {
+	return _m_tag;
+      }
+
+      inline bool has_children () const
+      {
+	return !_m_children.empty ();
+      }
+
+      inline children &children ()
+      {
+	return _m_children;
+      }
+
+      inline attributes &attributes ()
+      {
+	return _m_attributes;
+      }
+
+      template<class die>
+      bool operator== (const die &other) const
+      {
+	return (other.attributes () == attributes ()
+		&& other.children () == children ());
+      }
+    };
+
+    typedef debug_info_entry::attributes::value_type attribute;
+
+    class compile_unit : public debug_info_entry
+    {
+      friend class compile_units;
+    private:
+      inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
+
+      template<class die>
+      compile_unit (const die &die) : debug_info_entry (die)
+      {
+	if (die.tag () != ::DW_TAG_compile_unit)
+	  throw std::invalid_argument ("not a compile_unit entry");
+      }
+    };
+
+    // Main container anchoring all the output.
+    class compile_units : public std::list<compile_unit>
+    {
+      friend class dwarf_output;
+    private:
+      // Default constructor: an empty container, no CUs.
+      inline compile_units () {}
+
+      // Constructor copying CUs from input container.
+      template<class input>
+      compile_units(const input &units)
+	: std::list<compile_unit> (units.begin (), units.end ())
+      {}
+
+    public:
+      inline compile_unit &new_unit ()
+      {
+	compile_unit nu;
+	push_back (nu);
+	return back ();
+      }
+    };
+
+  private:
+    compile_units _m_units;
+
+  public:
+    class compile_units &compile_units ()
+    {
+      return _m_units;
+    }
+
+  public:
+    // Default constructor: an empty container, no CUs.
+    inline dwarf_output () {}
+
+    // Constructor copying CUs from an input file (dwarf or dwarf_output).
+    template<class input>
+    dwarf_output (const input &dw) : _m_units (dw.compile_units ()) {}
+  };
+};
+
+#endif	// <elfutils/dwarf>
