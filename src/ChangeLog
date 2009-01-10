@@ -1,3 +1,9 @@
+2009-01-10  Petr Machata  <pmachata@redhat.com>
+
+	* readelf.c: Extract functions that format dwarf enums into a file
+	of its own, so it can be shared with dwarflint.
+	* dwarfstrings.h: That file.
+
 2009-01-09  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: Sort the abbrev tables and look up abbreviations
