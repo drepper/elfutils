@@ -23,6 +23,10 @@
 	* dwarflint.c: Checking for zero padding and unreferenced bytes.
 	CU size and padding at the end of CU are now checked.
 
+2009-01-07  Ulrich Drepper  <drepper@redhat.com>
+
+	* ld.c (ld_new_searchdir): Fix adding to search path list.
+
 2009-01-07  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: Check that the sibling doesn't point to the
