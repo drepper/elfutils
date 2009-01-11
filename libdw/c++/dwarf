@@ -204,12 +204,12 @@ namespace elfutils
 
       raw _m_raw;
 
-    public:
+    protected:
       inline skipping_wrapper (const raw &raw) : _m_raw (raw) {}
 
+    public:
       inline skipping_wrapper (const skipping_wrapper &w) : _m_raw (w._m_raw) {}
 
-    public:
       /*
 	iterator: wraps raw iterator, skips DW_AT_sibling
 	size/empty: search for DW_AT_sibling, adjust raw size
@@ -400,7 +400,6 @@ namespace elfutils
 	}
 
       public:
-
 	inline const_iterator (const const_iterator &i) : _m_die (i._m_die) {}
 
 	inline const debug_info_entry &operator* () const
@@ -1201,14 +1200,19 @@ namespace elfutils
     private:
       inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
 
-    public:
       // XXX should be private
+    public:
       template<typename die>
       compile_unit (const die &die) : debug_info_entry (die)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
 	  throw std::invalid_argument ("not a compile_unit entry");
       }
+
+      /* XXX doesn't help
+	public:
+	compile_unit (const compile_unit &u) : debug_info_entry (u) {}
+      */
     };
 
     // Main container anchoring all the output.
