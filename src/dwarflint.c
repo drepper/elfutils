@@ -442,7 +442,7 @@ static void coverage_free (struct coverage *ar);
 
 /* Functions for checking of structural integrity.  */
 
-static void check_debug_info_structural (struct read_ctx *ctx,
+static bool check_debug_info_structural (struct read_ctx *ctx,
 					 struct abbrev_table *abbrev_chain,
 					 Elf_Data *strings);
 static int read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
@@ -452,7 +452,7 @@ static int read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 			   struct addr_record *die_refs,
 			   struct addr_record *die_loc_refs,
 			   struct coverage *strings_coverage);
-static void check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
+static bool check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
 				 struct abbrev_table *abbrev_chain,
 				 Elf_Data *strings, bool dwarf_64,
 				 struct addr_record *die_addrs,
@@ -1112,29 +1112,31 @@ coverage_free (struct coverage *ar)
   free (ar->buf);
 }
 
-static void
+static bool
 check_addr_record_addr (struct addr_record *ar, uint64_t addr)
 {
-  if (!addr_record_has_addr (ar, addr))
+  bool retval = addr_record_has_addr (ar, addr);
+  if (!retval)
+    /* XXX Write where it happened, ideally which DIE has the reference.  */
     ERROR ("Unresolved DIE reference to " PRI_DIE ".\n", addr);
+  return retval;
 }
 
-static void
+static bool
 check_die_references (struct addr_record *die_addrs,
 		      struct addr_record *die_refs)
 {
-  for (size_t i = 0; i < die_refs->size; )
+  bool retval = true;
+  for (size_t i = 0; i < die_refs->size; ++i)
     {
       uint64_t addr = die_refs->addrs[i];
-      check_addr_record_addr (die_addrs, addr);
-
-      for (; i < die_refs->size; ++i)
-	if (die_refs->addrs[i] != addr)
-	  break;
+      if (!check_addr_record_addr (die_addrs, addr))
+	retval = false;
     }
+  return retval;
 }
 
-static void
+static bool
 check_debug_info_structural (struct read_ctx *ctx,
 			     struct abbrev_table *abbrev_chain,
 			     Elf_Data *strings)
@@ -1148,6 +1150,7 @@ check_debug_info_structural (struct read_ctx *ctx,
   memset (die_refs, 0, sizeof (*die_refs));
 
   bool recording = true;
+  bool retval = true;
 
   struct coverage strings_coverage_mem;
   struct coverage *strings_coverage = NULL;
@@ -1192,7 +1195,8 @@ check_debug_info_structural (struct read_ctx *ctx,
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
 	  ERROR (PRI_CU ": can't read CU length.\n", cu_off);
-	  return;
+	  retval = false;
+	  break;
 	}
       if (size32 == 0 && check_zero_padding (ctx))
 	break;
@@ -1204,7 +1208,8 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  if (!read_ctx_read_8ubyte (ctx, &size))
 	    {
 	      ERROR (PRI_CU ": can't read 64bit CU length.\n", cu_off);
-	      return;
+	      retval = false;
+	      break;
 	    }
 
 	  dwarf_64 = true;
@@ -1215,14 +1220,19 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  ERROR (PRI_CU ": section doesn't have enough data"
 		 " to read CU of size %" PRIx64 ".\n", cu_off, size);
 	  ctx->ptr = ctx->end;
+	  retval = false;
 	  break;
 	}
 
       /* version + debug_abbrev_offset + address_size */
       uint64_t cu_header_size = 2 + (dwarf_64 ? 8 : 4) + 1;
       if (size < cu_header_size)
-	ERROR (PRI_CU ": claimed length of %" PRIx64
-	       " doesn't even cover CU header.\n", cu_off, size);
+	{
+	  ERROR (PRI_CU ": claimed length of %" PRIx64
+		 " doesn't even cover CU header.\n", cu_off, size);
+	  retval = false;
+	  break;
+	}
       else
 	{
 	  /* Make CU context begin just before the CU length, so that DIE
@@ -1232,8 +1242,13 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  read_ctx_init_sub (&cu_ctx, ctx->dbg, ctx->data, cu_begin, cu_end);
 	  cu_ctx.ptr = ctx->ptr;
 
-	  check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
-			       dwarf_64, die_addrs, die_refs, strings_coverage);
+	  if (!check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
+				    dwarf_64, die_addrs, die_refs,
+				    strings_coverage))
+	    {
+	      retval = false;
+	      break;
+	    }
 	  if (cu_ctx.ptr != cu_ctx.end && !check_zero_padding (&cu_ctx))
 	    MESSAGE_PADDING_N0 (mc_die_other,
 				PRI_CU, read_ctx_get_offset (ctx), size, cu_off);
@@ -1242,13 +1257,16 @@ check_debug_info_structural (struct read_ctx *ctx,
       ctx->ptr += size;
     }
 
-  if (ctx->ptr != ctx->end)
+  // Only check this if above we have been successful.
+  if (retval && ctx->ptr != ctx->end)
     MESSAGE (mc_die_other | mc_impact_4,
 	     ".debug_info: CU lengths don't exactly match Elf_Data contents.");
 
+  bool references_sound = true;
   if (recording)
     {
-      check_die_references (die_addrs, die_refs);
+      if (!check_die_references (die_addrs, die_refs))
+	references_sound = false;
       addr_record_free (&die_addrs_mem);
       addr_record_free (&die_refs_mem);
     }
@@ -1273,9 +1291,12 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  MESSAGE_PADDING_N0 (mc_strings, ".debug_str", begin, end);
       }
 
-      coverage_find_holes (strings_coverage, hole);
+      if (retval)
+	coverage_find_holes (strings_coverage, hole);
       coverage_free (strings_coverage);
     }
+
+  return retval && references_sound;
 }
 
 
@@ -1646,7 +1667,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
   return got_die ? 1 : 0;
 }
 
-static void
+static bool
 check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
 		     struct abbrev_table *abbrev_chain,
 		     Elf_Data *strings, bool dwarf_64,
@@ -1662,37 +1683,39 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
   if (!read_ctx_read_2ubyte (ctx, &version))
     {
       ERROR (PRI_CU ": can't read version.\n", cu_off);
-      return;
+      return false;
     }
 
   if (version < 2 || version > 3)
     {
       ERROR (PRI_CU ": %s version %d.\n",
 	     cu_off, (version < 2 ? "Invalid" : "Unsupported"), version);
-      return;
+      return false;
     }
 
   if (version == 2 && dwarf_64)
+    /* Keep going.  It's a standard violation, but we may still be
+       able to read the CU and do high-level checks.  */
     ERROR (PRI_CU ": Invalid 64-bit CU in DWARF 2 format.\n", cu_off);
 
   /* Abbrev offset.  */
   if (!read_ctx_read_offset (ctx, dwarf_64, &abbrev_offset))
     {
       ERROR (PRI_CU ": can't read abbrev offset.\n", cu_off);
-      return;
+      return false;
     }
 
   /* Address size.  */
   if (!read_ctx_read_ubyte (ctx, &address_size))
     {
       ERROR (PRI_CU ": can't read address size.\n", cu_off);
-      return;
+      return false;
     }
   if (address_size != 4 && address_size != 8)
     {
       ERROR (PRI_CU ": Invalid address size: %d (only 4 or 8 allowed).\n",
 	     cu_off, address_size);
-      return;
+      return false;
     }
 
   struct abbrev_table *abbrevs = abbrev_chain;
@@ -1705,7 +1728,7 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
       ERROR (PRI_CU
 	     ": Couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
 	     cu_off, abbrev_offset);
-      return;
+      return false;
     }
 
   struct addr_record die_loc_refs_mem;
@@ -1716,6 +1739,7 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
       memset (die_loc_refs, 0, sizeof (*die_loc_refs));
     }
 
+  bool retval = true;
   if (read_die_chain (ctx, cu_off, abbrevs, strings,
 		      dwarf_64, address_size == 8,
 		      die_addrs, die_refs, die_loc_refs,
@@ -1726,8 +1750,14 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
 	  ERROR (PRI_CU ": Abbreviation with code %" PRIu64 " is never used.\n",
 		 cu_off, abbrevs->abbr[i].code);
 
-      check_die_references (die_addrs, die_loc_refs);
+      if (!check_die_references (die_addrs, die_loc_refs))
+	retval = false;
     }
+  else
+    retval = false;
 
-  addr_record_free (&die_loc_refs_mem);
+  if (die_loc_refs)
+    addr_record_free (die_loc_refs);
+
+  return retval;
 }

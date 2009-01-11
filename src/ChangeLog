@@ -1,10 +1,18 @@
+2009-01-11  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c: A couple small fixes across the code.
+	(check_debug_info_structural): Return bool.
+	(check_cu_structural): Likewise.
+	(check_addr_record_addr): Likewise.
+	(check_die_references): Likewise.
+
 2009-01-10  Roland McGrath  <roland@redhat.com>
 
 	* dwarfcmp.cc (test_writer): New variable.
 	(options, parse_opt): Grok -T/--test-writer to set it.
 	(main): When set, exercise dwarf_output constructors and comparators.
 
-	* dwarflint.c (options, parse_opt): Replace --gnu with
+	* dwarflint.c (options, parse_opt): Replace --no-debug with
 	-i/--ignore-missing, to match dwarfcmp.
 
 2009-01-10  Petr Machata  <pmachata@redhat.com>
