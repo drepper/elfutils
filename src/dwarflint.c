@@ -53,7 +53,6 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 #define ARGP_strict	300
 #define ARGP_gnu	301
-#define ARGP_nodebug	302
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -62,8 +61,8 @@ static const struct argp_option options[] =
   { "strict", ARGP_strict, NULL, 0,
     N_("Be extremely strict, flag level 2 features."), 0 },
   { "quiet", 'q', NULL, 0, N_("Do not print anything if successful"), 0 },
-  { "no-debug", ARGP_nodebug, NULL, 0,
-    N_("Accept silently if no debug info is available."), 0 },
+  { "ignore-missing", 'i', NULL, 0,
+    N_("Don't complain if files have no DWARF at all"), 0 },
   { "gnu", ARGP_gnu, NULL, 0,
     N_("Binary has been created with GNU toolchain and is therefore known to be \
 broken in certain ways"), 0 },
@@ -283,7 +282,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       warning_criteria.reject |= mc_acc_bloat;
       break;
 
-    case ARGP_nodebug:
+    case 'i':
       tolerate_nodebug = true;
       break;
 

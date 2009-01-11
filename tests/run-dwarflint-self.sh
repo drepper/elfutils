@@ -30,7 +30,7 @@ runtest()
 {
   for file; do
     if [ -f $file ]; then
-      testrun ../src/dwarflint -q --gnu --no-debug $file ||
+      testrun ../src/dwarflint -q -i --gnu $file ||
       { echo "*** failure in $file"; status=1; }
     fi
   done

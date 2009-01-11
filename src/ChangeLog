@@ -1,3 +1,8 @@
+2009-01-10  Roland McGrath  <roland@redhat.com>
+
+	* dwarflint.c (options, parse_opt): Replace --gnu with
+	-i/--ignore-missing, to match dwarfcmp.
+
 2009-01-10  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: Implement --no-debug: silently accept file, if its

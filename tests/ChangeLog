@@ -1,3 +1,9 @@
+2009-01-10  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarflint-self.sh: --no-debug -> -i
+
+	* run-dwarfcmp-self.sh: Run both with and without -q.
+
 2009-01-10  Petr Machata  <pmachata@redhat.com>
 
 	* run-dwarflint-self.sh: Pass new option --no-debug to dwarflint.

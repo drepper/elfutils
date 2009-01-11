@@ -31,6 +31,7 @@ runtest()
   for file; do
     if [ -f $file ]; then
       testrun ../src/dwarfcmp -q -i $file $file ||
+      testrun ../src/dwarfcmp -i $file $file ||
       { echo "*** failure in $file"; status=1; }
     fi
   done
