@@ -471,12 +471,31 @@ process_file (int fd __attribute__((unused)),
 
   struct read_ctx ctx;
 
-  read_ctx_init (&ctx, dwarf, dwarf->sectiondata[IDX_debug_abbrev]);
-  struct abbrev_table *abbrev_chain = abbrev_table_load (&ctx);
+  /* If we got Dwarf pointer, debug_abbrev and debug_info are present
+     inside the file.  But let's be paranoid.  */
+  Elf_Data *abbrev_data = dwarf->sectiondata[IDX_debug_abbrev];
+  struct abbrev_table *abbrev_chain = NULL;
+  if (likely (abbrev_data != NULL))
+    {
+      read_ctx_init (&ctx, dwarf, abbrev_data);
+      abbrev_chain = abbrev_table_load (&ctx);
+    }
+  else if (!tolerate_nodebug)
+    ERROR (".debug_abbrev data not found.");
 
-  read_ctx_init (&ctx, dwarf, dwarf->sectiondata[IDX_debug_info]);
-  check_debug_info_structural (&ctx, abbrev_chain,
-			       dwarf->sectiondata[IDX_debug_str]);
+  if (abbrev_chain != NULL)
+    {
+      Elf_Data *info_data = dwarf->sectiondata[IDX_debug_info];
+      Elf_Data *str_data = dwarf->sectiondata[IDX_debug_str];
+      /* Same as above...  */
+      if (info_data != NULL && str_data != NULL)
+	{
+	  read_ctx_init (&ctx, dwarf, info_data);
+	  check_debug_info_structural (&ctx, abbrev_chain, str_data);
+	}
+      else if (!tolerate_nodebug)
+	ERROR (".debug_info or .debug_str data not found.");
+    }
 
   abbrev_table_free (abbrev_chain);
 }

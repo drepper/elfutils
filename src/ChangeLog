@@ -1,5 +1,10 @@
 2009-01-11  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c (process_file): Handle absence of .debug_info,
+	.debug_abbrev and .debug_str gracefully.
+
+2009-01-11  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: A couple small fixes across the code.
 	(check_debug_info_structural): Return bool.
 	(check_cu_structural): Likewise.
