@@ -1,5 +1,7 @@
 2009-01-10  Roland McGrath  <roland@redhat.com>
 
+	* run-dwarfcmp-self.sh: Also run with -T.
+
 	* run-dwarflint-self.sh: --no-debug -> -i
 
 	* run-dwarfcmp-self.sh: Run both with and without -q.

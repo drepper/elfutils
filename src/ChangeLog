@@ -1,5 +1,9 @@
 2009-01-10  Roland McGrath  <roland@redhat.com>
 
+	* dwarfcmp.cc (test_writer): New variable.
+	(options, parse_opt): Grok -T/--test-writer to set it.
+	(main): When set, exercise dwarf_output constructors and comparators.
+
 	* dwarflint.c (options, parse_opt): Replace --gnu with
 	-i/--ignore-missing, to match dwarfcmp.
 

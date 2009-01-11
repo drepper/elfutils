@@ -67,6 +67,8 @@ static const struct argp_option options[] =
   { "ignore-missing", 'i', NULL, 0,
     N_("Don't complain if both files have no DWARF at all"), 0 },
 
+  { "test-writer", 'T', NULL, 0, N_("Test DWARF output classes"), 0 },
+
   { NULL, 0, NULL, 0, N_("Miscellaneous:"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
@@ -92,6 +94,9 @@ static bool quiet;
 
 /* Nonzero if missing DWARF is equal DWARF.  */
 static bool missing_ok;
+
+/* Nonzero to test writer classes.  */
+static bool test_writer;
 
 
 static Dwarf *
@@ -295,8 +300,8 @@ main (int argc, char *argv[])
     }
   else
     {
-      elfutils::dwarf file1 (dw1);
-      elfutils::dwarf file2 (dw2);
+      dwarf file1 (dw1);
+      dwarf file2 (dw2);
 
       if (quiet)
 	result = !(file1 == file2);
@@ -304,6 +309,46 @@ main (int argc, char *argv[])
 	result = describe_mismatch (file1.compile_units (),
 				    file2.compile_units (),
 				    context ());
+
+      if (test_writer)
+	{
+	  dwarf_output out1 (file1);
+	  dwarf_output out2 (file2);
+
+# define compare_self(x, y)			\
+	  assert (x == y);			\
+	  assert (!(x != y))
+# define compare_other(x, y)			\
+	  assert (!(x == y) == result);		\
+	  assert (!(x != y) == !result)
+
+	  // Compare self, same type.
+	  compare_self (out1, out1);
+	  compare_self (out2, out2);
+
+	  // Compare self, output == input.
+	  compare_self (out1, file1);
+	  compare_self (out2, file2);
+
+	  // Compare self, input == output.
+	  compare_self (file1, out1);
+	  compare_self (file2, out2);
+
+	  // Compare files, output == output.
+	  compare_other (out1, out2);
+	  compare_other (out2, out1);
+
+	  // Compare files, output vs input.
+	  compare_other (out1, file2);
+	  compare_other (out2, file1);
+
+	  // Compare files, input vs output.
+	  compare_other (file2, out1);
+	  compare_other (file1, out2);
+
+#undef	compare_self
+#undef	compare_other
+	}
     }
 
   return result;
@@ -336,6 +381,10 @@ parse_opt (int key, char *arg,
 
     case 'i':
       missing_ok = true;
+      break;
+
+    case 'T':
+      test_writer = true;
       break;
 
     default:

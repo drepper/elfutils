@@ -64,6 +64,80 @@
 #include <algorithm>
 #include <functional>
 
+/* Abstractly, one DWARF object file consists of a few containers.
+   (We omit .debug_frame for now.  It does not interact with the others.)
+
+   1. list of compilation units		(.debug_info)
+   2. map of PC ranges to CU		(.debug_aranges)
+   3. map of global names to CU+DIE	(.debug_pubnames)
+   4. map of type names to CU+DIE	(.debug_pubtypes)
+
+   These maps refer to the CUs in .debug_info and optimize lookups
+   compared to simple iteration.
+
+   A compile_unit is a debug_info_entry.
+   A debug_info_entry consists of a tag (int/enum), and two containers:
+   children and attributes.  The attributes are an unordered map of name
+   (int/enum) to attribute value (complex variant record).  Children are
+   in an ordered list, each also a debug_info_entry.
+
+   dwarf.compile_units ()		works like list<compile_unit>
+	-> compile_unit : debug_info_entry
+		.attributes ()		like unordered_map<int, attr_value>
+		.children ()		works like list<debug_info_entry>
+			-> debug_info_entry
+				.attributes ()
+				.children ()
+
+  A compile_unit is not deeply special, it's just a debug_info_entry.
+  It has its own class just for some convenience methods that only
+  make sense for a compile_unit DIE.
+
+  This is the "logical" view of the file, grafting and eliding parts of the
+  raw information that are purely the structural elements of DWARF and not
+  part of the abstract semantics.  In the file reader (elfutils::dwarf),
+  these containers form a layer above the raw containers that expose the
+  file data directly (as the libdw C interfaces do).
+
+  dwarf.raw_compile_units ()		works like list<compile_unit>
+	-> compile_unit : debug_info_entry
+		.raw_attributes ()	like unordered_map<int, attr_value>
+		.raw_children ()	works like list<debug_info_entry>
+			-> debug_info_entry
+				.raw_attributes ()
+				.raw_children ()
+
+  compile_units () elides DW_TAG_partial_unit members,
+  raw_compile_units () includes them.
+
+  attributes () elides DW_AT_sibling, raw_attributes () includes it.
+
+  raw_children () reports DW_TAG_imported_unit as any other child.
+  children () flattens imported units into the containing list.
+
+  The == and != comparisons for dwarf and debug_info_entry objects compare
+  their logical containers, not the raw containers.  The comparisons are
+  defined via templates, so you can compare elfutils::dwarf with any other
+  class that implements the same structure of containers with input iterators.
+
+  The elfutils::dwarf class and its inner classes form a thin, read-only
+  layer of virtual containers that ideally could inline away entirely to
+  calls into the C libdw API and small amounts of stack storage.  The tree
+  of objects described above never exists in memory in its entirety.  The
+  objects are constructed on the fly in each call to a container method.
+
+  The output classes elfutils::dwarf_output are template-compatible with
+  the "logical view" interface above, but do not support any of the "raw"
+  container variants.  These == and != comparisons are template-driven too,
+  so all different classes can be compared.
+
+  The output classes have template-driven copy constructors, so they can be
+  copied from files or substructures of the elfutils::dwarf input classes.
+
+  The elfutils::dwarf_output containers are mutable, unlike the input classes.
+
+ */
+
 // DWARF reader interfaces: front end to <libdw.h> routines
 namespace elfutils
 {
@@ -102,7 +176,7 @@ namespace elfutils
       return known_name<known_tag> (code);
     }
 
-    template<class attribute>
+    template<typename attribute>
     static inline std::string attribute_name (const attribute &attr)
     {
       int code = attr.first;
@@ -121,7 +195,7 @@ namespace elfutils
 	throw_libdw ();
     }
 
-    template<class raw, typename raw_element, typename element,
+    template<typename raw, typename raw_element, typename element,
 	     bool skip (const raw_element &)>
     class skipping_wrapper
     {
@@ -131,7 +205,9 @@ namespace elfutils
       raw _m_raw;
 
     public:
-      inline skipping_wrapper (raw raw) : _m_raw (raw) {}
+      inline skipping_wrapper (const raw &raw) : _m_raw (raw) {}
+
+      inline skipping_wrapper (const skipping_wrapper &w) : _m_raw (w._m_raw) {}
 
     public:
       /*
@@ -154,6 +230,9 @@ namespace elfutils
 	}
 
       public:
+
+	const_iterator (const const_iterator &i)
+	  : _m_raw (i._m_raw), _m_end (i._m_end) {}
 
 	// Start at the raw position and skip as necessary.
 	const_iterator (const raw_iterator &begin, const raw_iterator &end)
@@ -238,11 +317,15 @@ namespace elfutils
       }
 
     public:
+      debug_info_entry (const debug_info_entry &die) : _m_die (die._m_die) {}
+
       // Containers, see class definitions below.
-      class children;
-      inline children children () const;
+      class raw_children;
+      inline raw_children raw_children () const;
       class raw_attributes;
       raw_attributes raw_attributes () const;
+      class children;
+      inline children children () const;
       class attributes;
       attributes attributes () const;
 
@@ -265,13 +348,13 @@ namespace elfutils
 	const_string tag_name () const // "name" or "0x123"
       */
 
-      template<class die>
+      template<typename die>
       bool operator== (const die &other) const
       {
 	return (attributes () == other.attributes ()
 		&& children () == other.children ());
       }
-      template<class die>
+      template<typename die>
       bool operator!= (const die &other) const
       {
 	return !(*this == other);
@@ -283,17 +366,19 @@ namespace elfutils
       }
     };
 
-    // Container for list of child DIEs, intended to be a compatible with
+    // Container for raw list of child DIEs, intended to be a compatible with
     // a read-only, unidirectional subset of std::list<debug_info_entry>.
-    class debug_info_entry::children
+    class debug_info_entry::raw_children
     {
       friend class debug_info_entry;
-    protected:
+    private:
       const debug_info_entry &_m_die;
 
-      inline children (const debug_info_entry &die) : _m_die (die) {}
+    protected:
+      inline raw_children (const debug_info_entry &die) : _m_die (die) {}
 
     public:
+      inline raw_children (const raw_children &c) : _m_die (c._m_die) {}
 
       bool empty () const
       {
@@ -315,6 +400,8 @@ namespace elfutils
 	}
 
       public:
+
+	inline const_iterator (const const_iterator &i) : _m_die (i._m_die) {}
 
 	inline const debug_info_entry &operator* () const
 	{
@@ -360,12 +447,12 @@ namespace elfutils
 	return const_iterator ();
       }
 
-      template<class other_children>
+      template<typename other_children>
       bool operator== (const other_children &other) const
       {
 	return std::equal (begin (), end (), other.begin ());
       }
-      template<class other_children>
+      template<typename other_children>
       bool operator!= (const other_children &other) const
       {
 	return !(*this == other);
@@ -384,6 +471,7 @@ namespace elfutils
       raw_attributes (const debug_info_entry &die) : _m_die (die) {}
 
     public:
+      inline raw_attributes (const raw_attributes &a) : _m_die (a._m_die) {}
 
       size_t size () const;
       inline bool empty () const
@@ -420,6 +508,8 @@ namespace elfutils
 	  : _m_die (die), _m_offset (offset) {}
 
       public:
+	inline const_iterator (const const_iterator &i)
+	  : _m_die (i._m_die), _m_offset (i._m_offset), _m_attr (i._m_attr) {}
 
 	inline const_iterator &operator= (const const_iterator &other)
 	{
@@ -480,6 +570,130 @@ namespace elfutils
       }
     };
 
+    // Container for list of child DIEs, intended to be a compatible with
+    // a read-only, unidirectional subset of std::list<debug_info_entry>.
+    // Same as raw_children, but flattens DW_TAG_imported_unit children.
+    class debug_info_entry::children : public debug_info_entry::raw_children
+    {
+      friend class debug_info_entry;
+    private:
+
+      inline children (const debug_info_entry &die)
+	: raw_children::raw_children (die) {}
+
+    public:
+      inline children (const children &c) : raw_children (c) {}
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, debug_info_entry>
+      {
+	friend class children;
+      private:
+
+	typedef raw_children::const_iterator raw_iterator;
+	std::stack<raw_iterator> _m_stack;
+	const raw_iterator _m_end;
+
+	/* Push and pop until either _m_stack.top () == _m_end or
+	   it's looking at a DIE other than DW_TAG_imported_unit.  */
+	inline void jiggle ()
+	{
+	  while (true)
+	    {
+	      raw_iterator &i = _m_stack.top ();
+
+	      if (i == _m_end)
+		{
+		  /* We're at the end of this raw DIE.
+		     Pop out to the iterator on the importing unit.  */
+		  _m_stack.pop ();
+
+		  if (_m_stack.empty ())
+		    // That was the outermost unit, this is the end.
+		    break;
+
+		  continue;
+		}
+
+	      if ((*i).tag () == ::DW_TAG_imported_unit)
+		// We have an imported unit.  Look at its referent.
+		_m_stack.push ((*i).attributes ().at (::DW_AT_import)
+			       .ref ().raw_children ().begin ());
+	      else
+		// This is some other DIE.  Iterate on it.
+		break;
+	    }
+	}
+
+	inline const_iterator (const raw_iterator &end) : _m_end (end) {}
+
+	inline const_iterator (const raw_iterator &end, const raw_iterator &i)
+	  : _m_end (end)
+	{
+	  _m_stack.push (i);
+	  jiggle ();
+	}
+
+      public:
+	inline const_iterator (const const_iterator &i)
+	  : _m_stack (i._m_stack), _m_end (i._m_end) {}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_stack = other._m_stack;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_stack == other._m_stack;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const debug_info_entry &operator* () const
+	{
+	  return *_m_stack.top ();
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  ++_m_stack.top ();
+	  jiggle ();
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      const_iterator begin () const
+      {
+	return const_iterator (raw_children::end (),
+			       raw_children::begin ());
+      }
+      const_iterator end () const
+      {
+	return const_iterator (raw_children::end ());
+      }
+
+      template<typename other_children>
+      bool operator== (const other_children &other) const
+      {
+	return std::equal (begin (), end (), other.begin ());
+      }
+      template<typename other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
   private:
     static inline bool skip_sibling (const attribute &attr)
     {
@@ -487,8 +701,8 @@ namespace elfutils
     }
 
     // Circumvent C++ namespace lookup.
-    typedef class debug_info_entry::raw_attributes debug_info_entry_raw_attributes;
-    typedef skipping_wrapper<debug_info_entry_raw_attributes,
+    typedef class debug_info_entry::raw_attributes debug_info_entry_raw_attrs;
+    typedef skipping_wrapper<debug_info_entry_raw_attrs,
 			     attribute, attribute, skip_sibling>
     attributes_base;
 
@@ -500,9 +714,13 @@ namespace elfutils
     {
       friend class dwarf;
     private:
-      inline attributes (class raw_attributes raw) : attributes_base (raw) {}
+      inline attributes (const class raw_attributes &raw)
+	: attributes_base (raw) {}
 
     public:
+      inline attributes (const class attributes &a)
+	: attributes_base (a) {}
+
       typedef attributes_base::const_iterator const_iterator;
 
       /*
@@ -534,8 +752,15 @@ namespace elfutils
       {
 	return std::map<int, attr_value> (begin (), end ());
       }
+      /*
+      template<typename attrs>
+      inline operator attrs () const
+      {
+	return attrs (begin (), end ());
+      }
+      */
 
-      template<class attrs>
+      template<typename attrs>
       bool operator== (const attrs &other) const
       {
 	/* Our container is unordered (i.e., in file order).  A set of
@@ -544,10 +769,11 @@ namespace elfutils
 	   compare corresponding elements in order.  So we need an ordered
 	   map of our attributes for the comparison.  */
 	const std::map<int, attr_value> mine = *this;
-	const std::map<int, attr_value> &his = other;
+	const std::map<int, attr_value> his = other;
 	return mine == his;
       }
-      template<class attrs>
+
+      template<typename attrs>
       bool operator!= (const attrs &other) const
       {
 	return !(*this == other);
@@ -559,6 +785,9 @@ namespace elfutils
     class attr_value
     {
     public:
+      attr_value () {}
+      attr_value (const attr_value &v) {}
+
       inline bool operator== (const attr_value &other) const
       {
 	return true;		// XXX dummy value comparison always true
@@ -607,10 +836,14 @@ namespace elfutils
       lhs first;
       attr_value second;
 
+      inline attribute (const attribute &a)
+	: _m_attr (a._m_attr), first (*this) {}
+
       // This lets pair<...> x = (attribute) y work.
-      operator std::pair<const int, attr_value> () const
+      template<typename value>
+      operator std::pair<const int, value> () const
       {
-	return std::make_pair (static_cast<int> (first), second);
+	return std::make_pair (static_cast<int> (first), value (second));
       }
 
       template<typename pair>
@@ -625,10 +858,10 @@ namespace elfutils
       }
     };
 
-    class raw_compile_unit : public debug_info_entry
+    class compile_unit : public debug_info_entry
     {
     public:
-      inline raw_compile_unit (const debug_info_entry &die)
+      inline compile_unit (const debug_info_entry &die)
 	: debug_info_entry (die) {}
 
       /*
@@ -642,136 +875,6 @@ namespace elfutils
       */
     };
 
-    // Same as raw_compile_unit, but the compile_unit::children
-    // container flattens DW_TAG_imported_unit children.
-    class compile_unit : public raw_compile_unit
-    {
-    public:
-      compile_unit (raw_compile_unit raw) : raw_compile_unit (raw) {}
-
-      class children : public raw_compile_unit::children
-      {
-	friend class compile_unit;
-      private:
-
-	inline children (const compile_unit &cu)
-	  : raw_compile_unit::children::children (cu) {}
-
-      public:
-
-	class const_iterator
-	  : public std::iterator<std::input_iterator_tag, debug_info_entry>
-	{
-	  friend class children;
-	private:
-
-	  typedef raw_compile_unit::children::const_iterator raw_iterator;
-	  std::stack<raw_iterator> _m_stack;
-	  const raw_iterator _m_end;
-
-	  /* Push and pop until either _m_stack.top () == _m_end or
-	     it's looking at a DIE other than DW_TAG_imported_unit.  */
-	  inline void jiggle ()
-	  {
-	    while (true)
-	      {
-		raw_iterator &i = _m_stack.top ();
-
-		if (i == _m_end)
-		  {
-		    /* We're at the end of this raw_compile_unit.
-		       Pop out to the iterator on the importing unit.  */
-		    _m_stack.pop ();
-
-		    if (_m_stack.empty ())
-		      // That was the outermost unit, this is the end.
-		      break;
-
-		    continue;
-		  }
-
-		if ((*i).tag () == ::DW_TAG_imported_unit)
-		  // We have an imported unit.  Look at its referent.
-		  _m_stack.push ((*i).attributes ().at (::DW_AT_import)
-				 .ref ().children ().begin ());
-		else
-		  // This is some other DIE.  Iterate on it.
-		  break;
-	      }
-	  }
-
-	  inline const_iterator (const raw_iterator &end) : _m_end (end) {}
-
-	  inline const_iterator (const raw_iterator &end, const raw_iterator &i)
-	    : _m_end (end)
-	  {
-	    _m_stack.push (i);
-	    jiggle ();
-	  }
-
-	public:
-
-	  inline const_iterator &operator= (const const_iterator &other)
-	  {
-	    _m_stack = other._m_stack;
-	    return *this;
-	  }
-
-	  inline bool operator== (const_iterator &other) const
-	  {
-	    return _m_stack == other._m_stack;
-	  }
-	  inline bool operator!= (const_iterator &other) const
-	  {
-	    return !(*this == other);
-	  }
-
-	  inline const debug_info_entry &operator* () const
-	  {
-	    return *_m_stack.top ();
-	  }
-
-	  inline const_iterator &operator++ () // prefix
-	  {
-	    ++_m_stack.top ();
-	    jiggle ();
-	    return *this;
-	  }
-	  inline const_iterator operator++ (int) // postfix
-	  {
-	    const_iterator prev = *this;
-	    ++*this;
-	    return prev;
-	  }
-	};
-
-	const_iterator begin () const
-	{
-	  return const_iterator (_m_die.children ().end (),
-				 _m_die.children ().begin ());
-	}
-	const_iterator end () const
-	{
-	  return const_iterator (_m_die.children ().end ());
-	}
-
-	template<class other_children>
-	bool operator== (const other_children &other) const
-	{
-	  return std::equal (begin (), end (), other.begin ());
-	}
-	template<class other_children>
-	bool operator!= (const other_children &other) const
-	{
-	  return !(*this == other);
-	}
-      };
-      inline children children () const
-      {
-	return children::children (*this);
-      }
-    };
-
     // Container for raw CUs in file order, intended to be compatible
     // with a read-only subset of std::list<raw_compile_unit>.
     class raw_compile_units
@@ -783,8 +886,11 @@ namespace elfutils
       raw_compile_units (const dwarf &file) : _m_file (file) {}
 
     public:
+      inline raw_compile_units (const raw_compile_units &u)
+	: _m_file (u._m_file) {}
+
       class const_iterator
-	: public std::iterator<std::input_iterator_tag, raw_compile_unit>
+	: public std::iterator<std::input_iterator_tag, compile_unit>
       {
 	friend class raw_compile_units;
       private:
@@ -800,6 +906,8 @@ namespace elfutils
 	}
 
       public:
+	inline const_iterator (const const_iterator &i)
+	  : _m_die (i._m_die), _m_file (i._m_file), _m_next (i._m_next) {}
 
 	inline const debug_info_entry &operator* () const
 	{
@@ -853,7 +961,7 @@ namespace elfutils
     }
 
   private:
-    static inline bool skip_partial_unit (const raw_compile_unit &unit)
+    static inline bool skip_partial_unit (const compile_unit &unit)
     {
       switch (unit.tag ())
 	{
@@ -867,7 +975,7 @@ namespace elfutils
     }
 
     typedef skipping_wrapper<class raw_compile_units,
-			     raw_compile_unit, compile_unit,
+			     compile_unit, compile_unit,
 			     skip_partial_unit> compile_units_base;
 
   public:
@@ -881,13 +989,14 @@ namespace elfutils
       compile_units (class raw_compile_units raw) : compile_units_base (raw) {}
 
     public:
+      compile_units (const compile_units &u) : compile_units_base (u) {}
 
-      template<class units>
+      template<typename units>
       bool operator== (const units &other) const
       {
 	return std::equal (begin (), end (), other.begin ());
       }
-      template<class units>
+      template<typename units>
       bool operator!= (const units &other) const
       {
 	return !(*this == other);
@@ -932,19 +1041,27 @@ namespace elfutils
       return next;
     }
 
-    dwarf (::Dwarf *dw) : _m_dw (dw) {};
+    inline dwarf (::Dwarf *dw) : _m_dw (dw) {};
 
-    template<class file>
+    inline dwarf (const dwarf &dw) : _m_dw (dw._m_dw) {};
+
+    template<typename file>
     inline bool operator== (const file &other) const
     {
       return compile_units () == other.compile_units ();
     }
-    template<class file>
+    template<typename file>
     inline bool operator!= (const file &other) const
     {
       return !(*this == other);
     }
   };
+
+  inline class dwarf::debug_info_entry::raw_children
+  dwarf::debug_info_entry::raw_children () const
+  {
+    return raw_children::raw_children (*this);
+  }
 
   inline class dwarf::debug_info_entry::children
   dwarf::debug_info_entry::children () const
@@ -966,6 +1083,7 @@ namespace elfutils
 };
 
 // DWARF writer interfaces (pure object construction)
+// XXX probably move to separate file
 namespace elfutils
 {
   class dwarf_output
@@ -973,30 +1091,44 @@ namespace elfutils
   public:
     class compile_units;
 
-    class attr_value : public dwarf::attr_value {}; // XXX later
+    // XXX later
+    class attr_value : public dwarf::attr_value
+    {
+    public:
+      attr_value (const dwarf::attr_value &v) : dwarf::attr_value (v) {}
+    };
 
     class debug_info_entry
     {
     public:
+
       class children : public std::list<debug_info_entry>
       {
 	friend class debug_info_entry;
       private:
         children () {}
 
-	template<class childrens>
+	template<typename childrens>
 	children (const childrens &other)
-	  : std::list<debug_info_entry>  (other.begin (), other.end ()) {}
+	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
       };
+
       class attributes : public std::map<int, attr_value>
       {
 	friend class debug_info_entry;
       private:
 	attributes () {}
 
-	template<class attrs>
+	template<typename attrs>
 	attributes (const attrs &other)
 	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
+
+      public:
+	template<typename attrs>
+	inline operator attrs () const
+	{
+	  return attrs (begin (), end ());
+	}
       };
 
     private:
@@ -1013,7 +1145,7 @@ namespace elfutils
 
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
-      template<class die>
+      template<typename die>
       debug_info_entry (const die &die)
 	: _m_tag (die.tag ()),
 	  _m_attributes (die.attributes ()),
@@ -1030,21 +1162,34 @@ namespace elfutils
 	return !_m_children.empty ();
       }
 
-      inline children &children ()
+      inline class children &children ()
+      {
+	return _m_children;
+      }
+      inline const class children &children () const
       {
 	return _m_children;
       }
 
-      inline attributes &attributes ()
+      inline class attributes &attributes ()
+      {
+	return _m_attributes;
+      }
+      inline const class attributes &attributes () const
       {
 	return _m_attributes;
       }
 
-      template<class die>
+      template<typename die>
       bool operator== (const die &other) const
       {
 	return (other.attributes () == attributes ()
 		&& other.children () == children ());
+      }
+      template<typename die>
+      bool operator!= (const die &other) const
+      {
+	return !(*this == other);;
       }
     };
 
@@ -1056,7 +1201,9 @@ namespace elfutils
     private:
       inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
 
-      template<class die>
+    public:
+      // XXX should be private
+      template<typename die>
       compile_unit (const die &die) : debug_info_entry (die)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
@@ -1073,7 +1220,7 @@ namespace elfutils
       inline compile_units () {}
 
       // Constructor copying CUs from input container.
-      template<class input>
+      template<typename input>
       compile_units(const input &units)
 	: std::list<compile_unit> (units.begin (), units.end ())
       {}
@@ -1085,6 +1232,17 @@ namespace elfutils
 	push_back (nu);
 	return back ();
       }
+
+      template<typename other_children>
+      bool operator== (const other_children &other) const
+      {
+	return std::equal (begin (), end (), other.begin ());
+      }
+      template<typename other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
     };
 
   private:
@@ -1095,14 +1253,29 @@ namespace elfutils
     {
       return _m_units;
     }
+    const class compile_units &compile_units () const
+    {
+      return _m_units;
+    }
 
   public:
     // Default constructor: an empty container, no CUs.
     inline dwarf_output () {}
 
     // Constructor copying CUs from an input file (dwarf or dwarf_output).
-    template<class input>
+    template<typename input>
     dwarf_output (const input &dw) : _m_units (dw.compile_units ()) {}
+
+    template<typename file>
+    inline bool operator== (const file &other) const
+    {
+      return compile_units () == other.compile_units ();
+    }
+    template<typename file>
+    inline bool operator!= (const file &other) const
+    {
+      return !(*this == other);
+    }
   };
 };
 
