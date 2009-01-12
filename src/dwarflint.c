@@ -111,15 +111,17 @@ enum message_category
   mc_acc_all       = 0x00f0, // all accuracy options
 
   /* Area: */
-  mc_leb128    = 0x00100, // ULEB/SLEB storage
-  mc_abbrevs   = 0x00200, // abbreviations and abbreviation tables
-  mc_die_siblings = 0x00400, // DIE sibling relationship
-  mc_die_children = 0x00800, // DIE parent/child relationship
-  mc_die_other = 0x01000, // messages related to DIEs and .debug_info tables, but not covered above
-  mc_die_all   = 0x01c00, // includes all above DIE categories
-  mc_strings   = 0x02000, // string table
-  mc_aranges   = 0x04000, // address ranges table
-  mc_other     = 0x80000, // messages unrelated to any of the above
+  mc_leb128    = 0x100, // ULEB/SLEB storage
+  mc_abbrevs   = 0x200, // abbreviations and abbreviation tables
+  mc_die_rel_sib  = 0x1000, // DIE sibling relationship
+  mc_die_rel_child= 0x2000, // DIE parent/child relationship
+  mc_die_rel_ref  = 0x4000, // relationship by reference
+  mc_die_rel_all  = 0x7000, // any DIE/DIE relationship
+  mc_die_other    = 0x8000, // other messages related to DIEs and .debug_info tables
+  mc_die_all      = 0xf000, // includes all DIE categories
+  mc_strings   = 0x10000, // string table
+  mc_aranges   = 0x20000, // address ranges table
+  mc_other     = 0x40000, // messages unrelated to any of the above
   mc_all       = 0xfff00, // all areas
 };
 
@@ -428,6 +430,28 @@ static void addr_record_add (struct addr_record *ar, uint64_t addr);
 static void addr_record_free (struct addr_record *ar);
 
 
+/* Functions and data structures for reference handling.  Just like
+   the above, we use this to check validity of DIE references.  Unlike
+   the above, this is not stored as sorted set, but simply as an array
+   of records, because duplicates are unlikely.  */
+
+struct ref
+{
+  uint64_t addr; // Referree address
+  uint64_t who;  // Referrer address
+};
+
+struct ref_record
+{
+  size_t size;
+  size_t alloc;
+  struct ref *refs;
+};
+
+static void ref_record_add (struct ref_record *rr, uint64_t addr, uint64_t who);
+static void ref_record_free (struct ref_record *rr);
+
+
 /* Functions and data structures for handling of address range
    coverage.  We use that to find holes of unused bytes in DWARF string
    table.  */
@@ -456,7 +480,7 @@ struct cu
 {
   uint64_t offset;
   struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
-  struct addr_record die_refs;  // DIE references into other CUs from this CU.
+  struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct cu *next;
 };
 
@@ -473,14 +497,14 @@ static int read_die_chain (struct read_ctx *ctx,
 			   struct cu *cu,
 			   struct abbrev_table *abbrevs, Elf_Data *strings,
 			   bool dwarf_64, bool addr_64,
-			   struct addr_record *die_refs,
-			   struct addr_record *die_loc_refs,
+			   struct ref_record *die_refs,
+			   struct ref_record *die_loc_refs,
 			   struct coverage *strings_coverage);
 static bool check_cu_structural (struct read_ctx *ctx,
 				 struct cu *const cu,
 				 struct abbrev_table *abbrev_chain,
 				 Elf_Data *strings, bool dwarf_64,
-				 struct addr_record *die_refs,
+				 struct ref_record *die_refs,
 				 struct coverage *strings_coverage);
 static bool check_aranges_structural (struct read_ctx *ctx,
 				      struct cu *cu_chain);
@@ -945,7 +969,7 @@ abbrev_table_load (struct read_ctx *ctx)
 		  sibling_attr = attr_off;
 
 		  if (!cur->has_children)
-		    MESSAGE (mc_die_siblings | mc_acc_bloat | mc_impact_1,
+		    MESSAGE (mc_die_rel_sib | mc_acc_bloat | mc_impact_1,
 			     PRI_ABBR_ATTR
 			     ": Excessive DW_AT_sibling attribute at childless abbrev.\n",
 			     abbr_off, attr_off);
@@ -954,7 +978,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	      switch (check_sibling_form (attrib_form))
 		{
 		case -1:
-		  MESSAGE (mc_die_siblings | mc_impact_2,
+		  MESSAGE (mc_die_rel_sib | mc_impact_2,
 			   PRI_ABBR_ATTR
 			   ": DW_AT_sibling attribute with form DW_FORM_ref_addr.\n",
 			   abbr_off, attr_off);
@@ -1089,6 +1113,24 @@ addr_record_free (struct addr_record *ar)
     free (ar->addrs);
 }
 
+
+static void
+ref_record_add (struct ref_record *rr, uint64_t addr, uint64_t who)
+{
+  REALLOC (rr, refs);
+  struct ref *ref = rr->refs + rr->size++;
+  ref->addr = addr;
+  ref->who = who;
+}
+
+static void
+ref_record_free (struct ref_record *rr)
+{
+  if (rr != NULL)
+    free (rr->refs);
+}
+
+
 static void
 coverage_init (struct coverage *ar, uint64_t size)
 {
@@ -1205,18 +1247,17 @@ cu_find_cu (struct cu *cu_chain, uint64_t offset)
 
 static bool
 check_die_references (struct cu *cu,
-		      struct addr_record *die_refs)
+		      struct ref_record *die_refs)
 {
   bool retval = true;
   for (size_t i = 0; i < die_refs->size; ++i)
     {
-      uint64_t ref_addr = die_refs->addrs[i];
-      if (!addr_record_has_addr (&cu->die_addrs, ref_addr))
+      struct ref *ref = die_refs->refs + i;
+      if (!addr_record_has_addr (&cu->die_addrs, ref->addr))
 	{
-	  /* XXX Write which DIE has the reference.  */
-	  ERROR (PRI_D_INFO PRI_CU
-		 ": unresolved DIE reference to " PRI_DIE ".\n",
-		 cu->offset, ref_addr);
+	  ERROR (PRI_D_INFO PRI_CU_DIE
+		 ": unresolved reference to " PRI_DIE ".\n",
+		 cu->offset, ref->who, ref->addr);
 	  retval = false;
 	}
     }
@@ -1230,28 +1271,27 @@ check_global_die_references (struct cu *cu_chain)
   for (struct cu *it = cu_chain; it != NULL; it = it->next)
     for (size_t i = 0; i < it->die_refs.size; ++i)
       {
-	uint64_t ref_addr = it->die_refs.addrs[i];
+	struct ref *ref = it->die_refs.refs + i;
 	struct cu *ref_cu = NULL;
 	for (struct cu *jt = cu_chain; jt != NULL; jt = jt->next)
-	  if (addr_record_has_addr (&jt->die_addrs, ref_addr))
+	  if (addr_record_has_addr (&jt->die_addrs, ref->addr))
 	    {
 	      ref_cu = jt;
 	      break;
 	    }
 
-	/* XXX Write which DIE has the reference.  */
 	if (ref_cu == NULL)
 	  {
-	    ERROR (PRI_D_INFO PRI_CU
-		   ": unresolved (global) DIE reference to " PRI_DIE ".\n",
-		   it->offset, ref_addr);
+	    ERROR (PRI_D_INFO PRI_CU_DIE
+		   ": unresolved (non-CU-local) reference to " PRI_DIE ".\n",
+		   it->offset, ref->who, ref->addr);
 	    retval = false;
 	  }
 	else if (ref_cu == it)
-	  /* XXX Turn to MESSAGE.  */
-	  WARNING (PRI_D_INFO PRI_CU
+	  MESSAGE (mc_impact_2 | mc_acc_suboptimal | mc_die_rel_ref,
+		   PRI_D_INFO PRI_CU_DIE
 		   ": local reference to " PRI_DIE " formed as global.\n",
-		   it->offset, ref_addr);
+		   it->offset, ref->who, ref->addr);
       }
 
   return retval;
@@ -1321,7 +1361,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 			     struct abbrev_table *abbrev_chain,
 			     Elf_Data *strings)
 {
-  struct addr_record die_refs;
+  struct ref_record die_refs;
   memset (&die_refs, 0, sizeof (die_refs));
 
   struct cu *cu_chain = NULL;
@@ -1424,7 +1464,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	     ".debug_info: CU lengths don't exactly match Elf_Data contents.");
 
   bool references_sound = check_global_die_references (cu_chain);
-  addr_record_free (&die_refs);
+  ref_record_free (&die_refs);
 
   if (strings_coverage != NULL)
     {
@@ -1473,8 +1513,8 @@ read_die_chain (struct read_ctx *ctx,
 		struct cu *cu,
 		struct abbrev_table *abbrevs, Elf_Data *strings,
 		bool dwarf_64, bool addr_64,
-		struct addr_record *die_refs,
-		struct addr_record *die_loc_refs,
+		struct ref_record *die_refs,
+		struct ref_record *die_loc_refs,
 		struct coverage *strings_coverage)
 {
   bool got_die = false;
@@ -1512,7 +1552,7 @@ read_die_chain (struct read_ctx *ctx,
 	/* Even if it has children, the DIE can't have a sibling
 	   attribute if it's the last DIE in chain.  That's the reason
 	   we can't simply check this when loading abbrevs.  */
-	MESSAGE (mc_die_siblings | mc_acc_suboptimal | mc_impact_4,
+	MESSAGE (mc_die_rel_sib | mc_acc_suboptimal | mc_impact_4,
 		 PRI_D_INFO PRI_CU_DIE
 		 ": This DIE had children, but no DW_AT_sibling attribute.\n",
 		 cu->offset, prev_die_off);
@@ -1548,9 +1588,9 @@ read_die_chain (struct read_ctx *ctx,
 	   it->name != 0; ++it)
 	{
 
-	  void record_ref (uint64_t addr, bool local)
+	  void record_ref (uint64_t addr, uint64_t who, bool local)
 	  {
-	    struct addr_record *record = &cu->die_refs;
+	    struct ref_record *record = &cu->die_refs;
 	    if (local)
 	      {
 		assert (ctx->end > ctx->begin);
@@ -1569,7 +1609,7 @@ read_die_chain (struct read_ctx *ctx,
 	      }
 
 	    if (record != NULL)
-	      addr_record_add (record, addr);
+	      ref_record_add (record, addr, who);
 	  }
 
 	  uint8_t form = it->form;
@@ -1596,7 +1636,7 @@ read_die_chain (struct read_ctx *ctx,
 		switch (check_sibling_form (form))
 		  {
 		  case -1:
-		    MESSAGE (mc_die_siblings | mc_impact_2,
+		    MESSAGE (mc_die_rel_sib | mc_impact_2,
 			     PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			     ": DW_AT_sibling attribute with (indirect) form DW_FORM_ref_addr.\n",
 			     cu->offset, die_off, abbrev->code, it->offset);
@@ -1666,7 +1706,7 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		if (it->form == DW_FORM_ref_addr)
-		  record_ref (addr, false);
+		  record_ref (addr, die_off, false);
 
 		/* XXX What are validity criteria for DW_FORM_addr? */
 		break;
@@ -1686,7 +1726,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (it->form == DW_FORM_ref_udata)
-		  record_ref (value, true);
+		  record_ref (value, die_off, true);
 		break;
 	      }
 
@@ -1701,7 +1741,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (it->form == DW_FORM_ref1)
-		  record_ref (value, true);
+		  record_ref (value, die_off, true);
 		break;
 	      }
 
@@ -1715,7 +1755,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (it->form == DW_FORM_ref2)
-		  record_ref (value, true);
+		  record_ref (value, die_off, true);
 		break;
 	      }
 
@@ -1729,7 +1769,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (it->form == DW_FORM_ref4)
-		  record_ref (value, true);
+		  record_ref (value, die_off, true);
 		break;
 	      }
 
@@ -1743,7 +1783,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (it->form == DW_FORM_ref8)
-		  record_ref (value, true);
+		  record_ref (value, die_off, true);
 		break;
 	      }
 
@@ -1817,7 +1857,7 @@ read_die_chain (struct read_ctx *ctx,
 	  if (st == -1)
 	    return -1;
 	  else if (st == 0)
-	    MESSAGE (mc_die_children | mc_acc_suboptimal | mc_impact_3,
+	    MESSAGE (mc_impact_3 | mc_acc_suboptimal | mc_die_rel_child,
 		     PRI_D_INFO PRI_CU_DIE
 		     ": Abbrev has_children, but the chain was empty.\n",
 		     cu->offset, die_off);
@@ -1872,7 +1912,7 @@ check_cu_structural (struct read_ctx *ctx,
 		     struct cu *const cu,
 		     struct abbrev_table *abbrev_chain,
 		     Elf_Data *strings, bool dwarf_64,
-		     struct addr_record *die_refs,
+		     struct ref_record *die_refs,
 		     struct coverage *strings_coverage)
 {
   uint16_t version;
@@ -1917,7 +1957,7 @@ check_cu_structural (struct read_ctx *ctx,
       return false;
     }
 
-  struct addr_record die_loc_refs;
+  struct ref_record die_loc_refs;
   memset (&die_loc_refs, 0, sizeof (die_loc_refs));
 
   bool retval = true;
@@ -1939,7 +1979,7 @@ check_cu_structural (struct read_ctx *ctx,
   else
     retval = false;
 
-  addr_record_free (&die_loc_refs);
+  ref_record_free (&die_loc_refs);
   return retval;
 }
 

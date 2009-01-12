@@ -1,5 +1,12 @@
 2009-01-12  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: For DIE references, remember both referrer and
+	referree.  Add a new data structure ref_record to support that.
+	Add new message category, mc_die_rel_ref.  Rename other DIE
+	relationship categories to mc_die_rel_* pattern.
+
+2009-01-12  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Changes in data structures for recording DIEs and CUs.
 
 2009-01-12  Petr Machata  <pmachata@redhat.com>
