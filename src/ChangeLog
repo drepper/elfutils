@@ -1,5 +1,9 @@
 2009-01-12  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Changes in data structures for recording DIEs and CUs.
+
+2009-01-12  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Implement validation of .debug_aranges.
 
 2009-01-11  Petr Machata  <pmachata@redhat.com>

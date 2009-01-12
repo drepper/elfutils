@@ -450,27 +450,40 @@ static void coverage_find_holes (struct coverage *ar,
 static void coverage_free (struct coverage *ar);
 
 
+/* Functions and data structures for CU handling.  */
+
+struct cu
+{
+  uint64_t offset;
+  struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
+  struct addr_record die_refs;  // DIE references into other CUs from this CU.
+  struct cu *next;
+};
+
+static void cu_free (struct cu *cu_chain);
+static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
+
+
 /* Functions for checking of structural integrity.  */
 
-static bool check_debug_info_structural (struct read_ctx *ctx,
-					 struct abbrev_table *abbrev_chain,
-					 struct addr_record *cu_addrs,
-					 Elf_Data *strings);
-static int read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
+static struct cu *check_debug_info_structural (struct read_ctx *ctx,
+					       struct abbrev_table *abbrev_chain,
+					       Elf_Data *strings);
+static int read_die_chain (struct read_ctx *ctx,
+			   struct cu *cu,
 			   struct abbrev_table *abbrevs, Elf_Data *strings,
 			   bool dwarf_64, bool addr_64,
-			   struct addr_record *die_addrs,
 			   struct addr_record *die_refs,
 			   struct addr_record *die_loc_refs,
 			   struct coverage *strings_coverage);
-static bool check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
+static bool check_cu_structural (struct read_ctx *ctx,
+				 struct cu *const cu,
 				 struct abbrev_table *abbrev_chain,
 				 Elf_Data *strings, bool dwarf_64,
-				 struct addr_record *die_addrs,
 				 struct addr_record *die_refs,
 				 struct coverage *strings_coverage);
 static bool check_aranges_structural (struct read_ctx *ctx,
-				      struct addr_record *cu_addrs);
+				      struct cu *cu_chain);
 
 
 static void
@@ -499,19 +512,7 @@ process_file (int fd __attribute__((unused)),
   else if (!tolerate_nodebug)
     ERROR (".debug_abbrev data not found.");
 
-  /* Set up container for storing CU addresses.  Don't do that if we
-     either have no data to fill that container from (abbrev and
-     info), or have no data that need validation against that
-     container (aranges). */
-  struct addr_record cu_addrs_mem;
-  struct addr_record *cu_addrs = NULL;
-  if (abbrev_data != NULL
-      && info_data != NULL
-      && aranges_data != NULL)
-    {
-      cu_addrs = &cu_addrs_mem;
-      memset (cu_addrs, 0, sizeof (*cu_addrs));
-    }
+  struct cu *cu_chain = NULL;
 
   if (abbrev_chain != NULL)
     {
@@ -520,7 +521,7 @@ process_file (int fd __attribute__((unused)),
       if (info_data != NULL)
 	{
 	  read_ctx_init (&ctx, dwarf, info_data);
-	  check_debug_info_structural (&ctx, abbrev_chain, cu_addrs, str_data);
+	  cu_chain = check_debug_info_structural (&ctx, abbrev_chain, str_data);
 	}
       else if (!tolerate_nodebug)
 	ERROR (".debug_info or .debug_str data not found.");
@@ -529,7 +530,7 @@ process_file (int fd __attribute__((unused)),
   if (aranges_data != NULL)
     {
       read_ctx_init (&ctx, dwarf, aranges_data);
-      check_aranges_structural (&ctx, cu_addrs);
+      check_aranges_structural (&ctx, cu_chain);
     }
   else
     /* Even though this is an error (XXX ?), it doesn't prevent us
@@ -537,7 +538,7 @@ process_file (int fd __attribute__((unused)),
        sections.  */
     ERROR (".debug_aranges data not found.");
 
-  addr_record_free (cu_addrs);
+  cu_free (cu_chain);
   abbrev_table_free (abbrev_chain);
 }
 
@@ -1057,6 +1058,11 @@ addr_record_find_addr (struct addr_record *ar, uint64_t addr)
 static bool
 addr_record_has_addr (struct addr_record *ar, uint64_t addr)
 {
+  if (ar->size == 0
+      || addr < ar->addrs[0]
+      || addr > ar->addrs[ar->size - 1])
+    return false;
+
   size_t a = addr_record_find_addr (ar, addr);
   return a < ar->size && ar->addrs[a] == addr;
 }
@@ -1173,27 +1179,81 @@ coverage_free (struct coverage *ar)
   free (ar->buf);
 }
 
-static bool
-check_addr_record_addr (struct addr_record *ar, uint64_t addr)
+
+static void
+cu_free (struct cu *cu_chain)
 {
-  bool retval = addr_record_has_addr (ar, addr);
-  if (!retval)
-    /* XXX Write where it happened, ideally which DIE has the reference.  */
-    ERROR ("Unresolved DIE reference to " PRI_DIE ".\n", addr);
-  return retval;
+  for (struct cu *it = cu_chain; it != NULL; )
+    {
+      addr_record_free (&it->die_addrs);
+
+      struct cu *temp = it;
+      it = it->next;
+      free (temp);
+    }
 }
 
+static struct cu *
+cu_find_cu (struct cu *cu_chain, uint64_t offset)
+{
+  for (struct cu *it = cu_chain; it != NULL; it = it->next)
+    if (it->offset == offset)
+      return it;
+  return NULL;
+}
+
+
 static bool
-check_die_references (struct addr_record *die_addrs,
+check_die_references (struct cu *cu,
 		      struct addr_record *die_refs)
 {
   bool retval = true;
   for (size_t i = 0; i < die_refs->size; ++i)
     {
-      uint64_t addr = die_refs->addrs[i];
-      if (!check_addr_record_addr (die_addrs, addr))
-	retval = false;
+      uint64_t ref_addr = die_refs->addrs[i];
+      if (!addr_record_has_addr (&cu->die_addrs, ref_addr))
+	{
+	  /* XXX Write which DIE has the reference.  */
+	  ERROR (PRI_D_INFO PRI_CU
+		 ": unresolved DIE reference to " PRI_DIE ".\n",
+		 cu->offset, ref_addr);
+	  retval = false;
+	}
     }
+  return retval;
+}
+
+static bool
+check_global_die_references (struct cu *cu_chain)
+{
+  bool retval = true;
+  for (struct cu *it = cu_chain; it != NULL; it = it->next)
+    for (size_t i = 0; i < it->die_refs.size; ++i)
+      {
+	uint64_t ref_addr = it->die_refs.addrs[i];
+	struct cu *ref_cu = NULL;
+	for (struct cu *jt = cu_chain; jt != NULL; jt = jt->next)
+	  if (addr_record_has_addr (&jt->die_addrs, ref_addr))
+	    {
+	      ref_cu = jt;
+	      break;
+	    }
+
+	/* XXX Write which DIE has the reference.  */
+	if (ref_cu == NULL)
+	  {
+	    ERROR (PRI_D_INFO PRI_CU
+		   ": unresolved (global) DIE reference to " PRI_DIE ".\n",
+		   it->offset, ref_addr);
+	    retval = false;
+	  }
+	else if (ref_cu == it)
+	  /* XXX Turn to MESSAGE.  */
+	  WARNING (PRI_D_INFO PRI_CU
+		   ": local reference to " PRI_DIE " formed as global.\n",
+		   it->offset, ref_addr);
+      }
+
   return retval;
 }
 
@@ -1256,22 +1316,17 @@ check_die_references (struct addr_record *die_addrs,
     _retval;								\
   })
 
-static bool
+static struct cu *
 check_debug_info_structural (struct read_ctx *ctx,
 			     struct abbrev_table *abbrev_chain,
-			     struct addr_record *cu_addrs,
 			     Elf_Data *strings)
 {
-  struct addr_record die_addrs_mem;
-  struct addr_record *die_addrs = &die_addrs_mem;
-  memset (die_addrs, 0, sizeof (*die_addrs));
+  struct addr_record die_refs;
+  memset (&die_refs, 0, sizeof (die_refs));
 
-  struct addr_record die_refs_mem;
-  struct addr_record *die_refs = &die_refs_mem;
-  memset (die_refs, 0, sizeof (*die_refs));
+  struct cu *cu_chain = NULL;
 
-  bool recording = true;
-  bool retval = true;
+  bool success = true;
 
   struct coverage strings_coverage_mem;
   struct coverage *strings_coverage = NULL;
@@ -1286,8 +1341,10 @@ check_debug_info_structural (struct read_ctx *ctx,
       const unsigned char *cu_begin = ctx->ptr;
       uint64_t cu_off = read_ctx_get_offset (ctx);
 
-      if (cu_addrs != NULL)
-	addr_record_add (cu_addrs, cu_off);
+      struct cu *cur = xcalloc (1, sizeof (*cur));
+      cur->offset = cu_off;
+      cur->next = cu_chain;
+      cu_chain = cur;
 
       uint32_t size32;
       uint64_t size;
@@ -1303,7 +1360,7 @@ check_debug_info_structural (struct read_ctx *ctx,
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
 	  ERROR (PRI_D_INFO PRI_CU ": can't read CU length.\n", cu_off);
-	  retval = false;
+	  success = false;
 	  break;
 	}
       if (size32 == 0 && CHECK_ZERO_PADDING (ctx, mc_die_other,
@@ -1313,7 +1370,7 @@ check_debug_info_structural (struct read_ctx *ctx,
       if (!READ_SIZE_EXTRA (ctx, size32, &size, &dwarf_64,
 			    PRI_D_INFO PRI_CU, cu_off))
 	{
-	  retval = false;
+	  success = false;
 	  break;
 	}
 
@@ -1322,7 +1379,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  ERROR (PRI_D_INFO PRI_CU ": section doesn't have enough data"
 		 " to read CU of size %" PRIx64 ".\n", cu_off, size);
 	  ctx->ptr = ctx->end;
-	  retval = false;
+	  success = false;
 	  break;
 	}
 
@@ -1332,7 +1389,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	{
 	  ERROR (PRI_D_INFO PRI_CU ": claimed length of %" PRIx64
 		 " doesn't even cover CU header.\n", cu_off, size);
-	  retval = false;
+	  success = false;
 	  break;
 	}
       else
@@ -1344,11 +1401,10 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  read_ctx_init_sub (&cu_ctx, ctx->dbg, ctx->data, cu_begin, cu_end);
 	  cu_ctx.ptr = ctx->ptr;
 
-	  if (!check_cu_structural (&cu_ctx, cu_off, abbrev_chain, strings,
-				    dwarf_64, die_addrs, die_refs,
-				    strings_coverage))
+	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain, strings,
+				    dwarf_64, &die_refs, strings_coverage))
 	    {
-	      retval = false;
+	      success = false;
 	      break;
 	    }
 	  if (cu_ctx.ptr != cu_ctx.end
@@ -1363,18 +1419,12 @@ check_debug_info_structural (struct read_ctx *ctx,
     }
 
   // Only check this if above we have been successful.
-  if (retval && ctx->ptr != ctx->end)
+  if (success && ctx->ptr != ctx->end)
     MESSAGE (mc_die_other | mc_impact_4,
 	     ".debug_info: CU lengths don't exactly match Elf_Data contents.");
 
-  bool references_sound = true;
-  if (recording)
-    {
-      if (!check_die_references (die_addrs, die_refs))
-	references_sound = false;
-      addr_record_free (&die_addrs_mem);
-      addr_record_free (&die_refs_mem);
-    }
+  bool references_sound = check_global_die_references (cu_chain);
+  addr_record_free (&die_refs);
 
   if (strings_coverage != NULL)
     {
@@ -1396,12 +1446,18 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  MESSAGE_PADDING_N0 (mc_strings, ".debug_str", begin, end);
       }
 
-      if (retval)
+      if (success)
 	coverage_find_holes (strings_coverage, hole);
       coverage_free (strings_coverage);
     }
 
-  return retval && references_sound;
+  if (!success || !references_sound)
+    {
+      cu_free (cu_chain);
+      cu_chain = NULL;
+    }
+
+  return cu_chain;
 }
 
 
@@ -1413,10 +1469,10 @@ check_debug_info_structural (struct read_ctx *ctx,
     +1 in case some dies were actually loaded
  */
 static int
-read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
+read_die_chain (struct read_ctx *ctx,
+		struct cu *cu,
 		struct abbrev_table *abbrevs, Elf_Data *strings,
 		bool dwarf_64, bool addr_64,
-		struct addr_record *die_addrs,
 		struct addr_record *die_refs,
 		struct addr_record *die_loc_refs,
 		struct coverage *strings_coverage)
@@ -1435,7 +1491,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
       die_off = read_ctx_get_offset (ctx);
       if (!CHECKED_READ_ULEB128 (ctx, &abbr_code,
 				 PRI_D_INFO PRI_CU_DIE, "abbrev code",
-				 cu_off, die_off))
+				 cu->offset, die_off))
 	return -1;
 
       /* Check sibling value advertised last time through the loop.  */
@@ -1444,12 +1500,12 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	  if (abbr_code == 0)
 	    ERROR (PRI_D_INFO PRI_CU_DIE
 		   ": is the last sibling in chain, but has a DW_AT_sibling attribute.\n",
-		   cu_off, prev_die_off);
+		   cu->offset, prev_die_off);
 	  else if (sibling_addr != die_off)
 	    ERROR (PRI_D_INFO PRI_CU_DIE
 		   ": This DIE should have had its sibling at 0x%"
 		   PRIx64 ", but it's at 0x%" PRIx64 " instead.\n",
-		   cu_off, prev_die_off, sibling_addr, die_off);
+		   cu->offset, prev_die_off, sibling_addr, die_off);
 	  sibling_addr = 0;
 	}
       else if (prev_abbrev != NULL && prev_abbrev->has_children)
@@ -1459,7 +1515,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	MESSAGE (mc_die_siblings | mc_acc_suboptimal | mc_impact_4,
 		 PRI_D_INFO PRI_CU_DIE
 		 ": This DIE had children, but no DW_AT_sibling attribute.\n",
-		 cu_off, prev_die_off);
+		 cu->offset, prev_die_off);
 
       /* The section ended.  */
       if (read_ctx_eof (ctx) || abbr_code == 0)
@@ -1467,7 +1523,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	  if (abbr_code != 0)
 	    ERROR (PRI_D_INFO PRI_CU
 		   ": DIE chain at %p not terminated with DIE with zero abbrev code.\n",
-		   cu_off, begin);
+		   cu->offset, begin);
 	  break;
 	}
 
@@ -1480,13 +1536,12 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	{
 	  ERROR (PRI_D_INFO PRI_CU_DIE ": abbrev section at 0x%" PRIx64
 		 " doesn't contain code %" PRIu64 ".\n",
-		 cu_off, die_off, abbrevs->offset, abbr_code);
+		 cu->offset, die_off, abbrevs->offset, abbr_code);
 	  return -1;
 	}
       abbrev->used = true;
 
-      if (die_addrs != NULL)
-	addr_record_add (die_addrs, cu_off + die_off);
+      addr_record_add (&cu->die_addrs, cu->offset + die_off);
 
       /* Attribute values.  */
       for (struct abbrev_attrib *it = abbrev->attribs;
@@ -1495,7 +1550,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 
 	  void record_ref (uint64_t addr, bool local)
 	  {
-	    struct addr_record *record = die_refs;
+	    struct addr_record *record = &cu->die_refs;
 	    if (local)
 	      {
 		assert (ctx->end > ctx->begin);
@@ -1503,15 +1558,17 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		  {
 		    ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			   ": Invalid reference outside the CU: 0x%" PRIx64 ".\n",
-			   cu_off, die_off, abbrev->code, it->offset, addr);
+			   cu->offset, die_off, abbrev->code, it->offset, addr);
 		    return;
 		  }
 
-		addr += cu_off;
+		/* Address holds a CU-local reference, so add CU
+		   offset to turn it into section offset.  */
+		addr += cu->offset;
 		record = die_loc_refs;
 	      }
 
-	    if (die_refs != NULL)
+	    if (record != NULL)
 	      addr_record_add (record, addr);
 	  }
 
@@ -1522,7 +1579,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	      if (!CHECKED_READ_ULEB128 (ctx, &value,
 					 PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					 "indirect attribute form",
-					 cu_off, die_off, abbrev->code,
+					 cu->offset, die_off, abbrev->code,
 					 it->offset))
 		return -1;
 
@@ -1530,7 +1587,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		{
 		  ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			 ": invalid indirect form 0x%" PRIx64 ".\n",
-			 cu_off, die_off, abbrev->code, it->offset, value);
+			 cu->offset, die_off, abbrev->code, it->offset, value);
 		  return -1;
 		}
 	      form = value;
@@ -1542,13 +1599,13 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		    MESSAGE (mc_die_siblings | mc_impact_2,
 			     PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			     ": DW_AT_sibling attribute with (indirect) form DW_FORM_ref_addr.\n",
-			     cu_off, die_off, abbrev->code, it->offset);
+			     cu->offset, die_off, abbrev->code, it->offset);
 		    break;
 
 		  case -2:
 		    ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			   ": DW_AT_sibling attribute with non-reference (indirect) form %s.\n",
-			   cu_off, die_off, abbrev->code, it->offset,
+			   cu->offset, die_off, abbrev->code, it->offset,
 			   dwarf_form_string (value));
 		  };
 	    }
@@ -1563,18 +1620,18 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		  cant_read:
 		    ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			   ": can't read attribute value.\n",
-			   cu_off, die_off, abbrev->code, it->offset);
+			   cu->offset, die_off, abbrev->code, it->offset);
 		    return -1;
 		  }
 
 		if (strings == NULL)
 		  ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			 ": strp attribute, but no .debug_str section.\n",
-			 cu_off, die_off, abbrev->code, it->offset);
+			 cu->offset, die_off, abbrev->code, it->offset);
 		else if (addr >= strings->d_size)
 		  ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			 ": Invalid offset outside .debug_str: 0x%" PRIx64 ".",
-			 cu_off, die_off, abbrev->code, it->offset, addr);
+			 cu->offset, die_off, abbrev->code, it->offset, addr);
 		else
 		  {
 		    /* Record used part of .debug_str.  */
@@ -1622,7 +1679,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		if (!CHECKED_READ_ULEB128 (ctx, &value,
 					   PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					   "attribute value",
-					   cu_off, die_off, abbrev->code,
+					   cu->offset, die_off, abbrev->code,
 					   it->offset))
 		  return -1;
 
@@ -1696,7 +1753,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		if (!CHECKED_READ_SLEB128 (ctx, &value,
 					   PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					   "attribute value",
-					   cu_off, die_off, abbrev->code,
+					   cu->offset, die_off, abbrev->code,
 					   it->offset))
 		  return -1;
 		break;
@@ -1725,7 +1782,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 		    if (!CHECKED_READ_ULEB128 (ctx, &length,
 					       PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					       "attribute value",
-					       cu_off, die_off, abbrev->code,
+					       cu->offset, die_off, abbrev->code,
 					       it->offset))
 		      return -1;
 		  }
@@ -1741,21 +1798,21 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	    case DW_FORM_indirect:
 	      ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 		     ": Indirect form is again indirect.\n",
-		     cu_off, die_off, abbrev->code, it->offset);
+		     cu->offset, die_off, abbrev->code, it->offset);
 	      return -1;
 
 	    default:
 	      ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 		     ": Internal error: unhandled form 0x%x\n",
-		     cu_off, die_off, abbrev->code, it->offset, it->form);
+		     cu->offset, die_off, abbrev->code, it->offset, it->form);
 	    }
 	}
 
       if (abbrev->has_children)
 	{
-	  int st = read_die_chain (ctx, cu_off, abbrevs, strings,
+	  int st = read_die_chain (ctx, cu, abbrevs, strings,
 				   dwarf_64, addr_64,
-				   die_addrs, die_refs, die_loc_refs,
+				   die_refs, die_loc_refs,
 				   strings_coverage);
 	  if (st == -1)
 	    return -1;
@@ -1763,7 +1820,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
 	    MESSAGE (mc_die_children | mc_acc_suboptimal | mc_impact_3,
 		     PRI_D_INFO PRI_CU_DIE
 		     ": Abbrev has_children, but the chain was empty.\n",
-		     cu_off, die_off);
+		     cu->offset, die_off);
 	}
     }
 
@@ -1771,7 +1828,7 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
     ERROR (PRI_D_INFO PRI_CU_DIE
 	   ": This DIE should have had its sibling at 0x%"
 	   PRIx64 ", but the DIE chain ended.\n",
-	   cu_off, prev_die_off, sibling_addr);
+	   cu->offset, prev_die_off, sibling_addr);
 
   return got_die ? 1 : 0;
 }
@@ -1811,10 +1868,10 @@ read_die_chain (struct read_ctx *ctx, uint64_t cu_off,
   })
 
 static bool
-check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
+check_cu_structural (struct read_ctx *ctx,
+		     struct cu *const cu,
 		     struct abbrev_table *abbrev_chain,
 		     Elf_Data *strings, bool dwarf_64,
-		     struct addr_record *die_addrs,
 		     struct addr_record *die_refs,
 		     struct coverage *strings_coverage)
 {
@@ -1823,27 +1880,27 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
   uint8_t address_size;
 
   /* Version.  */
-  if (!READ_VERSION (ctx, dwarf_64, &version, PRI_D_INFO PRI_CU, cu_off))
+  if (!READ_VERSION (ctx, dwarf_64, &version, PRI_D_INFO PRI_CU, cu->offset))
     return false;
 
   /* Abbrev offset.  */
   if (!read_ctx_read_offset (ctx, dwarf_64, &abbrev_offset))
     {
-      ERROR (PRI_D_INFO PRI_CU ": can't read abbrev offset.\n", cu_off);
+      ERROR (PRI_D_INFO PRI_CU ": can't read abbrev offset.\n", cu->offset);
       return false;
     }
 
   /* Address size.  */
   if (!read_ctx_read_ubyte (ctx, &address_size))
     {
-      ERROR (PRI_D_INFO PRI_CU ": can't read address size.\n", cu_off);
+      ERROR (PRI_D_INFO PRI_CU ": can't read address size.\n", cu->offset);
       return false;
     }
   if (address_size != 4 && address_size != 8)
     {
       ERROR (PRI_D_INFO PRI_CU
 	     ": Invalid address size: %d (only 4 or 8 allowed).\n",
-	     cu_off, address_size);
+	     cu->offset, address_size);
       return false;
     }
 
@@ -1856,46 +1913,40 @@ check_cu_structural (struct read_ctx *ctx, uint64_t cu_off,
     {
       ERROR (PRI_D_INFO PRI_CU
 	     ": Couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
-	     cu_off, abbrev_offset);
+	     cu->offset, abbrev_offset);
       return false;
     }
 
-  struct addr_record die_loc_refs_mem;
-  struct addr_record *die_loc_refs = NULL;
-  if (die_addrs != NULL)
-    {
-      die_loc_refs = &die_loc_refs_mem;
-      memset (die_loc_refs, 0, sizeof (*die_loc_refs));
-    }
+  struct addr_record die_loc_refs;
+  memset (&die_loc_refs, 0, sizeof (die_loc_refs));
 
   bool retval = true;
-  if (read_die_chain (ctx, cu_off, abbrevs, strings,
+  if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
-		      die_addrs, die_refs, die_loc_refs,
+		      die_refs, &die_loc_refs,
 		      strings_coverage) >= 0)
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
 	if (!abbrevs->abbr[i].used)
-	  ERROR (PRI_D_INFO PRI_CU ": Abbreviation with code %"
-		 PRIu64 " is never used.\n",
-		 cu_off, abbrevs->abbr[i].code);
+	  MESSAGE (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
+		   PRI_D_INFO PRI_CU ": Abbreviation with code %"
+		   PRIu64 " is never used.\n",
+		   cu->offset, abbrevs->abbr[i].code);
 
-      if (!check_die_references (die_addrs, die_loc_refs))
+      if (!check_die_references (cu, &die_loc_refs))
 	retval = false;
     }
   else
     retval = false;
 
-  if (die_loc_refs)
-    addr_record_free (die_loc_refs);
-
+  addr_record_free (&die_loc_refs);
   return retval;
 }
 
 
 static bool
 check_aranges_structural (struct read_ctx *ctx,
-			  struct addr_record *cu_addrs)
+			  struct cu *cu_chain)
 {
   while (!read_ctx_eof (ctx))
     {
@@ -1935,7 +1986,7 @@ check_aranges_structural (struct read_ctx *ctx,
 		 ": can't read debug info offset.\n", atab_off);
 	  return false;
 	}
-      if (cu_addrs != NULL && !addr_record_has_addr (cu_addrs, cu_off))
+      if (cu_find_cu (cu_chain, cu_off) == NULL)
 	ERROR (PRI_D_ARANGES PRI_ARANGETAB
 	       ": invalid reference to " PRI_CU ".\n", atab_off, cu_off);
 
@@ -2022,10 +2073,11 @@ check_aranges_structural (struct read_ctx *ctx,
 		     atab_off, cu_off, tuple_off);
 	      return false;
 	    }
-	  /* XXX find out how to validate address and length.  */
 
 	  if (address == 0 && length == 0)
 	    break;
+
+	  /* Address and length can be validated on high level.  */
 	}
     }
 
