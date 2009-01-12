@@ -327,6 +327,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_D_INFO ".debug_info: "
 #define PRI_D_ABBREV ".debug_abbrev: "
 #define PRI_D_ARANGES ".debug_aranges: "
+#define PRI_D_PUBNAMES ".debug_pubnames: "
 
 #define PRI_CU "CU 0x%" PRIx64
 #define PRI_DIE "DIE 0x%" PRIx64
@@ -334,12 +335,15 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_ABBR "abbrev 0x%" PRIx64
 #define PRI_ARANGETAB "arange table 0x%" PRIx64
 #define PRI_RECORD "record 0x%" PRIx64
+#define PRI_PUBNAMESET "pubname set 0x%" PRIx64
 
 #define PRI_CU_DIE PRI_CU ", " PRI_DIE
 #define PRI_CU_DIE_ABBR_ATTR PRI_CU_DIE ", " PRI_ABBR ", " PRI_ATTR
 #define PRI_ABBR_ATTR PRI_ABBR ", " PRI_ATTR
 #define PRI_ARANGETAB_CU PRI_ARANGETAB " (for " PRI_CU ")"
-#define PRI_ARANGETAB_CU_RECORD PRI_ARANGETAB " (for " PRI_CU "), " PRI_RECORD
+#define PRI_ARANGETAB_CU_RECORD PRI_ARANGETAB_CU ", " PRI_RECORD
+#define PRI_PUBNAMESET_CU PRI_PUBNAMESET " (for " PRI_CU ")"
+#define PRI_PUBNAMESET_CU_RECORD PRI_PUBNAMESET_CU ", " PRI_RECORD
 
 
 /* Functions and data structures related to bounds-checked
@@ -485,6 +489,7 @@ static void coverage_free (struct coverage *ar);
 struct cu
 {
   uint64_t offset;
+  uint64_t length;
   struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
   struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct cu *next;
@@ -514,6 +519,8 @@ static bool check_cu_structural (struct read_ctx *ctx,
 				 struct coverage *strings_coverage);
 static bool check_aranges_structural (struct read_ctx *ctx,
 				      struct cu *cu_chain);
+static bool check_pubnames_structural (struct read_ctx *ctx,
+				       struct cu *cu_chain);
 
 
 static void
@@ -530,6 +537,7 @@ process_file (int fd __attribute__((unused)),
   Elf_Data *abbrev_data = dwarf->sectiondata[IDX_debug_abbrev];
   Elf_Data *info_data = dwarf->sectiondata[IDX_debug_info];
   Elf_Data *aranges_data = dwarf->sectiondata[IDX_debug_aranges];
+  Elf_Data *pubnames_data = dwarf->sectiondata[IDX_debug_pubnames];
 
   /* If we got Dwarf pointer, debug_abbrev and debug_info are present
      inside the file.  But let's be paranoid.  */
@@ -567,6 +575,15 @@ process_file (int fd __attribute__((unused)),
   else
     MESSAGE (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 	     ".debug_aranges data not found.");
+
+  if (pubnames_data != NULL)
+    {
+      read_ctx_init (&ctx, dwarf, pubnames_data);
+      check_pubnames_structural (&ctx, cu_chain);
+    }
+  else
+    MESSAGE (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+	     ".debug_pubnames data not found.");
 
   cu_free (cu_chain);
   abbrev_table_free (abbrev_chain);
@@ -1429,6 +1446,9 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  break;
 	}
 
+      const unsigned char *cu_end = ctx->ptr + size;
+      cur->length = cu_end - cu_begin; // Length including the length field.
+
       /* version + debug_abbrev_offset + address_size */
       uint64_t cu_header_size = 2 + (dwarf_64 ? 8 : 4) + 1;
       if (size < cu_header_size)
@@ -1443,7 +1463,6 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  /* Make CU context begin just before the CU length, so that DIE
 	     offsets are computed correctly.  */
 	  struct read_ctx cu_ctx;
-	  const unsigned char *cu_end = ctx->ptr + size;
 	  read_ctx_init_sub (&cu_ctx, ctx->dbg, ctx->data, cu_begin, cu_end);
 	  cu_ctx.ptr = ctx->ptr;
 
@@ -1603,7 +1622,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (addr > (uint64_t)(ctx->end - ctx->begin))
 		  {
 		    ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
-			   ": Invalid reference outside the CU: 0x%" PRIx64 ".\n",
+			   ": invalid reference outside the CU: 0x%" PRIx64 ".\n",
 			   cu->offset, die_off, abbrev->code, it->offset, addr);
 		    return;
 		  }
@@ -2023,7 +2042,10 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
       uint16_t version;
       if (!READ_VERSION (&sub_ctx, dwarf_64, &version,
 			 PRI_D_ARANGES PRI_ARANGETAB, atab_off))
-	return false;
+	{
+	  retval = false;
+	  goto next;
+	}
 
       /* CU offset.  */
       uint64_t cu_off;
@@ -2031,11 +2053,12 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	{
 	  ERROR (PRI_D_ARANGES PRI_ARANGETAB
 		 ": can't read debug info offset.\n", atab_off);
-	  return false;
+	  retval = false;
+	  goto next;
 	}
       if (cu_chain != NULL && cu_find_cu (cu_chain, cu_off) == NULL)
 	ERROR (PRI_D_ARANGES PRI_ARANGETAB
-	       ": invalid reference to " PRI_CU ".\n", atab_off, cu_off);
+	       ": unresolved reference to " PRI_CU ".\n", atab_off, cu_off);
 
       /* Address size.  */
       uint8_t address_size;
@@ -2043,7 +2066,8 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	{
 	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
 		 ": can't read unit address size.\n", atab_off, cu_off);
-	  return false;
+	  retval = false;
+	  goto next;
 	}
       if (address_size != 2
 	  && address_size != 4
@@ -2053,7 +2077,8 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
 		 ": invalid address size: %d.\n",
 		 atab_off, cu_off, address_size);
-	  return false;
+	  retval = false;
+	  goto next;
 	}
 
       /* Segment size.  */
@@ -2062,14 +2087,16 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	{
 	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
 		 ": can't read unit segment size.\n", atab_off, cu_off);
-	  return false;
+	  retval = false;
+	  goto next;
 	}
       if (segment_size != 0)
 	{
 	  WARNING (PRI_D_ARANGES PRI_ARANGETAB_CU
 		   ": dwarflint can't handle segment_size != 0.\n",
 		   atab_off, cu_off);
-	  return false;
+	  retval = false;
+	  goto next;
 	}
 
 
@@ -2090,7 +2117,8 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 		  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
 			 ": section ends after the header, but before the first entry.\n",
 			 atab_off, cu_off);
-		  return false;
+		  retval = false;
+		  goto next;
 		}
 	      if (c != 0)
 		MESSAGE (mc_impact_2 | mc_aranges,
@@ -2111,14 +2139,16 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	      ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
 		     ": can't read address field.\n",
 		     atab_off, cu_off, tuple_off);
-	      return false;
+	      retval = false;
+	      goto next;
 	    }
 	  if (!read_ctx_read_var (&sub_ctx, address_size, &length))
 	    {
 	      ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
 		     ": can't read length field.\n",
 		     atab_off, cu_off, tuple_off);
-	      return false;
+	      retval = false;
+	      goto next;
 	    }
 
 	  if (address == 0 && length == 0)
@@ -2139,6 +2169,141 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  retval = false;
 	}
 
+    next:
+      ctx->ptr += size;
+    }
+
+  return retval;
+}
+
+static bool
+check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
+{
+  assert (cu_chain);
+  bool retval = true;
+
+  while (!read_ctx_eof (ctx))
+    {
+      uint64_t set_off = read_ctx_get_offset (ctx);
+      const unsigned char *set_begin = ctx->ptr;
+
+      /* Size.  */
+      uint32_t size32;
+      uint64_t size;
+      bool dwarf_64;
+      if (!read_ctx_read_4ubyte (ctx, &size32))
+	{
+	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
+		 ": can't read set length.\n", set_off);
+	  return false;
+	}
+      if (!READ_SIZE_EXTRA (ctx, size32, &size, &dwarf_64,
+			    PRI_D_PUBNAMES PRI_PUBNAMESET, set_off))
+	return false;
+
+      struct read_ctx sub_ctx;
+      const unsigned char *set_end = ctx->ptr + size;
+      read_ctx_init_sub (&sub_ctx, ctx->dbg, ctx->data, set_begin, set_end);
+      sub_ctx.ptr = ctx->ptr;
+
+      /* Version.  */
+      uint16_t version;
+      if (!read_ctx_read_2ubyte (&sub_ctx, &version))
+	{
+	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
+		 ": can't read set version.\n", set_off);
+	  retval = false;
+	  goto next;
+	}
+
+      /* CU offset.  */
+      uint64_t cu_off;
+      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
+	{
+	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
+		 ": can't read debug info offset.\n", set_off);
+	  retval = false;
+	  goto next;
+	}
+      struct cu *cu = cu_find_cu (cu_chain, cu_off);
+      if (cu_chain != NULL && cu == NULL)
+	ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
+	       ": unresolved reference to " PRI_CU ".\n", set_off, cu_off);
+
+      /* Covered length.  */
+      uint64_t cu_len;
+      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_len))
+	{
+	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
+		 ": can't read debug info offset.\n", set_off, cu_off);
+	  retval = false;
+	  goto next;
+	}
+      if (cu_len != cu->length)
+	{
+	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
+		 ": the set covers length %" PRId64
+		 " but CU has length %" PRId64 ".\n",
+		 set_off, cu_off, cu_len, cu->length);
+	  retval = false;
+	  goto next;
+	}
+
+      /* followed by a null-terminated character string
+	 representing the name of the object as given by the
+	 DW_AT_name attribute of the referenced debugging entry. Each
+	 set of names is terminated by an offset field containing zero
+	 (and no following string). */
+      while (!read_ctx_eof (&sub_ctx))
+	{
+	  uint64_t pair_off = read_ctx_get_offset (&sub_ctx);
+	  uint64_t offset;
+	  if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &offset))
+	    {
+	      ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+		     ": can't read offset field.\n",
+		     set_off, cu_off, pair_off);
+	      retval = false;
+	      goto next;
+	    }
+	  if (offset == 0)
+	    break;
+
+	  if (!addr_record_has_addr (&cu->die_addrs, offset + cu->offset))
+	    {
+	      ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+		     ": unresolved reference to " PRI_DIE ".\n",
+		     set_off, cu_off, pair_off, offset);
+	      retval = false;
+	      goto next;
+	    }
+
+	  uint8_t c;
+	  do
+	    if (!read_ctx_read_ubyte (&sub_ctx, &c))
+	      {
+		ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+		       ": can't read symbol name.\n",
+		       set_off, cu_off, pair_off);
+		retval = false;
+		goto next;
+	      }
+	  while (c);
+	}
+
+      if (sub_ctx.ptr != sub_ctx.end
+	  && !CHECK_ZERO_PADDING (&sub_ctx, mc_pubnames,
+				  PRI_D_PUBNAMES PRI_PUBNAMESET,
+				  set_off))
+	{
+	  MESSAGE_PADDING_N0 (mc_pubnames | mc_error,
+			      PRI_D_PUBNAMES PRI_PUBNAMESET,
+			      read_ctx_get_offset (&sub_ctx),
+			      size, set_off);
+	  retval = false;
+	}
+
+    next:
       ctx->ptr += size;
     }
 

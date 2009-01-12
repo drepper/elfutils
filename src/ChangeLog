@@ -1,5 +1,9 @@
 2009-01-12  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Implement validation of .debug_pubnames.
+
+2009-01-12  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Check padding between sections in .debug_aranges.
 
 2009-01-12  Petr Machata  <pmachata@redhat.com>
