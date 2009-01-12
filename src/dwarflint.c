@@ -97,18 +97,21 @@ enum message_category
   mc_none      = 0,
 
   /* Severity: */
-  mc_impact_1  = 0x0001, // no impact on the consumer
-  mc_impact_2  = 0x0002, // still no impact, but suspicious or worth mentioning
-  mc_impact_3  = 0x0004, // some impact
-  mc_impact_4  = 0x0008, // high impact
-  mc_impact_all= 0x000f, // all severity levels
-  mc_impact_2p = 0x000e, // 2+
-  mc_impact_3p = 0x000c, // 3+
+  mc_impact_1  = 0x1, // no impact on the consumer
+  mc_impact_2  = 0x2, // still no impact, but suspicious or worth mentioning
+  mc_impact_3  = 0x4, // some impact
+  mc_impact_4  = 0x8, // high impact
+  mc_impact_all= 0xf, // all severity levels
+  mc_impact_2p = 0xe, // 2+
+  mc_impact_3p = 0xc, // 3+
 
   /* Accuracy:  */
-  mc_acc_bloat     = 0x0010, // unnecessary constructs (e.g. unreferenced strings)
-  mc_acc_suboptimal= 0x0020, // suboptimal construct (e.g. lack of siblings)
-  mc_acc_all       = 0x00f0, // all accuracy options
+  mc_acc_bloat     = 0x10, // unnecessary constructs (e.g. unreferenced strings)
+  mc_acc_suboptimal= 0x20, // suboptimal construct (e.g. lack of siblings)
+  mc_acc_all       = 0x30, // all accuracy options
+
+  /* Various: */
+  mc_error     = 0x40,  // make the message into an error
 
   /* Area: */
   mc_leb128    = 0x100, // ULEB/SLEB storage
@@ -121,8 +124,10 @@ enum message_category
   mc_die_all      = 0xf000, // includes all DIE categories
   mc_strings   = 0x10000, // string table
   mc_aranges   = 0x20000, // address ranges table
-  mc_other     = 0x40000, // messages unrelated to any of the above
-  mc_all       = 0xfff00, // all areas
+  mc_elf       = 0x40000, // ELF structure, e.g. missing optional sections
+  mc_pubnames  = 0x80000, // table of public names
+  mc_other     = 0x100000, // messages unrelated to any of the above
+  mc_all       = 0xffff00, // all areas
 };
 
 struct message_criteria
@@ -140,7 +145,7 @@ accept_message (struct message_criteria *crit, enum message_category cat)
 }
 
 static struct message_criteria warning_criteria = {mc_all & ~mc_strings, mc_none};
-static struct message_criteria error_criteria = {mc_impact_4, mc_none};
+static struct message_criteria error_criteria = {mc_impact_4 | mc_error, mc_none};
 
 static bool
 check_category (enum message_category cat)
@@ -286,6 +291,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       break;
 
     case 'i':
+      warning_criteria.reject |= mc_elf;
       tolerate_nodebug = true;
       break;
 
@@ -534,6 +540,7 @@ process_file (int fd __attribute__((unused)),
       abbrev_chain = abbrev_table_load (&ctx);
     }
   else if (!tolerate_nodebug)
+    /* Hard error, not a message.  We can't debug without this.  */
     ERROR (".debug_abbrev data not found.");
 
   struct cu *cu_chain = NULL;
@@ -542,12 +549,13 @@ process_file (int fd __attribute__((unused)),
     {
       Elf_Data *str_data = dwarf->sectiondata[IDX_debug_str];
       /* Same as above...  */
-      if (info_data != NULL)
+      if (info_data != NULL && str_data != NULL)
 	{
 	  read_ctx_init (&ctx, dwarf, info_data);
 	  cu_chain = check_debug_info_structural (&ctx, abbrev_chain, str_data);
 	}
       else if (!tolerate_nodebug)
+	/* Hard error, not a message.  We can't debug without this.  */
 	ERROR (".debug_info or .debug_str data not found.");
     }
 
@@ -557,10 +565,8 @@ process_file (int fd __attribute__((unused)),
       check_aranges_structural (&ctx, cu_chain);
     }
   else
-    /* Even though this is an error (XXX ?), it doesn't prevent us
-       from doing high-level or low-level checks of other
-       sections.  */
-    ERROR (".debug_aranges data not found.");
+    MESSAGE (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+	     ".debug_aranges data not found.");
 
   cu_free (cu_chain);
   abbrev_table_free (abbrev_chain);
@@ -1985,12 +1991,14 @@ check_cu_structural (struct read_ctx *ctx,
 
 
 static bool
-check_aranges_structural (struct read_ctx *ctx,
-			  struct cu *cu_chain)
+check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 {
+  bool retval = true;
+
   while (!read_ctx_eof (ctx))
     {
       uint64_t atab_off = read_ctx_get_offset (ctx);
+      const unsigned char *atab_begin = ctx->ptr;
 
       /* Size.  */
       uint32_t size32;
@@ -2002,37 +2010,36 @@ check_aranges_structural (struct read_ctx *ctx,
 		 ": can't read unit length.\n", atab_off);
 	  return false;
 	}
-      /*
-      if (size32 == 0 && check_zero_padding (ctx))
-	break;
-      */
-
       if (!READ_SIZE_EXTRA (ctx, size32, &size, &dwarf_64,
 			    PRI_D_ARANGES PRI_ARANGETAB, atab_off))
 	return false;
 
+      struct read_ctx sub_ctx;
+      const unsigned char *atab_end = ctx->ptr + size;
+      read_ctx_init_sub (&sub_ctx, ctx->dbg, ctx->data, atab_begin, atab_end);
+      sub_ctx.ptr = ctx->ptr;
 
       /* Version.  */
       uint16_t version;
-      if (!READ_VERSION (ctx, dwarf_64, &version,
+      if (!READ_VERSION (&sub_ctx, dwarf_64, &version,
 			 PRI_D_ARANGES PRI_ARANGETAB, atab_off))
 	return false;
 
       /* CU offset.  */
       uint64_t cu_off;
-      if (!read_ctx_read_offset (ctx, dwarf_64, &cu_off))
+      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
 	{
 	  ERROR (PRI_D_ARANGES PRI_ARANGETAB
 		 ": can't read debug info offset.\n", atab_off);
 	  return false;
 	}
-      if (cu_find_cu (cu_chain, cu_off) == NULL)
+      if (cu_chain != NULL && cu_find_cu (cu_chain, cu_off) == NULL)
 	ERROR (PRI_D_ARANGES PRI_ARANGETAB
 	       ": invalid reference to " PRI_CU ".\n", atab_off, cu_off);
 
       /* Address size.  */
       uint8_t address_size;
-      if (!read_ctx_read_ubyte (ctx, &address_size))
+      if (!read_ctx_read_ubyte (&sub_ctx, &address_size))
 	{
 	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
 		 ": can't read unit address size.\n", atab_off, cu_off);
@@ -2051,7 +2058,7 @@ check_aranges_structural (struct read_ctx *ctx,
 
       /* Segment size.  */
       uint8_t segment_size;
-      if (!read_ctx_read_ubyte (ctx, &segment_size))
+      if (!read_ctx_read_ubyte (&sub_ctx, &segment_size))
 	{
 	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
 		 ": can't read unit segment size.\n", atab_off, cu_off);
@@ -2071,14 +2078,14 @@ check_aranges_structural (struct read_ctx *ctx,
 	 (that is, twice the size of an address). The header is
 	 padded, if necessary, to the appropriate boundary.  */
       const uint8_t tuple_size = 2 * address_size;
-      uint64_t off = read_ctx_get_offset (ctx);
+      uint64_t off = read_ctx_get_offset (&sub_ctx);
       if ((off % tuple_size) != 0)
 	{
 	  uint64_t noff = ((off / tuple_size) + 1) * tuple_size;
 	  for (uint64_t i = off; i < noff; ++i)
 	    {
 	      uint8_t c;
-	      if (!read_ctx_read_ubyte (ctx, &c))
+	      if (!read_ctx_read_ubyte (&sub_ctx, &c))
 		{
 		  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
 			 ": section ends after the header, but before the first entry.\n",
@@ -2090,23 +2097,23 @@ check_aranges_structural (struct read_ctx *ctx,
 			 PRI_D_ARANGES PRI_ARANGETAB_CU
 			 ": non-zero byte at 0x%" PRIx64
 			 " in padding before the first entry.\n",
-			 atab_off, cu_off, read_ctx_get_offset (ctx));
+			 atab_off, cu_off, read_ctx_get_offset (&sub_ctx));
 	    }
 	}
-      assert ((read_ctx_get_offset (ctx) % tuple_size) == 0);
+      assert ((read_ctx_get_offset (&sub_ctx) % tuple_size) == 0);
 
-      while (!read_ctx_eof (ctx))
+      while (!read_ctx_eof (&sub_ctx))
 	{
-	  uint64_t tuple_off = read_ctx_get_offset (ctx);
+	  uint64_t tuple_off = read_ctx_get_offset (&sub_ctx);
 	  uint64_t address, length;
-	  if (!read_ctx_read_var (ctx, address_size, &address))
+	  if (!read_ctx_read_var (&sub_ctx, address_size, &address))
 	    {
 	      ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
 		     ": can't read address field.\n",
 		     atab_off, cu_off, tuple_off);
 	      return false;
 	    }
-	  if (!read_ctx_read_var (ctx, address_size, &length))
+	  if (!read_ctx_read_var (&sub_ctx, address_size, &length))
 	    {
 	      ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
 		     ": can't read length field.\n",
@@ -2119,7 +2126,21 @@ check_aranges_structural (struct read_ctx *ctx,
 
 	  /* Address and length can be validated on high level.  */
 	}
+
+      if (sub_ctx.ptr != sub_ctx.end
+	  && !CHECK_ZERO_PADDING (&sub_ctx, mc_pubnames,
+				  PRI_D_ARANGES PRI_ARANGETAB_CU,
+				  atab_off, cu_off))
+	{
+	  MESSAGE_PADDING_N0 (mc_pubnames | mc_error,
+			      PRI_D_ARANGES PRI_ARANGETAB_CU,
+			      read_ctx_get_offset (&sub_ctx),
+			      size, atab_off, cu_off);
+	  retval = false;
+	}
+
+      ctx->ptr += size;
     }
 
-  return true;
+  return retval;
 }
