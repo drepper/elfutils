@@ -1,5 +1,10 @@
 2009-01-13  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Adjust check_pubnames_structural to be able to
+	validate also .debug_pubtypes.  Do the validation.
+
+2009-01-13  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Rewrite message macros to functions.  This makes it
 	possible to rewrite several other macros to functions.
 

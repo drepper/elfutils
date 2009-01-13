@@ -421,6 +421,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_D_ABBREV ".debug_abbrev: "
 #define PRI_D_ARANGES ".debug_aranges: "
 #define PRI_D_PUBNAMES ".debug_pubnames: "
+#define PRI_D_PUBTYPES ".debug_pubtypes: "
 #define PRI_D_STR ".debug_str: "
 
 #define PRI_CU "CU 0x%" PRIx64
@@ -614,7 +615,8 @@ static bool check_cu_structural (struct read_ctx *ctx,
 static bool check_aranges_structural (struct read_ctx *ctx,
 				      struct cu *cu_chain);
 static bool check_pubnames_structural (struct read_ctx *ctx,
-				       struct cu *cu_chain);
+				       struct cu *cu_chain,
+				       const char *secname);
 
 
 static void
@@ -632,6 +634,7 @@ process_file (int fd __attribute__((unused)),
   Elf_Data *info_data = dwarf->sectiondata[IDX_debug_info];
   Elf_Data *aranges_data = dwarf->sectiondata[IDX_debug_aranges];
   Elf_Data *pubnames_data = dwarf->sectiondata[IDX_debug_pubnames];
+  Elf_Data *pubtypes_data = dwarf->sectiondata[IDX_debug_pubnames];
 
   /* If we got Dwarf pointer, debug_abbrev and debug_info are present
      inside the file.  But let's be paranoid.  */
@@ -643,7 +646,7 @@ process_file (int fd __attribute__((unused)),
     }
   else if (!tolerate_nodebug)
     /* Hard error, not a message.  We can't debug without this.  */
-    wr_error (".debug_abbrev data not found.");
+    wr_error (".debug_abbrev data not found.\n");
 
   struct cu *cu_chain = NULL;
 
@@ -658,7 +661,7 @@ process_file (int fd __attribute__((unused)),
 	}
       else if (!tolerate_nodebug)
 	/* Hard error, not a message.  We can't debug without this.  */
-	wr_error (".debug_info or .debug_str data not found.");
+	wr_error (".debug_info or .debug_str data not found.\n");
     }
 
   if (aranges_data != NULL)
@@ -668,16 +671,25 @@ process_file (int fd __attribute__((unused)),
     }
   else
     message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
-	     ".debug_aranges data not found.");
+	     ".debug_aranges data not found.\n");
 
   if (pubnames_data != NULL)
     {
       read_ctx_init (&ctx, dwarf, pubnames_data);
-      check_pubnames_structural (&ctx, cu_chain);
+      check_pubnames_structural (&ctx, cu_chain, PRI_D_PUBNAMES);
     }
   else
     message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
-	     ".debug_pubnames data not found.");
+	     PRI_D_PUBNAMES "data not found.\n");
+
+  if (pubtypes_data != NULL)
+    {
+      read_ctx_init (&ctx, dwarf, pubtypes_data);
+      check_pubnames_structural (&ctx, cu_chain, PRI_D_PUBTYPES);
+    }
+  else
+    message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+	     PRI_D_PUBTYPES "data not found.\n");
 
   cu_free (cu_chain);
   abbrev_table_free (abbrev_chain);
@@ -2280,9 +2292,9 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 }
 
 static bool
-check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
+check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
+			   const char *secname)
 {
-  assert (cu_chain);
   bool retval = true;
 
   while (!read_ctx_eof (ctx))
@@ -2296,12 +2308,12 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
       bool dwarf_64;
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
-	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
-		    ": can't read set length.\n", set_off);
+	  wr_error ("%s" PRI_PUBNAMESET
+		    ": can't read set length.\n", secname, set_off);
 	  return false;
 	}
       if (!read_size_extra (ctx, size32, &size, &dwarf_64,
-			    PRI_D_PUBNAMES PRI_PUBNAMESET, set_off))
+			    "%s" PRI_PUBNAMESET, secname, set_off))
 	return false;
 
       struct read_ctx sub_ctx;
@@ -2313,8 +2325,8 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
       uint16_t version;
       if (!read_ctx_read_2ubyte (&sub_ctx, &version))
 	{
-	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
-		    ": can't read set version.\n", set_off);
+	  wr_error ("%s" PRI_PUBNAMESET
+		    ": can't read set version.\n", secname, set_off);
 	  retval = false;
 	  goto next;
 	}
@@ -2323,31 +2335,31 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
       uint64_t cu_off;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
 	{
-	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
-		    ": can't read debug info offset.\n", set_off);
+	  wr_error ("%s" PRI_PUBNAMESET
+		    ": can't read debug info offset.\n", secname, set_off);
 	  retval = false;
 	  goto next;
 	}
       struct cu *cu = cu_find_cu (cu_chain, cu_off);
       if (cu_chain != NULL && cu == NULL)
-	wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
-		  ": unresolved reference to " PRI_CU ".\n", set_off, cu_off);
+	wr_error ("%s" PRI_PUBNAMESET ": unresolved reference to " PRI_CU ".\n",
+		  secname, set_off, cu_off);
 
       /* Covered length.  */
       uint64_t cu_len;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_len))
 	{
-	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
-		    ": can't read debug info offset.\n", set_off, cu_off);
+	  wr_error ("%s" PRI_PUBNAMESET_CU ": can't read debug info offset.\n",
+		    secname, set_off, cu_off);
 	  retval = false;
 	  goto next;
 	}
       if (cu_len != cu->length)
 	{
-	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
+	  wr_error ("%s" PRI_PUBNAMESET_CU
 		    ": the set covers length %" PRId64
 		    " but CU has length %" PRId64 ".\n",
-		    set_off, cu_off, cu_len, cu->length);
+		    secname, set_off, cu_off, cu_len, cu->length);
 	  retval = false;
 	  goto next;
 	}
@@ -2363,9 +2375,9 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  uint64_t offset;
 	  if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &offset))
 	    {
-	      wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+	      wr_error ("%s" PRI_PUBNAMESET_CU_RECORD
 			": can't read offset field.\n",
-			set_off, cu_off, pair_off);
+			secname, set_off, cu_off, pair_off);
 	      retval = false;
 	      goto next;
 	    }
@@ -2374,9 +2386,9 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
 	  if (!addr_record_has_addr (&cu->die_addrs, offset + cu->offset))
 	    {
-	      wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+	      wr_error ("%s" PRI_PUBNAMESET_CU_RECORD
 			": unresolved reference to " PRI_DIE ".\n",
-			set_off, cu_off, pair_off, offset);
+			secname, set_off, cu_off, pair_off, offset);
 	      retval = false;
 	      goto next;
 	    }
@@ -2385,9 +2397,9 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  do
 	    if (!read_ctx_read_ubyte (&sub_ctx, &c))
 	      {
-		wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+		wr_error ("%s" PRI_PUBNAMESET_CU_RECORD
 			  ": can't read symbol name.\n",
-			  set_off, cu_off, pair_off);
+			  secname, set_off, cu_off, pair_off);
 		retval = false;
 		goto next;
 	      }
@@ -2396,12 +2408,12 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
       if (sub_ctx.ptr != sub_ctx.end
 	  && !check_zero_padding (&sub_ctx, mc_pubnames,
-				  PRI_D_PUBNAMES PRI_PUBNAMESET,
-				  set_off))
+				  "%s" PRI_PUBNAMESET,
+				  secname, set_off))
 	{
 	  message_padding_n0 (mc_pubnames | mc_error,
 			      read_ctx_get_offset (&sub_ctx), size,
-			      PRI_D_PUBNAMES PRI_PUBNAMESET, set_off);
+			      "%s" PRI_PUBNAMESET, secname, set_off);
 	  retval = false;
 	}
 
