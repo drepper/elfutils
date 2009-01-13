@@ -38,6 +38,7 @@
 #include <inttypes.h>
 #include <libintl.h>
 #include <locale.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -146,6 +147,7 @@ accept_message (struct message_criteria *crit, enum message_category cat)
 
 static struct message_criteria warning_criteria = {mc_all & ~mc_strings, mc_none};
 static struct message_criteria error_criteria = {mc_impact_4 | mc_error, mc_none};
+static unsigned error_count = 0;
 
 static bool
 check_category (enum message_category cat)
@@ -153,47 +155,138 @@ check_category (enum message_category cat)
   return accept_message (&warning_criteria, cat);
 }
 
-/* Report an error.  */
-#define ERROR(str, args...)			\
-  do {						\
-    fputs ("error: ", stdout);			\
-    printf (str, ##args);			\
-    ++error_count;				\
-  } while (0)
-static unsigned int error_count;
+static char fmterr[] = "(fmt error)";
 
-#define WARNING(str, args...)			\
-  do {						\
-    fputs ("warning: ", stdout);		\
-    printf (str, ##args);			\
-    ++error_count;				\
-  } while (0)
+static void
+verror (const char *format, va_list ap)
+{
+  fputs ("error: ", stdout);
+  vprintf (format, ap);
+  ++error_count;
+}
 
-#define MESSAGE(category, str, args...)			   \
-  do {							   \
-    if (accept_message (&warning_criteria, category))	   \
-      {							   \
-	if (accept_message (&error_criteria, category))	   \
-	  ERROR (str, ##args);				   \
-	else						   \
-	  WARNING (str, ##args);			   \
-      }							   \
-  } while (0)
+static void
+vwarning (const char *format, va_list ap)
+{
+  fputs ("warning: ", stdout);
+  vprintf (format, ap);
+  ++error_count;
+}
 
-/* mc_acc_bloat | mc_impact_1 is automatically attached.  */
-#define MESSAGE_PADDING_0(CAT, FMT, START, END, ARGS...)	\
-  MESSAGE (((CAT) | mc_acc_bloat | mc_impact_1),		\
-	   FMT ": 0x%" PRIx64 "..0x%" PRIx64			\
-	   ": unnecessary padding with zero bytes.\n",		\
-	   ##ARGS, (START), (END))
+static void
+vmessage (enum message_category category, const char *format, va_list ap)
+{
+  if (accept_message (&warning_criteria, category))
+    {
+      if (accept_message (&error_criteria, category))
+	verror (format, ap);
+      else
+	vwarning (format, ap);
+    }
+}
 
-/* mc_acc_bloat | mc_impact_2 is automatically attached.  */
-#define MESSAGE_PADDING_N0(CAT, FMT, START, END, ARGS...)	\
-  MESSAGE (((CAT) | mc_acc_bloat | mc_impact_2),		\
-	   FMT ": 0x%" PRIx64 "..0x%" PRIx64			\
-	   ": unreferenced non-zero bytes.\n",			\
-	   ##ARGS, (START), (END))
+static void __attribute__ ((format (printf, 1, 2)))
+wr_error (const char *format, ...)
+{
+  va_list ap;
+  va_start (ap, format);
+  verror (format, ap);
+  va_end (ap);
+}
 
+static void __attribute__ ((format (printf, 1, 2)))
+wr_warning (const char *format, ...)
+{
+  va_list ap;
+  va_start (ap, format);
+  vwarning (format, ap);
+  va_end (ap);
+}
+
+static void __attribute__ ((format (printf, 2, 3)))
+message (enum message_category category, const char *format, ...)
+{
+  va_list ap;
+  va_start (ap, format);
+  vmessage (category, format, ap);
+  va_end (ap);
+}
+
+static void
+format_padding_message (enum message_category category,
+			uint64_t start, uint64_t end,
+			char *kind, const char *format, va_list ap)
+{
+  if (!accept_message (&warning_criteria, category))
+    return;
+
+  char *buf;
+  if (vasprintf (&buf, format, ap) < 0)
+    buf = NULL;
+
+  message (category,
+	   "%s: 0x%" PRIx64 "..0x%" PRIx64
+	   ": %s.\n",
+	   buf ?: fmterr, start, end, kind);
+  free (buf);
+}
+
+static void
+format_leb128_message (int st, const char *format, char *what, va_list ap)
+{
+  enum message_category category = mc_leb128 | mc_acc_bloat | mc_impact_3;
+  if (st == 0 || (st > 0 && !accept_message (&warning_criteria, category)))
+    return;
+
+  char *buf;
+  if (vasprintf (&buf, format, ap) < 0)
+    buf = NULL;
+
+  if (st < 0)
+    wr_error ("%s: can't read %s.\n", buf ?: fmterr, what);
+  else if (st > 0)
+    message (category,
+	     "%s: unnecessarily long encoding of %s.\n",
+	     buf ?: fmterr, what);
+
+  free (buf);
+}
+
+static void
+vmessage_padding_0 (enum message_category category,
+		    uint64_t start, uint64_t end,
+		    const char *format, va_list ap)
+{
+  format_padding_message (category | mc_acc_bloat | mc_impact_1,
+			  start, end,
+			  "unnecessary padding with zero bytes",
+			  format, ap);
+}
+
+static void
+message_padding_0 (enum message_category category,
+		   uint64_t start, uint64_t end,
+		   const char *format, ...)
+{
+  va_list ap;
+  va_start (ap, format);
+  vmessage_padding_0 (category, start, end, format, ap);
+  va_end (ap);
+}
+
+static void
+message_padding_n0 (enum message_category category,
+		    uint64_t start, uint64_t end,
+		    const char *format, ...)
+{
+  va_list ap;
+  va_start (ap, format);
+  format_padding_message (category | mc_acc_bloat | mc_impact_2,
+			  start, end,
+			  "unreferenced non-zero bytes",
+			  format, ap);
+  va_end (ap);
+}
 
 /* True if no message is to be printed if the run is succesful.  */
 static bool be_quiet;
@@ -229,8 +322,8 @@ main (int argc, char *argv[])
       /* Create an `Elf' descriptor.  */
       Elf *elf = elf_begin (fd, ELF_C_READ_MMAP, NULL);
       if (elf == NULL)
-	ERROR (gettext ("cannot generate Elf descriptor: %s\n"),
-	       elf_errmsg (-1));
+	wr_error (gettext ("cannot generate Elf descriptor: %s\n"),
+		  elf_errmsg (-1));
       else
 	{
 	  unsigned int prev_error_count = error_count;
@@ -238,8 +331,8 @@ main (int argc, char *argv[])
 	  if (dwarf == NULL)
 	    {
 	      if (!tolerate_nodebug)
-		ERROR (gettext ("cannot generate Dwarf descriptor: %s\n"),
-		       dwarf_errmsg (-1));
+		wr_error (gettext ("cannot generate Dwarf descriptor: %s\n"),
+			  dwarf_errmsg (-1));
 	    }
 	  else
 	    {
@@ -256,13 +349,13 @@ main (int argc, char *argv[])
 
 	      /* Now we can close the descriptor.  */
 	      if (dwarf_end (dwarf) != 0)
-		ERROR (gettext ("error while closing Dwarf descriptor: %s\n"),
-		       dwarf_errmsg (-1));
+		wr_error (gettext ("error while closing Dwarf descriptor: %s\n"),
+			  dwarf_errmsg (-1));
 	    }
 
 	  if (elf_end (elf) != 0)
-	    ERROR (gettext ("error while closing Elf descriptor: %s\n"),
-		   elf_errmsg (-1));
+	    wr_error (gettext ("error while closing Elf descriptor: %s\n"),
+		      elf_errmsg (-1));
 
 	  if (prev_error_count == error_count && !be_quiet)
 	    puts (gettext ("No errors"));
@@ -328,6 +421,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_D_ABBREV ".debug_abbrev: "
 #define PRI_D_ARANGES ".debug_aranges: "
 #define PRI_D_PUBNAMES ".debug_pubnames: "
+#define PRI_D_STR ".debug_str: "
 
 #define PRI_CU "CU 0x%" PRIx64
 #define PRI_DIE "DIE 0x%" PRIx64
@@ -549,7 +643,7 @@ process_file (int fd __attribute__((unused)),
     }
   else if (!tolerate_nodebug)
     /* Hard error, not a message.  We can't debug without this.  */
-    ERROR (".debug_abbrev data not found.");
+    wr_error (".debug_abbrev data not found.");
 
   struct cu *cu_chain = NULL;
 
@@ -564,7 +658,7 @@ process_file (int fd __attribute__((unused)),
 	}
       else if (!tolerate_nodebug)
 	/* Hard error, not a message.  We can't debug without this.  */
-	ERROR (".debug_info or .debug_str data not found.");
+	wr_error (".debug_info or .debug_str data not found.");
     }
 
   if (aranges_data != NULL)
@@ -573,7 +667,7 @@ process_file (int fd __attribute__((unused)),
       check_aranges_structural (&ctx, cu_chain);
     }
   else
-    MESSAGE (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+    message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 	     ".debug_aranges data not found.");
 
   if (pubnames_data != NULL)
@@ -582,7 +676,7 @@ process_file (int fd __attribute__((unused)),
       check_pubnames_structural (&ctx, cu_chain);
     }
   else
-    MESSAGE (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+    message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 	     ".debug_pubnames data not found.");
 
   cu_free (cu_chain);
@@ -662,20 +756,17 @@ read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret)
   return zero_tail ? 1 : 0;
 }
 
-#define CHECKED_READ_ULEB128(CTX, RET, FMT, WHAT, ARGS...)		\
-  ({									\
-      int __st = read_ctx_read_uleb128 (CTX, RET);			\
-      bool __ret = false;						\
-      if (__st < 0)							\
-	ERROR (FMT ": can't read %s.\n", ##ARGS, WHAT);			\
-      else if (__st > 0)						\
-	MESSAGE (mc_leb128 | mc_acc_bloat | mc_impact_3,		\
-		 FMT ": unnecessarily long encoding of %s.\n",		\
-		 ##ARGS, WHAT);						\
-      else								\
-	__ret = true;							\
-      __ret;								\
-  })
+static bool __attribute__ ((format (printf, 3, 5)))
+checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
+		      char *format, char *what, ...)
+{
+  int st = read_ctx_read_uleb128 (ctx, ret);
+  va_list ap;
+  va_start (ap, what);
+  format_leb128_message (st, format, what, ap);
+  va_end (ap);
+  return st >= 0;
+}
 
 static int
 read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret)
@@ -712,21 +803,17 @@ read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret)
   return zero_tail ? 1 : 0;
 }
 
-#define CHECKED_READ_SLEB128(CTX, RET, FMT, WHAT, ARGS...)		\
-  ({									\
-      int __st = read_ctx_read_sleb128 (CTX, RET);			\
-      bool __ret = true;						\
-      if (__st < 0)							\
-	{								\
-	  ERROR (FMT ": can't read %s.\n", ##ARGS, WHAT);		\
-	  __ret = false;						\
-	}								\
-      else if (__st > 0)						\
-	MESSAGE (mc_leb128 | mc_acc_bloat | mc_impact_3,		\
-		 FMT ": unnecessarily long encoding of %s.\n",		\
-		 ##ARGS, WHAT);						\
-      __ret;								\
-  })
+static bool __attribute__ ((format (printf, 3, 5)))
+checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
+		      char *format, char *what, ...)
+{
+  int st = read_ctx_read_sleb128 (ctx, ret);
+  va_list ap;
+  va_start (ap, what);
+  format_leb128_message (st, format, what, ap);
+  va_end (ap);
+  return st >= 0;
+}
 
 static bool
 read_ctx_read_2ubyte (struct read_ctx *ctx, uint16_t *ret)
@@ -860,7 +947,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	  abbr_off = read_ctx_get_offset (ctx);
 
 	  /* Abbreviation code.  */
-	  if (!CHECKED_READ_ULEB128 (ctx, &abbr_code,
+	  if (!checked_read_uleb128 (ctx, &abbr_code,
 				     PRI_ABBR, "abbrev code", abbr_off))
 	    goto free_and_out;
 
@@ -878,8 +965,8 @@ abbrev_table_load (struct read_ctx *ctx)
 	}
 
       if (zero_seq_off != (uint64_t)-1)
-	MESSAGE_PADDING_0 (mc_abbrevs, PRI_ABBR,
-			   zero_seq_off, prev_abbr_off - 1, section_off);
+	message_padding_0 (mc_abbrevs, zero_seq_off, prev_abbr_off - 1,
+			   PRI_ABBR, section_off);
 
       if (read_ctx_eof (ctx))
 	break;
@@ -901,14 +988,14 @@ abbrev_table_load (struct read_ctx *ctx)
 
       /* Abbreviation tag.  */
       uint64_t abbr_tag;
-      if (!CHECKED_READ_ULEB128 (ctx, &abbr_tag,
+      if (!checked_read_uleb128 (ctx, &abbr_tag,
 				 PRI_ABBR, "abbrev tag", abbr_off))
 	goto free_and_out;
 
       if (abbr_tag > DW_TAG_hi_user)
 	{
-	  ERROR (PRI_ABBR ": invalid abbrev tag 0x%" PRIx64 ".\n",
-		 abbr_off, abbr_tag);
+	  wr_error (PRI_ABBR ": invalid abbrev tag 0x%" PRIx64 ".\n",
+		    abbr_off, abbr_tag);
 	  goto free_and_out;
 	}
       cur->tag = (typeof (cur->tag))abbr_tag;
@@ -917,15 +1004,15 @@ abbrev_table_load (struct read_ctx *ctx)
       uint8_t has_children;
       if (!read_ctx_read_ubyte (ctx, &has_children))
 	{
-	  ERROR (PRI_ABBR ": can't read abbrev has_children.\n", abbr_off);
+	  wr_error (PRI_ABBR ": can't read abbrev has_children.\n", abbr_off);
 	  goto free_and_out;
 	}
 
       if (has_children != DW_CHILDREN_no
 	  && has_children != DW_CHILDREN_yes)
 	{
-	  ERROR (PRI_ABBR ": invalid has_children value 0x%x.\n",
-		 abbr_off, cur->has_children);
+	  wr_error (PRI_ABBR ": invalid has_children value 0x%x.\n",
+		    abbr_off, cur->has_children);
 	  goto free_and_out;
 	}
       cur->has_children = has_children == DW_CHILDREN_yes;
@@ -938,12 +1025,12 @@ abbrev_table_load (struct read_ctx *ctx)
 	  uint64_t attrib_name, attrib_form;
 
 	  /* Load attribute name and form.  */
-	  if (!CHECKED_READ_ULEB128 (ctx, &attrib_name,
+	  if (!checked_read_uleb128 (ctx, &attrib_name,
 				     PRI_ABBR_ATTR, "attribute name",
 				     abbr_off, attr_off))
 	    goto free_and_out;
 
-	  if (!CHECKED_READ_ULEB128 (ctx, &attrib_form,
+	  if (!checked_read_uleb128 (ctx, &attrib_form,
 				     PRI_ABBR_ATTR, "attribute form",
 				     abbr_off, attr_off))
 	    goto free_and_out;
@@ -956,15 +1043,15 @@ abbrev_table_load (struct read_ctx *ctx)
 	      /* Otherwise validate name and form.  */
 	      if (attrib_name > DW_AT_hi_user)
 		{
-		  ERROR (PRI_ABBR_ATTR ": invalid name 0x%" PRIx64 ".\n",
-			 abbr_off, attr_off, attrib_name);
+		  wr_error (PRI_ABBR_ATTR ": invalid name 0x%" PRIx64 ".\n",
+			    abbr_off, attr_off, attrib_name);
 		  goto free_and_out;
 		}
 
 	      if (!attrib_form_valid (attrib_form))
 		{
-		  ERROR (PRI_ABBR_ATTR ": invalid form 0x%" PRIx64 ".\n",
-			 abbr_off, attr_off, attrib_form);
+		  wr_error (PRI_ABBR_ATTR ": invalid form 0x%" PRIx64 ".\n",
+			    abbr_off, attr_off, attrib_form);
 		  goto free_and_out;
 		}
 	    }
@@ -982,17 +1069,17 @@ abbrev_table_load (struct read_ctx *ctx)
 	  if (attrib_name == DW_AT_sibling)
 	    {
 	      if (sibling_attr != 0)
-		ERROR (PRI_ABBR_ATTR
-		       ": Another DW_AT_sibling attribute in one abbreviation. "
-		       "(First was 0x%" PRIx64 ".)\n",
-		       abbr_off, attr_off, sibling_attr);
+		wr_error (PRI_ABBR_ATTR
+			  ": Another DW_AT_sibling attribute in one abbreviation. "
+			  "(First was 0x%" PRIx64 ".)\n",
+			  abbr_off, attr_off, sibling_attr);
 	      else
 		{
 		  assert (attr_off > 0);
 		  sibling_attr = attr_off;
 
 		  if (!cur->has_children)
-		    MESSAGE (mc_die_rel_sib | mc_acc_bloat | mc_impact_1,
+		    message (mc_die_rel_sib | mc_acc_bloat | mc_impact_1,
 			     PRI_ABBR_ATTR
 			     ": Excessive DW_AT_sibling attribute at childless abbrev.\n",
 			     abbr_off, attr_off);
@@ -1001,16 +1088,16 @@ abbrev_table_load (struct read_ctx *ctx)
 	      switch (check_sibling_form (attrib_form))
 		{
 		case -1:
-		  MESSAGE (mc_die_rel_sib | mc_impact_2,
+		  message (mc_die_rel_sib | mc_impact_2,
 			   PRI_ABBR_ATTR
 			   ": DW_AT_sibling attribute with form DW_FORM_ref_addr.\n",
 			   abbr_off, attr_off);
 		  break;
 
 		case -2:
-		  ERROR (PRI_ABBR_ATTR
-			 ": DW_AT_sibling attribute with non-reference form %s.\n",
-			 abbr_off, attr_off, dwarf_form_string (attrib_form));
+		  wr_error (PRI_ABBR_ATTR
+			    ": DW_AT_sibling attribute with non-reference form %s.\n",
+			    abbr_off, attr_off, dwarf_form_string (attrib_form));
 		};
 	    }
 
@@ -1278,9 +1365,9 @@ check_die_references (struct cu *cu,
       struct ref *ref = die_refs->refs + i;
       if (!addr_record_has_addr (&cu->die_addrs, ref->addr))
 	{
-	  ERROR (PRI_D_INFO PRI_CU_DIE
-		 ": unresolved reference to " PRI_DIE ".\n",
-		 cu->offset, ref->who, ref->addr);
+	  wr_error (PRI_D_INFO PRI_CU_DIE
+		    ": unresolved reference to " PRI_DIE ".\n",
+		    cu->offset, ref->who, ref->addr);
 	  retval = false;
 	}
     }
@@ -1305,13 +1392,14 @@ check_global_die_references (struct cu *cu_chain)
 
 	if (ref_cu == NULL)
 	  {
-	    ERROR (PRI_D_INFO PRI_CU_DIE
-		   ": unresolved (non-CU-local) reference to " PRI_DIE ".\n",
-		   it->offset, ref->who, ref->addr);
+	    wr_error (PRI_D_INFO PRI_CU_DIE
+		      ": unresolved (non-CU-local) reference to "
+		      PRI_DIE ".\n",
+		      it->offset, ref->who, ref->addr);
 	    retval = false;
 	  }
 	else if (ref_cu == it)
-	  MESSAGE (mc_impact_2 | mc_acc_suboptimal | mc_die_rel_ref,
+	  message (mc_impact_2 | mc_acc_suboptimal | mc_die_rel_ref,
 		   PRI_D_INFO PRI_CU_DIE
 		   ": local reference to " PRI_DIE " formed as global.\n",
 		   it->offset, ref->who, ref->addr);
@@ -1320,64 +1408,70 @@ check_global_die_references (struct cu *cu_chain)
   return retval;
 }
 
-#define READ_SIZE_EXTRA(CTX, SIZE32, SIZEP, DWARF_64P, FMT, ARGS...)	\
-  ({									\
-    __label__ out;							\
-    struct read_ctx *_ctx = (CTX);					\
-    uint32_t _size32 = (SIZE32);					\
-    uint64_t *_sizep = (SIZEP);						\
-    bool *_dwarf_64p = (DWARF_64P);					\
-    bool _retval = true;						\
-									\
-    if (_size32 == DWARF3_LENGTH_64_BIT)				\
-      {									\
-	if (!read_ctx_read_8ubyte (_ctx, _sizep))			\
-	  {								\
-	    ERROR (FMT ": can't read 64bit CU length.\n", ##ARGS);	\
-	    _retval = false;						\
-	    goto out;							\
-	  }								\
-									\
-	*_dwarf_64p = true;						\
-      }									\
-    else if (_size32 >= DWARF3_LENGTH_MIN_ESCAPE_CODE)			\
-      {									\
-	ERROR (FMT ": unrecognized CU length escape value: %"		\
-	       PRIx32 ".\n", ##ARGS, size32);				\
-	_retval = false;						\
-	goto out;							\
-      }									\
-    else								\
-      *_sizep = _size32;						\
-									\
-  out:									\
-    _retval;								\
-  })
+static bool
+read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
+		 bool *dwarf_64p, const char *format, ...)
+{
+  bool retval = true;
 
-#define CHECK_ZERO_PADDING(CTX, CATEGORY, FMT, ARGS...)			\
-  ({									\
-    __label__ out;							\
-    struct read_ctx *_ctx = (CTX);					\
-    enum message_category _mc = (CATEGORY);				\
-    bool _retval = true;						\
-									\
-    assert (_ctx->ptr != _ctx->end);					\
-    const unsigned char *_save_ptr = _ctx->ptr;				\
-    while (!read_ctx_eof (_ctx))					\
-      if (*_ctx->ptr++ != 0)						\
-	{								\
-	  _ctx->ptr = _save_ptr;					\
-	  _retval = false;						\
-	  goto out;							\
-	}								\
-									\
-    MESSAGE_PADDING_0 (_mc, FMT,					\
-		       (uint64_t)(_save_ptr - _ctx->begin),		\
-		       (uint64_t)(_ctx->end - _ctx->begin), ##ARGS);	\
-									\
-  out:									\
-    _retval;								\
-  })
+  va_list ap;
+  va_start (ap, format);
+  char *buf = NULL;
+
+  if (size32 == DWARF3_LENGTH_64_BIT)
+    {
+      if (!read_ctx_read_8ubyte (ctx, sizep))
+	{
+	  if (vasprintf (&buf, format, ap) < 0)
+	    buf = NULL;
+	  wr_error ("%s: can't read 64bit CU length.n", buf ?: fmterr);
+	  retval = false;
+	  goto out;
+	}
+
+      *dwarf_64p = true;
+    }
+  else if (size32 >= DWARF3_LENGTH_MIN_ESCAPE_CODE)
+    {
+      if (vasprintf (&buf, format, ap) < 0)
+	buf = NULL;
+      wr_error ("%s: unrecognized CU length escape value: %"
+		PRIx32 ".n", buf ?: fmterr, size32);
+      retval = false;
+      goto out;
+    }
+  else
+    *sizep = size32;
+
+ out:
+  va_end (ap);
+  free (buf);
+  return retval;
+}
+
+static bool __attribute__ ((format (printf, 3, 4)))
+check_zero_padding (struct read_ctx *ctx,
+		    enum message_category category,
+		    const char *format, ...)
+{
+  assert (ctx->ptr != ctx->end);
+  const unsigned char *save_ptr = ctx->ptr;
+  while (!read_ctx_eof (ctx))
+    if (*ctx->ptr++ != 0)
+      {
+	ctx->ptr = save_ptr;
+	return false;
+      }
+
+  va_list ap;
+  va_start (ap, format);
+  vmessage_padding_0 (category,
+		      (uint64_t)(save_ptr - ctx->begin),
+		      (uint64_t)(ctx->end - ctx->begin),
+		      format, ap);
+  va_end (ap);
+  return true;
+}
 
 static struct cu *
 check_debug_info_structural (struct read_ctx *ctx,
@@ -1416,21 +1510,22 @@ check_debug_info_structural (struct read_ctx *ctx,
       /* Reading CU header is a bit tricky, because we don't know if
 	 we have run into (superfluous but allowed) zero padding.  */
       if (!read_ctx_need_data (ctx, 4)
-	  && CHECK_ZERO_PADDING (ctx, mc_die_other, PRI_D_INFO PRI_CU, cu_off))
+	  && check_zero_padding (ctx, mc_die_other,
+				 PRI_D_INFO PRI_CU, cu_off))
 	break;
 
       /* CU length.  */
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
-	  ERROR (PRI_D_INFO PRI_CU ": can't read CU length.\n", cu_off);
+	  wr_error (PRI_D_INFO PRI_CU ": can't read CU length.\n", cu_off);
 	  success = false;
 	  break;
 	}
-      if (size32 == 0 && CHECK_ZERO_PADDING (ctx, mc_die_other,
+      if (size32 == 0 && check_zero_padding (ctx, mc_die_other,
 					     PRI_D_INFO PRI_CU, cu_off))
 	break;
 
-      if (!READ_SIZE_EXTRA (ctx, size32, &size, &dwarf_64,
+      if (!read_size_extra (ctx, size32, &size, &dwarf_64,
 			    PRI_D_INFO PRI_CU, cu_off))
 	{
 	  success = false;
@@ -1439,8 +1534,8 @@ check_debug_info_structural (struct read_ctx *ctx,
 
       if (!read_ctx_need_data (ctx, size))
 	{
-	  ERROR (PRI_D_INFO PRI_CU ": section doesn't have enough data"
-		 " to read CU of size %" PRIx64 ".\n", cu_off, size);
+	  wr_error (PRI_D_INFO PRI_CU ": section doesn't have enough data"
+		    " to read CU of size %" PRIx64 ".\n", cu_off, size);
 	  ctx->ptr = ctx->end;
 	  success = false;
 	  break;
@@ -1453,8 +1548,8 @@ check_debug_info_structural (struct read_ctx *ctx,
       uint64_t cu_header_size = 2 + (dwarf_64 ? 8 : 4) + 1;
       if (size < cu_header_size)
 	{
-	  ERROR (PRI_D_INFO PRI_CU ": claimed length of %" PRIx64
-		 " doesn't even cover CU header.\n", cu_off, size);
+	  wr_error (PRI_D_INFO PRI_CU ": claimed length of %" PRIx64
+		    " doesn't even cover CU header.\n", cu_off, size);
 	  success = false;
 	  break;
 	}
@@ -1473,11 +1568,11 @@ check_debug_info_structural (struct read_ctx *ctx,
 	      break;
 	    }
 	  if (cu_ctx.ptr != cu_ctx.end
-	      && !CHECK_ZERO_PADDING (&cu_ctx, mc_die_other,
+	      && !check_zero_padding (&cu_ctx, mc_die_other,
 				      PRI_D_INFO PRI_CU, cu_off))
-	    MESSAGE_PADDING_N0 (mc_die_other, PRI_D_INFO PRI_CU,
-				read_ctx_get_offset (ctx),
-				size, cu_off);
+	    message_padding_n0 (mc_die_other,
+				read_ctx_get_offset (ctx), size,
+				PRI_D_INFO PRI_CU, cu_off);
 	}
 
       ctx->ptr += size;
@@ -1485,7 +1580,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 
   // Only check this if above we have been successful.
   if (success && ctx->ptr != ctx->end)
-    MESSAGE (mc_die_other | mc_impact_4,
+    message (mc_die_other | mc_impact_4,
 	     ".debug_info: CU lengths don't exactly match Elf_Data contents.");
 
   bool references_sound = check_global_die_references (cu_chain);
@@ -1504,11 +1599,11 @@ check_debug_info_structural (struct read_ctx *ctx,
 	    }
 
 	if (all_zeroes)
-	  MESSAGE_PADDING_0 (mc_strings, ".debug_str", begin, end);
+	  message_padding_0 (mc_strings, begin, end, PRI_D_STR);
 	else
 	  /* XXX: This is actually lying in case that the unreferenced
 	     portion is composed of sequences of zeroes and non-zeroes.  */
-	  MESSAGE_PADDING_N0 (mc_strings, ".debug_str", begin, end);
+	  message_padding_n0 (mc_strings, begin, end, PRI_D_STR);
       }
 
       if (success)
@@ -1554,7 +1649,7 @@ read_die_chain (struct read_ctx *ctx,
 
       prev_die_off = die_off;
       die_off = read_ctx_get_offset (ctx);
-      if (!CHECKED_READ_ULEB128 (ctx, &abbr_code,
+      if (!checked_read_uleb128 (ctx, &abbr_code,
 				 PRI_D_INFO PRI_CU_DIE, "abbrev code",
 				 cu->offset, die_off))
 	return -1;
@@ -1563,11 +1658,11 @@ read_die_chain (struct read_ctx *ctx,
       if (sibling_addr != 0)
 	{
 	  if (abbr_code == 0)
-	    ERROR (PRI_D_INFO PRI_CU_DIE
+	    wr_error (PRI_D_INFO PRI_CU_DIE
 		   ": is the last sibling in chain, but has a DW_AT_sibling attribute.\n",
 		   cu->offset, prev_die_off);
 	  else if (sibling_addr != die_off)
-	    ERROR (PRI_D_INFO PRI_CU_DIE
+	    wr_error (PRI_D_INFO PRI_CU_DIE
 		   ": This DIE should have had its sibling at 0x%"
 		   PRIx64 ", but it's at 0x%" PRIx64 " instead.\n",
 		   cu->offset, prev_die_off, sibling_addr, die_off);
@@ -1577,7 +1672,7 @@ read_die_chain (struct read_ctx *ctx,
 	/* Even if it has children, the DIE can't have a sibling
 	   attribute if it's the last DIE in chain.  That's the reason
 	   we can't simply check this when loading abbrevs.  */
-	MESSAGE (mc_die_rel_sib | mc_acc_suboptimal | mc_impact_4,
+	message (mc_die_rel_sib | mc_acc_suboptimal | mc_impact_4,
 		 PRI_D_INFO PRI_CU_DIE
 		 ": This DIE had children, but no DW_AT_sibling attribute.\n",
 		 cu->offset, prev_die_off);
@@ -1586,7 +1681,7 @@ read_die_chain (struct read_ctx *ctx,
       if (read_ctx_eof (ctx) || abbr_code == 0)
 	{
 	  if (abbr_code != 0)
-	    ERROR (PRI_D_INFO PRI_CU
+	    wr_error (PRI_D_INFO PRI_CU
 		   ": DIE chain at %p not terminated with DIE with zero abbrev code.\n",
 		   cu->offset, begin);
 	  break;
@@ -1599,7 +1694,7 @@ read_die_chain (struct read_ctx *ctx,
       abbrev = abbrev_table_find_abbrev (abbrevs, abbr_code);
       if (abbrev == NULL)
 	{
-	  ERROR (PRI_D_INFO PRI_CU_DIE ": abbrev section at 0x%" PRIx64
+	  wr_error (PRI_D_INFO PRI_CU_DIE ": abbrev section at 0x%" PRIx64
 		 " doesn't contain code %" PRIu64 ".\n",
 		 cu->offset, die_off, abbrevs->offset, abbr_code);
 	  return -1;
@@ -1621,7 +1716,7 @@ read_die_chain (struct read_ctx *ctx,
 		assert (ctx->end > ctx->begin);
 		if (addr > (uint64_t)(ctx->end - ctx->begin))
 		  {
-		    ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+		    wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			   ": invalid reference outside the CU: 0x%" PRIx64 ".\n",
 			   cu->offset, die_off, abbrev->code, it->offset, addr);
 		    return;
@@ -1641,7 +1736,7 @@ read_die_chain (struct read_ctx *ctx,
 	  if (form == DW_FORM_indirect)
 	    {
 	      uint64_t value;
-	      if (!CHECKED_READ_ULEB128 (ctx, &value,
+	      if (!checked_read_uleb128 (ctx, &value,
 					 PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					 "indirect attribute form",
 					 cu->offset, die_off, abbrev->code,
@@ -1650,9 +1745,9 @@ read_die_chain (struct read_ctx *ctx,
 
 	      if (!attrib_form_valid (value))
 		{
-		  ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
-			 ": invalid indirect form 0x%" PRIx64 ".\n",
-			 cu->offset, die_off, abbrev->code, it->offset, value);
+		  wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+			    ": invalid indirect form 0x%" PRIx64 ".\n",
+			    cu->offset, die_off, abbrev->code, it->offset, value);
 		  return -1;
 		}
 	      form = value;
@@ -1661,17 +1756,17 @@ read_die_chain (struct read_ctx *ctx,
 		switch (check_sibling_form (form))
 		  {
 		  case -1:
-		    MESSAGE (mc_die_rel_sib | mc_impact_2,
+		    message (mc_die_rel_sib | mc_impact_2,
 			     PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			     ": DW_AT_sibling attribute with (indirect) form DW_FORM_ref_addr.\n",
 			     cu->offset, die_off, abbrev->code, it->offset);
 		    break;
 
 		  case -2:
-		    ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
-			   ": DW_AT_sibling attribute with non-reference (indirect) form %s.\n",
-			   cu->offset, die_off, abbrev->code, it->offset,
-			   dwarf_form_string (value));
+		    wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+			      ": DW_AT_sibling attribute with non-reference (indirect) form %s.\n",
+			      cu->offset, die_off, abbrev->code, it->offset,
+			      dwarf_form_string (value));
 		  };
 	    }
 
@@ -1683,18 +1778,18 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_offset (ctx, dwarf_64, &addr))
 		  {
 		  cant_read:
-		    ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+		    wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			   ": can't read attribute value.\n",
 			   cu->offset, die_off, abbrev->code, it->offset);
 		    return -1;
 		  }
 
 		if (strings == NULL)
-		  ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+		  wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			 ": strp attribute, but no .debug_str section.\n",
 			 cu->offset, die_off, abbrev->code, it->offset);
 		else if (addr >= strings->d_size)
-		  ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+		  wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 			 ": Invalid offset outside .debug_str: 0x%" PRIx64 ".",
 			 cu->offset, die_off, abbrev->code, it->offset, addr);
 		else
@@ -1741,7 +1836,7 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_ref_udata:
 	      {
 		uint64_t value;
-		if (!CHECKED_READ_ULEB128 (ctx, &value,
+		if (!checked_read_uleb128 (ctx, &value,
 					   PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					   "attribute value",
 					   cu->offset, die_off, abbrev->code,
@@ -1815,7 +1910,7 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_sdata:
 	      {
 		int64_t value;
-		if (!CHECKED_READ_SLEB128 (ctx, &value,
+		if (!checked_read_sleb128 (ctx, &value,
 					   PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					   "attribute value",
 					   cu->offset, die_off, abbrev->code,
@@ -1844,7 +1939,7 @@ read_die_chain (struct read_ctx *ctx,
 	      process_DW_FORM_block:
 		if (width == 0)
 		  {
-		    if (!CHECKED_READ_ULEB128 (ctx, &length,
+		    if (!checked_read_uleb128 (ctx, &length,
 					       PRI_D_INFO PRI_CU_DIE_ABBR_ATTR,
 					       "attribute value",
 					       cu->offset, die_off, abbrev->code,
@@ -1861,13 +1956,13 @@ read_die_chain (struct read_ctx *ctx,
 	      }
 
 	    case DW_FORM_indirect:
-	      ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+	      wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 		     ": Indirect form is again indirect.\n",
 		     cu->offset, die_off, abbrev->code, it->offset);
 	      return -1;
 
 	    default:
-	      ERROR (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
+	      wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR
 		     ": Internal error: unhandled form 0x%x\n",
 		     cu->offset, die_off, abbrev->code, it->offset, it->form);
 	    }
@@ -1882,7 +1977,7 @@ read_die_chain (struct read_ctx *ctx,
 	  if (st == -1)
 	    return -1;
 	  else if (st == 0)
-	    MESSAGE (mc_impact_3 | mc_acc_suboptimal | mc_die_rel_child,
+	    message (mc_impact_3 | mc_acc_suboptimal | mc_die_rel_child,
 		     PRI_D_INFO PRI_CU_DIE
 		     ": Abbrev has_children, but the chain was empty.\n",
 		     cu->offset, die_off);
@@ -1890,7 +1985,7 @@ read_die_chain (struct read_ctx *ctx,
     }
 
   if (sibling_addr != 0)
-    ERROR (PRI_D_INFO PRI_CU_DIE
+    wr_error (PRI_D_INFO PRI_CU_DIE
 	   ": This DIE should have had its sibling at 0x%"
 	   PRIx64 ", but the DIE chain ended.\n",
 	   cu->offset, prev_die_off, sibling_addr);
@@ -1898,39 +1993,48 @@ read_die_chain (struct read_ctx *ctx,
   return got_die ? 1 : 0;
 }
 
-#define READ_VERSION(CTX, DWARF_64, VERSIONP, FMT, ARGS...)		\
-  ({									\
-    __label__ out;							\
-    struct read_ctx *_ctx = (CTX);					\
-    bool _dwarf_64 = (DWARF_64);					\
-    uint16_t *_versionp = (VERSIONP);					\
-    bool _retval = true;						\
-    									\
-    if (!read_ctx_read_2ubyte (_ctx, _versionp))			\
-      {									\
-	ERROR (FMT ": can't read version.\n", ##ARGS);			\
-	_retval = false;						\
-	goto out;							\
-      }									\
-									\
-    if (*_versionp < 2 || *_versionp > 3)				\
-      {									\
-	ERROR (FMT ": %s version %d.\n",				\
-	       ##ARGS, (*_versionp < 2 ? "invalid" : "unsupported"),	\
-	       *_versionp);						\
-	_retval = false;						\
-	goto out;							\
-      }									\
-									\
-    if (*_versionp == 2 && _dwarf_64)					\
-      /* Keep going.  It's a standard violation, but we may still be	\
-	 able to read the unit under considertaion and do high-level	\
-	 checks.  */							\
-      ERROR (FMT ": invalid 64-bit unit in DWARF 2 format.\n", ##ARGS);	\
-									\
-  out:									\
-    _retval;								\
-  })
+static bool
+read_version (struct read_ctx *ctx, bool dwarf_64,
+	      uint16_t *versionp, const char *format, ...)
+{
+  bool retval = read_ctx_read_2ubyte (ctx, versionp);
+  char *buf = NULL;
+  va_list ap;
+  va_start (ap, format);
+
+  if (!retval
+      || *versionp < 2 || *versionp > 3
+      || (*versionp == 2 && dwarf_64))
+    if (vasprintf (&buf, format, ap) < 0)
+      buf = NULL;
+
+  if (!retval)
+    {
+      wr_error ("%s: can't read version.\n", buf ?: fmterr);
+      retval = false;
+      goto out;
+    }
+
+  if (*versionp < 2 || *versionp > 3)
+    {
+      wr_error ("%s: %s version %d.\n", buf ?: fmterr,
+		(*versionp < 2 ? "invalid" : "unsupported"),
+		*versionp);
+      retval = false;
+      goto out;
+    }
+
+  if (*versionp == 2 && dwarf_64)
+    /* Keep going.  It's a standard violation, but we may still be
+       able to read the unit under consideration and do high-level
+       checks.  */
+    wr_error ("%s: invalid 64-bit unit in DWARF 2 format.\n", buf ?: fmterr);
+
+ out:
+  va_end (ap);
+  free (buf);
+  return retval;
+}
 
 static bool
 check_cu_structural (struct read_ctx *ctx,
@@ -1945,25 +2049,25 @@ check_cu_structural (struct read_ctx *ctx,
   uint8_t address_size;
 
   /* Version.  */
-  if (!READ_VERSION (ctx, dwarf_64, &version, PRI_D_INFO PRI_CU, cu->offset))
+  if (!read_version (ctx, dwarf_64, &version, PRI_D_INFO PRI_CU, cu->offset))
     return false;
 
   /* Abbrev offset.  */
   if (!read_ctx_read_offset (ctx, dwarf_64, &abbrev_offset))
     {
-      ERROR (PRI_D_INFO PRI_CU ": can't read abbrev offset.\n", cu->offset);
+      wr_error (PRI_D_INFO PRI_CU ": can't read abbrev offset.\n", cu->offset);
       return false;
     }
 
   /* Address size.  */
   if (!read_ctx_read_ubyte (ctx, &address_size))
     {
-      ERROR (PRI_D_INFO PRI_CU ": can't read address size.\n", cu->offset);
+      wr_error (PRI_D_INFO PRI_CU ": can't read address size.\n", cu->offset);
       return false;
     }
   if (address_size != 4 && address_size != 8)
     {
-      ERROR (PRI_D_INFO PRI_CU
+      wr_error (PRI_D_INFO PRI_CU
 	     ": Invalid address size: %d (only 4 or 8 allowed).\n",
 	     cu->offset, address_size);
       return false;
@@ -1976,7 +2080,7 @@ check_cu_structural (struct read_ctx *ctx,
 
   if (abbrevs == NULL)
     {
-      ERROR (PRI_D_INFO PRI_CU
+      wr_error (PRI_D_INFO PRI_CU
 	     ": Couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
 	     cu->offset, abbrev_offset);
       return false;
@@ -1993,7 +2097,7 @@ check_cu_structural (struct read_ctx *ctx,
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
 	if (!abbrevs->abbr[i].used)
-	  MESSAGE (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
+	  message (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
 		   PRI_D_INFO PRI_CU ": Abbreviation with code %"
 		   PRIu64 " is never used.\n",
 		   cu->offset, abbrevs->abbr[i].code);
@@ -2025,11 +2129,11 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
       bool dwarf_64;
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
-	  ERROR (PRI_D_ARANGES PRI_ARANGETAB
+	  wr_error (PRI_D_ARANGES PRI_ARANGETAB
 		 ": can't read unit length.\n", atab_off);
 	  return false;
 	}
-      if (!READ_SIZE_EXTRA (ctx, size32, &size, &dwarf_64,
+      if (!read_size_extra (ctx, size32, &size, &dwarf_64,
 			    PRI_D_ARANGES PRI_ARANGETAB, atab_off))
 	return false;
 
@@ -2040,7 +2144,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
       /* Version.  */
       uint16_t version;
-      if (!READ_VERSION (&sub_ctx, dwarf_64, &version,
+      if (!read_version (&sub_ctx, dwarf_64, &version,
 			 PRI_D_ARANGES PRI_ARANGETAB, atab_off))
 	{
 	  retval = false;
@@ -2051,21 +2155,21 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
       uint64_t cu_off;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
 	{
-	  ERROR (PRI_D_ARANGES PRI_ARANGETAB
-		 ": can't read debug info offset.\n", atab_off);
+	  wr_error (PRI_D_ARANGES PRI_ARANGETAB
+		    ": can't read debug info offset.\n", atab_off);
 	  retval = false;
 	  goto next;
 	}
       if (cu_chain != NULL && cu_find_cu (cu_chain, cu_off) == NULL)
-	ERROR (PRI_D_ARANGES PRI_ARANGETAB
-	       ": unresolved reference to " PRI_CU ".\n", atab_off, cu_off);
+	wr_error (PRI_D_ARANGES PRI_ARANGETAB
+		  ": unresolved reference to " PRI_CU ".\n", atab_off, cu_off);
 
       /* Address size.  */
       uint8_t address_size;
       if (!read_ctx_read_ubyte (&sub_ctx, &address_size))
 	{
-	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
-		 ": can't read unit address size.\n", atab_off, cu_off);
+	  wr_error (PRI_D_ARANGES PRI_ARANGETAB_CU
+		    ": can't read unit address size.\n", atab_off, cu_off);
 	  retval = false;
 	  goto next;
 	}
@@ -2074,9 +2178,9 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  && address_size != 8)
 	{
 	  /* XXX Does anyone need e.g. 6 byte addresses?  */
-	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
-		 ": invalid address size: %d.\n",
-		 atab_off, cu_off, address_size);
+	  wr_error (PRI_D_ARANGES PRI_ARANGETAB_CU
+		    ": invalid address size: %d.\n",
+		    atab_off, cu_off, address_size);
 	  retval = false;
 	  goto next;
 	}
@@ -2085,16 +2189,16 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
       uint8_t segment_size;
       if (!read_ctx_read_ubyte (&sub_ctx, &segment_size))
 	{
-	  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
-		 ": can't read unit segment size.\n", atab_off, cu_off);
+	  wr_error (PRI_D_ARANGES PRI_ARANGETAB_CU
+		    ": can't read unit segment size.\n", atab_off, cu_off);
 	  retval = false;
 	  goto next;
 	}
       if (segment_size != 0)
 	{
-	  WARNING (PRI_D_ARANGES PRI_ARANGETAB_CU
-		   ": dwarflint can't handle segment_size != 0.\n",
-		   atab_off, cu_off);
+	  wr_warning (PRI_D_ARANGES PRI_ARANGETAB_CU
+		      ": dwarflint can't handle segment_size != 0.\n",
+		      atab_off, cu_off);
 	  retval = false;
 	  goto next;
 	}
@@ -2114,14 +2218,14 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	      uint8_t c;
 	      if (!read_ctx_read_ubyte (&sub_ctx, &c))
 		{
-		  ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU
+		  wr_error (PRI_D_ARANGES PRI_ARANGETAB_CU
 			 ": section ends after the header, but before the first entry.\n",
 			 atab_off, cu_off);
 		  retval = false;
 		  goto next;
 		}
 	      if (c != 0)
-		MESSAGE (mc_impact_2 | mc_aranges,
+		message (mc_impact_2 | mc_aranges,
 			 PRI_D_ARANGES PRI_ARANGETAB_CU
 			 ": non-zero byte at 0x%" PRIx64
 			 " in padding before the first entry.\n",
@@ -2136,7 +2240,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  uint64_t address, length;
 	  if (!read_ctx_read_var (&sub_ctx, address_size, &address))
 	    {
-	      ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
+	      wr_error (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
 		     ": can't read address field.\n",
 		     atab_off, cu_off, tuple_off);
 	      retval = false;
@@ -2144,7 +2248,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	    }
 	  if (!read_ctx_read_var (&sub_ctx, address_size, &length))
 	    {
-	      ERROR (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
+	      wr_error (PRI_D_ARANGES PRI_ARANGETAB_CU_RECORD
 		     ": can't read length field.\n",
 		     atab_off, cu_off, tuple_off);
 	      retval = false;
@@ -2158,14 +2262,13 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
-	  && !CHECK_ZERO_PADDING (&sub_ctx, mc_pubnames,
+	  && !check_zero_padding (&sub_ctx, mc_pubnames,
 				  PRI_D_ARANGES PRI_ARANGETAB_CU,
 				  atab_off, cu_off))
 	{
-	  MESSAGE_PADDING_N0 (mc_pubnames | mc_error,
-			      PRI_D_ARANGES PRI_ARANGETAB_CU,
-			      read_ctx_get_offset (&sub_ctx),
-			      size, atab_off, cu_off);
+	  message_padding_n0 (mc_pubnames | mc_error,
+			      read_ctx_get_offset (&sub_ctx), size,
+			      PRI_D_ARANGES PRI_ARANGETAB_CU, atab_off, cu_off);
 	  retval = false;
 	}
 
@@ -2193,11 +2296,11 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
       bool dwarf_64;
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
-	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
-		 ": can't read set length.\n", set_off);
+	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
+		    ": can't read set length.\n", set_off);
 	  return false;
 	}
-      if (!READ_SIZE_EXTRA (ctx, size32, &size, &dwarf_64,
+      if (!read_size_extra (ctx, size32, &size, &dwarf_64,
 			    PRI_D_PUBNAMES PRI_PUBNAMESET, set_off))
 	return false;
 
@@ -2210,8 +2313,8 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
       uint16_t version;
       if (!read_ctx_read_2ubyte (&sub_ctx, &version))
 	{
-	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
-		 ": can't read set version.\n", set_off);
+	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
+		    ": can't read set version.\n", set_off);
 	  retval = false;
 	  goto next;
 	}
@@ -2220,31 +2323,31 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
       uint64_t cu_off;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
 	{
-	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
-		 ": can't read debug info offset.\n", set_off);
+	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
+		    ": can't read debug info offset.\n", set_off);
 	  retval = false;
 	  goto next;
 	}
       struct cu *cu = cu_find_cu (cu_chain, cu_off);
       if (cu_chain != NULL && cu == NULL)
-	ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET
-	       ": unresolved reference to " PRI_CU ".\n", set_off, cu_off);
+	wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET
+		  ": unresolved reference to " PRI_CU ".\n", set_off, cu_off);
 
       /* Covered length.  */
       uint64_t cu_len;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_len))
 	{
-	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
-		 ": can't read debug info offset.\n", set_off, cu_off);
+	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
+		    ": can't read debug info offset.\n", set_off, cu_off);
 	  retval = false;
 	  goto next;
 	}
       if (cu_len != cu->length)
 	{
-	  ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
-		 ": the set covers length %" PRId64
-		 " but CU has length %" PRId64 ".\n",
-		 set_off, cu_off, cu_len, cu->length);
+	  wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU
+		    ": the set covers length %" PRId64
+		    " but CU has length %" PRId64 ".\n",
+		    set_off, cu_off, cu_len, cu->length);
 	  retval = false;
 	  goto next;
 	}
@@ -2260,9 +2363,9 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  uint64_t offset;
 	  if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &offset))
 	    {
-	      ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
-		     ": can't read offset field.\n",
-		     set_off, cu_off, pair_off);
+	      wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+			": can't read offset field.\n",
+			set_off, cu_off, pair_off);
 	      retval = false;
 	      goto next;
 	    }
@@ -2271,9 +2374,9 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
 	  if (!addr_record_has_addr (&cu->die_addrs, offset + cu->offset))
 	    {
-	      ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
-		     ": unresolved reference to " PRI_DIE ".\n",
-		     set_off, cu_off, pair_off, offset);
+	      wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+			": unresolved reference to " PRI_DIE ".\n",
+			set_off, cu_off, pair_off, offset);
 	      retval = false;
 	      goto next;
 	    }
@@ -2282,9 +2385,9 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  do
 	    if (!read_ctx_read_ubyte (&sub_ctx, &c))
 	      {
-		ERROR (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
-		       ": can't read symbol name.\n",
-		       set_off, cu_off, pair_off);
+		wr_error (PRI_D_PUBNAMES PRI_PUBNAMESET_CU_RECORD
+			  ": can't read symbol name.\n",
+			  set_off, cu_off, pair_off);
 		retval = false;
 		goto next;
 	      }
@@ -2292,14 +2395,13 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
-	  && !CHECK_ZERO_PADDING (&sub_ctx, mc_pubnames,
+	  && !check_zero_padding (&sub_ctx, mc_pubnames,
 				  PRI_D_PUBNAMES PRI_PUBNAMESET,
 				  set_off))
 	{
-	  MESSAGE_PADDING_N0 (mc_pubnames | mc_error,
-			      PRI_D_PUBNAMES PRI_PUBNAMESET,
-			      read_ctx_get_offset (&sub_ctx),
-			      size, set_off);
+	  message_padding_n0 (mc_pubnames | mc_error,
+			      read_ctx_get_offset (&sub_ctx), size,
+			      PRI_D_PUBNAMES PRI_PUBNAMESET, set_off);
 	  retval = false;
 	}
 
