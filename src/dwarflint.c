@@ -128,6 +128,7 @@ enum message_category
   mc_elf       = 0x40000, // ELF structure, e.g. missing optional sections
   mc_pubnames  = 0x80000, // table of public names
   mc_other     = 0x100000, // messages unrelated to any of the above
+  mc_pubtypes  = 0x200000, // .debug_pubtypes presence
   mc_all       = 0xffff00, // all areas
 };
 
@@ -145,7 +146,7 @@ accept_message (struct message_criteria *crit, enum message_category cat)
     && (crit->reject & cat) == 0;
 }
 
-static struct message_criteria warning_criteria = {mc_all & ~mc_strings, mc_none};
+static struct message_criteria warning_criteria = {mc_all & ~mc_strings, mc_pubtypes};
 static struct message_criteria error_criteria = {mc_impact_4 | mc_error, mc_none};
 static unsigned error_count = 0;
 
@@ -290,6 +291,8 @@ message_padding_n0 (enum message_category category,
 
 /* True if no message is to be printed if the run is succesful.  */
 static bool be_quiet;
+static bool be_strict = false; /* --strict */
+static bool be_gnu = false; /* --gnu */
 
 int
 main (int argc, char *argv[])
@@ -303,6 +306,17 @@ main (int argc, char *argv[])
   /* Parse and process arguments.  */
   int remaining;
   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
+
+  if (tolerate_nodebug)
+    warning_criteria.reject |= mc_elf;
+  if (be_gnu)
+    warning_criteria.reject |= mc_acc_bloat | mc_pubtypes;
+  if (be_strict)
+    {
+      warning_criteria.accept |= mc_strings;
+      if (!be_gnu)
+	warning_criteria.reject &= ~mc_pubtypes;
+    }
 
   /* Before we start tell the ELF library which version we are using.  */
   elf_version (EV_CURRENT);
@@ -376,15 +390,14 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
   switch (key)
     {
     case ARGP_strict:
-      warning_criteria.accept |= mc_strings;
+      be_strict = true;
       break;
 
     case ARGP_gnu:
-      warning_criteria.reject |= mc_acc_bloat;
+      be_gnu = true;
       break;
 
     case 'i':
-      warning_criteria.reject |= mc_elf;
       tolerate_nodebug = true;
       break;
 
@@ -634,7 +647,36 @@ process_file (int fd __attribute__((unused)),
   Elf_Data *info_data = dwarf->sectiondata[IDX_debug_info];
   Elf_Data *aranges_data = dwarf->sectiondata[IDX_debug_aranges];
   Elf_Data *pubnames_data = dwarf->sectiondata[IDX_debug_pubnames];
-  Elf_Data *pubtypes_data = dwarf->sectiondata[IDX_debug_pubnames];
+
+  /* Obtaining pubtypes is a bit complicated, because GNU toolchain
+     doesn't emit it, and libdw doesn't account for it.  */
+  Elf_Scn *scn = NULL;
+  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (dwarf->elf, &ehdr_mem);
+  if (ehdr == NULL)
+    goto invalid_elf;
+  Elf_Data *pubtypes_data = NULL;
+  while ((scn = elf_nextscn (dwarf->elf, scn)) != NULL)
+    {
+      GElf_Shdr shdr_mem, *shdr = gelf_getshdr (scn, &shdr_mem);
+      if (shdr == NULL)
+	goto invalid_elf;
+
+      const char *scnname = elf_strptr (dwarf->elf, ehdr->e_shstrndx,
+					shdr->sh_name);
+      if (scnname == NULL)
+	{
+	invalid_elf:
+	  /* A "can't happen".  libdw already managed to parse the Elf
+	     file when constructing the Dwarf object.  */
+	  wr_error ("broken Elf");
+	  break;
+	}
+      if (strcmp (scnname, ".debug_pubtypes") == 0)
+	{
+	  pubtypes_data = elf_getdata (scn, NULL);
+	  break;
+	}
+    }
 
   /* If we got Dwarf pointer, debug_abbrev and debug_info are present
      inside the file.  But let's be paranoid.  */
@@ -688,7 +730,7 @@ process_file (int fd __attribute__((unused)),
       check_pubnames_structural (&ctx, cu_chain, PRI_D_PUBTYPES);
     }
   else
-    message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+    message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
 	     PRI_D_PUBTYPES "data not found.\n");
 
   cu_free (cu_chain);

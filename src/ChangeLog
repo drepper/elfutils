@@ -1,7 +1,11 @@
+2009-01-14  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c: Validation .debug_pubtypes.
+
 2009-01-13  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: Adjust check_pubnames_structural to be able to
-	validate also .debug_pubtypes.  Do the validation.
+	validate also .debug_pubtypes.
 
 2009-01-13  Petr Machata  <pmachata@redhat.com>
 
