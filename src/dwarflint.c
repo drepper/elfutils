@@ -129,7 +129,7 @@ enum message_category
   mc_pubnames  = 0x80000, // table of public names
   mc_other     = 0x100000, // messages unrelated to any of the above
   mc_pubtypes  = 0x200000, // .debug_pubtypes presence
-  mc_all       = 0xffff00, // all areas
+  mc_all       = 0xffffff00, // all areas
 };
 
 struct message_criteria
@@ -443,15 +443,15 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_ABBR "abbrev 0x%" PRIx64
 #define PRI_ARANGETAB "arange table 0x%" PRIx64
 #define PRI_RECORD "record 0x%" PRIx64
-#define PRI_PUBNAMESET "pubname set 0x%" PRIx64
+#define PRI_PUBSET "pubset 0x%" PRIx64 // for pubnames and pubtypes
 
 #define PRI_CU_DIE PRI_CU ", " PRI_DIE
 #define PRI_CU_DIE_ABBR_ATTR PRI_CU_DIE ", " PRI_ABBR ", " PRI_ATTR
 #define PRI_ABBR_ATTR PRI_ABBR ", " PRI_ATTR
 #define PRI_ARANGETAB_CU PRI_ARANGETAB " (for " PRI_CU ")"
 #define PRI_ARANGETAB_CU_RECORD PRI_ARANGETAB_CU ", " PRI_RECORD
-#define PRI_PUBNAMESET_CU PRI_PUBNAMESET " (for " PRI_CU ")"
-#define PRI_PUBNAMESET_CU_RECORD PRI_PUBNAMESET_CU ", " PRI_RECORD
+#define PRI_PUBSET_CU PRI_PUBSET " (for " PRI_CU ")"
+#define PRI_PUBSET_CU_RECORD PRI_PUBSET_CU ", " PRI_RECORD
 
 
 /* Functions and data structures related to bounds-checked
@@ -2350,12 +2350,12 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
       bool dwarf_64;
       if (!read_ctx_read_4ubyte (ctx, &size32))
 	{
-	  wr_error ("%s" PRI_PUBNAMESET
+	  wr_error ("%s" PRI_PUBSET
 		    ": can't read set length.\n", secname, set_off);
 	  return false;
 	}
       if (!read_size_extra (ctx, size32, &size, &dwarf_64,
-			    "%s" PRI_PUBNAMESET, secname, set_off))
+			    "%s" PRI_PUBSET, secname, set_off))
 	return false;
 
       struct read_ctx sub_ctx;
@@ -2367,8 +2367,15 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
       uint16_t version;
       if (!read_ctx_read_2ubyte (&sub_ctx, &version))
 	{
-	  wr_error ("%s" PRI_PUBNAMESET
+	  wr_error ("%s" PRI_PUBSET
 		    ": can't read set version.\n", secname, set_off);
+	  retval = false;
+	  goto next;
+	}
+      if (version != 2)
+	{
+	  wr_error ("%s" PRI_PUBSET ": %s set version.\n", secname, set_off,
+		    (version < 2 ? "invalid" : "unsupported"));
 	  retval = false;
 	  goto next;
 	}
@@ -2377,28 +2384,28 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
       uint64_t cu_off;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
 	{
-	  wr_error ("%s" PRI_PUBNAMESET
+	  wr_error ("%s" PRI_PUBSET
 		    ": can't read debug info offset.\n", secname, set_off);
 	  retval = false;
 	  goto next;
 	}
       struct cu *cu = cu_find_cu (cu_chain, cu_off);
       if (cu_chain != NULL && cu == NULL)
-	wr_error ("%s" PRI_PUBNAMESET ": unresolved reference to " PRI_CU ".\n",
+	wr_error ("%s" PRI_PUBSET ": unresolved reference to " PRI_CU ".\n",
 		  secname, set_off, cu_off);
 
       /* Covered length.  */
       uint64_t cu_len;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_len))
 	{
-	  wr_error ("%s" PRI_PUBNAMESET_CU ": can't read debug info offset.\n",
+	  wr_error ("%s" PRI_PUBSET_CU ": can't read debug info offset.\n",
 		    secname, set_off, cu_off);
 	  retval = false;
 	  goto next;
 	}
       if (cu_len != cu->length)
 	{
-	  wr_error ("%s" PRI_PUBNAMESET_CU
+	  wr_error ("%s" PRI_PUBSET_CU
 		    ": the set covers length %" PRId64
 		    " but CU has length %" PRId64 ".\n",
 		    secname, set_off, cu_off, cu_len, cu->length);
@@ -2417,7 +2424,7 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
 	  uint64_t offset;
 	  if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &offset))
 	    {
-	      wr_error ("%s" PRI_PUBNAMESET_CU_RECORD
+	      wr_error ("%s" PRI_PUBSET_CU_RECORD
 			": can't read offset field.\n",
 			secname, set_off, cu_off, pair_off);
 	      retval = false;
@@ -2428,7 +2435,7 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
 
 	  if (!addr_record_has_addr (&cu->die_addrs, offset + cu->offset))
 	    {
-	      wr_error ("%s" PRI_PUBNAMESET_CU_RECORD
+	      wr_error ("%s" PRI_PUBSET_CU_RECORD
 			": unresolved reference to " PRI_DIE ".\n",
 			secname, set_off, cu_off, pair_off, offset);
 	      retval = false;
@@ -2439,7 +2446,7 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
 	  do
 	    if (!read_ctx_read_ubyte (&sub_ctx, &c))
 	      {
-		wr_error ("%s" PRI_PUBNAMESET_CU_RECORD
+		wr_error ("%s" PRI_PUBSET_CU_RECORD
 			  ": can't read symbol name.\n",
 			  secname, set_off, cu_off, pair_off);
 		retval = false;
@@ -2450,12 +2457,11 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
 
       if (sub_ctx.ptr != sub_ctx.end
 	  && !check_zero_padding (&sub_ctx, mc_pubnames,
-				  "%s" PRI_PUBNAMESET,
-				  secname, set_off))
+				  "%s" PRI_PUBSET, secname, set_off))
 	{
 	  message_padding_n0 (mc_pubnames | mc_error,
 			      read_ctx_get_offset (&sub_ctx), size,
-			      "%s" PRI_PUBNAMESET, secname, set_off);
+			      "%s" PRI_PUBSET, secname, set_off);
 	  retval = false;
 	}
 
