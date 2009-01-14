@@ -126,7 +126,7 @@ enum message_category
   mc_strings   = 0x10000, // string table
   mc_aranges   = 0x20000, // address ranges table
   mc_elf       = 0x40000, // ELF structure, e.g. missing optional sections
-  mc_pubnames  = 0x80000, // table of public names
+  mc_pubtables = 0x80000, // table of public names/types
   mc_other     = 0x100000, // messages unrelated to any of the above
   mc_pubtypes  = 0x200000, // .debug_pubtypes presence
   mc_all       = 0xffffff00, // all areas
@@ -612,13 +612,6 @@ static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 static struct cu *check_debug_info_structural (struct read_ctx *ctx,
 					       struct abbrev_table *abbrev_chain,
 					       Elf_Data *strings);
-static int read_die_chain (struct read_ctx *ctx,
-			   struct cu *cu,
-			   struct abbrev_table *abbrevs, Elf_Data *strings,
-			   bool dwarf_64, bool addr_64,
-			   struct ref_record *die_refs,
-			   struct ref_record *die_loc_refs,
-			   struct coverage *strings_coverage);
 static bool check_cu_structural (struct read_ctx *ctx,
 				 struct cu *const cu,
 				 struct abbrev_table *abbrev_chain,
@@ -627,9 +620,9 @@ static bool check_cu_structural (struct read_ctx *ctx,
 				 struct coverage *strings_coverage);
 static bool check_aranges_structural (struct read_ctx *ctx,
 				      struct cu *cu_chain);
-static bool check_pubnames_structural (struct read_ctx *ctx,
-				       struct cu *cu_chain,
-				       const char *secname);
+static bool check_pub_structural (struct read_ctx *ctx,
+				  struct cu *cu_chain,
+				  const char *secname);
 
 
 static void
@@ -718,7 +711,7 @@ process_file (int fd __attribute__((unused)),
   if (pubnames_data != NULL)
     {
       read_ctx_init (&ctx, dwarf, pubnames_data);
-      check_pubnames_structural (&ctx, cu_chain, PRI_D_PUBNAMES);
+      check_pub_structural (&ctx, cu_chain, PRI_D_PUBNAMES);
     }
   else
     message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
@@ -727,7 +720,7 @@ process_file (int fd __attribute__((unused)),
   if (pubtypes_data != NULL)
     {
       read_ctx_init (&ctx, dwarf, pubtypes_data);
-      check_pubnames_structural (&ctx, cu_chain, PRI_D_PUBTYPES);
+      check_pub_structural (&ctx, cu_chain, PRI_D_PUBTYPES);
     }
   else
     message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
@@ -1002,7 +995,8 @@ abbrev_table_load (struct read_ctx *ctx)
 
 	  /* Abbreviation code.  */
 	  if (!checked_read_uleb128 (ctx, &abbr_code,
-				     PRI_ABBR, "abbrev code", abbr_off))
+				     PRI_D_ABBREV PRI_ABBR,
+				     "abbrev code", abbr_off))
 	    goto free_and_out;
 
 	  if (abbr_code == 0 && prev_abbr_code == 0
@@ -1020,7 +1014,7 @@ abbrev_table_load (struct read_ctx *ctx)
 
       if (zero_seq_off != (uint64_t)-1)
 	message_padding_0 (mc_abbrevs, zero_seq_off, prev_abbr_off - 1,
-			   PRI_ABBR, section_off);
+			   PRI_D_ABBREV PRI_ABBR, section_off);
 
       if (read_ctx_eof (ctx))
 	break;
@@ -1043,12 +1037,14 @@ abbrev_table_load (struct read_ctx *ctx)
       /* Abbreviation tag.  */
       uint64_t abbr_tag;
       if (!checked_read_uleb128 (ctx, &abbr_tag,
-				 PRI_ABBR, "abbrev tag", abbr_off))
+				 PRI_D_ABBREV PRI_ABBR,
+				 "abbrev tag", abbr_off))
 	goto free_and_out;
 
       if (abbr_tag > DW_TAG_hi_user)
 	{
-	  wr_error (PRI_ABBR ": invalid abbrev tag 0x%" PRIx64 ".\n",
+	  wr_error (PRI_D_ABBREV PRI_ABBR
+		    ": invalid abbrev tag 0x%" PRIx64 ".\n",
 		    abbr_off, abbr_tag);
 	  goto free_and_out;
 	}
@@ -1058,14 +1054,16 @@ abbrev_table_load (struct read_ctx *ctx)
       uint8_t has_children;
       if (!read_ctx_read_ubyte (ctx, &has_children))
 	{
-	  wr_error (PRI_ABBR ": can't read abbrev has_children.\n", abbr_off);
+	  wr_error (PRI_D_ABBREV PRI_ABBR
+		    ": can't read abbrev has_children.\n", abbr_off);
 	  goto free_and_out;
 	}
 
       if (has_children != DW_CHILDREN_no
 	  && has_children != DW_CHILDREN_yes)
 	{
-	  wr_error (PRI_ABBR ": invalid has_children value 0x%x.\n",
+	  wr_error (PRI_D_ABBREV PRI_ABBR
+		    ": invalid has_children value 0x%x.\n",
 		    abbr_off, cur->has_children);
 	  goto free_and_out;
 	}
@@ -1080,12 +1078,14 @@ abbrev_table_load (struct read_ctx *ctx)
 
 	  /* Load attribute name and form.  */
 	  if (!checked_read_uleb128 (ctx, &attrib_name,
-				     PRI_ABBR_ATTR, "attribute name",
+				     PRI_D_ABBREV PRI_ABBR_ATTR,
+				     "attribute name",
 				     abbr_off, attr_off))
 	    goto free_and_out;
 
 	  if (!checked_read_uleb128 (ctx, &attrib_form,
-				     PRI_ABBR_ATTR, "attribute form",
+				     PRI_D_ABBREV PRI_ABBR_ATTR,
+				     "attribute form",
 				     abbr_off, attr_off))
 	    goto free_and_out;
 
@@ -1097,14 +1097,16 @@ abbrev_table_load (struct read_ctx *ctx)
 	      /* Otherwise validate name and form.  */
 	      if (attrib_name > DW_AT_hi_user)
 		{
-		  wr_error (PRI_ABBR_ATTR ": invalid name 0x%" PRIx64 ".\n",
+		  wr_error (PRI_D_ABBREV PRI_ABBR_ATTR
+			    ": invalid name 0x%" PRIx64 ".\n",
 			    abbr_off, attr_off, attrib_name);
 		  goto free_and_out;
 		}
 
 	      if (!attrib_form_valid (attrib_form))
 		{
-		  wr_error (PRI_ABBR_ATTR ": invalid form 0x%" PRIx64 ".\n",
+		  wr_error (PRI_D_ABBREV PRI_ABBR_ATTR
+			    ": invalid form 0x%" PRIx64 ".\n",
 			    abbr_off, attr_off, attrib_form);
 		  goto free_and_out;
 		}
@@ -1123,7 +1125,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	  if (attrib_name == DW_AT_sibling)
 	    {
 	      if (sibling_attr != 0)
-		wr_error (PRI_ABBR_ATTR
+		wr_error (PRI_D_ABBREV PRI_ABBR_ATTR
 			  ": Another DW_AT_sibling attribute in one abbreviation. "
 			  "(First was 0x%" PRIx64 ".)\n",
 			  abbr_off, attr_off, sibling_attr);
@@ -1134,7 +1136,7 @@ abbrev_table_load (struct read_ctx *ctx)
 
 		  if (!cur->has_children)
 		    message (mc_die_rel_sib | mc_acc_bloat | mc_impact_1,
-			     PRI_ABBR_ATTR
+			     PRI_D_ABBREV PRI_ABBR_ATTR
 			     ": Excessive DW_AT_sibling attribute at childless abbrev.\n",
 			     abbr_off, attr_off);
 		}
@@ -1143,13 +1145,13 @@ abbrev_table_load (struct read_ctx *ctx)
 		{
 		case -1:
 		  message (mc_die_rel_sib | mc_impact_2,
-			   PRI_ABBR_ATTR
+			   PRI_D_ABBREV PRI_ABBR_ATTR
 			   ": DW_AT_sibling attribute with form DW_FORM_ref_addr.\n",
 			   abbr_off, attr_off);
 		  break;
 
 		case -2:
-		  wr_error (PRI_ABBR_ATTR
+		  wr_error (PRI_D_ABBREV PRI_ABBR_ATTR
 			    ": DW_AT_sibling attribute with non-reference form %s.\n",
 			    abbr_off, attr_off, dwarf_form_string (attrib_form));
 		};
@@ -2122,8 +2124,8 @@ check_cu_structural (struct read_ctx *ctx,
   if (address_size != 4 && address_size != 8)
     {
       wr_error (PRI_D_INFO PRI_CU
-	     ": Invalid address size: %d (only 4 or 8 allowed).\n",
-	     cu->offset, address_size);
+		": Invalid address size: %d (only 4 or 8 allowed).\n",
+		cu->offset, address_size);
       return false;
     }
 
@@ -2135,8 +2137,8 @@ check_cu_structural (struct read_ctx *ctx,
   if (abbrevs == NULL)
     {
       wr_error (PRI_D_INFO PRI_CU
-	     ": Couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
-	     cu->offset, abbrev_offset);
+		": Couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
+		cu->offset, abbrev_offset);
       return false;
     }
 
@@ -2316,11 +2318,11 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
-	  && !check_zero_padding (&sub_ctx, mc_pubnames,
+	  && !check_zero_padding (&sub_ctx, mc_pubtables,
 				  PRI_D_ARANGES PRI_ARANGETAB_CU,
 				  atab_off, cu_off))
 	{
-	  message_padding_n0 (mc_pubnames | mc_error,
+	  message_padding_n0 (mc_pubtables | mc_error,
 			      read_ctx_get_offset (&sub_ctx), size,
 			      PRI_D_ARANGES PRI_ARANGETAB_CU, atab_off, cu_off);
 	  retval = false;
@@ -2334,8 +2336,8 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 }
 
 static bool
-check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
-			   const char *secname)
+check_pub_structural (struct read_ctx *ctx, struct cu *cu_chain,
+		      const char *secname)
 {
   bool retval = true;
 
@@ -2456,10 +2458,10 @@ check_pubnames_structural (struct read_ctx *ctx, struct cu *cu_chain,
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
-	  && !check_zero_padding (&sub_ctx, mc_pubnames,
+	  && !check_zero_padding (&sub_ctx, mc_pubtables,
 				  "%s" PRI_PUBSET, secname, set_off))
 	{
-	  message_padding_n0 (mc_pubnames | mc_error,
+	  message_padding_n0 (mc_pubtables | mc_error,
 			      read_ctx_get_offset (&sub_ctx), size,
 			      "%s" PRI_PUBSET, secname, set_off);
 	  retval = false;
