@@ -1,3 +1,8 @@
+2009-01-15  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c: Implement validation of .debug_loc and references
+	from .debug_info to .debug_loc.
+
 2009-01-14  Petr Machata  <pmachata@redhat.com>
 
 	* dwarfstrings.h (dwarf_locexpr_opcode_string): New.
