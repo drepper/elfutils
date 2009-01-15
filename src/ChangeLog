@@ -1,5 +1,9 @@
 2009-01-14  Petr Machata  <pmachata@redhat.com>
 
+	* dwarfstrings.h (dwarf_locexpr_opcode_string): New.
+
+2009-01-14  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Validation .debug_pubtypes.
 
 2009-01-13  Petr Machata  <pmachata@redhat.com>

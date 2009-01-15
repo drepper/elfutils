@@ -1,6 +1,8 @@
 #ifndef DWARFSTRINGS_H
 #define DWARFSTRINGS_H 1
 
+#include "../libdw/known-dwarf.h"
+
 static __attribute__ ((unused)) const char *
 dwarf_tag_string (unsigned int tag)
 {
@@ -356,8 +358,11 @@ dwarf_form_string (unsigned int form)
     result = known_forms[form];
 
   if (unlikely (result == NULL))
-    snprintf (buf, sizeof buf, gettext ("unknown form %" PRIx64),
-	      (uint64_t) form);
+    {
+      snprintf (buf, sizeof buf, gettext ("unknown form %" PRIx64),
+		(uint64_t) form);
+      result = buf;
+    }
 
   return result;
 }
@@ -583,6 +588,37 @@ dwarf_discr_list_string (unsigned int code)
     return known[code];
 
   return "???";
+}
+
+
+static __attribute__ ((unused)) const char *
+dwarf_locexpr_opcode_string (unsigned int code)
+{
+  static const char *const known[] =
+    {
+      /* Normally we can't affort building huge table of 64K entries,
+	 most of them zero, just because there are a couple defined
+	 values at the far end.  In case of opcodes, it's OK.  */
+#define ONE_KNOWN_DW_OP_DESC(NAME, CODE, DESC) ONE_KNOWN_DW_OP(NAME, CODE)
+#define ONE_KNOWN_DW_OP(NAME, CODE) [CODE] = #NAME,
+      ALL_KNOWN_DW_OP
+#undef ONE_KNOWN_DW_OP
+#undef ONE_KNOWN_DW_OP_DESC
+    };
+
+  const char *ret = NULL;
+  if (likely (code < sizeof (known) / sizeof (known[0])))
+    ret = known[code];
+
+  if (ret == NULL)
+    {
+      static char buf[40];
+      snprintf (buf, sizeof buf, gettext ("unknown opcode %" PRIx64),
+		(uint64_t) code);
+      ret = buf;
+    }
+
+  return ret;
 }
 
 #endif  /* dwarfstrings.h */
