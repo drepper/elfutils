@@ -147,8 +147,12 @@ accept_message (struct message_criteria *crit, enum message_category cat)
     && (crit->reject & cat) == 0;
 }
 
-static struct message_criteria warning_criteria = {mc_all & ~mc_strings, mc_pubtypes};
-static struct message_criteria error_criteria = {mc_impact_4 | mc_error, mc_none};
+static struct message_criteria warning_criteria
+  = {mc_all & ~(mc_strings | mc_loc),
+     mc_pubtypes};
+static struct message_criteria error_criteria
+  = {mc_impact_4 | mc_error,
+     mc_none};
 static unsigned error_count = 0;
 
 static bool
@@ -332,7 +336,7 @@ main (int argc, char *argv[])
     warning_criteria.reject |= mc_acc_bloat | mc_pubtypes;
   if (be_strict)
     {
-      warning_criteria.accept |= mc_strings;
+      warning_criteria.accept |= mc_strings | mc_loc;
       if (!be_gnu)
 	warning_criteria.reject &= ~mc_pubtypes;
     }
@@ -653,6 +657,7 @@ static bool check_cu_structural (struct read_ctx *ctx,
 				 Elf_Data *loc,
 				 bool dwarf_64,
 				 struct ref_record *die_refs,
+				 struct addr_record *loc_addrs,
 				 struct coverage *strings_coverage,
 				 struct coverage *loc_coverage);
 static bool check_aranges_structural (struct read_ctx *ctx,
@@ -1746,10 +1751,13 @@ check_debug_info_structural (struct read_ctx *ctx,
     }
 
   struct coverage loc_coverage_mem, *loc_coverage = NULL;
+  struct addr_record loc_addrs_mem, *loc_addrs = NULL;
   if (loc != NULL && check_category (mc_loc))
     {
       coverage_init (&loc_coverage_mem, loc->d_size);
       loc_coverage = &loc_coverage_mem;
+      memset (&loc_addrs_mem, 0, sizeof (loc_addrs_mem));
+      loc_addrs = &loc_addrs_mem;
     }
 
   while (!read_ctx_eof (ctx))
@@ -1826,7 +1834,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  cu_ctx.ptr = ctx->ptr;
 
 	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain, strings, loc,
-				    dwarf_64, &die_refs,
+				    dwarf_64, &die_refs, loc_addrs,
 				    strings_coverage, loc_coverage))
 	    {
 	      success = false;
@@ -1868,6 +1876,9 @@ check_debug_info_structural (struct read_ctx *ctx,
 			       {PRI_D_LOC, mc_loc, loc->d_buf}));
       coverage_free (loc_coverage);
     }
+
+  if (loc_addrs != NULL)
+    addr_record_free (loc_addrs);
 
   if (!success || !references_sound)
     {
@@ -1973,6 +1984,7 @@ check_location_expression (struct read_ctx *ctx, bool addr_64)
 static bool
 check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
 			     struct coverage *loc_coverage,
+			     struct addr_record *loc_addrs,
 			     uint64_t addr, bool addr_64)
 {
   if (loc == NULL || loc_coverage == NULL)
@@ -1989,9 +2001,17 @@ check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
     }
 
   if (coverage_is_covered (loc_coverage, addr))
-    /* Already checked this.
-       XXX check this properly: keep a list of region beginnings.  */
-    return true;
+    {
+      if (!addr_record_has_addr (loc_addrs, addr))
+	{
+	  wr_error (PRI_D_LOC "0x%" PRIx64
+		    ": reference to the middle of location list.\n", addr);
+	  return false;
+	}
+      return true;
+    }
+  else
+    addr_record_add (loc_addrs, addr);
 
   uint64_t escape = addr_64 ? (uint64_t)-1 : (uint64_t)(uint32_t)-1;
 
@@ -2112,6 +2132,7 @@ read_die_chain (struct read_ctx *ctx,
 		bool dwarf_64, bool addr_64,
 		struct ref_record *die_refs,
 		struct ref_record *die_loc_refs,
+		struct addr_record *loc_addrs,
 		struct coverage *strings_coverage,
 		struct coverage *loc_coverage)
 {
@@ -2250,7 +2271,7 @@ read_die_chain (struct read_ctx *ctx,
 	    }
 
 	  bool check_locptr = false;
-	  bool locptr_64 = dwarf_64;
+	  bool locptr_64 = addr_64;
 	  if (is_location_attrib (it->name))
 	    {
 	      switch (check_CU_location_form (form, dwarf_64))
@@ -2395,11 +2416,11 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (check_locptr && !locptr_64)
+		else if (check_locptr)
 		  {
 		    if (!check_x_location_expression (ctx->dbg, loc,
-						      loc_coverage, value,
-						      addr_64))
+						      loc_coverage, loc_addrs,
+						      value, locptr_64))
 		      wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR PRI_CAUSE,
 				cu->offset, die_off, abbrev->code, it->offset);
 		  }
@@ -2417,11 +2438,11 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (check_locptr && locptr_64)
+		else if (check_locptr)
 		  {
 		    if (!check_x_location_expression (ctx->dbg, loc,
-						      loc_coverage, value,
-						      addr_64))
+						      loc_coverage, loc_addrs,
+						      value, locptr_64))
 		      wr_error (PRI_D_INFO PRI_CU_DIE_ABBR_ATTR PRI_CAUSE,
 				cu->offset, die_off, abbrev->code,
 				it->offset);
@@ -2513,9 +2534,8 @@ read_die_chain (struct read_ctx *ctx,
 	{
 	  int st = read_die_chain (ctx, cu, abbrevs, strings, loc,
 				   dwarf_64, addr_64,
-				   die_refs, die_loc_refs,
-				   strings_coverage,
-				   loc_coverage);
+				   die_refs, die_loc_refs, loc_addrs,
+				   strings_coverage, loc_coverage);
 	  if (st == -1)
 	    return -1;
 	  else if (st == 0)
@@ -2586,6 +2606,7 @@ check_cu_structural (struct read_ctx *ctx,
 		     Elf_Data *loc,
 		     bool dwarf_64,
 		     struct ref_record *die_refs,
+		     struct addr_record *loc_addrs,
 		     struct coverage *strings_coverage,
 		     struct coverage *loc_coverage)
 {
@@ -2638,6 +2659,7 @@ check_cu_structural (struct read_ctx *ctx,
   if (read_die_chain (ctx, cu, abbrevs, strings, loc,
 		      dwarf_64, address_size == 8,
 		      die_refs, &die_loc_refs,
+		      loc_addrs,
 		      strings_coverage,
 		      loc_coverage) >= 0)
     {
