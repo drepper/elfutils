@@ -1,6 +1,7 @@
 2009-01-17  Roland McGrath  <roland@redhat.com>
 
 	* expr_opcodes.h: Fix DW_OP_deref entry.
+	Add DW_OP_GNU_push_tls_address, DW_OP_GNU_uninit.
 
 2009-01-17  Petr Machata  <pmachata@redhat.com>
 
