@@ -3,19 +3,25 @@
 	* c++/dwarf: New file.
 	* Makefile.am (pkginclude_HEADERS): Add it.
 
-2008-01-06  Roland McGrath  <roland@redhat.com>
+2009-01-17  Roland McGrath  <roland@redhat.com>
 
-	* libdwP.h (struct Dwarf_Abbrev): Change type of 'has_children' to bool.
-	Reorder members.
-	* dwarf_haschildren.c: Return -1 for error case, not 0.
-
-2009-01-11  Roland McGrath  <roland@redhat.com>
+	* Makefile.am (known-dwarf.h): Target renamed, not in $(srcdir).
+	Make it unconditional.
+	(BUILT_SOURCES): Updated.
 
 	* dwarf.h: Add description comments for DW_LANG_* values.
 
 	* Makefile.am [MAINTAINER_MODE]
 	($(srcdir)/known-dwarf.h): New target.
 	(BUILT_SOURCES): Add it.
+
+	* dwarf.h: Add DW_OP_GNU_push_tls_address, DW_OP_GNU_uninit.
+
+2008-01-06  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf_Abbrev): Change type of 'has_children' to bool.
+	Reorder members.
+	* dwarf_haschildren.c: Return -1 for error case, not 0.
 
 2009-01-10  Ulrich Drepper  <drepper@redhat.com>
 
