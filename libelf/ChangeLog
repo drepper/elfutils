@@ -1,3 +1,22 @@
+2009-01-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32_updatefile.c (elfXX_updatemmap): When skipping non-NOBITS
+	sections we haven't loaded, update last_position based on scn_start,
+	not based on old value.  Don't run the loop for the dummy section 0.
+	(elfXX_updatefile): Don't run the loop for the dummy section 0.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* libelfP.h (_): We only have one translation domain, elfutils.
+
+	* Makefile.am: Use USE_LOCKS instead of USE_TLS.
+	* elf_error.c: Always use __thread.  Remove all !USE_TLS code.
+
+2009-01-04  Roland McGrath  <roland@redhat.com>
+
+	* note_xlate.h (elf_cvt_note): Don't examine a size too small to
+	container a note header.
+
 2008-12-11  Roland McGrath  <roland@redhat.com>
 
 	* elf32_updatefile.c (__elfw2(LIBELFBITS,updatemmap)): Handle

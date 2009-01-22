@@ -48,10 +48,10 @@
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 
 /* Values for the various options.  */
@@ -1183,11 +1183,12 @@ ld_new_searchdir (const char *dir)
 
   /* Enqueue the file.  */
   if (ld_state.tailpaths == NULL)
-    ld_state.paths = ld_state.tailpaths = newpath;
+    ld_state.paths = ld_state.tailpaths = newpath->next = newpath;
   else
     {
       ld_state.tailpaths->next = newpath;
       ld_state.tailpaths = newpath;
+      newpath->next = ld_state.paths;
     }
 }
 

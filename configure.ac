@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl Configure input file for elfutils.                     -*-autoconf-*-
 dnl
-dnl Copyright (C) 1996-2002, 2003, 2004, 2005, 2006, 2007, 2008 Red Hat, Inc.
+dnl Copyright (C) 1996-2009 Red Hat, Inc.
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -48,13 +48,13 @@ AC_CONFIG_FILES([elfutils.spec:config/elfutils.spec.in])
 
 AC_CANONICAL_HOST
 
-AC_ARG_ENABLE([tls],
-AS_HELP_STRING([--enable-tls], [enable use of thread local storage]),
-use_tls=yes, use_tls=no)
-AM_CONDITIONAL(USE_TLS, test "$use_tls" = yes)
-AS_IF([test "$use_tls" = yes], [AC_DEFINE(USE_TLS)])
+AC_ARG_ENABLE([thread-safety],
+AS_HELP_STRING([--enable-thread-safety], [enable thread safety of libraries]),
+use_tls=locks, use_locks=no)
+AM_CONDITIONAL(USE_LOCKS, test "$use_locks" = yes)
+AS_IF([test "$use_locks" = yes], [AC_DEFINE(USE_LOCKS)])
 
-AH_TEMPLATE([USE_TLS], [Defined if thread local storage should be used.])
+AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
 
 dnl Add all the languages for which translations are available.
 ALL_LINGUAS=
@@ -101,6 +101,14 @@ AS_IF([test "x$ac_cv_as_needed" = xyes],
       [LD_AS_NEEDED=-Wl,--as-needed], [LD_AS_NEEDED=])
 AC_SUBST(LD_AS_NEEDED)
 
+AC_CACHE_CHECK([for __thread support], ac_cv_tls, [dnl
+AC_COMPILE_IFELSE([dnl
+#undef __thread
+static __thread int a; int foo (int b) { return a + b; }],
+		  ac_cv_tls=yes, ac_cv_tls=no)])
+AS_IF([test "x$ac_cv_tls" != xyes],
+      AC_DEFINE([__thread], [/* empty, no multi-thread support */],
+		[Stubbed out if missing compiler support.]))
 
 LOCALEDIR=$datadir
 AC_SUBST(LOCALEDIR)
@@ -209,6 +217,16 @@ LIBEBL_SUBDIR="$enable_libebl_subdir"])
 AC_SUBST([LIBEBL_SUBDIR])
 AC_DEFINE_UNQUOTED(LIBEBL_SUBDIR, "$LIBEBL_SUBDIR")
 AH_TEMPLATE([LIBEBL_SUBDIR], [$libdir subdirectory containing libebl modules.])
+
+dnl Test for zlib and bzlib, gives ZLIB/BZLIB .am
+dnl conditional and config.h USE_ZLIB/USE_BZLIB #define.
+save_LIBS="$LIBS"
+LIBS=
+eu_ZIPLIB(z,Z,z,gzdopen,gzip)
+eu_ZIPLIB(bz,BZ,bz2,BZ2_bzdopen,bzip2)
+zip_LIBS="$LIBS"
+LIBS="$save_LIBS"
+AC_SUBST([zip_LIBS])
 
 dnl The directories with content.
 
