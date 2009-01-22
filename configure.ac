@@ -107,7 +107,7 @@ AC_COMPILE_IFELSE([dnl
 static __thread int a; int foo (int b) { return a + b; }],
 		  ac_cv_tls=yes, ac_cv_tls=no)])
 AS_IF([test "x$ac_cv_tls" != xyes],
-      AC_DEFINE([__thread], [/* empty, no multi-thread support */],
+      AC_DEFINE([__thread], [/* empty: no multi-thread support */],
 		[Stubbed out if missing compiler support.]))
 
 LOCALEDIR=$datadir
