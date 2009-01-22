@@ -117,7 +117,19 @@
 	* dwarflint.c: Checking for zero padding and unreferenced bytes.
 	CU size and padding at the end of CU are now checked.
 
+2009-01-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (check_program_header): Fix typo in .eh_frame_hdr section
+	test.  Handle debuginfo files.
+	(check_exception_data): First sanity test.
+
 2009-01-17  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c (print_debug_exception_table): Show target of ar_disp
+	field.
+
+	* elflint.c (check_program_header): Add most consistency checks for
+	PT_GNU_EH_FRAME entry.
 
 	* addr2line.c: Use ARGP_PROGRAM_VERSION_HOOK_DEF and
 	ARGP_PROGRAM_BUG_ADDRESS_DEF.
@@ -130,6 +142,7 @@
 	* objdump.c: Likewise.
 	* ranlib.c: Likewise.
 	* readelf.c: Likewise.
+
 	* size.c: Likewise.
 	* strings.c: Likewise.
 	* strip.c: Likewise.
@@ -199,6 +212,11 @@
 2009-01-06  Ulrich Drepper  <drepper@redhat.com>
 
 	* readelf.c: Implement call frame debug section dumping.
+
+2009-01-05  Roland McGrath  <roland@redhat.com>
+
+	* elfcmp.c: Exit with status 2 for errors (like cmp, diff, grep).
+	Status 1 (aka EXIT_FAILURE) is only for completed OK but not equal.
 
 2009-01-01  Ulrich Drepper  <drepper@redhat.com>
 
