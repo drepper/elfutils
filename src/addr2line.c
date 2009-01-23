@@ -376,7 +376,7 @@ handle_address (const char *string, Dwfl *dwfl)
       bool parsed = false;
       int n;
       char *name = NULL;
-      if (sscanf (string, "(%m[^)])%" PRIiMAX "%n", &name, &addr, &n) == 2
+      if (sscanf (string, "(%a[^)])%" PRIiMAX "%n", &name, &addr, &n) == 2
 	  && string[n] == '\0')
 	{
 	  /* It was (section)+offset.  This makes sense if there is
@@ -417,7 +417,7 @@ handle_address (const char *string, Dwfl *dwfl)
 		}
 	    }
 	}
-      else if (sscanf (string, "%m[^-+]%" PRIiMAX "%n", &name, &addr, &n) == 2
+      else if (sscanf (string, "%a[^-+]%" PRIiMAX "%n", &name, &addr, &n) == 2
 	       && string[n] == '\0')
 	{
 	  /* It was symbol+offset.  */
