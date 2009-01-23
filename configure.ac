@@ -102,12 +102,19 @@ AS_IF([test "x$ac_cv_as_needed" = xyes],
 AC_SUBST(LD_AS_NEEDED)
 
 AC_CACHE_CHECK([for __thread support], ac_cv_tls, [dnl
+# Use the same flags that we use for our DSOs, so the test is representative.
+# Some old compiler/linker/libc combinations fail some ways and not others.
+save_CFLAGS="$CFLAGS"
+save_LDFLAGS="$LDFLAGS"
+CFLAGS="-fpic $CFLAGS"
+LDFLAGS="-shared -Wl,-z,defs,-z,relro $LDFLAGS"
 AC_LINK_IFELSE([dnl
 AC_LANG_PROGRAM([[#undef __thread
-static __thread int a __attribute__ ((tls_model ("local-dynamic")));
-int foo (int b) { return a + b; }]],
+static __thread int a; int foo (int b) { return a + b; }]],
 		[[exit (foo (0));]])],
-	       ac_cv_tls=yes, ac_cv_tls=no)])
+	       ac_cv_tls=yes, ac_cv_tls=no)
+CFLAGS="$save_CFLAGS"
+LDFLAGS="$save_LDFLAGS"])
 AS_IF([test "x$ac_cv_tls" != xyes],
       [AS_IF([test "$use_locks" = yes],
 	     [AC_MSG_ERROR([--enable-thread-safety requires __thread support])],
@@ -226,7 +233,7 @@ dnl Test for zlib and bzlib, gives ZLIB/BZLIB .am
 dnl conditional and config.h USE_ZLIB/USE_BZLIB #define.
 save_LIBS="$LIBS"
 LIBS=
-eu_ZIPLIB(z,Z,z,gzdopen,gzip)
+eu_ZIPLIB(z,Z,z,gzdirect,gzip)
 eu_ZIPLIB(bz,BZ,bz2,BZ2_bzdopen,bzip2)
 zip_LIBS="$LIBS"
 LIBS="$save_LIBS"
