@@ -1178,6 +1178,16 @@
 	object symbols or symbols with unknown type.
 	(check_rel): Likewise.
 
+2005-06-09  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (handle_dynamic, handle_symtab): Check for bogus sh_link.
+	(handle_verneed, handle_verdef, handle_versym, handle_hash): Likewise.
+	(handle_scngrp): Check for bogus sh_info.
+
+	* strip.c (handle_elf): Check for bogus values in sh_link, sh_info,
+	st_shndx, e_shstrndx, and SHT_GROUP or SHT_SYMTAB_SHNDX data.
+	Don't use assert on input values, instead bail with "illformed" error.
+
 2005-06-08  Roland McGrath  <roland@redhat.com>
 
 	* readelf.c (print_ops): Add consts.
@@ -1222,6 +1232,19 @@
 2005-05-18  Ulrich Drepper  <drepper@redhat.com>
 
 	* readelf.c (dwarf_tag_string): Add new tags.
+
+2005-05-17  Jakub Jelinek  <jakub@redhat.com>
+
+	* elflint.c (check_hash): Don't check entries beyond end of section.
+	(check_note): Don't crash if gelf_rawchunk fails.
+	(section_name): Return <invalid> if gelf_getshdr returns NULL.
+
+2005-05-14  Jakub Jelinek  <jakub@redhat.com>
+
+	* elflint.c (section_name): Return "<invalid>" instead of
+	crashing on invalid section name.
+	(check_symtab, is_rel_dyn, check_rela, check_rel, check_dynamic,
+	check_symtab_shndx, check_hash, check_versym): Robustify.
 
 2005-05-08  Roland McGrath  <roland@redhat.com>
 

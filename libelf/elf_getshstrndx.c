@@ -125,10 +125,25 @@ elf_getshstrndx (elf, dst)
 	      if (elf->map_address != NULL
 		  && elf->state.elf32.ehdr->e_ident[EI_DATA] == MY_ELFDATA
 		  && (ALLOW_UNALIGNED
-		      || (((size_t) ((char *) elf->map_address + offset))
+		      || (((size_t) ((char *) elf->map_address
+			   + elf->start_offset + offset))
 			  & (__alignof__ (Elf32_Shdr) - 1)) == 0))
+		{
+		  /* First see whether the information in the ELF header is
+		     valid and it does not ask for too much.  */
+		  if (unlikely (offset + sizeof (Elf32_Shdr)
+				> elf->maximum_size))
+		    {
+		      /* Something is wrong.  */
+		      __libelf_seterrno (ELF_E_INVALID_SECTION_HEADER);
+		      result = -1;
+		      goto out;
+		    }
+
 		/* We can directly access the memory.  */
-		num = ((Elf32_Shdr *) (elf->map_address + offset))->sh_link;
+		  num = ((Elf32_Shdr *) (elf->map_address + elf->start_offset
+					 + offset))->sh_link;
+		}
 	      else
 		{
 		  /* We avoid reading in all the section headers.  Just read
@@ -163,10 +178,25 @@ elf_getshstrndx (elf, dst)
 	      if (elf->map_address != NULL
 		  && elf->state.elf64.ehdr->e_ident[EI_DATA] == MY_ELFDATA
 		  && (ALLOW_UNALIGNED
-		      || (((size_t) ((char *) elf->map_address + offset))
+		      || (((size_t) ((char *) elf->map_address
+			   + elf->start_offset + offset))
 			  & (__alignof__ (Elf64_Shdr) - 1)) == 0))
+		{
+		  /* First see whether the information in the ELF header is
+		     valid and it does not ask for too much.  */
+		  if (unlikely (offset + sizeof (Elf64_Shdr)
+				> elf->maximum_size))
+		    {
+		      /* Something is wrong.  */
+		      __libelf_seterrno (ELF_E_INVALID_SECTION_HEADER);
+		      result = -1;
+		      goto out;
+		    }
+
 		/* We can directly access the memory.  */
-		num = ((Elf64_Shdr *) (elf->map_address + offset))->sh_link;
+		  num = ((Elf64_Shdr *) (elf->map_address
+			 + elf->start_offset + offset))->sh_link;
+		}
 	      else
 		{
 		  /* We avoid reading in all the section headers.  Just read

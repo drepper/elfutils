@@ -124,6 +124,12 @@ elfw2(LIBELFBITS,newphdr) (elf, count)
   else if (elf->state.ELFW(elf,LIBELFBITS).ehdr->e_phnum != count
 	   || elf->state.ELFW(elf,LIBELFBITS).phdr == NULL)
     {
+      if (unlikely (count > SIZE_MAX / sizeof (ElfW2(LIBELFBITS,Phdr))))
+	{
+	  result = NULL;
+	  goto out;
+	}
+
       /* Allocate a new program header with the appropriate number of
 	 elements.  */
       result = (ElfW2(LIBELFBITS,Phdr) *)

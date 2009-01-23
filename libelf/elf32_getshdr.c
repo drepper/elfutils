@@ -1,5 +1,5 @@
 /* Return section header.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2005, 2007 Red Hat, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2005, 2007, 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -81,7 +81,8 @@ load_shdr_wrlock (Elf_Scn *scn)
     goto out;
 
   size_t shnum;
-  if (__elf_getshnum_rdlock (elf, &shnum) != 0)
+  if (__elf_getshnum_rdlock (elf, &shnum) != 0
+      || shnum > SIZE_MAX / sizeof (ElfW2(LIBELFBITS,Shdr)))
     goto out;
   size_t size = shnum * sizeof (ElfW2(LIBELFBITS,Shdr));
 
@@ -98,6 +99,16 @@ load_shdr_wrlock (Elf_Scn *scn)
 
   if (elf->map_address != NULL)
     {
+      /* First see whether the information in the ELF header is
+	 valid and it does not ask for too much.  */
+      if (unlikely (ehdr->e_shoff >= elf->maximum_size)
+	  || unlikely (ehdr->e_shoff + size > elf->maximum_size))
+	{
+	  /* Something is wrong.  */
+	  __libelf_seterrno (ELF_E_INVALID_SECTION_HEADER);
+	  goto free_and_out;
+	}
+
       ElfW2(LIBELFBITS,Shdr) *notcvt;
 
       /* All the data is already mapped.  If we could use it

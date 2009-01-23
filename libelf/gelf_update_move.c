@@ -75,7 +75,7 @@ gelf_update_move (data, ndx, src)
   assert (sizeof (GElf_Move) == sizeof (Elf64_Move));
 
   /* Check whether we have to resize the data buffer.  */
-  if (unlikely (ndx < 0)
+  if (INVALID_NDX (ndx, GElf_Move)
       || unlikely ((ndx + 1) * sizeof (GElf_Move) > data_scn->d.d_size))
     {
       __libelf_seterrno (ELF_E_INVALID_INDEX);

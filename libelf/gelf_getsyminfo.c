@@ -84,7 +84,8 @@ gelf_getsyminfo (data, ndx, dst)
 
   /* The data is already in the correct form.  Just make sure the
      index is OK.  */
-  if (unlikely ((ndx + 1) * sizeof (GElf_Syminfo) > data->d_size))
+  if (INVALID_NDX (ndx, GElf_Syminfo)
+      || unlikely ((ndx + 1) * sizeof (GElf_Syminfo) > data->d_size))
     {
       __libelf_seterrno (ELF_E_INVALID_INDEX);
       goto out;

@@ -75,7 +75,7 @@ gelf_update_versym (data, ndx, src)
   assert (sizeof (GElf_Versym) == sizeof (Elf64_Versym));
 
   /* Check whether we have to resize the data buffer.  */
-  if (unlikely (ndx < 0)
+  if (INVALID_NDX (ndx, GElf_Versym)
       || unlikely ((ndx + 1) * sizeof (GElf_Versym) > data_scn->d.d_size))
     {
       __libelf_seterrno (ELF_E_INVALID_INDEX);

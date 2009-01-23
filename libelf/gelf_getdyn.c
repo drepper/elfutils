@@ -93,7 +93,8 @@ gelf_getdyn (data, ndx, dst)
 	 table entries has to be adopted.  The user better has provided
 	 a buffer where we can store the information.  While copying the
 	 data we are converting the format.  */
-      if (unlikely ((ndx + 1) * sizeof (Elf32_Dyn) > data_scn->d.d_size))
+      if (INVALID_NDX (ndx, Elf32_Dyn)
+	  || unlikely ((ndx + 1) * sizeof (Elf32_Dyn) > data_scn->d.d_size))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;
@@ -114,7 +115,8 @@ gelf_getdyn (data, ndx, dst)
 
       /* The data is already in the correct form.  Just make sure the
 	 index is OK.  */
-      if (unlikely ((ndx + 1) * sizeof (GElf_Dyn) > data_scn->d.d_size))
+      if (INVALID_NDX (ndx, GElf_Dyn)
+	  || unlikely ((ndx + 1) * sizeof (GElf_Dyn) > data_scn->d.d_size))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;

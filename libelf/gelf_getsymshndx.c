@@ -90,7 +90,9 @@ gelf_getsymshndx (symdata, shndxdata, ndx, dst, dstshndx)
      section index table.  */
   if (likely (shndxdata_scn != NULL))
     {
-      if (unlikely ((ndx + 1) * sizeof (Elf32_Word) > shndxdata_scn->d.d_size))
+      if (INVALID_NDX (ndx, Elf32_Word)
+	  || unlikely ((ndx + 1) * sizeof (Elf32_Word)
+		       > shndxdata_scn->d.d_size))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;
@@ -110,7 +112,8 @@ gelf_getsymshndx (symdata, shndxdata, ndx, dst, dstshndx)
 	 table entries has to be adopted.  The user better has provided
 	 a buffer where we can store the information.  While copying the
 	 data we are converting the format.  */
-      if (unlikely ((ndx + 1) * sizeof (Elf32_Sym) > symdata->d_size))
+      if (INVALID_NDX (ndx, Elf32_Sym)
+	  || unlikely ((ndx + 1) * sizeof (Elf32_Sym) > symdata->d_size))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;
@@ -139,7 +142,8 @@ gelf_getsymshndx (symdata, shndxdata, ndx, dst, dstshndx)
 
       /* The data is already in the correct form.  Just make sure the
 	 index is OK.  */
-      if (unlikely ((ndx + 1) * sizeof (GElf_Sym) > symdata->d_size))
+      if (INVALID_NDX (ndx, GElf_Sym)
+	  || unlikely ((ndx + 1) * sizeof (GElf_Sym) > symdata->d_size))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;

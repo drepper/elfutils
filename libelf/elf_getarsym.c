@@ -179,6 +179,9 @@ elf_getarsym (elf, ptr)
       size_t index_size = atol (tmpbuf);
 
       if (SARMAG + sizeof (struct ar_hdr) + index_size > elf->maximum_size
+#if SIZE_MAX <= 4294967295U
+	  || n >= SIZE_MAX / sizeof (Elf_Arsym)
+#endif
 	  || n * sizeof (uint32_t) > index_size)
 	{
 	  /* This index table cannot be right since it does not fit into

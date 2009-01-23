@@ -104,10 +104,18 @@ elf_newscn (elf)
   else
     {
       /* We must allocate a new element.  */
-      Elf_ScnList *newp;
+      Elf_ScnList *newp = NULL;
 
       assert (elf->state.elf.scnincr > 0);
 
+      if (
+#if SIZE_MAX <= 4294967295U
+	  likely (elf->state.elf.scnincr
+		  < SIZE_MAX / 2 / sizeof (Elf_Scn) - sizeof (Elf_ScnList))
+#else
+	  1
+#endif
+	  )
       newp = (Elf_ScnList *) calloc (sizeof (Elf_ScnList)
 				     + ((elf->state.elf.scnincr *= 2)
 					* sizeof (Elf_Scn)), 1);

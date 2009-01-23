@@ -165,7 +165,8 @@ get_shnum (void *map_address, unsigned char *e_ident, int fildes, off_t offset,
 
       if (unlikely (result == 0) && ehdr.e32->e_shoff != 0)
 	{
-	  if (ehdr.e32->e_shoff + sizeof (Elf32_Shdr) > maxsize)
+	  if (unlikely (ehdr.e32->e_shoff >= maxsize)
+	      || unlikely (ehdr.e32->e_shoff + sizeof (Elf32_Shdr) > maxsize))
 	    /* Cannot read the first section header.  */
 	    return 0;
 
@@ -213,7 +214,8 @@ get_shnum (void *map_address, unsigned char *e_ident, int fildes, off_t offset,
 
       if (unlikely (result == 0) && ehdr.e64->e_shoff != 0)
 	{
-	  if (ehdr.e64->e_shoff + sizeof (Elf64_Shdr) > maxsize)
+	  if (unlikely (ehdr.e64->e_shoff >= maxsize)
+	      || unlikely (ehdr.e64->e_shoff + sizeof (Elf64_Shdr) > maxsize))
 	    /* Cannot read the first section header.  */
 	    return 0;
 
@@ -285,6 +287,15 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
     /* Could not determine the number of sections.  */
     return NULL;
 
+  /* Check for too many sections.  */
+  if (e_ident[EI_CLASS] == ELFCLASS32)
+    {
+      if (scncnt > SIZE_MAX / (sizeof (Elf_Scn) + sizeof (Elf32_Shdr)))
+	return NULL;
+    }
+  else if (scncnt > SIZE_MAX / (sizeof (Elf_Scn) + sizeof (Elf64_Shdr)))
+    return NULL;
+
   /* We can now allocate the memory.  */
   Elf *elf = allocate_elf (fildes, map_address, offset, maxsize, cmd, parent,
 			   ELF_K_ELF, scncnt * sizeof (Elf_Scn));
@@ -318,13 +329,31 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	{
 	  /* We can use the mmapped memory.  */
 	  elf->state.elf32.ehdr = ehdr;
+
+	  if (unlikely (ehdr->e_shoff >= maxsize)
+	      || unlikely (ehdr->e_shoff
+			   + scncnt * sizeof (Elf32_Shdr) > maxsize))
+	    {
+	    free_and_out:
+	      free (elf);
+	      __libelf_seterrno (ELF_E_INVALID_FILE);
+	      return NULL;
+	    }
 	  elf->state.elf32.shdr
 	    = (Elf32_Shdr *) ((char *) ehdr + ehdr->e_shoff);
+
 	  if (ehdr->e_phnum > 0)
+	    {
 	    /* Assign a value only if there really is a program
 	       header.  Otherwise the value remains NULL.  */
+	      if (unlikely (ehdr->e_phoff >= maxsize)
+		  || unlikely (ehdr->e_phoff
+			       + ehdr->e_phnum
+			       * sizeof (Elf32_Phdr) > maxsize))
+		goto free_and_out;
 	    elf->state.elf32.phdr
 	      = (Elf32_Phdr *) ((char *) ehdr + ehdr->e_phoff);
+	    }
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
 	    {
@@ -406,13 +435,26 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	{
 	  /* We can use the mmapped memory.  */
 	  elf->state.elf64.ehdr = ehdr;
+
+	  if (unlikely (ehdr->e_shoff >= maxsize)
+	      || unlikely (ehdr->e_shoff
+			   + scncnt * sizeof (Elf32_Shdr) > maxsize))
+	    goto free_and_out;
 	  elf->state.elf64.shdr
 	    = (Elf64_Shdr *) ((char *) ehdr + ehdr->e_shoff);
+
 	  if (ehdr->e_phnum > 0)
+	    {
 	    /* Assign a value only if there really is a program
 	       header.  Otherwise the value remains NULL.  */
+	      if (unlikely (ehdr->e_phoff >= maxsize)
+		  || unlikely (ehdr->e_phoff
+			       + ehdr->e_phnum
+			       * sizeof (Elf32_Phdr) > maxsize))
+		goto free_and_out;
 	    elf->state.elf64.phdr
 	      = (Elf64_Phdr *) ((char *) ehdr + ehdr->e_phoff);
+	    }
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
 	    {

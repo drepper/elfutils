@@ -86,7 +86,8 @@ gelf_getlib (data, ndx, dst)
   /* The data is already in the correct form.  Just make sure the
      index is OK.  */
   GElf_Lib *result = NULL;
-  if (unlikely ((ndx + 1) * sizeof (GElf_Lib) > data->d_size))
+  if (INVALID_NDX (ndx, GElf_Lib)
+      || unlikely ((ndx + 1) * sizeof (GElf_Lib) > data->d_size))
     __libelf_seterrno (ELF_E_INVALID_INDEX);
   else
     {

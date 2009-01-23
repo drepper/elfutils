@@ -105,6 +105,16 @@ __elfw2(LIBELFBITS,getphdr_wrlock) (elf)
 
       if (elf->map_address != NULL)
 	{
+	  /* First see whether the information in the ELF header is
+	     valid and it does not ask for too much.  */
+	  if (unlikely (ehdr->e_phoff >= elf->maximum_size)
+	      || unlikely (ehdr->e_phoff + size > elf->maximum_size))
+	    {
+	      /* Something is wrong.  */
+	      __libelf_seterrno (ELF_E_INVALID_PHDR);
+	      goto out;
+	    }
+
 	  /* All the data is already mapped.  Use it.  */
 	  void *file_phdr = ((char *) elf->map_address
 			     + elf->start_offset + ehdr->e_phoff);
