@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008 Red Hat, Inc.
+## Copyright (C) 2002-2009 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -85,6 +85,12 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  libdw_visit_scopes.c \
 		  dwarf_entry_breakpoints.c
 
+BUILT_SOURCES = known-dwarf.h
+CLEANFILES = known-dwarf.h
+known-dwarf.h: $(top_srcdir)/config/known-dwarf.awk $(srcdir)/dwarf.h
+	$(AWK) -f $^ > $@.new
+	mv -f $@.new $@
+
 if !MUDFLAP
 libdw_pic_a_SOURCES =
 am_libdw_pic_a_OBJECTS = $(libdw_a_SOURCES:.c=.os)
@@ -99,7 +105,7 @@ libdw.so: $(srcdir)/libdw.map libdw_pic.a \
 		-Wl,--enable-new-dtags,-rpath,$(pkglibdir) \
 		-Wl,--version-script,$<,--no-undefined \
 		-Wl,--whole-archive $(filter-out $<,$^) -Wl,--no-whole-archive\
-		-ldl
+		-ldl $(zip_LIBS)
 	if readelf -d $@ | fgrep -q TEXTREL; then exit 1; fi
 	ln -fs $@ $@.$(VERSION)
 
@@ -130,4 +136,4 @@ noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h
 
 EXTRA_DIST = libdw.map
 
-CLEANFILES = $(am_libdw_pic_a_OBJECTS) *.gcno *.gcda libdw.so.$(VERSION)
+MOSTLYCLEANFILES = $(am_libdw_pic_a_OBJECTS) *.gcno *.gcda libdw.so.$(VERSION)

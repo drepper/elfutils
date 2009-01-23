@@ -1,5 +1,5 @@
 /* Locate source files or functions which caused text relocations.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005, 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2005.
 
@@ -44,6 +44,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <system.h>
+
 
 struct segments
 {
@@ -54,10 +56,10 @@ struct segments
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 /* Values for the parameters which have no short form.  */
 #define OPT_DEBUGINFO 0x100
@@ -169,7 +171,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2008");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 

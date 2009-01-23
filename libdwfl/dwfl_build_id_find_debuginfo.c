@@ -1,5 +1,5 @@
 /* Find the debuginfo file for a module from its build ID.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -71,10 +71,16 @@ dwfl_build_id_find_debuginfo (Dwfl_Module *mod,
       /* We need to open an Elf handle on the file so we can check its
 	 build ID note for validation.  Backdoor the handle into the
 	 module data structure since we had to open it early anyway.  */
-      mod->debug.elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (likely (__libdwfl_find_build_id (mod, false, mod->debug.elf) == 2))
-	/* Also backdoor the gratuitous flag.  */
-	mod->debug.valid = true;
+      Dwfl_Error error = __libdw_open_file (&fd, &mod->debug.elf, true, false);
+      if (error != DWFL_E_NOERROR)
+	__libdwfl_seterrno (error);
+      else if (likely (__libdwfl_find_build_id (mod, false,
+						mod->debug.elf) == 2))
+	{
+	  /* Also backdoor the gratuitous flag.  */
+	  mod->debug.valid = true;
+	  return fd;
+	}
       else
 	{
 	  /* A mismatch!  */
@@ -82,10 +88,10 @@ dwfl_build_id_find_debuginfo (Dwfl_Module *mod,
 	  mod->debug.elf = NULL;
 	  close (fd);
 	  fd = -1;
-	  free (*debuginfo_file_name);
-	  *debuginfo_file_name = NULL;
-	  errno = 0;
 	}
+      free (*debuginfo_file_name);
+      *debuginfo_file_name = NULL;
+      errno = 0;
     }
   return fd;
 }

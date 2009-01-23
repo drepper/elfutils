@@ -1,5 +1,5 @@
 /* Discard section not used at runtime from object files.
-   Copyright (C) 2000,2001,2002,2003,2004,2005,2006,2007,2008 Red Hat, Inc.
+   Copyright (C) 2000-2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -55,10 +55,10 @@
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 
 /* Values for the parameters which have no short form.  */
@@ -204,7 +204,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2008");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 

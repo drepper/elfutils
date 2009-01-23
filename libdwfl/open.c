@@ -1,5 +1,5 @@
-/* Conversion functions for notes.
-   Copyright (C) 2007, 2009 Red Hat, Inc.
+/* Decompression support for libdwfl: zlib (gzip) and/or bzlib (bzip2).
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -47,34 +47,104 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-static void
-elf_cvt_note (void *dest, const void *src, size_t len, int encode)
+#include "../libelf/libelfP.h"
+#undef	_
+#include "libdwflP.h"
+
+#include <unistd.h>
+
+#if !USE_ZLIB
+# define __libdw_gunzip(...)	false
+#endif
+
+#if !USE_BZLIB
+# define __libdw_bunzip2(...)	false
+#endif
+
+/* Always consumes *ELF, never consumes FD.
+   Replaces *ELF on success.  */
+static Dwfl_Error
+decompress (int fd __attribute__ ((unused)), Elf **elf)
 {
-  assert (sizeof (Elf32_Nhdr) == sizeof (Elf64_Nhdr));
+  Dwfl_Error error = DWFL_E_BADELF;
+  void *buffer = NULL;
+  size_t size = 0;
 
-  while (len >= sizeof (Elf32_Nhdr))
+#if USE_ZLIB || USE_BZLIB
+  const off64_t offset = (*elf)->start_offset;
+  void *const mapped = ((*elf)->map_address == NULL ? NULL
+			: (*elf)->map_address + (*elf)->start_offset);
+  const size_t mapped_size = (*elf)->maximum_size;
+
+  error = __libdw_gunzip (fd, offset, mapped, mapped_size, &buffer, &size);
+  if (error == DWFL_E_BADELF)
+    error = __libdw_bunzip2 (fd, offset, mapped, mapped_size, &buffer, &size);
+#endif
+
+  elf_end (*elf);
+  *elf = NULL;
+
+  if (error == DWFL_E_NOERROR)
     {
-      (1 ? Elf32_cvt_Nhdr : Elf64_cvt_Nhdr) (dest, src, sizeof (Elf32_Nhdr),
-					     encode);
-      const Elf32_Nhdr *n = encode ? src : dest;
-      Elf32_Word namesz = NOTE_ALIGN (n->n_namesz);
-      Elf32_Word descsz = NOTE_ALIGN (n->n_descsz);
-
-      len -= sizeof *n;
-      src += sizeof *n;
-      dest += sizeof *n;
-
-      if (namesz > len)
-	break;
-      len -= namesz;
-      if (descsz > len)
-	break;
-      len -= descsz;
-
-      if (src != dest)
-	memcpy (dest, src, namesz + descsz);
-
-      src += namesz + descsz;
-      dest += namesz + descsz;
+      if (unlikely (size == 0))
+	{
+	  error = DWFL_E_BADELF;
+	  free (buffer);
+	}
+      else
+	{
+	  *elf = elf_memory (buffer, size);
+	  if (*elf == NULL)
+	    {
+	      error = DWFL_E_LIBELF;
+	      free (buffer);
+	    }
+	  else
+	    (*elf)->flags |= ELF_F_MALLOCED;
+	}
     }
+
+  return error;
+}
+
+Dwfl_Error internal_function
+__libdw_open_file (int *fdp, Elf **elfp, bool close_on_fail, bool archive_ok)
+{
+  bool close_fd = false;
+  Dwfl_Error error = DWFL_E_NOERROR;
+
+  Elf *elf = elf_begin (*fdp, ELF_C_READ_MMAP_PRIVATE, NULL);
+  Elf_Kind kind = elf_kind (elf);
+  if (unlikely (kind == ELF_K_NONE))
+    {
+      if (unlikely (elf == NULL))
+	error = DWFL_E_LIBELF;
+      else
+	{
+	  error = decompress (*fdp, &elf);
+	  if (error == DWFL_E_NOERROR)
+	    {
+	      close_fd = true;
+	      kind = elf_kind (elf);
+	    }
+	}
+    }
+
+  if (error == DWFL_E_NOERROR
+      && kind != ELF_K_ELF
+      && !(archive_ok && kind == ELF_K_AR))
+    {
+      elf_end (elf);
+      elf = NULL;
+      error = DWFL_E_BADELF;
+    }
+
+  if (error == DWFL_E_NOERROR ? close_fd : close_on_fail)
+    {
+      close (*fdp);
+      *fdp = -1;
+    }
+
+  *elfp = elf;
+  return error;
 }

@@ -1,7 +1,7 @@
 		      ToDo list for elfutils                      -*-outline-*-
                       ----------------------
 
-Time-stamp: <2008-02-03 14:15:41 drepper>
+Time-stamp: <2009-01-16 20:55:06 drepper>
 
 * mkinstalldirs
 
@@ -37,6 +37,20 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
 
 ** Rename dwarf_getabbrev
 
+
+* libcpu
+
+** x86
+
+*** Opcodes
+
+     crc32
+     extractps
+     pextrb
+     pextrd/pextrq
+     pextrw
+     pinsrq
+     popcnt 64-bit reg
 
 * nm:
 
@@ -104,6 +118,8 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
 
    check TLS relocation depencies
 
+   Check content of .eh_frame_hdr, .eh_frame, .gcc_except_table
+
 *** for x86
 
     check that R_386_TLS_GD is followed by R_386_PLT32 for __tls_get_addr
@@ -156,5 +172,5 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
      -V    Print on standard error the version number of mcs.
 
 Local Variables:
-eval:(hide-body)
+eval:(hide-sublevels 3)
 End:
