@@ -1,3 +1,8 @@
+2009-01-23  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c (check_debug_info_structural): Check that all CUs
+	have the same address size.
+
 2009-01-17  Roland McGrath  <roland@redhat.com>
 
 	* expr_opcodes.h: Fix DW_OP_deref entry.

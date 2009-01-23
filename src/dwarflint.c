@@ -162,13 +162,15 @@ enum message_category
   mc_die_rel_all  = 0x7000, // any DIE/DIE relationship
   mc_die_other    = 0x8000, // other messages related to DIEs and .debug_info tables
   mc_die_all      = 0xf000, // includes all DIE categories
-  mc_strings   = 0x10000, // string table
-  mc_aranges   = 0x20000, // address ranges table
-  mc_elf       = 0x40000, // ELF structure, e.g. missing optional sections
-  mc_pubtables = 0x80000, // table of public names/types
-  mc_pubtypes  = 0x100000, // .debug_pubtypes presence
-  mc_loc       = 0x200000, // messages related to .debug_loc
-  mc_other     = 0x400000, // messages unrelated to any of the above
+  mc_info      = 0x10000, // messages related to .debug_info, but not particular DIEs
+  mc_strings   = 0x20000, // string table
+  mc_aranges   = 0x40000, // address ranges table
+  mc_elf       = 0x80000, // ELF structure, e.g. missing optional sections
+  mc_pubtables = 0x100000, // table of public names/types
+  mc_pubtypes  = 0x200000, // .debug_pubtypes presence
+  mc_loc       = 0x400000, // messages related to .debug_loc
+  mc_ranges    = 0x800000, // messages related to .debug_ranges
+  mc_other     = 0x1000000, // messages unrelated to any of the above
   mc_all       = 0xffffff00, // all areas
 };
 
@@ -597,6 +599,7 @@ struct cu
 {
   uint64_t offset;
   uint64_t length;
+  int address_size;             // Address size in bytes on the target machine.
   struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
   struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct where where;           // Where was this section defined.
@@ -1053,6 +1056,55 @@ read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret)
     default:
       return false;
     };
+}
+
+/* The value passed back in uint64_t VALUEP may actually be
+   type-casted int64_t.  WHAT and WHERE describe error message and
+   context for LEB128 loading.  */
+static bool
+read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
+		    uint64_t *valuep, struct where *where, const char *what)
+{
+  switch (form)
+    {
+    case DW_FORM_addr:
+      return read_ctx_read_offset (ctx, addr_64, valuep);
+    case DW_FORM_udata:
+      return wr_checked_read_uleb128 (ctx, valuep, where, what);
+    case DW_FORM_sdata:
+      return wr_checked_read_sleb128 (ctx, (int64_t *)valuep, where, what);
+    case DW_FORM_data1:
+      {
+	uint8_t v;
+	if (!read_ctx_read_ubyte (ctx, &v))
+	  return false;
+	if (valuep != NULL)
+	  *valuep = v;
+	return false;
+      }
+    case DW_FORM_data2:
+      {
+	uint16_t v;
+	if (!read_ctx_read_2ubyte (ctx, &v))
+	  return false;
+	if (valuep != NULL)
+	  *valuep = v;
+	return false;
+      }
+    case DW_FORM_data4:
+      {
+	uint32_t v;
+	if (!read_ctx_read_4ubyte (ctx, &v))
+	  return false;
+	if (valuep != NULL)
+	  *valuep = v;
+	return false;
+      }
+    case DW_FORM_data8:
+      return read_ctx_read_8ubyte (ctx, valuep);
+    };
+
+  return false;
 }
 
 static bool
@@ -1706,7 +1758,7 @@ check_global_die_references (struct cu *cu_chain)
 }
 
 static bool
-wr_read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
+read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 		    bool *dwarf_64p, struct where *wh)
 {
   if (size32 == DWARF3_LENGTH_64_BIT)
@@ -1753,6 +1805,13 @@ wr_check_zero_padding (struct read_ctx *ctx,
 			(uint64_t)(ctx->end - ctx->begin));
   return true;
 }
+
+static bool
+check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
+			     struct coverage *loc_coverage,
+			     struct addr_record *loc_addrs,
+			     uint64_t addr, bool addr_64,
+			     struct where *wh);
 
 static struct cu *
 check_debug_info_structural (struct read_ctx *ctx,
@@ -1816,7 +1875,7 @@ check_debug_info_structural (struct read_ctx *ctx,
       if (size32 == 0 && wr_check_zero_padding (ctx, mc_die_other, &where))
 	break;
 
-      if (!wr_read_size_extra (ctx, size32, &size, &dwarf_64, &where))
+      if (!read_size_extra (ctx, size32, &size, &dwarf_64, &where))
 	{
 	  success = false;
 	  break;
@@ -1879,6 +1938,25 @@ check_debug_info_structural (struct read_ctx *ctx,
 		&WHERE (sec_info, NULL),
 		": CU lengths don't exactly match Elf_Data contents.");
 
+  if (cu_chain != NULL)
+    {
+      int address_size = 0;
+      uint64_t offset = 0;
+      for (struct cu *it = cu_chain; it != NULL; it = it->next)
+	if (address_size == 0)
+	  {
+	    address_size = it->address_size;
+	    offset = it->where.addr1;
+	  }
+	else if (address_size != it->address_size)
+	  {
+	    wr_message (mc_info, &it->where,
+			": has different address size than CU 0x%"
+			PRIx64 ".\n", offset);
+	    break;
+	  }
+    }
+
   bool references_sound = check_global_die_references (cu_chain);
   ref_record_free (&die_refs);
 
@@ -1934,31 +2012,6 @@ get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
     };
 }
 
-static bool
-skip_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
-	   struct where *wh, const char *what)
-{
-  switch (form)
-    {
-    case DW_FORM_addr:
-      return read_ctx_read_offset (ctx, addr_64, NULL);
-    case DW_FORM_udata:
-      return wr_checked_read_uleb128 (ctx, NULL, wh, what);
-    case DW_FORM_sdata:
-      return wr_checked_read_sleb128 (ctx, NULL, wh, what);
-    case DW_FORM_data1:
-      return read_ctx_read_ubyte (ctx, NULL);
-    case DW_FORM_data2:
-      return read_ctx_read_2ubyte (ctx, NULL);
-    case DW_FORM_data4:
-      return read_ctx_read_4ubyte (ctx, NULL);
-    case DW_FORM_data8:
-      return read_ctx_read_8ubyte (ctx, NULL);
-    };
-
-  return false;
-}
-
 static void
 check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 {
@@ -1981,25 +2034,26 @@ check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 	  return;
 	}
 
-#define SKIP_FORM(OP, STR)						\
-      if (OP != 0							\
-	  && !skip_form (ctx, addr_64, OP, &where, STR " operand"))	\
-	{								\
-	  wr_error (&where, ": opcode \"%s\""				\
-		    ": can't read " STR " operand (form \"%s\").\n",	\
-		    dwarf_locexpr_opcode_string (opcode),		\
-		    dwarf_form_string (OP));				\
-	  return;							\
-	}
+#define READ_FORM(OP, STR)						\
+      do {								\
+	if (OP != 0							\
+	    && !read_ctx_read_form (ctx, addr_64, (OP),			\
+				    NULL, &where, STR " operand"))	\
+	  {								\
+	    wr_error (&where, ": opcode \"%s\""				\
+		      ": can't read " STR " operand (form \"%s\").\n",	\
+		      dwarf_locexpr_opcode_string (opcode),		\
+		      dwarf_form_string ((OP)));			\
+	    return;							\
+	  }								\
+      } while (0)
 
-      SKIP_FORM (op1, "1st");
-      SKIP_FORM (op2, "2nd");
-#undef SKIP_FORM
+      READ_FORM (op1, "1st");
+      READ_FORM (op2, "2nd");
+#undef READ_FORM
     }
 }
 
-/* If it returns false, an error has been written, and the caller
-   should provide "at this point in file"-type message.  */
 static bool
 check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
 			     struct coverage *loc_coverage,
@@ -2524,7 +2578,7 @@ read_die_chain (struct read_ctx *ctx,
 }
 
 static bool
-wr_read_version (struct read_ctx *ctx, bool dwarf_64,
+read_version (struct read_ctx *ctx, bool dwarf_64,
 		 uint16_t *versionp, struct where *wh)
 {
   bool retval = read_ctx_read_2ubyte (ctx, versionp);
@@ -2568,7 +2622,7 @@ check_cu_structural (struct read_ctx *ctx,
   uint8_t address_size;
 
   /* Version.  */
-  if (!wr_read_version (ctx, dwarf_64, &version, &cu->where))
+  if (!read_version (ctx, dwarf_64, &version, &cu->where))
     return false;
 
   /* Abbrev offset.  */
@@ -2591,6 +2645,7 @@ check_cu_structural (struct read_ctx *ctx,
 		address_size);
       return false;
     }
+  cu->address_size = address_size;
 
   struct abbrev_table *abbrevs = abbrev_chain;
   for (; abbrevs != NULL; abbrevs = abbrevs->next)
@@ -2612,8 +2667,7 @@ check_cu_structural (struct read_ctx *ctx,
   if (read_die_chain (ctx, cu, abbrevs, strings, loc,
 		      dwarf_64, address_size == 8,
 		      die_refs, &die_loc_refs,
-		      loc_addrs,
-		      strings_coverage,
+		      loc_addrs, strings_coverage,
 		      loc_coverage) >= 0)
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
@@ -2653,7 +2707,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  wr_error (&where, ": can't read table length.\n");
 	  return false;
 	}
-      if (!wr_read_size_extra (ctx, size32, &size, &dwarf_64, &where))
+      if (!read_size_extra (ctx, size32, &size, &dwarf_64, &where))
 	return false;
 
       struct read_ctx sub_ctx;
@@ -2669,7 +2723,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
       /* Version.  */
       uint16_t version;
-      if (!wr_read_version (&sub_ctx, dwarf_64, &version, &where))
+      if (!read_version (&sub_ctx, dwarf_64, &version, &where))
 	{
 	  retval = false;
 	  goto next;
@@ -2812,7 +2866,7 @@ check_pub_structural (struct read_ctx *ctx, struct cu *cu_chain,
 	  wr_error (&where, ": can't read table length.\n");
 	  return false;
 	}
-      if (!wr_read_size_extra (ctx, size32, &size, &dwarf_64, &where))
+      if (!read_size_extra (ctx, size32, &size, &dwarf_64, &where))
 	return false;
 
       struct read_ctx sub_ctx;
