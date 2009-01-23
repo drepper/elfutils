@@ -102,10 +102,11 @@ AS_IF([test "x$ac_cv_as_needed" = xyes],
 AC_SUBST(LD_AS_NEEDED)
 
 AC_CACHE_CHECK([for __thread support], ac_cv_tls, [dnl
-AC_COMPILE_IFELSE([dnl
-#undef __thread
-static __thread int a; int foo (int b) { return a + b; }],
-		  ac_cv_tls=yes, ac_cv_tls=no)])
+AC_LINK_IFELSE([dnl
+AC_LANG_PROGRAM([[#undef __thread
+static __thread int a; int foo (int b) { return a + b; }]],
+		[[exit (foo (0));]])],
+	       ac_cv_tls=yes, ac_cv_tls=no)])
 AS_IF([test "x$ac_cv_tls" != xyes],
       AC_DEFINE([__thread], [/* empty: no multi-thread support */],
 		[Stubbed out if missing compiler support.]))
