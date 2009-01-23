@@ -108,8 +108,10 @@ static __thread int a; int foo (int b) { return a + b; }]],
 		[[exit (foo (0));]])],
 	       ac_cv_tls=yes, ac_cv_tls=no)])
 AS_IF([test "x$ac_cv_tls" != xyes],
-      AC_DEFINE([__thread], [/* empty: no multi-thread support */],
-		[Stubbed out if missing compiler support.]))
+      [AS_IF([test "$use_locks" = yes],
+	     [AC_MSG_ERROR([--enable-thread-safety requires __thread support])],
+	     [AC_DEFINE([__thread], [/* empty: no multi-thread support */],
+			[Stubbed out if missing compiler support.])])])
 
 LOCALEDIR=$datadir
 AC_SUBST(LOCALEDIR)
