@@ -507,11 +507,6 @@
 	If section content hasn't been read yet, do it before looking for the
 	block size.  If no section data present, infer size of section header.
 
-2005-05-31  Roland McGrath  <roland@redhat.com>
-
-	* Makefile.am (WEXTRA): New variable, substituted by configure.
-	(AM_CFLAGS): Use it in place of -Wextra.
-
 2005-05-11  Ulrich Drepper  <drepper@redhat.com>
 
 	* elf.h: Update again.
@@ -519,6 +514,11 @@
 2005-05-09  Ulrich Drepper  <drepper@redhat.com>
 
 	* elf.h: Update from glibc.
+
+2005-05-31  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (WEXTRA): New variable, substituted by configure.
+	(AM_CFLAGS): Use it in place of -Wextra.
 
 2005-05-08  Roland McGrath  <roland@redhat.com>
 
