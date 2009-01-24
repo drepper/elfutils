@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2000-2006, 2007, 2008 Red Hat, Inc.
+## Copyright (C) 2000-2006, 2007, 2008, 2009 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -115,7 +115,7 @@ libebl_%.so: libebl_%_pic.a libebl_%.map $(libelf) $(libdw) \
 	$(LINK) -shared -o $@ -Wl,--whole-archive,$<\
 		$(cpu_$(@:libebl_%.so=%)) -Wl,--no-whole-archive \
 		-Wl,--version-script,$(word 2,$^) \
-		-Wl,-z,defs -Wl,--as-needed $(libelf) $(libdw) $(libmudflap)
+		-Wl,-z,defs $(LD_AS_NEEDED) $(libelf) $(libdw) $(libmudflap)
 	$(textrel_check)
 
 # XXX Should not be needed...
