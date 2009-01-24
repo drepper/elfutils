@@ -101,6 +101,12 @@ AS_IF([test "x$ac_cv_as_needed" = xyes],
       [LD_AS_NEEDED=-Wl,--as-needed], [LD_AS_NEEDED=])
 AC_SUBST(LD_AS_NEEDED)
 
+AC_CACHE_CHECK([for __builtin_popcount], ac_cv_popcount, [dnl
+AC_LINK_IFELSE([AC_LANG_PROGRAM([], [[exit (__builtin_popcount (127));]])],
+	       ac_cv_popcount=yes, ac_cv_popcount=no)])
+AS_IF([test "x$ac_cv_popcount" = xyes],
+      [AC_DEFINE([HAVE_BUILTIN_POPCOUNT], [1], [Have __builtin_popcount.])])
+
 AC_CACHE_CHECK([for __thread support], ac_cv_tls, [dnl
 # Use the same flags that we use for our DSOs, so the test is representative.
 # Some old compiler/linker/libc combinations fail some ways and not others.

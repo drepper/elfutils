@@ -1,3 +1,8 @@
+2009-01-23  Roland McGrath  <roland@redhat.com>
+
+	* eu-config.h [! HAVE_BUILTIN_POPCOUNT]
+	(__builtin_popcount): New inline function.
+
 2009-01-17  Ulrich Drepper  <drepper@redhat.com>
 
 	* system.h (ARGP_PROGRAM_VERSION_HOOK_DEF): Define.

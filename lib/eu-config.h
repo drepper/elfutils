@@ -178,3 +178,14 @@ asm (".section predict_data, \"aw\"; .previous\n"
 
 /* This macro is used by the tests conditionalize for standalone building.  */
 #define ELFUTILS_HEADER(name) <lib##name.h>
+
+#ifndef HAVE_BUILTIN_POPCOUNT
+# define __builtin_popcount hakmem_popcount
+static inline unsigned int __attribute__ ((unused))
+popcount (unsigned int x)
+{
+  /* HAKMEM 169 */
+  unsigned int n = x - ((x >> 1) & 033333333333) - ((x >> 2) & 011111111111);
+  return ((n + (n >> 3)) & 030707070707) % 63;
+}
+#endif
