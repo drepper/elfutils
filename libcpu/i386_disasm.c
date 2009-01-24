@@ -791,6 +791,7 @@ i386_disasm (const uint8_t **startp, const uint8_t *end, GElf_Addr addr,
 
 			default:
 			  assert (! "INVALID not handled");
+			  abort ();
 			}
 		    }
 		  else

@@ -1,5 +1,8 @@
 2009-01-23  Roland McGrath  <roland@redhat.com>
 
+	* i386_disasm.c (i386_disasm): Add abort after assert-constant for old
+	compilers that don't realize it's noreturn.
+
 	* Makefile.am (i386_parse_CFLAGS): Use quotes around command
 	substitution that can produce leading whitespace.
 
