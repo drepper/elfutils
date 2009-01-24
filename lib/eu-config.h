@@ -46,6 +46,9 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifndef EU_CONFIG_H
+#define EU_CONFIG_H	1
+
 #ifdef USE_LOCKS
 # include <pthread.h>
 # include <assert.h>
@@ -182,10 +185,13 @@ asm (".section predict_data, \"aw\"; .previous\n"
 #ifndef HAVE_BUILTIN_POPCOUNT
 # define __builtin_popcount hakmem_popcount
 static inline unsigned int __attribute__ ((unused))
-popcount (unsigned int x)
+hakmem_popcount (unsigned int x)
 {
   /* HAKMEM 169 */
   unsigned int n = x - ((x >> 1) & 033333333333) - ((x >> 2) & 011111111111);
   return ((n + (n >> 3)) & 030707070707) % 63;
 }
-#endif
+#endif	/* HAVE_BUILTIN_POPCOUNT */
+
+
+#endif	/* eu-config.h */

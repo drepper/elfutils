@@ -3,6 +3,8 @@
 	* eu-config.h [! HAVE_BUILTIN_POPCOUNT]
 	(__builtin_popcount): New inline function.
 
+	* eu-config.h: Add multiple inclusion protection.
+
 2009-01-17  Ulrich Drepper  <drepper@redhat.com>
 
 	* system.h (ARGP_PROGRAM_VERSION_HOOK_DEF): Define.
