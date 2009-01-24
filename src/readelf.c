@@ -977,6 +977,10 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 	}
     }
 
+  if (ehdr->e_shnum == 0)
+    /* No sections in the file.  Punt.  */
+    return;
+
   /* Get the section header string table index.  */
   size_t shstrndx;
   if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
@@ -4028,7 +4032,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
       if (unlikely (unit_length == 0))
 	{
-	  printf (gettext ("\n [%6jx] Zero terminator\n"), offset);
+	  printf (gettext ("\n [%6tx] Zero terminator\n"), offset);
 	  continue;
 	}
 
@@ -4075,7 +4079,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	    // XXX Check overflow
 	    get_uleb128 (return_address_register, readp);
 
-	  printf ("\n [%6jx] CIE length=%" PRIu64 "\n"
+	  printf ("\n [%6tx] CIE length=%" PRIu64 "\n"
 		  "   CIE_id:                   %" PRIu64 "\n"
 		  "   version:                  %u\n"
 		  "   augmentation:             \"%s\"\n"
@@ -4118,13 +4122,12 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 		      unsigned int encoding = *readp++;
 		      uint64_t val = 0;
 		      int64_t sval = 0;
-		      bool is_signed;
+		      bool is_signed = false;
 
 		      switch (encoding & 0xf)
 			{
 			case DW_EH_PE_uleb128:
 			  get_uleb128 (val, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_sleb128:
 			  get_sleb128 (sval, readp);
@@ -4132,15 +4135,12 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 			  break;
 			case DW_EH_PE_udata2:
 			  val = read_2ubyte_unaligned_inc (dbg, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_udata4:
 			  val = read_4ubyte_unaligned_inc (dbg, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_udata8:
 			  val = read_8ubyte_unaligned_inc (dbg, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_sdata2:
 			  val = read_2sbyte_unaligned_inc (dbg, readp);
@@ -4213,7 +4213,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	  Dwarf_Word address_range
 	    = read_ubyte_unaligned_inc (ptr_size, dbg, readp);
 
-	  printf ("\n [%6jx] FDE length=%" PRIu64 " cie=[%6jx]\n"
+	  printf ("\n [%6tx] FDE length=%" PRIu64 " cie=[%6tx]\n"
 		  "   CIE_pointer:              %" PRIu64 "\n"
 		  "   initial_location:         %#" PRIx64,
 		  offset, (uint64_t) unit_length,
