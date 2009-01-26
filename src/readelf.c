@@ -276,6 +276,17 @@ static error_t
 parse_opt (int key, char *arg,
 	   struct argp_state *state __attribute__ ((unused)))
 {
+  void add_dump_section (const char *name)
+  {
+    struct section_argument *a = xmalloc (sizeof *a);
+    a->arg = name;
+    a->next = NULL;
+    struct section_argument ***tailp
+      = key == 'x' ? &dump_data_sections_tail : &string_sections_tail;
+    **tailp = a;
+    *tailp = &a->next;
+  }
+
   switch (key)
     {
     case 'a':
@@ -291,6 +302,9 @@ parse_opt (int key, char *arg,
       print_arch = true;
       print_notes = true;
       print_debug_sections |= section_exception;
+      add_dump_section (".strtab");
+      add_dump_section (".dynstr");
+      add_dump_section (".comment");
       any_control_option = true;
       break;
     case 'A':
@@ -388,15 +402,7 @@ parse_opt (int key, char *arg,
 	}
       /* Fall through.  */
     case 'x':
-      {
-	struct section_argument *a = xmalloc (sizeof *a);
-	a->arg = arg;
-	a->next = NULL;
-	struct section_argument ***tailp
-	  = key == 'x' ? &dump_data_sections_tail : &string_sections_tail;
-	**tailp = a;
-	*tailp = &a->next;
-      }
+      add_dump_section (arg);
       any_control_option = true;
       break;
     case ARGP_KEY_NO_ARGS:
@@ -976,6 +982,10 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 	  relro_to = relro_from + phdr->p_memsz;
 	}
     }
+
+  if (ehdr->e_shnum == 0)
+    /* No sections in the file.  Punt.  */
+    return;
 
   /* Get the section header string table index.  */
   size_t shstrndx;
@@ -4028,7 +4038,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
       if (unlikely (unit_length == 0))
 	{
-	  printf (gettext ("\n [%6jx] Zero terminator\n"), offset);
+	  printf (gettext ("\n [%6tx] Zero terminator\n"), offset);
 	  continue;
 	}
 
@@ -4050,6 +4060,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
       unsigned int fde_encoding = 0;
       unsigned int lsda_encoding = 0;
       Dwarf_Word initial_location = 0;
+      Dwarf_Word vma_base = 0;
 
       if (cie_id == (is_eh_frame ? 0 : DW_CIE_ID))
 	{
@@ -4075,7 +4086,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	    // XXX Check overflow
 	    get_uleb128 (return_address_register, readp);
 
-	  printf ("\n [%6jx] CIE length=%" PRIu64 "\n"
+	  printf ("\n [%6tx] CIE length=%" PRIu64 "\n"
 		  "   CIE_id:                   %" PRIu64 "\n"
 		  "   version:                  %u\n"
 		  "   augmentation:             \"%s\"\n"
@@ -4118,13 +4129,12 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 		      unsigned int encoding = *readp++;
 		      uint64_t val = 0;
 		      int64_t sval = 0;
-		      bool is_signed;
+		      bool is_signed = false;
 
 		      switch (encoding & 0xf)
 			{
 			case DW_EH_PE_uleb128:
 			  get_uleb128 (val, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_sleb128:
 			  get_sleb128 (sval, readp);
@@ -4132,15 +4142,12 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 			  break;
 			case DW_EH_PE_udata2:
 			  val = read_2ubyte_unaligned_inc (dbg, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_udata4:
 			  val = read_4ubyte_unaligned_inc (dbg, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_udata8:
 			  val = read_8ubyte_unaligned_inc (dbg, readp);
-			  is_signed = false;
 			  break;
 			case DW_EH_PE_sdata2:
 			  val = read_2sbyte_unaligned_inc (dbg, readp);
@@ -4213,23 +4220,33 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	  Dwarf_Word address_range
 	    = read_ubyte_unaligned_inc (ptr_size, dbg, readp);
 
-	  printf ("\n [%6jx] FDE length=%" PRIu64 " cie=[%6jx]\n"
+	  printf ("\n [%6tx] FDE length=%" PRIu64 " cie=[%6tx]\n"
 		  "   CIE_pointer:              %" PRIu64 "\n"
 		  "   initial_location:         %#" PRIx64,
 		  offset, (uint64_t) unit_length,
 		  cie->cie_offset, (uint64_t) cie_id,
 		  (uint64_t) initial_location);
 	  if ((fde_encoding & 0x70) == DW_EH_PE_pcrel)
-	    printf (gettext (" (offset: %#" PRIx64 ")"),
-		    ((uint64_t) shdr->sh_offset
-		     + (base - (const unsigned char *) data->d_buf)
-		     + (uint64_t) initial_location)
+	    {
+	      vma_base = (((uint64_t) shdr->sh_offset
+			   + (base - (const unsigned char *) data->d_buf)
+			   + (uint64_t) initial_location)
+			  & (ptr_size == 4
+			     ? UINT64_C (0xffffffff)
+			     : UINT64_C (0xffffffffffffffff)));
+	      printf (gettext (" (offset: %#" PRIx64 ")"),
+		      (uint64_t) vma_base);
+	    }
+
+	  printf ("\n   address_range:            %#" PRIx64,
+		  (uint64_t) address_range);
+	  if ((fde_encoding & 0x70) == DW_EH_PE_pcrel)
+	    printf (gettext (" (end offset: %#" PRIx64 ")"),
+		    ((uint64_t) vma_base + (uint64_t) address_range)
 		    & (ptr_size == 4
 		       ? UINT64_C (0xffffffff)
 		       : UINT64_C (0xffffffffffffffff)));
-
-	  printf ("\n   address_range:            %#" PRIx64 "\n",
-		  (uint64_t) address_range);
+	  putchar ('\n');
 
 	  if (cie->augmentation[0] == 'z')
 	    {
@@ -4269,13 +4286,6 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	      readp += augmentationlen;
 	    }
 	}
-
-      /* To print correct addresses compute the base address.  */
-      Dwarf_Word vma_base;
-      if ((fde_encoding & 0x70) == DW_EH_PE_pcrel && ehdr->e_type != ET_REL)
-	vma_base = shdr->sh_addr + initial_location;
-      else
-	vma_base = 0;
 
       /* Handle the initialization instructions.  */
       print_cfa_program (readp, cieend, vma_base, code_alignment_factor,
@@ -5602,9 +5612,16 @@ print_debug_exception_table (Dwfl_Module *dwflmod __attribute__ ((unused)),
 	  int ar_disp;
 	  get_sleb128 (ar_disp, readp);
 
-	  printf (" [%4u] ar_filter:  %d\n"
-		  "        ar_disp:    %d\n",
-		  u++, ar_filter, ar_disp);
+	  printf (" [%4u] ar_filter:  % d\n"
+		  "        ar_disp:    % -5d",
+		  u, ar_filter, ar_disp);
+	  if (abs (ar_disp) & 1)
+	    printf (" -> [%4u]\n", u + (ar_disp + 1) / 2);
+	  else if (ar_disp != 0)
+	    puts (" -> ???");
+	  else
+	    putchar_unlocked ('\n');
+	  ++u;
 	}
       while (readp < action_table_end);
     }

@@ -46,6 +46,9 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifndef EU_CONFIG_H
+#define EU_CONFIG_H	1
+
 #ifdef USE_LOCKS
 # include <pthread.h>
 # include <assert.h>
@@ -178,3 +181,10 @@ asm (".section predict_data, \"aw\"; .previous\n"
 
 /* This macro is used by the tests conditionalize for standalone building.  */
 #define ELFUTILS_HEADER(name) <lib##name.h>
+
+/* C++ needs this for <stdint.h> to define UINT64_MAX et al.  */
+#ifndef __STDC_LIMIT_MACROS
+# define __STDC_LIMIT_MACROS
+#endif
+
+#endif	/* eu-config.h */

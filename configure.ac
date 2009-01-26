@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl Configure input file for elfutils.                     -*-autoconf-*-
 dnl
-dnl Copyright (C) 1996-2009 Red Hat, Inc.
+dnl Copyright (C) 1996-2008, 2009 Red Hat, Inc.
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -16,13 +16,13 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; if not, write to the Free Software Foundation,
 dnl Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 dnl
-AC_INIT([Red Hat elfutils],[0.138],[http://bugzilla.redhat.com/bugzilla/],
+AC_INIT([Red Hat elfutils],[0.139],[http://bugzilla.redhat.com/bugzilla/],
 	[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
 
-AC_COPYRIGHT([Copyright (C) 1996-2007, 2008 Red Hat, Inc.])
+AC_COPYRIGHT([Copyright (C) 1996-2008, 2009 Red Hat, Inc.])
 AC_PREREQ(2.59)			dnl Minimum Autoconf version required.
 
 dnl We use GNU make extensions; automake 1.10 defaults to -Wportability.
@@ -75,12 +75,22 @@ CFLAGS="$old_CFLAGS"])
 AS_IF([test "x$ac_cv_c99" != xyes],
       AC_MSG_ERROR([gcc with C99 support required]))
 
-AC_CACHE_CHECK([for gcc with TLS support], ac_cv_tls, [dnl
-AC_COMPILE_IFELSE([dnl
-__thread int a; int foo (int b) { return a + b; }],
-		  ac_cv_tls=yes, ac_cv_tls=no)])
+AC_CACHE_CHECK([for __thread support], ac_cv_tls, [dnl
+# Use the same flags that we use for our DSOs, so the test is representative.
+# Some old compiler/linker/libc combinations fail some ways and not others.
+save_CFLAGS="$CFLAGS"
+save_LDFLAGS="$LDFLAGS"
+CFLAGS="-fpic $CFLAGS"
+LDFLAGS="-shared -Wl,-z,defs,-z,relro $LDFLAGS"
+AC_LINK_IFELSE([dnl
+AC_LANG_PROGRAM([[#undef __thread
+static __thread int a; int foo (int b) { return a + b; }]],
+		[[exit (foo (0));]])],
+	       ac_cv_tls=yes, ac_cv_tls=no)
+CFLAGS="$save_CFLAGS"
+LDFLAGS="$save_LDFLAGS"])
 AS_IF([test "x$ac_cv_tls" != xyes],
-      AC_MSG_ERROR([gcc with TLS support required]))
+      AC_MSG_ERROR([__thread support required]))
 
 LOCALEDIR=$datadir
 AC_SUBST(LOCALEDIR)
@@ -194,7 +204,7 @@ dnl Test for zlib and bzlib, gives ZLIB/BZLIB .am
 dnl conditional and config.h USE_ZLIB/USE_BZLIB #define.
 save_LIBS="$LIBS"
 LIBS=
-eu_ZIPLIB(z,Z,z,gzdopen,gzip)
+eu_ZIPLIB(z,Z,z,gzdirect,gzip)
 eu_ZIPLIB(bz,BZ,bz2,BZ2_bzdopen,bzip2)
 zip_LIBS="$LIBS"
 LIBS="$save_LIBS"

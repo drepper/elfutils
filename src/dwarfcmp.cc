@@ -164,9 +164,9 @@ struct context
     location () << "different attributes" << endl;
   }
 
-  void values (int name) const
+  void values (const string &a, const string &b) const
   {
-    location () << "different values for attribute 0x" << hex << name << endl;
+    location () << "attribute " << a << " vs " << b << endl;
   }
 };
 
@@ -249,7 +249,7 @@ describe_mismatch (const dwarf::attribute &a, const dwarf::attribute &b,
     {
       result = a.second != b.second;
       if (result != 0)
-	say.values (a.first);
+	say.values (a.to_string (), b.to_string ());
     }
   return result;
 }

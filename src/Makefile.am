@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2002,2003,2004,2005,2006,2007,2009 Red Hat, Inc.
+## Copyright (C) 1996-2002, 2003, 2004, 2005, 2006, 2007, 2009 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -34,7 +34,7 @@ endif
 AM_CFLAGS += -Wall -Wshadow -std=gnu99 $(native_ld_cflags) \
 	     $(if $($(*F)_no_Werror),,-Werror) \
 	     $(if $($(*F)_no_Wunused),,-Wunused -Wextra) \
-	     $(if $($(*F)_no_Wformat),,-Wformat=2) $(CFLAGS_$(*F))
+	     $(if $($(*F)_no_Wformat),-Wno-format,-Wformat=2) $(CFLAGS_$(*F))
 
 INCLUDES = -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwfl \
@@ -82,6 +82,8 @@ ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 libar_a_SOURCES = arlib.c arlib2.c
 
 dwarfcmp_SOURCES = dwarfcmp.cc
+# XXX need to figure out C++ dso crapola
+dwarfcmp_SOURCES += ../libdw/c++/values.cc ../libdw/c++/known.cc
 
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
 		 ldscript.h xelf.h unaligned.h
@@ -113,6 +115,7 @@ libeu = ../lib/libeu.a
 nm_no_Wformat = yes
 size_no_Wformat = yes
 strings_no_Wformat = yes
+addr2line_no_Wformat = yes
 # XXX While the file is not finished, don't warn about this
 ldgeneric_no_Wunused = yes
 dwarfcmp_no_Wformat = yes

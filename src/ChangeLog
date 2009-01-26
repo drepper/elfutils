@@ -126,7 +126,49 @@
 	* dwarflint.c: Checking for zero padding and unreferenced bytes.
 	CU size and padding at the end of CU are now checked.
 
+2009-01-24  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c (print_debug_frame_section): Fix computation of vma_base
+	for PC-relative mode.
+
+2009-01-23  Ulrich Drepper  <drepper@redhat.com>
+
+	* size.c (process_file): When handling archive, close file descriptor
+	here.  For unknown file format also close file descriptor.
+	(handle_ar): Don't close file descriptor here.
+
+	* readelf.c (parse_opt): Move code to add to dump_data_sections and
+	string_sections list in local function add_dump_section.  Adjust 'x'
+	key handling.  For 'a' key add .strtab, .dynstr, and .comment section
+	to string_sections list.
+
+2009-01-22  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_phdr): Don't print section mapping when no sections.
+
+	* Makefile.am (AM_CFLAGS): Pass -Wno-format for *_no_Wformat.
+
+	* readelf.c (print_debug_frame_section): Initialize IS_SIGNED to false
+	and reset it only for the 'true' cases.
+
+	* Makefile.am (addr2line_no_Wformat): New variable.
+
+	* readelf.c (print_debug_frame_section): Use t instead of j formats
+	for ptrdiff_t OFFSET.
+
+2009-01-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (check_program_header): Fix typo in .eh_frame_hdr section
+	test.  Handle debuginfo files.
+	(check_exception_data): First sanity test.
+
 2009-01-17  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c (print_debug_exception_table): Show target of ar_disp
+	field.
+
+	* elflint.c (check_program_header): Add most consistency checks for
+	PT_GNU_EH_FRAME entry.
 
 	* addr2line.c: Use ARGP_PROGRAM_VERSION_HOOK_DEF and
 	ARGP_PROGRAM_BUG_ADDRESS_DEF.
@@ -139,6 +181,7 @@
 	* objdump.c: Likewise.
 	* ranlib.c: Likewise.
 	* readelf.c: Likewise.
+
 	* size.c: Likewise.
 	* strings.c: Likewise.
 	* strip.c: Likewise.
@@ -208,6 +251,11 @@
 2009-01-06  Ulrich Drepper  <drepper@redhat.com>
 
 	* readelf.c: Implement call frame debug section dumping.
+
+2009-01-05  Roland McGrath  <roland@redhat.com>
+
+	* elfcmp.c: Exit with status 2 for errors (like cmp, diff, grep).
+	Status 1 (aka EXIT_FAILURE) is only for completed OK but not equal.
 
 2009-01-01  Ulrich Drepper  <drepper@redhat.com>
 

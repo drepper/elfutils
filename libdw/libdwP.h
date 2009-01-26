@@ -299,14 +299,21 @@ struct Dwarf_CU
 #define DIE_OFFSET_FROM_CU_OFFSET(cu_offset, offset_size) \
   ((cu_offset) + 3 * (offset_size) - 4 + 3)
 
-#define CUDIE(fromcu) \
-  ((Dwarf_Die)								      \
-   {									      \
-     .cu = (fromcu),							      \
-     .addr = ((char *) (fromcu)->dbg->sectiondata[IDX_debug_info]->d_buf      \
-	      + (fromcu)->start + 3 * (fromcu)->offset_size - 4 + 3),	      \
-   })
+#define CUDIE_ADDR(fromcu)						\
+  ((char *) (fromcu)->dbg->sectiondata[IDX_debug_info]->d_buf		\
+   + DIE_OFFSET_FROM_CU_OFFSET ((fromcu)->start, (fromcu)->offset_size))
 
+#ifdef __cplusplus
+# define CUDIE(name, fromcu)			\
+  Dwarf_Die name = { CUDIE_ADDR (fromcu), (fromcu), NULL, 0l }
+#else
+# define CUDIE(fromcu)				\
+  ((Dwarf_Die)					\
+   {						\
+    .cu = (fromcu),				\
+    .addr = CUDIE_ADDR (fromcu),		\
+   })
+#endif
 
 /* Macro information.  */
 struct Dwarf_Macro_s
