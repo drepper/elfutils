@@ -1,6 +1,6 @@
 2009-01-26  Petr Machata  <pmachata@redhat.com>
 
-	* dwarflint.c (check_pub_structural): 
+	* dwarflint.c (check_aranges_structural): More checking.
 
 2009-01-23  Petr Machata  <pmachata@redhat.com>
 
