@@ -2,6 +2,7 @@
 
 	* dwarflint.c (check_aranges_structural): Check that each CU is
 	referenced from one aranges section only.
+	(check_pub_structural): Likewise for pubnames and pubtypes.
 	(read_ctx_read_uleb128): Allow ten-byte ULEB128.
 
 2009-01-23  Petr Machata  <pmachata@redhat.com>

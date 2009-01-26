@@ -604,6 +604,8 @@ struct cu
   struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct where where;           // Where was this section defined.
   bool has_arange;              // Whether we saw arange section pointing to this CU.
+  bool has_pubnames;            // Likewise for pubnames.
+  bool has_pubtypes;            // Likewise for pubtypes.
   struct cu *next;
 };
 
@@ -2921,7 +2923,16 @@ check_pub_structural (struct read_ctx *ctx, struct cu *cu_chain,
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_off)) == NULL)
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_off);
       if (cu != NULL)
-	where.ref = &cu->where;
+	{
+	  where.ref = &cu->where;
+	  bool *has = sec == sec_pubnames
+			? &cu->has_pubnames : &cu->has_pubtypes;
+	  if (*has)
+	    wr_message (mc_impact_2 | mc_aranges, &where,
+			": there has already been section for this CU.\n");
+	  else
+	    *has = true;
+	}
 
       /* Covered length.  */
       uint64_t cu_len;
