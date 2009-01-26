@@ -151,7 +151,7 @@ enum message_category
   mc_acc_all       = 0x30, // all accuracy options
 
   /* Various: */
-  mc_error     = 0x40,  // make the message into an error
+  mc_error     = 0x40,  // turn the message into an error
 
   /* Area: */
   mc_leb128    = 0x100, // ULEB/SLEB storage
@@ -603,6 +603,7 @@ struct cu
   struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
   struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct where where;           // Where was this section defined.
+  bool has_arange;              // Whether we saw arange section pointing to this CU.
   struct cu *next;
 };
 
@@ -816,9 +817,6 @@ process_file (int fd __attribute__((unused)),
       read_ctx_init (&ctx, dwarf, aranges_data);
       check_aranges_structural (&ctx, cu_chain);
     }
-  else
-    wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
-		NULL, ".debug_aranges data not found.\n");
 
   if (pubnames_data != NULL)
     {
@@ -2741,7 +2739,14 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_off)) == NULL)
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_off);
       if (cu != NULL)
-	where.ref = &cu->where;
+	{
+	  where.ref = &cu->where;
+	  if (cu->has_arange)
+	    wr_message (mc_impact_2 | mc_aranges, &where,
+			": there has already been arange section for this CU.\n");
+	  else
+	    cu->has_arange = true;
+	}
 
       /* Address size.  */
       uint8_t address_size;
@@ -2751,8 +2756,18 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  retval = false;
 	  goto next;
 	}
-      if (address_size != 4 /* XXX What values are actually legal?  */
-	  && address_size != 8)
+      if (cu != NULL)
+	{
+	  if (address_size != cu->address_size)
+	    {
+	      wr_error (&where,
+			": address size %d doesn't match referred CU.\n",
+			address_size);
+	      retval = false;
+	    }
+	}
+      /* Try to parse it anyway, unless the address size is wacky.  */
+      else if (address_size != 4 && address_size != 8)
 	{
 	  wr_error (&where, ": invalid address size: %d.\n", address_size);
 	  retval = false;

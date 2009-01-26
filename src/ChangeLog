@@ -1,3 +1,7 @@
+2009-01-26  Petr Machata  <pmachata@redhat.com>
+
+	* dwarflint.c (check_pub_structural): 
+
 2009-01-23  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c (check_debug_info_structural): Check that all CUs
