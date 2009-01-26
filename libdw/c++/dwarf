@@ -60,6 +60,7 @@
 #include <sstream>
 #include <list>
 #include <map>
+#include <set>
 #include <stack>
 #include <algorithm>
 #include <functional>
@@ -167,10 +168,6 @@ namespace elfutils
     static const char *known_attribute (int);
     static const char *known_tag (int);
 
-    static inline std::string attribute_name (int code)
-    {
-      return known_name<known_attribute> (code);
-    }
     static inline std::string tag_name (int code)
     {
       return known_name<known_tag> (code);
@@ -182,6 +179,12 @@ namespace elfutils
       int code = attr.first;
       return attribute_name (code);
     }
+
+    static inline std::string attribute_name (const unsigned int code)
+    {
+      return known_name<known_attribute> (code);
+    }
+
 
   private:
     // XXX make this an instance method to include irritant context
@@ -293,6 +296,8 @@ namespace elfutils
 
     class attribute;
     class attr_value;
+    class location_attr;
+    class range_list;
 
     class debug_info_entry
     {
@@ -304,6 +309,7 @@ namespace elfutils
       }
 
       friend class dwarf;
+      friend class attr_value;
     protected:
 
       inline debug_info_entry ()
@@ -617,7 +623,7 @@ namespace elfutils
 	      if ((*i).tag () == ::DW_TAG_imported_unit)
 		// We have an imported unit.  Look at its referent.
 		_m_stack.push ((*i).attributes ().at (::DW_AT_import)
-			       .ref ().raw_children ().begin ());
+			       .reference ().raw_children ().begin ());
 	      else
 		// This is some other DIE.  Iterate on it.
 		break;
@@ -779,26 +785,370 @@ namespace elfutils
       }
     };
 
-    // This describes the value of an attribute.
-    // XXX dummy for now
-    class attr_value
+    class compile_unit : public debug_info_entry
     {
     public:
-      attr_value () {}
-      attr_value (const attr_value &v) {}
+      inline compile_unit (const debug_info_entry &die)
+	: debug_info_entry (die) {}
 
-      inline bool operator== (const attr_value &other) const
+      /*
+	containers/iterators:
+
+	lines
+	macros
+
+	abbrevs (punt)
+
+      */
+    };
+
+    // These are the kinds of values that attributes can have.
+    enum value_space
       {
-	return true;		// XXX dummy value comparison always true
+	// These spaces refer purely to DWARF concepts.
+	VS_flag,		// Boolean.
+	VS_dwarf_constant,	// Known DW_X_* space of integer constants.
+	VS_discr_list,		// Block as used for DW_AT_discr_list.
+	VS_reference,		// Pointer to another DIE.
+	VS_unit_reference,	// Pointer to another CU DIE.
+	VS_lineptr,		// Pointer into .debug_line section.
+	VS_macptr,		// Pointer into .debug_macinfo section.
+	VS_rangelistptr,	// Pointer into .debug_ranges section.
+
+	// These spaces refer to textual details of the program source.
+	VS_identifier,		// String, identifier in source language.
+	VS_string,		// String, miscellaneous use.
+	VS_source_file,		// Source file, string or index into file table.
+	VS_source_line,		// Line number in source file.
+	VS_source_column,	// Column number in source file.
+
+	// These spaces refer to target-format values in the debuggee.
+	VS_address,	   // Address constant.
+	VS_constant,	   // Other constant, integer or in target formats.
+	VS_location,	   // Location expression or location list.
+      };
+
+    /* A source file can be just a file name.  When represented in the
+       .debug_line file table, it can also have a modtime and a file size.
+       If the modtime or size stored is zero, it doesn't count.  */
+    class source_file
+    {
+      friend class attr_value;
+    private:
+      ::Dwarf_Attribute _m_attr;
+      inline ::Dwarf_Attribute *thisattr () const
+      {
+	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
+      }
+
+      source_file (const Dwarf_Attribute &attr) : _m_attr (attr) {}
+
+    public:
+      std::string to_string () const;
+
+      const char *name () const;
+      ::Dwarf_Word mtime () const;
+      ::Dwarf_Word size () const;
+
+      template<typename other_file>
+      bool operator== (const other_file &other) const
+      {
+	if (mtime () != 0)
+	  {
+	    ::Dwarf_Word other_mtime = other.mtime ();
+	    if (other_mtime != 0 && other_mtime != mtime ())
+	      return false;
+	  }
+	if (size () != 0)
+	  {
+	    ::Dwarf_Word other_size = other.size ();
+	    if (other_size != 0 && other_size != size ())
+	      return false;
+	  }
+	return !strcmp (name (), other.name ());
+      }
+
+      template<typename other_file>
+      inline bool operator!= (const other_file &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    // This describes the value of an attribute.
+    class attr_value
+    {
+      friend class attribute;
+      friend class location_attr;
+      friend class range_list;
+    private:
+      const ::Dwarf_Attribute _m_attr;
+      inline ::Dwarf_Attribute *thisattr () const
+      {
+	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
+      }
+
+      attr_value (const ::Dwarf_Attribute &attr) : _m_attr (attr) {}
+
+    public:
+      // not copyable, don't worry about ref lifetime(?)
+      // attr_value (const attr_value &v) : _m_attr (v.attr) {}
+
+      value_space what_space () const;
+
+      std::string to_string () const;
+
+      inline debug_info_entry reference () const
+      {
+	debug_info_entry result;
+	xif (::dwarf_formref_die (thisattr (), result.thisdie ()) == NULL);
+	return result;
+      }
+      inline compile_unit unit_reference () const
+      {
+	return reference ();
+      }
+
+      // XXX reloc, dwfl
+      ::Dwarf_Addr address () const;
+
+      bool flag () const;
+
+      const location_attr location () const;
+
+      const char *string () const;
+      inline const char *identifier () const
+      {
+	return string ();
+      }
+
+      const class source_file source_file () const;
+
+      // XXX reloc
+      ::Dwarf_Word constant () const;
+      ::Dwarf_Sword signed_constant () const;
+      // XXX better type??
+      std::string constant_block () const;
+
+      // XXX known enums
+      // dwarf_enum dwarf_constant () const;
+
+      inline const range_list ranges () const
+      {
+	return range_list (*this);
+      }
+
+      // XXX lineptr
+      // XXX macptr
+
+      template<typename value>
+      inline bool operator== (const value &other) const
+      {
+	const value_space what = what_space ();
+	if (other.what_space () == what)
+	  switch (what)
+	    {
+	    case VS_reference:
+	    case VS_unit_reference:
+	      // return reference () == other.reference ();
+	      return true;	// XXX temporary stub
+
+	    case VS_flag:
+	      return flag () == other.flag ();
+
+	    case VS_rangelistptr:
+	      return ranges () == other.ranges ();
+
+	    case VS_lineptr:	// XXX punt for now, treat as constant
+	    case VS_macptr:	// XXX punt for now, treat as constant
+	      /*FALLTHRU*/
+	    case VS_constant:
+	    case VS_dwarf_constant:
+	    case VS_source_line:
+	    case VS_source_column:
+	      return constant () == other.constant ();
+
+	    case VS_identifier:
+	      return !strcmp (identifier (), other.identifier ());
+
+	    case VS_string:
+	      return !strcmp (string (), other.string ());
+
+	    case VS_address:
+	      return address () == other.address ();
+
+	    case VS_source_file:
+	      return source_file () == other.source_file ();
+
+	    case VS_location:
+	      return location () == other; // XXX
+
+	    case VS_discr_list:
+	      throw std::runtime_error ("XXX unimplemented");
+	    }
+	return false;
       }
       inline bool operator!= (const attr_value &other) const
       {
 	return !(*this == other);
       }
+    };
 
-      debug_info_entry ref () const
+    /* A location attribute yields a location expression.
+       Either it's a single expression, or a map of PC to location.  */
+    class location_attr
+    {
+      friend class attr_value;
+    private:
+      const attr_value _m_attr;
+
+      location_attr (const attr_value &attr) : _m_attr (attr) {}
+
+      bool singleton () const;	// XXX temp hack
+
+    public:
+      std::string to_string () const;
+
+      template<typename other_attr>
+      bool operator== (const other_attr &other) const
       {
-	return debug_info_entry (); // XXX dummy hack
+	// XXX hack
+	if (singleton ())
+	  return _m_attr.constant_block () == other.constant_block ();
+	// loclistptr XXX punt for now, treat as constant
+	return _m_attr.constant () == other.constant ();
+      }
+
+      template<typename other_file>
+      inline bool operator!= (const other_file &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    /* The DW_AT_ranges attribute yields a range list.
+       This is equivalent to unordered_set<pair<Dwarf_Addr, Dwarf_Addr> >.  */
+    class range_list
+    {
+      friend class attr_value;
+    private:
+      const attr_value _m_attr;
+
+      range_list (const attr_value &attr) : _m_attr (attr) {}
+
+    public:
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type;
+      typedef key_type value_type;
+
+      range_list (const range_list &other) : _m_attr (other._m_attr) {}
+
+      std::string to_string () const;
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, value_type>
+      {
+	friend class range_list;
+      private:
+	::Dwarf_Addr _m_base;
+	::Dwarf_Addr _m_begin;
+	::Dwarf_Addr _m_end;
+	::Dwarf_CU *_m_cu;
+	ptrdiff_t _m_offset;
+
+	inline const_iterator () // end () value
+	  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (NULL), _m_offset (1)
+	{}
+	const_iterator (Dwarf_Attribute *);
+
+      public:
+	inline const_iterator (const const_iterator &i)
+	  : _m_base (i._m_base), _m_cu (i._m_cu), _m_offset (i._m_offset) {}
+
+	inline value_type operator* () const
+	{
+	  return std::make_pair (_m_base + _m_begin, _m_base + _m_end);
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_base = other._m_base;
+	  _m_begin = other._m_begin;
+	  _m_end = other._m_end;
+	  _m_cu = other._m_cu;
+	  _m_offset = other._m_offset;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_offset == other._m_offset;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	const_iterator &operator++ (); // prefix
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      const_iterator begin () const
+      {
+	return const_iterator (_m_attr.thisattr ());
+      }
+      const_iterator end () const
+      {
+	return const_iterator ();
+      }
+
+      const_iterator find (const key_type &match)
+      {
+	return std::find (begin (), end (), match);
+      }
+
+    private:
+      struct entry_contains
+	: public std::binary_function<key_type, ::Dwarf_Addr, bool>
+      {
+	inline bool operator() (const key_type &range, const ::Dwarf_Addr addr)
+	  const
+	{
+	  return addr >= range.first && addr < range.second;
+	}
+      };
+
+    public:
+      const_iterator find (const ::Dwarf_Addr addr) const
+      {
+	return std::find_if (begin (), end (),
+			     std::bind2nd (entry_contains (), addr));
+      }
+
+      inline operator std::set<key_type> () const
+      {
+	return std::set<key_type> (begin (), end ());
+      }
+
+      template<typename ranges>
+      inline bool operator== (const ranges &other) const
+      {
+	/* Our container is unordered (i.e., in file order).  A range list
+	    is conceptually equal if all the pairs match, regardless of the
+	    order.  But the std::equal algorithm will compare corresponding
+	    elements in order.  So we need an ordered set for comparison.  */
+	const std::set<key_type> mine = *this;
+	const std::set<key_type> his = other;
+	return mine == his;
+      }
+      template<typename ranges>
+      inline bool operator!= (const ranges &other) const
+      {
+	return !(*this == other);
       }
     };
 
@@ -806,11 +1156,11 @@ namespace elfutils
     class attribute
     {
       friend class debug_info_entry::raw_attributes::const_iterator;
+      friend class attr_value;
     private:
-      const ::Dwarf_Attribute _m_attr;
       inline ::Dwarf_Attribute *thisattr () const
       {
-	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
+	return second.thisattr ();
       }
 
       class lhs
@@ -829,14 +1179,14 @@ namespace elfutils
       };
 
       attribute (const ::Dwarf_Attribute &attr)
-	: _m_attr (attr), first (*this) {}
+	: first (*this), second (attr) {}
 
     public:
       lhs first;
       attr_value second;
 
       inline attribute (const attribute &a)
-	: _m_attr (a._m_attr), first (*this) {}
+	: first (*this), second (a.second) {}
 
       // This lets pair<...> x = (attribute) y work.
       template<typename value>
@@ -855,23 +1205,14 @@ namespace elfutils
       {
 	return !(*this == other);
       }
-    };
 
-    class compile_unit : public debug_info_entry
-    {
-    public:
-      inline compile_unit (const debug_info_entry &die)
-	: debug_info_entry (die) {}
-
-      /*
-	containers/iterators:
-
-	lines
-	macros
-
-	abbrevs (punt)
-
-      */
+      inline std::string to_string () const
+      {
+	std::string result = attribute_name (::dwarf_whatattr (thisattr ()));
+	result += "=";
+	result += second.to_string ();
+	return result;
+      }
     };
 
     // Container for raw CUs in file order, intended to be compatible
