@@ -149,6 +149,68 @@ namespace elfutils
     return a.first == b.first && a.second == b.second;
   }
 
+  // Used like std::vector<elt>, but is really just a simple fixed array.
+  template<typename elt>
+  class const_vector
+  {
+  private:
+    size_t _m_size;
+    const elt *_m_array;
+
+  public:
+    typedef const elt *const_iterator;
+
+    const_vector ()
+      : _m_size (0), _m_array (NULL) {}
+    const_vector (const const_vector &v)
+      : _m_size (v._m_size), _m_array (v._m_array) {}
+    const_vector (const elt *start, const elt *stop)
+      : _m_size (stop - start), _m_array (start) {}
+
+    inline const_vector &operator= (const const_vector &v)
+    {
+      _m_size = v._m_size;
+      _m_array = v._m_array;
+      return *this;
+    }
+
+    inline size_t size () const
+    {
+      return _m_size;
+    }
+    inline bool empty () const
+    {
+      return _m_size == 0;
+    }
+
+    const_iterator begin () const
+    {
+      return _m_array;
+    }
+    const_iterator end () const
+    {
+      return &_m_array[_m_size];
+    }
+
+    template<typename other>
+    inline operator other () const
+    {
+      return other (begin (), end ());
+    }
+
+    template<typename vec>
+    inline bool operator== (const vec &other) const
+    {
+      return (other.size () == size ()
+	      && std::equal (begin (), end (), other.begin ()));
+    }
+    template<typename vec>
+    inline bool operator!= (const vec &other) const
+    {
+      return !(*this == other);
+    }
+  };
+
   // One DWARF object file.
   class dwarf
   {
@@ -928,8 +990,7 @@ namespace elfutils
       // XXX reloc
       ::Dwarf_Word constant () const;
       ::Dwarf_Sword signed_constant () const;
-      // XXX better type??
-      std::vector<uint8_t> constant_block () const;
+      const_vector<uint8_t> constant_block () const;
 
       // XXX known enums
       // dwarf_enum dwarf_constant () const;
@@ -982,7 +1043,7 @@ namespace elfutils
 	      return source_file () == other.source_file ();
 
 	    case VS_location:
-	      return location () == other; // XXX
+	      return location () == other; // XXX will be other.location ()
 
 	    case VS_discr_list:
 	      throw std::runtime_error ("XXX unimplemented");
@@ -1013,7 +1074,7 @@ namespace elfutils
       template<typename other_attr>
       bool operator== (const other_attr &other) const
       {
-	// XXX hack
+	// XXX hack, real location interface later
 	if (singleton ())
 	  return _m_attr.constant_block () == other.constant_block ();
 	// loclistptr XXX punt for now, treat as constant

@@ -210,7 +210,7 @@ dwarf::attr_value::to_string () const
       return location ().to_string ();
 
     case VS_discr_list:
-      break;		// XXX
+      break;			// XXX DW_AT_discr_list unimplemented
     }
 
   throw std::runtime_error ("XXX unsupported value space");
@@ -242,7 +242,7 @@ dwarf::attr_value::string () const
   return result;
 }
 
-vector<uint8_t>
+const_vector<uint8_t>
 dwarf::attr_value::constant_block () const
 {
   Dwarf_Block block;
@@ -279,6 +279,12 @@ dwarf::attr_value::constant_block () const
     case DW_FORM_udata:
     case DW_FORM_sdata:
       // XXX ?
+      if ((*(const uint8_t *) thisattr ()->valp & 0x80) == 0)
+	{
+	  block.length = 1;
+	  block.data = thisattr ()->valp;
+	  break;
+	}
 
     default:
       throw std::runtime_error ("XXX wrong form");
@@ -286,7 +292,7 @@ dwarf::attr_value::constant_block () const
 
   const uint8_t *const begin = reinterpret_cast<const uint8_t *> (block.data);
   const uint8_t *const end = begin + block.length;
-  return vector<uint8_t> (begin, end);
+  return const_vector<uint8_t> (begin, end);
 }
 
 // dwarf::source_file
