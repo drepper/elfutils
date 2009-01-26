@@ -1,6 +1,8 @@
 2009-01-26  Petr Machata  <pmachata@redhat.com>
 
-	* dwarflint.c (check_aranges_structural): More checking.
+	* dwarflint.c (check_aranges_structural): Check that each CU is
+	referenced from one aranges section only.
+	(read_ctx_read_uleb128): Allow ten-byte ULEB128.
 
 2009-01-23  Petr Machata  <pmachata@redhat.com>
 

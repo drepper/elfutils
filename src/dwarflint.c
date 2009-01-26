@@ -914,7 +914,7 @@ read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret)
       zero_tail = payload == 0 && shift > 0;
       result |= (uint64_t)payload << shift;
       shift += 7;
-      if (shift > size)
+      if (shift > size && byte != 0x1)
 	return -1;
       if ((byte & 0x80) == 0)
 	break;
