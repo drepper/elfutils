@@ -140,11 +140,11 @@ dwarf::attr_value::what_space () const
 }
 
 static string
-hex_string (Dwarf_Word value)
+hex_string (Dwarf_Word value, const char *before = "", const char *after = "")
 {
   std::ostringstream os;
   os.setf(std::ios::hex, std::ios::basefield);
-  os << value;
+  os << before << value << after;
   return os.str ();
 }
 
@@ -201,7 +201,7 @@ dwarf::attr_value::to_string () const
 
     case VS_reference:
     case VS_unit_reference:
-      return "XXX";
+      return hex_string (reference ().offset (), "[", "]");
 
     case VS_source_file:
       return source_file ().to_string ();
@@ -242,7 +242,7 @@ dwarf::attr_value::string () const
   return result;
 }
 
-string
+vector<uint8_t>
 dwarf::attr_value::constant_block () const
 {
   Dwarf_Block block;
@@ -284,8 +284,9 @@ dwarf::attr_value::constant_block () const
       throw std::runtime_error ("XXX wrong form");
     }
 
-  return std::string (reinterpret_cast<const char *> (block.data),
-		      block.length);
+  const uint8_t *const begin = reinterpret_cast<const uint8_t *> (block.data);
+  const uint8_t *const end = begin + block.length;
+  return vector<uint8_t> (begin, end);
 }
 
 // dwarf::source_file
@@ -427,7 +428,7 @@ dwarf::location_attr::to_string () const
 {
   if (singleton ())
     return "XXX";
-  return hex_string (_m_attr.constant ());
+  return hex_string (_m_attr.constant (), "#");
 }
 
 // dwarf::range_list

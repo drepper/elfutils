@@ -61,6 +61,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <vector>
 #include <stack>
 #include <algorithm>
 #include <functional>
@@ -928,7 +929,7 @@ namespace elfutils
       ::Dwarf_Word constant () const;
       ::Dwarf_Sword signed_constant () const;
       // XXX better type??
-      std::string constant_block () const;
+      std::vector<uint8_t> constant_block () const;
 
       // XXX known enums
       // dwarf_enum dwarf_constant () const;
@@ -945,13 +946,13 @@ namespace elfutils
       inline bool operator== (const value &other) const
       {
 	const value_space what = what_space ();
-	if (other.what_space () == what)
+	if (likely (other.what_space () == what))
 	  switch (what)
 	    {
 	    case VS_reference:
 	    case VS_unit_reference:
-	      // return reference () == other.reference ();
-	      return true;	// XXX temporary stub
+	      // XXX Reference identity check (?)
+	      return reference ().offset () == other.reference ().offset ();
 
 	    case VS_flag:
 	      return flag () == other.flag ();
