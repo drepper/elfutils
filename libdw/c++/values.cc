@@ -202,7 +202,7 @@ dwarf::attr_value::to_string () const
 
     case VS_reference:
     case VS_unit_reference:
-      return hex_string (reference ().offset (), "[", "]");
+      return hex_string (reference ()->offset (), "[", "]");
 
     case VS_source_file:
       return source_file ().to_string ();
