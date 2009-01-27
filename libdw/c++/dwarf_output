@@ -1,4 +1,4 @@
-/* elfutils::dwarf_edit -- mutable DWARF representation in -*- C++ -*-
+/* elfutils::dwarf_output -- DWARF file generation in -*- C++ -*-
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -47,36 +47,25 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef _ELFUTILS_DWARF_EDIT
-#define _ELFUTILS_DWARF_EDIT	1
+#ifndef _ELFUTILS_DWARF_OUTPUT
+#define _ELFUTILS_DWARF_OUTPUT	1
 
 #include "dwarf"
 
 /* Read the comments for elfutils::dwarf first.
 
-   The elfutils::dwarf_edit class is template-compatible with the logical
-   containers described in elfutils::dwarf, and copy-constructible from the
-   input class.
+   The elfutils::dwarf_output class is template-compatible with the logical
+   containers described in elfutils::dwarf and elfutils::dwarf_edit.
 
-   The elfutils::dwarf_edit containers are mutable, unlike the input
-   classes.  You can modify the DWARF directly in all the normal ways the
-   corresponding std containers have, or build it up from scratch.  When
-   you have it how you want it, you can pass it into elfutils::dwarf_output.
+   The dwarf_output representation of the DWARF data is immutable once
+   created.  The only way to create the object is by copy-construction
+   from another compatible object: dwarf, dwarf_edit, or dwarf_output.
+   Construction collects all the information necessary to generate the
+   formatted DWARF sections.  */
 
-   The dwarf_edit classes will use unreasonable amounts of memory for large
-   DWARF data sets, like from reading in whole large program and DSO files.
-   To transform input files efficiently, you should construct dwarf_output
-   directly from input dwarf with transformations applied on the fly, and
-   not use dwarf_edit at all.
-
-   dwarf_edit is the only mutable representation and so it's easy to use in
-   a straightforward imperative style.  Use it for transformations on small
-   data files, or for creating small data sets from scratch.  */
-
-// DWARF manipulation interfaces (pure object construction)
 namespace elfutils
 {
-  class dwarf_edit
+  class dwarf_output
   {
   public:
     class compile_units;
@@ -92,7 +81,7 @@ namespace elfutils
     {
     public:
 
-      class children : public std::list<debug_info_entry>
+      class children : public std::vector<debug_info_entry>
       {
 	friend class debug_info_entry;
       private:
@@ -100,7 +89,7 @@ namespace elfutils
 
 	template<typename childrens>
 	children (const childrens &other)
-	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
+	  : std::vector<debug_info_entry> (other.begin (), other.end ()) {}
       };
 
       class attributes : public std::map<int, attr_value>
@@ -123,16 +112,10 @@ namespace elfutils
 
     private:
       const int _m_tag;
-      attributes _m_attributes;
-      children _m_children;
+      const attributes _m_attributes;
+      const children _m_children;
 
     public:
-      debug_info_entry (int t) : _m_tag (t)
-      {
-	if (unlikely (t <= 0))
-	  throw std::invalid_argument ("invalid tag");
-      }
-
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
       template<typename die>
@@ -187,47 +170,20 @@ namespace elfutils
 
     class compile_unit : public debug_info_entry
     {
-      friend class compile_units;
-    private:
-      inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
-
-      // XXX should be private
-    public:
-      template<typename die>
-      compile_unit (const die &die) : debug_info_entry (die)
-      {
-	if (die.tag () != ::DW_TAG_compile_unit)
-	  throw std::invalid_argument ("not a compile_unit entry");
-      }
-
-      /* XXX doesn't help
-	public:
-	compile_unit (const compile_unit &u) : debug_info_entry (u) {}
-      */
     };
 
     // Main container anchoring all the output.
-    class compile_units : public std::list<compile_unit>
+    class compile_units : public std::vector<compile_unit>
     {
-      friend class dwarf_edit;
+      friend class dwarf_output;
     private:
-      // Default constructor: an empty container, no CUs.
-      inline compile_units () {}
-
       // Constructor copying CUs from input container.
       template<typename input>
       compile_units(const input &units)
-	: std::list<compile_unit> (units.begin (), units.end ())
+	: std::vector<compile_unit> (units.begin (), units.end ())
       {}
 
     public:
-      inline compile_unit &new_unit ()
-      {
-	compile_unit nu;
-	push_back (nu);
-	return back ();
-      }
-
       template<typename other_children>
       bool operator== (const other_children &other) const
       {
@@ -241,25 +197,18 @@ namespace elfutils
     };
 
   private:
-    compile_units _m_units;
+    const compile_units _m_units;
 
   public:
-    class compile_units &compile_units ()
-    {
-      return _m_units;
-    }
     const class compile_units &compile_units () const
     {
       return _m_units;
     }
 
   public:
-    // Default constructor: an empty container, no CUs.
-    inline dwarf_edit () {}
-
-    // Constructor copying CUs from an input file (dwarf or dwarf_edit).
+    // Constructor copying CUs from an input file (dwarf or dwarf_output).
     template<typename input>
-    dwarf_edit (const input &dw) : _m_units (dw.compile_units ()) {}
+    dwarf_output (const input &dw) : _m_units (dw.compile_units ()) {}
 
     template<typename file>
     inline bool operator== (const file &other) const
@@ -272,6 +221,4 @@ namespace elfutils
       return !(*this == other);
     }
   };
-};
-
-#endif	// <elfutils/dwarf_edit>
+}

@@ -440,10 +440,10 @@ dwarf::location_attr::to_string () const
 
 // dwarf::range_list
 
-dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr)
-  : _m_base (-1), _m_cu (attr->cu), _m_offset (0)
+dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr,
+						   ptrdiff_t offset)
+  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (attr->cu), _m_offset (offset)
 {
-  ++*this;
 }
 
 dwarf::range_list::const_iterator &
