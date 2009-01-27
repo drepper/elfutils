@@ -518,8 +518,9 @@ dwarf::range_list::const_iterator::operator++ ()
   return *this;
 }
 
+template<typename container>
 string
-dwarf::range_list::to_string () const
+__libdw_ranges_to_string (const container &c)
 {
   std::ostringstream os;
   os.setf(std::ios::hex, std::ios::basefield);
@@ -527,9 +528,9 @@ dwarf::range_list::to_string () const
   os << "<";
 
   bool first = true;
-  for (const_iterator i = begin (); i != end (); ++i)
+  for (typename container::const_iterator i = c.begin (); i != c.end (); ++i)
     {
-      value_type range = *i;
+      typename container::value_type range = *i;
       if (!first)
 	os << ",";
       os << range.first << "-" << range.second;
@@ -539,4 +540,16 @@ dwarf::range_list::to_string () const
   os << ">";
 
   return os.str ();
+}
+
+string
+dwarf::range_list::to_string () const
+{
+  return __libdw_ranges_to_string (*this);
+}
+
+string
+dwarf::ranges::to_string () const
+{
+  return __libdw_ranges_to_string (*this);
 }

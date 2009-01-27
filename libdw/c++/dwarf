@@ -360,6 +360,7 @@ namespace elfutils
     class attr_value;
     class location_attr;
     class range_list;
+    class ranges;
 
     class debug_info_entry
     {
@@ -431,6 +432,11 @@ namespace elfutils
       ::Dwarf_Off offset () const
       {
 	return ::dwarf_dieoffset (thisdie ());
+      }
+
+      inline const dwarf::ranges ranges () const
+      {
+	return dwarf::ranges (*this);
       }
     };
 
@@ -856,8 +862,8 @@ namespace elfutils
       /*
 	containers/iterators:
 
-	lines
-	macros
+	XXX lines
+	XXX macros
 
 	abbrevs (punt)
 
@@ -1168,7 +1174,7 @@ namespace elfutils
 	return const_iterator ();
       }
 
-      const_iterator find (const key_type &match)
+      const_iterator find (const key_type &match) const
       {
 	return std::find (begin (), end (), match);
       }
@@ -1274,6 +1280,151 @@ namespace elfutils
 	result += "=";
 	result += second.to_string ();
 	return result;
+      }
+    };
+
+    /* This works like range_list, but is based on a debug_info_entry using
+       dwarf_ranges.  If the entry has DW_AT_low_pc and DW_AT_high_pc, this
+       will present a singleton list; if it has a DW_AT_ranges, it will be
+       the same as the range_list presentation.  If neither, an empty list.  */
+    class ranges
+    {
+      friend class debug_info_entry;
+    private:
+      debug_info_entry _m_die;
+
+      ranges (const debug_info_entry &die) : _m_die (die) {}
+
+    public:
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type;
+      typedef key_type value_type;
+
+      ranges (const ranges &other) : _m_die (other._m_die) {}
+
+      std::string to_string () const;
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, value_type>
+      {
+	friend class ranges;
+      private:
+	debug_info_entry _m_die;
+	::Dwarf_Addr _m_base;
+	::Dwarf_Addr _m_begin;
+	::Dwarf_Addr _m_end;
+	ptrdiff_t _m_offset;
+
+	inline const_iterator () : _m_die (), _m_offset (0) {} // end () value
+	inline const_iterator (const debug_info_entry &die)
+	  : _m_die (die), _m_offset (0)
+	{
+	  ++*this;
+	}
+
+      public:
+	inline const_iterator (const const_iterator &i)
+	  : _m_die (i._m_die), _m_base (i._m_base),
+	    _m_begin (i._m_begin), _m_end (i._m_begin),
+	    _m_offset (i._m_offset) {}
+
+	inline value_type operator* () const
+	{
+	  return std::make_pair (_m_begin, _m_end);
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  _m_base = other._m_base;
+	  _m_begin = other._m_begin;
+	  _m_end = other._m_end;
+	  _m_offset = other._m_offset;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_offset == other._m_offset;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	const_iterator &operator++ () // prefix
+	{
+	  do
+	    _m_offset = dwarf_ranges (_m_die.thisdie (), _m_offset,
+				      &_m_base, &_m_begin, &_m_end);
+	  // Skip over empty ranges.
+	  while (_m_offset != 0 && _m_begin == _m_end);
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      const_iterator begin () const
+      {
+	return const_iterator (_m_die);
+      }
+      const_iterator end () const
+      {
+	return const_iterator ();
+      }
+
+      inline bool empty () const
+      {
+	return begin () == end ();
+      }
+
+      const_iterator find (const key_type &match) const
+      {
+	return std::find (begin (), end (), match);
+      }
+
+    private:
+      struct entry_contains
+	: public std::binary_function<key_type, ::Dwarf_Addr, bool>
+      {
+	inline bool operator() (const key_type &range, const ::Dwarf_Addr addr)
+	  const
+	{
+	  return addr >= range.first && addr < range.second;
+	}
+      };
+
+    public:
+      const_iterator find (const ::Dwarf_Addr addr) const
+      {
+	return std::find_if (begin (), end (),
+			     std::bind2nd (entry_contains (), addr));
+      }
+
+      inline operator std::set<key_type> () const
+      {
+	return std::set<key_type> (begin (), end ());
+      }
+
+      template<typename ranges>
+      inline bool operator== (const ranges &other) const
+      {
+	/* Our container is unordered (i.e., in file order).  A range list
+	   is conceptually equal if all the pairs match, regardless of the
+	   order.  But the std::equal algorithm will compare corresponding
+	   elements in order.  So we need an ordered set for comparison.  */
+	const std::set<key_type> mine = *this;
+	const std::set<key_type> his = other;
+	return mine == his;
+      }
+      template<typename ranges>
+      inline bool operator!= (const ranges &other) const
+      {
+	return !(*this == other);
       }
     };
 
@@ -1415,8 +1566,9 @@ namespace elfutils
 
       containers/iterators:
       raw CU in file order
-      pubnames: list of (CU, DIE, FQ name string)
-      aranges: list of (start, len, CU file offset)
+      XXX pubnames: list of (CU, DIE, FQ name string)
+      XXX aranges: list of (start, len, CU file offset)
+      XXX or aranges: list of (CU, range_list)
       raw CU by addr (getarange_addr)
 
       logical CU in file order
