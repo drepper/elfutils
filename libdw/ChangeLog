@@ -1,3 +1,9 @@
+2009-01-26  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf (dwarf_output): Renamed to dwarf_edit and moved to ...
+	* c++/dwarf_edit: ... here.  New file.
+	* Makefile.am (pkginclude_HEADERS): Add it.
+
 2009-01-10  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf: New file.

@@ -138,6 +138,24 @@
 
   The elfutils::dwarf_output containers are mutable, unlike the input classes.
 
+  ------ XXX to be done: more file-level containers
+
+  input side only (?):
+
+  aranges_by_unit : map<CU, range_list>
+  	can compare range_list == cu.ranges ()
+	only used for dwarflint, can be slow/copying
+
+  units_by_addr : map<pair<begin,end>, CU> and map<address, CU>
+	use dwarf_getarange_addr
+
+  pub{names,types}_by_unit
+
+  output too:
+
+  pub{names,types}_by_name
+	too much lang knowledge to autogenerate for now,
+	output will do it explicitly
  */
 
 // DWARF reader interfaces: front end to <libdw.h> routines
@@ -1560,22 +1578,6 @@ namespace elfutils
       return compile_units::compile_units (raw_compile_units ());
     }
 
-    /*
-      raw CU: compile_unit or partial_unit, raw DIE children
-      logical CU: compile_unit, DIE children with imported_unit replaced
-
-      containers/iterators:
-      raw CU in file order
-      XXX pubnames: list of (CU, DIE, FQ name string)
-      XXX aranges: list of (start, len, CU file offset)
-      XXX or aranges: list of (CU, range_list)
-      raw CU by addr (getarange_addr)
-
-      logical CU in file order
-      logical CU by addr
-
-    */
-
   private:
     ::Dwarf *_m_dw;
 
@@ -1634,208 +1636,6 @@ namespace elfutils
   {
     return attributes::attributes (raw_attributes ());
   }
-};
-
-// DWARF writer interfaces (pure object construction)
-// XXX probably move to separate file
-namespace elfutils
-{
-  class dwarf_output
-  {
-  public:
-    class compile_units;
-
-    // XXX later
-    class attr_value : public dwarf::attr_value
-    {
-    public:
-      attr_value (const dwarf::attr_value &v) : dwarf::attr_value (v) {}
-    };
-
-    class debug_info_entry
-    {
-    public:
-
-      class children : public std::list<debug_info_entry>
-      {
-	friend class debug_info_entry;
-      private:
-        children () {}
-
-	template<typename childrens>
-	children (const childrens &other)
-	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
-      };
-
-      class attributes : public std::map<int, attr_value>
-      {
-	friend class debug_info_entry;
-      private:
-	attributes () {}
-
-	template<typename attrs>
-	attributes (const attrs &other)
-	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
-
-      public:
-	template<typename attrs>
-	inline operator attrs () const
-	{
-	  return attrs (begin (), end ());
-	}
-      };
-
-    private:
-      const int _m_tag;
-      attributes _m_attributes;
-      children _m_children;
-
-    public:
-      debug_info_entry (int t) : _m_tag (t)
-      {
-	if (unlikely (t <= 0))
-	  throw std::invalid_argument ("invalid tag");
-      }
-
-      /* The template constructor lets us copy in from any class that has
-	 compatibly iterable containers for attributes and children.  */
-      template<typename die>
-      debug_info_entry (const die &die)
-	: _m_tag (die.tag ()),
-	  _m_attributes (die.attributes ()),
-	  _m_children (die.children ())
-      {}
-
-      inline int tag () const
-      {
-	return _m_tag;
-      }
-
-      inline bool has_children () const
-      {
-	return !_m_children.empty ();
-      }
-
-      inline class children &children ()
-      {
-	return _m_children;
-      }
-      inline const class children &children () const
-      {
-	return _m_children;
-      }
-
-      inline class attributes &attributes ()
-      {
-	return _m_attributes;
-      }
-      inline const class attributes &attributes () const
-      {
-	return _m_attributes;
-      }
-
-      template<typename die>
-      bool operator== (const die &other) const
-      {
-	return (other.attributes () == attributes ()
-		&& other.children () == children ());
-      }
-      template<typename die>
-      bool operator!= (const die &other) const
-      {
-	return !(*this == other);;
-      }
-    };
-
-    typedef debug_info_entry::attributes::value_type attribute;
-
-    class compile_unit : public debug_info_entry
-    {
-      friend class compile_units;
-    private:
-      inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
-
-      // XXX should be private
-    public:
-      template<typename die>
-      compile_unit (const die &die) : debug_info_entry (die)
-      {
-	if (die.tag () != ::DW_TAG_compile_unit)
-	  throw std::invalid_argument ("not a compile_unit entry");
-      }
-
-      /* XXX doesn't help
-	public:
-	compile_unit (const compile_unit &u) : debug_info_entry (u) {}
-      */
-    };
-
-    // Main container anchoring all the output.
-    class compile_units : public std::list<compile_unit>
-    {
-      friend class dwarf_output;
-    private:
-      // Default constructor: an empty container, no CUs.
-      inline compile_units () {}
-
-      // Constructor copying CUs from input container.
-      template<typename input>
-      compile_units(const input &units)
-	: std::list<compile_unit> (units.begin (), units.end ())
-      {}
-
-    public:
-      inline compile_unit &new_unit ()
-      {
-	compile_unit nu;
-	push_back (nu);
-	return back ();
-      }
-
-      template<typename other_children>
-      bool operator== (const other_children &other) const
-      {
-	return std::equal (begin (), end (), other.begin ());
-      }
-      template<typename other_children>
-      bool operator!= (const other_children &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-  private:
-    compile_units _m_units;
-
-  public:
-    class compile_units &compile_units ()
-    {
-      return _m_units;
-    }
-    const class compile_units &compile_units () const
-    {
-      return _m_units;
-    }
-
-  public:
-    // Default constructor: an empty container, no CUs.
-    inline dwarf_output () {}
-
-    // Constructor copying CUs from an input file (dwarf or dwarf_output).
-    template<typename input>
-    dwarf_output (const input &dw) : _m_units (dw.compile_units ()) {}
-
-    template<typename file>
-    inline bool operator== (const file &other) const
-    {
-      return compile_units () == other.compile_units ();
-    }
-    template<typename file>
-    inline bool operator!= (const file &other) const
-    {
-      return !(*this == other);
-    }
-  };
 };
 
 #endif	// <elfutils/dwarf>

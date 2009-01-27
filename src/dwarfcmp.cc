@@ -44,6 +44,7 @@
 #include "../libdw/libdwP.h"	// XXX
 
 #include "c++/dwarf"
+#include "c++/dwarf_edit"
 
 using namespace elfutils;
 using namespace std;
@@ -312,8 +313,8 @@ main (int argc, char *argv[])
 
       if (test_writer)
 	{
-	  dwarf_output out1 (file1);
-	  dwarf_output out2 (file2);
+	  dwarf_edit out1 (file1);
+	  dwarf_edit out2 (file2);
 
 # define compare_self(x, y)			\
 	  assert (x == y);			\

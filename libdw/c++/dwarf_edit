@@ -1,0 +1,256 @@
+/* -*- C++ -*- interfaces for libdw.
+   Copyright (C) 2009 Red Hat, Inc.
+   This file is part of Red Hat elfutils.
+
+   Red Hat elfutils is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by the
+   Free Software Foundation; version 2 of the License.
+
+   Red Hat elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License along
+   with Red Hat elfutils; if not, write to the Free Software Foundation,
+   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
+
+   In addition, as a special exception, Red Hat, Inc. gives You the
+   additional right to link the code of Red Hat elfutils with code licensed
+   under any Open Source Initiative certified open source license
+   (http://www.opensource.org/licenses/index.php) which requires the
+   distribution of source code with any binary distribution and to
+   distribute linked combinations of the two.  Non-GPL Code permitted under
+   this exception must only link to the code of Red Hat elfutils through
+   those well defined interfaces identified in the file named EXCEPTION
+   found in the source code files (the "Approved Interfaces").  The files
+   of Non-GPL Code may instantiate templates or use macros or inline
+   functions from the Approved Interfaces without causing the resulting
+   work to be covered by the GNU General Public License.  Only Red Hat,
+   Inc. may make changes or additions to the list of Approved Interfaces.
+   Red Hat's grant of this exception is conditioned upon your not adding
+   any new exceptions.  If you wish to add a new Approved Interface or
+   exception, please contact Red Hat.  You must obey the GNU General Public
+   License in all respects for all of the Red Hat elfutils code and other
+   code used in conjunction with Red Hat elfutils except the Non-GPL Code
+   covered by this exception.  If you modify this file, you may extend this
+   exception to your version of the file, but you are not obligated to do
+   so.  If you do not wish to provide this exception without modification,
+   you must delete this exception statement from your version and license
+   this file solely under the GPL without exception.
+
+   Red Hat elfutils is an included package of the Open Invention Network.
+   An included package of the Open Invention Network is a package for which
+   Open Invention Network licensees cross-license their patents.  No patent
+   license is granted, either expressly or impliedly, by designation as an
+   included package.  Should you wish to participate in the Open Invention
+   Network licensing program, please visit www.openinventionnetwork.com
+   <http://www.openinventionnetwork.com>.  */
+
+#ifndef _ELFUTILS_DWARF_EDIT
+#define _ELFUTILS_DWARF_EDIT	1
+
+#include "dwarf"
+
+// DWARF writer interfaces (pure object construction)
+namespace elfutils
+{
+  class dwarf_edit
+  {
+  public:
+    class compile_units;
+
+    // XXX later
+    class attr_value : public dwarf::attr_value
+    {
+    public:
+      attr_value (const dwarf::attr_value &v) : dwarf::attr_value (v) {}
+    };
+
+    class debug_info_entry
+    {
+    public:
+
+      class children : public std::list<debug_info_entry>
+      {
+	friend class debug_info_entry;
+      private:
+        children () {}
+
+	template<typename childrens>
+	children (const childrens &other)
+	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
+      };
+
+      class attributes : public std::map<int, attr_value>
+      {
+	friend class debug_info_entry;
+      private:
+	attributes () {}
+
+	template<typename attrs>
+	attributes (const attrs &other)
+	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
+
+      public:
+	template<typename attrs>
+	inline operator attrs () const
+	{
+	  return attrs (begin (), end ());
+	}
+      };
+
+    private:
+      const int _m_tag;
+      attributes _m_attributes;
+      children _m_children;
+
+    public:
+      debug_info_entry (int t) : _m_tag (t)
+      {
+	if (unlikely (t <= 0))
+	  throw std::invalid_argument ("invalid tag");
+      }
+
+      /* The template constructor lets us copy in from any class that has
+	 compatibly iterable containers for attributes and children.  */
+      template<typename die>
+      debug_info_entry (const die &die)
+	: _m_tag (die.tag ()),
+	  _m_attributes (die.attributes ()),
+	  _m_children (die.children ())
+      {}
+
+      inline int tag () const
+      {
+	return _m_tag;
+      }
+
+      inline bool has_children () const
+      {
+	return !_m_children.empty ();
+      }
+
+      inline class children &children ()
+      {
+	return _m_children;
+      }
+      inline const class children &children () const
+      {
+	return _m_children;
+      }
+
+      inline class attributes &attributes ()
+      {
+	return _m_attributes;
+      }
+      inline const class attributes &attributes () const
+      {
+	return _m_attributes;
+      }
+
+      template<typename die>
+      bool operator== (const die &other) const
+      {
+	return (other.attributes () == attributes ()
+		&& other.children () == children ());
+      }
+      template<typename die>
+      bool operator!= (const die &other) const
+      {
+	return !(*this == other);;
+      }
+    };
+
+    typedef debug_info_entry::attributes::value_type attribute;
+
+    class compile_unit : public debug_info_entry
+    {
+      friend class compile_units;
+    private:
+      inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
+
+      // XXX should be private
+    public:
+      template<typename die>
+      compile_unit (const die &die) : debug_info_entry (die)
+      {
+	if (die.tag () != ::DW_TAG_compile_unit)
+	  throw std::invalid_argument ("not a compile_unit entry");
+      }
+
+      /* XXX doesn't help
+	public:
+	compile_unit (const compile_unit &u) : debug_info_entry (u) {}
+      */
+    };
+
+    // Main container anchoring all the output.
+    class compile_units : public std::list<compile_unit>
+    {
+      friend class dwarf_edit;
+    private:
+      // Default constructor: an empty container, no CUs.
+      inline compile_units () {}
+
+      // Constructor copying CUs from input container.
+      template<typename input>
+      compile_units(const input &units)
+	: std::list<compile_unit> (units.begin (), units.end ())
+      {}
+
+    public:
+      inline compile_unit &new_unit ()
+      {
+	compile_unit nu;
+	push_back (nu);
+	return back ();
+      }
+
+      template<typename other_children>
+      bool operator== (const other_children &other) const
+      {
+	return std::equal (begin (), end (), other.begin ());
+      }
+      template<typename other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+  private:
+    compile_units _m_units;
+
+  public:
+    class compile_units &compile_units ()
+    {
+      return _m_units;
+    }
+    const class compile_units &compile_units () const
+    {
+      return _m_units;
+    }
+
+  public:
+    // Default constructor: an empty container, no CUs.
+    inline dwarf_edit () {}
+
+    // Constructor copying CUs from an input file (dwarf or dwarf_edit).
+    template<typename input>
+    dwarf_edit (const input &dw) : _m_units (dw.compile_units ()) {}
+
+    template<typename file>
+    inline bool operator== (const file &other) const
+    {
+      return compile_units () == other.compile_units ();
+    }
+    template<typename file>
+    inline bool operator!= (const file &other) const
+    {
+      return !(*this == other);
+    }
+  };
+};
+
+#endif	// <elfutils/dwarf_edit>
