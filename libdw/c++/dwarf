@@ -248,7 +248,6 @@ namespace elfutils
       return known_name<known_attribute> (code);
     }
 
-
   private:
     // XXX make this an instance method to include irritant context
     static void throw_libdw (void) // XXX raises (...)
@@ -985,7 +984,7 @@ namespace elfutils
 	return string ();
       }
 
-      const class source_file source_file () const;
+      const dwarf::source_file source_file () const;
 
       // XXX reloc
       ::Dwarf_Word constant () const;
@@ -1124,7 +1123,8 @@ namespace elfutils
 
       public:
 	inline const_iterator (const const_iterator &i)
-	  : _m_base (i._m_base), _m_cu (i._m_cu), _m_offset (i._m_offset) {}
+	  : _m_base (i._m_base), _m_begin (i._m_begin), _m_end (i._m_begin),
+	    _m_cu (i._m_cu), _m_offset (i._m_offset) {}
 
 	inline value_type operator* () const
 	{
@@ -1200,9 +1200,9 @@ namespace elfutils
       inline bool operator== (const ranges &other) const
       {
 	/* Our container is unordered (i.e., in file order).  A range list
-	    is conceptually equal if all the pairs match, regardless of the
-	    order.  But the std::equal algorithm will compare corresponding
-	    elements in order.  So we need an ordered set for comparison.  */
+	   is conceptually equal if all the pairs match, regardless of the
+	   order.  But the std::equal algorithm will compare corresponding
+	   elements in order.  So we need an ordered set for comparison.  */
 	const std::set<key_type> mine = *this;
 	const std::set<key_type> his = other;
 	return mine == his;
