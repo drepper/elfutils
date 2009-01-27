@@ -1136,10 +1136,7 @@ namespace elfutils
 	::Dwarf_CU *_m_cu;
 	ptrdiff_t _m_offset;
 
-	inline const_iterator () // end () value
-	  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (NULL), _m_offset (1)
-	{}
-	const_iterator (Dwarf_Attribute *);
+	const_iterator (Dwarf_Attribute *, ptrdiff_t);
 
       public:
 	inline const_iterator (const const_iterator &i)
@@ -1181,11 +1178,12 @@ namespace elfutils
 
       const_iterator begin () const
       {
-	return const_iterator (_m_attr.thisattr ());
+	const_iterator it (_m_attr.thisattr (), 0);
+	return ++it;
       }
       const_iterator end () const
       {
-	return const_iterator ();
+	return const_iterator (_m_attr.thisattr (), 1);
       }
 
       const_iterator find (const key_type &match) const
@@ -1330,12 +1328,8 @@ namespace elfutils
 	::Dwarf_Addr _m_end;
 	ptrdiff_t _m_offset;
 
-	inline const_iterator () : _m_die (), _m_offset (0) {} // end () value
 	inline const_iterator (const debug_info_entry &die)
-	  : _m_die (die), _m_offset (0)
-	{
-	  ++*this;
-	}
+	  : _m_die (die), _m_offset (0) {}
 
       public:
 	inline const_iterator (const const_iterator &i)
@@ -1387,11 +1381,12 @@ namespace elfutils
 
       const_iterator begin () const
       {
-	return const_iterator (_m_die);
+	const_iterator it (_m_die);
+	return ++it;
       }
       const_iterator end () const
       {
-	return const_iterator ();
+	return const_iterator (_m_die);
       }
 
       inline bool empty () const
@@ -1470,12 +1465,8 @@ namespace elfutils
 	const dwarf *_m_file;	// XXX
 	::Dwarf_Off _m_next;	// XXX
 
-	inline const_iterator ()
-	  : _m_file (NULL), _m_next (-1) {} // end () value
-	inline const_iterator (const dwarf &file) : _m_file (&file), _m_next (0)
-	{
-	  ++*this;
-	}
+	inline const_iterator (const dwarf &file, ::Dwarf_Off next)
+	  : _m_file (&file), _m_next (next) {}
 
       public:
 	inline const_iterator (const const_iterator &i)
@@ -1496,8 +1487,7 @@ namespace elfutils
 
 	inline bool operator== (const const_iterator &other) const
 	{
-	  return (_m_die._m_die.addr == other._m_die._m_die.addr
-		  && _m_next == other._m_next);
+	  return _m_file == other._m_file && _m_next == other._m_next;
 	}
 	inline bool operator!= (const const_iterator &other) const
 	{
@@ -1521,11 +1511,12 @@ namespace elfutils
 
       const_iterator begin () const
       {
-	return const_iterator (_m_file);
+	const_iterator it (_m_file, 0);
+	return ++it;
       }
       inline const_iterator end () const
       {
-	return const_iterator ();
+	return const_iterator (_m_file, -1);
       }
     };
     inline raw_compile_units raw_compile_units () const
