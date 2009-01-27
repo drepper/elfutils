@@ -128,15 +128,13 @@
   of objects described above never exists in memory in its entirety.  The
   objects are constructed on the fly in each call to a container method.
 
-  The output classes elfutils::dwarf_output are template-compatible with
-  the "logical view" interface above, but do not support any of the "raw"
-  container variants.  These == and != comparisons are template-driven too,
-  so all different classes can be compared.
+  See the dwarf_edit and dwarf_output headers for other classes that are
+  template-compatible with the "logical view" interface above, but do not
+  support any of the "raw" container variants.  These == and != comparisons
+  are template-driven too, so all different classes can be compared.
 
   The output classes have template-driven copy constructors, so they can be
   copied from files or substructures of the elfutils::dwarf input classes.
-
-  The elfutils::dwarf_output containers are mutable, unlike the input classes.
 
   ------ XXX to be done: more file-level containers
 
