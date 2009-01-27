@@ -190,7 +190,7 @@ accept_message (struct message_criteria *crit, enum message_category cat)
 }
 
 static struct message_criteria warning_criteria
-  = {mc_all & ~(mc_strings | mc_loc),
+  = {mc_all & ~(mc_strings | mc_loc | mc_ranges),
      mc_pubtypes};
 static struct message_criteria error_criteria
   = {mc_impact_4 | mc_error,
@@ -620,17 +620,21 @@ static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 static struct cu *check_debug_info_structural (struct read_ctx *ctx,
 					       struct abbrev_table *abbrev_chain,
 					       Elf_Data *strings,
-					       Elf_Data *loc);
+					       Elf_Data *loc,
+					       Elf_Data *ranges);
 static bool check_cu_structural (struct read_ctx *ctx,
 				 struct cu *const cu,
 				 struct abbrev_table *abbrev_chain,
 				 Elf_Data *strings,
 				 Elf_Data *loc,
+				 Elf_Data *ranges,
 				 bool dwarf_64,
 				 struct ref_record *die_refs,
 				 struct addr_record *loc_addrs,
+				 struct addr_record *ranges_addrs,
 				 struct coverage *strings_coverage,
-				 struct coverage *loc_coverage);
+				 struct coverage *loc_coverage,
+				 struct coverage *ranges_coverage);
 static bool check_aranges_structural (struct read_ctx *ctx,
 				      struct cu *cu_chain);
 static bool check_pub_structural (struct read_ctx *ctx,
@@ -788,6 +792,7 @@ process_file (int fd __attribute__((unused)),
   Elf_Data *aranges_data = dwarf->sectiondata[IDX_debug_aranges];
   Elf_Data *pubnames_data = dwarf->sectiondata[IDX_debug_pubnames];
   Elf_Data *loc_data = dwarf->sectiondata[IDX_debug_loc];
+  Elf_Data *ranges_data = dwarf->sectiondata[IDX_debug_ranges];
 
   /* Obtaining pubtypes is a bit complicated, because GNU toolchain
      doesn't emit it, and libdw doesn't account for it.  */
@@ -841,7 +846,8 @@ process_file (int fd __attribute__((unused)),
 	{
 	  read_ctx_init (&ctx, dwarf, info_data);
 	  cu_chain = check_debug_info_structural (&ctx, abbrev_chain,
-						  str_data, loc_data);
+						  str_data, loc_data,
+						  ranges_data);
 	}
       else if (!tolerate_nodebug)
 	/* Hard error, not a message.  We can't debug without this.  */
@@ -1209,37 +1215,6 @@ check_abbrev_location_form (uint64_t form)
     };
 }
 
-/* Check that given form is in fact valid in concrete CU.  Return 0 if
-   it's absolutely invalid, -1 if it's invalid in the given context, 1
-   if it's valid loclistptr, 2 if it's valid block.  */
-static int
-check_CU_location_form (uint64_t form, bool dwarf_64)
-{
-  switch (form)
-    {
-      /* loclistptr */
-    case DW_FORM_data4:
-      if (dwarf_64)
-	return -1;
-      return 1;
-
-    case DW_FORM_data8:
-      if (!dwarf_64)
-	return -1;
-      return 1;
-
-      /* block */
-    case DW_FORM_block1:
-    case DW_FORM_block2:
-    case DW_FORM_block4:
-    case DW_FORM_block:
-      return 2;
-
-    default:
-      return 0;
-    };
-}
-
 static bool
 is_location_attrib (uint64_t name)
 {
@@ -1436,12 +1411,22 @@ abbrev_table_load (struct read_ctx *ctx)
 			    dwarf_form_string (attrib_form));
 		};
 	    }
-	  /* Similar for DW_AT_location.  */
+	  /* Similar for DW_AT_location and friends.  */
 	  else if (is_location_attrib (attrib_name))
 	    {
 	      if (!check_abbrev_location_form (attrib_form))
 		wr_error (&where,
 			  ": location attribute with invalid form \"%s\".\n",
+			  dwarf_form_string (attrib_form));
+	    }
+	  /* Similar for DW_AT_ranges.  */
+	  else if (attrib_name == DW_AT_ranges)
+	    {
+	      if (attrib_form != DW_FORM_data4
+		  && attrib_form != DW_FORM_data8
+		  && attrib_form != DW_FORM_indirect)
+		wr_error (&where,
+			  ": DW_AT_ranges with invalid form \"%s\".\n",
 			  dwarf_form_string (attrib_form));
 	    }
 
@@ -1844,19 +1829,12 @@ wr_check_zero_padding (struct read_ctx *ctx,
   return true;
 }
 
-static bool
-check_x_location_expression (struct read_ctx *ctx,
-			     struct cu *cu,
-			     struct coverage *loc_coverage,
-			     struct addr_record *loc_addrs,
-			     uint64_t addr, bool addr_64,
-			     struct where *wh);
-
 static struct cu *
 check_debug_info_structural (struct read_ctx *ctx,
 			     struct abbrev_table *abbrev_chain,
 			     Elf_Data *strings,
-			     Elf_Data *loc)
+			     Elf_Data *loc,
+			     Elf_Data *ranges)
 {
   struct ref_record die_refs;
   memset (&die_refs, 0, sizeof (die_refs));
@@ -1874,12 +1852,22 @@ check_debug_info_structural (struct read_ctx *ctx,
 
   struct coverage loc_coverage_mem, *loc_coverage = NULL;
   struct addr_record loc_addrs_mem, *loc_addrs = NULL;
-  if (loc != NULL && check_category (mc_loc))
+  if (loc != NULL)
     {
       coverage_init (&loc_coverage_mem, loc->d_size);
       loc_coverage = &loc_coverage_mem;
       memset (&loc_addrs_mem, 0, sizeof (loc_addrs_mem));
       loc_addrs = &loc_addrs_mem;
+    }
+
+  struct coverage ranges_coverage_mem, *ranges_coverage = NULL;
+  struct addr_record ranges_addrs_mem, *ranges_addrs = NULL;
+  if (ranges != NULL)
+    {
+      coverage_init (&ranges_coverage_mem, ranges->d_size);
+      ranges_coverage = &ranges_coverage_mem;
+      memset (&ranges_addrs_mem, 0, sizeof (ranges_addrs_mem));
+      ranges_addrs = &ranges_addrs_mem;
     }
 
   while (!read_ctx_eof (ctx))
@@ -1955,9 +1943,12 @@ check_debug_info_structural (struct read_ctx *ctx,
 	    }
 	  cu_ctx.ptr = ctx->ptr;
 
-	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain, strings, loc,
-				    dwarf_64, &die_refs, loc_addrs,
-				    strings_coverage, loc_coverage))
+	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain,
+				    strings, loc, ranges,
+				    dwarf_64, &die_refs,
+				    loc_addrs, ranges_addrs,
+				    strings_coverage,
+				    loc_coverage, ranges_coverage))
 	    {
 	      success = false;
 	      break;
@@ -2015,6 +2006,15 @@ check_debug_info_structural (struct read_ctx *ctx,
 			     &((struct hole_info)
 			       {sec_loc, mc_loc, loc->d_buf}));
       coverage_free (loc_coverage);
+    }
+
+  if (ranges_coverage != NULL)
+    {
+      if (success)
+	coverage_find_holes (ranges_coverage, found_hole,
+			     &((struct hole_info)
+			       {sec_ranges, mc_ranges, ranges->d_buf}));
+      coverage_free (ranges_coverage);
     }
 
   if (loc_addrs != NULL)
@@ -2094,14 +2094,16 @@ check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 }
 
 static bool
-check_x_location_expression (struct read_ctx *ctx,
-			     struct cu *cu,
-			     struct coverage *loc_coverage,
-			     struct addr_record *loc_addrs,
-			     uint64_t addr, bool addr_64,
-			     struct where *wh)
+check_loc_or_range_ref (struct read_ctx *ctx,
+			struct cu *cu,
+			struct coverage *coverage,
+			struct addr_record *addrs,
+			uint64_t addr,
+			bool addr_64,
+			struct where *wh,
+			bool contains_locations)
 {
-  if (loc_coverage == NULL)
+  if (coverage == NULL)
     return true;
 
   if (!read_ctx_skip (ctx, addr))
@@ -2112,9 +2114,9 @@ check_x_location_expression (struct read_ctx *ctx,
       return false;
     }
 
-  if (coverage_is_covered (loc_coverage, addr))
+  if (coverage_is_covered (coverage, addr))
     {
-      if (!addr_record_has_addr (loc_addrs, addr))
+      if (!addr_record_has_addr (addrs, addr))
 	{
 	  /* XXX do it like everywhere else, using addr_records and
 	     ref_records..  */
@@ -2125,7 +2127,7 @@ check_x_location_expression (struct read_ctx *ctx,
       return true;
     }
   else
-    addr_record_add (loc_addrs, addr);
+    addr_record_add (addrs, addr);
 
   uint64_t escape = addr_64 ? (uint64_t)-1 : (uint64_t)(uint32_t)-1;
 
@@ -2147,7 +2149,7 @@ check_x_location_expression (struct read_ctx *ctx,
       /* begin address */
       uint64_t begin_addr;
       if (!overlap
-	  && !coverage_pristine (loc_coverage,
+	  && !coverage_pristine (coverage,
 				 read_ctx_get_offset (ctx),
 				 addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
@@ -2161,7 +2163,7 @@ check_x_location_expression (struct read_ctx *ctx,
       /* end address */
       uint64_t end_addr;
       if (!overlap
-	  && !coverage_pristine (loc_coverage,
+	  && !coverage_pristine (coverage,
 				 read_ctx_get_offset (ctx),
 				 addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
@@ -2176,39 +2178,42 @@ check_x_location_expression (struct read_ctx *ctx,
 
       if (!done && begin_addr != escape)
 	{
-	  /* location expression length */
-	  uint16_t len;
-	  if (!overlap
-	      && !coverage_pristine (loc_coverage,
-				     read_ctx_get_offset (ctx), 2))
-	    HAVE_OVERLAP;
-
-	  if (!read_ctx_read_2ubyte (ctx, &len))
+	  if (contains_locations)
 	    {
-	      wr_error (&where, ": can't read length of location expression.\n");
-	      return false;
+	      /* location expression length */
+	      uint16_t len;
+	      if (!overlap
+		  && !coverage_pristine (coverage,
+					 read_ctx_get_offset (ctx), 2))
+		HAVE_OVERLAP;
+
+	      if (!read_ctx_read_2ubyte (ctx, &len))
+		{
+		  wr_error (&where, ": can't read length of location expression.\n");
+		  return false;
+		}
+
+	      /* location expression itself */
+	      struct read_ctx expr_ctx;
+	      if (!read_ctx_init_sub (&expr_ctx, ctx, ctx->ptr, ctx->ptr + len))
+		{
+		not_enough:
+		  wr_error (&where, PRI_NOT_ENOUGH, "location expression");
+		  return false;
+		}
+
+	      uint64_t expr_start = read_ctx_get_offset (ctx);
+	      check_location_expression (&expr_ctx, &where, addr_64);
+	      uint64_t expr_end = read_ctx_get_offset (ctx);
+	      if (!overlap
+		  && !coverage_pristine (coverage,
+					 expr_start, expr_end - expr_start))
+		HAVE_OVERLAP;
+
+	      if (!read_ctx_skip (ctx, len))
+		/* "can't happen" */
+		goto not_enough;
 	    }
-
-	  /* location expression itself */
-	  struct read_ctx expr_ctx;
-	  if (!read_ctx_init_sub (&expr_ctx, ctx, ctx->ptr, ctx->ptr + len))
-	    {
-	    not_enough:
-	      wr_error (&where, PRI_NOT_ENOUGH, "location expression");
-	      return false;
-	    }
-
-	  uint64_t expr_start = read_ctx_get_offset (ctx);
-	  check_location_expression (&expr_ctx, &where, addr_64);
-	  uint64_t expr_end = read_ctx_get_offset (ctx);
-	  if (!overlap
-	      && !coverage_pristine (loc_coverage,
-				     expr_start, expr_end - expr_start))
-	    HAVE_OVERLAP;
-
-	  if (!read_ctx_skip (ctx, len))
-	    /* "can't happen" */
-	    goto not_enough;
 	}
       else if (!done)
 	{
@@ -2221,7 +2226,7 @@ check_x_location_expression (struct read_ctx *ctx,
 	}
 #undef HAVE_OVERLAP
 
-      coverage_add (loc_coverage, where.addr1, read_ctx_get_offset (ctx) - 1);
+      coverage_add (coverage, where.addr1, read_ctx_get_offset (ctx) - 1);
       if (done)
 	break;
     }
@@ -2243,12 +2248,15 @@ read_die_chain (struct read_ctx *ctx,
 		struct abbrev_table *abbrevs,
 		Elf_Data *strings,
 		Elf_Data *loc,
+		Elf_Data *ranges,
 		bool dwarf_64, bool addr_64,
 		struct ref_record *die_refs,
 		struct ref_record *die_loc_refs,
 		struct addr_record *loc_addrs,
+		struct addr_record *ranges_addrs,
 		struct coverage *strings_coverage,
-		struct coverage *loc_coverage)
+		struct coverage *loc_coverage,
+		struct coverage *ranges_coverage)
 {
   bool got_die = false;
   uint64_t sibling_addr = 0;
@@ -2377,31 +2385,56 @@ read_die_chain (struct read_ctx *ctx,
 	    }
 
 	  bool check_locptr = false;
-	  bool locptr_64 = addr_64;
 	  if (is_location_attrib (it->name))
-	    {
-	      switch (check_CU_location_form (form, dwarf_64))
-		{
-		case 0: /* absolutely invalid */
-		  /* Only print error if it's indirect.  Otherwise we
-		     gave diagnostic during abbrev loading.  */
-		  if (indirect)
-		    wr_error (&where,
-			      ": location attribute with invalid (indirect) form \"%s\".\n",
-			      dwarf_form_string (form));
-		  break;
-
-		case -1: /* locptr invalid in this context */
+	    switch (form)
+	      {
+	      case DW_FORM_data8:
+		if (!dwarf_64)
 		  wr_error (&where,
-			    ": location attribute with form \"%s\" in %d-bit CU.\n",
-			    dwarf_form_string (form), (dwarf_64 ? 64 : 32));
-		  locptr_64 = !locptr_64;
+			    ": location attribute with form \"%s\" in 32-bit CU.\n",
+			    dwarf_form_string (form));
+		/* fall-through */
+	      case DW_FORM_data4:
+		check_locptr = true;
+		/* fall-through */
+	      case DW_FORM_block1:
+	      case DW_FORM_block2:
+	      case DW_FORM_block4:
+	      case DW_FORM_block:
+		break;
 
-		  /* fall-through */
-		case 1: /* locptr */
-		  check_locptr = true;
-		};
-	    }
+	      default:
+		/* Only print error if it's indirect.  Otherwise we
+		   gave diagnostic during abbrev loading.  */
+		if (indirect)
+		  wr_error (&where,
+			    ": location attribute with invalid (indirect) form \"%s\".\n",
+			    dwarf_form_string (form));
+	      };
+
+	  bool check_rangeptr = false;
+	  if (it->name == DW_AT_ranges)
+	    switch (form)
+	      {
+	      case DW_FORM_data8:
+		if (!dwarf_64)
+		  wr_error (&where,
+			    ": DW_AT_ranges with form DW_FORM_data8 in 32-bit CU.\n");
+		/* fall-through */
+	      case DW_FORM_data4:
+		check_rangeptr = true;
+		break;
+
+	      default:
+		/* Only print error if it's indirect.  Otherwise we
+		   gave diagnostic during abbrev loading.  */
+		if (indirect)
+		  wr_error (&where,
+			    ": DW_AT_ranges with invalid (indirect) form \"%s\".\n",
+			    dwarf_form_string (form));
+	      };
+
+	  assert (!(check_locptr && check_rangeptr));
 
 	  switch (form)
 	    {
@@ -2516,13 +2549,19 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (check_locptr)
+		else if (check_locptr || check_rangeptr)
 		  {
+		    Elf_Data *d = check_locptr ? loc : ranges;
+		    struct coverage *cov
+		      = check_locptr ? loc_coverage : ranges_coverage;
+		    struct addr_record *rec
+		      = check_locptr ? loc_addrs : ranges_addrs;
+
 		    struct read_ctx sub_ctx;
-		    read_ctx_init (&sub_ctx, ctx->dbg, loc);
-		    check_x_location_expression (&sub_ctx, cu, loc_coverage,
-						 loc_addrs, value, locptr_64,
-						 &where);
+		    read_ctx_init (&sub_ctx, ctx->dbg, d);
+		    check_loc_or_range_ref (&sub_ctx, cu, cov,
+					    rec, value, addr_64,
+					    &where, check_locptr);
 		  }
 		else if (it->form == DW_FORM_ref4)
 		  record_ref (value, &where, true);
@@ -2538,13 +2577,19 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (check_locptr)
+		else if (check_locptr || check_rangeptr)
 		  {
+		    Elf_Data *d = check_locptr ? loc : ranges;
+		    struct coverage *cov
+		      = check_locptr ? loc_coverage : ranges_coverage;
+		    struct addr_record *rec
+		      = check_locptr ? loc_addrs : ranges_addrs;
+
 		    struct read_ctx sub_ctx;
-		    read_ctx_init (&sub_ctx, ctx->dbg, loc);
-		    check_x_location_expression (&sub_ctx, cu, loc_coverage,
-						 loc_addrs, value, locptr_64,
-						 &where);
+		    read_ctx_init (&sub_ctx, ctx->dbg, d);
+		    check_loc_or_range_ref (&sub_ctx, cu, cov,
+					    rec, value, addr_64,
+					    &where, check_locptr);
 		  }
 		else if (it->form == DW_FORM_ref8)
 		  record_ref (value, &where, true);
@@ -2618,10 +2663,13 @@ read_die_chain (struct read_ctx *ctx,
 
       if (abbrev->has_children)
 	{
-	  int st = read_die_chain (ctx, cu, abbrevs, strings, loc,
+	  int st = read_die_chain (ctx, cu, abbrevs, strings,
+				   loc, ranges,
 				   dwarf_64, addr_64,
-				   die_refs, die_loc_refs, loc_addrs,
-				   strings_coverage, loc_coverage);
+				   die_refs, die_loc_refs,
+				   loc_addrs, ranges_addrs,
+				   strings_coverage,
+				   loc_coverage, ranges_coverage);
 	  if (st == -1)
 	    return -1;
 	  else if (st == 0)
@@ -2673,11 +2721,14 @@ check_cu_structural (struct read_ctx *ctx,
 		     struct abbrev_table *abbrev_chain,
 		     Elf_Data *strings,
 		     Elf_Data *loc,
+		     Elf_Data *ranges,
 		     bool dwarf_64,
 		     struct ref_record *die_refs,
 		     struct addr_record *loc_addrs,
+		     struct addr_record *ranges_addrs,
 		     struct coverage *strings_coverage,
-		     struct coverage *loc_coverage)
+		     struct coverage *loc_coverage,
+		     struct coverage *ranges_coverage)
 {
   uint16_t version;
   uint64_t abbrev_offset;
@@ -2726,11 +2777,12 @@ check_cu_structural (struct read_ctx *ctx,
   memset (&die_loc_refs, 0, sizeof (die_loc_refs));
 
   bool retval = true;
-  if (read_die_chain (ctx, cu, abbrevs, strings, loc,
+  if (read_die_chain (ctx, cu, abbrevs, strings, loc, ranges,
 		      dwarf_64, address_size == 8,
 		      die_refs, &die_loc_refs,
-		      loc_addrs, strings_coverage,
-		      loc_coverage) >= 0)
+		      loc_addrs, ranges_addrs,
+		      strings_coverage,
+		      loc_coverage, ranges_coverage) >= 0)
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
 	if (!abbrevs->abbr[i].used)

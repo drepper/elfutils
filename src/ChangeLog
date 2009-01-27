@@ -1,5 +1,10 @@
 2009-01-27  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Implement validation of .debug_ranges and
+	references from .debug_info to .debug_ranges.
+
+2009-01-27  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Check that the base address selection entry
 	actually changes base address.
 
