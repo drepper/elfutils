@@ -477,6 +477,7 @@ namespace elfutils
 	: public std::iterator<std::input_iterator_tag, debug_info_entry>
       {
 	friend class debug_info_entry;
+	friend class attr_value;
       private:
 	debug_info_entry _m_die;
 
@@ -487,12 +488,22 @@ namespace elfutils
 	  xif (result < 0);
 	}
 
+	// Construct from a reference attribute.
+	inline const_iterator (Dwarf_Attribute *attr)
+	{
+	  xif (::dwarf_formref_die (attr, &_m_die._m_die) == NULL);
+	}
+
       public:
 	inline const_iterator (const const_iterator &i) : _m_die (i._m_die) {}
 
 	inline const debug_info_entry &operator* () const
 	{
 	  return _m_die;
+	}
+	inline const debug_info_entry *operator-> () const
+	{
+	  return &(operator* ());
 	}
 
 	inline const_iterator &operator= (const const_iterator &other)
@@ -702,10 +713,10 @@ namespace elfutils
 		  continue;
 		}
 
-	      if ((*i).tag () == ::DW_TAG_imported_unit)
+	      if (i->tag () == ::DW_TAG_imported_unit)
 		// We have an imported unit.  Look at its referent.
-		_m_stack.push ((*i).attributes ().at (::DW_AT_import)
-			       .reference ().raw_children ().begin ());
+		_m_stack.push (i->attributes ().at (::DW_AT_import)
+			       .reference ()->raw_children ().begin ());
 	      else
 		// This is some other DIE.  Iterate on it.
 		break;
@@ -743,6 +754,10 @@ namespace elfutils
 	inline const debug_info_entry &operator* () const
 	{
 	  return *_m_stack.top ();
+	}
+	inline const debug_info_entry *operator-> () const
+	{
+	  return &(operator* ());
 	}
 
 	inline const_iterator &operator++ () // prefix
@@ -980,15 +995,10 @@ namespace elfutils
 
       std::string to_string () const;
 
-      inline debug_info_entry reference () const
+      // Return an iterator on which * will yield the referent debug_info_entry.
+      inline debug_info_entry::raw_children::const_iterator reference () const
       {
-	debug_info_entry result;
-	xif (::dwarf_formref_die (thisattr (), result.thisdie ()) == NULL);
-	return result;
-      }
-      inline compile_unit unit_reference () const
-      {
-	return reference ();
+	return debug_info_entry::raw_children::const_iterator (thisattr ());
       }
 
       // XXX reloc, dwfl
@@ -1032,7 +1042,7 @@ namespace elfutils
 	    case VS_reference:
 	    case VS_unit_reference:
 	      // XXX Reference identity check (?)
-	      return reference ().offset () == other.reference ().offset ();
+	      return reference ()->offset () == other.reference ()->offset ();
 
 	    case VS_flag:
 	      return flag () == other.flag ();
@@ -1476,6 +1486,10 @@ namespace elfutils
 	{
 	  return _m_die;
 	}
+	inline const debug_info_entry *operator-> () const
+	{
+	  return &(operator* ());
+	}
 
 	inline const_iterator &operator= (const const_iterator &other)
 	{
@@ -1658,7 +1672,7 @@ namespace elfutils
 	    std::set<arange_list::key_type>::iterator k = ++j;
 	    while (++k != set.end () && adjacency (*j, *k))
 	      ++j;
-	    const arange_list::key_type joined ((*i).first, (*j).second);
+	    const arange_list::key_type joined (i->first, j->second);
 	    set.erase (i, k);
 	    i = set.insert (joined).first;
 	  }
