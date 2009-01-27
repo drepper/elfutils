@@ -143,7 +143,8 @@ static string
 hex_string (Dwarf_Word value, const char *before = "", const char *after = "")
 {
   std::ostringstream os;
-  os.setf(std::ios::hex, std::ios::basefield);
+  os.setf (std::ios::hex, std::ios::basefield);
+  os.setf (std::ios::showbase);
   os << before << value << after;
   return os.str ();
 }
@@ -523,14 +524,15 @@ string
 __libdw_ranges_to_string (const container &c)
 {
   std::ostringstream os;
-  os.setf(std::ios::hex, std::ios::basefield);
+  os.setf (std::ios::hex, std::ios::basefield);
+  os.setf (std::ios::showbase);
 
   os << "<";
 
   bool first = true;
   for (typename container::const_iterator i = c.begin (); i != c.end (); ++i)
     {
-      typename container::value_type range = *i;
+      const typename container::value_type range = *i;
       if (!first)
 	os << ",";
       os << range.first << "-" << range.second;
@@ -552,4 +554,29 @@ string
 dwarf::ranges::to_string () const
 {
   return __libdw_ranges_to_string (*this);
+}
+
+string
+dwarf::arange_list::to_string () const
+{
+  return __libdw_ranges_to_string (*this);
+}
+
+dwarf::aranges_map
+dwarf::aranges () const
+{
+  Dwarf_Aranges *these;
+  xif (dwarf_getaranges (_m_dw, &these, NULL) < 0);
+
+  if (these == NULL)
+    return aranges_map ();
+
+  aranges_map result;
+  for (const Dwarf_Aranges_s::Dwarf_Arange_s *r = &these->info[0];
+       r < &these->info[these->naranges];
+       ++r)
+    result[compile_unit (debug_info_entry (_m_dw, r->offset))].insert
+      (arange_list::value_type (r->addr, r->addr + r->length));
+
+  return result;
 }

@@ -1342,7 +1342,7 @@ namespace elfutils
       public:
 	inline const_iterator (const const_iterator &i)
 	  : _m_die (i._m_die), _m_base (i._m_base),
-	    _m_begin (i._m_begin), _m_end (i._m_begin),
+	    _m_begin (i._m_begin), _m_end (i._m_end),
 	    _m_offset (i._m_offset) {}
 
 	inline value_type operator* () const
@@ -1611,6 +1611,41 @@ namespace elfutils
     {
       return !(*this == other);
     }
+
+    class arange_list
+      : public std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> >
+    {
+    private:
+      typedef std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> > _base;
+
+    public:
+      typedef _base::key_type key_type;
+      typedef _base::value_type value_type;
+      typedef _base::iterator iterator;
+      typedef _base::const_iterator const_iterator;
+
+      arange_list () {}
+      arange_list (const arange_list &other)
+	: _base (static_cast<const _base &> (other)) {}
+
+      std::string to_string () const;
+    };
+
+  private:
+    struct arange_less
+      : public std::binary_function<compile_unit, compile_unit, bool>
+    {
+      inline bool operator() (const compile_unit &a, const compile_unit &b)
+	const
+      {
+	return a.offset () < b.offset ();
+      }
+    };
+
+  public:
+    typedef std::map<compile_unit, arange_list, arange_less> aranges_map;
+
+    aranges_map aranges () const;
   };
 
   inline class dwarf::debug_info_entry::raw_children
