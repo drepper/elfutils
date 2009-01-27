@@ -1147,7 +1147,7 @@ namespace elfutils
 
       public:
 	inline const_iterator (const const_iterator &i)
-	  : _m_base (i._m_base), _m_begin (i._m_begin), _m_end (i._m_begin),
+	  : _m_base (i._m_base), _m_begin (i._m_begin), _m_end (i._m_end),
 	    _m_cu (i._m_cu), _m_offset (i._m_offset) {}
 
 	inline value_type operator* () const
@@ -1227,8 +1227,10 @@ namespace elfutils
 	   is conceptually equal if all the pairs match, regardless of the
 	   order.  But the std::equal algorithm will compare corresponding
 	   elements in order.  So we need an ordered set for comparison.  */
-	const std::set<key_type> mine = *this;
-	const std::set<key_type> his = other;
+	std::set<key_type> mine = *this;
+	coalesce (mine);
+	std::set<key_type> his = other;
+	coalesce (his);
 	return mine == his;
       }
       template<typename ranges>
@@ -1435,8 +1437,10 @@ namespace elfutils
 	   is conceptually equal if all the pairs match, regardless of the
 	   order.  But the std::equal algorithm will compare corresponding
 	   elements in order.  So we need an ordered set for comparison.  */
-	const std::set<key_type> mine = *this;
-	const std::set<key_type> his = other;
+	std::set<key_type> mine = *this;
+	coalesce (mine);
+	std::set<key_type> his = other;
+	coalesce (his);
 	return mine == his;
       }
       template<typename ranges>
@@ -1646,6 +1650,30 @@ namespace elfutils
     typedef std::map<compile_unit, arange_list, arange_less> aranges_map;
 
     aranges_map aranges () const;
+
+  private:
+    static bool adjacency (const arange_list::key_type &a,
+			   const arange_list::key_type &b)
+      {
+	return a.second == b.first;
+      }
+
+      // Coalesce adjacent ranges.
+      static void coalesce (std::set<arange_list::key_type> &set)
+      {
+	for (std::set<arange_list::key_type>::iterator i = set.begin ();
+	     (i = std::adjacent_find (i, set.end (), adjacency)) != set.end ();
+	     ++i)
+	  {
+	    std::set<arange_list::key_type>::iterator j = i;
+	    std::set<arange_list::key_type>::iterator k = ++j;
+	    while (++k != set.end () && adjacency (*j, *k))
+	      ++j;
+	    const arange_list::key_type joined ((*i).first, (*j).second);
+	    set.erase (i, k);
+	    i = set.insert (joined).first;
+	  }
+      }
   };
 
   inline class dwarf::debug_info_entry::raw_children
