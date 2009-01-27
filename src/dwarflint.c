@@ -643,11 +643,69 @@ static const char *where_fmt (struct where *wh, char *ptr)
 
   static char buf[256];
 
+  struct section_info
+  {
+    const char *name;
+    const char *addr1n;
+    const char *addr1f;
+    const char *addr2n;
+    const char *addr2f;
+    const char *addr3n;
+    const char *addr3f;
+  };
+
+  static struct section_info section_names[] =
+    {
+      [sec_info] = {".debug_info", "CU", "%"PRId64,
+		    "DIE", "%#"PRIx64, NULL, NULL},
+
+      [sec_abbrev] = {".debug_abbrev", "section", "%"PRId64,
+		      "abbreviation", "%"PRId64, "attribute", "%#"PRIx64},
+
+      [sec_aranges] = {".debug_aranges", "table", "%"PRId64,
+		       "arange", "%#"PRIx64, NULL, NULL},
+
+      [sec_pubnames] = {".debug_pubnames", "pubname table", "%"PRId64,
+			"pubname", "%#"PRIx64, NULL, NULL},
+
+      [sec_pubtypes] = {".debug_pubtypes", "pubtype table", "%"PRId64,
+			"pubtype", "%#"PRIx64, NULL, NULL},
+
+      [sec_str] = {".debug_str", "offset", "%#"PRIx64,
+		   NULL, NULL, NULL, NULL},
+
+      [sec_loc] = {".debug_loc", "loclist", "%#"PRIx64,
+		   "offset", "%#"PRIx64, NULL, NULL},
+
+      [sec_locexpr] = {"location expression", "offset", "%#"PRIx64,
+		       NULL, NULL, NULL, NULL},
+    };
+  assert (wh->section < sizeof (section_names) / sizeof (*section_names));
+  struct section_info *inf = section_names + wh->section;
+  assert (inf->name);
+
+  assert ((inf->addr1n == NULL) == (inf->addr1f == NULL));
+  assert ((inf->addr2n == NULL) == (inf->addr2f == NULL));
+  assert ((inf->addr3n == NULL) == (inf->addr3f == NULL));
+
+  assert ((wh->addr1 != (uint64_t)-1) ? inf->addr1n != NULL : true);
+  assert ((wh->addr2 != (uint64_t)-1) ? inf->addr2n != NULL : true);
+  assert ((wh->addr3 != (uint64_t)-1) ? inf->addr3n != NULL : true);
+
+  assert ((wh->addr3 != (uint64_t)-1) ? (wh->addr2 != (uint64_t)-1) : true);
+  assert ((wh->addr2 != (uint64_t)-1) ? (wh->addr1 != (uint64_t)-1) : true);
+
+  /* GCC insists on checking format parameters and emits a warning
+     when we don't use string literal.  With -Werror this ends up
+     being hard error.  So instead we walk around this warning by
+     using function pointer.  */
+  int (*x_asprintf)(char **strp, const char *fmt, ...) = asprintf;
+
 #define SETUP_ADDR(N)							\
   char *addr##N##s;							\
   if (wh->addr##N == (uint64_t)-1)					\
     addr##N##s = NULL;							\
-  else if (asprintf (&addr##N##s, "0x%" PRIx64, wh->addr##N) < 0)	\
+  else if (x_asprintf (&addr##N##s, inf->addr##N##f, wh->addr##N) < 0) \
     addr##N##s = "(fmt error)"
 
   SETUP_ADDR (1);
@@ -655,46 +713,16 @@ static const char *where_fmt (struct where *wh, char *ptr)
   SETUP_ADDR (3);
 #undef SETUP_ADDR
 
-  struct section_info
-  {
-    const char *name;
-    const char *addr1n;
-    const char *addr2n;
-    const char *addr3n;
-  };
-
-  static struct section_info section_names[] = {
-    [sec_info] = {".debug_info", "CU", "DIE", NULL},
-    [sec_abbrev] = {".debug_abbrev", "abbrev table", "abbrev", "attribute"},
-    [sec_aranges] = {".debug_aranges", "arange table", "arange", NULL},
-    [sec_pubnames] = {".debug_pubnames", "pubname table", "record", NULL},
-    [sec_pubtypes] = {".debug_pubtypes", "pubtype table", "record", NULL},
-    [sec_str] = {".debug_str", "offset", NULL, NULL},
-    [sec_loc] = {".debug_loc", "loclist", "offset", NULL},
-    [sec_locexpr] = {"location expression", "offset", NULL, NULL},
-  };
-  assert (wh->section < sizeof (section_names) / sizeof (*section_names));
-  struct section_info *inf = section_names + wh->section;
-  assert (inf->name);
-
   char *orig = ptr;
   if (ptr == NULL)
     ptr = stpcpy (stpcpy (buf, inf->name), addr1s != NULL ? ": " : "");
 
-  assert (addr1s != NULL ? inf->addr1n != NULL : true);
-  assert (addr2s != NULL ? inf->addr2n != NULL : true);
-  assert (addr3s != NULL ? inf->addr3n != NULL : true);
-  assert (addr3s != NULL ? addr2s != NULL : true);
-  assert (addr2s != NULL ? addr1s != NULL : true);
-
-  if (addr1s != NULL)
-    ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr1n), " "), addr1s);
-  if (addr2s != NULL)
-    ptr = stpcpy (stpcpy (stpcpy (stpcpy (ptr, ", "),
-				  inf->addr2n), " "), addr2s);
   if (addr3s != NULL)
-    ptr = stpcpy (stpcpy (stpcpy (stpcpy (ptr, ", "),
-				  inf->addr3n), " "), addr3s);
+    ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr3n), " "), addr3s);
+  else if (addr2s != NULL)
+    ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr2n), " "), addr2s);
+  else if (addr1s != NULL)
+    ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr1n), " "), addr1s);
 
   if (wh->ref != NULL)
     {
@@ -1226,6 +1254,7 @@ abbrev_table_load (struct read_ctx *ctx)
 {
   struct abbrev_table *section_chain = NULL;
   struct abbrev_table *section = NULL;
+  uint64_t first_attr_off = 0;
   struct where where = WHERE (sec_abbrev, NULL);
   where.addr1 = 0;
 
@@ -1326,7 +1355,10 @@ abbrev_table_load (struct read_ctx *ctx)
 	{
 	  uint64_t attr_off = read_ctx_get_offset (ctx);
 	  uint64_t attrib_name, attrib_form;
-	  where_reset_3 (&where, attr_off);
+	  if (first_attr_off == 0)
+	    first_attr_off = attr_off;
+	  /* Shift to match elfutils reporting.  */
+	  where_reset_3 (&where, attr_off - first_attr_off);
 
 	  /* Load attribute name and form.  */
 	  if (!wr_checked_read_uleb128 (ctx, &attrib_name, &where,
@@ -2211,7 +2243,11 @@ read_die_chain (struct read_ctx *ctx,
   while (!read_ctx_eof (ctx))
     {
       where = cu->where;
-      where_reset_2 (&where, (die_off = read_ctx_get_offset (ctx)));
+      die_off = read_ctx_get_offset (ctx);
+      /* Shift reported DIE offset by CU offset, to match the way
+	 readelf reports DIEs.  */
+      where_reset_2 (&where, die_off + cu->offset);
+
       uint64_t abbr_code;
 
       prev_die_off = die_off;
