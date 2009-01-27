@@ -1,5 +1,10 @@
 2009-01-27  Petr Machata  <pmachata@redhat.com>
 
+	* dwarflint.c: Check that the base address selection entry
+	actually changes base address.
+
+2009-01-27  Petr Machata  <pmachata@redhat.com>
+
 	* dwarflint.c: Match the way dwarflint reports offsets with the
 	way elfutils does it.
 

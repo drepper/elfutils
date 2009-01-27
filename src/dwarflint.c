@@ -106,6 +106,7 @@ enum section_id
   sec_loc,
   sec_locexpr, /* Not a section, but a portion of file that contains a
 		  location expression.  */
+  sec_ranges,
 };
 
 struct where
@@ -600,6 +601,7 @@ struct cu
   uint64_t offset;
   uint64_t length;
   int address_size;             // Address size in bytes on the target machine.
+  uint64_t base;                // DW_AT_low_pc value of CU DIE, 0 if not present.
   struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
   struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct where where;           // Where was this section defined.
@@ -679,7 +681,11 @@ static const char *where_fmt (struct where *wh, char *ptr)
 
       [sec_locexpr] = {"location expression", "offset", "%#"PRIx64,
 		       NULL, NULL, NULL, NULL},
+
+      [sec_ranges] = {".debug_ranges", NULL, NULL, /* XXX fill me */
+		      NULL, NULL, NULL, NULL}
     };
+
   assert (wh->section < sizeof (section_names) / sizeof (*section_names));
   struct section_info *inf = section_names + wh->section;
   assert (inf->name);
@@ -1839,7 +1845,8 @@ wr_check_zero_padding (struct read_ctx *ctx,
 }
 
 static bool
-check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
+check_x_location_expression (struct read_ctx *ctx,
+			     struct cu *cu,
 			     struct coverage *loc_coverage,
 			     struct addr_record *loc_addrs,
 			     uint64_t addr, bool addr_64,
@@ -2087,22 +2094,21 @@ check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 }
 
 static bool
-check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
+check_x_location_expression (struct read_ctx *ctx,
+			     struct cu *cu,
 			     struct coverage *loc_coverage,
 			     struct addr_record *loc_addrs,
 			     uint64_t addr, bool addr_64,
 			     struct where *wh)
 {
-  if (loc == NULL || loc_coverage == NULL)
+  if (loc_coverage == NULL)
     return true;
 
-  struct read_ctx ctx;
-  read_ctx_init (&ctx, dbg, loc);
-  if (!read_ctx_skip (&ctx, addr))
+  if (!read_ctx_skip (ctx, addr))
     {
       wr_error (wh, ": invalid reference outside .debug_loc "
 		"0x%" PRIx64 ", size only 0x%" PRIx64 ".\n",
-		addr, loc->d_size);
+		addr, ctx->end - ctx->begin);
       return false;
     }
 
@@ -2125,10 +2131,11 @@ check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
 
   bool retval = true;
   bool overlap = false;
-  while (!read_ctx_eof (&ctx))
+  uint64_t base = cu->base;
+  while (!read_ctx_eof (ctx))
     {
       struct where where = WHERE (sec_loc, wh);
-      where_reset_1 (&where, read_ctx_get_offset (&ctx));
+      where_reset_1 (&where, read_ctx_get_offset (ctx));
 
 #define HAVE_OVERLAP						\
       do {							\
@@ -2141,11 +2148,11 @@ check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
       uint64_t begin_addr;
       if (!overlap
 	  && !coverage_pristine (loc_coverage,
-				 read_ctx_get_offset (&ctx),
+				 read_ctx_get_offset (ctx),
 				 addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
 
-      if (!read_ctx_read_offset (&ctx, addr_64, &begin_addr))
+      if (!read_ctx_read_offset (ctx, addr_64, &begin_addr))
 	{
 	  wr_error (&where, ": can't read address range beginning.\n");
 	  return false;
@@ -2155,11 +2162,11 @@ check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
       uint64_t end_addr;
       if (!overlap
 	  && !coverage_pristine (loc_coverage,
-				 read_ctx_get_offset (&ctx),
+				 read_ctx_get_offset (ctx),
 				 addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
 
-      if (!read_ctx_read_offset (&ctx, addr_64, &end_addr))
+      if (!read_ctx_read_offset (ctx, addr_64, &end_addr))
 	{
 	  wr_error (&where, ": can't read address range ending.\n");
 	  return false;
@@ -2173,10 +2180,10 @@ check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
 	  uint16_t len;
 	  if (!overlap
 	      && !coverage_pristine (loc_coverage,
-				     read_ctx_get_offset (&ctx), 2))
+				     read_ctx_get_offset (ctx), 2))
 	    HAVE_OVERLAP;
 
-	  if (!read_ctx_read_2ubyte (&ctx, &len))
+	  if (!read_ctx_read_2ubyte (ctx, &len))
 	    {
 	      wr_error (&where, ": can't read length of location expression.\n");
 	      return false;
@@ -2184,28 +2191,37 @@ check_x_location_expression (Dwarf *dbg, Elf_Data *loc,
 
 	  /* location expression itself */
 	  struct read_ctx expr_ctx;
-	  if (!read_ctx_init_sub (&expr_ctx, &ctx, ctx.ptr, ctx.ptr + len))
+	  if (!read_ctx_init_sub (&expr_ctx, ctx, ctx->ptr, ctx->ptr + len))
 	    {
 	    not_enough:
 	      wr_error (&where, PRI_NOT_ENOUGH, "location expression");
 	      return false;
 	    }
 
-	  uint64_t expr_start = read_ctx_get_offset (&ctx);
+	  uint64_t expr_start = read_ctx_get_offset (ctx);
 	  check_location_expression (&expr_ctx, &where, addr_64);
-	  uint64_t expr_end = read_ctx_get_offset (&ctx);
+	  uint64_t expr_end = read_ctx_get_offset (ctx);
 	  if (!overlap
 	      && !coverage_pristine (loc_coverage,
 				     expr_start, expr_end - expr_start))
 	    HAVE_OVERLAP;
 
-	  if (!read_ctx_skip (&ctx, len))
+	  if (!read_ctx_skip (ctx, len))
 	    /* "can't happen" */
 	    goto not_enough;
 	}
+      else if (!done)
+	{
+	  if (end_addr == base)
+	    wr_message (mc_loc | mc_acc_bloat | mc_impact_3, &where,
+			": duplicate base address selection %#" PRIx64 ".\n",
+			base);
+	  else
+	    base = end_addr;
+	}
 #undef HAVE_OVERLAP
 
-      coverage_add (loc_coverage, where.addr1, read_ctx_get_offset (&ctx) - 1);
+      coverage_add (loc_coverage, where.addr1, read_ctx_get_offset (ctx) - 1);
       if (done)
 	break;
     }
@@ -2440,8 +2456,10 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
+		else if (abbrev->tag == DW_TAG_compile_unit
+			 || abbrev->tag == DW_TAG_partial_unit)
+		  cu->base = addr;
 
-		/* XXX What are validity criteria for DW_FORM_addr? */
 		break;
 	      }
 
@@ -2499,9 +2517,13 @@ read_die_chain (struct read_ctx *ctx,
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (check_locptr)
-		  check_x_location_expression (ctx->dbg, loc, loc_coverage,
-					       loc_addrs, value, locptr_64,
-					       &where);
+		  {
+		    struct read_ctx sub_ctx;
+		    read_ctx_init (&sub_ctx, ctx->dbg, loc);
+		    check_x_location_expression (&sub_ctx, cu, loc_coverage,
+						 loc_addrs, value, locptr_64,
+						 &where);
+		  }
 		else if (it->form == DW_FORM_ref4)
 		  record_ref (value, &where, true);
 		break;
@@ -2517,9 +2539,13 @@ read_die_chain (struct read_ctx *ctx,
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (check_locptr)
-		  check_x_location_expression (ctx->dbg, loc, loc_coverage,
-					       loc_addrs, value, locptr_64,
-					       &where);
+		  {
+		    struct read_ctx sub_ctx;
+		    read_ctx_init (&sub_ctx, ctx->dbg, loc);
+		    check_x_location_expression (&sub_ctx, cu, loc_coverage,
+						 loc_addrs, value, locptr_64,
+						 &where);
+		  }
 		else if (it->form == DW_FORM_ref8)
 		  record_ref (value, &where, true);
 		break;
