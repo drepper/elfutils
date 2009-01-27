@@ -138,22 +138,20 @@
 
   ------ XXX to be done: more file-level containers
 
-  input side only (?):
-
-  aranges_by_unit : map<CU, range_list>
-  	can compare range_list == cu.ranges ()
-	only used for dwarflint, can be slow/copying
+  input side only:
 
   units_by_addr : map<pair<begin,end>, CU> and map<address, CU>
 	use dwarf_getarange_addr
 
-  pub{names,types}_by_unit
+  pub{names,types} : map<string, debug_info_entry> (across all CUs)
 
   output too:
 
-  pub{names,types}_by_name
+  pubnames_map : map<string, debug_info_entry>
+  pub{names,types}_units : map<compile_unit, pubnames_map>
 	too much lang knowledge to autogenerate for now,
 	output will do it explicitly
+
  */
 
 // DWARF reader interfaces: front end to <libdw.h> routines
@@ -1165,7 +1163,7 @@ namespace elfutils
 
 	inline bool operator== (const const_iterator &other) const
 	{
-	  return _m_offset == other._m_offset;
+	  return _m_offset == other._m_offset && _m_cu == other._m_cu;
 	}
 	inline bool operator!= (const const_iterator &other) const
 	{
@@ -1362,7 +1360,8 @@ namespace elfutils
 
 	inline bool operator== (const const_iterator &other) const
 	{
-	  return _m_offset == other._m_offset;
+	  return (_m_die._m_die.addr == other._m_die._m_die.addr
+		  && _m_offset == other._m_offset);
 	}
 	inline bool operator!= (const const_iterator &other) const
 	{
@@ -1497,7 +1496,8 @@ namespace elfutils
 
 	inline bool operator== (const const_iterator &other) const
 	{
-	  return _m_next == other._m_next;
+	  return (_m_die._m_die.addr == other._m_die._m_die.addr
+		  && _m_next == other._m_next);
 	}
 	inline bool operator!= (const const_iterator &other) const
 	{
