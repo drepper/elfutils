@@ -325,15 +325,11 @@ stringform (Dwarf_Attribute *attr)
 }
 
 static bool
-get_files (Dwarf_Attribute *attr, Dwarf_Files **files, size_t *idx)
+get_files (Dwarf_Attribute *attr, Dwarf_Files **files, Dwarf_Word *idx)
 {
-  Dwarf_Word result;
   CUDIE (cudie, attr->cu);
-  if (dwarf_formudata (attr, &result) < 0
-      || dwarf_getsrcfiles (&cudie, files, NULL) < 0)
-    return true;
-  *idx = result;
-  return false;
+  return (dwarf_formudata (attr, idx) < 0
+	  || dwarf_getsrcfiles (&cudie, files, NULL) < 0);
 }
 
 Dwarf_Word
@@ -343,7 +339,7 @@ dwarf::source_file::mtime () const
     return 0;
 
   Dwarf_Files *files;
-  size_t idx;
+  Dwarf_Word idx;
   xif (get_files (thisattr (), &files, &idx));
 
   Dwarf_Word result;
@@ -358,7 +354,7 @@ dwarf::source_file::size () const
     return 0;
 
   Dwarf_Files *files;
-  size_t idx;
+  Dwarf_Word idx;
   xif (get_files (thisattr (), &files, &idx));
 
   Dwarf_Word result;
