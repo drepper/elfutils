@@ -54,6 +54,7 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 #define ARGP_strict	300
 #define ARGP_gnu	301
+#define ARGP_tolerant	302
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -66,6 +67,8 @@ static const struct argp_option options[] =
   { "gnu", ARGP_gnu, NULL, 0,
     N_("Binary has been created with GNU toolchain and is therefore known to be \
 broken in certain ways"), 0 },
+  { "tolerant", ARGP_tolerant, NULL, 0,
+    N_("Don't output certain common error messages"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -155,23 +158,19 @@ enum message_category
   mc_error     = 0x40,  // turn the message into an error
 
   /* Area: */
-  mc_leb128    = 0x100, // ULEB/SLEB storage
-  mc_abbrevs   = 0x200, // abbreviations and abbreviation tables
-  mc_die_rel_sib  = 0x1000, // DIE sibling relationship
-  mc_die_rel_child= 0x2000, // DIE parent/child relationship
-  mc_die_rel_ref  = 0x4000, // relationship by reference
-  mc_die_rel_all  = 0x7000, // any DIE/DIE relationship
-  mc_die_other    = 0x8000, // other messages related to DIEs and .debug_info tables
-  mc_die_all      = 0xf000, // includes all DIE categories
-  mc_info      = 0x10000, // messages related to .debug_info, but not particular DIEs
-  mc_strings   = 0x20000, // string table
-  mc_aranges   = 0x40000, // address ranges table
-  mc_elf       = 0x80000, // ELF structure, e.g. missing optional sections
-  mc_pubtables = 0x100000, // table of public names/types
-  mc_pubtypes  = 0x200000, // .debug_pubtypes presence
-  mc_loc       = 0x400000, // messages related to .debug_loc
-  mc_ranges    = 0x800000, // messages related to .debug_ranges
-  mc_other     = 0x1000000, // messages unrelated to any of the above
+  mc_leb128    = 0x100,  // ULEB/SLEB storage
+  mc_abbrevs   = 0x200,  // abbreviations and abbreviation tables
+  mc_die_rel   = 0x400,  // DIE relationship
+  mc_die_other = 0x800,  // other messages related to DIEs
+  mc_info      = 0x1000, // messages related to .debug_info, but not particular DIEs
+  mc_strings   = 0x2000, // string table
+  mc_aranges   = 0x4000, // address ranges table
+  mc_elf       = 0x8000, // ELF structure, e.g. missing optional sections
+  mc_pubtables = 0x10000,  // table of public names/types
+  mc_pubtypes  = 0x20000,  // .debug_pubtypes presence
+  mc_loc       = 0x40000,  // messages related to .debug_loc
+  mc_ranges    = 0x80000,  // messages related to .debug_ranges
+  mc_other     = 0x100000, // messages unrelated to any of the above
   mc_all       = 0xffffff00, // all areas
 };
 
@@ -190,7 +189,7 @@ accept_message (struct message_criteria *crit, enum message_category cat)
 }
 
 static struct message_criteria warning_criteria
-  = {mc_all & ~(mc_strings | mc_loc | mc_ranges),
+  = {mc_all & ~(mc_strings),
      mc_pubtypes};
 static struct message_criteria error_criteria
   = {mc_impact_4 | mc_error,
@@ -301,6 +300,7 @@ wr_message_padding_n0 (enum message_category category,
 static bool be_quiet;
 static bool be_strict = false; /* --strict */
 static bool be_gnu = false; /* --gnu */
+static bool be_tolerant = false; /* --tolerant */
 
 int
 main (int argc, char *argv[])
@@ -321,10 +321,12 @@ main (int argc, char *argv[])
     warning_criteria.reject |= mc_acc_bloat | mc_pubtypes;
   if (be_strict)
     {
-      warning_criteria.accept |= mc_strings | mc_loc;
+      warning_criteria.accept |= mc_strings;
       if (!be_gnu)
 	warning_criteria.reject &= ~mc_pubtypes;
     }
+  if (be_tolerant)
+    warning_criteria.reject |= mc_loc | mc_ranges;
 
   /* Before we start tell the ELF library which version we are using.  */
   elf_version (EV_CURRENT);
@@ -407,6 +409,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case ARGP_gnu:
       be_gnu = true;
+      break;
+
+    case ARGP_tolerant:
+      be_tolerant = true;
       break;
 
     case 'i':
@@ -581,6 +587,7 @@ struct hole_info
 {
   enum section_id section;
   enum message_category category;
+  unsigned align;
   void *d_buf;
 };
 
@@ -968,8 +975,8 @@ read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret)
 }
 
 static bool
-wr_checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
-			  struct where *wh, const char *what)
+checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
+		      struct where *wh, const char *what)
 {
   int st = read_ctx_read_uleb128 (ctx, ret);
   wr_format_leb128_message (st, wh, what);
@@ -1110,7 +1117,7 @@ read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
     case DW_FORM_addr:
       return read_ctx_read_offset (ctx, addr_64, valuep);
     case DW_FORM_udata:
-      return wr_checked_read_uleb128 (ctx, valuep, where, what);
+      return checked_read_uleb128 (ctx, valuep, where, what);
     case DW_FORM_sdata:
       return wr_checked_read_sleb128 (ctx, (int64_t *)valuep, where, what);
     case DW_FORM_data1:
@@ -1254,8 +1261,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	    where_reset_2 (&where, abbr_off);
 
 	    /* Abbreviation code.  */
-	    if (!wr_checked_read_uleb128 (ctx, &abbr_code, &where,
-					  "abbrev code"))
+	    if (!checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
 	      goto free_and_out;
 
 	    if (abbr_code == 0 && prev_abbr_code == 0
@@ -1303,7 +1309,7 @@ abbrev_table_load (struct read_ctx *ctx)
 
       /* Abbreviation tag.  */
       uint64_t abbr_tag;
-      if (!wr_checked_read_uleb128 (ctx, &abbr_tag, &where, "abbrev tag"))
+      if (!checked_read_uleb128 (ctx, &abbr_tag, &where, "abbrev tag"))
 	goto free_and_out;
 
       if (abbr_tag > DW_TAG_hi_user)
@@ -1342,12 +1348,12 @@ abbrev_table_load (struct read_ctx *ctx)
 	  where_reset_3 (&where, attr_off - first_attr_off);
 
 	  /* Load attribute name and form.  */
-	  if (!wr_checked_read_uleb128 (ctx, &attrib_name, &where,
-					"attribute name"))
+	  if (!checked_read_uleb128 (ctx, &attrib_name, &where,
+				     "attribute name"))
 	    goto free_and_out;
 
-	  if (!wr_checked_read_uleb128 (ctx, &attrib_form, &where,
-					"attribute form"))
+	  if (!checked_read_uleb128 (ctx, &attrib_form, &where,
+				     "attribute form"))
 	    goto free_and_out;
 
 	  null_attrib = attrib_name == 0 && attrib_form == 0;
@@ -1393,7 +1399,7 @@ abbrev_table_load (struct read_ctx *ctx)
 		  sibling_attr = attr_off;
 
 		  if (!cur->has_children)
-		    wr_message (mc_die_rel_sib | mc_acc_bloat | mc_impact_1,
+		    wr_message (mc_die_rel | mc_acc_bloat | mc_impact_1,
 				&where,
 				": Excessive DW_AT_sibling attribute at childless abbrev.\n");
 		}
@@ -1401,7 +1407,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	      switch (check_sibling_form (attrib_form))
 		{
 		case -1:
-		  wr_message (mc_die_rel_sib | mc_impact_2, &where,
+		  wr_message (mc_die_rel | mc_impact_2, &where,
 			      ": DW_AT_sibling attribute with form DW_FORM_ref_addr.\n");
 		  break;
 
@@ -1690,8 +1696,15 @@ found_hole (uint64_t begin, uint64_t end, void *data)
       }
 
   if (all_zeroes)
-    wr_message_padding_0 (info->category, &WHERE (info->section, NULL),
-			  begin, end);
+    {
+      /* Zero padding is valid, if it aligns on the bounds of
+	 info->align bytes, and is not excessive.  */
+      if (!(info->align != 0 && info->align != 1
+	    && ((end + 1) % info->align == 0) && (begin % 4 != 0)
+	    && (end + 1 - begin < info->align)))
+	wr_message_padding_0 (info->category, &WHERE (info->section, NULL),
+			      begin, end);
+    }
   else
     /* XXX: This actually lies when the unreferenced portion is
        composed of sequences of zeroes and non-zeroes.  */
@@ -1771,7 +1784,7 @@ check_global_die_references (struct cu *cu_chain)
 	    retval = false;
 	  }
 	else if (ref_cu == it)
-	  wr_message (mc_impact_2 | mc_acc_suboptimal | mc_die_rel_ref,
+	  wr_message (mc_impact_2 | mc_acc_suboptimal | mc_die_rel,
 		      &ref->who,
 		      ": local reference to " PRI_DIE " formed as global.\n",
 		      ref->addr);
@@ -1810,9 +1823,9 @@ read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 }
 
 static bool
-wr_check_zero_padding (struct read_ctx *ctx,
-		       enum message_category category,
-		       struct where *wh)
+check_zero_padding (struct read_ctx *ctx,
+		    enum message_category category,
+		    struct where *wh)
 {
   assert (ctx->ptr != ctx->end);
   const unsigned char *save_ptr = ctx->ptr;
@@ -1889,7 +1902,7 @@ check_debug_info_structural (struct read_ctx *ctx,
       /* Reading CU header is a bit tricky, because we don't know if
 	 we have run into (superfluous but allowed) zero padding.  */
       if (!read_ctx_need_data (ctx, 4)
-	  && wr_check_zero_padding (ctx, mc_die_other, &where))
+	  && check_zero_padding (ctx, mc_die_other, &where))
 	break;
 
       /* CU length.  */
@@ -1899,7 +1912,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	  success = false;
 	  break;
 	}
-      if (size32 == 0 && wr_check_zero_padding (ctx, mc_die_other, &where))
+      if (size32 == 0 && check_zero_padding (ctx, mc_die_other, &where))
 	break;
 
       if (!read_size_extra (ctx, size32, &size, &dwarf_64, &where))
@@ -1954,7 +1967,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	      break;
 	    }
 	  if (cu_ctx.ptr != cu_ctx.end
-	      && !wr_check_zero_padding (&cu_ctx, mc_die_other, &where))
+	      && !check_zero_padding (&cu_ctx, mc_die_other, &where))
 	    wr_message_padding_n0 (mc_die_other, &where,
 				   read_ctx_get_offset (ctx), size);
 	}
@@ -1968,9 +1981,9 @@ check_debug_info_structural (struct read_ctx *ctx,
 		&WHERE (sec_info, NULL),
 		": CU lengths don't exactly match Elf_Data contents.");
 
+  int address_size = 0;
   if (cu_chain != NULL)
     {
-      int address_size = 0;
       uint64_t offset = 0;
       for (struct cu *it = cu_chain; it != NULL; it = it->next)
 	if (address_size == 0)
@@ -1983,6 +1996,7 @@ check_debug_info_structural (struct read_ctx *ctx,
 	    wr_message (mc_info, &it->where,
 			": has different address size than CU 0x%"
 			PRIx64 ".\n", offset);
+	    address_size = 0;
 	    break;
 	  }
     }
@@ -1995,7 +2009,7 @@ check_debug_info_structural (struct read_ctx *ctx,
       if (success)
 	coverage_find_holes (strings_coverage, found_hole,
 			     &((struct hole_info)
-			       {sec_str, mc_strings, strings->d_buf}));
+			       {sec_str, mc_strings, 0, strings->d_buf}));
       coverage_free (strings_coverage);
     }
 
@@ -2004,7 +2018,8 @@ check_debug_info_structural (struct read_ctx *ctx,
       if (success)
 	coverage_find_holes (loc_coverage, found_hole,
 			     &((struct hole_info)
-			       {sec_loc, mc_loc, loc->d_buf}));
+			       {sec_loc, mc_loc, address_size,
+				loc->d_buf}));
       coverage_free (loc_coverage);
     }
 
@@ -2013,7 +2028,8 @@ check_debug_info_structural (struct read_ctx *ctx,
       if (success)
 	coverage_find_holes (ranges_coverage, found_hole,
 			     &((struct hole_info)
-			       {sec_ranges, mc_ranges, ranges->d_buf}));
+			       {sec_ranges, mc_ranges, address_size,
+				ranges->d_buf}));
       coverage_free (ranges_coverage);
     }
 
@@ -2114,24 +2130,24 @@ check_loc_or_range_ref (struct read_ctx *ctx,
       return false;
     }
 
+  bool retval = true;
+
   if (coverage_is_covered (coverage, addr))
     {
       if (!addr_record_has_addr (addrs, addr))
 	{
-	  /* XXX do it like everywhere else, using addr_records and
-	     ref_records..  */
 	  wr_error (wh, ": reference to 0x%" PRIx64
 		    " points at the middle of location list.\n", addr);
-	  return false;
+	  retval = false;
 	}
-      return true;
+      else
+	return true;
     }
   else
     addr_record_add (addrs, addr);
 
   uint64_t escape = addr_64 ? (uint64_t)-1 : (uint64_t)(uint32_t)-1;
 
-  bool retval = true;
   bool overlap = false;
   uint64_t base = cu->base;
   while (!read_ctx_eof (ctx))
@@ -2275,7 +2291,7 @@ read_die_chain (struct read_ctx *ctx,
       uint64_t abbr_code;
 
       prev_die_off = die_off;
-      if (!wr_checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
+      if (!checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
 	return -1;
 
       /* Check sibling value advertised last time through the loop.  */
@@ -2294,7 +2310,7 @@ read_die_chain (struct read_ctx *ctx,
 	/* Even if it has children, the DIE can't have a sibling
 	   attribute if it's the last DIE in chain.  That's the reason
 	   we can't simply check this when loading abbrevs.  */
-	wr_message (mc_die_rel_sib | mc_acc_suboptimal | mc_impact_4, &where,
+	wr_message (mc_die_rel | mc_acc_suboptimal | mc_impact_4, &where,
 		    ": This DIE had children, but no DW_AT_sibling attribute.\n");
 
       /* The section ended.  */
@@ -2357,8 +2373,8 @@ read_die_chain (struct read_ctx *ctx,
 	  if (indirect)
 	    {
 	      uint64_t value;
-	      if (!wr_checked_read_uleb128 (ctx, &value, &where,
-					    "indirect attribute form"))
+	      if (!checked_read_uleb128 (ctx, &value, &where,
+					 "indirect attribute form"))
 		return -1;
 
 	      if (!attrib_form_valid (value))
@@ -2373,7 +2389,7 @@ read_die_chain (struct read_ctx *ctx,
 		switch (check_sibling_form (form))
 		  {
 		  case -1:
-		    wr_message (mc_die_rel_sib | mc_impact_2, &where,
+		    wr_message (mc_die_rel | mc_impact_2, &where,
 				": DW_AT_sibling attribute with (indirect) form DW_FORM_ref_addr.\n");
 		    break;
 
@@ -2500,8 +2516,8 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_ref_udata:
 	      {
 		uint64_t value;
-		if (!wr_checked_read_uleb128 (ctx, &value, &where,
-					      "attribute value"))
+		if (!checked_read_uleb128 (ctx, &value, &where,
+					   "attribute value"))
 		  return -1;
 
 		if (it->name == DW_AT_sibling)
@@ -2625,8 +2641,8 @@ read_die_chain (struct read_ctx *ctx,
 	      process_DW_FORM_block:
 		if (width == 0)
 		  {
-		    if (!wr_checked_read_uleb128 (ctx, &length, &where,
-						  "attribute value"))
+		    if (!checked_read_uleb128 (ctx, &length, &where,
+					       "attribute value"))
 		      return -1;
 		  }
 		else if (!read_ctx_read_var (ctx, width, &length))
@@ -2673,7 +2689,7 @@ read_die_chain (struct read_ctx *ctx,
 	  if (st == -1)
 	    return -1;
 	  else if (st == 0)
-	    wr_message (mc_impact_3 | mc_acc_suboptimal | mc_die_rel_child,
+	    wr_message (mc_impact_3 | mc_acc_suboptimal | mc_die_rel,
 			&where,
 			": Abbrev has_children, but the chain was empty.\n");
 	}
@@ -2754,7 +2770,7 @@ check_cu_structural (struct read_ctx *ctx,
   if (address_size != 4 && address_size != 8)
     {
       wr_error (&cu->where,
-		": Invalid address size: %d (only 4 or 8 allowed).\n",
+		": invalid address size: %d (only 4 or 8 allowed).\n",
 		address_size);
       return false;
     }
@@ -2768,7 +2784,7 @@ check_cu_structural (struct read_ctx *ctx,
   if (abbrevs == NULL)
     {
       wr_error (&cu->where,
-		": Couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
+		": couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
 		abbrev_offset);
       return false;
     }
@@ -2787,7 +2803,7 @@ check_cu_structural (struct read_ctx *ctx,
       for (size_t i = 0; i < abbrevs->size; ++i)
 	if (!abbrevs->abbr[i].used)
 	  wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs, &cu->where,
-		      ": Abbreviation with code %" PRIu64 " is never used.\n",
+		      ": abbreviation with code %" PRIu64 " is never used.\n",
 		      abbrevs->abbr[i].code);
 
       if (!check_die_references (cu, &die_loc_refs))
@@ -2958,8 +2974,8 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
-	  && !wr_check_zero_padding (&sub_ctx, mc_pubtables,
-				     &WHERE (where.section, NULL)))
+	  && !check_zero_padding (&sub_ctx, mc_pubtables,
+				  &WHERE (where.section, NULL)))
 	{
 	  wr_message_padding_n0 (mc_pubtables | mc_error,
 				 &WHERE (where.section, NULL),
@@ -3102,7 +3118,7 @@ check_pub_structural (struct read_ctx *ctx, struct cu *cu_chain,
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
-	  && !wr_check_zero_padding (&sub_ctx, mc_pubtables, &WHERE (sec, NULL)))
+	  && !check_zero_padding (&sub_ctx, mc_pubtables, &WHERE (sec, NULL)))
 	{
 	  wr_message_padding_n0 (mc_pubtables | mc_error, &WHERE (sec, NULL),
 				 read_ctx_get_offset (&sub_ctx), size);
