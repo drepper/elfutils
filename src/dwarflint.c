@@ -673,7 +673,7 @@ static const char *where_fmt (struct where *wh, char *ptr)
 		    "DIE", "%#"PRIx64, NULL, NULL},
 
       [sec_abbrev] = {".debug_abbrev", "section", "%"PRId64,
-		      "abbreviation", "%"PRId64, "attribute", "%#"PRIx64},
+		      "abbreviation", "%"PRId64, "abbr. attribute", "%#"PRIx64},
 
       [sec_aranges] = {".debug_aranges", "table", "%"PRId64,
 		       "arange", "%#"PRIx64, NULL, NULL},
@@ -1893,6 +1893,7 @@ check_debug_info_structural (struct read_ctx *ctx,
       cur->offset = where.addr1;
       cur->next = cu_chain;
       cur->where = where;
+      cur->base = (uint64_t)-1;
       cu_chain = cur;
 
       uint32_t size32;
@@ -2117,27 +2118,32 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 			uint64_t addr,
 			bool addr_64,
 			struct where *wh,
-			bool contains_locations)
+			unsigned cat,
+			enum section_id sec)
 {
+  assert (sec == sec_loc || sec == sec_ranges);
+  assert (cat == mc_loc || cat == mc_ranges);
+
   if (coverage == NULL)
     return true;
 
   if (!read_ctx_skip (ctx, addr))
     {
-      wr_error (wh, ": invalid reference outside .debug_loc "
+      wr_error (wh, ": invalid reference outside the section "
 		"0x%" PRIx64 ", size only 0x%" PRIx64 ".\n",
 		addr, ctx->end - ctx->begin);
       return false;
     }
 
   bool retval = true;
+  bool contains_locations = sec == sec_loc;
 
   if (coverage_is_covered (coverage, addr))
     {
       if (!addr_record_has_addr (addrs, addr))
 	{
 	  wr_error (wh, ": reference to 0x%" PRIx64
-		    " points at the middle of location list.\n", addr);
+		    " points at the middle of location or range list.\n", addr);
 	  retval = false;
 	}
       else
@@ -2152,7 +2158,7 @@ check_loc_or_range_ref (struct read_ctx *ctx,
   uint64_t base = cu->base;
   while (!read_ctx_eof (ctx))
     {
-      struct where where = WHERE (sec_loc, wh);
+      struct where where = WHERE (sec, wh);
       where_reset_1 (&where, read_ctx_get_offset (ctx));
 
 #define HAVE_OVERLAP						\
@@ -2194,6 +2200,16 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 
       if (!done && begin_addr != escape)
 	{
+	  if (end_addr < begin_addr)
+	    wr_message (cat | mc_error, &where,
+			": has negative range 0x%" PRIx64 "..0x%" PRIx64 ".\n",
+			begin_addr, end_addr);
+	  else if (begin_addr == end_addr)
+	    /* 2.6.6: A location list entry [...] whose beginning
+	       and ending addresses are equal has no effect.  */
+	    wr_message (cat | mc_acc_bloat | mc_impact_3, &where,
+			": entry covers no range.\n");
+
 	  if (contains_locations)
 	    {
 	      /* location expression length */
@@ -2234,9 +2250,9 @@ check_loc_or_range_ref (struct read_ctx *ctx,
       else if (!done)
 	{
 	  if (end_addr == base)
-	    wr_message (mc_loc | mc_acc_bloat | mc_impact_3, &where,
-			": duplicate base address selection %#" PRIx64 ".\n",
-			base);
+	    wr_message (cat | mc_acc_bloat | mc_impact_3, &where,
+			": base address selection doesn't change base address"
+			" (%#" PRIx64 ").\n", base);
 	  else
 	    base = end_addr;
 	}
@@ -2576,8 +2592,9 @@ read_die_chain (struct read_ctx *ctx,
 		    struct read_ctx sub_ctx;
 		    read_ctx_init (&sub_ctx, ctx->dbg, d);
 		    check_loc_or_range_ref (&sub_ctx, cu, cov,
-					    rec, value, addr_64,
-					    &where, check_locptr);
+					    rec, value, addr_64, &where,
+					    check_locptr ? mc_loc : mc_ranges,
+					    check_locptr ? sec_loc : sec_ranges);
 		  }
 		else if (it->form == DW_FORM_ref4)
 		  record_ref (value, &where, true);
@@ -2604,8 +2621,9 @@ read_die_chain (struct read_ctx *ctx,
 		    struct read_ctx sub_ctx;
 		    read_ctx_init (&sub_ctx, ctx->dbg, d);
 		    check_loc_or_range_ref (&sub_ctx, cu, cov,
-					    rec, value, addr_64,
-					    &where, check_locptr);
+					    rec, value, addr_64, &where,
+					    check_locptr ? mc_loc : mc_ranges,
+					    check_locptr ? sec_loc : sec_ranges);
 		  }
 		else if (it->form == DW_FORM_ref8)
 		  record_ref (value, &where, true);
