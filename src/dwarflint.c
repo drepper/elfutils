@@ -2118,7 +2118,7 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 			uint64_t addr,
 			bool addr_64,
 			struct where *wh,
-			unsigned cat,
+			enum message_category cat,
 			enum section_id sec)
 {
   assert (sec == sec_loc || sec == sec_ranges);
@@ -2594,13 +2594,22 @@ read_die_chain (struct read_ctx *ctx,
 		      = check_locptr ? loc_coverage : ranges_coverage;
 		    struct addr_record *rec
 		      = check_locptr ? loc_addrs : ranges_addrs;
+		    enum message_category cat
+		      = check_locptr ? mc_loc : mc_ranges;
+		    enum section_id sec_id
+		      = check_locptr ? sec_loc : sec_ranges;
+
+		    if (check_rangeptr && (value % cu->address_size != 0))
+		      wr_message (mc_ranges | mc_impact_4, &where,
+				  ": rangeptr value %#" PRIx32
+				  " not aligned to CU address size.\n",
+				  value);
 
 		    struct read_ctx sub_ctx;
 		    read_ctx_init (&sub_ctx, ctx->dbg, d);
 		    check_loc_or_range_ref (&sub_ctx, cu, cov,
 					    rec, value, addr_64, &where,
-					    check_locptr ? mc_loc : mc_ranges,
-					    check_locptr ? sec_loc : sec_ranges);
+					    cat, sec_id);
 		  }
 		else if (it->form == DW_FORM_ref4)
 		  record_ref (value, &where, true);
@@ -2623,13 +2632,22 @@ read_die_chain (struct read_ctx *ctx,
 		      = check_locptr ? loc_coverage : ranges_coverage;
 		    struct addr_record *rec
 		      = check_locptr ? loc_addrs : ranges_addrs;
+		    enum message_category cat
+		      = check_locptr ? mc_loc : mc_ranges;
+		    enum section_id sec_id
+		      = check_locptr ? sec_loc : sec_ranges;
+
+		    if (check_rangeptr && (value % cu->address_size != 0))
+		      wr_message (mc_ranges | mc_impact_4, &where,
+				  ": rangeptr value %#" PRIx64
+				  " not aligned to CU address size.\n",
+				  value);
 
 		    struct read_ctx sub_ctx;
 		    read_ctx_init (&sub_ctx, ctx->dbg, d);
 		    check_loc_or_range_ref (&sub_ctx, cu, cov,
 					    rec, value, addr_64, &where,
-					    check_locptr ? mc_loc : mc_ranges,
-					    check_locptr ? sec_loc : sec_ranges);
+					    cat, sec_id);
 		  }
 		else if (it->form == DW_FORM_ref8)
 		  record_ref (value, &where, true);
