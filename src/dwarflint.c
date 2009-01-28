@@ -722,7 +722,7 @@ static const char *where_fmt (struct where *wh, char *ptr)
   char *addr##N##s;							\
   if (wh->addr##N == (uint64_t)-1)					\
     addr##N##s = NULL;							\
-  else if (x_asprintf (&addr##N##s, inf->addr##N##f, wh->addr##N) < 0) \
+  else if (x_asprintf (&addr##N##s, inf->addr##N##f, wh->addr##N) < 0)	\
     addr##N##s = "(fmt error)"
 
   SETUP_ADDR (1);
@@ -2200,6 +2200,12 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 
       if (!done && begin_addr != escape)
 	{
+	  if (base == (uint64_t)-1)
+	    {
+	      wr_error (&where, ": address range with no base address set.\n");
+	      base = (uint64_t)-2; /* Only report once.  */
+	    }
+
 	  if (end_addr < begin_addr)
 	    wr_message (cat | mc_error, &where,
 			": has negative range 0x%" PRIx64 "..0x%" PRIx64 ".\n",
