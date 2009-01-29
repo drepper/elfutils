@@ -471,7 +471,7 @@ static bool read_ctx_init_sub (struct read_ctx *ctx,
 			       struct read_ctx *parent,
 			       const unsigned char *begin,
 			       const unsigned char *end);
-static off64_t read_ctx_get_offset (struct read_ctx *ctx);
+static uint64_t read_ctx_get_offset (struct read_ctx *ctx);
 static bool read_ctx_need_data (struct read_ctx *ctx, size_t length);
 static bool read_ctx_read_ubyte (struct read_ctx *ctx, unsigned char *ret);
 static int read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret);
@@ -693,8 +693,8 @@ static const char *where_fmt (struct where *wh, char *ptr)
       [sec_locexpr] = {"location expression", "offset", "%#"PRIx64,
 		       NULL, NULL, NULL, NULL},
 
-      [sec_ranges] = {".debug_ranges", NULL, NULL, /* XXX fill me */
-		      NULL, NULL, NULL, NULL}
+      [sec_ranges] = {".debug_ranges", "rangelist", "%#"PRIx64,
+		      "offset", "%#"PRIx64, NULL, NULL}
     };
 
   assert (wh->section < sizeof (section_names) / sizeof (*section_names));
@@ -921,10 +921,11 @@ read_ctx_init_sub (struct read_ctx *ctx, struct read_ctx *parent,
   return true;
 }
 
-static off64_t
+static uint64_t
 read_ctx_get_offset (struct read_ctx *ctx)
 {
-  return ctx->ptr - ctx->begin;
+  assert (ctx->ptr >= ctx->begin);
+  return (uint64_t)(ctx->ptr - ctx->begin);
 }
 
 static bool
@@ -2071,15 +2072,24 @@ get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
 static void
 check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 {
+  struct ref_record oprefs;
+  memset (&oprefs, 0, sizeof (oprefs));
+
+  struct addr_record opaddrs;
+  memset (&opaddrs, 0, sizeof (opaddrs));
+
   while (!read_ctx_eof (ctx))
     {
       struct where where = WHERE (sec_locexpr, wh);
-      where_reset_1 (&where, read_ctx_get_offset (ctx));
+      uint64_t opcode_off = read_ctx_get_offset (ctx);
+      where_reset_1 (&where, opcode_off);
+      addr_record_add (&opaddrs, opcode_off);
+
       uint8_t opcode;
       if (!read_ctx_read_ubyte (ctx, &opcode))
 	{
 	  wr_error (&where, ": can't read opcode.\n");
-	  return;
+	  break;
 	}
 
       uint8_t op1, op2;
@@ -2087,27 +2097,84 @@ check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 	{
 	  wr_error (&where, ": can't decode opcode \"%s\".\n",
 		    dwarf_locexpr_opcode_string (opcode));
-	  return;
+	  break;
 	}
 
-#define READ_FORM(OP, STR)						\
+#define READ_FORM(OP, STR, PTR)						\
       do {								\
 	if (OP != 0							\
 	    && !read_ctx_read_form (ctx, addr_64, (OP),			\
-				    NULL, &where, STR " operand"))	\
+				    PTR, &where, STR " operand"))	\
 	  {								\
 	    wr_error (&where, ": opcode \"%s\""				\
 		      ": can't read " STR " operand (form \"%s\").\n",	\
 		      dwarf_locexpr_opcode_string (opcode),		\
 		      dwarf_form_string ((OP)));			\
-	    return;							\
+	    goto out;							\
 	  }								\
       } while (0)
 
-      READ_FORM (op1, "1st");
-      READ_FORM (op2, "2nd");
+      uint64_t value1, value2;
+      READ_FORM (op1, "1st", &value1);
+      READ_FORM (op2, "2st", &value2);
 #undef READ_FORM
+
+      switch (opcode)
+	{
+	case DW_OP_bra:
+	case DW_OP_skip:
+	  {
+	    int16_t skip = (uint16_t)value1;
+
+	    if (skip == 0)
+	      wr_message (mc_loc | mc_acc_bloat | mc_impact_3, &where,
+			  ": %s with skip 0.\n",
+			  dwarf_locexpr_opcode_string (opcode));
+	    else if (skip > 0 && !read_ctx_need_data (ctx, (size_t)skip))
+	      wr_error (&where, ": %s branches out of location expression.\n",
+			dwarf_locexpr_opcode_string (opcode));
+	    /* Compare with the offset after the two-byte skip value.  */
+	    else if (skip < 0 && ((uint64_t)-skip) > read_ctx_get_offset (ctx))
+	      wr_error (&where,
+			": %s branches before the beginning of location expression.\n",
+			dwarf_locexpr_opcode_string (opcode));
+	    else
+	      ref_record_add (&oprefs, opcode_off + skip, &where);
+
+	    break;
+	  }
+
+	case DW_OP_const8u:
+	case DW_OP_const8s:
+	  if (!addr_64)
+	    wr_error (&where, ": %s on 32-bit machine.\n",
+		      dwarf_locexpr_opcode_string (opcode));
+	  break;
+
+	default:
+	  if (!addr_64
+	      && (opcode == DW_OP_constu
+		  || opcode == DW_OP_consts
+		  || opcode == DW_OP_deref_size
+		  || opcode == DW_OP_plus_uconst)
+	      && (value1 > (uint64_t)(uint32_t)-1))
+	    wr_error (&where, ": %s with operand %#" PRIx64 " on 32-bit machine.\n",
+		      dwarf_locexpr_opcode_string (opcode), value1);
+	};
     }
+
+ out:
+  for (size_t i = 0; i < oprefs.size; ++i)
+    {
+      struct ref *ref = oprefs.refs + i;
+      if (!addr_record_has_addr (&opaddrs, ref->addr))
+	wr_error (&ref->who,
+		  ": unresolved reference to opcode at %#" PRIx64 ".\n",
+		  ref->addr);
+    }
+
+  addr_record_free (&opaddrs);
+  ref_record_free (&oprefs);
 }
 
 static bool
@@ -2130,7 +2197,7 @@ check_loc_or_range_ref (struct read_ctx *ctx,
   if (!read_ctx_skip (ctx, addr))
     {
       wr_error (wh, ": invalid reference outside the section "
-		"0x%" PRIx64 ", size only 0x%" PRIx64 ".\n",
+		"%#" PRIx64 ", size only %#tx.\n",
 		addr, ctx->end - ctx->begin);
       return false;
     }
