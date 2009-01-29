@@ -2130,7 +2130,7 @@ check_loc_or_range_ref (struct read_ctx *ctx,
   if (!read_ctx_skip (ctx, addr))
     {
       wr_error (wh, ": invalid reference outside the section "
-		"0x%" PRIx64 ", size only 0x%" PRIx64 ".\n",
+		"%#" PRIx64 ", size only %#tx.\n",
 		addr, ctx->end - ctx->begin);
       return false;
     }

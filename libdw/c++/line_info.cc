@@ -125,7 +125,7 @@ dwarf::source_file::name () const
     return dwarf_formstring (thisattr ());
 
   Dwarf_Files *files;
-  size_t idx;
+  Dwarf_Word idx;
   xif (get_files (thisattr (), &files, &idx));
 
   const char *result = dwarf_filesrc (files, idx, NULL, NULL);
@@ -146,7 +146,7 @@ dwarf::source_file::to_string () const
     return plain_string (dwarf_formstring (thisattr ()));
 
   Dwarf_Files *files;
-  size_t idx;
+  Dwarf_Word idx;
   xif (get_files (thisattr (), &files, &idx));
 
   Dwarf_Word file_mtime;
