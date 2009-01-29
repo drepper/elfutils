@@ -1,5 +1,11 @@
 2009-01-28  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf: Add line table support.
+	* c++/values.cc: New file.
+	* c++/line_info.cc: New file.
+	* c++/subr.hh: New file.
+	* Makefile.am (pkginclude_HEADERS): Add it.
+
 	* libdwP.h (struct Dwarf_Line_s): Move out of struct Dwarf_Lines_s
 	defn so C++ doesn't scope the name to not match the Dwarf_Line typedef.
 

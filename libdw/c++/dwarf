@@ -52,8 +52,8 @@
 
 #include "libdw.h"
 #include "dwarf.h"
+#include "subr.hh"
 #include <stdexcept>
-#include <iterator>
 
 #include <cstring>
 #include <iostream>
@@ -375,6 +375,11 @@ namespace elfutils
     class location_attr;
     class range_list;
     class ranges;
+    class line_info_table;
+    class directory_table;
+    class file_table;
+    class line_table;
+    class line_entry;
 
     class debug_info_entry
     {
@@ -888,6 +893,23 @@ namespace elfutils
       inline compile_unit (const debug_info_entry &die)
 	: debug_info_entry (die) {}
 
+      // Fetch the CU's DW_AT_stmt_list.
+      const line_info_table line_info () const;
+
+      // Convenience methods for line_info_table sub-containers.
+      inline const directory_table include_directories () const
+      {
+	return line_info ().include_directories ();
+      }
+      const file_table files () const
+      {
+	return line_info ().files ();
+      }
+      const line_table lines () const
+      {
+	return line_info ().lines ();
+      }
+
       /*
 	containers/iterators:
 
@@ -931,6 +953,8 @@ namespace elfutils
     class source_file
     {
       friend class attr_value;
+      friend class file_table;
+      friend class line_entry;
     private:
       ::Dwarf_Attribute _m_attr;
       inline ::Dwarf_Attribute *thisattr () const
@@ -1029,7 +1053,8 @@ namespace elfutils
 	return range_list (*this);
       }
 
-      // XXX lineptr
+      const line_info_table line_info () const;
+
       // XXX macptr
 
       template<typename value>
@@ -1050,7 +1075,9 @@ namespace elfutils
 	    case VS_rangelistptr:
 	      return ranges () == other.ranges ();
 
-	    case VS_lineptr:	// XXX punt for now, treat as constant
+	    case VS_lineptr:
+	      return line_info () == other.line_info ();
+
 	    case VS_macptr:	// XXX punt for now, treat as constant
 	      /*FALLTHRU*/
 	    case VS_constant:
@@ -1239,6 +1266,310 @@ namespace elfutils
       }
       template<typename ranges>
       inline bool operator!= (const ranges &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    // This describes a CU's directory table, a simple array of strings.
+    class directory_table
+    {
+    private:
+      ::Dwarf_Files *_m_files;
+
+      template<typename string>
+      struct name_equal
+	: public std::binary_function<const char *, string, bool>
+      {
+	bool operator () (const char *me, const string &you)
+	{
+	  return you == me;
+	}
+      };
+      template<typename table>
+      inline bool table_equal (const table &other) const
+      {
+	/* We ignore the first element, the compilation directory.
+	   This is not encoded in the .debug_line table, but in
+	   the DW_AT_comp_dir attribute of the referring CU.
+	   The directory table itself matches regardless.  */
+	const_iterator i = begin ();
+	typename table::const_iterator j = other.begin ();
+	return std::equal (++i, end (), ++j,
+			   name_equal<typename table::value_type> ());
+      }
+
+    public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      typedef const char *value_type;
+
+      inline directory_table (::Dwarf_Files *const files)
+	: _m_files (files) {}
+      inline directory_table (const directory_table &t)
+	: _m_files (t._m_files) {}
+
+      typedef const char *const *const_iterator;
+
+      inline bool empty () const
+      {
+	return size () == 0;
+      }
+
+      size_t size () const;
+      const_iterator begin () const;
+      const_iterator end () const;
+
+      template<typename table>
+      inline bool operator== (const table &other) const
+      {
+	return table_equal (other);
+      }
+      template<typename table>
+      inline bool operator!= (const table &other) const
+      {
+	return !(*this == other);
+      }
+      // Short-circuit for comparing to self.
+      inline bool operator== (const directory_table &other) const
+      {
+	return _m_files == other._m_files || table_equal (other);
+      }
+    };
+
+    /* This describes a CU's file table.  It works like a read-only
+       std::vector<source_file>, and also supports lookup by name.  */
+    class file_table
+    {
+    private:
+      ::Dwarf_Files *_m_files;
+
+    public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      typedef source_file value_type;
+
+      inline file_table (::Dwarf_Files *const files)
+	: _m_files (files) {}
+      inline file_table (const file_table &t)
+	: _m_files (t._m_files) {}
+
+      inline file_table &operator= (const file_table &t)
+      {
+	_m_files = t._m_files;
+	return *this;
+      }
+
+      typedef subr::indexed_iterator<file_table> const_iterator;
+
+      inline bool empty () const
+      {
+	return size () == 0;
+      }
+
+      size_t size () const;
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (*this, 0);
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator (*this, size ());
+      }
+
+      const source_file at (size_t idx) const;
+      const source_file operator[] (size_t idx) const
+      {
+	return at (idx);
+      }
+
+      // Look up by matching file name.
+      const_iterator find (const source_file &) const;
+      const_iterator find (const char *filename) const
+      {
+	const_iterator i = begin ();
+	while (i != end () && strcmp ((*i).name (), filename) != 0)
+	  ++i;
+	return i;
+      }
+      template<typename string>
+      const_iterator find (const string &filename) const
+      {
+	const_iterator i = begin ();
+	while (i != end () && filename != (*i).name ())
+	  ++i;
+	return i;
+      }
+    };
+
+    class line_entry
+    {
+    private:
+      ::Dwarf_Line *_m_line;
+
+    public:
+      line_entry (::Dwarf_Line *entry) : _m_line (entry) {}
+      line_entry (const line_entry &entry) : _m_line (entry._m_line) {}
+
+      // XXX reloc, dwfl
+      ::Dwarf_Addr address () const;
+
+      bool statement () const;
+      bool basic_block () const;
+      bool end_sequence () const;
+      bool prologue_end () const;
+      bool epilogue_begin () const;
+
+      const source_file file () const;
+      unsigned int line () const;
+      unsigned int column () const;
+
+      template<typename entry>
+      bool operator< (const entry &other) const
+      {
+	return address () < other.address ();
+      }
+      template<typename entry>
+      bool operator> (const entry &other) const
+      {
+	return address () > other.address ();
+      }
+      template<typename entry>
+      bool operator<= (const entry &other) const
+      {
+	return address () <= other.address ();
+      }
+      template<typename entry>
+      bool operator>= (const entry &other) const
+      {
+	return address () >= other.address ();
+      }
+
+      template<typename entry>
+      inline bool operator== (const entry &other) const
+      {
+	return (address () == other.address ()
+		&& line () == other.line ()
+		&& column () == other.column ()
+		&& statement () == other.statement ()
+		&& basic_block () == other.basic_block ()
+		&& end_sequence () == other.end_sequence ()
+		&& prologue_end () == other.prologue_end ()
+		&& epilogue_begin () == other.epilogue_begin ()
+		&& file () == other.file ());
+      }
+      template<typename entry>
+      inline bool operator!= (const entry &other) const
+      {
+	return !(*this == other);
+      }
+      // Short-circuit for our own type.
+      bool operator== (const line_entry &other) const;
+    };
+
+    class line_table
+    {
+    private:
+      ::Dwarf_Lines *_m_lines;
+
+    public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      typedef line_entry value_type;
+
+      inline line_table (::Dwarf_Lines *const lines)
+	: _m_lines (lines) {}
+      inline line_table (const line_table &t)
+	: _m_lines (t._m_lines) {}
+
+      inline line_table &operator= (const line_table &t)
+      {
+	_m_lines = t._m_lines;
+	return *this;
+      }
+
+      typedef subr::indexed_iterator<line_table> const_iterator;
+
+      inline bool empty () const
+      {
+	return size () == 0;
+      }
+
+      size_t size () const;
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (*this, 0);
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator (*this, size ());
+      }
+
+      const line_entry at (size_t idx) const;
+      const line_entry operator[] (size_t idx) const
+      {
+	return at (idx);
+      }
+
+      template<typename table>
+      inline bool operator== (const table &other) const
+      {
+	return std::equal (begin (), end (), other.begin ());
+      }
+      template<typename table>
+      inline bool operator!= (const table &other) const
+      {
+	return !(*this == other);
+      }
+      // Short-circuit for comparing to self.
+      inline bool operator== (const line_table &other) const
+      {
+	return (_m_lines == other._m_lines
+		|| std::equal (begin (), end (), other.begin ()));
+      }
+
+      // Look up by matching address.
+      const_iterator find (::Dwarf_Addr) const;
+    };
+
+    // The DW_AT_stmt_list attribute yields a line info table.
+    class line_info_table
+    {
+    private:
+      ::Dwarf_Files *_m_files;
+
+    public:
+      inline line_info_table (::Dwarf_Files *const t)
+	: _m_files (t) {}
+      inline line_info_table (const line_info_table &t)
+	: _m_files (t._m_files) {}
+
+      inline line_info_table &operator= (const line_info_table &t)
+      {
+	_m_files = t._m_files;
+	return *this;
+      }
+
+      const directory_table include_directories () const
+      {
+	return directory_table (_m_files);
+      }
+      const file_table files () const
+      {
+	return file_table (_m_files);
+      }
+      const line_table lines () const;
+
+      template<typename table>
+      inline bool operator== (const table &other) const
+      {
+	return (include_directories () == other.include_directories ()
+		&& lines () == other.lines ());
+      }
+      template<typename table>
+      inline bool operator!= (const table &other) const
       {
 	return !(*this == other);
       }
@@ -1677,6 +2008,17 @@ namespace elfutils
 	    i = set.insert (joined).first;
 	  }
       }
+  };
+
+  // Explicit specialization used inside dwarf::directory_table::operator==.
+  template<>
+  struct dwarf::directory_table::name_equal<const char *>
+    : public std::binary_function<const char *, const char *, bool>
+  {
+    bool operator () (const char *me, const char *you)
+    {
+      return !strcmp (me, you);
+    }
   };
 
   inline class dwarf::debug_info_entry::raw_children

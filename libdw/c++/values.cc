@@ -48,6 +48,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include <config.h>
+#include <cassert>
 #include "dwarf"
 
 extern "C"
@@ -294,110 +295,6 @@ dwarf::attr_value::constant_block () const
   const uint8_t *const begin = reinterpret_cast<const uint8_t *> (block.data);
   const uint8_t *const end = begin + block.length;
   return const_vector<uint8_t> (begin, end);
-}
-
-// dwarf::source_file
-
-const class dwarf::source_file
-dwarf::attr_value::source_file () const
-{
-  switch (what_space ())
-    {
-    case VS_string:
-    case VS_source_file:
-      break;
-    default:
-      throw std::runtime_error ("XXX not a file name");
-    }
-  return source_file::source_file (_m_attr);
-}
-
-static bool
-stringform (Dwarf_Attribute *attr)
-{
-  switch (dwarf_whatform (attr))
-    {
-    case DW_FORM_string:
-    case DW_FORM_strp:
-      return true;
-    }
-  return false;
-}
-
-static bool
-get_files (Dwarf_Attribute *attr, Dwarf_Files **files, Dwarf_Word *idx)
-{
-  CUDIE (cudie, attr->cu);
-  return (dwarf_formudata (attr, idx) < 0
-	  || dwarf_getsrcfiles (&cudie, files, NULL) < 0);
-}
-
-Dwarf_Word
-dwarf::source_file::mtime () const
-{
-  if (stringform (thisattr ()))
-    return 0;
-
-  Dwarf_Files *files;
-  Dwarf_Word idx;
-  xif (get_files (thisattr (), &files, &idx));
-
-  Dwarf_Word result;
-  xif (dwarf_filesrc (files, idx, &result, NULL) == NULL);
-  return result;
-}
-
-Dwarf_Word
-dwarf::source_file::size () const
-{
-  if (stringform (thisattr ()))
-    return 0;
-
-  Dwarf_Files *files;
-  Dwarf_Word idx;
-  xif (get_files (thisattr (), &files, &idx));
-
-  Dwarf_Word result;
-  xif (dwarf_filesrc (files, idx, NULL, &result) == NULL);
-  return result;
-}
-
-const char *
-dwarf::source_file::name () const
-{
-  if (stringform (thisattr ()))
-    return dwarf_formstring (thisattr ());
-
-  Dwarf_Files *files;
-  size_t idx;
-  xif (get_files (thisattr (), &files, &idx));
-
-  const char *result = dwarf_filesrc (files, idx, NULL, NULL);
-  xif (result == NULL);
-  return result;
-}
-
-string
-dwarf::source_file::to_string () const
-{
-  if (stringform (thisattr ()))
-    return plain_string (dwarf_formstring (thisattr ()));
-
-  Dwarf_Files *files;
-  size_t idx;
-  xif (get_files (thisattr (), &files, &idx));
-
-  Dwarf_Word file_mtime;
-  Dwarf_Word file_size;
-  const char *result = dwarf_filesrc (files, idx, &file_mtime, &file_size);
-  xif (result == NULL);
-
-  if (likely (file_mtime == 0) && likely (file_size == 0))
-    return plain_string (result);
-
-  std::ostringstream os;
-  os << "{\"" << result << "," << file_mtime << "," << file_size << "}";
-  return os.str ();
 }
 
 // dwarf::location_attr

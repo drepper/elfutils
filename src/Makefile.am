@@ -81,9 +81,12 @@ ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 
 libar_a_SOURCES = arlib.c arlib2.c
 
-dwarfcmp_SOURCES = dwarfcmp.cc
 # XXX need to figure out C++ dso crapola
-dwarfcmp_SOURCES += ../libdw/c++/values.cc ../libdw/c++/known.cc
+libdwplusplus_SOURCES = ../libdw/c++/values.cc ../libdw/c++/known.cc \
+		      	../libdw/c++/line_info.cc
+
+dwarfcmp_SOURCES = dwarfcmp.cc
+dwarfcmp_SOURCES += $(libdwplusplus_SOURCES)
 
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
 		 ldscript.h xelf.h unaligned.h
