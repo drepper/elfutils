@@ -380,6 +380,7 @@ namespace elfutils
     class file_table;
     class line_table;
     class line_entry;
+    class macro_info_table;
 
     class debug_info_entry
     {
@@ -914,15 +915,8 @@ namespace elfutils
 	return line_info ().lines ();
       }
 
-      /*
-	containers/iterators:
-
-	XXX lines
-	XXX macros
-
-	abbrevs (punt)
-
-      */
+      // Fetch the CU's DW_AT_macro_info.
+      const macro_info_table macro_info () const;
     };
 
     // These are the kinds of values that attributes can have.
@@ -1058,8 +1052,7 @@ namespace elfutils
       }
 
       const line_info_table line_info () const;
-
-      // XXX macptr
+      const macro_info_table macro_info () const;
 
       template<typename value>
       inline bool operator== (const value &other) const
@@ -1082,8 +1075,9 @@ namespace elfutils
 	    case VS_lineptr:
 	      return line_info () == other.line_info ();
 
-	    case VS_macptr:	// XXX punt for now, treat as constant
-	      /*FALLTHRU*/
+	    case VS_macptr:
+	       return macro_info () == macro_info ();
+
 	    case VS_constant:
 	    case VS_dwarf_constant:
 	    case VS_source_line:
@@ -1579,6 +1573,37 @@ namespace elfutils
       {
 	return (include_directories () == other.include_directories ()
 		&& lines () == other.lines ());
+      }
+      template<typename table>
+      inline bool operator!= (const table &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    class macro_entry;		// XXX
+    // The DW_AT_macro_info attribute yields a line info table.
+    class macro_info_table
+    {
+      friend class attr_value;
+    private:
+      compile_unit _m_cu;
+
+      macro_info_table (const debug_info_entry &die) : _m_cu (die) {}
+
+    public:
+      typedef macro_entry value_type;
+
+      macro_info_table (const macro_info_table &t) : _m_cu (t._m_cu) {}
+
+      typedef void **const_iterator; // XXX
+      const_iterator begin () const { return NULL; } // dummy
+      const_iterator end () const { return NULL; }   // dummy
+
+      template<typename table>
+      inline bool operator== (const table &other) const
+      {
+	return std::equal (begin (), end (), other.begin ());
       }
       template<typename table>
       inline bool operator!= (const table &other) const

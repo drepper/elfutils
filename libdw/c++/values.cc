@@ -296,6 +296,16 @@ dwarf::attr_value::constant_block () const
   const uint8_t *const end = begin + block.length;
   return const_vector<uint8_t> (begin, end);
 }
+
+const dwarf::macro_info_table
+dwarf::attr_value::macro_info () const
+{
+  assert (dwarf_whatattr (thisattr ()) == DW_AT_macro_info);
+  CUDIE (cudie, _m_attr.cu);
+  debug_info_entry die;
+  die._m_die = cudie;
+  return macro_info_table (die);
+}
 
 // dwarf::location_attr
 

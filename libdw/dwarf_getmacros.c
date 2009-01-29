@@ -1,5 +1,5 @@
 /* Get macro information.
-   Copyright (C) 2002, 2003, 2004, 2005 Red Hat, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -142,9 +142,8 @@ dwarf_getmacros (die, callback, arg, offset)
 	mac.param2.s = str;
 
       if (callback (&mac, arg) != DWARF_CB_OK)
-	return (readp
-		- ((unsigned char *) die->cu->dbg->sectiondata[IDX_debug_macinfo]->d_buf
-		   + offset));
+	return readp - ((unsigned char *) die->cu->dbg->sectiondata
+			[IDX_debug_macinfo]->d_buf);
     }
 
   /* If we come here the termination of the data for the CU is not
