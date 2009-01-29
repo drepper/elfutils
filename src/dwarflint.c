@@ -693,8 +693,8 @@ static const char *where_fmt (struct where *wh, char *ptr)
       [sec_locexpr] = {"location expression", "offset", "%#"PRIx64,
 		       NULL, NULL, NULL, NULL},
 
-      [sec_ranges] = {".debug_ranges", NULL, NULL, /* XXX fill me */
-		      NULL, NULL, NULL, NULL}
+      [sec_ranges] = {".debug_ranges", "rangelist", "%#"PRIx64,
+		      "offset", "%#"PRIx64, NULL, NULL}
     };
 
   assert (wh->section < sizeof (section_names) / sizeof (*section_names));
