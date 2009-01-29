@@ -504,6 +504,8 @@ namespace elfutils
 
 	inline const debug_info_entry &operator* () const
 	{
+	  if (unlikely (_m_die._m_die.addr == NULL))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return _m_die;
 	}
 	inline const debug_info_entry *operator-> () const
@@ -650,6 +652,8 @@ namespace elfutils
 
 	inline attribute operator* () const
 	{
+	  if (unlikely (_m_offset == 1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return attribute (_m_attr);
 	}
       };
@@ -1182,6 +1186,8 @@ namespace elfutils
 
 	inline value_type operator* () const
 	{
+	  if (unlikely (_m_offset == 1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return std::make_pair (_m_base + _m_begin, _m_base + _m_end);
 	}
 
@@ -1403,6 +1409,7 @@ namespace elfutils
       }
     };
 
+    // This describes one entry in the line information table.
     class line_entry
     {
     private:
@@ -1468,6 +1475,11 @@ namespace elfutils
       bool operator== (const line_entry &other) const;
     };
 
+    /* This describes a CU's line information table.
+       It works like a read-only std::vector<line_entry>,
+       and also supports lookup by address.
+       XXX later, by file/line
+    */
     class line_table
     {
     private:
@@ -1552,11 +1564,11 @@ namespace elfutils
 	return *this;
       }
 
-      const directory_table include_directories () const
+      inline const directory_table include_directories () const
       {
 	return directory_table (_m_files);
       }
-      const file_table files () const
+      inline const file_table files () const
       {
 	return file_table (_m_files);
       }
@@ -1680,6 +1692,8 @@ namespace elfutils
 
 	inline value_type operator* () const
 	{
+	  if (unlikely (_m_offset == 1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return std::make_pair (_m_begin, _m_end);
 	}
 
@@ -1815,6 +1829,8 @@ namespace elfutils
 
 	inline const debug_info_entry &operator* () const
 	{
+	  if (unlikely (_m_next == (::Dwarf_Off) -1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return _m_die;
 	}
 	inline const debug_info_entry *operator-> () const
