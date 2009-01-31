@@ -101,12 +101,17 @@ namespace elfutils
 	template<typename childrens>
 	children (const childrens &other)
 	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
+
+      public:
+	typedef debug_info_entry value_type;
       };
 
       class attributes : public std::map<int, attr_value>
       {
 	friend class debug_info_entry;
       private:
+	typedef std::map<int, attr_value> base_type;
+
 	attributes () {}
 
 	template<typename attrs>
@@ -114,6 +119,10 @@ namespace elfutils
 	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
 
       public:
+	typedef base_type::key_type key_type;
+	typedef base_type::value_type value_type;
+	typedef base_type::mapped_type mapped_type;
+
 	template<typename attrs>
 	inline operator attrs () const
 	{
@@ -221,6 +230,8 @@ namespace elfutils
       {}
 
     public:
+      typedef compile_unit value_type;
+
       inline compile_unit &new_unit ()
       {
 	compile_unit nu;

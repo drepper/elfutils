@@ -6,11 +6,43 @@
 #define _ELFUTILS_SUBR_HH	1
 
 #include <iterator>
+#include <functional>
 
 namespace elfutils
 {
   namespace subr
   {
+    template<typename t1, typename t2>
+    struct equal_to : public std::binary_function<t1, t2, bool>
+    {
+      inline bool operator () (const t1 &a, const t2 &b)
+      {
+	return a == b;
+      }
+    };
+
+    template<typename iter1, typename iter2, typename pred_type>
+    inline bool container_equal (iter1 first1, iter1 last1,
+				 iter2 first2, iter2 last2,
+				 pred_type pred)
+    {
+      while (first1 != last1)
+	if (first2 == last2 || !pred (*first1++, *first2++))
+	  return false;
+      return first2 == last2;
+    }
+
+    template<typename t1, typename t2>
+    inline bool container_equal (const t1 &a, const t2 &b)
+    {
+      typename t1::const_iterator first1 = a.begin ();
+      typename t1::const_iterator last1 = a.end ();
+      typename t2::const_iterator first2 = b.begin ();
+      typename t2::const_iterator last2 = b.end ();
+      return container_equal (first1, last1, first2, last2,
+			      equal_to<typename t1::value_type,
+			               typename t2::value_type> ());
+    }
 
     template<typename array, typename element = typename array::value_type>
     class indexed_iterator

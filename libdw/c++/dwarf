@@ -471,6 +471,8 @@ namespace elfutils
       inline raw_children (const debug_info_entry &die) : _m_die (die) {}
 
     public:
+      typedef debug_info_entry value_type;
+
       inline raw_children (const raw_children &c) : _m_die (c._m_die) {}
 
       bool empty () const
@@ -504,6 +506,8 @@ namespace elfutils
 
 	inline const debug_info_entry &operator* () const
 	{
+	  if (unlikely (_m_die._m_die.addr == NULL))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return _m_die;
 	}
 	inline const debug_info_entry *operator-> () const
@@ -553,7 +557,7 @@ namespace elfutils
       template<typename other_children>
       bool operator== (const other_children &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename other_children>
       bool operator!= (const other_children &other) const
@@ -574,6 +578,8 @@ namespace elfutils
       raw_attributes (const debug_info_entry &die) : _m_die (die) {}
 
     public:
+      typedef attribute value_type;
+
       inline raw_attributes (const raw_attributes &a) : _m_die (a._m_die) {}
 
       size_t size () const;
@@ -650,6 +656,8 @@ namespace elfutils
 
 	inline attribute operator* () const
 	{
+	  if (unlikely (_m_offset == 1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return attribute (_m_attr);
 	}
       };
@@ -685,6 +693,8 @@ namespace elfutils
 	: raw_children::raw_children (die) {}
 
     public:
+      typedef debug_info_entry value_type;
+
       inline children (const children &c) : raw_children (c) {}
 
       class const_iterator
@@ -792,7 +802,7 @@ namespace elfutils
       template<typename other_children>
       bool operator== (const other_children &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename other_children>
       bool operator!= (const other_children &other) const
@@ -825,6 +835,8 @@ namespace elfutils
 	: attributes_base (raw) {}
 
     public:
+      typedef attribute value_type;
+
       inline attributes (const class attributes &a)
 	: attributes_base (a) {}
 
@@ -1182,6 +1194,8 @@ namespace elfutils
 
 	inline value_type operator* () const
 	{
+	  if (unlikely (_m_offset == 1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return std::make_pair (_m_base + _m_begin, _m_base + _m_end);
 	}
 
@@ -1295,8 +1309,9 @@ namespace elfutils
 	   The directory table itself matches regardless.  */
 	const_iterator i = begin ();
 	typename table::const_iterator j = other.begin ();
-	return std::equal (++i, end (), ++j,
-			   name_equal<typename table::value_type> ());
+	return subr::container_equal
+	  (++i, end (), ++j, other.end (),
+	   name_equal<typename table::value_type> ());
       }
 
     public:
@@ -1403,6 +1418,7 @@ namespace elfutils
       }
     };
 
+    // This describes one entry in the line information table.
     class line_entry
     {
     private:
@@ -1468,6 +1484,11 @@ namespace elfutils
       bool operator== (const line_entry &other) const;
     };
 
+    /* This describes a CU's line information table.
+       It works like a read-only std::vector<line_entry>,
+       and also supports lookup by address.
+       XXX later, by file/line
+    */
     class line_table
     {
     private:
@@ -1516,7 +1537,7 @@ namespace elfutils
       template<typename table>
       inline bool operator== (const table &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename table>
       inline bool operator!= (const table &other) const
@@ -1527,7 +1548,7 @@ namespace elfutils
       inline bool operator== (const line_table &other) const
       {
 	return (_m_lines == other._m_lines
-		|| std::equal (begin (), end (), other.begin ()));
+		|| subr::container_equal (*this, other));
       }
 
       // Look up by matching address.
@@ -1552,11 +1573,11 @@ namespace elfutils
 	return *this;
       }
 
-      const directory_table include_directories () const
+      inline const directory_table include_directories () const
       {
 	return directory_table (_m_files);
       }
-      const file_table files () const
+      inline const file_table files () const
       {
 	return file_table (_m_files);
       }
@@ -1680,6 +1701,8 @@ namespace elfutils
 
 	inline value_type operator* () const
 	{
+	  if (unlikely (_m_offset == 1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return std::make_pair (_m_begin, _m_end);
 	}
 
@@ -1784,7 +1807,7 @@ namespace elfutils
     };
 
     // Container for raw CUs in file order, intended to be compatible
-    // with a read-only subset of std::list<raw_compile_unit>.
+    // with a read-only subset of std::list<compile_unit>.
     class raw_compile_units
     {
       friend class dwarf;
@@ -1794,6 +1817,8 @@ namespace elfutils
       raw_compile_units (const dwarf &file) : _m_file (file) {}
 
     public:
+      typedef compile_unit value_type;
+
       inline raw_compile_units (const raw_compile_units &u)
 	: _m_file (u._m_file) {}
 
@@ -1815,6 +1840,8 @@ namespace elfutils
 
 	inline const debug_info_entry &operator* () const
 	{
+	  if (unlikely (_m_next == (::Dwarf_Off) -1))
+	    throw std::runtime_error ("dereferencing end iterator");
 	  return _m_die;
 	}
 	inline const debug_info_entry *operator-> () const
@@ -1898,12 +1925,14 @@ namespace elfutils
       compile_units (class raw_compile_units raw) : compile_units_base (raw) {}
 
     public:
+      typedef compile_unit value_type;
+
       compile_units (const compile_units &u) : compile_units_base (u) {}
 
       template<typename units>
       bool operator== (const units &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename units>
       bool operator!= (const units &other) const
