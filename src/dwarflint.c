@@ -2296,10 +2296,11 @@ read_die_chain (struct read_ctx *ctx,
 		    ": This DIE had children, but no DW_AT_sibling attribute.\n");
 
       /* The section ended.  */
-      if (read_ctx_eof (ctx) || abbr_code == 0)
+      if (abbr_code == 0)
+	break;
+      if (read_ctx_eof (ctx))
 	{
-	  if (abbr_code != 0)
-	    wr_error (&where, ": DIE chain not terminated with DIE with zero abbrev code.\n");
+	  wr_error (&where, ": DIE chain not terminated with DIE with zero abbrev code.\n");
 	  break;
 	}
 
@@ -2629,15 +2630,15 @@ read_die_chain (struct read_ctx *ctx,
 		uint64_t length;
 		goto process_DW_FORM_block;
 
-	      case DW_FORM_block1:
+	    case DW_FORM_block1:
 		width = 1;
 		goto process_DW_FORM_block;
 
-	      case DW_FORM_block2:
+	    case DW_FORM_block2:
 		width = 2;
 		goto process_DW_FORM_block;
 
-	      case DW_FORM_block4:
+	    case DW_FORM_block4:
 		width = 4;
 
 	      process_DW_FORM_block:
@@ -2822,11 +2823,60 @@ check_cu_structural (struct read_ctx *ctx,
 static bool
 check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 {
+  struct where where = WHERE (sec_aranges, NULL);
   bool retval = true;
+  bool cov_retval = true;
+
+  Elf *elf = ctx->dbg->elf;
+  struct section_coverage
+  {
+    Elf_Scn *scn;
+    GElf_Shdr shdr;
+    struct coverage cov;
+    bool hit; /* true if COV is not pristine.  */
+  };
+  struct coverage_map
+  {
+    size_t size;
+    size_t alloc;
+    struct section_coverage *scos;
+  };
+
+  struct coverage_map coverage_map;
+  memset (&coverage_map, 0, sizeof (coverage_map));
+  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
+  if (ehdr == NULL)
+    {
+    invalid_elf:
+      wr_error (&where,
+		": couldn't read ELF, skipping coverage analysis.\n");
+      retval = false;
+    }
+  else
+    for (size_t i = 0; i < ehdr->e_shnum; ++i)
+      {
+	Elf_Scn *scn = elf_getscn (elf, i);
+	if (scn == NULL)
+	  goto invalid_elf;
+
+	GElf_Shdr shdr_mem, *shdr = gelf_getshdr (scn, &shdr_mem);
+	if (shdr == NULL)
+	  goto invalid_elf;
+
+	if ((shdr->sh_flags & SHF_ALLOC) && (shdr->sh_flags & SHF_EXECINSTR))
+	  {
+	    REALLOC (&coverage_map, scos);
+	    struct section_coverage *sco
+	      = coverage_map.scos + coverage_map.size++;
+	    sco->scn = scn;
+	    sco->shdr = *shdr;
+	    coverage_init (&sco->cov, shdr->sh_size);
+	    sco->hit = false;
+	  }
+      }
 
   while (!read_ctx_eof (ctx))
     {
-      struct where where = WHERE (sec_aranges, NULL);
       where_reset_1 (&where, read_ctx_get_offset (ctx));
       const unsigned char *atab_begin = ctx->ptr;
 
@@ -2972,7 +3022,91 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	  if (address == 0 && length == 0)
 	    break;
 
-	  /* XXX Can address and length can be validated on high level?  */
+	  /* Coverage analysis. Skip if we have errors.  */
+	  if (retval)
+	    {
+	      bool found = false;
+	      bool crosses_boundary = false;
+	      uint64_t end = address + length;
+
+	      /* This is for analyzing how much of the current range
+    		 falls into AX sections.  Whatever is left uncovered
+    		 doesn't fall into sections that describe IP values.  */
+    	      struct coverage range_cov;
+	      coverage_init (&range_cov, length);
+
+    	      for (size_t i = 0; i < coverage_map.size; ++i)
+		{
+		  struct section_coverage *sco = coverage_map.scos + i;
+		  GElf_Shdr *shdr = &sco->shdr;
+		  struct coverage *cov = &sco->cov;
+
+		  Elf64_Addr s_end = shdr->sh_addr + shdr->sh_size;
+		  if (end < shdr->sh_addr || address >= s_end)
+		    /* no overlap */
+		    continue;
+
+		  if (found && !crosses_boundary)
+		    {
+		      /* While probably not an error, it's very suspicious.  */
+		      wr_message (mc_aranges | mc_impact_2, &where,
+				  ": arange crosses section boundaries.\n");
+		      cov_retval = false;
+		      crosses_boundary = true;
+		    }
+
+		  found = true;
+
+		  uint64_t cov_begin
+		    = address < shdr->sh_addr ? 0 : address - shdr->sh_addr;
+		  uint64_t cov_end
+		    = (end < s_end ? end - shdr->sh_addr
+		       : shdr->sh_size) - 1; /* -1 because coverage
+						endpoint is inclusive.  */
+
+		  uint64_t r_cov_begin = cov_begin + shdr->sh_addr - address;
+		  uint64_t r_cov_end = cov_end + shdr->sh_addr - address;
+
+		  if (!coverage_pristine (cov, cov_begin, cov_end - cov_begin))
+		    {
+		      wr_message (mc_aranges | mc_impact_2 | mc_error, &where,
+				  ": address range %#" PRIx64 "..%#" PRIx64
+				  " overlaps with another one defined earlier.\n",
+				  address, end);
+		      cov_retval = false;
+		    }
+
+		  /* Section coverage... */
+		  coverage_add (cov, cov_begin, cov_end);
+		  sco->hit = true;
+
+		  /* And range coverage... */
+		  coverage_add (&range_cov, r_cov_begin, r_cov_end);
+		}
+
+	      if (!found)
+		{
+		  wr_error (&where,
+			    ": couldn't find a section that the range %#"
+			    PRIx64 "..%#" PRIx64 " covers.\n", address, end);
+		  retval = false;
+		  continue;
+		}
+	      else
+		{
+		  void range_hole (uint64_t h_begin, uint64_t h_end,
+				   void *user __attribute__ ((unused)))
+		  {
+		    wr_error (&where,
+			      ": portion %#" PRIx64 "..%#" PRIx64
+			      ", of the range %#" PRIx64 "..%#" PRIx64
+			      " doesn't fall into any ALLOC & EXEC section.\n",
+			      h_begin + address, h_end + address,
+			      address, end);
+		  }
+		  coverage_find_holes (&range_cov, range_hole, NULL);
+		}
+	    }
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
@@ -2991,7 +3125,56 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	goto not_enough;
     }
 
-  return retval;
+  if (retval)
+    for (size_t i = 0; i < coverage_map.size; ++i)
+      {
+	struct section_coverage *sco = coverage_map.scos + i;
+	Elf_Data *data = elf_getdata (sco->scn, NULL);
+	if (data == NULL)
+	  wr_error (&WHERE (sec_aranges, NULL),
+		    ": couldn't read section data, coverage analysis may be inaccurate.\n");
+
+	void section_hole (uint64_t h_begin, uint64_t h_end,
+			   void *user __attribute__ ((unused)))
+	{
+	  const char *scnname = elf_strptr (elf, ehdr->e_shstrndx,
+					    sco->shdr.sh_name);
+
+	  /* We don't expect some sections to be covered.  But if they
+	     are at least partially covered, we expect the same
+	     coverage criteria as for .text.  */
+	  if (!sco->hit
+	      && (strcmp (scnname, ".init") == 0
+		  || strcmp (scnname, ".fini") == 0
+		  || strcmp (scnname, ".plt") == 0))
+	    return;
+
+	  uint64_t base = sco->shdr.sh_addr;
+	  h_begin += base;
+	  h_end += base;
+	  if (data != NULL)
+	    {
+	      bool zeroes = true;
+	      for (uint64_t j = h_begin; j < h_end; ++j)
+		if (((char *)data->d_buf)[j - base] != 0)
+		  {
+		    zeroes = false;
+		    break;
+		  }
+	      if (!zeroes)
+		return;
+	    }
+
+	  wr_error (&where,
+		    ": addresses %#" PRIx64 "..%#" PRIx64
+		    " (of section %s) are not covered.\n",
+		    h_begin + base, h_end + base, scnname);
+	}
+
+	coverage_find_holes (&sco->cov, section_hole, NULL);
+      }
+
+  return retval && cov_retval;
 }
 
 static bool
