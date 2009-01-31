@@ -88,6 +88,9 @@ libdwplusplus_SOURCES = ../libdw/c++/values.cc ../libdw/c++/known.cc \
 dwarfcmp_SOURCES = dwarfcmp.cc
 dwarfcmp_SOURCES += $(libdwplusplus_SOURCES)
 
+dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc
+dwarflint_SOURCES += $(libdwplusplus_SOURCES) # XXX drop when we have the DSO
+
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
 		 ldscript.h xelf.h unaligned.h
 

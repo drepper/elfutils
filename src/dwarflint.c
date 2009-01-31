@@ -48,6 +48,7 @@
 #include "../libdw/dwarf.h"
 #include "../libdw/libdwP.h"
 #include "dwarfstrings.h"
+#include "dwarflint.h"
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
@@ -95,85 +96,6 @@ static void
 process_file (int fd, Dwarf *dwarf, const char *fname,
 	      size_t size, bool only_one);
 
-/* Functions and data structures describing location in Dwarf.  */
-
-enum section_id
-{
-  sec_invalid = 0,
-  sec_info,
-  sec_abbrev,
-  sec_aranges,
-  sec_pubnames,
-  sec_pubtypes,
-  sec_str,
-  sec_loc,
-  sec_locexpr, /* Not a section, but a portion of file that contains a
-		  location expression.  */
-  sec_ranges,
-};
-
-struct where
-{
-  enum section_id section;
-  uint64_t addr1; // E.g. a CU offset.
-  uint64_t addr2; // E.g. a DIE address.
-  uint64_t addr3; // E.g. an attribute.
-  struct where *ref; // Related reference, e.g. an abbrev related to given DIE.
-  struct where *next; // Hierarchically superior location.
-};
-
-#define WHERE(SECTION, NEXT)						\
-  ((struct where)							\
-    {(SECTION), (uint64_t)-1, (uint64_t)-1, (uint64_t)-1, NULL, NEXT})
-
-static const char *where_fmt (struct where *wh, char *ptr);
-static void where_fmt_chain (struct where *wh, const char *severity);
-static void where_reset_1 (struct where *wh, uint64_t addr);
-static void where_reset_2 (struct where *wh, uint64_t addr);
-static void where_reset_3 (struct where *wh, uint64_t addr);
-
-
-/* Functions and data structures for emitting various types of
-   messages.  */
-
-enum message_category
-{
-  mc_none      = 0,
-
-  /* Severity: */
-  mc_impact_1  = 0x1, // no impact on the consumer
-  mc_impact_2  = 0x2, // still no impact, but suspicious or worth mentioning
-  mc_impact_3  = 0x4, // some impact
-  mc_impact_4  = 0x8, // high impact
-  mc_impact_all= 0xf, // all severity levels
-  mc_impact_2p = 0xe, // 2+
-  mc_impact_3p = 0xc, // 3+
-
-  /* Accuracy:  */
-  mc_acc_bloat     = 0x10, // unnecessary constructs (e.g. unreferenced strings)
-  mc_acc_suboptimal= 0x20, // suboptimal construct (e.g. lack of siblings)
-  mc_acc_all       = 0x30, // all accuracy options
-
-  /* Various: */
-  mc_error     = 0x40,  // turn the message into an error
-
-  /* Area: */
-  mc_leb128    = 0x100,  // ULEB/SLEB storage
-  mc_abbrevs   = 0x200,  // abbreviations and abbreviation tables
-  mc_die_rel   = 0x400,  // DIE relationship
-  mc_die_other = 0x800,  // other messages related to DIEs
-  mc_info      = 0x1000, // messages related to .debug_info, but not particular DIEs
-  mc_strings   = 0x2000, // string table
-  mc_aranges   = 0x4000, // address ranges table
-  mc_elf       = 0x8000, // ELF structure, e.g. missing optional sections
-  mc_pubtables = 0x10000,  // table of public names/types
-  mc_pubtypes  = 0x20000,  // .debug_pubtypes presence
-  mc_loc       = 0x40000,  // messages related to .debug_loc
-  mc_ranges    = 0x80000,  // messages related to .debug_ranges
-  mc_other     = 0x100000, // messages unrelated to any of the above
-  mc_all       = 0xffffff00, // all areas
-};
-
 struct message_criteria
 {
   enum message_category accept; /* cat & accept must be != 0  */
@@ -220,7 +142,7 @@ wr_vwarning (struct where *wh, const char *format, va_list ap)
   ++error_count;
 }
 
-static void __attribute__ ((format (printf, 2, 3)))
+void
 wr_error (struct where *wh, const char *format, ...)
 {
   va_list ap;
@@ -229,7 +151,7 @@ wr_error (struct where *wh, const char *format, ...)
   va_end (ap);
 }
 
-static void __attribute__ ((format (printf, 2, 3)))
+void
 wr_warning (struct where *wh, const char *format, ...)
 {
   va_list ap;
@@ -238,7 +160,7 @@ wr_warning (struct where *wh, const char *format, ...)
   va_end (ap);
 }
 
-static void __attribute__ ((format (printf, 3, 4)))
+void
 wr_message (enum message_category category, struct where *wh,
 	     const char *format, ...)
 {
@@ -254,7 +176,7 @@ wr_message (enum message_category category, struct where *wh,
   va_end (ap);
 }
 
-static void
+void
 wr_format_padding_message (enum message_category category,
 			   struct where *wh,
 			   uint64_t start, uint64_t end, char *kind)
@@ -263,7 +185,7 @@ wr_format_padding_message (enum message_category category,
 	      ": 0x%" PRIx64 "..0x%" PRIx64 ": %s.\n", start, end, kind);
 }
 
-static void
+void
 wr_format_leb128_message (int st, struct where *wh, const char *what)
 {
   enum message_category category = mc_leb128 | mc_acc_bloat | mc_impact_3;
@@ -276,7 +198,7 @@ wr_format_leb128_message (int st, struct where *wh, const char *what)
     wr_message (category, wh, ": unnecessarily long encoding of %s.\n", what);
 }
 
-static void
+void
 wr_message_padding_0 (enum message_category category,
 		      struct where *wh,
 		      uint64_t start, uint64_t end)
@@ -286,7 +208,7 @@ wr_message_padding_0 (enum message_category category,
 			     "unnecessary padding with zero bytes");
 }
 
-static void
+void
 wr_message_padding_n0 (enum message_category category,
 		       struct where *wh,
 		       uint64_t start, uint64_t end)
@@ -568,39 +490,6 @@ static void ref_record_add (struct ref_record *rr, uint64_t addr, struct where *
 static void ref_record_free (struct ref_record *rr);
 
 
-/* Functions and data structures for handling of address range
-   coverage.  We use that to find holes of unused bytes in DWARF string
-   table.  */
-
-typedef uint_fast32_t coverage_emt_type;
-static const size_t coverage_emt_size = sizeof (coverage_emt_type);
-static const size_t coverage_emt_bits = 8 * sizeof (coverage_emt_type);
-
-struct coverage
-{
-  size_t alloc;
-  uint64_t size;
-  coverage_emt_type *buf;
-};
-
-struct hole_info
-{
-  enum section_id section;
-  enum message_category category;
-  unsigned align;
-  void *d_buf;
-};
-
-static void coverage_init (struct coverage *ar, uint64_t size);
-static void coverage_add (struct coverage *ar, uint64_t begin, uint64_t end);
-static bool coverage_is_covered (struct coverage *ar, uint64_t address);
-static void coverage_find_holes (struct coverage *ar,
-				 void (*cb)(uint64_t begin, uint64_t end, void *data),
-				 void *data);
-static void found_hole (uint64_t begin, uint64_t end, void *data);
-static void coverage_free (struct coverage *ar);
-
-
 /* Functions and data structures for CU handling.  */
 
 struct cu
@@ -649,7 +538,8 @@ static bool check_pub_structural (struct read_ctx *ctx,
 				  enum section_id sec);
 
 
-static const char *where_fmt (struct where *wh, char *ptr)
+const char *
+where_fmt (struct where *wh, char *ptr)
 {
   if (wh == NULL)
     return "";
@@ -755,7 +645,7 @@ static const char *where_fmt (struct where *wh, char *ptr)
     return ptr;
 }
 
-static void
+void
 where_fmt_chain (struct where *wh, const char *severity)
 {
   if (wh != NULL)
@@ -764,21 +654,21 @@ where_fmt_chain (struct where *wh, const char *severity)
 	      severity, where_fmt (it, NULL));
 }
 
-static void
+void
 where_reset_1 (struct where *wh, uint64_t addr)
 {
   wh->addr1 = addr;
   wh->addr2 = wh->addr3 = (uint64_t)-1;
 }
 
-static void
+void
 where_reset_2 (struct where *wh, uint64_t addr)
 {
   wh->addr2 = addr;
   wh->addr3 = (uint64_t)-1;
 }
 
-static void
+void
 where_reset_3 (struct where *wh, uint64_t addr)
 {
   wh->addr3 = addr;
@@ -865,7 +755,8 @@ process_file (int fd __attribute__((unused)),
   if (aranges_data != NULL)
     {
       read_ctx_init (&ctx, dwarf, aranges_data);
-      check_aranges_structural (&ctx, cu_chain);
+      if (check_aranges_structural (&ctx, cu_chain))
+	check_aranges_hl (dwarf);
     }
 
   if (pubnames_data != NULL)
@@ -1578,7 +1469,7 @@ ref_record_free (struct ref_record *rr)
 }
 
 
-static void
+void
 coverage_init (struct coverage *ar, uint64_t size)
 {
   size_t ctemts = size / coverage_emt_bits + 1;
@@ -1587,7 +1478,7 @@ coverage_init (struct coverage *ar, uint64_t size)
   ar->size = size;
 }
 
-static void
+void
 coverage_add (struct coverage *ar, uint64_t begin, uint64_t end)
 {
   assert (ar);
@@ -1613,7 +1504,7 @@ coverage_add (struct coverage *ar, uint64_t begin, uint64_t end)
     }
 }
 
-static bool
+bool
 coverage_is_covered (struct coverage *ar, uint64_t address)
 {
   assert (ar);
@@ -1625,7 +1516,7 @@ coverage_is_covered (struct coverage *ar, uint64_t address)
   return !!(ar->buf[bi] & bm);
 }
 
-static bool
+bool
 coverage_pristine (struct coverage *ar, uint64_t begin, uint64_t length)
 {
   for (uint64_t i = 0; i < length; ++i)
@@ -1634,7 +1525,7 @@ coverage_pristine (struct coverage *ar, uint64_t begin, uint64_t length)
   return true;
 }
 
-static void
+void
 coverage_find_holes (struct coverage *ar,
 		     void (*cb)(uint64_t begin, uint64_t end, void *user),
 		     void *user)
@@ -1685,7 +1576,7 @@ coverage_find_holes (struct coverage *ar,
     hole_end (ar->size);
 }
 
-static void
+void
 found_hole (uint64_t begin, uint64_t end, void *data)
 {
   struct hole_info *info = (struct hole_info *)data;
@@ -1714,7 +1605,7 @@ found_hole (uint64_t begin, uint64_t end, void *data)
 			   begin, end);
 }
 
-static void
+void
 coverage_free (struct coverage *ar)
 {
   free (ar->buf);
