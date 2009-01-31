@@ -359,14 +359,15 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
 #define REALLOC(A, BUF)						\
   do {								\
-    if (A->size == A->alloc)					\
+    typeof ((A)) _a = (A);					\
+    if (_a->size == _a->alloc)					\
       {								\
-	if (A->alloc == 0)					\
-	  A->alloc = 8;						\
+	if (_a->alloc == 0)					\
+	  _a->alloc = 8;					\
 	else							\
-	  A->alloc *= 2;					\
-	A->BUF = xrealloc (A->BUF,				\
-			   sizeof (*A->BUF) * A->alloc);	\
+	  _a->alloc *= 2;					\
+	_a->BUF = xrealloc (_a->BUF,				\
+			    sizeof (*_a->BUF) * _a->alloc);	\
       }								\
   } while (0)
 
