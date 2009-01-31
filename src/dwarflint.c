@@ -746,6 +746,7 @@ static const char *where_fmt (struct where *wh, char *ptr)
       ptr = stpcpy (ptr, " (");
       ptr = (char *)where_fmt (wh->ref, ptr);
       *ptr++ = ')';
+      *ptr = 0;
     }
 
   if (orig == NULL)
