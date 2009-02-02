@@ -66,8 +66,9 @@ check_matching_ranges (Dwarf *dwarf)
       where_reset_1 (&where_ref, 0);
       where_reset_2 (&where_ref, cu.offset ());
 
-      const elfutils::dwarf::arange_list &cu_aranges = i->second;
-      const elfutils::dwarf::ranges &cu_ranges = cu.ranges ();
+      std::set<elfutils::dwarf::ranges::key_type>
+	cu_aranges = i->second,
+	cu_ranges = cu.ranges ();
 
       typedef std::vector <elfutils::dwarf::arange_list::value_type> range_vec;
       range_vec missing;
