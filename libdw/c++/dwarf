@@ -225,6 +225,7 @@ namespace elfutils
     {
       return !(*this == other);
     }
+
   };
 
   // One DWARF object file.
@@ -1236,9 +1237,11 @@ namespace elfutils
 	if (empty ())
 	  return (other.empty ()
 		  || std::find_if (other.begin (), other.end (),
-				   nonempty<value_type> ()) == other.end ());
+				   nonempty<typename other_attr::value_type> ()
+				   ) == other.end ());
 	if (!is_list ())
-	  return !other.is_list () && location () == other.location ();
+	  return (!other.is_list () && !other.empty ()
+		  && location () == other.location ());
 
 	return other.is_list () && subr::container_equal (*this, other);
       }

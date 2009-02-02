@@ -83,7 +83,8 @@ libar_a_SOURCES = arlib.c arlib2.c
 
 # XXX need to figure out C++ dso crapola
 libdwplusplus_SOURCES = ../libdw/c++/values.cc ../libdw/c++/known.cc \
-		      	../libdw/c++/line_info.cc
+		      	../libdw/c++/line_info.cc \
+		      	../libdw/c++/edit-values.cc
 
 dwarfcmp_SOURCES = dwarfcmp.cc
 dwarfcmp_SOURCES += $(libdwplusplus_SOURCES)

@@ -1,3 +1,7 @@
+2009-02-01  Roland McGrath  <roland@redhat.com>
+
+	* c++/edit-values.cc: New file.
+
 2009-01-28  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf: Add line table support.
