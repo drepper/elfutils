@@ -3068,13 +3068,11 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 		  uint64_t r_cov_end = cov_end + shdr->sh_addr - address;
 
 		  if (!coverage_pristine (cov, cov_begin, cov_end - cov_begin))
-		    {
-		      wr_message (mc_aranges | mc_impact_2 | mc_error, &where,
-				  ": address range %#" PRIx64 "..%#" PRIx64
-				  " overlaps with another one defined earlier.\n",
-				  address, end);
-		      cov_retval = false;
-		    }
+		    /* Not a show stopper, this shouldn't derain high-level.  ou*/
+		    wr_message (mc_aranges | mc_impact_2 | mc_error, &where,
+				": address range %#" PRIx64 "..%#" PRIx64
+				" overlaps with another one defined earlier.\n",
+				address, end);
 
 		  /* Section coverage... */
 		  coverage_add (cov, cov_begin, cov_end);
@@ -3086,10 +3084,10 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
 	      if (!found)
 		{
+		  /* Not a show stopper.  */
 		  wr_error (&where,
 			    ": couldn't find a section that the range %#"
 			    PRIx64 "..%#" PRIx64 " covers.\n", address, end);
-		  retval = false;
 		  continue;
 		}
 	      else
@@ -3133,6 +3131,9 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	if (data == NULL)
 	  wr_error (&WHERE (sec_aranges, NULL),
 		    ": couldn't read section data, coverage analysis may be inaccurate.\n");
+	else if (data->d_buf == NULL)
+	  wr_error (&WHERE (sec_aranges, NULL),
+		    ": data-less section data, coverage analysis may be inaccurate.\n");
 
 	void section_hole (uint64_t h_begin, uint64_t h_end,
 			   void *user __attribute__ ((unused)))
@@ -3150,13 +3151,11 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	    return;
 
 	  uint64_t base = sco->shdr.sh_addr;
-	  h_begin += base;
-	  h_end += base;
-	  if (data != NULL)
+	  if (data != NULL && data->d_buf != NULL)
 	    {
 	      bool zeroes = true;
 	      for (uint64_t j = h_begin; j < h_end; ++j)
-		if (((char *)data->d_buf)[j - base] != 0)
+		if (((char *)data->d_buf)[j] != 0)
 		  {
 		    zeroes = false;
 		    break;
@@ -3167,7 +3166,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
 	  wr_error (&where,
 		    ": addresses %#" PRIx64 "..%#" PRIx64
-		    " (of section %s) are not covered.\n",
+		    " of section %s are not covered.\n",
 		    h_begin + base, h_end + base, scnname);
 	}
 

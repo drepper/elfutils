@@ -45,8 +45,8 @@ extern "C"
   ((struct where)							\
     {(SECTION), (uint64_t)-1, (uint64_t)-1, (uint64_t)-1, NULL, NEXT})
 
-  extern const char *where_fmt (const struct where *wh, char *ptr);
-  extern void where_fmt_chain (const struct where *wh, const char *severity);
+  extern const char *where_fmt (struct where *wh, char *ptr);
+  extern void where_fmt_chain (struct where *wh, const char *severity);
   extern void where_reset_1 (struct where *wh, uint64_t addr);
   extern void where_reset_2 (struct where *wh, uint64_t addr);
   extern void where_reset_3 (struct where *wh, uint64_t addr);
@@ -93,10 +93,10 @@ extern "C"
     mc_all       = 0xffffff00, // all areas
   };
 
-  extern void wr_error (const struct where *wh, const char *format, ...)
+  extern void wr_error (struct where *wh, const char *format, ...)
     __attribute__ ((format (printf, 2, 3)));
 
-  extern void wr_warning (const struct where *wh, const char *format, ...)
+  extern void wr_warning (struct where *wh, const char *format, ...)
     __attribute__ ((format (printf, 2, 3)));
 
   extern void wr_message (enum message_category category, const struct where *wh,
