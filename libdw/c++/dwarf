@@ -1729,10 +1729,20 @@ namespace elfutils
 	const_iterator &operator++ () // prefix
 	{
 	  do
-	    _m_offset = dwarf_ranges (_m_die.thisdie (), _m_offset,
-				      &_m_base, &_m_begin, &_m_end);
+	    {
+	      _m_offset = dwarf_ranges (_m_die.thisdie (), _m_offset,
+					&_m_base, &_m_begin, &_m_end);
+
+	      // Special case: no ranges to look for.
+	      if (_m_offset == 1)
+		{
+		  _m_offset = 0;
+		  break;
+		}
+	    }
 	  // Skip over empty ranges.
 	  while (_m_offset != 0 && _m_begin == _m_end);
+
 	  return *this;
 	}
 	inline const_iterator operator++ (int) // postfix
