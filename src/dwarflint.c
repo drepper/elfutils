@@ -125,7 +125,7 @@ check_category (enum message_category cat)
 }
 
 static void
-wr_verror (struct where *wh, const char *format, va_list ap)
+wr_verror (const struct where *wh, const char *format, va_list ap)
 {
   printf ("error: %s", where_fmt (wh, NULL));
   vprintf (format, ap);
@@ -134,7 +134,7 @@ wr_verror (struct where *wh, const char *format, va_list ap)
 }
 
 static void
-wr_vwarning (struct where *wh, const char *format, va_list ap)
+wr_vwarning (const struct where *wh, const char *format, va_list ap)
 {
   printf ("warning: %s", where_fmt (wh, NULL));
   vprintf (format, ap);
@@ -143,7 +143,7 @@ wr_vwarning (struct where *wh, const char *format, va_list ap)
 }
 
 void
-wr_error (struct where *wh, const char *format, ...)
+wr_error (const struct where *wh, const char *format, ...)
 {
   va_list ap;
   va_start (ap, format);
@@ -152,7 +152,7 @@ wr_error (struct where *wh, const char *format, ...)
 }
 
 void
-wr_warning (struct where *wh, const char *format, ...)
+wr_warning (const struct where *wh, const char *format, ...)
 {
   va_list ap;
   va_start (ap, format);
@@ -161,8 +161,8 @@ wr_warning (struct where *wh, const char *format, ...)
 }
 
 void
-wr_message (enum message_category category, struct where *wh,
-	     const char *format, ...)
+wr_message (enum message_category category, const struct where *wh,
+	    const char *format, ...)
 {
   va_list ap;
   va_start (ap, format);
@@ -540,7 +540,7 @@ static bool check_pub_structural (struct read_ctx *ctx,
 
 
 const char *
-where_fmt (struct where *wh, char *ptr)
+where_fmt (const struct where *wh, char *ptr)
 {
   if (wh == NULL)
     return "";
@@ -647,7 +647,7 @@ where_fmt (struct where *wh, char *ptr)
 }
 
 void
-where_fmt_chain (struct where *wh, const char *severity)
+where_fmt_chain (const struct where *wh, const char *severity)
 {
   if (wh != NULL)
     for (struct where *it = wh->next; it != NULL; it = it->next)
