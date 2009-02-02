@@ -29,17 +29,73 @@
 #endif
 
 #include <iostream>
-#include <cinttypes>
-#include <map>
+#include <set>
 #include <algorithm>
+#include <cinttypes>
 
 #include "dwarflint.h"
 #include "c++/dwarf"
 #include "../libdw/libdwP.h"
 
+namespace
+{
+  message_category cat (message_category c1,
+			message_category c2,
+			message_category c3)
+  {
+    return static_cast<message_category> (c1 | c2 | c3);
+  }
+}
 
 bool
-check_aranges_hl (Dwarf *dwarf)
+check_matching_ranges (Dwarf *dwarf)
 {
+  elfutils::dwarf dw(dwarf);
+
+  struct where where_ref = WHERE (sec_info, NULL);
+  struct where where_ar = WHERE (sec_aranges, NULL);
+  where_ar.ref = &where_ref;
+  struct where where_r = WHERE (sec_ranges, NULL);
+  where_r.ref = &where_ref;
+
+  const elfutils::dwarf::aranges_map &aranges = dw.aranges ();
+  for (elfutils::dwarf::aranges_map::const_iterator i = aranges.begin ();
+       i != aranges.end (); ++i)
+    {
+      const elfutils::dwarf::compile_unit &cu = i->first;
+      where_reset_1 (&where_ref, 0);
+      where_reset_2 (&where_ref, cu.offset ());
+
+      const elfutils::dwarf::arange_list &cu_aranges = i->second;
+      const elfutils::dwarf::ranges &cu_ranges = cu.ranges ();
+
+      typedef std::vector <elfutils::dwarf::arange_list::value_type> range_vec;
+      range_vec missing;
+      std::back_insert_iterator <range_vec> i_missing (missing);
+
+      std::set_difference (cu_aranges.begin (), cu_aranges.end (),
+			   cu_ranges.begin (), cu_ranges.end (),
+			   i_missing);
+
+      for (range_vec::iterator it = missing.begin ();
+	   it != missing.end (); ++it)
+	wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_r,
+		    ": missing range %#" PRIx64 "..%#" PRIx64
+		    ", present in .debug_aranges.\n",
+		    it->first, it->second);
+
+      missing.clear ();
+      std::set_difference (cu_ranges.begin (), cu_ranges.end (),
+			   cu_aranges.begin (), cu_aranges.end (),
+			   i_missing);
+
+      for (range_vec::iterator it = missing.begin ();
+	   it != missing.end (); ++it)
+	wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_ar,
+		    ": missing range %#" PRIx64 "..%#" PRIx64
+		    ", present in .debug_ranges.\n",
+		    it->first, it->second);
+    }
+
   return dwarf != NULL;
 }

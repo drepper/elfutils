@@ -11,7 +11,9 @@ extern "C"
 #endif
 
   /* Entry points for high-level checks.  */
-  extern bool check_aranges_hl (Dwarf *dwarf);
+
+  /* Check that .debug_aranges and .debug_ranges match.  */
+  extern bool check_matching_ranges (Dwarf *dwarf);
 
 
   /* Functions and data structures describing location in Dwarf.  */

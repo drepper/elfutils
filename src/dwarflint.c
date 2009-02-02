@@ -757,7 +757,8 @@ process_file (int fd __attribute__((unused)),
     {
       read_ctx_init (&ctx, dwarf, aranges_data);
       if (check_aranges_structural (&ctx, cu_chain))
-	check_aranges_hl (dwarf);
+	/* XXX only do this if .debug_ranges are also OK.  */
+	check_matching_ranges (dwarf);
     }
 
   if (pubnames_data != NULL)
