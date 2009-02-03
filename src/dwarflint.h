@@ -137,22 +137,67 @@ extern "C"
     coverage_emt_type *buf;
   };
 
-  struct hole_info
+  struct section_coverage
   {
-    enum section_id section;
-    enum message_category category;
-    unsigned align;
-    void *d_buf;
+    Elf_Scn *scn;
+    GElf_Shdr shdr;
+    struct coverage cov;
+    bool hit; /* true if COV is not pristine.  */
+  };
+
+  struct coverage_map
+  {
+    Elf *elf;
+    size_t size;
+    size_t alloc;
+    struct section_coverage *scos;
   };
 
   void coverage_init (struct coverage *ar, uint64_t size);
   void coverage_add (struct coverage *ar, uint64_t begin, uint64_t end);
   bool coverage_is_covered (struct coverage *ar, uint64_t address);
-  void coverage_find_holes (struct coverage *ar,
-			    void (*cb)(uint64_t begin, uint64_t end, void *data),
+  bool coverage_find_holes (struct coverage *ar,
+			    bool (*cb)(uint64_t begin, uint64_t end, void *data),
 			    void *data);
-  void found_hole (uint64_t begin, uint64_t end, void *data);
   void coverage_free (struct coverage *ar);
+
+  void section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
+			      GElf_Shdr *shdr);
+  bool coverage_map_init (struct coverage_map *coverage_map, Elf *elf,
+			  Elf64_Xword mask);
+  void coverage_map_add (struct coverage_map *coverage_map,
+			 uint64_t address, uint64_t length,
+			 struct where *where, enum message_category cat);
+  bool coverage_map_find_holes (struct coverage_map *coverage_map,
+				bool (*cb) (uint64_t, uint64_t,
+					    struct section_coverage *, void *),
+				void *user);
+  void coverage_map_free (struct coverage_map *coverage_map);
+
+
+  struct hole_info
+  {
+    enum section_id section;
+    enum message_category category;
+    unsigned align;
+    void *data;
+  };
+
+  /* DATA has to be a pointer to an instance of struct hole_info.
+     DATA->data has to point at d_buf of section in question.  */
+  bool found_hole (uint64_t begin, uint64_t end, void *data);
+
+  struct coverage_map_hole_info
+  {
+    struct hole_info info;
+    Elf *elf;
+  };
+
+  /* DATA has to be a pointer to an instance of struct hole_info.
+     DATA->info.data has to be NULL, it is used by the callback.  */
+  bool coverage_map_found_hole (uint64_t begin, uint64_t end,
+				struct section_coverage *sco, void *data);
+
 
 #ifdef __cplusplus
 }
