@@ -2996,7 +2996,7 @@ check_pub_structural (struct read_ctx *ctx, struct cu *cu_chain,
 	  bool *has = sec == sec_pubnames
 			? &cu->has_pubnames : &cu->has_pubtypes;
 	  if (*has)
-	    wr_message (mc_impact_2 | mc_aranges, &where,
+	    wr_message (mc_impact_2 | mc_pubtables, &where,
 			": there has already been section for this CU.\n");
 	  else
 	    *has = true;
@@ -3432,7 +3432,7 @@ check_loc_or_range_structural (struct read_ctx *ctx,
 
       coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
 			       &(struct coverage_map_hole_info)
-			       {{sec_aranges, mc_aranges, 0, NULL},
+			       {{sec, cat, 0, NULL},
 				 coverage_map->elf});
     }
 
