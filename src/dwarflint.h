@@ -150,6 +150,7 @@ extern "C"
     Elf *elf;
     size_t size;
     size_t alloc;
+    bool allow_overlap;
     struct section_coverage *scos;
   };
 
@@ -164,7 +165,7 @@ extern "C"
   void section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
 			      GElf_Shdr *shdr);
   bool coverage_map_init (struct coverage_map *coverage_map, Elf *elf,
-			  Elf64_Xword mask);
+			  Elf64_Xword mask, bool allow_overlap);
   void coverage_map_add (struct coverage_map *coverage_map,
 			 uint64_t address, uint64_t length,
 			 struct where *where, enum message_category cat);

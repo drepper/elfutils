@@ -1714,13 +1714,14 @@ section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
 
 bool
 coverage_map_init (struct coverage_map *coverage_map, Elf *elf,
-		   Elf64_Xword mask)
+		   Elf64_Xword mask, bool allow_overlap)
 {
   assert (coverage_map != NULL);
   assert (elf != NULL);
 
   memset (coverage_map, 0, sizeof (*coverage_map));
   coverage_map->elf = elf;
+  coverage_map->allow_overlap = allow_overlap;
 
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
   if (ehdr == NULL)
@@ -1795,11 +1796,12 @@ coverage_map_add (struct coverage_map *coverage_map,
       uint64_t r_cov_begin = cov_begin + shdr->sh_addr - address;
       uint64_t r_cov_end = cov_end + shdr->sh_addr - address;
 
-      if (!coverage_pristine (cov, cov_begin, cov_end - cov_begin))
+      if (!coverage_map->allow_overlap
+	  && !coverage_pristine (cov, cov_begin, cov_end - cov_begin))
 	/* Not a show stopper, this shouldn't derail high-level.  */
 	wr_message (cat | mc_impact_2 | mc_error, where,
 		    ": the range %#" PRIx64 "..%#" PRIx64
-		    " overlaps with another one defined earlier.\n",
+		    " overlaps with another one.\n",
 		    address, end);
 
       /* Section coverage... */
@@ -2407,8 +2409,9 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
-		else if (abbrev->tag == DW_TAG_compile_unit
-			 || abbrev->tag == DW_TAG_partial_unit)
+		else if ((abbrev->tag == DW_TAG_compile_unit
+			  || abbrev->tag == DW_TAG_partial_unit)
+			 && it->name == DW_AT_low_pc)
 		  cu->base = addr;
 
 		break;
@@ -2703,22 +2706,40 @@ check_cu_structural (struct read_ctx *ctx,
   return retval;
 }
 
+static struct coverage_map *
+coverage_map_alloc_XA (Elf *elf, bool allow_overlap)
+{
+  struct coverage_map *ret = xmalloc (sizeof (*ret));
+  if (!coverage_map_init (ret, elf, SHF_ALLOC | SHF_EXECINSTR, allow_overlap))
+    {
+      free (ret);
+      return NULL;
+    }
+  return ret;
+}
+
+static void
+coverage_map_free_XA (struct coverage_map *coverage_map)
+{
+  if (coverage_map != NULL)
+    {
+      coverage_map_free (coverage_map);
+      free (coverage_map);
+    }
+}
+
 static bool
 check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 {
   struct where where = WHERE (sec_aranges, NULL);
   bool retval = true;
 
-  struct coverage_map coverage_map_mem, *coverage_map;
-  if (!coverage_map_init (&coverage_map_mem, ctx->dbg->elf,
-			  SHF_ALLOC | SHF_EXECINSTR))
+  struct coverage_map *coverage_map;
+  if ((coverage_map = coverage_map_alloc_XA (ctx->dbg->elf, false)) == NULL)
     {
       wr_error (&where, ": couldn't read ELF, skipping coverage analysis.\n");
       retval = false;
-      coverage_map = NULL;
     }
-  else
-    coverage_map = &coverage_map_mem;
 
   while (!read_ctx_eof (ctx))
     {
@@ -2895,8 +2916,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 			       {{sec_aranges, mc_aranges, 0, NULL},
 				 coverage_map->elf});
 
-  if (coverage_map != NULL)
-    coverage_map_free (coverage_map);
+  coverage_map_free_XA (coverage_map);
 
   return retval;
 }
@@ -3176,6 +3196,7 @@ static bool
 check_loc_or_range_ref (struct read_ctx *ctx,
 			struct cu *cu,
 			struct coverage *coverage,
+			struct coverage_map *coverage_map,
 			struct addr_record *addrs,
 			uint64_t addr,
 			bool addr_64,
@@ -3257,14 +3278,18 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 	  return false;
 	}
 
-      bool done = begin_addr == 0 && end_addr == 0;
+      bool done = false;
 
-      if (!done && begin_addr != escape)
+      if (begin_addr == 0 && end_addr == 0)
+	done = true;
+      else if (begin_addr != escape)
 	{
 	  if (base == (uint64_t)-1)
 	    {
 	      wr_error (&where, ": address range with no base address set.\n");
 	      base = (uint64_t)-2; /* Only report once.  */
+	      /* This is not something that would derail high-level,
+		 so carry on.  */
 	    }
 
 	  if (end_addr < begin_addr)
@@ -3276,6 +3301,13 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 	       and ending addresses are equal has no effect.  */
 	    wr_message (cat | mc_acc_bloat | mc_impact_3, &where,
 			": entry covers no range.\n");
+	  /* Skip coverage analysis if we have errors or have no base.  */
+	  else if (base < (uint64_t)-2 && retval)
+	    {
+	      uint64_t address = begin_addr + base;
+	      uint64_t length = end_addr - begin_addr;
+	      coverage_map_add (coverage_map, address, length, &where, cat);
+	    }
 
 	  if (contains_locations)
 	    {
@@ -3314,7 +3346,7 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 		goto not_enough;
 	    }
 	}
-      else if (!done)
+      else
 	{
 	  if (end_addr == base)
 	    wr_message (cat | mc_acc_bloat | mc_impact_3, &where,
@@ -3342,6 +3374,17 @@ check_loc_or_range_structural (struct read_ctx *ctx,
   assert (cu_chain != NULL);
   assert (ctx != NULL);
 
+  bool retval = true;
+
+  struct coverage_map *coverage_map;
+  if ((coverage_map = coverage_map_alloc_XA (ctx->dbg->elf,
+					     sec == sec_loc)) == NULL)
+    {
+      wr_error (&WHERE (sec, NULL),
+		": couldn't read ELF, skipping coverage analysis.\n");
+      retval = false;
+    }
+
   struct coverage coverage;
   coverage_init (&coverage, ctx->data->d_size);
 
@@ -3349,7 +3392,6 @@ check_loc_or_range_structural (struct read_ctx *ctx,
   memset (&addrs, 0, sizeof (addrs));
 
   enum message_category cat = sec == sec_loc ? mc_loc : mc_ranges;
-  bool retval = true;
 
   for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
     {
@@ -3362,7 +3404,8 @@ check_loc_or_range_structural (struct read_ctx *ctx,
 	  struct read_ctx sub_ctx;
 	  read_ctx_init (&sub_ctx, ctx->dbg, ctx->data);
 
-	  if (!check_loc_or_range_ref (&sub_ctx, cu, &coverage, &addrs,
+	  if (!check_loc_or_range_ref (&sub_ctx, cu,
+				       &coverage, coverage_map, &addrs,
 				       ref->addr, cu->address_size == 8,
 				       &ref->who, cat, sec))
 	    retval = false;
@@ -3370,16 +3413,25 @@ check_loc_or_range_structural (struct read_ctx *ctx,
     }
 
   if (retval)
-    /* We check that all CUs have the same address size when building
-       the CU chain.  So just take the address size of the first CU in
-       chain.  */
-    coverage_find_holes (&coverage, found_hole,
-			 &((struct hole_info)
-			   {sec, cat, cu_chain->address_size,
-			       ctx->data->d_buf}));
+    {
+      /* We check that all CUs have the same address size when building
+	 the CU chain.  So just take the address size of the first CU in
+	 chain.  */
+      coverage_find_holes (&coverage, found_hole,
+			   &((struct hole_info)
+			     {sec, cat, cu_chain->address_size,
+			      ctx->data->d_buf}));
+
+      coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
+			       &(struct coverage_map_hole_info)
+			       {{sec_aranges, mc_aranges, 0, NULL},
+				 coverage_map->elf});
+    }
+
 
   coverage_free (&coverage);
   addr_record_free (&addrs);
+  coverage_map_free_XA (coverage_map);
 
   return retval;
 }
