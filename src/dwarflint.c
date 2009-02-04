@@ -56,6 +56,7 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_strict	300
 #define ARGP_gnu	301
 #define ARGP_tolerant	302
+#define ARGP_ref        303
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -70,6 +71,9 @@ static const struct argp_option options[] =
 broken in certain ways"), 0 },
   { "tolerant", ARGP_tolerant, NULL, 0,
     N_("Don't output certain common error messages"), 0 },
+  { "ref", ARGP_ref, NULL, 0,
+    N_("When validating .debug_loc and .debug_ranges, display information about \
+the DIE referring to the entry in consideration"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -222,6 +226,7 @@ static bool be_quiet;
 static bool be_strict = false; /* --strict */
 static bool be_gnu = false; /* --gnu */
 static bool be_tolerant = false; /* --tolerant */
+static bool show_refs = false; /* --ref */
 
 int
 main (int argc, char *argv[])
@@ -334,6 +339,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case ARGP_tolerant:
       be_tolerant = true;
+      break;
+
+    case ARGP_ref:
+      show_refs = true;
       break;
 
     case 'i':
@@ -3239,8 +3248,7 @@ check_loc_or_range_ref (struct read_ctx *ctx,
   uint64_t base = cu->base;
   while (!read_ctx_eof (ctx))
     {
-      struct where where = WHERE (sec, NULL);
-      where.ref = wh;
+      struct where where = WHERE (sec, show_refs ? wh : NULL);
       where_reset_1 (&where, read_ctx_get_offset (ctx));
 
 #define HAVE_OVERLAP						\
