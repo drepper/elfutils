@@ -939,7 +939,6 @@ namespace elfutils
       /*
 	containers/iterators:
 
-	XXX lines
 	XXX macros
 
 	abbrevs (punt)
@@ -1253,6 +1252,7 @@ namespace elfutils
 
       /*
 	XXX missing: find, at; by key_type or by PC
+	XXX worse than that: multiple overlapping matches!
        */
     };
 
