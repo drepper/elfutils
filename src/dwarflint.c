@@ -92,9 +92,8 @@ static struct argp argp =
 /* If true, we accept silently files without debuginfo.  */
 static bool tolerate_nodebug = false;
 
-static void
-process_file (int fd, Dwarf *dwarf, const char *fname,
-	      size_t size, bool only_one);
+static void process_file (int fd, Dwarf *dwarf,
+			  const char *fname, size_t size, bool only_one);
 
 struct message_criteria
 {
@@ -775,7 +774,8 @@ process_file (int fd __attribute__((unused)),
   if (aranges_data != NULL)
     {
       read_ctx_init (&ctx, dwarf, aranges_data);
-      if (check_aranges_structural (&ctx, cu_chain) && ranges_sound)
+      if (check_aranges_structural (&ctx, cu_chain)
+	  && ranges_sound)
 	check_matching_ranges (dwarf);
     }
 
@@ -1640,36 +1640,7 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
 {
   struct coverage_map_hole_info *info = (struct coverage_map_hole_info *)user;
 
-  uintptr_t *flags = (uintptr_t *)&info->info.data;
-  enum
-  {
-    flag_nodata_reported = 0x1,
-    flag_dataless_reported = 0x2,
-  };
-
   struct where where = WHERE (info->info.section, NULL);
-
-  Elf_Data *data = elf_getdata (sco->scn, NULL);
-  if (data == NULL)
-    {
-      if ((*flags & flag_nodata_reported) == 0)
-	{
-	  wr_error (&where,
-		    ": couldn't read section data, coverage analysis may be inaccurate.\n");
-	  *flags |= flag_nodata_reported;
-	}
-    }
-  else if (data->d_buf == NULL)
-    {
-      if ((*flags & flag_dataless_reported) == 0)
-	{
-	  /* XXX data-less section looks like libelf thing, not dwarf
-	     thing.  Find out what's happening.  */
-	  wr_error (&where,
-		    ": data-less section data, coverage analysis may be inaccurate.\n");
-	  *flags |= flag_dataless_reported;
-	}
-    }
 
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (info->elf, &ehdr_mem);
   if (ehdr == NULL)
@@ -1677,9 +1648,15 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
       wr_error (&where, ": invalid ELF, terminating coverage analysis.\n");
       return false;
     }
-
   const char *scnname = elf_strptr (info->elf, ehdr->e_shstrndx,
-				    sco->shdr.sh_name);
+				    sco->shdr.sh_name) ?: "(unknown)";
+
+  Elf_Data *data = elf_getdata (sco->scn, NULL);
+  if (data == NULL)
+    {
+      wr_error (&where, ": couldn't read the data of section %s.\n", scnname);
+      return false;
+    }
 
   /* We don't expect some sections to be covered.  But if they
      are at least partially covered, we expect the same
@@ -1691,10 +1668,13 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
     return true;
 
   uint64_t base = sco->shdr.sh_addr;
-  if (data != NULL && data->d_buf != NULL)
+  /* If we get stripped debuginfo file, the data simply may not be
+     available.  In that case simply report the hole.  */
+  if (data->d_buf != NULL)
     {
       bool zeroes = true;
       for (uint64_t j = begin; j < end; ++j)
+	/* XXX NOP run detection?  */
 	if (((char *)data->d_buf)[j] != 0)
 	  {
 	    zeroes = false;
@@ -1704,10 +1684,10 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
 	return true;
     }
 
-  wr_error (&where,
-	    ": addresses %#" PRIx64 "..%#" PRIx64
-	    " of section %s are not covered.\n",
-	    begin + base, end + base, scnname);
+  wr_message (info->info.category | mc_acc_suboptimal | mc_impact_4, &where,
+	      ": addresses %#" PRIx64 "..%#" PRIx64
+	      " of section %s are not covered.\n",
+	      begin + base, end + base, scnname);
   return true;
 }
 
