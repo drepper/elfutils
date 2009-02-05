@@ -2482,7 +2482,7 @@ read_die_chain (struct read_ctx *ctx,
 		else if (check_locptr || check_rangeptr)
 		  {
 		    if (check_rangeptr && (value % cu->address_size != 0))
-		      wr_message (mc_ranges | mc_impact_4, &where,
+		      wr_message (mc_ranges | mc_impact_2, &where,
 				  ": rangeptr value %#" PRIx32
 				  " not aligned to CU address size.\n",
 				  value);
