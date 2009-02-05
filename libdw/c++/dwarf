@@ -939,7 +939,6 @@ namespace elfutils
       /*
 	containers/iterators:
 
-	XXX lines
 	XXX macros
 
 	abbrevs (punt)
@@ -1253,6 +1252,7 @@ namespace elfutils
 
       /*
 	XXX missing: find, at; by key_type or by PC
+	XXX worse than that: multiple overlapping matches!
        */
     };
 
@@ -1836,7 +1836,7 @@ namespace elfutils
 
 	inline value_type operator* () const
 	{
-	  if (unlikely (_m_offset == 1))
+	  if (unlikely (_m_offset == 0))
 	    throw std::runtime_error ("dereferencing end iterator");
 	  return std::make_pair (_m_begin, _m_end);
 	}
@@ -1864,20 +1864,10 @@ namespace elfutils
 	const_iterator &operator++ () // prefix
 	{
 	  do
-	    {
-	      _m_offset = dwarf_ranges (_m_die.thisdie (), _m_offset,
-					&_m_base, &_m_begin, &_m_end);
-
-	      // Special case: no ranges to look for.
-	      if (_m_offset == 1)
-		{
-		  _m_offset = 0;
-		  break;
-		}
-	    }
+	    _m_offset = dwarf_ranges (_m_die.thisdie (), _m_offset,
+				      &_m_base, &_m_begin, &_m_end);
 	  // Skip over empty ranges.
 	  while (_m_offset != 0 && _m_begin == _m_end);
-
 	  return *this;
 	}
 	inline const_iterator operator++ (int) // postfix
