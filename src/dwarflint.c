@@ -58,6 +58,8 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_tolerant	302
 #define ARGP_ref        303
 
+#undef FIND_SECTION_HOLES
+
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
 {
@@ -1845,6 +1847,7 @@ coverage_map_add (struct coverage_map *coverage_map,
   coverage_free (&range_cov);
 }
 
+#ifdef FIND_SECTION_HOLES
 bool
 coverage_map_find_holes (struct coverage_map *coverage_map,
 			 bool (*cb) (uint64_t, uint64_t,
@@ -1866,6 +1869,7 @@ coverage_map_find_holes (struct coverage_map *coverage_map,
 
   return true;
 }
+#endif
 
 void
 coverage_map_free (struct coverage_map *coverage_map)
@@ -2919,11 +2923,13 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	goto not_enough;
     }
 
+#ifdef FIND_SECTION_HOLES
   if (retval)
     coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
 			     &(struct coverage_map_hole_info)
 			       {{sec_aranges, mc_aranges, 0, NULL},
 				 coverage_map->elf});
+#endif
 
   coverage_map_free_XA (coverage_map);
 
@@ -3430,10 +3436,12 @@ check_loc_or_range_structural (struct read_ctx *ctx,
 			     {sec, cat, cu_chain->address_size,
 			      ctx->data->d_buf}));
 
+#ifdef FIND_SECTION_HOLES
       coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
 			       &(struct coverage_map_hole_info)
 			       {{sec, cat, 0, NULL},
 				 coverage_map->elf});
+#endif
     }
 
 
