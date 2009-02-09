@@ -31,6 +31,8 @@ extern "C"
     sec_locexpr, /* Not a section, but a portion of file that contains a
 		    location expression.  */
     sec_ranges,
+    sec_rel,
+    sec_rela,
   };
 
   struct where
