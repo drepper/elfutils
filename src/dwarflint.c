@@ -391,13 +391,20 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_DIE "DIE 0x%" PRIx64
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
 
+struct relocation_data
+{
+  Elf_Data *data;	/* May be NULL if there are no associated
+			   relocation data.  */
+  size_t type;		/* SHT_REL or SHT_RELA.  */
+  size_t count;		/* How many relocation entries are there?  */
+  size_t index;		/* Current index. */
+};
+
 struct section_data
 {
   enum section_id sec;
-  Elf_Data *secdata;
-  Elf_Data *reldata;	/* May be NULL if there are no associated
-			   relocation data.  */
-  size_t reltype;	/* SHT_REL or SHT_RELA.  */
+  Elf_Data *data;
+  struct relocation_data rel;
 };
 
 /* Functions and data structures related to bounds-checked
@@ -543,7 +550,7 @@ static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 
 /* Functions for checking of structural integrity.  */
 
-static struct cu *check_debug_info_structural (Dwarf *dwarf,
+static struct cu *check_debug_info_structural (Dwarf *dwarf, Ebl *ebl,
 					       struct section_data *data,
 					       struct abbrev_table *abbrev_chain);
 
@@ -729,7 +736,7 @@ process_file (int fd __attribute__((unused)),
   struct read_ctx ctx;
 
 #define DEF_SECDATA(VAR, SEC)			\
-  struct section_data VAR = {SEC, NULL, NULL, 0}
+  struct section_data VAR = {SEC, NULL, {NULL, 0, 0, 0}}
 
   DEF_SECDATA (abbrev_data, sec_abbrev);
   DEF_SECDATA (aranges_data, sec_aranges);
@@ -795,10 +802,10 @@ process_file (int fd __attribute__((unused)),
       struct section_data *secdata = find_secdata (scnname);
       if (secdata != NULL)
 	{
-	  if (secdata->secdata == NULL)
+	  if (secdata->data == NULL)
 	    {
-	      secdata->secdata = elf_getdata (scn, NULL);
-	      if (secdata->secdata == NULL)
+	      secdata->data = elf_getdata (scn, NULL);
+	      if (secdata->data == NULL)
 		wr_error (NULL, "data-less section %s.\n", scnname);
 	    }
 	  else
@@ -826,17 +833,17 @@ process_file (int fd __attribute__((unused)),
 
 	  if (relocated_secdata != NULL)
 	    {
-	      if (relocated_secdata->reldata != NULL)
+	      if (relocated_secdata->rel.data != NULL)
 		wr_error (NULL,
 			  "Several relocation sections for debug section %s\n.",
 			  relocated_scnname);
 	      else
 		{
-		  relocated_secdata->reldata = elf_getdata (scn, NULL);
-		  if (relocated_secdata->reldata == NULL)
+		  relocated_secdata->rel.data = elf_getdata (scn, NULL);
+		  if (relocated_secdata->rel.data == NULL)
 		    wr_error (NULL,
 			      "Data-less relocation section %s.\n", scnname);
-		  relocated_secdata->reltype = shdr->sh_type;
+		  relocated_secdata->rel.type = shdr->sh_type;
 		}
 
 	      if (reloc_symtab == NULL)
@@ -850,27 +857,27 @@ process_file (int fd __attribute__((unused)),
 
   /* Check relocation sections that we've got.  */
   for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
-    if (secinfo[i].dataptr->reldata != NULL)
+    if (secinfo[i].dataptr->rel.data != NULL)
       {
-	if (secinfo[i].dataptr->secdata == NULL)
+	if (secinfo[i].dataptr->data == NULL)
 	  {
-	    secinfo[i].dataptr->secdata = NULL;
+	    secinfo[i].dataptr->data = NULL;
 	    wr_error (&WHERE (secinfo[i].dataptr->sec, NULL),
 		      ": the ELF contains relocation section for this data-less section.\n");
 	  }
 	else if (!check_relocation_section_structural (dwarf,
 						       secinfo[i].dataptr,
 						       ebl, elf_64))
-	  secinfo[i].dataptr->reldata = NULL;
+	  secinfo[i].dataptr->rel.data = NULL;
       }
 
  skip_rel:;
   /* If we got Dwarf pointer, debug_abbrev and debug_info are present
      inside the file.  But let's be paranoid.  */
   struct abbrev_table *abbrev_chain = NULL;
-  if (likely (abbrev_data.secdata != NULL))
+  if (likely (abbrev_data.data != NULL))
     {
-      read_ctx_init (&ctx, dwarf, abbrev_data.secdata);
+      read_ctx_init (&ctx, dwarf, abbrev_data.data);
       abbrev_chain = abbrev_table_load (&ctx);
     }
   else if (!tolerate_nodebug)
@@ -882,8 +889,8 @@ process_file (int fd __attribute__((unused)),
   if (abbrev_chain != NULL)
     {
       /* Same as above...  */
-      if (info_data.secdata != NULL)
-	cu_chain = check_debug_info_structural (dwarf, &info_data,
+      if (info_data.data != NULL)
+	cu_chain = check_debug_info_structural (dwarf, ebl, &info_data,
 						abbrev_chain);
       else if (!tolerate_nodebug)
 	/* Hard error, not a message.  We can't debug without this.  */
@@ -891,29 +898,29 @@ process_file (int fd __attribute__((unused)),
     }
 
   bool ranges_sound;
-  if (ranges_data.secdata != NULL && cu_chain != NULL)
+  if (ranges_data.data != NULL && cu_chain != NULL)
     ranges_sound = check_loc_or_range_structural (dwarf, &ranges_data, cu_chain);
   else
     ranges_sound = false;
 
-  if (loc_data.secdata != NULL && cu_chain != NULL)
+  if (loc_data.data != NULL && cu_chain != NULL)
     check_loc_or_range_structural (dwarf, &loc_data, cu_chain);
 
-  if (aranges_data.secdata != NULL)
+  if (aranges_data.data != NULL)
     {
-      read_ctx_init (&ctx, dwarf, aranges_data.secdata);
+      read_ctx_init (&ctx, dwarf, aranges_data.data);
       if (check_aranges_structural (&ctx, cu_chain)
 	  && ranges_sound)
 	check_matching_ranges (dwarf);
     }
 
-  if (pubnames_data.secdata != NULL)
+  if (pubnames_data.data != NULL)
     check_pub_structural (dwarf, &pubnames_data, cu_chain);
   else
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 		&WHERE (sec_pubnames, NULL), ": data not found.\n");
 
-  if (pubtypes_data.secdata != NULL)
+  if (pubtypes_data.data != NULL)
     check_pub_structural (dwarf, &pubtypes_data, cu_chain);
   else
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
@@ -2142,6 +2149,84 @@ check_zero_padding (struct read_ctx *ctx,
   return true;
 }
 
+static bool
+check_reloc (struct relocation_data *reloc, Ebl *ebl,
+	     uint64_t offset, unsigned width,
+	     struct where *where)
+{
+  if (reloc == NULL)
+    return true;
+
+  bool retval = true;
+  while (reloc->index < reloc->count)
+    {
+      GElf_Rela rela_mem, *rela
+	= gelf_getrela (reloc->data, reloc->index, &rela_mem);
+
+      /* This relocation entry is ahead of us.  */
+      if (rela->r_offset > offset)
+	break;
+
+      reloc->index++;
+
+      /* Hit!  */
+      if (rela->r_offset == offset)
+	{
+	  int rtype = GELF_R_TYPE (rela->r_info);
+	  Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
+
+	  unsigned rel_width;
+	  switch (type)
+	    {
+	    case ELF_T_BYTE:
+	      rel_width = 1;
+	      break;
+
+	    case ELF_T_HALF:
+	      rel_width = 2;
+	      break;
+
+	    case ELF_T_WORD:
+	    case ELF_T_SWORD:
+	      rel_width = 4;
+	      break;
+
+	    case ELF_T_XWORD:
+	    case ELF_T_SXWORD:
+	      rel_width = 8;
+	      break;
+
+	    default:
+	      /* Even though it is an error, it's an error that was
+		 already diagnosed, so don't make the result false.  */
+	      return retval;
+	    };
+
+	  if (rel_width != width)
+	    {
+	      /* XXX here we want both relocation and data reference
+		 in where.  */
+	      wr_error (where,
+			": %d-byte relocation relocates %d-byte datum.\n",
+			rel_width, width);
+	      return false;
+	    }
+
+	  break;
+	}
+
+      /* XXX make 'where' point to reloc.  Currently it's done so
+	 that it points to the first place with offset greater than
+	 the current relocation cursor.  */
+      retval = false;
+      wr_error (where,
+		": mismatched relocation of %#" PRIx64 ".\n",
+		rela->r_offset);
+    }
+
+  return retval;
+}
+
 /*
   Returns:
     -1 in case of error
@@ -2157,7 +2242,9 @@ read_die_chain (struct read_ctx *ctx,
 		bool dwarf_64, bool addr_64,
 		struct ref_record *die_refs,
 		struct ref_record *die_loc_refs,
-		struct coverage *strings_coverage)
+		struct coverage *strings_coverage,
+		struct relocation_data *reloc,
+		Ebl *ebl)
 {
   bool got_die = false;
   uint64_t sibling_addr = 0;
@@ -2338,11 +2425,14 @@ read_die_chain (struct read_ctx *ctx,
 
 	  assert (!(check_locptr && check_rangeptr));
 
+	  uint64_t offset = read_ctx_get_offset (ctx) + cu->offset;
+	  //printf ("Datum @%#" PRIx64 ", form %s.\n", offset, dwarf_form_string (form));
 	  switch (form)
 	    {
 	    case DW_FORM_strp:
 	      {
 		uint64_t addr;
+		check_reloc (reloc, ebl, offset, dwarf_64 ? 8 : 4, &where);
 		if (!read_ctx_read_offset (ctx, dwarf_64, &addr))
 		  {
 		  cant_read:
@@ -2386,6 +2476,7 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_ref_addr:
 	      {
 		uint64_t addr;
+		check_reloc (reloc, ebl, offset, dwarf_64 ? 8 : 4, &where);
 		if (!read_ctx_read_offset (ctx, addr_64, &addr))
 		  goto cant_read;
 
@@ -2418,6 +2509,9 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_data1:
 	    case DW_FORM_ref1:
 	      {
+		if (form == DW_FORM_data1)
+		  check_reloc (reloc, ebl, offset, 1, &where);
+
 		uint8_t value;
 		if (!read_ctx_read_ubyte (ctx, &value))
 		  goto cant_read;
@@ -2432,6 +2526,9 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_data2:
 	    case DW_FORM_ref2:
 	      {
+		if (form == DW_FORM_data2)
+		  check_reloc (reloc, ebl, offset, 2, &where);
+
 		uint16_t value;
 		if (!read_ctx_read_2ubyte (ctx, &value))
 		  goto cant_read;
@@ -2446,6 +2543,9 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_data4:
 	    case DW_FORM_ref4:
 	      {
+		if (form == DW_FORM_data4)
+		  check_reloc (reloc, ebl, offset, 4, &where);
+
 		uint32_t value;
 		if (!read_ctx_read_4ubyte (ctx, &value))
 		  goto cant_read;
@@ -2472,6 +2572,9 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_data8:
 	    case DW_FORM_ref8:
 	      {
+		if (form == DW_FORM_data8)
+		  check_reloc (reloc, ebl, offset, 8, &where);
+
 		uint64_t value;
 		if (!read_ctx_read_8ubyte (ctx, &value))
 		  goto cant_read;
@@ -2565,7 +2668,7 @@ read_die_chain (struct read_ctx *ctx,
 	  int st = read_die_chain (ctx, cu, abbrevs, strings,
 				   dwarf_64, addr_64,
 				   die_refs, die_loc_refs,
-				   strings_coverage);
+				   strings_coverage, reloc, ebl);
 	  if (st == -1)
 	    return -1;
 	  else if (st == 0)
@@ -2590,17 +2693,22 @@ check_cu_structural (struct read_ctx *ctx,
 		     Elf_Data *strings,
 		     bool dwarf_64,
 		     struct ref_record *die_refs,
-		     struct coverage *strings_coverage)
+		     struct coverage *strings_coverage,
+		     struct relocation_data *reloc,
+		     Ebl *ebl)
 {
   uint16_t version;
   uint64_t abbrev_offset;
   uint8_t address_size;
+  bool retval = true;
 
   /* Version.  */
   if (!read_ctx_read_version (ctx, dwarf_64, &version, &cu->where))
     return false;
 
   /* Abbrev offset.  */
+  check_reloc (reloc, ebl, read_ctx_get_offset (ctx),
+	       dwarf_64 ? 8 : 4, &cu->where);
   if (!read_ctx_read_offset (ctx, dwarf_64, &abbrev_offset))
     {
       wr_error (&cu->where, ": can't read abbrev offset.\n");
@@ -2638,11 +2746,10 @@ check_cu_structural (struct read_ctx *ctx,
   struct ref_record die_loc_refs;
   memset (&die_loc_refs, 0, sizeof (die_loc_refs));
 
-  bool retval = true;
   if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
-		      die_refs, &die_loc_refs,
-		      strings_coverage) >= 0)
+		      die_refs, &die_loc_refs, strings_coverage,
+		      reloc->data != NULL ? reloc : NULL, ebl) >= 0)
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
 	if (!abbrevs->abbr[i].used)
@@ -2661,12 +2768,12 @@ check_cu_structural (struct read_ctx *ctx,
 }
 
 static struct cu *
-check_debug_info_structural (Dwarf *dwarf,
+check_debug_info_structural (Dwarf *dwarf, Ebl *ebl,
 			     struct section_data *data,
 			     struct abbrev_table *abbrev_chain)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->secdata);
+  read_ctx_init (&ctx, dwarf, data->data);
   Elf_Data *strings = dwarf->sectiondata[IDX_debug_str];
 
   struct ref_record die_refs;
@@ -2683,6 +2790,7 @@ check_debug_info_structural (Dwarf *dwarf,
       strings_coverage = &strings_coverage_mem;
     }
 
+  struct relocation_data *reloc = data->rel.data != NULL ? &data->rel : NULL;
   while (!read_ctx_eof (&ctx))
     {
       const unsigned char *cu_begin = ctx.ptr;
@@ -2758,9 +2866,8 @@ check_debug_info_structural (Dwarf *dwarf,
 	  cu_ctx.ptr = ctx.ptr;
 
 	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain,
-				    strings,
-				    dwarf_64, &die_refs,
-				    strings_coverage))
+				    strings, dwarf_64, &die_refs,
+				    strings_coverage, reloc, ebl))
 	    {
 	      success = false;
 	      break;
@@ -3055,7 +3162,7 @@ check_pub_structural (Dwarf *dwarf,
 		      struct cu *cu_chain)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->secdata);
+  read_ctx_init (&ctx, dwarf, data->data);
   bool retval = true;
 
   while (!read_ctx_eof (&ctx))
@@ -3433,8 +3540,9 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 	       and ending addresses are equal has no effect.  */
 	    wr_message (cat | mc_acc_bloat | mc_impact_3, &where,
 			": entry covers no range.\n");
-	  /* Skip coverage analysis if we have errors or have no base.  */
-	  else if (base < (uint64_t)-2 && retval)
+	  /* Skip coverage analysis if we have errors or have no base
+	     (or just don't do coverage analysis at all).  */
+	  else if (base < (uint64_t)-2 && retval && coverage_map != NULL)
 	    {
 	      uint64_t address = begin_addr + base;
 	      uint64_t length = end_addr - begin_addr;
@@ -3506,7 +3614,7 @@ check_loc_or_range_structural (Dwarf *dwarf,
   assert (cu_chain != NULL);
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->secdata);
+  read_ctx_init (&ctx, dwarf, data->data);
 
   bool retval = true;
 
@@ -3580,31 +3688,31 @@ check_relocation_section_structural (Dwarf *dwarf,
 				     Ebl *ebl,
 				     bool elf_64)
 {
-  assert (data->reltype == SHT_REL || data->reltype == SHT_RELA);
+  assert (data->rel.type == SHT_REL || data->rel.type == SHT_RELA);
   bool retval = true;
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->secdata);
+  read_ctx_init (&ctx, dwarf, data->data);
 
-  bool is_rela = data->reltype == SHT_RELA;
+  bool is_rela = data->rel.type == SHT_RELA;
   size_t entrysize
     = elf_64
     ? (is_rela ? sizeof (Elf64_Rela) : sizeof (Elf64_Rel))
     : (is_rela ? sizeof (Elf32_Rela) : sizeof (Elf32_Rel));
-  unsigned entries = data->reldata->d_size / entrysize;
+  data->rel.count = data->rel.data->d_size / entrysize;
 
   struct where parent = WHERE (data->sec, NULL);
   struct where where = WHERE (is_rela ? sec_rela : sec_rel, NULL);
   where.ref = &parent;
 
-  for (unsigned i = 0; i < entries; ++i)
+  for (unsigned i = 0; i < data->rel.count; ++i)
     {
       where_reset_1 (&where, i);
 
       GElf_Rela rela_mem = {0, 0, 0};
       GElf_Rela *rela = is_rela
-	? gelf_getrela (data->reldata, i, &rela_mem)
-	: (GElf_Rela *)gelf_getrel (data->reldata, i, (GElf_Rel *)(&rela_mem));
+	? gelf_getrela (data->rel.data, i, &rela_mem)
+	: (GElf_Rela *)gelf_getrel (data->rel.data, i, (GElf_Rel *)(&rela_mem));
       if (rela == NULL)
 	{
 	  wr_error (&where, ": couldn't read relocation.\n");
@@ -3640,13 +3748,13 @@ check_relocation_section_structural (Dwarf *dwarf,
       int compar##BITS (const void *a, const void *b)	\
       {							\
 	typedef Elf##BITS##_Rela rel_t;			\
-	return ((rel_t *)b)->r_offset - ((rel_t *)a)->r_offset;	\
+	return ((rel_t *)a)->r_offset - ((rel_t *)b)->r_offset;	\
       }
       COMPAR (32);
       COMPAR (64);
 #undef COMPAR
 
-      qsort (data->reldata->d_buf, entries, entrysize,
+      qsort (data->rel.data->d_buf, data->rel.count, entrysize,
 	     elf_64 ? &compar64 : &compar32);
     }
 
