@@ -2389,7 +2389,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_offset (ctx, addr_64, &addr))
 		  goto cant_read;
 
-		if (it->form == DW_FORM_ref_addr)
+		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
 		else if ((abbrev->tag == DW_TAG_compile_unit
 			  || abbrev->tag == DW_TAG_partial_unit)
@@ -2409,7 +2409,7 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (it->form == DW_FORM_ref_udata)
+		else if (form == DW_FORM_ref_udata)
 		  record_ref (value, &where, true);
 		break;
 	      }
@@ -2424,7 +2424,7 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (it->form == DW_FORM_ref1)
+		else if (form == DW_FORM_ref1)
 		  record_ref (value, &where, true);
 		break;
 	      }
@@ -2438,7 +2438,7 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (it->form == DW_FORM_ref2)
+		else if (form == DW_FORM_ref2)
 		  record_ref (value, &where, true);
 		break;
 	      }
@@ -2464,7 +2464,7 @@ read_die_chain (struct read_ctx *ctx,
 		      = check_locptr ? &cu->loc_refs : &cu->range_refs;
 		    ref_record_add (ref, value, &where);
 		  }
-		else if (it->form == DW_FORM_ref4)
+		else if (form == DW_FORM_ref4)
 		  record_ref (value, &where, true);
 		break;
 	      }
@@ -2490,7 +2490,7 @@ read_die_chain (struct read_ctx *ctx,
 		      = check_locptr ? &cu->loc_refs : &cu->range_refs;
 		    ref_record_add (ref, value, &where);
 		  }
-		else if (it->form == DW_FORM_ref8)
+		else if (form == DW_FORM_ref8)
 		  record_ref (value, &where, true);
 		break;
 	      }
@@ -2556,7 +2556,7 @@ read_die_chain (struct read_ctx *ctx,
 
 	    default:
 	      wr_error (&where,
-			": internal error: unhandled form 0x%x\n", it->form);
+			": internal error: unhandled form 0x%x\n", form);
 	    }
 	}
 
