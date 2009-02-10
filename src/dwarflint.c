@@ -395,6 +395,8 @@ struct relocation_data
 {
   Elf_Data *data;	/* May be NULL if there are no associated
 			   relocation data.  */
+  Elf_Data *symdata;	/* Symbol table associated with this
+			   relocation section.  */
   size_t type;		/* SHT_REL or SHT_RELA.  */
   size_t count;		/* How many relocation entries are there?  */
   size_t index;		/* Current index. */
@@ -739,7 +741,7 @@ process_file (int fd __attribute__((unused)),
   struct read_ctx ctx;
 
 #define DEF_SECDATA(VAR, SEC)			\
-  struct section_data VAR = {SEC, NULL, {NULL, 0, 0, 0}}
+  struct section_data VAR = {SEC, NULL, {NULL, NULL, 0, 0, 0}}
 
   DEF_SECDATA (abbrev_data, sec_abbrev);
   DEF_SECDATA (aranges_data, sec_aranges);
@@ -858,6 +860,19 @@ process_file (int fd __attribute__((unused)),
 	}
     }
 
+  Elf_Data *reloc_symdata = NULL;
+  if (reloc_symtab != NULL)
+    {
+      reloc_symdata = elf_getdata (reloc_symtab, NULL);
+      if (reloc_symdata == NULL)
+	{
+	  wr_error (NULL,
+		    "Couldn't obtain symtab data.\n");
+	  /* But carry on, we can check a lot of stuff even without
+	     symbol table.  */
+	}
+    }
+
   /* Check relocation sections that we've got.  */
   for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
     if (secinfo[i].dataptr->rel.data != NULL)
@@ -866,12 +881,14 @@ process_file (int fd __attribute__((unused)),
 	  {
 	    secinfo[i].dataptr->data = NULL;
 	    wr_error (&WHERE (secinfo[i].dataptr->sec, NULL),
-		      ": the ELF contains relocation section for this data-less section.\n");
+		      ": this data-less section has a relocation section.\n");
 	  }
 	else if (!check_relocation_section_structural (dwarf,
 						       secinfo[i].dataptr,
 						       ebl, elf_64))
 	  secinfo[i].dataptr->rel.data = NULL;
+	else
+	  secinfo[i].dataptr->rel.symdata = reloc_symdata;
       }
 
  skip_rel:;
@@ -2180,94 +2197,236 @@ where_from_reloc (struct relocation_data *reloc, struct where *ref)
   return where;
 }
 
-static void
-relocate_one (struct relocation_data *reloc, Ebl *ebl,
-	      uint64_t offset, unsigned width,
-	      uint64_t *value, struct where *where)
+static GElf_Rela *
+next_relocation (struct relocation_data *reloc, uint64_t offset,
+		 GElf_Rela *rela_mem, struct where *where)
 {
-  assert (value);
   if (reloc == NULL)
-    return;
+    return NULL;
 
   while (reloc->index < reloc->count)
     {
       struct where reloc_where = where_from_reloc (reloc, where);
 
-      GElf_Rela rela_mem, *rela
-	= get_rel_or_rela (reloc->data, reloc->index, &rela_mem, reloc->type);
+      GElf_Rela *rela
+	= get_rel_or_rela (reloc->data, reloc->index, rela_mem, reloc->type);
       if (rela == NULL)
 	{
 	  /* "can't happen"  */
 	  wr_error (&reloc_where, ": couldn't obtain relocation.\n");
-	  return;
+	  return NULL;
 	}
 
       where_reset_2 (&reloc_where, rela->r_offset);
 
       /* This relocation entry is ahead of us.  */
       if (rela->r_offset > offset)
-	return;
+	return NULL;
 
       reloc->index++;
 
       if (rela->r_offset != offset)
 	{
 	  wr_error (&reloc_where,
-		    ": mismatched relocation of %#" PRIx64 ".\n",
+		    ": relocation of %#" PRIx64 " is mismatched.\n",
 		    rela->r_offset);
 	  continue;
 	}
 
-      /* Hit!  */
-      struct where reloc_ref_where = reloc_where;
-      reloc_ref_where.next = where;
+      return rela;
+    }
 
-      if (reloc->type == SHT_REL)
-	rela->r_addend = *value;
-      else if (*value != 0)
-	wr_warning (&reloc_ref_where,
-		    ": non-zero value being relocated by SHR_RELA relocation.\n");
+  return NULL;
+}
 
-      int rtype = GELF_R_TYPE (rela->r_info);
-      Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
+static void
+relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
+	      Elf *elf, Ebl *ebl, unsigned width,
+	      uint64_t *value, struct where *where,
+	      enum section_id offset_into)
+{
+  assert (offset_into != sec_invalid);
 
-      unsigned rel_width;
-      switch (type)
+  struct where reloc_where = where_from_reloc (reloc, where);
+  where_reset_2 (&reloc_where, rela->r_offset);
+  struct where reloc_ref_where = reloc_where;
+  reloc_ref_where.next = where;
+
+  uint64_t addend;
+  if (reloc->type == SHT_REL)
+    addend = *value;
+  else
+    {
+      if (*value != 0)
+	wr_message (mc_impact_2 | mc_reloc, &reloc_ref_where,
+		    ": SHR_RELA relocates a place with non-zero value.\n");
+      addend = rela->r_addend;
+    }
+
+  int rtype = GELF_R_TYPE (rela->r_info);
+  int symndx = GELF_R_SYM (rela->r_info);
+  Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
+
+  unsigned rel_width;
+  switch (type)
+    {
+    case ELF_T_BYTE:
+      rel_width = 1;
+      break;
+
+    case ELF_T_HALF:
+      rel_width = 2;
+      break;
+
+    case ELF_T_WORD:
+    case ELF_T_SWORD:
+      rel_width = 4;
+      break;
+
+    case ELF_T_XWORD:
+    case ELF_T_SXWORD:
+      rel_width = 8;
+      break;
+
+    default:
+      /* This has already been diagnosed during the isolated
+	 validation of relocation section.  */
+      return;
+    };
+
+  if (rel_width != width)
+    wr_error (&reloc_ref_where,
+	      ": %d-byte relocation relocates %d-byte datum.\n",
+	      rel_width, width);
+
+  /* Tolerate that we might have failed to obtain a symbol table.  */
+  if (reloc->symdata != NULL)
+    {
+      GElf_Sym symbol_mem, *symbol
+	= gelf_getsym (reloc->symdata, symndx, &symbol_mem);
+      if (symbol == NULL)
 	{
-	case ELF_T_BYTE:
-	  rel_width = 1;
-	  break;
-
-	case ELF_T_HALF:
-	  rel_width = 2;
-	  break;
-
-	case ELF_T_WORD:
-	case ELF_T_SWORD:
-	  rel_width = 4;
-	  break;
-
-	case ELF_T_XWORD:
-	case ELF_T_SXWORD:
-	  rel_width = 8;
-	  break;
-
-	default:
-	  /* This has already been diagnosed during the isolated
-	     validation of relocation section.  */
+	  wr_error (&reloc_where,
+		    ": couldn't obtain symbol #%d: %s.\n",
+		    symndx, elf_errmsg (-1));
 	  return;
+	}
+
+      uint64_t nv = rela->r_addend + symbol->st_value;
+      /*
+      wr_warning (where,
+		  ": relocation %#lx st_shndx %d: %#lx->%#lx.\n",
+		  rela->r_offset, symbol->st_shndx, *value, nv);
+      */
+
+      uint64_t section_index = symbol->st_shndx;
+
+      /* It's target value, not section offset.  */
+      if (offset_into == rel_value)
+	{
+	  /* If a target value is what's expected, then complain
+	     if it's not either SHN_ABS, an SHF_ALLOC section, or
+	     SHN_UNDEF  */
+	  if (section_index != SHN_ABS && section_index != SHN_UNDEF)
+	    {
+	      Elf_Scn *scn = elf_getscn (elf, section_index);
+	      GElf_Shdr shdr_mem, *shdr;
+	      if (scn == NULL)
+		wr_error (&reloc_where,
+			  ": couldn't obtain associated section #%" PRId64 ".\n",
+			  section_index);
+	      else if ((shdr = gelf_getshdr (scn, &shdr_mem)) == NULL)
+		wr_error (&reloc_where,
+			  ": couldn't obtain header of associated section #%" PRId64 ".\n",
+			  section_index);
+	      else if ((shdr->sh_flags & SHF_ALLOC) != SHF_ALLOC)
+		wr_message (mc_reloc | mc_impact_3, &reloc_where,
+			    ": associated section #%" PRId64 " isn't SHF_ALLOC.\n",
+			    section_index);
+	    }
+	  *value = nv;
+	}
+      /* XXX If symtab[symndx].st_shndx does not match the
+	 expected debug section's index, complain */
+    }
+}
+
+static enum section_id
+reloc_target (uint8_t form, struct abbrev_attrib *at)
+{
+  switch (form)
+    {
+    case DW_FORM_strp:
+      return sec_str;
+
+    case DW_FORM_addr:
+
+      switch (at->name)
+	{
+	case DW_AT_low_pc:
+	case DW_AT_high_pc:
+	  return sec_text;
 	};
 
-      if (rel_width != width)
-	wr_error (&reloc_ref_where,
-		  ": %d-byte relocation relocates %d-byte datum.\n",
-		  rel_width, width);
+      break;
 
-      wr_warning (where,
-		  ": relocation %#lx symndx %ld.\n",
-		  rela->r_offset, GELF_R_SYM (rela->r_info));
-      return;
-    }
+    case DW_FORM_ref_addr:
+      return sec_info;
+
+    case DW_FORM_data1:
+    case DW_FORM_data2:
+    case DW_FORM_data4:
+    case DW_FORM_data8:
+
+      switch (at->name)
+	{
+	case DW_AT_stmt_list:
+	  return sec_line;
+
+	case DW_AT_location:
+	case DW_AT_string_length:
+	case DW_AT_return_addr:
+	case DW_AT_data_member_location:
+	case DW_AT_frame_base:
+	case DW_AT_segment:
+	case DW_AT_static_link:
+	case DW_AT_use_location:
+	case DW_AT_vtable_elem_location:
+	  return sec_loc;
+
+	case DW_AT_mac_info:
+	  return sec_mac;
+
+	case DW_AT_ranges:
+	  return sec_ranges;
+	}
+
+      break;
+
+    case DW_FORM_string:
+    case DW_FORM_ref1:
+    case DW_FORM_ref2:
+    case DW_FORM_ref4:
+      /* Shouldn't be relocated.  */
+      return sec_invalid;
+
+    case DW_FORM_sdata:
+    case DW_FORM_udata:
+    case DW_FORM_flag:
+    case DW_FORM_ref_udata:
+      assert (!"Can't be relocated!");
+
+    case DW_FORM_block1:
+    case DW_FORM_block2:
+    case DW_FORM_block4:
+    case DW_FORM_block:
+      assert (!"Should be handled specially!");
+    };
+
+  printf ("XXX don't know how to handle form=%s, at=%s\n",
+	  dwarf_form_string (form), dwarf_attr_string (at->name));
+
+  return rel_value;
 }
 
 /*
@@ -2469,6 +2628,8 @@ read_die_chain (struct read_ctx *ctx,
 	  assert (!(check_locptr && check_rangeptr));
 
 	  uint64_t offset = read_ctx_get_offset (ctx) + cu->offset;
+	  GElf_Rela rela_mem, *rela = NULL;
+	  Elf *elf = ctx->dbg->elf;
 	  //printf ("Datum @%#" PRIx64 ", form %s.\n", offset, dwarf_form_string (form));
 	  switch (form)
 	    {
@@ -2481,8 +2642,10 @@ read_die_chain (struct read_ctx *ctx,
 		    wr_error (&where, ": can't read attribute value.\n");
 		    return -1;
 		  }
-		relocate_one (reloc, ebl, offset, dwarf_64 ? 8 : 4,
-			      &addr, &where);
+
+		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		  relocate_one (reloc, rela, elf, ebl, dwarf_64 ? 8 : 4,
+				&addr, &where, sec_str);
 
 		if (strings == NULL)
 		  wr_error (&where,
@@ -2522,8 +2685,10 @@ read_die_chain (struct read_ctx *ctx,
 		uint64_t addr;
 		if (!read_ctx_read_offset (ctx, addr_64, &addr))
 		  goto cant_read;
-		relocate_one (reloc, ebl, offset, addr_64 ? 8 : 4,
-			      &addr, &where);
+
+		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		  relocate_one (reloc, rela, elf, ebl, dwarf_64 ? 8 : 4,
+				&addr, &where, reloc_target (form, it));
 
 		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
@@ -2559,8 +2724,9 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		uint64_t value = raw_value;
-		if (form == DW_FORM_data1)
-		  relocate_one (reloc, ebl, offset, 1, &value, &where);
+		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		  relocate_one (reloc, rela, elf, ebl, 1,
+				&value, &where, reloc_target (form, it));
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2577,8 +2743,9 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		uint64_t value = raw_value;
-		if (form == DW_FORM_data2)
-		  relocate_one (reloc, ebl, offset, 2, &value, &where);
+		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		  relocate_one (reloc, rela, elf, ebl, 2,
+				&value, &where, reloc_target (form, it));
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2595,8 +2762,9 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		uint64_t value = raw_value;
-		if (form == DW_FORM_data4)
-		  relocate_one (reloc, ebl, offset, 4, &value, &where);
+		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		  relocate_one (reloc, rela, elf, ebl, 4,
+				&value, &where, reloc_target (form, it));
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2623,8 +2791,9 @@ read_die_chain (struct read_ctx *ctx,
 		uint64_t value;
 		if (!read_ctx_read_8ubyte (ctx, &value))
 		  goto cant_read;
-		if (form == DW_FORM_data8)
-		  relocate_one (reloc, ebl, offset, 8, &value, &where);
+		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		  relocate_one (reloc, rela, elf, ebl, 8,
+				&value, &where, reloc_target (form, it));
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2760,8 +2929,10 @@ check_cu_structural (struct read_ctx *ctx,
       wr_error (&cu->where, ": can't read abbrev offset.\n");
       return false;
     }
-  relocate_one (reloc, ebl, offset, dwarf_64 ? 8 : 4,
-		&abbrev_offset, &cu->where);
+  GElf_Rela rela_mem, *rela;
+  if ((rela = next_relocation (reloc, offset, &rela_mem, &cu->where)))
+    relocate_one (reloc, rela, ctx->dbg->elf, ebl, dwarf_64 ? 8 : 4,
+		  &abbrev_offset, &cu->where, sec_abbrev);
 
   /* Address size.  */
   if (!read_ctx_read_ubyte (ctx, &address_size))
