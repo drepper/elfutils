@@ -432,6 +432,8 @@ static bool read_ctx_read_offset (struct read_ctx *ctx, bool dwarf64,
 static bool read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret);
 static bool read_ctx_skip (struct read_ctx *ctx, uint64_t len);
 static bool read_ctx_eof (struct read_ctx *ctx);
+static bool read_ctx_read_version (struct read_ctx *ctx, bool dwarf_64,
+				   uint16_t *versionp, struct where *wh);
 
 
 /* Functions and data structures related to raw (i.e. unassisted by
@@ -544,14 +546,6 @@ static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 static struct cu *check_debug_info_structural (Dwarf *dwarf,
 					       struct section_data *data,
 					       struct abbrev_table *abbrev_chain);
-
-static bool check_cu_structural (struct read_ctx *ctx,
-				 struct cu *const cu,
-				 struct abbrev_table *abbrev_chain,
-				 Elf_Data *strings,
-				 bool dwarf_64,
-				 struct ref_record *die_refs,
-				 struct coverage *strings_coverage);
 
 static bool check_aranges_structural (struct read_ctx *ctx,
 				      struct cu *cu_chain);
@@ -1210,6 +1204,34 @@ static bool
 read_ctx_eof (struct read_ctx *ctx)
 {
   return !read_ctx_need_data (ctx, 1);
+}
+
+static bool
+read_ctx_read_version (struct read_ctx *ctx, bool dwarf_64,
+		       uint16_t *versionp, struct where *wh)
+{
+  bool retval = read_ctx_read_2ubyte (ctx, versionp);
+
+  if (!retval)
+    {
+      wr_error (wh, ": can't read version.\n");
+      return false;
+    }
+
+  if (*versionp < 2 || *versionp > 3)
+    {
+      wr_error (wh, ": %s version %d.\n",
+		(*versionp < 2 ? "invalid" : "unsupported"), *versionp);
+      return false;
+    }
+
+  if (*versionp == 2 && dwarf_64)
+    /* Keep going.  It's a standard violation, but we may still be
+       able to read the unit under consideration and do high-level
+       checks.  */
+    wr_error (wh, ": invalid 64-bit unit in DWARF 2 format.\n");
+
+  return true;
 }
 
 static bool
@@ -2122,180 +2144,6 @@ check_zero_padding (struct read_ctx *ctx,
   return true;
 }
 
-static struct cu *
-check_debug_info_structural (Dwarf *dwarf,
-			     struct section_data *data,
-			     struct abbrev_table *abbrev_chain)
-{
-  struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->secdata);
-  Elf_Data *strings = dwarf->sectiondata[IDX_debug_str];
-
-  struct ref_record die_refs;
-  memset (&die_refs, 0, sizeof (die_refs));
-
-  struct cu *cu_chain = NULL;
-
-  bool success = true;
-
-  struct coverage strings_coverage_mem, *strings_coverage = NULL;
-  if (strings != NULL && check_category (mc_strings))
-    {
-      coverage_init (&strings_coverage_mem, strings->d_size);
-      strings_coverage = &strings_coverage_mem;
-    }
-
-  while (!read_ctx_eof (&ctx))
-    {
-      const unsigned char *cu_begin = ctx.ptr;
-      struct where where = WHERE (sec_info, NULL);
-      where_reset_1 (&where, read_ctx_get_offset (&ctx));
-
-      struct cu *cur = xcalloc (1, sizeof (*cur));
-      cur->offset = where.addr1;
-      cur->next = cu_chain;
-      cur->where = where;
-      cur->base = (uint64_t)-1;
-      cu_chain = cur;
-
-      uint32_t size32;
-      uint64_t size;
-      bool dwarf_64 = false;
-
-      /* Reading CU header is a bit tricky, because we don't know if
-	 we have run into (superfluous but allowed) zero padding.  */
-      if (!read_ctx_need_data (&ctx, 4)
-	  && check_zero_padding (&ctx, mc_die_other, &where))
-	break;
-
-      /* CU length.  */
-      if (!read_ctx_read_4ubyte (&ctx, &size32))
-	{
-	  wr_error (&where, ": can't read CU length.\n");
-	  success = false;
-	  break;
-	}
-      if (size32 == 0 && check_zero_padding (&ctx, mc_die_other, &where))
-	break;
-
-      if (!read_size_extra (&ctx, size32, &size, &dwarf_64, &where))
-	{
-	  success = false;
-	  break;
-	}
-
-      if (!read_ctx_need_data (&ctx, size))
-	{
-	  wr_error (&where,
-		    ": section doesn't have enough data"
-		    " to read CU of size %" PRIx64 ".\n", size);
-	  ctx.ptr = ctx.end;
-	  success = false;
-	  break;
-	}
-
-      const unsigned char *cu_end = ctx.ptr + size;
-      cur->length = cu_end - cu_begin; // Length including the length field.
-
-      /* version + debug_abbrev_offset + address_size */
-      uint64_t cu_header_size = 2 + (dwarf_64 ? 8 : 4) + 1;
-      if (size < cu_header_size)
-	{
-	  wr_error (&where, ": claimed length of %" PRIx64
-		    " doesn't even cover CU header.\n", size);
-	  success = false;
-	  break;
-	}
-      else
-	{
-	  /* Make CU context begin just before the CU length, so that DIE
-	     offsets are computed correctly.  */
-	  struct read_ctx cu_ctx;
-	  if (!read_ctx_init_sub (&cu_ctx, &ctx, cu_begin, cu_end))
-	    {
-	      wr_error (&where, PRI_NOT_ENOUGH, "next CU");
-	      success = false;
-	      break;
-	    }
-	  cu_ctx.ptr = ctx.ptr;
-
-	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain,
-				    strings,
-				    dwarf_64, &die_refs,
-				    strings_coverage))
-	    {
-	      success = false;
-	      break;
-	    }
-	  if (cu_ctx.ptr != cu_ctx.end
-	      && !check_zero_padding (&cu_ctx, mc_die_other, &where))
-	    wr_message_padding_n0 (mc_die_other, &where,
-				   read_ctx_get_offset (&ctx), size);
-	}
-
-      ctx.ptr += size;
-    }
-
-  /* Only check this if above we have been successful.  */
-  if (success && ctx.ptr != ctx.end)
-    wr_message (mc_die_other | mc_impact_4,
-		&WHERE (sec_info, NULL),
-		": CU lengths don't exactly match Elf_Data contents.");
-
-  int address_size = 0;
-  if (cu_chain != NULL)
-    {
-      uint64_t offset = 0;
-      for (struct cu *it = cu_chain; it != NULL; it = it->next)
-	if (address_size == 0)
-	  {
-	    address_size = it->address_size;
-	    offset = it->where.addr1;
-	  }
-	else if (address_size != it->address_size)
-	  {
-	    wr_message (mc_info, &it->where,
-			": has different address size than CU 0x%"
-			PRIx64 ".\n", offset);
-	    address_size = 0;
-	    break;
-	  }
-    }
-
-  bool references_sound = check_global_die_references (cu_chain);
-  ref_record_free (&die_refs);
-
-  if (strings_coverage != NULL)
-    {
-      if (success)
-	coverage_find_holes (strings_coverage, found_hole,
-			     &((struct hole_info)
-			       {sec_str, mc_strings, 0, strings->d_buf}));
-      coverage_free (strings_coverage);
-    }
-
-  if (!success || !references_sound)
-    {
-      cu_free (cu_chain);
-      cu_chain = NULL;
-    }
-
-  /* Reverse the chain, so that it's organized "naturally".  Has
-     significant impact on performance when handling loc_ref and
-     range_ref fields in loc/range validation.  */
-  struct cu *last = NULL;
-  for (struct cu *it = cu_chain; it != NULL; )
-    {
-      struct cu *next = it->next;
-      it->next = last;
-      last = it;
-      it = next;
-    }
-  cu_chain = last;
-
-  return cu_chain;
-}
-
 /*
   Returns:
     -1 in case of error
@@ -2738,34 +2586,6 @@ read_die_chain (struct read_ctx *ctx,
 }
 
 static bool
-read_version (struct read_ctx *ctx, bool dwarf_64,
-		 uint16_t *versionp, struct where *wh)
-{
-  bool retval = read_ctx_read_2ubyte (ctx, versionp);
-
-  if (!retval)
-    {
-      wr_error (wh, ": can't read version.\n");
-      return false;
-    }
-
-  if (*versionp < 2 || *versionp > 3)
-    {
-      wr_error (wh, ": %s version %d.\n",
-		(*versionp < 2 ? "invalid" : "unsupported"), *versionp);
-      return false;
-    }
-
-  if (*versionp == 2 && dwarf_64)
-    /* Keep going.  It's a standard violation, but we may still be
-       able to read the unit under consideration and do high-level
-       checks.  */
-    wr_error (wh, ": invalid 64-bit unit in DWARF 2 format.\n");
-
-  return true;
-}
-
-static bool
 check_cu_structural (struct read_ctx *ctx,
 		     struct cu *const cu,
 		     struct abbrev_table *abbrev_chain,
@@ -2779,7 +2599,7 @@ check_cu_structural (struct read_ctx *ctx,
   uint8_t address_size;
 
   /* Version.  */
-  if (!read_version (ctx, dwarf_64, &version, &cu->where))
+  if (!read_ctx_read_version (ctx, dwarf_64, &version, &cu->where))
     return false;
 
   /* Abbrev offset.  */
@@ -2840,6 +2660,180 @@ check_cu_structural (struct read_ctx *ctx,
 
   ref_record_free (&die_loc_refs);
   return retval;
+}
+
+static struct cu *
+check_debug_info_structural (Dwarf *dwarf,
+			     struct section_data *data,
+			     struct abbrev_table *abbrev_chain)
+{
+  struct read_ctx ctx;
+  read_ctx_init (&ctx, dwarf, data->secdata);
+  Elf_Data *strings = dwarf->sectiondata[IDX_debug_str];
+
+  struct ref_record die_refs;
+  memset (&die_refs, 0, sizeof (die_refs));
+
+  struct cu *cu_chain = NULL;
+
+  bool success = true;
+
+  struct coverage strings_coverage_mem, *strings_coverage = NULL;
+  if (strings != NULL && check_category (mc_strings))
+    {
+      coverage_init (&strings_coverage_mem, strings->d_size);
+      strings_coverage = &strings_coverage_mem;
+    }
+
+  while (!read_ctx_eof (&ctx))
+    {
+      const unsigned char *cu_begin = ctx.ptr;
+      struct where where = WHERE (sec_info, NULL);
+      where_reset_1 (&where, read_ctx_get_offset (&ctx));
+
+      struct cu *cur = xcalloc (1, sizeof (*cur));
+      cur->offset = where.addr1;
+      cur->next = cu_chain;
+      cur->where = where;
+      cur->base = (uint64_t)-1;
+      cu_chain = cur;
+
+      uint32_t size32;
+      uint64_t size;
+      bool dwarf_64 = false;
+
+      /* Reading CU header is a bit tricky, because we don't know if
+	 we have run into (superfluous but allowed) zero padding.  */
+      if (!read_ctx_need_data (&ctx, 4)
+	  && check_zero_padding (&ctx, mc_die_other, &where))
+	break;
+
+      /* CU length.  */
+      if (!read_ctx_read_4ubyte (&ctx, &size32))
+	{
+	  wr_error (&where, ": can't read CU length.\n");
+	  success = false;
+	  break;
+	}
+      if (size32 == 0 && check_zero_padding (&ctx, mc_die_other, &where))
+	break;
+
+      if (!read_size_extra (&ctx, size32, &size, &dwarf_64, &where))
+	{
+	  success = false;
+	  break;
+	}
+
+      if (!read_ctx_need_data (&ctx, size))
+	{
+	  wr_error (&where,
+		    ": section doesn't have enough data"
+		    " to read CU of size %" PRIx64 ".\n", size);
+	  ctx.ptr = ctx.end;
+	  success = false;
+	  break;
+	}
+
+      const unsigned char *cu_end = ctx.ptr + size;
+      cur->length = cu_end - cu_begin; // Length including the length field.
+
+      /* version + debug_abbrev_offset + address_size */
+      uint64_t cu_header_size = 2 + (dwarf_64 ? 8 : 4) + 1;
+      if (size < cu_header_size)
+	{
+	  wr_error (&where, ": claimed length of %" PRIx64
+		    " doesn't even cover CU header.\n", size);
+	  success = false;
+	  break;
+	}
+      else
+	{
+	  /* Make CU context begin just before the CU length, so that DIE
+	     offsets are computed correctly.  */
+	  struct read_ctx cu_ctx;
+	  if (!read_ctx_init_sub (&cu_ctx, &ctx, cu_begin, cu_end))
+	    {
+	      wr_error (&where, PRI_NOT_ENOUGH, "next CU");
+	      success = false;
+	      break;
+	    }
+	  cu_ctx.ptr = ctx.ptr;
+
+	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain,
+				    strings,
+				    dwarf_64, &die_refs,
+				    strings_coverage))
+	    {
+	      success = false;
+	      break;
+	    }
+	  if (cu_ctx.ptr != cu_ctx.end
+	      && !check_zero_padding (&cu_ctx, mc_die_other, &where))
+	    wr_message_padding_n0 (mc_die_other, &where,
+				   read_ctx_get_offset (&ctx), size);
+	}
+
+      ctx.ptr += size;
+    }
+
+  /* Only check this if above we have been successful.  */
+  if (success && ctx.ptr != ctx.end)
+    wr_message (mc_die_other | mc_impact_4,
+		&WHERE (sec_info, NULL),
+		": CU lengths don't exactly match Elf_Data contents.");
+
+  int address_size = 0;
+  if (cu_chain != NULL)
+    {
+      uint64_t offset = 0;
+      for (struct cu *it = cu_chain; it != NULL; it = it->next)
+	if (address_size == 0)
+	  {
+	    address_size = it->address_size;
+	    offset = it->where.addr1;
+	  }
+	else if (address_size != it->address_size)
+	  {
+	    wr_message (mc_info, &it->where,
+			": has different address size than CU 0x%"
+			PRIx64 ".\n", offset);
+	    address_size = 0;
+	    break;
+	  }
+    }
+
+  bool references_sound = check_global_die_references (cu_chain);
+  ref_record_free (&die_refs);
+
+  if (strings_coverage != NULL)
+    {
+      if (success)
+	coverage_find_holes (strings_coverage, found_hole,
+			     &((struct hole_info)
+			       {sec_str, mc_strings, 0, strings->d_buf}));
+      coverage_free (strings_coverage);
+    }
+
+  if (!success || !references_sound)
+    {
+      cu_free (cu_chain);
+      cu_chain = NULL;
+    }
+
+  /* Reverse the chain, so that it's organized "naturally".  Has
+     significant impact on performance when handling loc_ref and
+     range_ref fields in loc/range validation.  */
+  struct cu *last = NULL;
+  for (struct cu *it = cu_chain; it != NULL; )
+    {
+      struct cu *next = it->next;
+      it->next = last;
+      last = it;
+      it = next;
+    }
+  cu_chain = last;
+
+  return cu_chain;
 }
 
 static struct coverage_map *
@@ -2907,7 +2901,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 
       /* Version.  */
       uint16_t version;
-      if (!read_version (&sub_ctx, dwarf_64, &version, &where))
+      if (!read_ctx_read_version (&sub_ctx, dwarf_64, &version, &where))
 	{
 	  retval = false;
 	  goto next;
