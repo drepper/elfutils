@@ -2797,7 +2797,8 @@ check_cu_structural (struct read_ctx *ctx,
   if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
 		      die_refs, &die_loc_refs, strings_coverage,
-		      reloc->data != NULL ? reloc : NULL, ebl) >= 0)
+		      (reloc != NULL && reloc->data != NULL) ? reloc : NULL,
+		      ebl) >= 0)
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
 	if (!abbrevs->abbr[i].used)
