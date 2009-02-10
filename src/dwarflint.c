@@ -1988,7 +1988,6 @@ coverage_map_add (struct coverage_map *coverage_map,
   coverage_free (&range_cov);
 }
 
-#ifdef FIND_SECTION_HOLES
 bool
 coverage_map_find_holes (struct coverage_map *coverage_map,
 			 bool (*cb) (uint64_t, uint64_t,
@@ -2010,7 +2009,6 @@ coverage_map_find_holes (struct coverage_map *coverage_map,
 
   return true;
 }
-#endif
 
 void
 coverage_map_free (struct coverage_map *coverage_map)
@@ -3040,13 +3038,11 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	goto not_enough;
     }
 
-#ifdef FIND_SECTION_HOLES
-  if (retval)
+  if (retval && coverage_map != NULL)
     coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
 			     &(struct coverage_map_hole_info)
 			       {{sec_aranges, mc_aranges, 0, NULL},
 				 coverage_map->elf});
-#endif
 
   coverage_map_free_XA (coverage_map);
 
@@ -3514,7 +3510,8 @@ check_loc_or_range_structural (Dwarf *dwarf,
 
   bool retval = true;
 
-  struct coverage_map *coverage_map;
+  struct coverage_map *coverage_map = NULL;
+#ifdef FIND_SECTION_HOLES
   if ((coverage_map = coverage_map_alloc_XA (ctx.dbg->elf,
 					     data->sec == sec_loc)) == NULL)
     {
@@ -3522,6 +3519,7 @@ check_loc_or_range_structural (Dwarf *dwarf,
 		": couldn't read ELF, skipping coverage analysis.\n");
       retval = false;
     }
+#endif
 
   struct coverage coverage;
   coverage_init (&coverage, ctx.data->d_size);
@@ -3560,12 +3558,11 @@ check_loc_or_range_structural (Dwarf *dwarf,
 			     {data->sec, cat, cu_chain->address_size,
 			      ctx.data->d_buf}));
 
-#ifdef FIND_SECTION_HOLES
-      coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
-			       &(struct coverage_map_hole_info)
-			       {{data->sec, cat, 0, NULL},
-				 coverage_map->elf});
-#endif
+      if (coverage_map)
+	coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
+				 &(struct coverage_map_hole_info)
+				 {{data->sec, cat, 0, NULL},
+				     coverage_map->elf});
     }
 
 
