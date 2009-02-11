@@ -413,9 +413,9 @@ parse_opt (int key, char *arg,
 	{
 	  fputs (gettext ("No operation specified.\n"), stderr);
 	do_argp_help:
-	  argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
+	  argp_help (&argp, stderr, ARGP_HELP_SEE,
 		     program_invocation_short_name);
-	  exit (1);
+	  exit (EXIT_FAILURE);
 	}
       break;
     default:
@@ -3719,7 +3719,7 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_uleb128 (op2, readp);
-	    printf ("     same_value r%" PRIu64 " (%s) in r%" PRIu64 " (%s)\n",
+	    printf ("     register r%" PRIu64 " (%s) in r%" PRIu64 " (%s)\n",
 		    op1, regname (op1), op2, regname (op2));
 	    break;
 	  case DW_CFA_remember_state:
@@ -3749,16 +3749,16 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	  case DW_CFA_def_cfa_expression:
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);	/* Length of DW_FORM_block.  */
-	    printf ("     val_expression %" PRIu64 "\n", op1);
+	    printf ("     def_cfa_expression %" PRIu64 "\n", op1);
 	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op1, readp);
 	    readp += op1;
-	    error (1,0,"need to implement BLOCK reading");
 	    break;
 	  case DW_CFA_expression:
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_uleb128 (op2, readp);	/* Length of DW_FORM_block.  */
-	    printf ("     val_expression %" PRIu64 "\n", op1);
+	    printf ("     expression r%" PRIu64 " (%s) \n",
+		    op1, regname (op1));
 	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op2, readp);
 	    readp += op2;
 	    break;
@@ -3793,24 +3793,25 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_sleb128 (sop2, readp);
-	    printf ("     val_offset %" PRIu64 " at offset %" PRId64 "\n",
+	    printf ("     val_offset_sf %" PRIu64 " at offset %" PRId64 "\n",
 		    op1, sop2 * data_align);
 	    break;
 	  case DW_CFA_val_expression:
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_uleb128 (op2, readp);	/* Length of DW_FORM_block.  */
-	    printf ("     val_expression %" PRIu64 "\n", op1);
+	    printf ("     val_expression r%" PRIu64 " (%s)\n",
+		    op1, regname (op1));
 	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op2, readp);
 	    readp += op2;
 	    break;
 	  case DW_CFA_MIPS_advance_loc8:
 	    op1 = read_8ubyte_unaligned_inc (dbg, readp);
-	    printf ("     advance_loc2 %" PRIu64 " to %#" PRIx64 "\n",
+	    printf ("     MIPS_advance_loc8 %" PRIu64 " to %#" PRIx64 "\n",
 		    op1, pc += op1 * code_align);
 	    break;
 	  case DW_CFA_GNU_window_save:
-	    puts ("     window_save");
+	    puts ("     GNU_window_save");
 	    break;
 	  case DW_CFA_GNU_args_size:
 	    // XXX overflow check
