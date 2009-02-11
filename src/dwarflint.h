@@ -21,16 +21,27 @@ extern "C"
   enum section_id
   {
     sec_invalid = 0,
+    rel_value,		/* For relocations, this denotes that the
+			   relocation is applied to taget value, not a
+			   section offset.  */
+
+    /* Debuginfo sections:  */
     sec_info,
     sec_abbrev,
     sec_aranges,
     sec_pubnames,
     sec_pubtypes,
     sec_str,
+    sec_line,
     sec_loc,
-    sec_locexpr, /* Not a section, but a portion of file that contains a
-		    location expression.  */
+    sec_mac,
     sec_ranges,
+    sec_locexpr,	/* Not a section, but a portion of file that
+			   contains a location expression.  */
+    /* Non-debuginfo sections:  */
+    sec_rel,
+    sec_rela,
+    sec_text
   };
 
   struct where
@@ -91,7 +102,8 @@ extern "C"
     mc_pubtypes  = 0x20000,  // .debug_pubtypes presence
     mc_loc       = 0x40000,  // messages related to .debug_loc
     mc_ranges    = 0x80000,  // messages related to .debug_ranges
-    mc_other     = 0x100000, // messages unrelated to any of the above
+    mc_reloc     = 0x100000, // messages related to relocation handling
+    mc_other     = 0x80000000, // messages unrelated to any of the above
     mc_all       = 0xffffff00, // all areas
   };
 
