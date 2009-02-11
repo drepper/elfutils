@@ -391,8 +391,19 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_DIE "DIE 0x%" PRIx64
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
 
+struct elf_file
+{
+  Dwarf *dwarf;
+  Ebl *ebl;
+
+  enum section_id *sec;
+  size_t size;
+  size_t alloc;
+};
+
 struct relocation_data
 {
+  struct elf_file *elf;
   Elf_Data *data;	/* May be NULL if there are no associated
 			   relocation data.  */
   Elf_Data *symdata;	/* Symbol table associated with this
@@ -563,7 +574,9 @@ static bool check_pub_structural (Dwarf *dwarf,
 				  struct section_data *data,
 				  struct cu *cu_chain);
 
-static void check_location_expression (struct read_ctx *ctx,
+static bool check_location_expression (struct read_ctx *ctx,
+				       struct relocation_data *reloc,
+				       size_t length,
 				       struct where *wh,
 				       bool addr_64);
 
@@ -616,19 +629,24 @@ where_fmt (const struct where *wh, char *ptr)
       [sec_str] = {".debug_str", "offset", "%#"PRIx64,
 		   NULL, NULL, NULL, NULL},
 
+      [sec_line] = {".debug_line", NULL, NULL, NULL, NULL, NULL, NULL},
+
       [sec_loc] = {".debug_loc", "loclist", "%#"PRIx64,
 		   "offset", "%#"PRIx64, NULL, NULL},
 
-      [sec_locexpr] = {"location expression", "offset", "%#"PRIx64,
-		       NULL, NULL, NULL, NULL},
+      [sec_mac] = {".debug_mac", NULL, NULL, NULL, NULL, NULL, NULL},
 
       [sec_ranges] = {".debug_ranges", "rangelist", "%#"PRIx64,
 		      "offset", "%#"PRIx64, NULL, NULL},
+
+      [sec_locexpr] = {"location expression", "offset", "%#"PRIx64,
+		       NULL, NULL, NULL, NULL},
 
       [sec_rel] = {".rel", "relocation", "%"PRId64,
 		   "offset", "%#"PRIx64, NULL, NULL},
       [sec_rela] = {".rela", "relocation", "%"PRId64,
 		    "offset", "%#"PRIx64, NULL, NULL},
+      [sec_text] = {".debug_text", NULL, NULL, NULL, NULL, NULL, NULL},
     };
 
   assert (wh->section < sizeof (section_names) / sizeof (*section_names));
@@ -740,12 +758,16 @@ process_file (int fd __attribute__((unused)),
 
   struct read_ctx ctx;
 
+  Ebl *ebl = ebl_openbackend (dwarf->elf);
+  struct elf_file elf = {dwarf, ebl, NULL, 0, 0};
+
 #define DEF_SECDATA(VAR, SEC)			\
-  struct section_data VAR = {SEC, NULL, {NULL, NULL, 0, 0, 0}}
+  struct section_data VAR = {SEC, NULL, {&elf, NULL, NULL, 0, 0, 0}}
 
   DEF_SECDATA (abbrev_data, sec_abbrev);
   DEF_SECDATA (aranges_data, sec_aranges);
   DEF_SECDATA (info_data, sec_info);
+  DEF_SECDATA (line_data, sec_line);
   DEF_SECDATA (loc_data, sec_loc);
   DEF_SECDATA (pubnames_data, sec_pubnames);
   DEF_SECDATA (pubtypes_data, sec_pubtypes);
@@ -757,25 +779,42 @@ process_file (int fd __attribute__((unused)),
   {
     const char *name;
     struct section_data *dataptr;
+    enum section_id sec;
   };
   struct secinfo secinfo[] = {
-    {".debug_abbrev", &abbrev_data},
-    {".debug_aranges", &aranges_data},
-    {".debug_info", &info_data},
-    {".debug_loc", &loc_data},
-    {".debug_pubnames", &pubnames_data},
-    {".debug_pubtypes", &pubtypes_data},
-    {".debug_ranges", &ranges_data},
+#define DEF_SECINFO(SEC) {".debug_" #SEC, &SEC##_data, sec_##SEC}
+#define DEF_NOINFO(SEC)  {".debug_" #SEC, NULL, sec_##SEC}
+    DEF_SECINFO (abbrev),
+    DEF_SECINFO (aranges),
+    DEF_SECINFO (info),
+    DEF_SECINFO (line),
+    DEF_SECINFO (loc),
+    DEF_SECINFO (pubnames),
+    DEF_SECINFO (pubtypes),
+    DEF_SECINFO (ranges),
+    DEF_NOINFO (str),
+    {".text", NULL, sec_text}
+#undef DEF_NOINFO
+#undef DEF_SECINFO
   };
 
   Elf_Scn *reloc_symtab = NULL;
 
-  struct section_data *find_secdata (const char *secname)
+  struct secinfo *find_secentry (const char *secname)
   {
     for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
       if (strcmp (secinfo[i].name, secname) == 0)
-	return secinfo[i].dataptr;
+	return secinfo + i;
     return NULL;
+  }
+
+  struct section_data *find_secdata (const char *secname)
+  {
+    struct secinfo *info = find_secentry (secname);
+    if (info != NULL)
+      return info->dataptr;
+    else
+      return NULL;
   }
 
   /* Now find all necessary debuginfo sections and associated
@@ -783,10 +822,14 @@ process_file (int fd __attribute__((unused)),
 
   Elf_Scn *scn = NULL;
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (dwarf->elf, &ehdr_mem);
-  Ebl *ebl = ebl_openbackend (dwarf->elf);
   if (ehdr == NULL || ebl == NULL)
     goto invalid_elf;
   bool elf_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
+
+  /* Section 0 is special, skip it.  */
+  REALLOC (&elf, sec);
+  elf.sec[elf.size++] = sec_invalid;
+
   while ((scn = elf_nextscn (dwarf->elf, scn)) != NULL)
     {
       GElf_Shdr shdr_mem, *shdr = gelf_getshdr (scn, &shdr_mem);
@@ -804,7 +847,12 @@ process_file (int fd __attribute__((unused)),
       if (scnname == NULL)
 	goto invalid_elf;
 
-      struct section_data *secdata = find_secdata (scnname);
+      struct secinfo *secentry = find_secentry (scnname);
+      struct section_data *secdata = secentry != NULL ? secentry->dataptr : NULL;
+
+      REALLOC (&elf, sec);
+      elf.sec[elf.size++] = secentry != NULL ? secentry->sec : sec_invalid;
+
       if (secdata != NULL)
 	{
 	  if (secdata->data == NULL)
@@ -875,7 +923,8 @@ process_file (int fd __attribute__((unused)),
 
   /* Check relocation sections that we've got.  */
   for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
-    if (secinfo[i].dataptr->rel.data != NULL)
+    if (secinfo[i].dataptr != NULL
+	&& secinfo[i].dataptr->rel.data != NULL)
       {
 	if (secinfo[i].dataptr->data == NULL)
 	  {
@@ -950,6 +999,7 @@ process_file (int fd __attribute__((unused)),
   abbrev_table_free (abbrev_chain);
   if (ebl != NULL)
     ebl_closebackend (ebl);
+  free (elf.sec);
 }
 
 static void
@@ -2198,8 +2248,9 @@ where_from_reloc (struct relocation_data *reloc, struct where *ref)
 }
 
 static GElf_Rela *
-next_relocation (struct relocation_data *reloc, uint64_t offset,
-		 GElf_Rela *rela_mem, struct where *where)
+relocation_next (struct relocation_data *reloc, uint64_t offset,
+		 GElf_Rela *rela_mem, struct where *where,
+		 bool skip_is_legal)
 {
   if (reloc == NULL)
     return NULL;
@@ -2225,11 +2276,12 @@ next_relocation (struct relocation_data *reloc, uint64_t offset,
 
       reloc->index++;
 
-      if (rela->r_offset != offset)
+      if (rela->r_offset < offset)
 	{
-	  wr_error (&reloc_where,
-		    ": relocation of %#" PRIx64 " is mismatched.\n",
-		    rela->r_offset);
+	  if (!skip_is_legal)
+	    wr_error (&reloc_where,
+		      ": relocation of %#" PRIx64 " is mismatched.\n",
+		      rela->r_offset);
 	  continue;
 	}
 
@@ -2237,6 +2289,14 @@ next_relocation (struct relocation_data *reloc, uint64_t offset,
     }
 
   return NULL;
+}
+
+static void
+relocation_skip (struct relocation_data *reloc, uint64_t offset,
+		 struct where *where, bool skip_is_legal)
+{
+  GElf_Rela rela_mem;
+  relocation_next (reloc, offset, &rela_mem, where, skip_is_legal);
 }
 
 static void
@@ -2312,13 +2372,7 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	  return;
 	}
 
-      uint64_t nv = rela->r_addend + symbol->st_value;
-      /*
-      wr_warning (where,
-		  ": relocation %#lx st_shndx %d: %#lx->%#lx.\n",
-		  rela->r_offset, symbol->st_shndx, *value, nv);
-      */
-
+      *value = rela->r_addend + symbol->st_value;
       uint64_t section_index = symbol->st_shndx;
 
       /* It's target value, not section offset.  */
@@ -2344,10 +2398,27 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 			    ": associated section #%" PRId64 " isn't SHF_ALLOC.\n",
 			    section_index);
 	    }
-	  *value = nv;
 	}
-      /* XXX If symtab[symndx].st_shndx does not match the
-	 expected debug section's index, complain */
+      else
+	{
+	  enum section_id id;
+	  /* If symtab[symndx].st_shndx does not match the expected
+	     debug section's index, complain.  */
+	  if (section_index >= reloc->elf->size)
+	    wr_error (&reloc_where,
+		      ": invalid associated section #%" PRId64 ".\n",
+		      section_index);
+	  else if ((id = reloc->elf->sec[section_index]) != offset_into)
+	    {
+	      char *wh1 = strdup (where_fmt (&WHERE (id, NULL), NULL));
+	      char *wh2 = strdup (where_fmt (&WHERE (offset_into, NULL), NULL));
+	      wr_error (&reloc_where,
+			": relocation references section %s, but %s was expected.\n",
+			wh1, wh2);
+	      free (wh2);
+	      free (wh1);
+	    }
+	}
     }
 }
 
@@ -2643,7 +2714,8 @@ read_die_chain (struct read_ctx *ctx,
 		    return -1;
 		  }
 
-		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		if ((rela = relocation_next (reloc, offset, &rela_mem,
+					     &where, false)))
 		  relocate_one (reloc, rela, elf, ebl, dwarf_64 ? 8 : 4,
 				&addr, &where, sec_str);
 
@@ -2686,8 +2758,9 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_offset (ctx, addr_64, &addr))
 		  goto cant_read;
 
-		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
-		  relocate_one (reloc, rela, elf, ebl, dwarf_64 ? 8 : 4,
+		if ((rela = relocation_next (reloc, offset, &rela_mem,
+					     &where, false)))
+		  relocate_one (reloc, rela, elf, ebl, addr_64 ? 8 : 4,
 				&addr, &where, reloc_target (form, it));
 
 		if (form == DW_FORM_ref_addr)
@@ -2724,7 +2797,8 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		uint64_t value = raw_value;
-		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		if ((rela = relocation_next (reloc, offset, &rela_mem,
+					     &where, false)))
 		  relocate_one (reloc, rela, elf, ebl, 1,
 				&value, &where, reloc_target (form, it));
 
@@ -2743,7 +2817,8 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		uint64_t value = raw_value;
-		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		if ((rela = relocation_next (reloc, offset, &rela_mem,
+					     &where, false)))
 		  relocate_one (reloc, rela, elf, ebl, 2,
 				&value, &where, reloc_target (form, it));
 
@@ -2762,7 +2837,8 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		uint64_t value = raw_value;
-		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		if ((rela = relocation_next (reloc, offset, &rela_mem,
+					     &where, false)))
 		  relocate_one (reloc, rela, elf, ebl, 4,
 				&value, &where, reloc_target (form, it));
 
@@ -2791,7 +2867,8 @@ read_die_chain (struct read_ctx *ctx,
 		uint64_t value;
 		if (!read_ctx_read_8ubyte (ctx, &value))
 		  goto cant_read;
-		if ((rela = next_relocation (reloc, offset, &rela_mem, &where)))
+		if ((rela = relocation_next (reloc, offset, &rela_mem,
+					     &where, false)))
 		  relocate_one (reloc, rela, elf, ebl, 8,
 				&value, &where, reloc_target (form, it));
 
@@ -2852,16 +2929,14 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (is_location_attrib (it->name))
 		  {
-		    struct read_ctx sub_ctx;
-		    if (!read_ctx_init_sub (&sub_ctx, ctx, ctx->ptr,
-					    ctx->ptr + length))
-		      {
-			wr_error (&where, PRI_NOT_ENOUGH, "location expression");
-			return -1;
-		      }
-
-		    check_location_expression (&sub_ctx, &where, addr_64);
+		    if (!check_location_expression (ctx, reloc, length,
+						    &where, addr_64))
+		      return -1;
 		  }
+		else
+		  relocation_skip (reloc,
+				   read_ctx_get_offset (ctx) + length,
+				   &where, false);
 
 		if (!read_ctx_skip (ctx, length))
 		  goto cant_read;
@@ -2930,7 +3005,8 @@ check_cu_structural (struct read_ctx *ctx,
       return false;
     }
   GElf_Rela rela_mem, *rela;
-  if ((rela = next_relocation (reloc, offset, &rela_mem, &cu->where)))
+  if ((rela = relocation_next (reloc, offset, &rela_mem,
+			       &cu->where, false)))
     relocate_one (reloc, rela, ctx->dbg->elf, ebl, dwarf_64 ? 8 : 4,
 		  &abbrev_offset, &cu->where, sec_abbrev);
 
@@ -3544,24 +3620,42 @@ get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
     };
 }
 
-static void
-check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
+static bool
+check_location_expression (struct read_ctx *parent_ctx,
+			   struct relocation_data *reloc,
+			   size_t length,
+			   struct where *wh,
+			   bool addr_64)
 {
+  struct read_ctx ctx;
+  if (!read_ctx_init_sub (&ctx, parent_ctx, parent_ctx->ptr,
+			  parent_ctx->ptr + length))
+    {
+      wr_error (wh, PRI_NOT_ENOUGH, "location expression");
+      return false;
+    }
+
+  /* XXX Just skip relocations for now.  */
+  if (reloc != NULL)
+    relocation_skip (reloc,
+		     read_ctx_get_offset (parent_ctx) + length,
+		     wh, true);
+
   struct ref_record oprefs;
   memset (&oprefs, 0, sizeof (oprefs));
 
   struct addr_record opaddrs;
   memset (&opaddrs, 0, sizeof (opaddrs));
 
-  while (!read_ctx_eof (ctx))
+  while (!read_ctx_eof (&ctx))
     {
       struct where where = WHERE (sec_locexpr, wh);
-      uint64_t opcode_off = read_ctx_get_offset (ctx);
+      uint64_t opcode_off = read_ctx_get_offset (&ctx);
       where_reset_1 (&where, opcode_off);
       addr_record_add (&opaddrs, opcode_off);
 
       uint8_t opcode;
-      if (!read_ctx_read_ubyte (ctx, &opcode))
+      if (!read_ctx_read_ubyte (&ctx, &opcode))
 	{
 	  wr_error (&where, ": can't read opcode.\n");
 	  break;
@@ -3578,7 +3672,7 @@ check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 #define READ_FORM(OP, STR, PTR)						\
       do {								\
 	if (OP != 0							\
-	    && !read_ctx_read_form (ctx, addr_64, (OP),			\
+	    && !read_ctx_read_form (&ctx, addr_64, (OP),		\
 				    PTR, &where, STR " operand"))	\
 	  {								\
 	    wr_error (&where, ": opcode \"%s\""				\
@@ -3605,11 +3699,11 @@ check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 	      wr_message (mc_loc | mc_acc_bloat | mc_impact_3, &where,
 			  ": %s with skip 0.\n",
 			  dwarf_locexpr_opcode_string (opcode));
-	    else if (skip > 0 && !read_ctx_need_data (ctx, (size_t)skip))
+	    else if (skip > 0 && !read_ctx_need_data (&ctx, (size_t)skip))
 	      wr_error (&where, ": %s branches out of location expression.\n",
 			dwarf_locexpr_opcode_string (opcode));
 	    /* Compare with the offset after the two-byte skip value.  */
-	    else if (skip < 0 && ((uint64_t)-skip) > read_ctx_get_offset (ctx))
+	    else if (skip < 0 && ((uint64_t)-skip) > read_ctx_get_offset (&ctx))
 	      wr_error (&where,
 			": %s branches before the beginning of location expression.\n",
 			dwarf_locexpr_opcode_string (opcode));
@@ -3650,6 +3744,8 @@ check_location_expression (struct read_ctx *ctx, struct where *wh, bool addr_64)
 
   addr_record_free (&opaddrs);
   ref_record_free (&oprefs);
+
+  return true;
 }
 
 static bool
@@ -3785,16 +3881,9 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 		}
 
 	      /* location expression itself */
-	      struct read_ctx expr_ctx;
-	      if (!read_ctx_init_sub (&expr_ctx, ctx, ctx->ptr, ctx->ptr + len))
-		{
-		not_enough:
-		  wr_error (&where, PRI_NOT_ENOUGH, "location expression");
-		  return false;
-		}
-
 	      uint64_t expr_start = read_ctx_get_offset (ctx);
-	      check_location_expression (&expr_ctx, &where, addr_64);
+	      if (!check_location_expression (ctx, NULL, len, &where, addr_64))
+		return false;
 	      uint64_t expr_end = read_ctx_get_offset (ctx);
 	      if (!overlap
 		  && !coverage_pristine (coverage,
@@ -3802,8 +3891,11 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 		HAVE_OVERLAP;
 
 	      if (!read_ctx_skip (ctx, len))
-		/* "can't happen" */
-		goto not_enough;
+		{
+		  /* "can't happen" */
+		  wr_error (&where, PRI_NOT_ENOUGH, "location expression");
+		  return false;
+		}
 	    }
 	}
       else
