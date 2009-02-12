@@ -3772,7 +3772,6 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 			struct section_data *data,
 			struct coverage *coverage,
 			struct coverage_map *coverage_map,
-			struct addr_record *addrs,
 			uint64_t addr,
 			bool addr_64,
 			struct where *wh,
@@ -3801,17 +3800,10 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 
   if (coverage_is_covered (coverage, addr))
     {
-      if (!addr_record_has_addr (addrs, addr))
-	{
-	  wr_error (wh, ": reference to 0x%" PRIx64
-		    " points at the middle of location or range list.\n", addr);
-	  retval = false;
-	}
-      else
-	return true;
+      wr_error (wh, ": reference to 0x%" PRIx64
+		" points at the middle of location or range list.\n", addr);
+      retval = false;
     }
-  else
-    addr_record_add (addrs, addr);
 
   uint64_t escape = addr_64 ? (uint64_t)-1 : (uint64_t)(uint32_t)-1;
 
@@ -3994,30 +3986,54 @@ check_loc_or_range_structural (Dwarf *dwarf,
   struct coverage coverage;
   coverage_init (&coverage, ctx.data->d_size);
 
-  struct addr_record addrs;
-  memset (&addrs, 0, sizeof (addrs));
-
   enum message_category cat = data->sec->id == sec_loc ? mc_loc : mc_ranges;
 
-  /* XXX relocation checking in the followings assumes that all the
+  /* Relocation checking in the followings assumes that all the
      references are organized in monotonously increasing order.  That
-     doesn't have to be the case.  */
-
+     doesn't have to be the case.  So merge all the references into
+     them into one sorted array.  */
+  size_t size = 0;
+  for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
+    {
+      struct ref_record *rec
+	= data->sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
+      size += rec->size;
+    }
+  struct ref_cu
+  {
+    struct ref ref;
+    struct cu *cu;
+  };
+  struct ref_cu *refs = xmalloc (sizeof (*refs) * size);
+  struct ref_cu *refptr = refs;
   for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
     {
       struct ref_record *rec
 	= data->sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
       for (size_t i = 0; i < rec->size; ++i)
-	{
-	  struct ref *ref = rec->refs + i;
-
-	  if (!check_loc_or_range_ref (&ctx, cu, data,
-				       &coverage, coverage_map, &addrs,
-				       ref->addr, cu->address_size == 8,
-				       &ref->who, cat))
-	    retval = false;
-	}
+	*refptr++ = ((struct ref_cu){.ref = rec->refs[i], .cu = cu});
     }
+  int compare_refs (const void *a, const void *b)
+  {
+    const struct ref_cu *ref_a = (const struct ref_cu *)a;
+    const struct ref_cu *ref_b = (const struct ref_cu *)b;
+
+    if (ref_a->ref.addr > ref_b->ref.addr)
+      return 1;
+    else if (ref_a->ref.addr < ref_b->ref.addr)
+      return -1;
+    else
+      return 0;
+  }
+  qsort (refs, size, sizeof (*refs), compare_refs);
+
+  for (size_t i = 0; i < size; ++i)
+    if (!check_loc_or_range_ref (&ctx, refs[i].cu, data,
+				 &coverage, coverage_map,
+				 refs[i].ref.addr,
+				 refs[i].cu->address_size == 8,
+				 &refs[i].ref.who, cat))
+      retval = false;
 
   if (retval)
     {
@@ -4041,7 +4057,6 @@ check_loc_or_range_structural (Dwarf *dwarf,
 
 
   coverage_free (&coverage);
-  addr_record_free (&addrs);
   coverage_map_free_XA (coverage_map);
 
   return retval;
