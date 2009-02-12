@@ -41,7 +41,7 @@ extern "C"
     /* Non-debuginfo sections:  */
     sec_rel,
     sec_rela,
-    sec_text
+    sec_text		/* Some AX section, not necessarily .text.  */
   };
 
   struct where

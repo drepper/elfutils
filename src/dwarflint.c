@@ -391,12 +391,18 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_DIE "DIE 0x%" PRIx64
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
 
+struct sec
+{
+  enum section_id id;
+  GElf_Shdr shdr;
+};
+
 struct elf_file
 {
   Dwarf *dwarf;
   Ebl *ebl;
 
-  enum section_id *sec;
+  struct sec *sec;	/* Array of sections.  */
   size_t size;
   size_t alloc;
 };
@@ -415,7 +421,7 @@ struct relocation_data
 
 struct section_data
 {
-  enum section_id sec;
+  struct sec *sec;	/* Pointer to section info.  */
   Elf_Data *data;
   struct relocation_data rel;
 };
@@ -646,7 +652,8 @@ where_fmt (const struct where *wh, char *ptr)
 		   "offset", "%#"PRIx64, NULL, NULL},
       [sec_rela] = {".rela", "relocation", "%"PRId64,
 		    "offset", "%#"PRIx64, NULL, NULL},
-      [sec_text] = {".debug_text", NULL, NULL, NULL, NULL, NULL, NULL},
+
+      [sec_text] = {"(exec data)", NULL, NULL, NULL, NULL, NULL, NULL},
     };
 
   assert (wh->section < sizeof (section_names) / sizeof (*section_names));
@@ -761,8 +768,8 @@ process_file (int fd __attribute__((unused)),
   Ebl *ebl = ebl_openbackend (dwarf->elf);
   struct elf_file elf = {dwarf, ebl, NULL, 0, 0};
 
-#define DEF_SECDATA(VAR, SEC)			\
-  struct section_data VAR = {SEC, NULL, {&elf, NULL, NULL, 0, 0, 0}}
+#define DEF_SECDATA(VAR, SEC)						\
+  struct section_data VAR = {NULL, NULL, {&elf, NULL, NULL, 0, 0, 0}}
 
   DEF_SECDATA (abbrev_data, sec_abbrev);
   DEF_SECDATA (aranges_data, sec_aranges);
@@ -793,7 +800,6 @@ process_file (int fd __attribute__((unused)),
     DEF_SECINFO (pubtypes),
     DEF_SECINFO (ranges),
     DEF_NOINFO (str),
-    {".text", NULL, sec_text}
 #undef DEF_NOINFO
 #undef DEF_SECINFO
   };
@@ -828,11 +834,14 @@ process_file (int fd __attribute__((unused)),
 
   /* Section 0 is special, skip it.  */
   REALLOC (&elf, sec);
-  elf.sec[elf.size++] = sec_invalid;
+  elf.sec[elf.size++].id = sec_invalid;
 
   while ((scn = elf_nextscn (dwarf->elf, scn)) != NULL)
     {
-      GElf_Shdr shdr_mem, *shdr = gelf_getshdr (scn, &shdr_mem);
+      REALLOC (&elf, sec);
+      struct sec *cursec = elf.sec + elf.size++;
+
+      GElf_Shdr *shdr = gelf_getshdr (scn, &cursec->shdr);
       if (shdr == NULL)
 	{
 	invalid_elf:
@@ -849,21 +858,22 @@ process_file (int fd __attribute__((unused)),
 
       struct secinfo *secentry = find_secentry (scnname);
       struct section_data *secdata = secentry != NULL ? secentry->dataptr : NULL;
-
-      REALLOC (&elf, sec);
-      elf.sec[elf.size++] = secentry != NULL ? secentry->sec : sec_invalid;
+      cursec->id = secentry != NULL ? secentry->sec : sec_invalid;
 
       if (secdata != NULL)
 	{
-	  if (secdata->data == NULL)
+	  if (secdata->sec == NULL)
 	    {
 	      secdata->data = elf_getdata (scn, NULL);
 	      if (secdata->data == NULL)
-		wr_error (NULL, "data-less section %s.\n", scnname);
+		wr_error (NULL, "Data-less section %s.\n", scnname);
+	      secdata->sec = cursec;
 	    }
 	  else
-	    wr_error (NULL, "multiple occurrences of section %s.\n", scnname);
+	    wr_error (NULL, "Multiple occurrences of section %s.\n", scnname);
 	}
+      else if ((shdr->sh_flags & SHF_ALLOC) && (shdr->sh_flags & SHF_EXECINSTR))
+	cursec->id = sec_text;
       else if (shdr->sh_type == SHT_RELA || shdr->sh_type == SHT_REL)
 	{
 	  Elf_Scn *relocated_scn = elf_getscn (dwarf->elf, shdr->sh_info);
@@ -929,7 +939,7 @@ process_file (int fd __attribute__((unused)),
 	if (secinfo[i].dataptr->data == NULL)
 	  {
 	    secinfo[i].dataptr->data = NULL;
-	    wr_error (&WHERE (secinfo[i].dataptr->sec, NULL),
+	    wr_error (&WHERE (secinfo[i].dataptr->sec->id, NULL),
 		      ": this data-less section has a relocation section.\n");
 	  }
 	else if (!check_relocation_section_structural (dwarf,
@@ -941,9 +951,11 @@ process_file (int fd __attribute__((unused)),
       }
 
  skip_rel:;
-  /* If we got Dwarf pointer, debug_abbrev and debug_info are present
-     inside the file.  But let's be paranoid.  */
   struct abbrev_table *abbrev_chain = NULL;
+  struct cu *cu_chain = NULL;
+
+  /* If we got Dwarf pointer, .debug_abbrev and .debug_info are
+     present inside the file.  But let's be paranoid.  */
   if (likely (abbrev_data.data != NULL))
     {
       read_ctx_init (&ctx, dwarf, abbrev_data.data);
@@ -953,11 +965,8 @@ process_file (int fd __attribute__((unused)),
     /* Hard error, not a message.  We can't debug without this.  */
     wr_error (NULL, ".debug_abbrev data not found.\n");
 
-  struct cu *cu_chain = NULL;
-
   if (abbrev_chain != NULL)
     {
-      /* Same as above...  */
       if (info_data.data != NULL)
 	cu_chain = check_debug_info_structural (dwarf, ebl, &info_data,
 						abbrev_chain);
@@ -2408,9 +2417,10 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	    wr_error (&reloc_where,
 		      ": invalid associated section #%" PRId64 ".\n",
 		      section_index);
-	  else if ((id = reloc->elf->sec[section_index]) != offset_into)
+	  else if ((id = reloc->elf->sec[section_index].id) != offset_into)
 	    {
-	      char *wh1 = strdup (where_fmt (&WHERE (id, NULL), NULL));
+	      char *wh1 = id != sec_invalid
+		? strdup (where_fmt (&WHERE (id, NULL), NULL)) : "(?)";
 	      char *wh2 = strdup (where_fmt (&WHERE (offset_into, NULL), NULL));
 	      wr_error (&reloc_where,
 			": relocation references section %s, but %s was expected.\n",
@@ -3177,11 +3187,19 @@ check_debug_info_structural (Dwarf *dwarf, Ebl *ebl,
       ctx.ptr += size;
     }
 
-  /* Only check this if above we have been successful.  */
-  if (success && ctx.ptr != ctx.end)
-    wr_message (mc_die_other | mc_impact_4,
-		&WHERE (sec_info, NULL),
-		": CU lengths don't exactly match Elf_Data contents.");
+  if (success)
+    {
+      if (ctx.ptr != ctx.end)
+	/* Did we read up everything?  */
+	wr_message (mc_die_other | mc_impact_4,
+		    &WHERE (sec_info, NULL),
+		    ": CU lengths don't exactly match Elf_Data contents.");
+      else
+	/* Did we consume all the relocations?  */
+	relocation_skip (&data->rel, (uint64_t)-1,
+			 &WHERE (sec_info, NULL), false);
+    }
+
 
   int address_size = 0;
   if (cu_chain != NULL)
@@ -3463,7 +3481,7 @@ check_pub_structural (Dwarf *dwarf,
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (data->sec, NULL);
+      struct where where = WHERE (data->sec->id, NULL);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
       const unsigned char *set_begin = ctx.ptr;
 
@@ -3518,7 +3536,7 @@ check_pub_structural (Dwarf *dwarf,
       if (cu != NULL)
 	{
 	  where.ref = &cu->where;
-	  bool *has = data->sec == sec_pubnames
+	  bool *has = data->sec->id == sec_pubnames
 			? &cu->has_pubnames : &cu->has_pubtypes;
 	  if (*has)
 	    wr_message (mc_impact_2 | mc_pubtables, &where,
@@ -3582,10 +3600,10 @@ check_pub_structural (Dwarf *dwarf,
 
       if (sub_ctx.ptr != sub_ctx.end
 	  && !check_zero_padding (&sub_ctx, mc_pubtables,
-				  &WHERE (data->sec, NULL)))
+				  &WHERE (data->sec->id, NULL)))
 	{
 	  wr_message_padding_n0 (mc_pubtables | mc_error,
-				 &WHERE (data->sec, NULL),
+				 &WHERE (data->sec->id, NULL),
 				 read_ctx_get_offset (&sub_ctx), size);
 	  retval = false;
 	}
@@ -3749,26 +3767,32 @@ check_location_expression (struct read_ctx *parent_ctx,
 }
 
 static bool
-check_loc_or_range_ref (struct read_ctx *ctx,
+check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 			struct cu *cu,
+			struct section_data *data,
 			struct coverage *coverage,
 			struct coverage_map *coverage_map,
 			struct addr_record *addrs,
 			uint64_t addr,
 			bool addr_64,
 			struct where *wh,
-			enum message_category cat,
-			enum section_id sec)
+			enum message_category cat)
 {
+  struct read_ctx ctx;
+  read_ctx_init (&ctx, parent_ctx->dbg, parent_ctx->data);
+
+  enum section_id sec = data->sec->id;
+
   assert (sec == sec_loc || sec == sec_ranges);
   assert (cat == mc_loc || cat == mc_ranges);
+  assert ((sec == sec_loc) == (cat == mc_loc));
   assert (coverage != NULL);
 
-  if (!read_ctx_skip (ctx, addr))
+  if (!read_ctx_skip (&ctx, addr))
     {
       wr_error (wh, ": invalid reference outside the section "
 		"%#" PRIx64 ", size only %#tx.\n",
-		addr, ctx->end - ctx->begin);
+		addr, ctx.end - ctx.begin);
       return false;
     }
 
@@ -3793,10 +3817,10 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 
   bool overlap = false;
   uint64_t base = cu->base;
-  while (!read_ctx_eof (ctx))
+  while (!read_ctx_eof (&ctx))
     {
       struct where where = WHERE (sec, show_refs ? wh : NULL);
-      where_reset_1 (&where, read_ctx_get_offset (ctx));
+      where_reset_1 (&where, read_ctx_get_offset (&ctx));
 
 #define HAVE_OVERLAP						\
       do {							\
@@ -3807,13 +3831,12 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 
       /* begin address */
       uint64_t begin_addr;
+      uint64_t begin_off = read_ctx_get_offset (&ctx);
       if (!overlap
-	  && !coverage_pristine (coverage,
-				 read_ctx_get_offset (ctx),
-				 addr_64 ? 8 : 4))
+	  && !coverage_pristine (coverage, begin_off, addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
 
-      if (!read_ctx_read_offset (ctx, addr_64, &begin_addr))
+      if (!read_ctx_read_offset (&ctx, addr_64, &begin_addr))
 	{
 	  wr_error (&where, ": can't read address range beginning.\n");
 	  return false;
@@ -3821,20 +3844,47 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 
       /* end address */
       uint64_t end_addr;
+      uint64_t end_off = read_ctx_get_offset (&ctx);
       if (!overlap
-	  && !coverage_pristine (coverage,
-				 read_ctx_get_offset (ctx),
-				 addr_64 ? 8 : 4))
+	  && !coverage_pristine (coverage, end_off, addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
 
-      if (!read_ctx_read_offset (ctx, addr_64, &end_addr))
+      if (!read_ctx_read_offset (&ctx, addr_64, &end_addr))
 	{
 	  wr_error (&where, ": can't read address range ending.\n");
 	  return false;
 	}
 
-      bool done = false;
+      if (begin_addr != 0 || end_addr != 0)
+	{
+	  GElf_Rela rela_mem, *rela;
+	  bool begin_relocated = false;
+	  if (begin_addr != escape)
+	    if ((rela = relocation_next (&data->rel, begin_off, &rela_mem,
+					 &where, false)))
+	      {
+		begin_relocated = true;
+		relocate_one (&data->rel, rela,
+			      data->rel.elf->dwarf->elf, data->rel.elf->ebl,
+			      addr_64 ? 8 : 4, &begin_addr, &where, rel_value);
+	      }
 
+	  if ((rela = relocation_next (&data->rel, end_off, &rela_mem,
+				       &where, false)))
+	    {
+	      relocate_one (&data->rel, rela,
+			    data->rel.elf->dwarf->elf, data->rel.elf->ebl,
+			    addr_64 ? 8 : 4, &end_addr, &where, rel_value);
+	      if (begin_addr != escape && !begin_relocated)
+		wr_message (cat | mc_impact_2, &where,
+			    ": end of address range is relocated, but the beginning wasn't.\n");
+	    }
+	  else if (begin_relocated)
+	    wr_message (cat | mc_impact_2, &where,
+			": end of address range is not relocated, but the beginning was.\n");
+	}
+
+      bool done = false;
       if (begin_addr == 0 && end_addr == 0)
 	done = true;
       else if (begin_addr != escape)
@@ -3871,26 +3921,26 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 	      uint16_t len;
 	      if (!overlap
 		  && !coverage_pristine (coverage,
-					 read_ctx_get_offset (ctx), 2))
+					 read_ctx_get_offset (&ctx), 2))
 		HAVE_OVERLAP;
 
-	      if (!read_ctx_read_2ubyte (ctx, &len))
+	      if (!read_ctx_read_2ubyte (&ctx, &len))
 		{
 		  wr_error (&where, ": can't read length of location expression.\n");
 		  return false;
 		}
 
 	      /* location expression itself */
-	      uint64_t expr_start = read_ctx_get_offset (ctx);
-	      if (!check_location_expression (ctx, NULL, len, &where, addr_64))
+	      uint64_t expr_start = read_ctx_get_offset (&ctx);
+	      if (!check_location_expression (&ctx, &data->rel, len, &where, addr_64))
 		return false;
-	      uint64_t expr_end = read_ctx_get_offset (ctx);
+	      uint64_t expr_end = read_ctx_get_offset (&ctx);
 	      if (!overlap
 		  && !coverage_pristine (coverage,
 					 expr_start, expr_end - expr_start))
 		HAVE_OVERLAP;
 
-	      if (!read_ctx_skip (ctx, len))
+	      if (!read_ctx_skip (&ctx, len))
 		{
 		  /* "can't happen" */
 		  wr_error (&where, PRI_NOT_ENOUGH, "location expression");
@@ -3909,7 +3959,7 @@ check_loc_or_range_ref (struct read_ctx *ctx,
 	}
 #undef HAVE_OVERLAP
 
-      coverage_add (coverage, where.addr1, read_ctx_get_offset (ctx) - 1);
+      coverage_add (coverage, where.addr1, read_ctx_get_offset (&ctx) - 1);
       if (done)
 	break;
     }
@@ -3922,7 +3972,7 @@ check_loc_or_range_structural (Dwarf *dwarf,
 			       struct section_data *data,
 			       struct cu *cu_chain)
 {
-  assert (data->sec == sec_loc || data->sec == sec_ranges);
+  assert (data->sec->id == sec_loc || data->sec->id == sec_ranges);
   assert (cu_chain != NULL);
 
   struct read_ctx ctx;
@@ -3947,41 +3997,45 @@ check_loc_or_range_structural (Dwarf *dwarf,
   struct addr_record addrs;
   memset (&addrs, 0, sizeof (addrs));
 
-  enum message_category cat = data->sec == sec_loc ? mc_loc : mc_ranges;
+  enum message_category cat = data->sec->id == sec_loc ? mc_loc : mc_ranges;
+
+  /* XXX relocation checking in the followings assumes that all the
+     references are organized in monotonously increasing order.  That
+     doesn't have to be the case.  */
 
   for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
     {
       struct ref_record *rec
-	= data->sec == sec_loc ? &cu->loc_refs : &cu->range_refs;
+	= data->sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
       for (size_t i = 0; i < rec->size; ++i)
 	{
 	  struct ref *ref = rec->refs + i;
 
-	  struct read_ctx sub_ctx;
-	  read_ctx_init (&sub_ctx, ctx.dbg, ctx.data);
-
-	  if (!check_loc_or_range_ref (&sub_ctx, cu,
+	  if (!check_loc_or_range_ref (&ctx, cu, data,
 				       &coverage, coverage_map, &addrs,
 				       ref->addr, cu->address_size == 8,
-				       &ref->who, cat, data->sec))
+				       &ref->who, cat))
 	    retval = false;
 	}
     }
 
   if (retval)
     {
+      relocation_skip (&data->rel, (uint64_t)-1,
+		       &WHERE (data->sec->id, NULL), false);
+
       /* We check that all CUs have the same address size when building
 	 the CU chain.  So just take the address size of the first CU in
 	 chain.  */
       coverage_find_holes (&coverage, found_hole,
 			   &((struct hole_info)
-			     {data->sec, cat, cu_chain->address_size,
+			     {data->sec->id, cat, cu_chain->address_size,
 			      ctx.data->d_buf}));
 
       if (coverage_map)
 	coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
 				 &(struct coverage_map_hole_info)
-				 {{data->sec, cat, 0, NULL},
+				 {{data->sec->id, cat, 0, NULL},
 				     coverage_map->elf});
     }
 
@@ -4013,7 +4067,7 @@ check_relocation_section_structural (Dwarf *dwarf,
     : (is_rela ? sizeof (Elf32_Rela) : sizeof (Elf32_Rel));
   data->rel.count = data->rel.data->d_size / entrysize;
 
-  struct where parent = WHERE (data->sec, NULL);
+  struct where parent = WHERE (data->sec->id, NULL);
   struct where where = WHERE (is_rela ? sec_rela : sec_rel, NULL);
   where.ref = &parent;
 
