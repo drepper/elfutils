@@ -2461,6 +2461,11 @@ reloc_target (uint8_t form, struct abbrev_attrib *at)
 
     case DW_FORM_data1:
     case DW_FORM_data2:
+      /* While these are technically legal, they are never used in
+	 DWARF sections.  So better mark them as illegal, and have
+	 dwarflint flag them.  */
+      return sec_invalid;
+
     case DW_FORM_data4:
     case DW_FORM_data8:
 
@@ -4108,14 +4113,17 @@ check_relocation_section_structural (Dwarf *dwarf,
 
       switch (type)
 	{
-	case ELF_T_BYTE:
-	case ELF_T_HALF:
 	case ELF_T_WORD:
 	case ELF_T_SWORD:
 	case ELF_T_XWORD:
 	case ELF_T_SXWORD:
 	  break;
 
+	case ELF_T_BYTE:
+	case ELF_T_HALF:
+	  /* Technically legal, but never used.  Better have dwarflint
+	     flag them as erroneous, because it's more likely these
+	     are a result of a bug than actually being used.  */
 	default:
 	  wr_error (&where, ": invalid relocation type %d.\n", type);
 	  retval = false;
