@@ -2256,10 +2256,17 @@ where_from_reloc (struct relocation_data *reloc, struct where *ref)
   return where;
 }
 
+enum skip_type
+{
+  skip_unref = 0,
+  skip_mismatched = 1,
+  skip_ok,
+};
+
 static GElf_Rela *
 relocation_next (struct relocation_data *reloc, uint64_t offset,
 		 GElf_Rela *rela_mem, struct where *where,
-		 bool skip_is_legal)
+		 enum skip_type st)
 {
   if (reloc == NULL)
     return NULL;
@@ -2287,10 +2294,14 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
 
       if (rela->r_offset < offset)
 	{
-	  if (!skip_is_legal)
-	    wr_error (&reloc_where,
-		      ": relocation of %#" PRIx64 " is mismatched.\n",
-		      rela->r_offset);
+	  if (st != skip_ok)
+	    {
+	      void (*w) (const struct where *, const char *, ...) = wr_error;
+	      (*w) (&reloc_where,
+		    ((const char *[])
+		    {": relocation targets unreferenced portion of the section.\n",
+		     ": relocation is mismatched.\n"})[st]);
+	    }
 	  continue;
 	}
 
@@ -2302,10 +2313,10 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
 
 static void
 relocation_skip (struct relocation_data *reloc, uint64_t offset,
-		 struct where *where, bool skip_is_legal)
+		 struct where *where, enum skip_type st)
 {
   GElf_Rela rela_mem;
-  relocation_next (reloc, offset, &rela_mem, where, skip_is_legal);
+  relocation_next (reloc, offset, &rela_mem, where, st);
 }
 
 static void
@@ -2735,7 +2746,7 @@ read_die_chain (struct read_ctx *ctx,
 		  }
 
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, false)))
+					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, dwarf_64 ? 8 : 4,
 				&addr, &where, sec_str);
 
@@ -2779,7 +2790,7 @@ read_die_chain (struct read_ctx *ctx,
 		  goto cant_read;
 
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, false)))
+					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, addr_64 ? 8 : 4,
 				&addr, &where, reloc_target (form, it));
 
@@ -2818,7 +2829,7 @@ read_die_chain (struct read_ctx *ctx,
 
 		uint64_t value = raw_value;
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, false)))
+					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 1,
 				&value, &where, reloc_target (form, it));
 
@@ -2838,7 +2849,7 @@ read_die_chain (struct read_ctx *ctx,
 
 		uint64_t value = raw_value;
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, false)))
+					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 2,
 				&value, &where, reloc_target (form, it));
 
@@ -2858,7 +2869,7 @@ read_die_chain (struct read_ctx *ctx,
 
 		uint64_t value = raw_value;
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, false)))
+					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 4,
 				&value, &where, reloc_target (form, it));
 
@@ -2888,7 +2899,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_8ubyte (ctx, &value))
 		  goto cant_read;
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, false)))
+					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 8,
 				&value, &where, reloc_target (form, it));
 
@@ -2956,7 +2967,7 @@ read_die_chain (struct read_ctx *ctx,
 		else
 		  relocation_skip (reloc,
 				   read_ctx_get_offset (ctx) + length,
-				   &where, false);
+				   &where, skip_mismatched);
 
 		if (!read_ctx_skip (ctx, length))
 		  goto cant_read;
@@ -3026,7 +3037,7 @@ check_cu_structural (struct read_ctx *ctx,
     }
   GElf_Rela rela_mem, *rela;
   if ((rela = relocation_next (reloc, offset, &rela_mem,
-			       &cu->where, false)))
+			       &cu->where, skip_mismatched)))
     relocate_one (reloc, rela, ctx->dbg->elf, ebl, dwarf_64 ? 8 : 4,
 		  &abbrev_offset, &cu->where, sec_abbrev);
 
@@ -3207,7 +3218,7 @@ check_debug_info_structural (Dwarf *dwarf, Ebl *ebl,
       else
 	/* Did we consume all the relocations?  */
 	relocation_skip (&data->rel, (uint64_t)-1,
-			 &WHERE (sec_info, NULL), false);
+			 &WHERE (sec_info, NULL), skip_mismatched);
     }
 
 
@@ -3667,7 +3678,7 @@ check_location_expression (struct read_ctx *parent_ctx,
   if (reloc != NULL)
     relocation_skip (reloc,
 		     read_ctx_get_offset (parent_ctx) + length,
-		     wh, true);
+		     wh, skip_ok);
 
   struct ref_record oprefs;
   memset (&oprefs, 0, sizeof (oprefs));
@@ -3834,6 +3845,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
       /* begin address */
       uint64_t begin_addr;
       uint64_t begin_off = read_ctx_get_offset (&ctx);
+      GElf_Rela rela_mem, *rela;
+      bool begin_relocated = false;
       if (!overlap
 	  && !coverage_pristine (coverage, begin_off, addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
@@ -3844,9 +3857,19 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  return false;
 	}
 
+      if ((rela = relocation_next (&data->rel, begin_off, &rela_mem,
+				   &where, skip_mismatched)))
+	{
+	  begin_relocated = true;
+	  relocate_one (&data->rel, rela,
+			data->rel.elf->dwarf->elf, data->rel.elf->ebl,
+			addr_64 ? 8 : 4, &begin_addr, &where, rel_value);
+	}
+
       /* end address */
       uint64_t end_addr;
       uint64_t end_off = read_ctx_get_offset (&ctx);
+      bool end_relocated = false;
       if (!overlap
 	  && !coverage_pristine (coverage, end_off, addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
@@ -3857,37 +3880,23 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  return false;
 	}
 
-      if (begin_addr != 0 || end_addr != 0)
+      if ((rela = relocation_next (&data->rel, end_off, &rela_mem,
+				   &where, skip_mismatched)))
 	{
-	  GElf_Rela rela_mem, *rela;
-	  bool begin_relocated = false;
-	  if (begin_addr != escape)
-	    if ((rela = relocation_next (&data->rel, begin_off, &rela_mem,
-					 &where, false)))
-	      {
-		begin_relocated = true;
-		relocate_one (&data->rel, rela,
-			      data->rel.elf->dwarf->elf, data->rel.elf->ebl,
-			      addr_64 ? 8 : 4, &begin_addr, &where, rel_value);
-	      }
-
-	  if ((rela = relocation_next (&data->rel, end_off, &rela_mem,
-				       &where, false)))
-	    {
-	      relocate_one (&data->rel, rela,
-			    data->rel.elf->dwarf->elf, data->rel.elf->ebl,
-			    addr_64 ? 8 : 4, &end_addr, &where, rel_value);
-	      if (begin_addr != escape && !begin_relocated)
-		wr_message (cat | mc_impact_2, &where,
-			    ": end of address range is relocated, but the beginning wasn't.\n");
-	    }
-	  else if (begin_relocated)
+	  end_relocated = true;
+	  relocate_one (&data->rel, rela,
+			data->rel.elf->dwarf->elf, data->rel.elf->ebl,
+			addr_64 ? 8 : 4, &end_addr, &where, rel_value);
+	  if (!begin_relocated && begin_addr != escape)
 	    wr_message (cat | mc_impact_2, &where,
-			": end of address range is not relocated, but the beginning was.\n");
+			": end of address range is relocated, but the beginning wasn't.\n");
 	}
+      else if (begin_relocated)
+	wr_message (cat | mc_impact_2, &where,
+		    ": end of address range is not relocated, but the beginning was.\n");
 
       bool done = false;
-      if (begin_addr == 0 && end_addr == 0)
+      if (begin_addr == 0 && end_addr == 0 && !begin_relocated && !end_relocated)
 	done = true;
       else if (begin_addr != escape)
 	{
@@ -4037,18 +4046,29 @@ check_loc_or_range_structural (Dwarf *dwarf,
   }
   qsort (refs, size, sizeof (*refs), compare_refs);
 
+  uint64_t last_off = 0;
   for (size_t i = 0; i < size; ++i)
-    if (!check_loc_or_range_ref (&ctx, refs[i].cu, data,
-				 &coverage, coverage_map,
-				 refs[i].ref.addr,
-				 refs[i].cu->address_size == 8,
-				 &refs[i].ref.who, cat))
-      retval = false;
+    {
+      uint64_t off = refs[i].ref.addr;
+      if (i > 0)
+	{
+	  if (off == last_off)
+	    continue;
+	  relocation_skip (&data->rel, off,
+			   &WHERE (data->sec->id, NULL), skip_unref);
+	}
+      if (!check_loc_or_range_ref (&ctx, refs[i].cu, data,
+				   &coverage, coverage_map,
+				   off, refs[i].cu->address_size == 8,
+				   &refs[i].ref.who, cat))
+	retval = false;
+      last_off = off;
+    }
 
   if (retval)
     {
       relocation_skip (&data->rel, (uint64_t)-1,
-		       &WHERE (data->sec->id, NULL), false);
+		       &WHERE (data->sec->id, NULL), skip_mismatched);
 
       /* We check that all CUs have the same address size when building
 	 the CU chain.  So just take the address size of the first CU in
