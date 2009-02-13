@@ -2314,12 +2314,17 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	      uint64_t *value, struct where *where,
 	      enum section_id offset_into)
 {
-  assert (offset_into != sec_invalid);
-
   struct where reloc_where = where_from_reloc (reloc, where);
   where_reset_2 (&reloc_where, rela->r_offset);
   struct where reloc_ref_where = reloc_where;
   reloc_ref_where.next = where;
+
+  if (offset_into == sec_invalid)
+    {
+      wr_message (mc_impact_3 | mc_reloc, &reloc_ref_where,
+		  ": relocates a datum that shouldn't be relocated.\n");
+      return;
+    }
 
   uint64_t addend;
   if (reloc->type == SHT_REL)
