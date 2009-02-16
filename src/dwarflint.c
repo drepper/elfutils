@@ -1995,6 +1995,7 @@ coverage_map_add (struct coverage_map *coverage_map,
 {
   bool found = false;
   bool crosses_boundary = false;
+  bool overlap = false;
   uint64_t end = address + length;
 
   /* This is for analyzing how much of the current range falls into
@@ -2018,7 +2019,9 @@ coverage_map_add (struct coverage_map *coverage_map,
 	{
 	  /* While probably not an error, it's very suspicious.  */
 	  wr_message (cat | mc_impact_2, where,
-		      ": crosses section boundaries.\n");
+		      ": the range %#" PRIx64 "..%#" PRIx64
+		      " crosses section boundaries.\n",
+		      address, end);
 	  crosses_boundary = true;
 	}
 
@@ -2034,13 +2037,16 @@ coverage_map_add (struct coverage_map *coverage_map,
       uint64_t r_cov_begin = cov_begin + shdr->sh_addr - address;
       uint64_t r_cov_end = cov_end + shdr->sh_addr - address;
 
-      if (!coverage_map->allow_overlap
+      if (!overlap && !coverage_map->allow_overlap
 	  && !coverage_pristine (cov, cov_begin, cov_end - cov_begin))
-	/* Not a show stopper, this shouldn't derail high-level.  */
-	wr_message (cat | mc_impact_2 | mc_error, where,
-		    ": the range %#" PRIx64 "..%#" PRIx64
-		    " overlaps with another one.\n",
-		    address, end);
+	{
+	  /* Not a show stopper, this shouldn't derail high-level.  */
+	  wr_message (cat | mc_impact_2 | mc_error, where,
+		      ": the range %#" PRIx64 "..%#" PRIx64
+		      " overlaps with another one.\n",
+		      address, end);
+	  overlap = true;
+	}
 
       /* Section coverage... */
       coverage_add (cov, cov_begin, cov_end);
