@@ -390,6 +390,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_CU "CU 0x%" PRIx64
 #define PRI_DIE "DIE 0x%" PRIx64
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
+#define PRI_LACK_RELOCATION ": seems to lack a relocation.\n"
 
 struct sec
 {
@@ -2787,7 +2788,8 @@ read_die_chain (struct read_ctx *ctx,
 	  uint64_t offset = read_ctx_get_offset (ctx) + cu->offset;
 	  GElf_Rela rela_mem, *rela = NULL;
 	  Elf *elf = file->dwarf->elf;
-	  //printf ("Datum @%#" PRIx64 ", form %s.\n", offset, dwarf_form_string (form));
+	  bool type_is_rel = file->ehdr.e_type == ET_REL;
+
 	  switch (form)
 	    {
 	    case DW_FORM_strp:
@@ -2804,6 +2806,9 @@ read_die_chain (struct read_ctx *ctx,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, file->ebl, dwarf_64 ? 8 : 4,
 				&addr, &where, sec_str, NULL);
+		else if (type_is_rel)
+		  wr_message (mc_impact_2 | mc_die_other | mc_reloc | mc_strings,
+			      &where, PRI_LACK_RELOCATION);
 
 		if (strings == NULL)
 		  wr_error (&where,
@@ -2848,7 +2853,11 @@ read_die_chain (struct read_ctx *ctx,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, file->ebl, addr_64 ? 8 : 4,
 				&addr, &where, reloc_target (form, it), NULL);
-		/* XXX complain if no reloc.  */
+		else if ((type_is_rel
+			  || form == DW_FORM_ref_addr)
+			 && addr != 0)
+		  wr_message (mc_impact_2 | mc_die_rel | mc_reloc, &where,
+			      PRI_LACK_RELOCATION);
 
 		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
@@ -2879,15 +2888,10 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_data1:
 	    case DW_FORM_ref1:
 	      {
-		uint8_t raw_value;
-		if (!read_ctx_read_ubyte (ctx, &raw_value))
+		/* Neither of these should be relocated.  */
+		uint8_t value;
+		if (!read_ctx_read_ubyte (ctx, &value))
 		  goto cant_read;
-
-		uint64_t value = raw_value;
-		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, elf, file->ebl, 1,
-				&value, &where, reloc_target (form, it), NULL);
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2899,15 +2903,10 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_data2:
 	    case DW_FORM_ref2:
 	      {
-		uint16_t raw_value;
-		if (!read_ctx_read_2ubyte (ctx, &raw_value))
+		/* Neither of these should be relocated.  */
+		uint16_t value;
+		if (!read_ctx_read_2ubyte (ctx, &value))
 		  goto cant_read;
-
-		uint64_t value = raw_value;
-		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, elf, file->ebl, 2,
-				&value, &where, reloc_target (form, it), NULL);
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2923,17 +2922,26 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_4ubyte (ctx, &raw_value))
 		  goto cant_read;
 
+		/* DW_FORM_ref4 shouldn't be relocated.  */
 		uint64_t value = raw_value;
-		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, elf, file->ebl, 4,
-				&value, &where, reloc_target (form, it), NULL);
+		if (form == DW_FORM_data4)
+		  {
+		    if ((rela = relocation_next (reloc, offset, &rela_mem,
+						 &where, skip_mismatched)))
+		      relocate_one (reloc, rela, elf, file->ebl, 4,
+				    &value, &where, reloc_target (form, it), NULL);
+		    else if (type_is_rel
+			     && (check_locptr || check_rangeptr))
+		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
+				  | (check_rangeptr ? mc_ranges : mc_loc),
+				  &where, PRI_LACK_RELOCATION);
+		  }
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
 		else if (check_locptr || check_rangeptr)
 		  {
-		    if (check_rangeptr && (value % cu->address_size != 0))
+		    if (check_rangeptr && ((value % cu->address_size) != 0))
 		      wr_message (mc_ranges | mc_impact_2, &where,
 				  ": rangeptr value %#" PRIx64
 				  " not aligned to CU address size.\n",
@@ -2954,10 +2962,20 @@ read_die_chain (struct read_ctx *ctx,
 		uint64_t value;
 		if (!read_ctx_read_8ubyte (ctx, &value))
 		  goto cant_read;
-		if ((rela = relocation_next (reloc, offset, &rela_mem,
-					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, elf, file->ebl, 8,
-				&value, &where, reloc_target (form, it), NULL);
+
+		/* DW_FORM_ref8 shouldn't be relocated.  */
+		if (form == DW_FORM_data8)
+		  {
+		    if ((rela = relocation_next (reloc, offset, &rela_mem,
+						 &where, skip_mismatched)))
+		      relocate_one (reloc, rela, elf, file->ebl, 8,
+				    &value, &where, reloc_target (form, it), NULL);
+		    else if (type_is_rel
+			     && (check_locptr || check_rangeptr))
+		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
+				  | (check_rangeptr ? mc_ranges : mc_loc),
+				  &where, PRI_LACK_RELOCATION);
+		  }
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -3052,13 +3070,13 @@ read_die_chain (struct read_ctx *ctx,
 	  else if (st == 0)
 	    wr_message (mc_impact_3 | mc_acc_suboptimal | mc_die_rel,
 			&where,
-			": Abbrev has_children, but the chain was empty.\n");
+			": abbrev has_children, but the chain was empty.\n");
 	}
     }
 
   if (sibling_addr != 0)
     wr_error (&where,
-	      ": This DIE should have had its sibling at 0x%"
+	      ": this DIE should have had its sibling at 0x%"
 	      PRIx64 ", but the DIE chain ended.\n", sibling_addr);
 
   return got_die ? 1 : 0;
@@ -3096,6 +3114,9 @@ check_cu_structural (struct read_ctx *ctx,
 			       &cu->where, skip_mismatched)))
     relocate_one (reloc, rela, file->dwarf->elf, file->ebl, dwarf_64 ? 8 : 4,
 		  &abbrev_offset, &cu->where, sec_abbrev, NULL);
+  else if (file->ehdr.e_type == ET_REL)
+    wr_message (mc_impact_2 | mc_info | mc_reloc, &cu->where,
+		PRI_LACK_RELOCATION);
 
   /* Address size.  */
   if (!read_ctx_read_ubyte (ctx, &address_size))
