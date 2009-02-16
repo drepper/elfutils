@@ -2488,7 +2488,8 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 			": relocation references section %s, but %s was expected.\n",
 			wh1, wh2);
 	      free (wh2);
-	      free (wh1);
+	      if (id != sec_invalid)
+		free (wh1);
 	    }
 	}
     }
