@@ -409,7 +409,7 @@ struct elf_file
 
 struct relocation_data
 {
-  struct elf_file *elf;
+  struct elf_file *file;
   Elf_Data *data;	/* May be NULL if there are no associated
 			   relocation data.  */
   Elf_Data *symdata;	/* Symbol table associated with this
@@ -2461,11 +2461,11 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	  enum section_id id;
 	  /* If symtab[symndx].st_shndx does not match the expected
 	     debug section's index, complain.  */
-	  if (section_index >= reloc->elf->size)
+	  if (section_index >= reloc->file->size)
 	    wr_error (&reloc_where,
 		      ": invalid associated section #%" PRId64 ".\n",
 		      section_index);
-	  else if ((id = reloc->elf->sec[section_index].id) != offset_into)
+	  else if ((id = reloc->file->sec[section_index].id) != offset_into)
 	    {
 	      char *wh1 = id != sec_invalid
 		? strdup (where_fmt (&WHERE (id, NULL), NULL)) : "(?)";
@@ -3772,7 +3772,7 @@ check_location_expression (struct read_ctx *parent_ctx,
 	    if ((_rela = relocation_next (reloc, _off + off0, &_rela_mem, \
 					 &where, skip_mismatched)))	\
 	      relocate_one (reloc, _rela,				\
-			    reloc->elf->dwarf->elf, reloc->elf->ebl,	\
+			    reloc->file->dwarf->elf, reloc->file->ebl,	\
 			    addr_64 ? 8 : 4, _ptr, &where,		\
 			    reloc_target_loc (opcode), NULL);		\
 	  }								\
@@ -3919,7 +3919,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	{
 	  begin_relocated = true;
 	  relocate_one (&data->rel, rela,
-			data->rel.elf->dwarf->elf, data->rel.elf->ebl,
+			data->rel.file->dwarf->elf, data->rel.file->ebl,
 			addr_64 ? 8 : 4, &begin_addr, &where, rel_value,
 			&begin_symbol);
 	}
@@ -3944,7 +3944,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	{
 	  end_relocated = true;
 	  relocate_one (&data->rel, rela,
-			data->rel.elf->dwarf->elf, data->rel.elf->ebl,
+			data->rel.file->dwarf->elf, data->rel.file->ebl,
 			addr_64 ? 8 : 4, &end_addr, &where, rel_value,
 			&end_symbol);
 	  if (begin_addr != escape)
