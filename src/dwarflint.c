@@ -4060,7 +4060,7 @@ check_loc_or_range_structural (Dwarf *dwarf,
 	{
 	  if (off == last_off)
 	    continue;
-	  relocation_skip (&data->rel, off,
+	  relocation_skip (&data->rel, off - 1,
 			   &WHERE (data->sec->id, NULL), skip_unref);
 	}
       if (!check_loc_or_range_ref (&ctx, refs[i].cu, data,
