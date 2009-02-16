@@ -2337,16 +2337,29 @@ relocation_skip_rest (struct relocation_data *reloc, enum section_id sec)
 		   &WHERE (sec, NULL), skip_mismatched);
 }
 
+/* SYMPTR may be NULL, otherwise (**SYMPTR) has to yield valid memory
+   location.  When the function returns, (*SYMPTR) is either NULL, in
+   which case we failed or didn't get around to obtain the symbol from
+   symbol table, or non-NULL, in which case the symbol was initialized.  */
 static void
 relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	      Elf *elf, Ebl *ebl, unsigned width,
 	      uint64_t *value, struct where *where,
-	      enum section_id offset_into)
+	      enum section_id offset_into, GElf_Sym **symptr)
 {
   struct where reloc_where = where_from_reloc (reloc, where);
   where_reset_2 (&reloc_where, rela->r_offset);
   struct where reloc_ref_where = reloc_where;
   reloc_ref_where.next = where;
+
+  GElf_Sym symbol_mem, *symbol;
+  if (symptr != NULL)
+    {
+      symbol = *symptr;
+      *symptr = NULL;
+    }
+  else
+    symbol = &symbol_mem;
 
   if (offset_into == sec_invalid)
     {
@@ -2405,8 +2418,9 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
   /* Tolerate that we might have failed to obtain a symbol table.  */
   if (reloc->symdata != NULL)
     {
-      GElf_Sym symbol_mem, *symbol
-	= gelf_getsym (reloc->symdata, symndx, &symbol_mem);
+      symbol = gelf_getsym (reloc->symdata, symndx, symbol);
+      if (symptr != NULL)
+	*symptr = symbol;
       if (symbol == NULL)
 	{
 	  wr_error (&reloc_where,
@@ -2423,7 +2437,7 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	{
 	  /* If a target value is what's expected, then complain
 	     if it's not either SHN_ABS, an SHF_ALLOC section, or
-	     SHN_UNDEF  */
+	     SHN_UNDEF.  */
 	  if (section_index != SHN_ABS && section_index != SHN_UNDEF)
 	    {
 	      Elf_Scn *scn = elf_getscn (elf, section_index);
@@ -2785,7 +2799,7 @@ read_die_chain (struct read_ctx *ctx,
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, dwarf_64 ? 8 : 4,
-				&addr, &where, sec_str);
+				&addr, &where, sec_str, NULL);
 
 		if (strings == NULL)
 		  wr_error (&where,
@@ -2829,7 +2843,7 @@ read_die_chain (struct read_ctx *ctx,
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, addr_64 ? 8 : 4,
-				&addr, &where, reloc_target (form, it));
+				&addr, &where, reloc_target (form, it), NULL);
 
 		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
@@ -2868,7 +2882,7 @@ read_die_chain (struct read_ctx *ctx,
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 1,
-				&value, &where, reloc_target (form, it));
+				&value, &where, reloc_target (form, it), NULL);
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2888,7 +2902,7 @@ read_die_chain (struct read_ctx *ctx,
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 2,
-				&value, &where, reloc_target (form, it));
+				&value, &where, reloc_target (form, it), NULL);
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2908,7 +2922,7 @@ read_die_chain (struct read_ctx *ctx,
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 4,
-				&value, &where, reloc_target (form, it));
+				&value, &where, reloc_target (form, it), NULL);
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -2938,7 +2952,7 @@ read_die_chain (struct read_ctx *ctx,
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, elf, ebl, 8,
-				&value, &where, reloc_target (form, it));
+				&value, &where, reloc_target (form, it), NULL);
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
@@ -3076,7 +3090,7 @@ check_cu_structural (struct read_ctx *ctx,
   if ((rela = relocation_next (reloc, offset, &rela_mem,
 			       &cu->where, skip_mismatched)))
     relocate_one (reloc, rela, ctx->dbg->elf, ebl, dwarf_64 ? 8 : 4,
-		  &abbrev_offset, &cu->where, sec_abbrev);
+		  &abbrev_offset, &cu->where, sec_abbrev, NULL);
 
   /* Address size.  */
   if (!read_ctx_read_ubyte (ctx, &address_size))
@@ -3760,7 +3774,7 @@ check_location_expression (struct read_ctx *parent_ctx,
 	      relocate_one (reloc, _rela,				\
 			    reloc->elf->dwarf->elf, reloc->elf->ebl,	\
 			    addr_64 ? 8 : 4, _ptr, &where,		\
-			    reloc_target_loc (opcode));			\
+			    reloc_target_loc (opcode), NULL);		\
 	  }								\
       } while (0)
 
@@ -3888,6 +3902,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
       uint64_t begin_addr;
       uint64_t begin_off = read_ctx_get_offset (&ctx);
       GElf_Rela rela_mem, *rela;
+      GElf_Sym begin_symbol_mem, *begin_symbol = &begin_symbol_mem;
       bool begin_relocated = false;
       if (!overlap
 	  && !coverage_pristine (coverage, begin_off, addr_64 ? 8 : 4))
@@ -3905,12 +3920,14 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  begin_relocated = true;
 	  relocate_one (&data->rel, rela,
 			data->rel.elf->dwarf->elf, data->rel.elf->ebl,
-			addr_64 ? 8 : 4, &begin_addr, &where, rel_value);
+			addr_64 ? 8 : 4, &begin_addr, &where, rel_value,
+			&begin_symbol);
 	}
 
       /* end address */
       uint64_t end_addr;
       uint64_t end_off = read_ctx_get_offset (&ctx);
+      GElf_Sym end_symbol_mem, *end_symbol = &end_symbol_mem;
       bool end_relocated = false;
       if (!overlap
 	  && !coverage_pristine (coverage, end_off, addr_64 ? 8 : 4))
@@ -3928,10 +3945,21 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  end_relocated = true;
 	  relocate_one (&data->rel, rela,
 			data->rel.elf->dwarf->elf, data->rel.elf->ebl,
-			addr_64 ? 8 : 4, &end_addr, &where, rel_value);
-	  if (!begin_relocated && begin_addr != escape)
-	    wr_message (cat | mc_impact_2, &where,
-			": end of address range is relocated, but the beginning wasn't.\n");
+			addr_64 ? 8 : 4, &end_addr, &where, rel_value,
+			&end_symbol);
+	  if (begin_addr != escape)
+	    {
+	      if (!begin_relocated)
+		wr_message (cat | mc_impact_2, &where,
+			    ": end of address range is relocated, but the beginning wasn't.\n");
+	      else if (begin_symbol != NULL
+		       && end_symbol != NULL
+		       && begin_symbol->st_shndx != end_symbol->st_shndx)
+		wr_message (cat | mc_impact_2, &where,
+			    ": symbols of begin and end relocations reference"
+			    " different sections (%d and %d).\n",
+			    begin_symbol->st_shndx, end_symbol->st_shndx);
+	    }
 	}
       else if (begin_relocated)
 	wr_message (cat | mc_impact_2, &where,
