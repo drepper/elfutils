@@ -2537,6 +2537,25 @@ reloc_target (uint8_t form, struct abbrev_attrib *at)
   return rel_value;
 }
 
+static enum section_id
+reloc_target_loc (uint8_t opcode)
+{
+  switch (opcode)
+    {
+    case DW_OP_call2:
+    case DW_OP_call4:
+      return sec_info;
+
+    case DW_OP_call_ref:
+      assert (!"Can't handle call_ref!");
+    };
+
+  printf ("XXX don't know how to handle opcode=%s\n",
+	  dwarf_locexpr_opcode_string (opcode));
+
+  return rel_value;
+}
+
 /*
   Returns:
     -1 in case of error
@@ -3679,12 +3698,7 @@ check_location_expression (struct read_ctx *parent_ctx,
       wr_error (wh, PRI_NOT_ENOUGH, "location expression");
       return false;
     }
-
-  /* XXX Just skip relocations for now.  */
-  if (reloc != NULL)
-    relocation_skip (reloc,
-		     read_ctx_get_offset (parent_ctx) + length,
-		     wh, skip_ok);
+  uint64_t off0 = read_ctx_get_offset (parent_ctx);
 
   struct ref_record oprefs;
   memset (&oprefs, 0, sizeof (oprefs));
@@ -3716,15 +3730,26 @@ check_location_expression (struct read_ctx *parent_ctx,
 
 #define READ_FORM(OP, STR, PTR)						\
       do {								\
-	if (OP != 0							\
-	    && !read_ctx_read_form (&ctx, addr_64, (OP),		\
-				    PTR, &where, STR " operand"))	\
+	if (OP != 0)							\
 	  {								\
-	    wr_error (&where, ": opcode \"%s\""				\
-		      ": can't read " STR " operand (form \"%s\").\n",	\
-		      dwarf_locexpr_opcode_string (opcode),		\
-		      dwarf_form_string ((OP)));			\
-	    goto out;							\
+	    GElf_Rela _rela_mem, *_rela;				\
+	    uint64_t _off = read_ctx_get_offset (&ctx);			\
+	    uint64_t *_ptr = (PTR);					\
+	    if (!read_ctx_read_form (&ctx, addr_64, (OP),		\
+				     _ptr, &where, STR " operand"))	\
+	      {								\
+		wr_error (&where, ": opcode \"%s\""			\
+			  ": can't read " STR " operand (form \"%s\").\n", \
+			  dwarf_locexpr_opcode_string (opcode),		\
+			  dwarf_form_string ((OP)));			\
+		goto out;						\
+	      }								\
+	    if ((_rela = relocation_next (reloc, _off + off0, &_rela_mem, \
+					 &where, skip_mismatched)))	\
+	      relocate_one (reloc, _rela,				\
+			    reloc->elf->dwarf->elf, reloc->elf->ebl,	\
+			    addr_64 ? 8 : 4, _ptr, &where,		\
+			    reloc_target_loc (opcode));			\
 	  }								\
       } while (0)
 
