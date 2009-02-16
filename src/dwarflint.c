@@ -2317,12 +2317,24 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
   return NULL;
 }
 
+/* Skip all relocation up to offset, and leave cursor pointing at that
+   relocation, so that next time relocation_next is called, relocation
+   matching that offset is immediately yielded.  */
 static void
 relocation_skip (struct relocation_data *reloc, uint64_t offset,
 		 struct where *where, enum skip_type st)
 {
   GElf_Rela rela_mem;
-  relocation_next (reloc, offset, &rela_mem, where, st);
+  relocation_next (reloc, offset - 1, &rela_mem, where, st);
+}
+
+/* Skip all the remaining relocations.  */
+static void
+relocation_skip_rest (struct relocation_data *reloc, enum section_id sec)
+{
+  GElf_Rela rela_mem;
+  relocation_next (reloc, (uint64_t)-1, &rela_mem,
+		   &WHERE (sec, NULL), skip_mismatched);
 }
 
 static void
@@ -3242,8 +3254,7 @@ check_debug_info_structural (Dwarf *dwarf, Ebl *ebl,
 		    ": CU lengths don't exactly match Elf_Data contents.");
       else
 	/* Did we consume all the relocations?  */
-	relocation_skip (&data->rel, (uint64_t)-1,
-			 &WHERE (sec_info, NULL), skip_mismatched);
+	relocation_skip_rest (&data->rel, sec_info);
     }
 
 
@@ -4085,7 +4096,7 @@ check_loc_or_range_structural (Dwarf *dwarf,
 	{
 	  if (off == last_off)
 	    continue;
-	  relocation_skip (&data->rel, off - 1,
+	  relocation_skip (&data->rel, off,
 			   &WHERE (data->sec->id, NULL), skip_unref);
 	}
       if (!check_loc_or_range_ref (&ctx, refs[i].cu, data,
@@ -4098,8 +4109,7 @@ check_loc_or_range_structural (Dwarf *dwarf,
 
   if (retval)
     {
-      relocation_skip (&data->rel, (uint64_t)-1,
-		       &WHERE (data->sec->id, NULL), skip_mismatched);
+      relocation_skip_rest (&data->rel, data->sec->id);
 
       /* We check that all CUs have the same address size when building
 	 the CU chain.  So just take the address size of the first CU in
