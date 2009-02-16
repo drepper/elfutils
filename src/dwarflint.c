@@ -2447,16 +2447,23 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
       uint64_t section_index = symbol->st_shndx;
 
       /* It's target value, not section offset.  */
-      if (offset_into == rel_value)
+      if (offset_into == rel_value
+	  || offset_into == rel_address)
 	{
-	  /* If a target value is what's expected, then complain
-	     if it's not either SHN_ABS, an SHF_ALLOC section, or
-	     SHN_UNDEF.  */
-	  if (section_index != SHN_ABS && section_index != SHN_UNDEF)
+	  /* If a target value is what's expected, then complain if
+	     it's not either SHN_ABS, an SHF_ALLOC section, or
+	     SHN_UNDEF.  For data forms of address_size, an SHN_UNDEF
+	     reloc is acceptable, otherwise reject it.  */
+	  if (!(section_index == SHN_ABS
+		|| (offset_into == rel_address && section_index == SHN_UNDEF)))
 	    {
-	      Elf_Scn *scn = elf_getscn (elf, section_index);
+	      Elf_Scn *scn;
 	      GElf_Shdr shdr_mem, *shdr;
-	      if (scn == NULL)
+	      if (offset_into != rel_address && section_index == SHN_UNDEF)
+		wr_error (&reloc_where,
+			    ": relocation of an address is formed against SHN_UNDEF section"
+			    " (index %" PRId64 ").\n", section_index);
+	      else if ((scn = elf_getscn (elf, section_index)) == NULL)
 		wr_error (&reloc_where,
 			  ": couldn't obtain associated section #%" PRId64 ".\n",
 			  section_index);
@@ -2485,8 +2492,9 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 		? strdup (where_fmt (&WHERE (id, NULL), NULL)) : "(?)";
 	      char *wh2 = strdup (where_fmt (&WHERE (offset_into, NULL), NULL));
 	      wr_error (&reloc_where,
-			": relocation references section %s, but %s was expected.\n",
-			wh1, wh2);
+			": relocation references section %s, but %s was expected"
+			" (section index: %" PRId64 ").\n",
+			wh1, wh2, section_index);
 	      free (wh2);
 	      if (id != sec_invalid)
 		free (wh1);
@@ -2586,6 +2594,9 @@ reloc_target_loc (uint8_t opcode)
     case DW_OP_call2:
     case DW_OP_call4:
       return sec_info;
+
+    case DW_OP_addr:
+      return rel_address;
 
     case DW_OP_call_ref:
       assert (!"Can't handle call_ref!");

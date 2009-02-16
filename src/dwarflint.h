@@ -24,6 +24,7 @@ extern "C"
     rel_value,		/* For relocations, this denotes that the
 			   relocation is applied to taget value, not a
 			   section offset.  */
+    rel_address,	/* Same as above, but for addresses.  */
 
     /* Debuginfo sections:  */
     sec_info,
