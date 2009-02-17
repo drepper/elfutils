@@ -998,12 +998,14 @@ process_file (int fd __attribute__((unused)),
   if (loc_data.data != NULL && cu_chain != NULL)
     check_loc_or_range_structural (dwarf, &loc_data, cu_chain);
 
+  struct hl_ctx *hlctx = hl_ctx_new (dwarf);
+
   if (aranges_data.data != NULL)
     {
       read_ctx_init (&ctx, dwarf, aranges_data.data);
       if (check_aranges_structural (&ctx, cu_chain)
 	  && ranges_sound)
-	check_matching_ranges (dwarf);
+	check_matching_ranges (hlctx);
     }
 
   if (pubnames_data.data != NULL)
@@ -1023,6 +1025,7 @@ process_file (int fd __attribute__((unused)),
   if (file.ebl != NULL)
     ebl_closebackend (file.ebl);
   free (file.sec);
+  hl_ctx_delete (hlctx);
 }
 
 static void

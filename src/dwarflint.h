@@ -12,8 +12,12 @@ extern "C"
 
   /* Entry points for high-level checks.  */
 
+  struct hl_ctx;
+
   /* Check that .debug_aranges and .debug_ranges match.  */
-  extern bool check_matching_ranges (Dwarf *dwarf);
+  extern struct hl_ctx *hl_ctx_new (Dwarf *dwarf);
+  extern void hl_ctx_delete (struct hl_ctx *hlctx);
+  extern bool check_matching_ranges (struct hl_ctx *hlctx);
 
 
   /* Functions and data structures describing location in Dwarf.  */

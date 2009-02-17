@@ -47,18 +47,38 @@ namespace
   }
 }
 
-bool
-check_matching_ranges (Dwarf *dwarf)
+struct hl_ctx
 {
-  elfutils::dwarf dw(dwarf);
+  elfutils::dwarf dw;
 
+  hl_ctx (Dwarf *dwarf)
+    : dw (dwarf)
+  {
+  }
+};
+
+hl_ctx *
+hl_ctx_new (Dwarf *dwarf)
+{
+  return new hl_ctx (dwarf);
+}
+
+void
+hl_ctx_delete (hl_ctx *hlctx)
+{
+  delete hlctx;
+}
+
+bool
+check_matching_ranges (struct hl_ctx *hlctx)
+{
   struct where where_ref = WHERE (sec_info, NULL);
   struct where where_ar = WHERE (sec_aranges, NULL);
   where_ar.ref = &where_ref;
   struct where where_r = WHERE (sec_ranges, NULL);
   where_r.ref = &where_ref;
 
-  const elfutils::dwarf::aranges_map &aranges = dw.aranges ();
+  const elfutils::dwarf::aranges_map &aranges = hlctx->dw.aranges ();
   for (elfutils::dwarf::aranges_map::const_iterator i = aranges.begin ();
        i != aranges.end (); ++i)
     {
@@ -98,5 +118,5 @@ check_matching_ranges (Dwarf *dwarf)
 		    it->first, it->second);
     }
 
-  return dwarf != NULL;
+  return true;
 }
