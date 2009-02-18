@@ -702,8 +702,15 @@ where_fmt (const struct where *wh, char *ptr)
       ptr = stpcpy (buf, inf->name);
       if (is_reloc)
 	{
-	  assert (wh->ref != NULL);
-	  ptr = stpcpy (ptr, section_names[wh->ref->section].name);
+	  struct where *ref = wh->ref;
+	  assert (ref != NULL);
+	  if (ref->section == sec_locexpr)
+	    {
+	      ref = ref->next;
+	      assert (ref != NULL);
+	      assert (ref->section != sec_locexpr);
+	    }
+	  ptr = stpcpy (ptr, section_names[ref->section].name);
 	}
 
       if (addr1s != NULL)
