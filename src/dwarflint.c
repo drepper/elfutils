@@ -2286,7 +2286,7 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
 		 GElf_Rela *rela_mem, struct where *where,
 		 enum skip_type st)
 {
-  if (reloc == NULL)
+  if (reloc == NULL || reloc->data == NULL)
     return NULL;
 
   while (reloc->index < reloc->count)
@@ -2336,6 +2336,9 @@ static void
 relocation_skip (struct relocation_data *reloc, uint64_t offset,
 		 struct where *where, enum skip_type st)
 {
+  if (reloc == NULL || reloc->data == NULL)
+    return;
+
   GElf_Rela rela_mem;
   relocation_next (reloc, offset - 1, &rela_mem, where, st);
 }
@@ -2344,6 +2347,9 @@ relocation_skip (struct relocation_data *reloc, uint64_t offset,
 static void
 relocation_skip_rest (struct relocation_data *reloc, enum section_id sec)
 {
+  if (reloc == NULL || reloc->data == NULL)
+    return;
+
   GElf_Rela rela_mem;
   relocation_next (reloc, (uint64_t)-1, &rela_mem,
 		   &WHERE (sec, NULL), skip_mismatched);
