@@ -3113,7 +3113,6 @@ check_cu_structural (struct read_ctx *ctx,
 		     struct elf_file *file)
 {
   uint16_t version;
-  uint64_t abbrev_offset;
   uint8_t address_size;
   bool retval = true;
 
@@ -3122,14 +3121,15 @@ check_cu_structural (struct read_ctx *ctx,
     return false;
 
   /* Abbrev offset.  */
-  uint64_t offset = read_ctx_get_offset (ctx);
+  uint64_t abbrev_offset;
+  uint64_t ctx_offset = read_ctx_get_offset (ctx);
   if (!read_ctx_read_offset (ctx, dwarf_64, &abbrev_offset))
     {
       wr_error (&cu->where, ": can't read abbrev offset.\n");
       return false;
     }
   GElf_Rela rela_mem, *rela;
-  if ((rela = relocation_next (reloc, offset, &rela_mem,
+  if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
 			       &cu->where, skip_mismatched)))
     relocate_one (reloc, rela, file->dwarf->elf, file->ebl, dwarf_64 ? 8 : 4,
 		  &abbrev_offset, &cu->where, sec_abbrev, NULL);
@@ -3442,16 +3442,16 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	}
 
       /* CU offset.  */
-      uint64_t cu_off;
-      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
+      uint64_t cu_offset;
+      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_offset))
 	{
 	  wr_error (&where, ": can't read debug info offset.\n");
 	  retval = false;
 	  goto next;
 	}
       struct cu *cu = NULL;
-      if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_off)) == NULL)
-	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_off);
+      if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
+	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
       if (cu != NULL)
 	{
 	  where.ref = &cu->where;
@@ -3637,20 +3637,32 @@ check_pub_structural (struct section_data *data,
 	}
 
       /* CU offset.  */
-      uint64_t cu_off = 0;
-      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_off))
+      uint64_t cu_offset;  /* Offset of related CU.  */
+      uint64_t ctx_offset = sub_ctx.ptr - ctx.begin;
+      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_offset))
 	{
 	  wr_error (&where, ": can't read debug info offset.\n");
 	  retval = false;
 	  goto next;
 	}
+
+      GElf_Rela rela_mem, *rela;
+      if ((rela = relocation_next (&data->rel, ctx_offset, &rela_mem,
+				   &where, skip_mismatched)))
+	relocate_one (&data->rel, rela, data->file->dwarf->elf, data->file->ebl,
+		      dwarf_64 ? 8 : 4, &cu_offset, &where, sec_info, NULL);
+      else if (data->file->ehdr.e_type == ET_REL)
+	wr_message (mc_impact_2 | mc_pubtables | mc_reloc, &where,
+		    PRI_LACK_RELOCATION);
+
       struct cu *cu = NULL;
-      if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_off)) == NULL)
-	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_off);
+      enum section_id sec = data_get_sec (data)->id;
+      if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
+	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
       if (cu != NULL)
 	{
 	  where.ref = &cu->where;
-	  bool *has = data_get_sec (data)->id == sec_pubnames
+	  bool *has = sec == sec_pubnames
 			? &cu->has_pubnames : &cu->has_pubtypes;
 	  if (*has)
 	    wr_message (mc_impact_2 | mc_pubtables, &where,
@@ -3679,8 +3691,8 @@ check_pub_structural (struct section_data *data,
       /* Records... */
       while (!read_ctx_eof (&sub_ctx))
 	{
-	  uint64_t pair_off = read_ctx_get_offset (&sub_ctx);
-	  where_reset_2 (&where, pair_off);
+	  ctx_offset = sub_ctx.ptr - ctx.begin;
+	  where_reset_2 (&where, ctx_offset);
 
 	  uint64_t offset;
 	  if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &offset))
@@ -3714,10 +3726,10 @@ check_pub_structural (struct section_data *data,
 
       if (sub_ctx.ptr != sub_ctx.end
 	  && !check_zero_padding (&sub_ctx, mc_pubtables,
-				  &WHERE (data_get_sec (data)->id, NULL)))
+				  &WHERE (sec, NULL)))
 	{
 	  wr_message_padding_n0 (mc_pubtables | mc_error,
-				 &WHERE (data_get_sec (data)->id, NULL),
+				 &WHERE (sec, NULL),
 				 read_ctx_get_offset (&sub_ctx), size);
 	  retval = false;
 	}
@@ -3725,6 +3737,9 @@ check_pub_structural (struct section_data *data,
     next:
       ctx.ptr += size;
     }
+
+  if (retval)
+    relocation_skip_rest (&data->rel, sec_pubnames);
 
   return retval;
 }
