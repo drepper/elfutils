@@ -2455,6 +2455,9 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 
       *value = rela->r_addend + symbol->st_value;
       uint64_t section_index = symbol->st_shndx;
+      /* XXX We should handle SHN_XINDEX here.  Or, instead, maybe it
+	 would be possible to use dwfl, which already does XINDEX
+	 translation.  */
 
       /* It's target value, not section offset.  */
       if (offset_into == rel_value
@@ -2465,14 +2468,16 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	     SHN_UNDEF.  For data forms of address_size, an SHN_UNDEF
 	     reloc is acceptable, otherwise reject it.  */
 	  if (!(section_index == SHN_ABS
-		|| (offset_into == rel_address && section_index == SHN_UNDEF)))
+		|| (offset_into == rel_address
+		    && (section_index == SHN_UNDEF
+			|| section_index == SHN_COMMON))))
 	    {
 	      Elf_Scn *scn;
 	      GElf_Shdr shdr_mem, *shdr;
 	      if (offset_into != rel_address && section_index == SHN_UNDEF)
 		wr_error (&reloc_where,
-			    ": relocation of an address is formed against SHN_UNDEF section"
-			    " (index %" PRId64 ").\n", section_index);
+			    ": relocation of an address is formed against SHN_UNDEF symbol"
+			    " (symtab index %d).\n", symndx);
 	      else if ((scn = elf_getscn (reloc->file->dwarf->elf,
 					  section_index)) == NULL)
 		wr_error (&reloc_where,
