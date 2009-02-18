@@ -4284,6 +4284,9 @@ check_relocation_section_structural (Dwarf *dwarf,
 	  /* Technically legal, but never used.  Better have dwarflint
 	     flag them as erroneous, because it's more likely these
 	     are a result of a bug than actually being used.  */
+	  wr_error (&where, ": 8 or 16-bit relocation type %d.\n", type);
+	  break;
+
 	default:
 	  wr_error (&where, ": invalid relocation type %d.\n", type);
 	  retval = false;
