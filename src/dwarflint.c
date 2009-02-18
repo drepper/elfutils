@@ -2355,8 +2355,7 @@ relocation_skip_rest (struct relocation_data *reloc, enum section_id sec)
    symbol table, or non-NULL, in which case the symbol was initialized.  */
 static void
 relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
-	      Elf *elf, Ebl *ebl, unsigned width,
-	      uint64_t *value, struct where *where,
+	      unsigned width, uint64_t *value, struct where *where,
 	      enum section_id offset_into, GElf_Sym **symptr)
 {
   struct where reloc_where = where_from_reloc (reloc, where);
@@ -2393,7 +2392,7 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 
   int rtype = GELF_R_TYPE (rela->r_info);
   int symndx = GELF_R_SYM (rela->r_info);
-  Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
+  Elf_Type type = ebl_reloc_simple_type (reloc->file->ebl, rtype);
 
   unsigned rel_width;
   switch (type)
@@ -2461,7 +2460,8 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 		wr_error (&reloc_where,
 			    ": relocation of an address is formed against SHN_UNDEF section"
 			    " (index %" PRId64 ").\n", section_index);
-	      else if ((scn = elf_getscn (elf, section_index)) == NULL)
+	      else if ((scn = elf_getscn (reloc->file->dwarf->elf,
+					  section_index)) == NULL)
 		wr_error (&reloc_where,
 			  ": couldn't obtain associated section #%" PRId64 ".\n",
 			  section_index);
@@ -2806,7 +2806,6 @@ read_die_chain (struct read_ctx *ctx,
 
 	  uint64_t offset = read_ctx_get_offset (ctx) + cu->offset;
 	  GElf_Rela rela_mem, *rela = NULL;
-	  Elf *elf = file->dwarf->elf;
 	  bool type_is_rel = file->ehdr.e_type == ET_REL;
 
 	  switch (form)
@@ -2823,7 +2822,7 @@ read_die_chain (struct read_ctx *ctx,
 
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, elf, file->ebl, dwarf_64 ? 8 : 4,
+		  relocate_one (reloc, rela, dwarf_64 ? 8 : 4,
 				&addr, &where, sec_str, NULL);
 		else if (type_is_rel)
 		  wr_message (mc_impact_2 | mc_die_other | mc_reloc | mc_strings,
@@ -2870,8 +2869,8 @@ read_die_chain (struct read_ctx *ctx,
 
 		if ((rela = relocation_next (reloc, offset, &rela_mem,
 					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, elf, file->ebl, addr_64 ? 8 : 4,
-				&addr, &where, reloc_target (form, it), NULL);
+		  relocate_one (reloc, rela, addr_64 ? 8 : 4, &addr, &where,
+				reloc_target (form, it), NULL);
 		else if ((type_is_rel
 			  || form == DW_FORM_ref_addr)
 			 && addr != 0)
@@ -2947,8 +2946,8 @@ read_die_chain (struct read_ctx *ctx,
 		  {
 		    if ((rela = relocation_next (reloc, offset, &rela_mem,
 						 &where, skip_mismatched)))
-		      relocate_one (reloc, rela, elf, file->ebl, 4,
-				    &value, &where, reloc_target (form, it), NULL);
+		      relocate_one (reloc, rela, 4, &value, &where,
+				    reloc_target (form, it), NULL);
 		    else if (type_is_rel
 			     && (check_locptr || check_rangeptr))
 		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
@@ -2987,8 +2986,8 @@ read_die_chain (struct read_ctx *ctx,
 		  {
 		    if ((rela = relocation_next (reloc, offset, &rela_mem,
 						 &where, skip_mismatched)))
-		      relocate_one (reloc, rela, elf, file->ebl, 8,
-				    &value, &where, reloc_target (form, it), NULL);
+		      relocate_one (reloc, rela, 8, &value, &where,
+				    reloc_target (form, it), NULL);
 		    else if (type_is_rel
 			     && (check_locptr || check_rangeptr))
 		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
@@ -3131,7 +3130,7 @@ check_cu_structural (struct read_ctx *ctx,
   GElf_Rela rela_mem, *rela;
   if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
 			       &cu->where, skip_mismatched)))
-    relocate_one (reloc, rela, file->dwarf->elf, file->ebl, dwarf_64 ? 8 : 4,
+    relocate_one (reloc, rela, dwarf_64 ? 8 : 4,
 		  &abbrev_offset, &cu->where, sec_abbrev, NULL);
   else if (file->ehdr.e_type == ET_REL)
     wr_message (mc_impact_2 | mc_info | mc_reloc, &cu->where,
@@ -3649,8 +3648,8 @@ check_pub_structural (struct section_data *data,
       GElf_Rela rela_mem, *rela;
       if ((rela = relocation_next (&data->rel, ctx_offset, &rela_mem,
 				   &where, skip_mismatched)))
-	relocate_one (&data->rel, rela, data->file->dwarf->elf, data->file->ebl,
-		      dwarf_64 ? 8 : 4, &cu_offset, &where, sec_info, NULL);
+	relocate_one (&data->rel, rela, dwarf_64 ? 8 : 4,
+		      &cu_offset, &where, sec_info, NULL);
       else if (data->file->ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_pubtables | mc_reloc, &where,
 		    PRI_LACK_RELOCATION);
@@ -3830,7 +3829,6 @@ check_location_expression (struct read_ctx *parent_ctx,
 	    if ((_rela = relocation_next (reloc, _off + off0, &_rela_mem, \
 					 &where, skip_mismatched)))	\
 	      relocate_one (reloc, _rela,				\
-			    reloc->file->dwarf->elf, reloc->file->ebl,	\
 			    addr_64 ? 8 : 4, _ptr, &where,		\
 			    reloc_target_loc (opcode), NULL);		\
 	  }								\
@@ -3976,10 +3974,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 				   &where, skip_mismatched)))
 	{
 	  begin_relocated = true;
-	  relocate_one (&data->rel, rela,
-			data->rel.file->dwarf->elf, data->rel.file->ebl,
-			addr_64 ? 8 : 4, &begin_addr, &where, rel_value,
-			&begin_symbol);
+	  relocate_one (&data->rel, rela, addr_64 ? 8 : 4,
+			&begin_addr, &where, rel_value,	&begin_symbol);
 	}
 
       /* end address */
@@ -4001,10 +3997,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 				   &where, skip_mismatched)))
 	{
 	  end_relocated = true;
-	  relocate_one (&data->rel, rela,
-			data->rel.file->dwarf->elf, data->rel.file->ebl,
-			addr_64 ? 8 : 4, &end_addr, &where, rel_value,
-			&end_symbol);
+	  relocate_one (&data->rel, rela, addr_64 ? 8 : 4,
+			&end_addr, &where, rel_value, &end_symbol);
 	  if (begin_addr != escape)
 	    {
 	      if (!begin_relocated)
