@@ -2533,6 +2533,7 @@ reloc_target (uint8_t form, struct abbrev_attrib *at)
 	{
 	case DW_AT_low_pc:
 	case DW_AT_high_pc:
+	case DW_AT_entry_pc:
 	  return sec_text;
 	};
 
