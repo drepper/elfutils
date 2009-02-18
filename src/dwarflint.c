@@ -4267,6 +4267,7 @@ check_relocation_section_structural (Dwarf *dwarf,
 	  wr_error (&where, ": couldn't read relocation.\n");
 	  return false;
 	}
+      where_reset_2 (&where, rela->r_offset);
 
       int rtype = GELF_R_TYPE (rela->r_info);
       Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
