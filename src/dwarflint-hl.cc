@@ -70,7 +70,7 @@ hl_ctx_delete (hl_ctx *hlctx)
 }
 
 bool
-check_matching_ranges (struct hl_ctx *hlctx)
+check_matching_ranges (hl_ctx *hlctx)
 {
   struct where where_ref = WHERE (sec_info, NULL);
   struct where where_ar = WHERE (sec_aranges, NULL);

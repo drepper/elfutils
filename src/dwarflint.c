@@ -967,6 +967,7 @@ process_file (int fd __attribute__((unused)),
   struct abbrev_table *abbrev_chain = NULL;
   struct cu *cu_chain = NULL;
   struct read_ctx ctx;
+  struct hl_ctx *hlctx = hl_ctx_new (dwarf);
 
   /* If we got Dwarf pointer, .debug_abbrev and .debug_info are
      present inside the file.  But let's be paranoid.  */
@@ -997,8 +998,6 @@ process_file (int fd __attribute__((unused)),
 
   if (loc_data.data != NULL && cu_chain != NULL)
     check_loc_or_range_structural (dwarf, &loc_data, cu_chain);
-
-  struct hl_ctx *hlctx = hl_ctx_new (dwarf);
 
   if (aranges_data.data != NULL)
     {
