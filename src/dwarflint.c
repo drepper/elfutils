@@ -99,8 +99,7 @@ static struct argp argp =
 /* If true, we accept silently files without debuginfo.  */
 static bool tolerate_nodebug = false;
 
-static void process_file (int fd, Dwarf *dwarf,
-			  const char *fname, size_t size, bool only_one);
+static void process_file (Dwarf *dwarf, const char *fname, bool only_one);
 
 struct message_criteria
 {
@@ -296,18 +295,8 @@ main (int argc, char *argv[])
 	    }
 	  else
 	    {
-	      struct stat64 st;
+	      process_file (dwarf, argv[remaining], only_one);
 
-	      if (fstat64 (fd, &st) != 0)
-		{
-		  printf ("cannot stat '%s': %m\n", argv[remaining]);
-		  close (fd);
-		  continue;
-		}
-
-	      process_file (fd, dwarf, argv[remaining], st.st_size, only_one);
-
-	      /* Now we can close the descriptor.  */
 	      if (dwarf_end (dwarf) != 0)
 		wr_error (NULL,
 			  gettext ("error while closing Dwarf descriptor: %s\n"),
@@ -768,10 +757,7 @@ where_reset_3 (struct where *wh, uint64_t addr)
 }
 
 static void
-process_file (int fd __attribute__((unused)),
-	      Dwarf *dwarf, const char *fname,
-	      size_t size __attribute__((unused)),
-	      bool only_one)
+process_file (Dwarf *dwarf, const char *fname, bool only_one)
 {
   if (!only_one)
     printf ("\n%s:\n", fname);
