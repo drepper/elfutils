@@ -578,15 +578,13 @@ static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 
 /* Functions for checking of structural integrity.  */
 
-static struct cu * check_debug_info_structural (struct elf_file *file,
-						struct section_data *data,
+static struct cu * check_debug_info_structural (struct section_data *data,
 						struct abbrev_table *abbrev_chain);
 
 static bool check_aranges_structural (struct read_ctx *ctx,
 				      struct cu *cu_chain);
 
-static bool check_pub_structural (Dwarf *dwarf,
-				  struct section_data *data,
+static bool check_pub_structural (struct section_data *data,
 				  struct cu *cu_chain);
 
 static bool check_location_expression (struct read_ctx *ctx,
@@ -595,8 +593,7 @@ static bool check_location_expression (struct read_ctx *ctx,
 				       struct where *wh,
 				       bool addr_64);
 
-static bool check_loc_or_range_structural (Dwarf *dwarf,
-					   struct section_data *data,
+static bool check_loc_or_range_structural (struct section_data *data,
 					   struct cu *cu_chain);
 
 static bool check_relocation_section_structural (Dwarf *dwarf,
@@ -983,8 +980,7 @@ process_file (int fd __attribute__((unused)),
   if (abbrev_chain != NULL)
     {
       if (info_data.data != NULL)
-	cu_chain = check_debug_info_structural (&file, &info_data,
-						abbrev_chain);
+	cu_chain = check_debug_info_structural (&info_data, abbrev_chain);
       else if (!tolerate_nodebug)
 	/* Hard error, not a message.  We can't debug without this.  */
 	wr_error (NULL, ".debug_info data not found.\n");
@@ -992,12 +988,12 @@ process_file (int fd __attribute__((unused)),
 
   bool ranges_sound;
   if (ranges_data.data != NULL && cu_chain != NULL)
-    ranges_sound = check_loc_or_range_structural (dwarf, &ranges_data, cu_chain);
+    ranges_sound = check_loc_or_range_structural (&ranges_data, cu_chain);
   else
     ranges_sound = false;
 
   if (loc_data.data != NULL && cu_chain != NULL)
-    check_loc_or_range_structural (dwarf, &loc_data, cu_chain);
+    check_loc_or_range_structural (&loc_data, cu_chain);
 
   if (aranges_data.data != NULL)
     {
@@ -1008,13 +1004,13 @@ process_file (int fd __attribute__((unused)),
     }
 
   if (pubnames_data.data != NULL)
-    check_pub_structural (dwarf, &pubnames_data, cu_chain);
+    check_pub_structural (&pubnames_data, cu_chain);
   else
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 		&WHERE (sec_pubnames, NULL), ": data not found.\n");
 
   if (pubtypes_data.data != NULL)
-    check_pub_structural (dwarf, &pubtypes_data, cu_chain);
+    check_pub_structural (&pubtypes_data, cu_chain);
   else
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
 		&WHERE (sec_pubtypes, NULL), ": data not found.\n");
@@ -3195,13 +3191,12 @@ check_cu_structural (struct read_ctx *ctx,
 }
 
 static struct cu *
-check_debug_info_structural (struct elf_file *file,
-			     struct section_data *data,
+check_debug_info_structural (struct section_data *data,
 			     struct abbrev_table *abbrev_chain)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, file->dwarf, data->data);
-  Elf_Data *strings = file->dwarf->sectiondata[IDX_debug_str];
+  read_ctx_init (&ctx, data->file->dwarf, data->data);
+  Elf_Data *strings = data->file->dwarf->sectiondata[IDX_debug_str];
 
   struct ref_record die_refs;
   memset (&die_refs, 0, sizeof (die_refs));
@@ -3294,7 +3289,7 @@ check_debug_info_structural (struct elf_file *file,
 
 	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain,
 				    strings, dwarf_64, &die_refs,
-				    strings_coverage, reloc, file))
+				    strings_coverage, reloc, data->file))
 	    {
 	      success = false;
 	      break;
@@ -3591,12 +3586,11 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 }
 
 static bool
-check_pub_structural (Dwarf *dwarf,
-		      struct section_data *data,
+check_pub_structural (struct section_data *data,
 		      struct cu *cu_chain)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->data);
+  read_ctx_init (&ctx, data->file->dwarf, data->data);
   bool retval = true;
 
   while (!read_ctx_eof (&ctx))
@@ -4098,8 +4092,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 }
 
 static bool
-check_loc_or_range_structural (Dwarf *dwarf,
-			       struct section_data *data,
+check_loc_or_range_structural (struct section_data *data,
 			       struct cu *cu_chain)
 {
   enum section_id sec = data_get_sec (data)->id;
@@ -4107,7 +4100,7 @@ check_loc_or_range_structural (Dwarf *dwarf,
   assert (cu_chain != NULL);
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->data);
+  read_ctx_init (&ctx, data->file->dwarf, data->data);
 
   bool retval = true;
 
