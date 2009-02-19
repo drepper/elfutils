@@ -271,13 +271,8 @@ main (int argc, char *argv[])
 	  continue;
 	}
 
-      /* Create an `Elf' descriptor.  We need either
-	 READ_MMAP_PRIVATE, or plain READ, so that we can access and
-	 modify the data inside.  */
-      Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (elf == NULL)
-	elf = elf_begin (fd, ELF_C_READ, NULL);
-
+      /* Create an `Elf' descriptor.  */
+      Elf *elf = elf_begin (fd, ELF_C_READ_MMAP, NULL);
       if (elf == NULL)
 	wr_error (NULL,
 		  gettext ("cannot generate Elf descriptor: %s\n"),
@@ -398,15 +393,31 @@ struct elf_file
   size_t alloc;
 };
 
+struct relocation
+{
+  uint64_t offset;
+  uint64_t addend;
+  int symndx;
+  int type;
+  bool invalid;		/* Whether this one relocation should be
+			   ignored.  Necessary so that we don't
+			   double-report invalid & missing
+			   relocation.  */
+  size_t index;		/* Original index (before sorting).  */
+};
+
 struct relocation_data
 {
   struct elf_file *file;
-  Elf_Data *data;	/* May be NULL if there are no associated
-			   relocation data.  */
   Elf_Data *symdata;	/* Symbol table associated with this
 			   relocation section.  */
   size_t type;		/* SHT_REL or SHT_RELA.  */
-  size_t count;		/* How many relocation entries are there?  */
+
+  struct relocation *rel;	/* Array of relocations.  May be NULL
+				   if there are no associated
+				   relocation data.  */
+  size_t size;
+  size_t alloc;
   size_t index;		/* Current index. */
 };
 
@@ -586,10 +597,9 @@ static bool check_location_expression (struct read_ctx *ctx,
 static bool check_loc_or_range_structural (struct section_data *data,
 					   struct cu *cu_chain);
 
-static bool check_relocation_section_structural (Dwarf *dwarf,
-						 struct section_data *data,
-						 Ebl *ebl,
-						 bool elf_64);
+static bool read_rel (struct section_data *secdata,
+		      Elf_Data *reldata,
+		      bool elf_64);
 
 
 const char *
@@ -776,7 +786,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 
 #define DEF_SECDATA(VAR, SEC)					\
   struct section_data VAR = {&file, (size_t)-1, NULL,		\
-			     {&file, NULL, NULL, 0, 0, 0}}
+			     {&file, NULL, SHT_NULL, NULL, 0, 0, 0}}
 
   DEF_SECDATA (abbrev_data, sec_abbrev);
   DEF_SECDATA (aranges_data, sec_aranges);
@@ -794,11 +804,12 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   {
     const char *name;
     struct section_data *dataptr;
+    Elf_Data *reldata;
     enum section_id sec;
   };
   struct secinfo secinfo[] = {
-#define DEF_SECINFO(SEC) {".debug_" #SEC, &SEC##_data, sec_##SEC}
-#define DEF_NOINFO(SEC)  {".debug_" #SEC, NULL, sec_##SEC}
+#define DEF_SECINFO(SEC) {".debug_" #SEC, &SEC##_data, NULL, sec_##SEC}
+#define DEF_NOINFO(SEC)  {".debug_" #SEC, NULL, NULL, sec_##SEC}
     DEF_SECINFO (abbrev),
     DEF_SECINFO (aranges),
     DEF_SECINFO (info),
@@ -870,7 +881,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	  if (secdata->secndx == (size_t)-1)
 	    {
 	      secdata->data = elf_getdata (scn, NULL);
-	      if (secdata->data == NULL)
+	      if (secdata->data == NULL || secdata->data->d_buf == NULL)
 		wr_error (NULL, "Data-less section %s.\n", scnname);
 	      secdata->secndx = curndx;
 	    }
@@ -881,6 +892,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	cursec->id = sec_text;
       else if (shdr->sh_type == SHT_RELA || shdr->sh_type == SHT_REL)
 	{
+	  /* Get data of section that this REL(A) section relocates.  */
 	  Elf_Scn *relocated_scn = elf_getscn (dwarf->elf, shdr->sh_info);
 	  Elf_Scn *symtab_scn = elf_getscn (dwarf->elf, shdr->sh_link);
 	  if (relocated_scn == NULL || symtab_scn == NULL)
@@ -896,22 +908,23 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	    = elf_strptr (dwarf->elf, file.ehdr.e_shstrndx,
 			  relocated_shdr->sh_name);
 
-	  struct section_data *relocated_secdata
-	    = find_secdata (relocated_scnname);
+	  struct secinfo *relocated
+	    = find_secentry (relocated_scnname);
 
-	  if (relocated_secdata != NULL)
+	  if (relocated != NULL && relocated->dataptr != NULL)
 	    {
-	      if (relocated_secdata->rel.data != NULL)
+	      if (relocated->reldata != NULL)
 		wr_error (NULL,
-			  "Several relocation sections for debug section %s\n.",
-			  relocated_scnname);
+			  "Several relocation sections for debug section %s."
+			  "  Ignoring %s.\n",
+			  relocated_scnname, scnname);
 	      else
 		{
-		  relocated_secdata->rel.data = elf_getdata (scn, NULL);
-		  if (relocated_secdata->rel.data == NULL)
+		  relocated->reldata = elf_getdata (scn, NULL);
+		  if (relocated->reldata == NULL)
 		    wr_error (NULL,
 			      "Data-less relocation section %s.\n", scnname);
-		  relocated_secdata->rel.type = shdr->sh_type;
+		  relocated->dataptr->rel.type = shdr->sh_type;
 		}
 
 	      if (reloc_symtab == NULL)
@@ -938,24 +951,20 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 
   /* Check relocation sections that we've got.  */
   for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
-    if (secinfo[i].dataptr != NULL
-	&& secinfo[i].dataptr->rel.data != NULL)
-      {
-	if (secinfo[i].dataptr->data == NULL)
-	  {
-	    secinfo[i].dataptr->data = NULL;
+    {
+      struct secinfo *cur = secinfo + i;
+      if (cur->dataptr != NULL
+	  && cur->reldata != NULL)
+	{
+	  if (cur->dataptr->data == NULL)
 	    wr_error (&WHERE (data_get_sec (secinfo[i].dataptr)->id, NULL),
 		      ": this data-less section has a relocation section.\n");
-	  }
-	else if (!check_relocation_section_structural (dwarf,
-						       secinfo[i].dataptr,
-						       file.ebl, elf_64))
-	  secinfo[i].dataptr->rel.data = NULL;
-	else
-	  secinfo[i].dataptr->rel.symdata = reloc_symdata;
-      }
+	  else if (read_rel (cur->dataptr, cur->reldata, elf_64))
+	    cur->dataptr->rel.symdata = reloc_symdata;
+	}
+    }
 
-  if (str_data.rel.data != NULL)
+  if (str_data.rel.size > 0)
     wr_message (mc_impact_2 | mc_elf, &WHERE (sec_str, NULL),
 		": has associated relocation section, that's unexpected.\n");
 
@@ -2245,24 +2254,6 @@ check_zero_padding (struct read_ctx *ctx,
   return true;
 }
 
-static GElf_Rela *
-get_rel_or_rela (Elf_Data *data, int ndx, GElf_Rela *dst, size_t type)
-{
-  if (type == SHT_RELA)
-    return gelf_getrela (data, ndx, dst);
-  else
-    {
-      assert (type == SHT_REL);
-      GElf_Rel rel_mem;
-      if (gelf_getrel (data, ndx, &rel_mem) == NULL)
-	return NULL;
-      dst->r_offset = rel_mem.r_offset;
-      dst->r_info = rel_mem.r_info;
-      dst->r_addend = 0;
-      return dst;
-    }
-}
-
 static struct where
 where_from_reloc (struct relocation_data *reloc, struct where *ref)
 {
@@ -2280,36 +2271,27 @@ enum skip_type
   skip_ok,
 };
 
-static GElf_Rela *
+static struct relocation *
 relocation_next (struct relocation_data *reloc, uint64_t offset,
-		 GElf_Rela *rela_mem, struct where *where,
-		 enum skip_type st)
+		 struct where *where, enum skip_type st)
 {
-  if (reloc == NULL || reloc->data == NULL)
+  if (reloc == NULL || reloc->rel == NULL)
     return NULL;
 
-  while (reloc->index < reloc->count)
+  while (reloc->index < reloc->size)
     {
       struct where reloc_where = where_from_reloc (reloc, where);
 
-      GElf_Rela *rela
-	= get_rel_or_rela (reloc->data, reloc->index, rela_mem, reloc->type);
-      if (rela == NULL)
-	{
-	  /* "can't happen"  */
-	  wr_error (&reloc_where, ": couldn't obtain relocation.\n");
-	  return NULL;
-	}
-
-      where_reset_2 (&reloc_where, rela->r_offset);
+      struct relocation *rel = reloc->rel + reloc->index;
+      where_reset_2 (&reloc_where, rel->offset);
 
       /* This relocation entry is ahead of us.  */
-      if (rela->r_offset > offset)
+      if (rel->offset > offset)
 	return NULL;
 
       reloc->index++;
 
-      if (rela->r_offset < offset)
+      if (rel->offset < offset)
 	{
 	  if (st != skip_ok)
 	    {
@@ -2322,7 +2304,7 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
 	  continue;
 	}
 
-      return rela;
+      return rel;
     }
 
   return NULL;
@@ -2335,23 +2317,16 @@ static void
 relocation_skip (struct relocation_data *reloc, uint64_t offset,
 		 struct where *where, enum skip_type st)
 {
-  if (reloc == NULL || reloc->data == NULL)
-    return;
-
-  GElf_Rela rela_mem;
-  relocation_next (reloc, offset - 1, &rela_mem, where, st);
+  if (reloc != NULL && reloc->rel != NULL)
+    relocation_next (reloc, offset - 1, where, st);
 }
 
 /* Skip all the remaining relocations.  */
 static void
 relocation_skip_rest (struct relocation_data *reloc, enum section_id sec)
 {
-  if (reloc == NULL || reloc->data == NULL)
-    return;
-
-  GElf_Rela rela_mem;
-  relocation_next (reloc, (uint64_t)-1, &rela_mem,
-		   &WHERE (sec, NULL), skip_mismatched);
+  if (reloc != NULL && reloc->rel != NULL)
+    relocation_next (reloc, (uint64_t)-1, &WHERE (sec, NULL), skip_mismatched);
 }
 
 /* SYMPTR may be NULL, otherwise (**SYMPTR) has to yield valid memory
@@ -2359,12 +2334,15 @@ relocation_skip_rest (struct relocation_data *reloc, enum section_id sec)
    which case we failed or didn't get around to obtain the symbol from
    symbol table, or non-NULL, in which case the symbol was initialized.  */
 static void
-relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
+relocate_one (struct relocation_data *reloc, struct relocation *rel,
 	      unsigned width, uint64_t *value, struct where *where,
 	      enum section_id offset_into, GElf_Sym **symptr)
 {
+  if (rel->invalid)
+    return;
+
   struct where reloc_where = where_from_reloc (reloc, where);
-  where_reset_2 (&reloc_where, rela->r_offset);
+  where_reset_2 (&reloc_where, rel->offset);
   struct where reloc_ref_where = reloc_where;
   reloc_ref_where.next = where;
 
@@ -2384,20 +2362,7 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
       return;
     }
 
-  uint64_t addend;
-  if (reloc->type == SHT_REL)
-    addend = *value;
-  else
-    {
-      if (*value != 0)
-	wr_message (mc_impact_2 | mc_reloc, &reloc_ref_where,
-		    ": SHR_RELA relocates a place with non-zero value.\n");
-      addend = rela->r_addend;
-    }
-
-  int rtype = GELF_R_TYPE (rela->r_info);
-  int symndx = GELF_R_SYM (rela->r_info);
-  Elf_Type type = ebl_reloc_simple_type (reloc->file->ebl, rtype);
+  Elf_Type type = ebl_reloc_simple_type (reloc->file->ebl, rel->type);
 
   unsigned rel_width;
   switch (type)
@@ -2434,18 +2399,18 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
   /* Tolerate that we might have failed to obtain a symbol table.  */
   if (reloc->symdata != NULL)
     {
-      symbol = gelf_getsym (reloc->symdata, symndx, symbol);
+      symbol = gelf_getsym (reloc->symdata, rel->symndx, symbol);
       if (symptr != NULL)
 	*symptr = symbol;
       if (symbol == NULL)
 	{
 	  wr_error (&reloc_where,
 		    ": couldn't obtain symbol #%d: %s.\n",
-		    symndx, elf_errmsg (-1));
+		    rel->symndx, elf_errmsg (-1));
 	  return;
 	}
 
-      *value = rela->r_addend + symbol->st_value;
+      *value = rel->addend + symbol->st_value;
       uint64_t section_index = symbol->st_shndx;
       /* XXX We should handle SHN_XINDEX here.  Or, instead, maybe it
 	 would be possible to use dwfl, which already does XINDEX
@@ -2469,7 +2434,7 @@ relocate_one (struct relocation_data *reloc, GElf_Rela *rela,
 	      if (offset_into != rel_address && section_index == SHN_UNDEF)
 		wr_error (&reloc_where,
 			    ": relocation of an address is formed against SHN_UNDEF symbol"
-			    " (symtab index %d).\n", symndx);
+			    " (symtab index %d).\n", rel->symndx);
 	      else if ((scn = elf_getscn (reloc->file->dwarf->elf,
 					  section_index)) == NULL)
 		wr_error (&reloc_where,
@@ -2816,7 +2781,7 @@ read_die_chain (struct read_ctx *ctx,
 	  assert (!(check_locptr && check_rangeptr));
 
 	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
-	  GElf_Rela rela_mem, *rela = NULL;
+	  struct relocation *rel;
 	  bool type_is_rel = file->ehdr.e_type == ET_REL;
 
 	  switch (form)
@@ -2831,9 +2796,9 @@ read_die_chain (struct read_ctx *ctx,
 		    return -1;
 		  }
 
-		if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
-					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, dwarf_64 ? 8 : 4,
+		if ((rel = relocation_next (reloc, ctx_offset,
+					    &where, skip_mismatched)))
+		  relocate_one (reloc, rel, dwarf_64 ? 8 : 4,
 				&addr, &where, sec_str, NULL);
 		else if (type_is_rel)
 		  wr_message (mc_impact_2 | mc_die_other | mc_reloc | mc_strings,
@@ -2878,9 +2843,9 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_offset (ctx, addr_64, &addr))
 		  goto cant_read;
 
-		if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
-					     &where, skip_mismatched)))
-		  relocate_one (reloc, rela, addr_64 ? 8 : 4, &addr, &where,
+		if ((rel = relocation_next (reloc, ctx_offset,
+					    &where, skip_mismatched)))
+		  relocate_one (reloc, rel, addr_64 ? 8 : 4, &addr, &where,
 				reloc_target (form, it), NULL);
 		else if ((type_is_rel
 			  || form == DW_FORM_ref_addr)
@@ -2955,9 +2920,9 @@ read_die_chain (struct read_ctx *ctx,
 		uint64_t value = raw_value;
 		if (form == DW_FORM_data4)
 		  {
-		    if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
-						 &where, skip_mismatched)))
-		      relocate_one (reloc, rela, 4, &value, &where,
+		    if ((rel = relocation_next (reloc, ctx_offset,
+						&where, skip_mismatched)))
+		      relocate_one (reloc, rel, 4, &value, &where,
 				    reloc_target (form, it), NULL);
 		    else if (type_is_rel
 			     && (check_locptr || check_rangeptr))
@@ -2995,9 +2960,9 @@ read_die_chain (struct read_ctx *ctx,
 		/* DW_FORM_ref8 shouldn't be relocated.  */
 		if (form == DW_FORM_data8)
 		  {
-		    if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
-						 &where, skip_mismatched)))
-		      relocate_one (reloc, rela, 8, &value, &where,
+		    if ((rel = relocation_next (reloc, ctx_offset,
+						&where, skip_mismatched)))
+		      relocate_one (reloc, rel, 8, &value, &where,
 				    reloc_target (form, it), NULL);
 		    else if (type_is_rel
 			     && (check_locptr || check_rangeptr))
@@ -3138,10 +3103,11 @@ check_cu_structural (struct read_ctx *ctx,
       wr_error (&cu->where, ": can't read abbrev offset.\n");
       return false;
     }
-  GElf_Rela rela_mem, *rela;
-  if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
-			       &cu->where, skip_mismatched)))
-    relocate_one (reloc, rela, dwarf_64 ? 8 : 4,
+
+  struct relocation *rel
+    = relocation_next (reloc, ctx_offset, &cu->where, skip_mismatched);
+  if (rel != NULL)
+    relocate_one (reloc, rel, dwarf_64 ? 8 : 4,
 		  &abbrev_offset, &cu->where, sec_abbrev, NULL);
   else if (file->ehdr.e_type == ET_REL)
     wr_message (mc_impact_2 | mc_info | mc_reloc, &cu->where,
@@ -3181,7 +3147,7 @@ check_cu_structural (struct read_ctx *ctx,
   if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
 		      die_refs, &die_loc_refs, strings_coverage,
-		      (reloc != NULL && reloc->data != NULL) ? reloc : NULL,
+		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
 		      file) >= 0)
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
@@ -3222,7 +3188,7 @@ check_debug_info_structural (struct section_data *data,
       strings_coverage = &strings_coverage_mem;
     }
 
-  struct relocation_data *reloc = data->rel.data != NULL ? &data->rel : NULL;
+  struct relocation_data *reloc = data->rel.size > 0 ? &data->rel : NULL;
   while (!read_ctx_eof (&ctx))
     {
       const unsigned char *cu_begin = ctx.ptr;
@@ -3465,10 +3431,10 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	  goto next;
 	}
 
-      GElf_Rela rela_mem, *rela;
-      if ((rela = relocation_next (&data->rel, ctx_offset, &rela_mem,
-				   &where, skip_mismatched)))
-	relocate_one (&data->rel, rela, dwarf_64 ? 8 : 4,
+      struct relocation *rel;
+      if ((rel = relocation_next (&data->rel, ctx_offset,
+				  &where, skip_mismatched)))
+	relocate_one (&data->rel, rel, dwarf_64 ? 8 : 4,
 		      &cu_offset, &where, sec_info, NULL);
       else if (data->file->ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,
@@ -3572,11 +3538,11 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	      goto next;
 	    }
 
-    	  if ((rela = relocation_next (&data->rel, ctx_offset, &rela_mem,
-				       &where, skip_mismatched)))
+    	  if ((rel = relocation_next (&data->rel, ctx_offset,
+				      &where, skip_mismatched)))
 	    {
 	      address_relocated = true;
-	      relocate_one (&data->rel, rela, address_size,
+	      relocate_one (&data->rel, rel, address_size,
 			    &address, &where, sec_text, NULL);
 	    }
 	  else if (data->file->ehdr.e_type == ET_REL
@@ -3690,10 +3656,10 @@ check_pub_structural (struct section_data *data,
 	  goto next;
 	}
 
-      GElf_Rela rela_mem, *rela;
-      if ((rela = relocation_next (&data->rel, ctx_offset, &rela_mem,
-				   &where, skip_mismatched)))
-	relocate_one (&data->rel, rela, dwarf_64 ? 8 : 4,
+      struct relocation *rel;
+      if ((rel = relocation_next (&data->rel, ctx_offset,
+				  &where, skip_mismatched)))
+	relocate_one (&data->rel, rel, dwarf_64 ? 8 : 4,
 		      &cu_offset, &where, sec_info, NULL);
       else if (data->file->ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_pubtables | mc_reloc, &where,
@@ -3859,7 +3825,6 @@ check_location_expression (struct read_ctx *parent_ctx,
       do {								\
 	if (OP != 0)							\
 	  {								\
-	    GElf_Rela _rela_mem, *_rela;				\
 	    uint64_t _off = read_ctx_get_offset (&ctx);			\
 	    uint64_t *_ptr = (PTR);					\
 	    if (!read_ctx_read_form (&ctx, addr_64, (OP),		\
@@ -3871,9 +3836,10 @@ check_location_expression (struct read_ctx *parent_ctx,
 			  dwarf_form_string ((OP)));			\
 		goto out;						\
 	      }								\
-	    if ((_rela = relocation_next (reloc, _off + off0, &_rela_mem, \
+	    struct relocation *_rel;					\
+	    if ((_rel = relocation_next (reloc, _off + off0,		\
 					 &where, skip_mismatched)))	\
-	      relocate_one (reloc, _rela,				\
+	      relocate_one (reloc, _rel,				\
 			    addr_64 ? 8 : 4, _ptr, &where,		\
 			    reloc_target_loc (opcode), NULL);		\
 	  }								\
@@ -4002,7 +3968,6 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
       /* begin address */
       uint64_t begin_addr;
       uint64_t begin_off = read_ctx_get_offset (&ctx);
-      GElf_Rela rela_mem, *rela;
       GElf_Sym begin_symbol_mem, *begin_symbol = &begin_symbol_mem;
       bool begin_relocated = false;
       if (!overlap
@@ -4015,11 +3980,12 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  return false;
 	}
 
-      if ((rela = relocation_next (&data->rel, begin_off, &rela_mem,
-				   &where, skip_mismatched)))
+      struct relocation *rel;
+      if ((rel = relocation_next (&data->rel, begin_off,
+				  &where, skip_mismatched)))
 	{
 	  begin_relocated = true;
-	  relocate_one (&data->rel, rela, addr_64 ? 8 : 4,
+	  relocate_one (&data->rel, rel, addr_64 ? 8 : 4,
 			&begin_addr, &where, rel_value,	&begin_symbol);
 	}
 
@@ -4038,11 +4004,11 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  return false;
 	}
 
-      if ((rela = relocation_next (&data->rel, end_off, &rela_mem,
-				   &where, skip_mismatched)))
+      if ((rel = relocation_next (&data->rel, end_off,
+				  &where, skip_mismatched)))
 	{
 	  end_relocated = true;
-	  relocate_one (&data->rel, rela, addr_64 ? 8 : 4,
+	  relocate_one (&data->rel, rel, addr_64 ? 8 : 4,
 			&end_addr, &where, rel_value, &end_symbol);
 	  if (begin_addr != escape)
 	    {
@@ -4258,52 +4224,83 @@ check_loc_or_range_structural (struct section_data *data,
   return retval;
 }
 
-
-bool
-check_relocation_section_structural (Dwarf *dwarf,
-				     struct section_data *data,
-				     Ebl *ebl,
-				     bool elf_64)
+GElf_Rela *get_rel_or_rela (Elf_Data *data, int ndx,
+			    GElf_Rela *dst, size_t type)
 {
-  assert (data->rel.type == SHT_REL || data->rel.type == SHT_RELA);
-  bool retval = true;
+  if (type == SHT_RELA)
+    return gelf_getrela (data, ndx, dst);
+  else
+    {
+      assert (type == SHT_REL);
+      GElf_Rel rel_mem;
+      if (gelf_getrel (data, ndx, &rel_mem) == NULL)
+	return NULL;
+      dst->r_offset = rel_mem.r_offset;
+      dst->r_info = rel_mem.r_info;
+      dst->r_addend = 0;
+      return dst;
+    }
+}
+
+static bool
+read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
+{
+  assert (secdata->rel.type == SHT_REL
+	  || secdata->rel.type == SHT_RELA);
+  bool is_rela = secdata->rel.type == SHT_RELA;
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, dwarf, data->data);
+  read_ctx_init (&ctx, secdata->file->dwarf, secdata->data);
 
-  bool is_rela = data->rel.type == SHT_RELA;
   size_t entrysize
     = elf_64
     ? (is_rela ? sizeof (Elf64_Rela) : sizeof (Elf64_Rel))
     : (is_rela ? sizeof (Elf32_Rela) : sizeof (Elf32_Rel));
-  data->rel.count = data->rel.data->d_size / entrysize;
+  size_t count = reldata->d_size / entrysize;
 
-  struct where parent = WHERE (data_get_sec (data)->id, NULL);
+  struct where parent = WHERE (data_get_sec (secdata)->id, NULL);
   struct where where = WHERE (is_rela ? sec_rela : sec_rel, NULL);
   where.ref = &parent;
 
-  for (unsigned i = 0; i < data->rel.count; ++i)
+  for (unsigned i = 0; i < count; ++i)
     {
       where_reset_1 (&where, i);
 
+      REALLOC (&secdata->rel, rel);
+      struct relocation *cur = secdata->rel.rel + secdata->rel.size;
+      memset (cur, 0, sizeof (*cur));
+
+      cur->index = secdata->rel.size++;
+
       GElf_Rela rela_mem, *rela
-	= get_rel_or_rela (data->rel.data, i, &rela_mem, data->rel.type);
+	= get_rel_or_rela (reldata, i, &rela_mem, secdata->rel.type);
       if (rela == NULL)
 	{
 	  wr_error (&where, ": couldn't read relocation.\n");
-	  return false;
+	skip:
+	  cur->invalid = true;
+	  continue;
 	}
-      where_reset_2 (&where, rela->r_offset);
 
-      int rtype = GELF_R_TYPE (rela->r_info);
-      Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
+      cur->offset = rela->r_offset;
+      cur->symndx = GELF_R_SYM (rela->r_info);
+      cur->type = GELF_R_TYPE (rela->r_info);
+
+      where_reset_2 (&where, cur->offset);
+
+      Elf_Type type = ebl_reloc_simple_type (secdata->file->ebl, cur->type);
+      int width;
 
       switch (type)
 	{
 	case ELF_T_WORD:
 	case ELF_T_SWORD:
+	  width = 4;
+	  break;
+
 	case ELF_T_XWORD:
 	case ELF_T_SXWORD:
+	  width = 8;
 	  break;
 
 	case ELF_T_BYTE:
@@ -4312,31 +4309,51 @@ check_relocation_section_structural (Dwarf *dwarf,
 	     flag them as erroneous, because it's more likely these
 	     are a result of a bug than actually being used.  */
 	  wr_error (&where, ": 8 or 16-bit relocation type %d.\n", type);
-	  break;
+	  goto skip;
 
 	default:
 	  wr_error (&where, ": invalid relocation type %d.\n", type);
-	  retval = false;
+	  goto skip;
 	};
+
+      if (cur->offset + width >= secdata->data->d_size)
+	{
+	  wr_error (&where,
+		    ": relocation doesn't fall into relocated section.\n");
+	  goto skip;
+	}
+
+      uint64_t value;
+      if (width == 4)
+	value = read_4ubyte_unaligned (secdata->file->dwarf,
+				       secdata->data->d_buf + cur->offset);
+      else
+	{
+	  assert (width == 8);
+	  value = read_8ubyte_unaligned (secdata->file->dwarf,
+					 secdata->data->d_buf + cur->offset);
+	}
+
+      if (is_rela)
+	{
+	  if (value != 0)
+	    wr_message (mc_impact_2 | mc_reloc, &where,
+			": SHR_RELA relocates a place with non-zero value.\n");
+	  cur->addend = rela->r_addend;
+	}
+      else
+	cur->addend = value;
     }
 
-  if (retval)
-    {
-      /* Sort the reloc section so that the applicable addresses of
-	 relocation entries are monotonously increasing.  */
-#define COMPAR(BITS)					\
-      int compar##BITS (const void *a, const void *b)	\
-      {							\
-	typedef Elf##BITS##_Rela rel_t;			\
-	return ((rel_t *)a)->r_offset - ((rel_t *)b)->r_offset;	\
-      }
-      COMPAR (32);
-      COMPAR (64);
-#undef COMPAR
+  /* Sort the reloc section so that the applicable addresses of
+     relocation entries are monotonously increasing.  */
+  int compare (const void *a, const void *b)
+  {
+    return ((struct relocation *)a)->offset
+      - ((struct relocation *)b)->offset;
+  }
 
-      qsort (data->rel.data->d_buf, data->rel.count, entrysize,
-	     elf_64 ? &compar64 : &compar32);
-    }
-
-  return retval;
+  qsort (secdata->rel.rel, secdata->rel.size,
+	 sizeof (*secdata->rel.rel), &compare);
+  return true;
 }
