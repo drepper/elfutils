@@ -2815,7 +2815,7 @@ read_die_chain (struct read_ctx *ctx,
 
 	  assert (!(check_locptr && check_rangeptr));
 
-	  uint64_t offset = read_ctx_get_offset (ctx) + cu->offset;
+	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
 	  GElf_Rela rela_mem, *rela = NULL;
 	  bool type_is_rel = file->ehdr.e_type == ET_REL;
 
@@ -2831,7 +2831,7 @@ read_die_chain (struct read_ctx *ctx,
 		    return -1;
 		  }
 
-		if ((rela = relocation_next (reloc, offset, &rela_mem,
+		if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, dwarf_64 ? 8 : 4,
 				&addr, &where, sec_str, NULL);
@@ -2878,7 +2878,7 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_offset (ctx, addr_64, &addr))
 		  goto cant_read;
 
-		if ((rela = relocation_next (reloc, offset, &rela_mem,
+		if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
 					     &where, skip_mismatched)))
 		  relocate_one (reloc, rela, addr_64 ? 8 : 4, &addr, &where,
 				reloc_target (form, it), NULL);
@@ -2955,7 +2955,7 @@ read_die_chain (struct read_ctx *ctx,
 		uint64_t value = raw_value;
 		if (form == DW_FORM_data4)
 		  {
-		    if ((rela = relocation_next (reloc, offset, &rela_mem,
+		    if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
 						 &where, skip_mismatched)))
 		      relocate_one (reloc, rela, 4, &value, &where,
 				    reloc_target (form, it), NULL);
@@ -2995,7 +2995,7 @@ read_die_chain (struct read_ctx *ctx,
 		/* DW_FORM_ref8 shouldn't be relocated.  */
 		if (form == DW_FORM_data8)
 		  {
-		    if ((rela = relocation_next (reloc, offset, &rela_mem,
+		    if ((rela = relocation_next (reloc, ctx_offset, &rela_mem,
 						 &where, skip_mismatched)))
 		      relocate_one (reloc, rela, 8, &value, &where,
 				    reloc_target (form, it), NULL);
@@ -3457,12 +3457,23 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 
       /* CU offset.  */
       uint64_t cu_offset;
+      uint64_t ctx_offset = sub_ctx.ptr - ctx.begin;
       if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &cu_offset))
 	{
 	  wr_error (&where, ": can't read debug info offset.\n");
 	  retval = false;
 	  goto next;
 	}
+
+      GElf_Rela rela_mem, *rela;
+      if ((rela = relocation_next (&data->rel, ctx_offset, &rela_mem,
+				   &where, skip_mismatched)))
+	relocate_one (&data->rel, rela, dwarf_64 ? 8 : 4,
+		      &cu_offset, &where, sec_info, NULL);
+      else if (data->file->ehdr.e_type == ET_REL)
+	wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,
+		    PRI_LACK_RELOCATION);
+
       struct cu *cu = NULL;
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
@@ -3549,13 +3560,32 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
       while (!read_ctx_eof (&sub_ctx))
 	{
 	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
-	  uint64_t address, length;
+
+	  /* Record address.  */
+	  uint64_t address;
+	  ctx_offset = sub_ctx.ptr - ctx.begin;
+	  bool address_relocated = false;
 	  if (!read_ctx_read_var (&sub_ctx, address_size, &address))
 	    {
 	      wr_error (&where, ": can't read address field.\n");
 	      retval = false;
 	      goto next;
 	    }
+
+    	  if ((rela = relocation_next (&data->rel, ctx_offset, &rela_mem,
+				       &where, skip_mismatched)))
+	    {
+	      address_relocated = true;
+	      relocate_one (&data->rel, rela, address_size,
+			    &address, &where, sec_text, NULL);
+	    }
+	  else if (data->file->ehdr.e_type == ET_REL
+		   && address != 0)
+	    wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,
+			PRI_LACK_RELOCATION);
+
+	  /* Record length.  */
+	  uint64_t length;
 	  if (!read_ctx_read_var (&sub_ctx, address_size, &length))
 	    {
 	      wr_error (&where, ": can't read length field.\n");
@@ -3563,7 +3593,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	      goto next;
 	    }
 
-	  if (address == 0 && length == 0)
+	  if (address == 0 && length == 0 && !address_relocated)
 	    break;
 
 	  /* Skip coverage analysis if we have errors.  */
