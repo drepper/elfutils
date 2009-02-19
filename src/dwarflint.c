@@ -403,7 +403,6 @@ struct relocation
 			   ignored.  Necessary so that we don't
 			   double-report invalid & missing
 			   relocation.  */
-  size_t index;		/* Original index (before sorting).  */
 };
 
 struct relocation_data
@@ -2259,7 +2258,7 @@ where_from_reloc (struct relocation_data *reloc, struct where *ref)
 {
   struct where where
     = WHERE (reloc->type == SHT_REL ? sec_rel : sec_rela, NULL);
-  where_reset_1 (&where, reloc->index);
+  where_reset_1 (&where, reloc->rel[reloc->index].offset);
   where.ref = ref;
   return where;
 }
@@ -4267,10 +4266,8 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
       where_reset_1 (&where, i);
 
       REALLOC (&secdata->rel, rel);
-      struct relocation *cur = secdata->rel.rel + secdata->rel.size;
+      struct relocation *cur = secdata->rel.rel + secdata->rel.size++;
       memset (cur, 0, sizeof (*cur));
-
-      cur->index = secdata->rel.size++;
 
       GElf_Rela rela_mem, *rela
 	= get_rel_or_rela (reldata, i, &rela_mem, secdata->rel.type);
