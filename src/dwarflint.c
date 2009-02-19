@@ -568,9 +568,10 @@ static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 /* Functions for checking of structural integrity.  */
 
 static struct cu * check_debug_info_structural (struct section_data *data,
-						struct abbrev_table *abbrev_chain);
+						struct abbrev_table *abbrev_chain,
+						Elf_Data *strings);
 
-static bool check_aranges_structural (struct read_ctx *ctx,
+static bool check_aranges_structural (struct section_data *data,
 				      struct cu *cu_chain);
 
 static bool check_pub_structural (struct section_data *data,
@@ -785,6 +786,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   DEF_SECDATA (pubnames_data, sec_pubnames);
   DEF_SECDATA (pubtypes_data, sec_pubtypes);
   DEF_SECDATA (ranges_data, sec_ranges);
+  DEF_SECDATA (str_data, sec_str);
 
 #undef DEF_SECDATA
 
@@ -805,7 +807,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
     DEF_SECINFO (pubnames),
     DEF_SECINFO (pubtypes),
     DEF_SECINFO (ranges),
-    DEF_NOINFO (str),
+    DEF_SECINFO (str),
 #undef DEF_NOINFO
 #undef DEF_SECINFO
   };
@@ -953,6 +955,10 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	  secinfo[i].dataptr->rel.symdata = reloc_symdata;
       }
 
+  if (str_data.rel.data != NULL)
+    wr_message (mc_impact_2 | mc_elf, &WHERE (sec_str, NULL),
+		": has associated relocation section, that's unexpected.\n");
+
  skip_rel:;
   struct abbrev_table *abbrev_chain = NULL;
   struct cu *cu_chain = NULL;
@@ -973,7 +979,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   if (abbrev_chain != NULL)
     {
       if (info_data.data != NULL)
-	cu_chain = check_debug_info_structural (&info_data, abbrev_chain);
+	cu_chain = check_debug_info_structural (&info_data, abbrev_chain, str_data.data);
       else if (!tolerate_nodebug)
 	/* Hard error, not a message.  We can't debug without this.  */
 	wr_error (NULL, ".debug_info data not found.\n");
@@ -991,7 +997,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   if (aranges_data.data != NULL)
     {
       read_ctx_init (&ctx, dwarf, aranges_data.data);
-      if (check_aranges_structural (&ctx, cu_chain)
+      if (check_aranges_structural (&aranges_data, cu_chain)
 	  && ranges_sound)
 	check_matching_ranges (hlctx);
     }
@@ -3196,11 +3202,11 @@ check_cu_structural (struct read_ctx *ctx,
 
 static struct cu *
 check_debug_info_structural (struct section_data *data,
-			     struct abbrev_table *abbrev_chain)
+			     struct abbrev_table *abbrev_chain,
+			     Elf_Data *strings)
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, data->file->dwarf, data->data);
-  Elf_Data *strings = data->file->dwarf->sectiondata[IDX_debug_str];
 
   struct ref_record die_refs;
   memset (&die_refs, 0, sizeof (die_refs));
@@ -3397,45 +3403,49 @@ coverage_map_free_XA (struct coverage_map *coverage_map)
 }
 
 static bool
-check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
+check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 {
+  struct read_ctx ctx;
+  read_ctx_init (&ctx, data->file->dwarf, data->data);
+
   struct where where = WHERE (sec_aranges, NULL);
   bool retval = true;
 
   struct coverage_map *coverage_map;
-  if ((coverage_map = coverage_map_alloc_XA (ctx->dbg->elf, false)) == NULL)
+  if ((coverage_map = coverage_map_alloc_XA (data->file->dwarf->elf,
+					     false)) == NULL)
     {
       wr_error (&where, ": couldn't read ELF, skipping coverage analysis.\n");
       retval = false;
     }
 
-  while (!read_ctx_eof (ctx))
+  while (!read_ctx_eof (&ctx))
     {
-      where_reset_1 (&where, read_ctx_get_offset (ctx));
-      const unsigned char *atab_begin = ctx->ptr;
+      where_reset_1 (&where, read_ctx_get_offset (&ctx));
+      const unsigned char *atab_begin = ctx.ptr;
 
       /* Size.  */
       uint32_t size32;
       uint64_t size;
       bool dwarf_64;
-      if (!read_ctx_read_4ubyte (ctx, &size32))
+      if (!read_ctx_read_4ubyte (&ctx, &size32))
 	{
 	  wr_error (&where, ": can't read table length.\n");
 	  return false;
 	}
-      if (!read_size_extra (ctx, size32, &size, &dwarf_64, &where))
+      if (!read_size_extra (&ctx, size32, &size, &dwarf_64, &where))
 	return false;
 
       struct read_ctx sub_ctx;
-      const unsigned char *atab_end = ctx->ptr + size;
-      if (!read_ctx_init_sub (&sub_ctx, ctx, atab_begin, atab_end))
+      const unsigned char *atab_end = ctx.ptr + size;
+      if (!read_ctx_init_sub (&sub_ctx, &ctx, atab_begin, atab_end))
 	{
 	not_enough:
 	  wr_error (&where, PRI_NOT_ENOUGH, "next table");
 	  return false;
 	}
 
-      sub_ctx.ptr = ctx->ptr;
+      sub_ctx.ptr = ctx.ptr;
 
       /* Version.  */
       uint16_t version;
@@ -3573,7 +3583,7 @@ check_aranges_structural (struct read_ctx *ctx, struct cu *cu_chain)
 	}
 
     next:
-      if (!read_ctx_skip (ctx, size))
+      if (!read_ctx_skip (&ctx, size))
 	/* A "can't happen" error.  */
 	goto not_enough;
     }
