@@ -977,6 +977,7 @@ struct expected_at_map
       .optional (DW_AT_type)
       .optional (DW_AT_visibility)
       .optional (DW_AT_MIPS_linkage_name) // XXX added to reflect reality
+      .optional (DW_AT_artificial) // XXX added to reflect reality
       ;
 
     m_map [DW_TAG_variant]
