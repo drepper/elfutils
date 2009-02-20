@@ -987,7 +987,11 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   if (abbrev_chain != NULL)
     {
       if (info_data.data != NULL)
-	cu_chain = check_debug_info_structural (&info_data, abbrev_chain, str_data.data);
+	{
+	  cu_chain = check_debug_info_structural (&info_data, abbrev_chain, str_data.data);
+	  if (cu_chain != NULL)
+	    check_expected_trees (hlctx);
+	}
       else if (!tolerate_nodebug)
 	/* Hard error, not a message.  We can't debug without this.  */
 	wr_error (NULL, ".debug_info data not found.\n");
