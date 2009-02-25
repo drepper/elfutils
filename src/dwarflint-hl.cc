@@ -220,18 +220,27 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
       expected_set::expectation_map::const_iterator kt = expect.find (name);
       if (kt == expect.end ())
 	wr_message (cat (mc_impact_3, mc_info), &where,
-		    ": \"%s\" has attribute \"%s\", which is not expected.\n",
+		    ": DIE \"%s\" has attribute \"%s\", which is not expected.\n",
 		    dwarf_tag_string (parent_tag),
 		    dwarf_attr_string (name));
-
-      unsigned exp_vs = expected_value_space (name, parent_tag);
-      elfutils::dwarf::value_space vs = (*jt).second.what_space ();
-      if ((exp_vs & (1U << vs)) == 0)
-	wr_message (cat (mc_impact_3, mc_info), &where,
-		    ": in \"%s\" attribute \"%s\" has value of unexpected type \"%s\".\n",
-		    dwarf_tag_string (parent_tag),
-		    dwarf_attr_string (name),
-		    to_string (vs).c_str ());
+      try
+	{
+	  unsigned exp_vs = expected_value_space (name, parent_tag);
+	  elfutils::dwarf::value_space vs = (*jt).second.what_space ();
+	  if ((exp_vs & (1U << vs)) == 0)
+	    wr_message (cat (mc_impact_3, mc_info), &where,
+			": in DIE \"%s\", attribute \"%s\" has value of unexpected type \"%s\".\n",
+			dwarf_tag_string (parent_tag),
+			dwarf_attr_string (name),
+			to_string (vs).c_str ());
+	}
+      catch (...)
+	{
+	  wr_message (cat (mc_impact_4, mc_info, mc_error), &where,
+		      ": in DIE \"%s\", couldn't obtain type of attribute \"%s\".\n",
+		      dwarf_tag_string (parent_tag),
+		      dwarf_attr_string (name));
+	}
     }
 
   // Check children recursively.
