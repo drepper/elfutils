@@ -37,6 +37,7 @@
 #include <iterator>
 
 #include "dwarflint.h"
+#include "dwarflint-expected.hh"
 #include "dwarfstrings.h"
 #include "c++/dwarf"
 #include "../libdw/libdwP.h"
@@ -129,11 +130,38 @@ check_matching_ranges (hl_ctx *hlctx)
   return true;
 }
 
-struct extract_tag {
+struct name_extractor {
   int operator () (elfutils::dwarf::attribute const &at) {
     return at.first;
   }
-};
+} extract_name;
+
+std::ostream &
+operator << (std::ostream &o, elfutils::dwarf::value_space vs)
+{
+  using namespace elfutils;
+  switch (vs)
+    {
+    case dwarf::VS_flag: return o << "flag";
+    case dwarf::VS_dwarf_constant: return o << "dwarf_constant";
+    case dwarf::VS_discr_list: return o << "discr_list";
+    case dwarf::VS_reference: return o << "reference";
+    case dwarf::VS_unit_reference: return o << "unit_reference";
+    case dwarf::VS_lineptr: return o << "lineptr";
+    case dwarf::VS_macptr: return o << "macptr";
+    case dwarf::VS_rangelistptr: return o << "rangelistptr";
+    case dwarf::VS_identifier: return o << "identifier";
+    case dwarf::VS_string: return o << "string";
+    case dwarf::VS_source_file: return o << "source_file";
+    case dwarf::VS_source_line: return o << "source_line";
+    case dwarf::VS_source_column: return o << "source_column";
+    case dwarf::VS_address: return o << "address";
+    case dwarf::VS_constant: return o << "constant";
+    case dwarf::VS_location: return o << "location";
+    };
+
+  abort ();
+}
 
 static void
 recursively_validate (elfutils::dwarf::compile_unit const &cu,
@@ -150,7 +178,7 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
   std::transform (parent.attributes ().begin (),
 		  parent.attributes ().end (),
 		  std::inserter (attributes, attributes.end ()),
-		  extract_tag ());
+		  extract_name);
 
   // Attributes that we expect at this DIE.
   expected_set::expectation_map const &expect
@@ -181,16 +209,29 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
 	  };
     }
 
-  // Check unexpected attributes.
-  for (std::set <int>::iterator jt = attributes.begin ();
-       jt != attributes.end (); ++jt)
+  // Check present attributes for expected-ness, and validate value
+  // space.
+  for (elfutils::dwarf::debug_info_entry::attributes::const_iterator jt
+	 = parent.attributes ().begin (), jte = parent.attributes ().end ();
+       jt != jte; ++jt)
     {
-      expected_set::expectation_map::const_iterator kt = expect.find (*jt);
+      unsigned name = extract_name (*jt);
+
+      expected_set::expectation_map::const_iterator kt = expect.find (name);
       if (kt == expect.end ())
 	wr_message (cat (mc_impact_3, mc_info), &where,
-		    ": %s has attribute %s, which is not expected.\n",
+		    ": \"%s\" has attribute \"%s\", which is not expected.\n",
 		    dwarf_tag_string (parent_tag),
-		    dwarf_attr_string (*jt));
+		    dwarf_attr_string (name));
+
+      unsigned exp_vs = expected_value_space (name, parent_tag);
+      elfutils::dwarf::value_space vs = (*jt).second.what_space ();
+      if ((exp_vs & (1U << vs)) == 0)
+	wr_message (cat (mc_impact_3, mc_info), &where,
+		    ": in \"%s\" attribute \"%s\" has value of unexpected type \"%s\".\n",
+		    dwarf_tag_string (parent_tag),
+		    dwarf_attr_string (name),
+		    to_string (vs).c_str ());
     }
 
   // Check children recursively.
