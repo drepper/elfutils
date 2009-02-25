@@ -89,7 +89,7 @@ libdwplusplus_SOURCES = ../libdw/c++/values.cc ../libdw/c++/known.cc \
 dwarfcmp_SOURCES = dwarfcmp.cc
 dwarfcmp_SOURCES += $(libdwplusplus_SOURCES)
 
-dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc dwarfstrings.c
+dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc dwarflint-expected-at.cc dwarfstrings.c
 dwarflint_SOURCES += $(libdwplusplus_SOURCES) # XXX drop when we have the DSO
 
 readelf_SOURCES = readelf.c dwarfstrings.c
