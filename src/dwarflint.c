@@ -764,6 +764,8 @@ where_reset_3 (struct where *wh, uint64_t addr)
   wh->addr3 = addr;
 }
 
+#define WHERE_SECDATA(DATA, PARENT) (WHERE (data_get_sec (DATA)->id, PARENT))
+
 static void
 process_file (Dwarf *dwarf, const char *fname, bool only_one)
 {
@@ -954,7 +956,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	  && cur->reldata != NULL)
 	{
 	  if (cur->dataptr->data == NULL)
-	    wr_error (&WHERE (data_get_sec (secinfo[i].dataptr)->id, NULL),
+	    wr_error (&WHERE_SECDATA (secinfo[i].dataptr, NULL),
 		      ": this data-less section has a relocation section.\n");
 	  else if (read_rel (cur->dataptr, cur->reldata, elf_64))
 	    cur->dataptr->rel.symdata = reloc_symdata;
@@ -963,7 +965,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 
   if (str_data.rel.size > 0)
     wr_message (mc_impact_2 | mc_elf, &WHERE (sec_str, NULL),
-		": has associated relocation section, that's unexpected.\n");
+		": there's a relocation section associated with this section.\n");
 
  skip_rel:;
   struct abbrev_table *abbrev_chain = NULL;
@@ -3618,7 +3620,7 @@ check_pub_structural (struct section_data *data,
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (data_get_sec (data)->id, NULL);
+      struct where where = WHERE_SECDATA (data, NULL);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
       const unsigned char *set_begin = ctx.ptr;
 
@@ -4269,7 +4271,7 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
     : (is_rela ? sizeof (Elf32_Rela) : sizeof (Elf32_Rel));
   size_t count = reldata->d_size / entrysize;
 
-  struct where parent = WHERE (data_get_sec (secdata)->id, NULL);
+  struct where parent = WHERE_SECDATA (secdata, NULL);
   struct where where = WHERE (is_rela ? sec_rela : sec_rel, NULL);
   where.ref = &parent;
 
