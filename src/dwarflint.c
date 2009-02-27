@@ -464,6 +464,7 @@ static bool read_ctx_read_8ubyte (struct read_ctx *ctx, uint64_t *ret);
 static bool read_ctx_read_offset (struct read_ctx *ctx, bool dwarf64,
 				  uint64_t *ret);
 static bool read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret);
+static const char *read_ctx_read_str (struct read_ctx *ctx);
 static bool read_ctx_skip (struct read_ctx *ctx, uint64_t len);
 static bool read_ctx_eof (struct read_ctx *ctx);
 
@@ -1298,6 +1299,18 @@ read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
     };
 
   return false;
+}
+
+static const char *
+read_ctx_read_str (struct read_ctx *ctx)
+{
+  const char *ret = (const char *)ctx->ptr;
+  uint8_t byte;
+  do
+    if (!read_ctx_read_ubyte (ctx, &byte))
+      return NULL;
+  while (byte != 0);
+  return ret;
 }
 
 static bool
@@ -2802,13 +2815,8 @@ read_die_chain (struct read_ctx *ctx,
 
 	    case DW_FORM_string:
 	      {
-		uint8_t byte;
-		do
-		  {
-		    if (!read_ctx_read_ubyte (ctx, &byte))
-		      goto cant_read;
-		  }
-		while (byte != 0);
+		if (!read_ctx_read_str (ctx))
+		  goto cant_read;
 		break;
 	      }
 
