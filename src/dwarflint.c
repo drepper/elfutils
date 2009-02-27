@@ -4505,12 +4505,16 @@ check_line_structural (struct section_data *data)
 	  }
 
       /* Include directories.  */
+      struct include_directory_t
+      {
+	const char *name;
+	bool used;
+      };
       struct include_directories_t
       {
 	size_t size;
 	size_t alloc;
-	const char **names;
-	bool used;
+	struct include_directory_t *dirs;
       } include_directories;
       memset (&include_directories, 0, sizeof (include_directories));
       while (!read_ctx_eof (&sub_ctx))
@@ -4527,8 +4531,9 @@ check_line_structural (struct section_data *data)
 	    break;
 
 	  // XXX high-level check for filename?
-	  REALLOC (&include_directories, names);
-	  include_directories.names[include_directories.size++] = name;
+	  REALLOC (&include_directories, dirs);
+	  include_directories.dirs[include_directories.size++] =
+	    (struct include_directory_t){name, false};
 	}
 
       /* File names.  */
@@ -4590,10 +4595,19 @@ check_line_structural (struct section_data *data)
 				     &where, "file size of file entry"))
 	    goto skip;
 
+	  if (dir_idx != 0)
+	    include_directories.dirs[dir_idx - 1].used = true;
+
 	  REALLOC (&files, files);
 	  files.files[files.size++]
 	    = (struct file_t){name, dir_idx, timestamp, file_size};
 	}
+
+      for (size_t i = 0; i < include_directories.size; ++i)
+	if (!include_directories.dirs[i].used)
+	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line, &where,
+		      ": the include #%zd `%s' is not used.\n",
+		      i + 1, include_directories.dirs[i].name);
 
       /* Skip the rest of the header.  */
       if (ctx.ptr > program_start)
