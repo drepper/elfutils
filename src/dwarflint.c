@@ -1167,7 +1167,7 @@ read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret)
 }
 
 static bool
-wr_checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
+checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
 			 struct where *wh, const char *what)
 {
   int st = read_ctx_read_sleb128 (ctx, ret);
@@ -1266,7 +1266,7 @@ read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
     case DW_FORM_udata:
       return checked_read_uleb128 (ctx, valuep, where, what);
     case DW_FORM_sdata:
-      return wr_checked_read_sleb128 (ctx, (int64_t *)valuep, where, what);
+      return checked_read_sleb128 (ctx, (int64_t *)valuep, where, what);
     case DW_FORM_data1:
       {
 	uint8_t v;
@@ -2977,8 +2977,8 @@ read_die_chain (struct read_ctx *ctx,
 	    case DW_FORM_sdata:
 	      {
 		int64_t value;
-		if (!wr_checked_read_sleb128 (ctx, &value, &where,
-					      "attribute value"))
+		if (!checked_read_sleb128 (ctx, &value, &where,
+					   "attribute value"))
 		  return -1;
 		break;
 	      }
