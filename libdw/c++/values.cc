@@ -120,9 +120,8 @@ dwarf::attr_value::what_space () const
       throw std::runtime_error ("XXX bad form");
     }
 
-  unsigned int expected = expected_value_space
-    (dwarf_whatattr (thisattr ()), 0); // XXX need tag!
-
+  unsigned int expected = expected_value_space (dwarf_whatattr (thisattr ()),
+						_m_tag);
   if (unlikely ((expected & possible) == 0))
     {
       if (expected == 0 && possible == (VS(unit_reference) | VS(reference)))

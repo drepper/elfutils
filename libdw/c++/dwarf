@@ -670,7 +670,7 @@ namespace elfutils
 	{
 	  if (unlikely (_m_offset == 1))
 	    throw std::runtime_error ("dereferencing end iterator");
-	  return attribute (_m_attr);
+	  return attribute (_m_die, _m_attr);
 	}
       };
       inline const_iterator begin () const
@@ -1027,13 +1027,15 @@ namespace elfutils
       friend class location_attr;
       friend class range_list;
     private:
+      const int _m_tag;
       ::Dwarf_Attribute _m_attr;
       inline ::Dwarf_Attribute *thisattr () const
       {
 	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
       }
 
-      attr_value (const ::Dwarf_Attribute &attr) : _m_attr (attr) {}
+      attr_value (int tag, const ::Dwarf_Attribute &attr)
+	: _m_tag (tag), _m_attr (attr) {}
 
       inline bool same (const attr_value &other) const
       {
@@ -1757,8 +1759,8 @@ namespace elfutils
 	}
       };
 
-      attribute (const ::Dwarf_Attribute &attr)
-	: first (*this), second (attr) {}
+      attribute (const debug_info_entry &die, const ::Dwarf_Attribute &attr)
+	: first (*this), second (die.tag (), attr) {}
 
     public:
       lhs first;

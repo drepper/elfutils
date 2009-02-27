@@ -1,3 +1,10 @@
+2009-02-26  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf (dwarf::attr_value): Add _m_tag private member.
+	(dwarf::attr_value, dwarf::attribute): Update initializers.
+	(dwarf::raw_attributes::const_iterator): Update caller.
+	* c++/values.cc (attr_value::what_space): Use it.
+
 2009-02-01  Roland McGrath  <roland@redhat.com>
 
 	* c++/edit-values.cc: New file.
