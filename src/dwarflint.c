@@ -466,8 +466,6 @@ static bool read_ctx_read_offset (struct read_ctx *ctx, bool dwarf64,
 static bool read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret);
 static bool read_ctx_skip (struct read_ctx *ctx, uint64_t len);
 static bool read_ctx_eof (struct read_ctx *ctx);
-static bool read_ctx_read_version (struct read_ctx *ctx, bool dwarf_64,
-				   uint16_t *versionp, struct where *wh);
 
 
 /* Functions and data structures related to raw (i.e. unassisted by
@@ -1313,34 +1311,6 @@ static bool
 read_ctx_eof (struct read_ctx *ctx)
 {
   return !read_ctx_need_data (ctx, 1);
-}
-
-static bool
-read_ctx_read_version (struct read_ctx *ctx, bool dwarf_64,
-		       uint16_t *versionp, struct where *wh)
-{
-  bool retval = read_ctx_read_2ubyte (ctx, versionp);
-
-  if (!retval)
-    {
-      wr_error (wh, ": can't read version.\n");
-      return false;
-    }
-
-  if (*versionp < 2 || *versionp > 3)
-    {
-      wr_error (wh, ": %s version %d.\n",
-		(*versionp < 2 ? "invalid" : "unsupported"), *versionp);
-      return false;
-    }
-
-  if (*versionp == 2 && dwarf_64)
-    /* Keep going.  It's a standard violation, but we may still be
-       able to read the unit under consideration and do high-level
-       checks.  */
-    wr_error (wh, ": invalid 64-bit unit in DWARF 2 format.\n");
-
-  return true;
 }
 
 static bool
@@ -3080,6 +3050,30 @@ read_die_chain (struct read_ctx *ctx,
 }
 
 static bool
+supported_version (unsigned version,
+		   size_t num_supported, struct where *where, ...)
+{
+  bool retval = false;
+  va_list ap;
+  va_start (ap, where);
+  for (size_t i = 0; i < num_supported; ++i)
+    {
+      unsigned v = va_arg (ap, unsigned);
+      if (version == v)
+	{
+	  retval = true;
+	  break;
+	}
+    }
+  va_end (ap);
+
+  if (!retval)
+    wr_error (where, ": unsupported version %d.\n", version);
+
+  return retval;
+}
+
+static bool
 check_cu_structural (struct read_ctx *ctx,
 		     struct cu *const cu,
 		     struct abbrev_table *abbrev_chain,
@@ -3090,13 +3084,23 @@ check_cu_structural (struct read_ctx *ctx,
 		     struct relocation_data *reloc,
 		     struct elf_file *file)
 {
-  uint16_t version;
   uint8_t address_size;
   bool retval = true;
 
   /* Version.  */
-  if (!read_ctx_read_version (ctx, dwarf_64, &version, &cu->where))
+  uint16_t version;
+  if (!read_ctx_read_2ubyte (ctx, &version))
+    {
+      wr_error (&cu->where, ": can't read version.\n");
+      return false;
+    }
+  if (!supported_version (version, 2, &cu->where, 2, 3))
     return false;
+  if (version == 2 && dwarf_64)
+    /* Keep going.  It's a standard violation, but we may still be
+       able to read the unit under consideration and do high-level
+       checks.  */
+    wr_error (&cu->where, ": invalid 64-bit unit in DWARF 2 format.\n");
 
   /* Abbrev offset.  */
   uint64_t abbrev_offset;
@@ -3418,7 +3422,13 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 
       /* Version.  */
       uint16_t version;
-      if (!read_ctx_read_version (&sub_ctx, dwarf_64, &version, &where))
+      if (!read_ctx_read_2ubyte (&sub_ctx, &version))
+	{
+	  wr_error (&where, ": can't read version.\n");
+	  retval = false;
+	  goto next;
+	}
+      if (!supported_version (version, 1, &where, 2))
 	{
 	  retval = false;
 	  goto next;
@@ -3641,10 +3651,8 @@ check_pub_structural (struct section_data *data,
 	  retval = false;
 	  goto next;
 	}
-      if (version != 2)
+      if (!supported_version (version, 1, &where, 2))
 	{
-	  wr_error (&where, ": %s set version.\n",
-		    version < 2 ? "invalid" : "unsupported");
 	  retval = false;
 	  goto next;
 	}
