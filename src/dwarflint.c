@@ -2182,7 +2182,7 @@ check_global_die_references (struct cu *cu_chain)
 
 static bool
 read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
-		    bool *dwarf_64p, struct where *wh)
+		 bool *dwarf_64p, struct where *wh)
 {
   if (size32 == DWARF3_LENGTH_64_BIT)
     {
@@ -2298,10 +2298,11 @@ relocation_skip (struct relocation_data *reloc, uint64_t offset,
 
 /* Skip all the remaining relocations.  */
 static void
-relocation_skip_rest (struct relocation_data *reloc, enum section_id sec)
+relocation_skip_rest (struct section_data *data)
 {
-  if (reloc != NULL && reloc->rel != NULL)
-    relocation_next (reloc, (uint64_t)-1, &WHERE (sec, NULL), skip_mismatched);
+  if (data->rel.rel != NULL)
+    relocation_next (&data->rel, (uint64_t)-1, &WHERE_SECDATA (data, NULL),
+		     skip_mismatched);
 }
 
 /* SYMPTR may be NULL, otherwise (**SYMPTR) has to yield valid memory
@@ -3266,6 +3267,7 @@ check_debug_info_structural (struct section_data *data,
 	  struct read_ctx cu_ctx;
 	  if (!read_ctx_init_sub (&cu_ctx, &ctx, cu_begin, cu_end))
 	    {
+	    not_enough:
 	      wr_error (&where, PRI_NOT_ENOUGH, "next CU");
 	      success = false;
 	      break;
@@ -3285,7 +3287,8 @@ check_debug_info_structural (struct section_data *data,
 				   read_ctx_get_offset (&ctx), size);
 	}
 
-      ctx.ptr += size;
+      if (!read_ctx_skip (&ctx, size))
+	goto not_enough;
     }
 
   if (success)
@@ -3297,7 +3300,7 @@ check_debug_info_structural (struct section_data *data,
 		    ": CU lengths don't exactly match Elf_Data contents.");
       else
 	/* Did we consume all the relocations?  */
-	relocation_skip_rest (&data->rel, sec_info);
+	relocation_skip_rest (data);
     }
 
 
@@ -3640,6 +3643,7 @@ check_pub_structural (struct section_data *data,
       const unsigned char *set_end = ctx.ptr + size;
       if (!read_ctx_init_sub (&sub_ctx, &ctx, set_begin, set_end))
 	{
+	not_enough:
 	  wr_error (&where, PRI_NOT_ENOUGH, "next set");
 	  return false;
 	}
@@ -3758,11 +3762,12 @@ check_pub_structural (struct section_data *data,
 	}
 
     next:
-      ctx.ptr += size;
+      if (!read_ctx_skip (&ctx, size))
+	goto not_enough;
     }
 
   if (retval)
-    relocation_skip_rest (&data->rel, sec_pubnames);
+    relocation_skip_rest (data);
 
   return retval;
 }
@@ -4213,7 +4218,7 @@ check_loc_or_range_structural (struct section_data *data,
 
   if (retval)
     {
-      relocation_skip_rest (&data->rel, sec);
+      relocation_skip_rest (data);
 
       /* We check that all CUs have the same address size when building
 	 the CU chain.  So just take the address size of the first CU in
