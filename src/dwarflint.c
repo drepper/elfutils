@@ -599,6 +599,7 @@ static bool read_rel (struct section_data *secdata,
 		      Elf_Data *reldata,
 		      bool elf_64);
 
+static bool check_line_structural (struct section_data *data);
 
 const char *
 where_fmt (const struct where *wh, char *ptr)
@@ -639,7 +640,8 @@ where_fmt (const struct where *wh, char *ptr)
       [sec_str] = {".debug_str", "offset", "%#"PRIx64,
 		   NULL, NULL, NULL, NULL},
 
-      [sec_line] = {".debug_line", NULL, NULL, NULL, NULL, NULL, NULL},
+      [sec_line] = {".debug_line", "table", "%#"PRIx64,
+		    NULL, NULL, NULL, NULL},
 
       [sec_loc] = {".debug_loc", "loclist", "%#"PRIx64,
 		   "offset", "%#"PRIx64, NULL, NULL},
@@ -1026,6 +1028,12 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   else
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
 		&WHERE (sec_pubtypes, NULL), ": data not found.\n");
+
+  if (line_data.data != NULL)
+    check_line_structural (&line_data);
+  else
+    wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_loc,
+		&WHERE (sec_line, NULL), ": data not found.\n");
 
   cu_free (cu_chain);
   abbrev_table_free (abbrev_chain);
@@ -4380,4 +4388,241 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
   qsort (secdata->rel.rel, secdata->rel.size,
 	 sizeof (*secdata->rel.rel), &compare);
   return true;
+}
+
+static bool
+check_line_structural (struct section_data *data)
+{
+  struct read_ctx ctx;
+  read_ctx_init (&ctx, data->file->dwarf, data->data);
+  bool retval = true;
+
+  while (!read_ctx_eof (&ctx))
+    {
+      struct where where = WHERE_SECDATA (data, NULL);
+      where_reset_1 (&where, read_ctx_get_offset (&ctx));
+      const unsigned char *set_begin = ctx.ptr;
+
+      /* Size.  */
+      uint32_t size32;
+      uint64_t size;
+      bool dwarf_64;
+      if (!read_ctx_read_4ubyte (&ctx, &size32))
+	{
+	  wr_error (&where, ": can't read table length.\n");
+	  return false;
+	}
+      if (!read_size_extra (&ctx, size32, &size, &dwarf_64, &where))
+	return false;
+
+      struct read_ctx sub_ctx;
+      const unsigned char *set_end = ctx.ptr + size;
+      if (!read_ctx_init_sub (&sub_ctx, &ctx, set_begin, set_end))
+	{
+	not_enough:
+	  wr_error (&where, PRI_NOT_ENOUGH, "next unit");
+	  return false;
+	}
+      sub_ctx.ptr = ctx.ptr;
+
+      {
+      /* Version.  */
+      uint16_t version;
+      if (!read_ctx_read_2ubyte (&sub_ctx, &version))
+	{
+	  wr_error (&where, ": can't read set version.\n");
+	skip:
+	  retval = false;
+	  goto next;
+	}
+      if (!supported_version (version, 2, &where, 2, 3))
+	goto skip;
+
+      /* Header length.  */
+      uint64_t header_length;
+      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &header_length))
+	{
+	  wr_error (&where, ": can't read attribute value.\n");
+	  goto skip;
+	}
+      const unsigned char *program_start = sub_ctx.ptr + header_length;
+
+      /* Minimum instruction length.  */
+      uint8_t minimum_i_length;
+      if (!read_ctx_read_ubyte (&sub_ctx, &minimum_i_length))
+	{
+	  wr_error (&where, ": can't read minimum instruction length.\n");
+	  goto skip;
+	}
+
+      /* Default value of is_stmt.  */
+      uint8_t default_is_stmt;
+      if (!read_ctx_read_ubyte (&sub_ctx, &default_is_stmt))
+	{
+	  wr_error (&where, ": can't read default_is_stmt.\n");
+	  goto skip;
+	}
+      /* The standard speaks of 'true' and 'false', but not about the
+	 way these are represented.  */
+      if (default_is_stmt != 0
+	  && default_is_stmt != 1)
+	wr_message (mc_line | mc_impact_2, &where,
+		    ": default_is_stmt should be 0 or 1, not %ud\n",
+		    default_is_stmt);
+
+      /* Line base.  */
+      int8_t line_base;
+      if (!read_ctx_read_ubyte (&sub_ctx, (uint8_t *)&line_base))
+	{
+	  wr_error (&where, ": can't read line_base.\n");
+	  goto skip;
+	}
+
+      /* Line range.  */
+      uint8_t line_range;
+      if (!read_ctx_read_ubyte (&sub_ctx, &line_range))
+	{
+	  wr_error (&where, ": can't read line_range.\n");
+	  goto skip;
+	}
+
+      /* Opcode base.  */
+      uint8_t opcode_base;
+      if (!read_ctx_read_ubyte (&sub_ctx, &opcode_base))
+	{
+	  wr_error (&where, ": can't read opcode_base.\n");
+	  goto skip;
+	}
+
+      /* Standard opcode lengths.  */
+      uint8_t std_opc_lengths[opcode_base];
+      for (unsigned i = 0; i < opcode_base; ++i)
+	if (!read_ctx_read_ubyte (&sub_ctx, std_opc_lengths + i))
+	  {
+	    wr_error (&where,
+		      ": can't read length of standard opcode #%d.\n", i);
+	    goto skip;
+	  }
+
+      /* Include directories.  */
+      struct include_directories_t
+      {
+	size_t size;
+	size_t alloc;
+	const char **names;
+	bool used;
+      } include_directories;
+      memset (&include_directories, 0, sizeof (include_directories));
+      while (!read_ctx_eof (&sub_ctx))
+	{
+	  const char *name = read_ctx_read_str (&sub_ctx);
+	  if (name == NULL)
+	    {
+	      wr_error (&where,
+			": can't read name of include directory #%zd.\n",
+			include_directories.size + 1); /* Numbered from 1.  */
+	      goto skip;
+	    }
+	  if (*name == 0)
+	    break;
+
+	  // XXX high-level check for filename?
+	  REALLOC (&include_directories, names);
+	  include_directories.names[include_directories.size++] = name;
+	}
+
+      /* File names.  */
+      struct file_t
+      {
+	const char *name;
+	uint64_t dir_idx;
+	uint64_t mtime;
+	uint64_t size;
+      };
+      struct files_t
+      {
+	size_t size;
+	size_t alloc;
+	struct file_t *files;
+      } files;
+      memset (&files, 0, sizeof (files));
+      while (1)
+	{
+	  const char *name = read_ctx_read_str (&sub_ctx);
+	  if (name == NULL)
+	    {
+	      wr_error (&where,
+			": can't read name of file #%zd.\n",
+			files.size + 1); /* Numbered from 1.  */
+	      goto skip;
+	    }
+	  if (*name == 0)
+	    break;
+	  // XXX high-level check for filename?
+
+	  /* Directory index.  */
+	  uint64_t dir_idx;
+	  if (!checked_read_uleb128 (&sub_ctx, &dir_idx,
+				     &where, "directory index of file entry"))
+	    goto skip;
+	  if (*name == '/' && dir_idx != 0)
+	    wr_message (mc_impact_2 | mc_line, &where,
+			": file #%zd has absolute pathname, but refers to directory != 0.\n",
+			files.size + 1);
+	  if (dir_idx > include_directories.size) /* Not >=, dirs indexed from 1.  */
+	    {
+	      wr_message (mc_impact_4 | mc_line, &where,
+			  ": file #%zd refers to directory #%zd, which wasn't defined.\n",
+			  files.size + 1, dir_idx);
+	      /* Consumer might choke on that.  */
+	      retval = false;
+	    }
+
+	  /* Time of last modification.  */
+	  uint64_t timestamp;
+	  if (!checked_read_uleb128 (&sub_ctx, &timestamp,
+				     &where, "timestamp of file entry"))
+	    goto skip;
+
+	  /* Size of the file.  */
+	  uint64_t file_size;
+	  if (!checked_read_uleb128 (&sub_ctx, &file_size,
+				     &where, "file size of file entry"))
+	    goto skip;
+
+	  REALLOC (&files, files);
+	  files.files[files.size++]
+	    = (struct file_t){name, dir_idx, timestamp, file_size};
+	}
+
+      /* Skip the rest of the header.  */
+      if (ctx.ptr > program_start)
+	{
+	  wr_error (&where,
+		    ": header claims that it has a size of %#" PRIx64
+		    ", but in fact it has a size of %#" PRIx64 ".\n",
+		    header_length, ctx.ptr - program_start + header_length);
+	  /* Assume that the header lies, and what follows is in
+	     fact line number program.  */
+	  retval = false;
+	}
+      else if (sub_ctx.ptr < program_start)
+	{
+	  if (!check_zero_padding (&sub_ctx, mc_line, &where))
+	    wr_message_padding_n0 (mc_line, &where,
+				   read_ctx_get_offset (&sub_ctx),
+				   program_start - sub_ctx.ptr);
+	  sub_ctx.ptr = program_start;
+	}
+      }
+
+    next:
+      if (!read_ctx_skip (&ctx, size))
+	goto not_enough;
+    }
+
+  if (retval)
+    relocation_skip_rest (data);
+
+  return retval;
 }

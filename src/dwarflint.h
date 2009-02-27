@@ -108,7 +108,8 @@ extern "C"
     mc_pubtypes  = 0x20000,  // .debug_pubtypes presence
     mc_loc       = 0x40000,  // messages related to .debug_loc
     mc_ranges    = 0x80000,  // messages related to .debug_ranges
-    mc_reloc     = 0x100000, // messages related to relocation handling
+    mc_line      = 0x1000000, // messages related to .debug_line
+    mc_reloc     = 0x40000000, // messages related to relocation handling
     mc_other     = 0x80000000, // messages unrelated to any of the above
     mc_all       = 0xffffff00, // all areas
   };
