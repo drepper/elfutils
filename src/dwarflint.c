@@ -387,6 +387,7 @@ struct elf_file
   Dwarf *dwarf;
   Ebl *ebl;
   GElf_Ehdr ehdr;	/* Header of dwarf->elf.  */
+  bool addr_64;
 
   struct sec *sec;	/* Array of sections.  */
   size_t size;
@@ -784,7 +785,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
     goto invalid_elf;
   if (gelf_getehdr (dwarf->elf, &file.ehdr) == NULL)
     goto invalid_elf;
-  bool elf_64 = file.ehdr.e_ident[EI_CLASS] == ELFCLASS64;
+  file.addr_64 = file.ehdr.e_ident[EI_CLASS] == ELFCLASS64;
 
 #define DEF_SECDATA(VAR, SEC)					\
   struct section_data VAR = {&file, (size_t)-1, NULL,		\
@@ -961,7 +962,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	  if (cur->dataptr->data == NULL)
 	    wr_error (&WHERE_SECDATA (secinfo[i].dataptr, NULL),
 		      ": this data-less section has a relocation section.\n");
-	  else if (read_rel (cur->dataptr, cur->reldata, elf_64))
+	  else if (read_rel (cur->dataptr, cur->reldata, file.addr_64))
 	    cur->dataptr->rel.symdata = reloc_symdata;
 	}
     }
