@@ -47,6 +47,7 @@
 
 #include "../libdw/dwarf.h"
 #include "../libdw/libdwP.h"
+#include "../libdw/known-dwarf.h"
 #include "../libebl/libebl.h"
 #include "dwarfstrings.h"
 #include "dwarflint.h"
@@ -642,7 +643,7 @@ where_fmt (const struct where *wh, char *ptr)
 		   NULL, NULL, NULL, NULL},
 
       [sec_line] = {".debug_line", "table", "%#"PRIx64,
-		    NULL, NULL, NULL, NULL},
+		    "offset", "%#"PRIx64, NULL, NULL},
 
       [sec_loc] = {".debug_loc", "loclist", "%#"PRIx64,
 		   "offset", "%#"PRIx64, NULL, NULL},
@@ -4463,8 +4464,10 @@ check_line_structural (struct section_data *data)
 	  wr_error (&where, ": can't read default_is_stmt.\n");
 	  goto skip;
 	}
-      /* The standard speaks of 'true' and 'false', but not about the
-	 way these are represented.  */
+      /* 7.21: The boolean values "true" and "false" used by the line
+	 number information program are encoded as a single byte
+	 containing the value 0 for "false," and a non-zero value for
+	 "true."  [But give a notice if it's not 0 or 1.]  */
       if (default_is_stmt != 0
 	  && default_is_stmt != 1)
 	wr_message (mc_line | mc_impact_2, &where,
@@ -4542,8 +4545,7 @@ check_line_structural (struct section_data *data)
       {
 	const char *name;
 	uint64_t dir_idx;
-	uint64_t mtime;
-	uint64_t size;
+	bool used;
       };
       struct files_t
       {
@@ -4552,6 +4554,30 @@ check_line_structural (struct section_data *data)
 	struct file_t *files;
       } files;
       memset (&files, 0, sizeof (files));
+
+      /* Directory index.  */
+      bool read_directory_index (const char *name, uint64_t *ptr)
+      {
+	if (!checked_read_uleb128 (&sub_ctx, ptr,
+				   &where, "directory index"))
+	  return false;
+	if (*name == '/' && *ptr != 0)
+	  wr_message (mc_impact_2 | mc_line, &where,
+		      ": file #%zd has absolute pathname, but refers to directory != 0.\n",
+		      files.size + 1);
+	if (*ptr > include_directories.size) /* Not >=, dirs indexed from 1.  */
+	  {
+	    wr_message (mc_impact_4 | mc_line, &where,
+			": file #%zd refers to directory #%zd, which wasn't defined.\n",
+			files.size + 1, *ptr);
+	    /* Consumer might choke on that.  */
+	    retval = false;
+	  }
+	if (*ptr != 0)
+	  include_directories.dirs[*ptr - 1].used = true;
+	return true;
+      }
+
       while (1)
 	{
 	  const char *name = read_ctx_read_str (&sub_ctx);
@@ -4566,23 +4592,9 @@ check_line_structural (struct section_data *data)
 	    break;
 	  // XXX high-level check for filename?
 
-	  /* Directory index.  */
 	  uint64_t dir_idx;
-	  if (!checked_read_uleb128 (&sub_ctx, &dir_idx,
-				     &where, "directory index of file entry"))
+	  if (!read_directory_index (name, &dir_idx))
 	    goto skip;
-	  if (*name == '/' && dir_idx != 0)
-	    wr_message (mc_impact_2 | mc_line, &where,
-			": file #%zd has absolute pathname, but refers to directory != 0.\n",
-			files.size + 1);
-	  if (dir_idx > include_directories.size) /* Not >=, dirs indexed from 1.  */
-	    {
-	      wr_message (mc_impact_4 | mc_line, &where,
-			  ": file #%zd refers to directory #%zd, which wasn't defined.\n",
-			  files.size + 1, dir_idx);
-	      /* Consumer might choke on that.  */
-	      retval = false;
-	    }
 
 	  /* Time of last modification.  */
 	  uint64_t timestamp;
@@ -4596,19 +4608,10 @@ check_line_structural (struct section_data *data)
 				     &where, "file size of file entry"))
 	    goto skip;
 
-	  if (dir_idx != 0)
-	    include_directories.dirs[dir_idx - 1].used = true;
-
 	  REALLOC (&files, files);
 	  files.files[files.size++]
-	    = (struct file_t){name, dir_idx, timestamp, file_size};
+	    = (struct file_t){name, dir_idx, false};
 	}
-
-      for (size_t i = 0; i < include_directories.size; ++i)
-	if (!include_directories.dirs[i].used)
-	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line, &where,
-		      ": the include #%zd `%s' is not used.\n",
-		      i + 1, include_directories.dirs[i].name);
 
       /* Skip the rest of the header.  */
       if (ctx.ptr > program_start)
@@ -4629,7 +4632,214 @@ check_line_structural (struct section_data *data)
 				   program_start - sub_ctx.ptr);
 	  sub_ctx.ptr = program_start;
 	}
+
+      bool terminated = false;
+      bool first_file = true;
+      while (!read_ctx_eof (&sub_ctx))
+	{
+	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx)
+				 + read_ctx_get_offset (&ctx));
+	  uint8_t opcode;
+	  if (!read_ctx_read_ubyte (&sub_ctx, &opcode))
+	    {
+	      wr_error (&where, ": can't read opcode.\n");
+	      goto skip;
+	    }
+
+	  void use_file (uint64_t file_idx)
+	  {
+	    if (file_idx == 0
+		|| file_idx > files.size)
+	      {
+		wr_error (&where,
+			  ": DW_LNS_set_file: invalid file index %" PRId64 ".\n",
+			  file_idx);
+		retval = false;
+	      }
+	    else
+	      files.files[file_idx - 1].used = true;
+	  }
+
+	  unsigned operands = 0;
+	  uint8_t extended = 0;
+	  switch (opcode)
+	    {
+	      /* Extended opcodes.  */
+	    case 0:
+	      {
+		uint64_t skip_len;
+		if (!checked_read_uleb128 (&sub_ctx, &skip_len, &where,
+					   "length of extended opcode"))
+		  goto skip;
+		const unsigned char *next = sub_ctx.ptr + skip_len;
+		if (!read_ctx_read_ubyte (&sub_ctx, &extended))
+		  {
+		    wr_error (&where, ": can't read extended opcode.\n");
+		    goto skip;
+		  }
+
+		bool handled = true;
+		switch (extended)
+		  {
+		  case DW_LNE_end_sequence:
+		    terminated = true;
+		    break;
+
+		  case DW_LNE_set_address:
+		    {
+		      uint64_t ctx_offset = read_ctx_get_offset (&sub_ctx);
+		      uint64_t addr;
+		      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &addr))
+			{
+			  wr_error (&where, ": can't read operand of DW_LNE_set_address.\n");
+			  goto skip;
+			}
+
+		      struct relocation *rel;
+		      if ((rel = relocation_next (&data->rel, ctx_offset,
+						  &where, skip_mismatched)))
+			relocate_one (&data->rel, rel, data->file->addr_64 ? 8 : 4,
+				      &addr, &where, sec_text, NULL);
+		      else
+			wr_message (mc_impact_2 | mc_line | mc_reloc, &where,
+				    PRI_LACK_RELOCATION);
+		      break;
+		    }
+
+		  case DW_LNE_define_file:
+		    {
+		      const char *name;
+		      if ((name = read_ctx_read_str (&sub_ctx)) == NULL)
+			{
+			  wr_error (&where,
+				    ": can't read filename operand of DW_LNE_define_file.\n");
+			  goto skip;
+			}
+		      uint64_t dir_idx;
+		      if (!read_directory_index (name, &dir_idx))
+			goto skip;
+		      REALLOC (&files, files);
+		      files.files[files.size++] =
+			(struct file_t){name, dir_idx, false};
+		      operands = 2; /* Skip mtime & size of the file.  */
+		    }
+
+		    /* See if we know about any other standard opcodes.  */
+		  default:
+		    handled = false;
+		    switch (extended)
+		      {
+#define ONE_KNOWN_DW_LNE(NAME, CODE) case CODE: break;
+			ALL_KNOWN_DW_LNE
+#undef ONE_KNOWN_DW_LNE
+		      default:
+			/* No we don't, emit a warning.  */
+			wr_message (mc_impact_2 | mc_line, &where,
+				    ": unknown extended opcode #%d.\n", extended);
+		      };
+		  };
+
+		if (sub_ctx.ptr > next)
+		  {
+		    wr_error (&where,
+			      ": opcode claims that it has a size of %#" PRIx64
+			      ", but in fact it has a size of %#" PRIx64 ".\n",
+			      skip_len, skip_len + (next - sub_ctx.ptr));
+		    retval = false;
+		  }
+		else if (sub_ctx.ptr < next)
+		  {
+		    if (handled
+			&& !check_zero_padding (&sub_ctx, mc_line, &where))
+		      wr_message_padding_n0 (mc_line, &where,
+					     read_ctx_get_offset (&sub_ctx),
+					     next - sub_ctx.ptr);
+		    sub_ctx.ptr = next;
+		  }
+		break;
+	      }
+
+	      /* Standard opcodes that need validation or have
+		 non-ULEB operands.  */
+	    case DW_LNS_fixed_advance_pc:
+	      {
+		uint16_t a;
+		if (!read_ctx_read_2ubyte (&sub_ctx, &a))
+		  {
+		    wr_error (&where, ": can't read operand of DW_LNS_fixed_advance_pc.\n");
+		    goto skip;
+		  }
+		break;
+	      }
+
+	    case DW_LNS_set_file:
+	      {
+		uint64_t file_idx;
+		if (!checked_read_uleb128 (&sub_ctx, &file_idx, &where,
+					   "DW_LNS_set_file operand"))
+		  goto skip;
+		use_file (file_idx);
+		first_file = false;
+	      }
+	      break;
+
+	    case DW_LNS_set_isa:
+	      // XXX is it possible to validate this?
+	      operands = 1;
+	      break;
+
+	      /* All the other opcodes.  */
+	    default:
+	      if (opcode < opcode_base)
+		operands = std_opc_lengths[opcode - 1];
+
+    	      switch (opcode)
+		{
+#define ONE_KNOWN_DW_LNS(NAME, CODE) case CODE: break;
+		  ALL_KNOWN_DW_LNS
+#undef ONE_KNOWN_DW_LNS
+
+		default:
+		  if (opcode < opcode_base)
+		    wr_message (mc_impact_2 | mc_line, &where,
+				": unknown standard opcode #%d.\n", opcode);
+		};
+	    };
+
+	  for (unsigned i = 0; i < operands; ++i)
+	    {
+	      uint64_t operand;
+	      if (!checked_read_uleb128 (&sub_ctx, &operand, &where,
+					 "opcode operand"))
+		goto skip;
+	    }
+
+	  if (first_file)
+	    {
+	      use_file (1);
+	      first_file = false;
+	    }
+	}
+
+      for (size_t i = 0; i < include_directories.size; ++i)
+	if (!include_directories.dirs[i].used)
+	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line, &where,
+		      ": the include #%zd `%s' is not used.\n",
+		      i + 1, include_directories.dirs[i].name);
+
+      for (size_t i = 0; i < files.size; ++i)
+	if (!files.files[i].used)
+	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line, &where,
+		      ": the file #%zd `%s' is not used.\n",
+		      i + 1, files.files[i].name);
+
+      if (!terminated)
+	wr_error (&where,
+		  ": sequence of opcodes not terminated with DW_LNE_end_sequence.\n");
       }
+
+      /* XXX overlaps in defined addresses are probably OK, one
+	 instruction can be derived from several statements.  */
 
     next:
       if (!read_ctx_skip (&ctx, size))
