@@ -375,7 +375,7 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_CU "CU 0x%" PRIx64
 #define PRI_DIE "DIE 0x%" PRIx64
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
-#define PRI_LACK_RELOCATION ": seems to lack a relocation.\n"
+#define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"
 
 struct sec
 {
@@ -578,9 +578,9 @@ static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 
 /* Functions for checking of structural integrity.  */
 
-static struct cu * check_debug_info_structural (struct section_data *data,
-						struct abbrev_table *abbrev_chain,
-						Elf_Data *strings);
+static struct cu * check_info_structural (struct section_data *data,
+					  struct abbrev_table *abbrev_chain,
+					  Elf_Data *strings);
 
 static bool check_aranges_structural (struct section_data *data,
 				      struct cu *cu_chain);
@@ -993,7 +993,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
     {
       if (info_data.data != NULL)
 	{
-	  cu_chain = check_debug_info_structural (&info_data, abbrev_chain, str_data.data);
+	  cu_chain = check_info_structural (&info_data, abbrev_chain, str_data.data);
 	  if (cu_chain != NULL)
 	    check_expected_trees (hlctx);
 	}
@@ -2801,7 +2801,7 @@ read_die_chain (struct read_ctx *ctx,
 				&addr, &where, sec_str, NULL);
 		else if (type_is_rel)
 		  wr_message (mc_impact_2 | mc_die_other | mc_reloc | mc_strings,
-			      &where, PRI_LACK_RELOCATION);
+			      &where, PRI_LACK_RELOCATION, "DW_FORM_strp");
 
 		if (strings == NULL)
 		  wr_error (&where,
@@ -2845,7 +2845,7 @@ read_die_chain (struct read_ctx *ctx,
 			  || form == DW_FORM_ref_addr)
 			 && addr != 0)
 		  wr_message (mc_impact_2 | mc_die_rel | mc_reloc, &where,
-			      PRI_LACK_RELOCATION);
+			      PRI_LACK_RELOCATION, dwarf_form_string (form));
 
 		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
@@ -2922,7 +2922,8 @@ read_die_chain (struct read_ctx *ctx,
 			     && (check_locptr || check_rangeptr))
 		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
 				  | (check_rangeptr ? mc_ranges : mc_loc),
-				  &where, PRI_LACK_RELOCATION);
+				  &where, PRI_LACK_RELOCATION,
+				  dwarf_form_string (form));
 		  }
 
 		if (it->name == DW_AT_sibling)
@@ -2962,7 +2963,8 @@ read_die_chain (struct read_ctx *ctx,
 			     && (check_locptr || check_rangeptr))
 		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
 				  | (check_rangeptr ? mc_ranges : mc_loc),
-				  &where, PRI_LACK_RELOCATION);
+				  &where, PRI_LACK_RELOCATION,
+				  dwarf_form_string (form));
 		  }
 
 		if (it->name == DW_AT_sibling)
@@ -3139,7 +3141,7 @@ check_cu_structural (struct read_ctx *ctx,
 		  &abbrev_offset, &cu->where, sec_abbrev, NULL);
   else if (file->ehdr.e_type == ET_REL)
     wr_message (mc_impact_2 | mc_info | mc_reloc, &cu->where,
-		PRI_LACK_RELOCATION);
+		PRI_LACK_RELOCATION, "abbrev offset");
 
   /* Address size.  */
   if (!read_ctx_read_ubyte (ctx, &address_size))
@@ -3195,9 +3197,9 @@ check_cu_structural (struct read_ctx *ctx,
 }
 
 static struct cu *
-check_debug_info_structural (struct section_data *data,
-			     struct abbrev_table *abbrev_chain,
-			     Elf_Data *strings)
+check_info_structural (struct section_data *data,
+		       struct abbrev_table *abbrev_chain,
+		       Elf_Data *strings)
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, data->file->dwarf, data->data);
@@ -3474,7 +3476,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 		      &cu_offset, &where, sec_info, NULL);
       else if (data->file->ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,
-		    PRI_LACK_RELOCATION);
+		    PRI_LACK_RELOCATION, "debug info offset");
 
       struct cu *cu = NULL;
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
@@ -3584,7 +3586,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	  else if (data->file->ehdr.e_type == ET_REL
 		   && address != 0)
 	    wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,
-			PRI_LACK_RELOCATION);
+			PRI_LACK_RELOCATION, "address field");
 
 	  /* Record length.  */
 	  uint64_t length;
@@ -3698,7 +3700,7 @@ check_pub_structural (struct section_data *data,
 		      &cu_offset, &where, sec_info, NULL);
       else if (data->file->ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_pubtables | mc_reloc, &where,
-		    PRI_LACK_RELOCATION);
+		    PRI_LACK_RELOCATION, "debug info offset");
 
       struct cu *cu = NULL;
       enum section_id sec = data_get_sec (data)->id;
@@ -4702,7 +4704,7 @@ check_line_structural (struct section_data *data)
 				      &addr, &where, sec_text, NULL);
 		      else
 			wr_message (mc_impact_2 | mc_line | mc_reloc, &where,
-				    PRI_LACK_RELOCATION);
+				    PRI_LACK_RELOCATION, "DW_LNE_set_address");
 		      break;
 		    }
 
@@ -4839,7 +4841,10 @@ check_line_structural (struct section_data *data)
       }
 
       /* XXX overlaps in defined addresses are probably OK, one
-	 instruction can be derived from several statements.  */
+	 instruction can be derived from several statements.  But
+	 certain flags in table should be consistent in that case,
+	 namely is_stmt, basic_block, end_sequence, prologue_end,
+	 epilogue_begin, isa.  */
 
     next:
       if (!read_ctx_skip (&ctx, size))
