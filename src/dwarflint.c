@@ -565,6 +565,7 @@ struct cu
   struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct ref_record loc_refs;   // references into .debug_loc from this CU.
   struct ref_record range_refs; // references into .debug_ranges from this CU.
+  struct ref_record line_refs;	// references into .debug_line from this CU.
   struct where where;           // Where was this section defined.
   bool has_arange;              // Whether we saw arange section pointing to this CU.
   bool has_pubnames;            // Likewise for pubnames.
@@ -601,7 +602,8 @@ static bool read_rel (struct section_data *secdata,
 		      Elf_Data *reldata,
 		      bool elf_64);
 
-static bool check_line_structural (struct section_data *data);
+static bool check_line_structural (struct section_data *data,
+				   struct cu *cu_chain);
 
 const char *
 where_fmt (const struct where *wh, char *ptr)
@@ -993,7 +995,8 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
     {
       if (info_data.data != NULL)
 	{
-	  cu_chain = check_info_structural (&info_data, abbrev_chain, str_data.data);
+	  cu_chain = check_info_structural (&info_data, abbrev_chain,
+					    str_data.data);
 	  if (cu_chain != NULL)
 	    check_expected_trees (hlctx);
 	}
@@ -1032,7 +1035,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 		&WHERE (sec_pubtypes, NULL), ": data not found.\n");
 
   if (line_data.data != NULL)
-    check_line_structural (&line_data);
+    check_line_structural (&line_data, cu_chain);
   else
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_loc,
 		&WHERE (sec_line, NULL), ": data not found.\n");
@@ -1595,13 +1598,15 @@ abbrev_table_load (struct read_ctx *ctx)
 			  dwarf_form_string (attrib_form));
 	    }
 	  /* Similar for DW_AT_ranges.  */
-	  else if (attrib_name == DW_AT_ranges)
+	  else if (attrib_name == DW_AT_ranges
+		   || attrib_name == DW_AT_stmt_list)
 	    {
 	      if (attrib_form != DW_FORM_data4
 		  && attrib_form != DW_FORM_data8
 		  && attrib_form != DW_FORM_indirect)
 		wr_error (&where,
-			  ": DW_AT_ranges with invalid form \"%s\".\n",
+			  ": %s with invalid form \"%s\".\n",
+			  dwarf_attr_string (attrib_name),
 			  dwarf_form_string (attrib_form));
 	    }
 
@@ -2595,7 +2600,7 @@ read_die_chain (struct read_ctx *ctx,
 		Elf_Data *strings,
 		bool dwarf_64, bool addr_64,
 		struct ref_record *die_refs,
-		struct ref_record *die_loc_refs,
+		struct ref_record *local_die_refs,
 		struct coverage *strings_coverage,
 		struct relocation_data *reloc,
 		struct elf_file *file)
@@ -2688,7 +2693,7 @@ read_die_chain (struct read_ctx *ctx,
 		/* Address holds a CU-local reference, so add CU
 		   offset to turn it into section offset.  */
 		addr += cu->offset;
-		record = die_loc_refs;
+		record = local_die_refs;
 	      }
 
 	    if (record != NULL)
@@ -2727,23 +2732,96 @@ read_die_chain (struct read_ctx *ctx,
 		  };
 	    }
 
-	  bool check_locptr = false;
+	  enum check_what_t
+	  {
+	    check_nothing = 0,
+	    check_locptr,
+	    check_lineptr,
+	    check_rangeptr
+	  };
+	  static enum message_category mc_check[] =
+	    {
+	      [check_nothing] = mc_none,
+	      [check_locptr] = mc_loc,
+	      [check_lineptr] = mc_line,
+	      [check_rangeptr] = mc_ranges
+	    };
+
+	  void do_check_ptr (enum check_what_t what, uint64_t value)
+	  {
+	    assert (what != check_nothing);
+
+	    if (what == check_rangeptr && ((value % cu->address_size) != 0))
+	      wr_message (mc_ranges | mc_impact_2, &where,
+			  ": rangeptr value %#" PRIx64
+			  " not aligned to CU address size.\n", value);
+
+	    struct ref_record *ref = NULL;
+	    switch (what)
+	      {
+	      case check_rangeptr:
+		ref = &cu->range_refs;
+	        break;
+	      case check_lineptr:
+		ref = &cu->line_refs;
+		break;
+	      case check_locptr:
+		ref = &cu->loc_refs;
+	      case check_nothing:
+		break;
+	      };
+
+	    ref_record_add (ref, value, &where);
+	  }
+
+	  enum check_what_t check_ptr = check_nothing;
+
 	  if (is_location_attrib (it->name))
+	    {
+	      switch (form)
+		{
+		case DW_FORM_data8:
+		  if (!dwarf_64)
+		    wr_error (&where,
+			      ": location attribute with form \"%s\" in 32-bit CU.\n",
+			      dwarf_form_string (form));
+		  /* fall-through */
+		case DW_FORM_data4:
+		  check_ptr = check_locptr;
+		  /* fall-through */
+		case DW_FORM_block1:
+		case DW_FORM_block2:
+		case DW_FORM_block4:
+		case DW_FORM_block:
+		  break;
+
+		default:
+		  /* Only print error if it's indirect.  Otherwise we
+		     gave diagnostic during abbrev loading.  */
+		  if (indirect)
+		    wr_error (&where,
+			      ": location attribute with invalid (indirect) form \"%s\".\n",
+			      dwarf_form_string (form));
+		};
+	    }
+	  else if (it->name == DW_AT_ranges
+		   || it->name == DW_AT_stmt_list)
 	    switch (form)
 	      {
 	      case DW_FORM_data8:
 		if (!dwarf_64)
 		  wr_error (&where,
-			    ": location attribute with form \"%s\" in 32-bit CU.\n",
-			    dwarf_form_string (form));
+			    ": %s with form DW_FORM_data8 in 32-bit CU.\n",
+			    dwarf_attr_string (it->name));
 		/* fall-through */
 	      case DW_FORM_data4:
-		check_locptr = true;
-		/* fall-through */
-	      case DW_FORM_block1:
-	      case DW_FORM_block2:
-	      case DW_FORM_block4:
-	      case DW_FORM_block:
+		if (it->name == DW_AT_ranges)
+		  check_ptr = check_rangeptr;
+		else
+		  {
+		    assert (it->name == DW_AT_stmt_list);
+		    check_ptr = check_lineptr;
+		  }
 		break;
 
 	      default:
@@ -2751,33 +2829,10 @@ read_die_chain (struct read_ctx *ctx,
 		   gave diagnostic during abbrev loading.  */
 		if (indirect)
 		  wr_error (&where,
-			    ": location attribute with invalid (indirect) form \"%s\".\n",
+			    ": %s with invalid (indirect) form \"%s\".\n",
+			    dwarf_attr_string (it->name),
 			    dwarf_form_string (form));
 	      };
-
-	  bool check_rangeptr = false;
-	  if (it->name == DW_AT_ranges)
-	    switch (form)
-	      {
-	      case DW_FORM_data8:
-		if (!dwarf_64)
-		  wr_error (&where,
-			    ": DW_AT_ranges with form DW_FORM_data8 in 32-bit CU.\n");
-		/* fall-through */
-	      case DW_FORM_data4:
-		check_rangeptr = true;
-		break;
-
-	      default:
-		/* Only print error if it's indirect.  Otherwise we
-		   gave diagnostic during abbrev loading.  */
-		if (indirect)
-		  wr_error (&where,
-			    ": DW_AT_ranges with invalid (indirect) form \"%s\".\n",
-			    dwarf_form_string (form));
-	      };
-
-	  assert (!(check_locptr && check_rangeptr));
 
 	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
 	  struct relocation *rel;
@@ -2918,28 +2973,17 @@ read_die_chain (struct read_ctx *ctx,
 						&where, skip_mismatched)))
 		      relocate_one (reloc, rel, 4, &value, &where,
 				    reloc_target (form, it), NULL);
-		    else if (type_is_rel
-			     && (check_locptr || check_rangeptr))
+		    else if (type_is_rel && check_ptr != check_nothing)
 		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
-				  | (check_rangeptr ? mc_ranges : mc_loc),
+				  | mc_check[check_ptr],
 				  &where, PRI_LACK_RELOCATION,
 				  dwarf_form_string (form));
 		  }
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (check_locptr || check_rangeptr)
-		  {
-		    if (check_rangeptr && ((value % cu->address_size) != 0))
-		      wr_message (mc_ranges | mc_impact_2, &where,
-				  ": rangeptr value %#" PRIx64
-				  " not aligned to CU address size.\n",
-				  value);
-
-		    struct ref_record *ref
-		      = check_locptr ? &cu->loc_refs : &cu->range_refs;
-		    ref_record_add (ref, value, &where);
-		  }
+		else if (check_ptr != check_nothing)
+		  do_check_ptr (check_ptr, value);
 		else if (form == DW_FORM_ref4)
 		  record_ref (value, &where, true);
 		break;
@@ -2969,18 +3013,8 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (it->name == DW_AT_sibling)
 		  sibling_addr = value;
-		else if (check_locptr || check_rangeptr)
-		  {
-		    if (check_rangeptr && (value % cu->address_size != 0))
-		      wr_message (mc_ranges | mc_impact_4, &where,
-				  ": rangeptr value %#" PRIx64
-				  " not aligned to CU address size.\n",
-				  value);
-
-		    struct ref_record *ref
-		      = check_locptr ? &cu->loc_refs : &cu->range_refs;
-		    ref_record_add (ref, value, &where);
-		  }
+		else if (check_ptr != check_nothing)
+		  do_check_ptr (check_ptr, value);
 		else if (form == DW_FORM_ref8)
 		  record_ref (value, &where, true);
 		break;
@@ -3053,7 +3087,7 @@ read_die_chain (struct read_ctx *ctx,
 	{
 	  int st = read_die_chain (ctx, cu, abbrevs, strings,
 				   dwarf_64, addr_64,
-				   die_refs, die_loc_refs,
+				   die_refs, local_die_refs,
 				   strings_coverage, reloc, file);
 	  if (st == -1)
 	    return -1;
@@ -3171,12 +3205,12 @@ check_cu_structural (struct read_ctx *ctx,
       return false;
     }
 
-  struct ref_record die_loc_refs;
-  memset (&die_loc_refs, 0, sizeof (die_loc_refs));
+  struct ref_record local_die_refs;
+  memset (&local_die_refs, 0, sizeof (local_die_refs));
 
   if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
-		      die_refs, &die_loc_refs, strings_coverage,
+		      die_refs, &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
 		      file) >= 0)
     {
@@ -3186,13 +3220,13 @@ check_cu_structural (struct read_ctx *ctx,
 		      ": abbreviation with code %" PRIu64 " is never used.\n",
 		      abbrevs->abbr[i].code);
 
-      if (!check_die_references (cu, &die_loc_refs))
+      if (!check_die_references (cu, &local_die_refs))
 	retval = false;
     }
   else
     retval = false;
 
-  ref_record_free (&die_loc_refs);
+  ref_record_free (&local_die_refs);
   return retval;
 }
 
@@ -4395,7 +4429,8 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
 }
 
 static bool
-check_line_structural (struct section_data *data)
+check_line_structural (struct section_data *data,
+		       __attribute__ ((unused)) struct cu *cu_chain)
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, data->file->dwarf, data->data);
