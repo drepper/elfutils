@@ -4651,12 +4651,12 @@ check_line_structural (struct section_data *data,
 	}
 
       /* Skip the rest of the header.  */
-      if (ctx.ptr > program_start)
+      if (sub_ctx.ptr > program_start)
 	{
 	  wr_error (&where,
 		    ": header claims that it has a size of %#" PRIx64
 		    ", but in fact it has a size of %#" PRIx64 ".\n",
-		    header_length, ctx.ptr - program_start + header_length);
+		    header_length, sub_ctx.ptr - program_start + header_length);
 	  /* Assume that the header lies, and what follows is in
 	     fact line number program.  */
 	  retval = false;
