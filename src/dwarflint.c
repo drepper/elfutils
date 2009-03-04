@@ -2586,6 +2586,30 @@ reloc_target_loc (uint8_t opcode)
   return rel_value;
 }
 
+static bool
+supported_version (unsigned version,
+		   size_t num_supported, struct where *where, ...)
+{
+  bool retval = false;
+  va_list ap;
+  va_start (ap, where);
+  for (size_t i = 0; i < num_supported; ++i)
+    {
+      unsigned v = va_arg (ap, unsigned);
+      if (version == v)
+	{
+	  retval = true;
+	  break;
+	}
+    }
+  va_end (ap);
+
+  if (!retval)
+    wr_error (where, ": unsupported version %d.\n", version);
+
+  return retval;
+}
+
 /*
   Returns:
     -1 in case of error
@@ -3104,30 +3128,6 @@ read_die_chain (struct read_ctx *ctx,
 	      PRIx64 ", but the DIE chain ended.\n", sibling_addr);
 
   return got_die ? 1 : 0;
-}
-
-static bool
-supported_version (unsigned version,
-		   size_t num_supported, struct where *where, ...)
-{
-  bool retval = false;
-  va_list ap;
-  va_start (ap, where);
-  for (size_t i = 0; i < num_supported; ++i)
-    {
-      unsigned v = va_arg (ap, unsigned);
-      if (version == v)
-	{
-	  retval = true;
-	  break;
-	}
-    }
-  va_end (ap);
-
-  if (!retval)
-    wr_error (where, ": unsupported version %d.\n", version);
-
-  return retval;
 }
 
 static bool
@@ -4433,16 +4433,21 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
 
 static bool
 check_line_structural (struct section_data *data,
-		       __attribute__ ((unused)) struct cu *cu_chain)
+		       struct cu *cu_chain)
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, data->file->dwarf, data->data);
   bool retval = true;
 
+  struct addr_record line_tables;
+  memset (&line_tables, 0, sizeof (line_tables));
+
   while (!read_ctx_eof (&ctx))
     {
       struct where where = WHERE_SECDATA (data, NULL);
-      where_reset_1 (&where, read_ctx_get_offset (&ctx));
+      uint64_t set_offset = read_ctx_get_offset (&ctx);
+      where_reset_1 (&where, set_offset);
+      addr_record_add (&line_tables, set_offset);
       const unsigned char *set_begin = ctx.ptr;
 
       /* Size.  */
@@ -4893,7 +4898,19 @@ check_line_structural (struct section_data *data,
     }
 
   if (retval)
-    relocation_skip_rest (data);
+    {
+      relocation_skip_rest (data);
+
+      for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
+	for (size_t i = 0; i < cu->line_refs.size; ++i)
+	  {
+	    struct ref *ref = cu->line_refs.refs + i;
+	    if (!addr_record_has_addr (&line_tables, ref->addr))
+	      wr_error (&ref->who,
+			": unresolved reference to .debug_line table %#" PRIx64 ".\n",
+			ref->addr);
+	  }
+    }
 
   return retval;
 }
