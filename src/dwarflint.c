@@ -3338,7 +3338,8 @@ check_info_structural (struct section_data *data,
 	  if (cu_ctx.ptr != cu_ctx.end
 	      && !check_zero_padding (&cu_ctx, mc_die_other, &where))
 	    wr_message_padding_n0 (mc_die_other, &where,
-				   read_ctx_get_offset (&ctx), size);
+				   read_ctx_get_offset (&ctx),
+				   read_ctx_get_offset (&ctx) + size - 1);
 	}
 
       if (!read_ctx_skip (&ctx, size))
@@ -3646,7 +3647,8 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	{
 	  wr_message_padding_n0 (mc_pubtables | mc_error,
 				 &WHERE (where.section, NULL),
-				 read_ctx_get_offset (&sub_ctx), size);
+				 read_ctx_get_offset (&sub_ctx),
+				 read_ctx_get_offset (&sub_ctx) + size - 1);
 	  retval = false;
 	}
 
@@ -3811,7 +3813,8 @@ check_pub_structural (struct section_data *data,
 	{
 	  wr_message_padding_n0 (mc_pubtables | mc_error,
 				 &WHERE (sec, NULL),
-				 read_ctx_get_offset (&sub_ctx), size);
+				 read_ctx_get_offset (&sub_ctx),
+				 read_ctx_get_offset (&sub_ctx) + size - 1);
 	  retval = false;
 	}
 
@@ -4463,6 +4466,7 @@ check_line_structural (struct section_data *data,
 	  return false;
 	}
       sub_ctx.ptr = ctx.ptr;
+      sub_ctx.begin = ctx.begin;
 
       {
       /* Version.  */
@@ -4571,7 +4575,6 @@ check_line_structural (struct section_data *data,
 	  if (*name == 0)
 	    break;
 
-	  // XXX high-level check for filename?
 	  REALLOC (&include_directories, dirs);
 	  include_directories.dirs[include_directories.size++] =
 	    (struct include_directory_t){name, false};
@@ -4627,7 +4630,6 @@ check_line_structural (struct section_data *data,
 	    }
 	  if (*name == 0)
 	    break;
-	  // XXX high-level check for filename?
 
 	  uint64_t dir_idx;
 	  if (!read_directory_index (name, &dir_idx))
@@ -4664,9 +4666,9 @@ check_line_structural (struct section_data *data,
       else if (sub_ctx.ptr < program_start)
 	{
 	  if (!check_zero_padding (&sub_ctx, mc_line, &where))
-	    wr_message_padding_n0 (mc_line, &where,
+	    wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
 				   read_ctx_get_offset (&sub_ctx),
-				   program_start - sub_ctx.ptr);
+				   program_start - sub_ctx.begin - 1);
 	  sub_ctx.ptr = program_start;
 	}
 
@@ -4674,8 +4676,7 @@ check_line_structural (struct section_data *data,
       bool first_file = true;
       while (!read_ctx_eof (&sub_ctx))
 	{
-	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx)
-				 + read_ctx_get_offset (&ctx));
+	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
 	  uint8_t opcode;
 	  if (!read_ctx_read_ubyte (&sub_ctx, &opcode))
 	    {
@@ -4685,8 +4686,7 @@ check_line_structural (struct section_data *data,
 
 	  void use_file (uint64_t file_idx)
 	  {
-	    if (file_idx == 0
-		|| file_idx > files.size)
+	    if (file_idx == 0 || file_idx > files.size)
 	      {
 		wr_error (&where,
 			  ": DW_LNS_set_file: invalid file index %" PRId64 ".\n",
@@ -4788,9 +4788,9 @@ check_line_structural (struct section_data *data,
 		  {
 		    if (handled
 			&& !check_zero_padding (&sub_ctx, mc_line, &where))
-		      wr_message_padding_n0 (mc_line, &where,
+		      wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
 					     read_ctx_get_offset (&sub_ctx),
-					     next - sub_ctx.ptr);
+					     next - sub_ctx.begin - 1);
 		    sub_ctx.ptr = next;
 		  }
 		break;
@@ -4873,6 +4873,12 @@ check_line_structural (struct section_data *data,
       if (!terminated)
 	wr_error (&where,
 		  ": sequence of opcodes not terminated with DW_LNE_end_sequence.\n");
+      else if (sub_ctx.ptr != sub_ctx.end
+	       && !check_zero_padding (&sub_ctx, mc_line,
+				       &WHERE (sec_line, NULL)))
+	wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
+			       read_ctx_get_offset (&sub_ctx),
+			       sub_ctx.end - sub_ctx.begin - 1);
       }
 
       /* XXX overlaps in defined addresses are probably OK, one
