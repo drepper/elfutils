@@ -1626,7 +1626,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	    /* Don't report abbrev address, this is section-wide
 	       padding.  */
 	    struct where wh = WHERE (where.section, NULL);
-	    wr_message_padding_0 (mc_abbrevs, &wh,
+	    wr_message_padding_0 (mc_abbrevs | mc_header, &wh,
 				  zero_seq_off, prev_abbr_off - 1);
 	  }
       }
@@ -3445,7 +3445,7 @@ check_info_structural (struct section_data *data,
       /* Reading CU header is a bit tricky, because we don't know if
 	 we have run into (superfluous but allowed) zero padding.  */
       if (!read_ctx_need_data (&ctx, 4)
-	  && check_zero_padding (&ctx, mc_die_other, &where))
+	  && check_zero_padding (&ctx, mc_info | mc_header, &where))
 	break;
 
       /* CU length.  */
@@ -3455,7 +3455,7 @@ check_info_structural (struct section_data *data,
 	  success = false;
 	  break;
 	}
-      if (size32 == 0 && check_zero_padding (&ctx, mc_die_other, &where))
+      if (size32 == 0 && check_zero_padding (&ctx, mc_info | mc_header, &where))
 	break;
 
       if (!read_size_extra (&ctx, size32, &size, &dwarf_64, &where))
@@ -3508,8 +3508,8 @@ check_info_structural (struct section_data *data,
 	      break;
 	    }
 	  if (cu_ctx.ptr != cu_ctx.end
-	      && !check_zero_padding (&cu_ctx, mc_die_other, &where))
-	    wr_message_padding_n0 (mc_die_other, &where,
+	      && !check_zero_padding (&cu_ctx, mc_info, &where))
+	    wr_message_padding_n0 (mc_info, &where,
 				   read_ctx_get_offset (&ctx),
 				   read_ctx_get_offset (&ctx) + size - 1);
 	}
@@ -3543,6 +3543,8 @@ check_info_structural (struct section_data *data,
 	  }
 	else if (address_size != it->address_size)
 	  {
+	    /* XXX would be nice to check consistency of CU address
+	       size declared in various other .debug_* sections.  */
 	    wr_message (mc_info, &it->where,
 			": has different address size than CU 0x%"
 			PRIx64 ".\n", offset);
@@ -3682,7 +3684,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	relocate_one (&data->rel, rel, dwarf_64 ? 8 : 4,
 		      &cu_offset, &where, sec_info, NULL);
       else if (data->file->ehdr.e_type == ET_REL)
-	wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,
+	wr_message (mc_impact_2 | mc_aranges | mc_reloc | mc_header, &where,
 		    PRI_LACK_RELOCATION, "debug info offset");
 
       struct cu *cu = NULL;
@@ -3692,7 +3694,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	{
 	  where.ref = &cu->where;
 	  if (cu->has_arange)
-	    wr_message (mc_impact_2 | mc_aranges, &where,
+	    wr_message (mc_impact_2 | mc_aranges | mc_header, &where,
 			": there has already been arange section for this CU.\n");
 	  else
 	    cu->has_arange = true;
@@ -3760,7 +3762,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 		  goto next;
 		}
 	      if (c != 0)
-		wr_message (mc_impact_2 | mc_aranges, &where,
+		wr_message (mc_impact_2 | mc_aranges | mc_header, &where,
 			    ": non-zero byte at 0x%" PRIx64
 			    " in padding before the first entry.\n",
 			    read_ctx_get_offset (&sub_ctx));
@@ -3907,7 +3909,7 @@ check_pub_structural (struct section_data *data,
 	relocate_one (&data->rel, rel, dwarf_64 ? 8 : 4,
 		      &cu_offset, &where, sec_info, NULL);
       else if (data->file->ehdr.e_type == ET_REL)
-	wr_message (mc_impact_2 | mc_pubtables | mc_reloc, &where,
+	wr_message (mc_impact_2 | mc_pubtables | mc_reloc | mc_header, &where,
 		    PRI_LACK_RELOCATION, "debug info offset");
 
       struct cu *cu = NULL;
@@ -3920,7 +3922,7 @@ check_pub_structural (struct section_data *data,
 	  bool *has = sec == sec_pubnames
 			? &cu->has_pubnames : &cu->has_pubtypes;
 	  if (*has)
-	    wr_message (mc_impact_2 | mc_pubtables, &where,
+	    wr_message (mc_impact_2 | mc_pubtables | mc_header, &where,
 			": there has already been section for this CU.\n");
 	  else
 	    *has = true;
@@ -4688,7 +4690,7 @@ check_line_structural (struct section_data *data,
 	 "true."  [But give a notice if it's not 0 or 1.]  */
       if (default_is_stmt != 0
 	  && default_is_stmt != 1)
-	wr_message (mc_line | mc_impact_2, &where,
+	wr_message (mc_line | mc_impact_2 | mc_header, &where,
 		    ": default_is_stmt should be 0 or 1, not %ud\n",
 		    default_is_stmt);
 
@@ -4779,12 +4781,12 @@ check_line_structural (struct section_data *data,
 				   &where, "directory index"))
 	  return false;
 	if (*name == '/' && *ptr != 0)
-	  wr_message (mc_impact_2 | mc_line, &where,
+	  wr_message (mc_impact_2 | mc_line | mc_header, &where,
 		      ": file #%zd has absolute pathname, but refers to directory != 0.\n",
 		      files.size + 1);
 	if (*ptr > include_directories.size) /* Not >=, dirs indexed from 1.  */
 	  {
-	    wr_message (mc_impact_4 | mc_line, &where,
+	    wr_message (mc_impact_4 | mc_line | mc_header, &where,
 			": file #%zd refers to directory #%zd, which wasn't defined.\n",
 			files.size + 1, *ptr);
 	    /* Consumer might choke on that.  */
@@ -4842,8 +4844,8 @@ check_line_structural (struct section_data *data,
 	}
       else if (sub_ctx.ptr < program_start)
 	{
-	  if (!check_zero_padding (&sub_ctx, mc_line, &where))
-	    wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
+	  if (!check_zero_padding (&sub_ctx, mc_line | mc_header, &where))
+	    wr_message_padding_n0 (mc_line | mc_header, &WHERE (sec_line, NULL),
 				   read_ctx_get_offset (&sub_ctx),
 				   program_start - sub_ctx.begin - 1);
 	  sub_ctx.ptr = program_start;
@@ -5043,13 +5045,13 @@ check_line_structural (struct section_data *data,
 
       for (size_t i = 0; i < include_directories.size; ++i)
 	if (!include_directories.dirs[i].used)
-	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line,
+	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line | mc_header,
 		      &where, ": the include #%zd `%s' is not used.\n",
 		      i + 1, include_directories.dirs[i].name);
 
       for (size_t i = 0; i < files.size; ++i)
 	if (!files.files[i].used)
-	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line,
+	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line | mc_header,
 		      &where, ": the file #%zd `%s' is not used.\n",
 		      i + 1, files.files[i].name);
 
