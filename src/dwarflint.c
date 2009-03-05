@@ -81,6 +81,8 @@ broken in certain ways"), 0 },
 the DIE referring to the entry in consideration"), 0 },
   { "nohl", ARGP_nohl, NULL, 0,
     N_("Don't run high-level tests"), 0 },
+  { "verbose", 'v', NULL, 0,
+    N_("Be verbose"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -105,32 +107,154 @@ static bool tolerate_nodebug = false;
 
 static void process_file (Dwarf *dwarf, const char *fname, bool only_one);
 
+#define REALLOC(A, BUF)						\
+  do {								\
+    typeof ((A)) _a = (A);					\
+    if (_a->size == _a->alloc)					\
+      {								\
+	if (_a->alloc == 0)					\
+	  _a->alloc = 8;					\
+	else							\
+	  _a->alloc *= 2;					\
+	_a->BUF = xrealloc (_a->BUF,				\
+			    sizeof (*_a->BUF) * _a->alloc);	\
+      }								\
+  } while (0)
+
+struct message_term
+{
+  /* Given a term like A && !B && C && !D, we decompose it thus: */
+  enum message_category positive; /* non-zero bits for plain predicates */
+  enum message_category negative; /* non-zero bits for negated predicates */
+};
+
 struct message_criteria
 {
-  enum message_category accept; /* cat & accept must be != 0  */
-  enum message_category reject; /* cat & reject must be == 0  */
+  struct message_term *terms;
+  size_t size;
+  size_t alloc;
 };
 
 static bool
-accept_message (struct message_criteria *crit, enum message_category cat)
+message_accept (struct message_criteria *cri, enum message_category cat)
 {
-  assert (crit != NULL);
-  return (crit->accept & cat) != 0
-    && (crit->reject & cat) == 0;
+  for (size_t i = 0; i < cri->size; ++i)
+    {
+      struct message_term *t = cri->terms + i;
+      if ((t->positive & cat) == t->positive
+	  && (t->negative & cat) == 0)
+	return true;
+    }
+  return false;
 }
 
-static struct message_criteria warning_criteria
-  = {mc_all & ~(mc_strings),
-     mc_pubtypes};
-static struct message_criteria error_criteria
-  = {mc_impact_4 | mc_error,
-     mc_none};
+static const char *
+message_term_str (struct message_term *t)
+{
+  static char *names[] = {
+#define MC(CAT, ID) [ID] = #CAT,
+    MESSAGE_CATEGORIES
+#undef MC
+  };
+
+  unsigned max = 0;
+#define MC(CAT, ID) max = ID;
+  MESSAGE_CATEGORIES
+#undef MC
+
+  static char buf[512];
+  char *ptr = buf;
+  ptr = stpcpy (ptr, "(");
+
+  bool got = false;
+  for (unsigned i = 0; i <= max; ++i)
+    {
+      unsigned mask = 1u << i;
+      if ((t->positive & mask) != 0
+	  || (t->negative & mask) != 0)
+	{
+	  if (got)
+	    ptr = stpcpy (ptr, " & ");
+	  if ((t->negative & (1u << i)) != 0)
+	    ptr = stpcpy (ptr, "~");
+	  ptr = stpcpy (ptr, names[i]);
+	  got = true;
+	}
+    }
+
+  if (ptr == buf + 1)
+    ptr = stpcpy (ptr, "1");
+  ptr = stpcpy (ptr, ")");
+  return buf;
+}
+
+static const char *
+message_cri_str (struct message_criteria *cri)
+{
+  static char buf[512];
+  char *ptr = buf;
+  *ptr = 0;
+
+  for (size_t i = 0; i < cri->size; ++i)
+    {
+      struct message_term *t = cri->terms + i;
+      if (i > 0)
+	ptr = stpcpy (ptr, " | ");
+      ptr = stpcpy (ptr, message_term_str (t));
+    }
+
+  return buf;
+}
+
+static void
+message_cri_and (struct message_criteria *cri, struct message_term term)
+{
+  assert ((term.positive & term.negative) == 0);
+  //printf ("message_cri_and(%s)\n : %s\n", message_term_str (&term), message_cri_str (cri));
+  for (size_t i = 0; i < cri->size; )
+    {
+      struct message_term *t = cri->terms + i;
+      //struct message_term orig = *t;
+      t->positive |= term.positive;
+      t->negative |= term.negative;
+      if ((t->positive & t->negative) != 0)
+	{
+	  /* A ^ ~A -> drop the term.  */
+	  /*
+	  printf ("(eliminate %s)\n", message_term_str (&orig));
+	  printf ("(became %s)\n", message_term_str (t));
+	  */
+	  cri->terms[i] = cri->terms[--cri->size];
+	}
+      else
+	++i;
+    }
+  //printf (" : %s\n", message_cri_str (cri));
+}
+
+static void
+message_cri_or (struct message_criteria *cri, struct message_term term)
+{
+  assert ((term.positive & term.negative) == 0);
+  //printf ("message_cri_or(%s)\n : %s\n", message_term_str (&term), message_cri_str (cri));
+  REALLOC (cri, terms);
+  cri->terms[cri->size++] = term;
+  //printf (" : %s\n", message_cri_str (cri));
+}
+
+
+/* Messages that are accepted (and made into warning).  */
+static struct message_criteria warning_criteria;
+
+/* Accepted (warning) messages, that are turned into errors.  */
+static struct message_criteria error_criteria;
+
 static unsigned error_count = 0;
 
 static bool
 check_category (enum message_category cat)
 {
-  return accept_message (&warning_criteria, cat);
+  return message_accept (&warning_criteria, cat);
 }
 
 static void
@@ -175,9 +299,9 @@ wr_message (enum message_category category, const struct where *wh,
 {
   va_list ap;
   va_start (ap, format);
-  if (accept_message (&warning_criteria, category))
+  if (message_accept (&warning_criteria, category))
     {
-      if (accept_message (&error_criteria, category))
+      if (message_accept (&error_criteria, category))
 	wr_verror (wh, format, ap);
       else
 	wr_vwarning (wh, format, ap);
@@ -230,7 +354,8 @@ wr_message_padding_n0 (enum message_category category,
 }
 
 /* True if no message is to be printed if the run is succesful.  */
-static bool be_quiet;
+static bool be_quiet = false; /* -q */
+static bool be_verbose = false; /* -v */
 static bool be_strict = false; /* --strict */
 static bool be_gnu = false; /* --gnu */
 static bool be_tolerant = false; /* --tolerant */
@@ -250,18 +375,46 @@ main (int argc, char *argv[])
   int remaining;
   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
 
+  /* Initialize warning & error criteria.  */
+  message_cri_or (&error_criteria,
+		  (struct message_term){mc_impact_4, mc_none});
+  message_cri_or (&error_criteria,
+		  (struct message_term){mc_error, mc_none});
+
+  message_cri_or (&warning_criteria,
+		  (struct message_term){mc_none, mc_strings});
+
+  /* Configure warning & error criteria according to configuration.  */
   if (tolerate_nodebug)
-    warning_criteria.reject |= mc_elf;
+    message_cri_and (&warning_criteria,
+		     (struct message_term){mc_none, mc_elf});
+
   if (be_gnu)
-    warning_criteria.reject |= mc_acc_bloat | mc_pubtypes;
-  if (be_strict)
     {
-      warning_criteria.accept |= mc_strings;
-      if (!be_gnu)
-	warning_criteria.reject &= ~mc_pubtypes;
+      message_cri_and (&warning_criteria,
+		       (struct message_term){mc_none, mc_acc_bloat});
+      if (!be_strict)
+	message_cri_and (&warning_criteria,
+			 (struct message_term){mc_none, mc_pubtypes});
     }
+
+  if (be_strict)
+    message_cri_and (&warning_criteria,
+		     (struct message_term){mc_strings, mc_none});
+
   if (be_tolerant)
-    warning_criteria.reject |= mc_loc | mc_ranges;
+    {
+      message_cri_and (&warning_criteria,
+		       (struct message_term){mc_none, mc_loc});
+      message_cri_and (&warning_criteria,
+		       (struct message_term){mc_none, mc_ranges});
+    }
+
+  if (be_verbose)
+    {
+      printf ("warning criteria: %s\n", message_cri_str (&warning_criteria));
+      printf ("error criteria:   %s\n", message_cri_str (&error_criteria));
+    }
 
   /* Before we start tell the ELF library which version we are using.  */
   elf_version (EV_CURRENT);
@@ -354,6 +507,12 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case 'q':
       be_quiet = true;
+      be_verbose = false;
+      break;
+
+    case 'v':
+      be_quiet = false;
+      be_verbose = true;
       break;
 
     case ARGP_KEY_NO_ARGS:
@@ -367,20 +526,6 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
     }
   return 0;
 }
-
-#define REALLOC(A, BUF)						\
-  do {								\
-    typeof ((A)) _a = (A);					\
-    if (_a->size == _a->alloc)					\
-      {								\
-	if (_a->alloc == 0)					\
-	  _a->alloc = 8;					\
-	else							\
-	  _a->alloc *= 2;					\
-	_a->BUF = xrealloc (_a->BUF,				\
-			    sizeof (*_a->BUF) * _a->alloc);	\
-      }								\
-  } while (0)
 
 #define PRI_CU "CU 0x%" PRIx64
 #define PRI_DIE "DIE 0x%" PRIx64
@@ -4898,14 +5043,14 @@ check_line_structural (struct section_data *data,
 
       for (size_t i = 0; i < include_directories.size; ++i)
 	if (!include_directories.dirs[i].used)
-	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line, &where,
-		      ": the include #%zd `%s' is not used.\n",
+	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line,
+		      &where, ": the include #%zd `%s' is not used.\n",
 		      i + 1, include_directories.dirs[i].name);
 
       for (size_t i = 0; i < files.size; ++i)
 	if (!files.files[i].used)
-	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line, &where,
-		      ": the file #%zd `%s' is not used.\n",
+	  wr_message (mc_impact_3 | mc_acc_bloat | mc_line,
+		      &where, ": the file #%zd `%s' is not used.\n",
 		      i + 1, files.files[i].name);
 
       if (!terminated)
