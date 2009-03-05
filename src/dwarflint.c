@@ -195,16 +195,18 @@ wr_format_padding_message (enum message_category category,
 }
 
 void
-wr_format_leb128_message (int st, struct where *wh, const char *what)
+wr_format_leb128_message (struct where *where, const char *what,
+			  const char *purpose,
+			  const unsigned char *begin, const unsigned char *end)
 {
   enum message_category category = mc_leb128 | mc_acc_bloat | mc_impact_3;
-  if (st == 0)
-    return;
-
-  if (st < 0)
-    wr_error (wh, ": can't read %s.\n", what);
-  else if (st > 0)
-    wr_message (category, wh, ": unnecessarily long encoding of %s.\n", what);
+  char buf[(end - begin) * 3 + 1]; // 2 hexa digits+" " per byte, and term. 0
+  char *ptr = buf;
+  for (; begin < end; ++begin)
+    ptr += sprintf (ptr, " %02x", *begin);
+  wr_message (category, where,
+	      ": %s: value %s encoded as `%s'.\n",
+	      what, purpose, buf + 1);
 }
 
 void
@@ -1144,10 +1146,18 @@ read_ctx_read_uleb128 (struct read_ctx *ctx, uint64_t *ret)
 
 static bool
 checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
-		      struct where *wh, const char *what)
+		      struct where *where, const char *what)
 {
+  const unsigned char *ptr = ctx->ptr;
   int st = read_ctx_read_uleb128 (ctx, ret);
-  wr_format_leb128_message (st, wh, what);
+  if (st < 0)
+    wr_error (where, ": can't read %s.\n", what);
+  else if (st > 0)
+    {
+      char buf[19]; // 16 hexa digits, "0x", terminating zero
+      sprintf (buf, "%#" PRIx64, *ret);
+      wr_format_leb128_message (where, what, buf, ptr, ctx->ptr);
+    }
   return st >= 0;
 }
 
@@ -1189,10 +1199,19 @@ read_ctx_read_sleb128 (struct read_ctx *ctx, int64_t *ret)
 
 static bool
 checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
-			 struct where *wh, const char *what)
+		      struct where *where, const char *what)
 {
+  const unsigned char *ptr = ctx->ptr;
   int st = read_ctx_read_sleb128 (ctx, ret);
-  wr_format_leb128_message (st, wh, what);
+  if (st < 0)
+    wr_error (where, ": can't read %s.\n", what);
+  else if (st > 0)
+    {
+      char buf[20]; // sign, "0x", 16 hexa digits, terminating zero
+      int64_t val = *ret;
+      sprintf (buf, "%s%#" PRIx64, val < 0 ? "-" : "", val < 0 ? -val : val);
+      wr_format_leb128_message (where, what, buf, ptr, ctx->ptr);
+    }
   return st >= 0;
 }
 

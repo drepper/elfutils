@@ -129,8 +129,10 @@ extern "C"
 					 uint64_t start, uint64_t end,
 					 char *kind);
 
-  extern void wr_format_leb128_message (int st, struct where *wh,
-					const char *what);
+  extern void wr_format_leb128_message (struct where *where, const char *what,
+					const char *purpose,
+					const unsigned char *begin,
+					const unsigned char *end);
 
   extern void wr_message_padding_0 (enum message_category category,
 				    struct where *wh,
