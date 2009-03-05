@@ -198,7 +198,7 @@ void
 wr_format_leb128_message (int st, struct where *wh, const char *what)
 {
   enum message_category category = mc_leb128 | mc_acc_bloat | mc_impact_3;
-  if (st == 0 || (st > 0 && !accept_message (&warning_criteria, category)))
+  if (st == 0)
     return;
 
   if (st < 0)
