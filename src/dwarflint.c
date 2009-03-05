@@ -59,6 +59,7 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_gnu	301
 #define ARGP_tolerant	302
 #define ARGP_ref        303
+#define ARGP_nohl       304
 
 #undef FIND_SECTION_HOLES
 
@@ -78,6 +79,8 @@ broken in certain ways"), 0 },
   { "ref", ARGP_ref, NULL, 0,
     N_("When validating .debug_loc and .debug_ranges, display information about \
 the DIE referring to the entry in consideration"), 0 },
+  { "nohl", ARGP_nohl, NULL, 0,
+    N_("Don't run high-level tests"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -230,6 +233,7 @@ static bool be_strict = false; /* --strict */
 static bool be_gnu = false; /* --gnu */
 static bool be_tolerant = false; /* --tolerant */
 static bool show_refs = false; /* --ref */
+static bool do_high_level = true; /* ! --nohl */
 
 int
 main (int argc, char *argv[])
@@ -336,6 +340,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case ARGP_ref:
       show_refs = true;
+      break;
+
+    case ARGP_nohl:
+      do_high_level = false;
       break;
 
     case 'i':
@@ -997,7 +1005,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	{
 	  cu_chain = check_info_structural (&info_data, abbrev_chain,
 					    str_data.data);
-	  if (cu_chain != NULL)
+	  if (cu_chain != NULL && do_high_level)
 	    check_expected_trees (hlctx);
 	}
       else if (!tolerate_nodebug)
@@ -1011,7 +1019,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   else
     ranges_sound = false;
 
-  if (loc_data.data != NULL && cu_chain != NULL)
+  if (loc_data.data != NULL && cu_chain != NULL && do_high_level)
     check_loc_or_range_structural (&loc_data, cu_chain);
 
   if (aranges_data.data != NULL)
