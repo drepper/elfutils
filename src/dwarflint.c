@@ -4526,8 +4526,9 @@ check_loc_or_range_structural (struct section_data *data,
   return retval;
 }
 
-GElf_Rela *get_rel_or_rela (Elf_Data *data, int ndx,
-			    GElf_Rela *dst, size_t type)
+static GElf_Rela *
+get_rel_or_rela (Elf_Data *data, int ndx,
+		 GElf_Rela *dst, size_t type)
 {
   if (type == SHT_RELA)
     return gelf_getrela (data, ndx, dst);
@@ -4608,12 +4609,23 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
 	  /* Technically legal, but never used.  Better have dwarflint
 	     flag them as erroneous, because it's more likely these
 	     are a result of a bug than actually being used.  */
-	  wr_error (&where, ": 8 or 16-bit relocation type %d.\n", type);
-	  goto skip;
+	  {
+	    char buf[64];
+	    wr_error (&where, ": 8 or 16-bit relocation type %s.\n",
+		      ebl_reloc_type_name (secdata->file->ebl,
+					   cur->type, buf, sizeof (buf)));
+	    goto skip;
+	  }
 
 	default:
-	  wr_error (&where, ": invalid relocation type %d.\n", type);
-	  goto skip;
+	  {
+	    char buf[64];
+	    wr_error (&where, ": invalid relocation %d (%s).\n",
+		      cur->type,
+		      ebl_reloc_type_name (secdata->file->ebl,
+					   cur->type, buf, sizeof (buf)));
+	    goto skip;
+	  }
 	};
 
       if (cur->offset + width >= secdata->data->d_size)
