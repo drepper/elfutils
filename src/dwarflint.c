@@ -121,6 +121,8 @@ static void process_file (Dwarf *dwarf, const char *fname, bool only_one);
       }								\
   } while (0)
 
+#define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
+
 struct message_term
 {
   /* Given a term like A && !B && C && !D, we decompose it thus: */
@@ -935,7 +937,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
     printf ("\n%s:\n", fname);
 
   struct elf_file file;
-  memset (&file, 0, sizeof (file));
+  WIPE (file);
 
   file.dwarf = dwarf;
   file.ebl = ebl_openbackend (dwarf->elf);
@@ -1647,7 +1649,7 @@ abbrev_table_load (struct read_ctx *ctx)
       REALLOC (section, abbr);
 
       struct abbrev *cur = section->abbr + section->size++;
-      memset (cur, 0, sizeof (*cur));
+      WIPE (*cur);
 
       cur->code = abbr_code;
 
@@ -1724,7 +1726,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	  REALLOC (cur, attribs);
 
 	  struct abbrev_attrib *acur = cur->attribs + cur->size++;
-	  memset (acur, 0, sizeof (*acur));
+	  WIPE (*acur);
 
 	  /* We do structural checking of sibling attribute, so make
 	     sure our assumptions in actual DIE-loading code are
@@ -2152,7 +2154,7 @@ coverage_map_init (struct coverage_map *coverage_map, Elf *elf,
   assert (coverage_map != NULL);
   assert (elf != NULL);
 
-  memset (coverage_map, 0, sizeof (*coverage_map));
+  WIPE (*coverage_map);
   coverage_map->elf = elf;
   coverage_map->allow_overlap = allow_overlap;
 
@@ -3378,7 +3380,7 @@ check_cu_structural (struct read_ctx *ctx,
     }
 
   struct ref_record local_die_refs;
-  memset (&local_die_refs, 0, sizeof (local_die_refs));
+  WIPE (local_die_refs);
 
   if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
@@ -3411,7 +3413,7 @@ check_info_structural (struct section_data *data,
   read_ctx_init (&ctx, data->file->dwarf, data->data);
 
   struct ref_record die_refs;
-  memset (&die_refs, 0, sizeof (die_refs));
+  WIPE (die_refs);
 
   struct cu *cu_chain = NULL;
 
@@ -4043,10 +4045,10 @@ check_location_expression (struct read_ctx *parent_ctx,
   uint64_t off0 = read_ctx_get_offset (parent_ctx);
 
   struct ref_record oprefs;
-  memset (&oprefs, 0, sizeof (oprefs));
+  WIPE (oprefs);
 
   struct addr_record opaddrs;
-  memset (&opaddrs, 0, sizeof (opaddrs));
+  WIPE (opaddrs);
 
   while (!read_ctx_eof (&ctx))
     {
@@ -4517,7 +4519,7 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
 
       REALLOC (&secdata->rel, rel);
       struct relocation *cur = secdata->rel.rel + secdata->rel.size++;
-      memset (cur, 0, sizeof (*cur));
+      WIPE (*cur);
 
       GElf_Rela rela_mem, *rela
 	= get_rel_or_rela (reldata, i, &rela_mem, secdata->rel.type);
@@ -4614,7 +4616,7 @@ check_line_structural (struct section_data *data,
   bool retval = true;
 
   struct addr_record line_tables;
-  memset (&line_tables, 0, sizeof (line_tables));
+  WIPE (line_tables);
 
   while (!read_ctx_eof (&ctx))
     {
@@ -4740,7 +4742,7 @@ check_line_structural (struct section_data *data,
 	size_t alloc;
 	struct include_directory_t *dirs;
       } include_directories;
-      memset (&include_directories, 0, sizeof (include_directories));
+      WIPE (include_directories);
       while (!read_ctx_eof (&sub_ctx))
 	{
 	  const char *name = read_ctx_read_str (&sub_ctx);
@@ -4772,7 +4774,7 @@ check_line_structural (struct section_data *data,
 	size_t alloc;
 	struct file_t *files;
       } files;
-      memset (&files, 0, sizeof (files));
+      WIPE (files);
 
       /* Directory index.  */
       bool read_directory_index (const char *name, uint64_t *ptr)
