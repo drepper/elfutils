@@ -209,41 +209,88 @@ message_cri_str (struct message_criteria *cri)
 }
 
 static void
-message_cri_and (struct message_criteria *cri, struct message_term term)
+message_cri_and (struct message_criteria *cri, struct message_term *term)
 {
-  assert ((term.positive & term.negative) == 0);
-  //printf ("message_cri_and(%s)\n : %s\n", message_term_str (&term), message_cri_str (cri));
+  assert ((term->positive & term->negative) == 0);
   for (size_t i = 0; i < cri->size; )
     {
       struct message_term *t = cri->terms + i;
-      //struct message_term orig = *t;
-      t->positive |= term.positive;
-      t->negative |= term.negative;
+      t->positive |= term->positive;
+      t->negative |= term->negative;
       if ((t->positive & t->negative) != 0)
-	{
-	  /* A ^ ~A -> drop the term.  */
-	  /*
-	  printf ("(eliminate %s)\n", message_term_str (&orig));
-	  printf ("(became %s)\n", message_term_str (t));
-	  */
-	  cri->terms[i] = cri->terms[--cri->size];
-	}
+	/* A ^ ~A -> drop the term.  */
+	cri->terms[i] = cri->terms[--cri->size];
       else
 	++i;
     }
-  //printf (" : %s\n", message_cri_str (cri));
 }
 
 static void
-message_cri_or (struct message_criteria *cri, struct message_term term)
+message_cri_or (struct message_criteria *cri, struct message_term *term)
 {
-  assert ((term.positive & term.negative) == 0);
-  //printf ("message_cri_or(%s)\n : %s\n", message_term_str (&term), message_cri_str (cri));
+  assert ((term->positive & term->negative) == 0);
   REALLOC (cri, terms);
-  cri->terms[cri->size++] = term;
-  //printf (" : %s\n", message_cri_str (cri));
+  cri->terms[cri->size++] = *term;
 }
 
+/* NEG(a&b&~c) -> (~a + ~b + c) */
+static struct message_criteria
+message_cri_neg (struct message_term *term)
+{
+  assert ((term->positive & term->negative) == 0);
+
+  unsigned max = 0;
+#define MC(CAT, ID) max = ID;
+  MESSAGE_CATEGORIES
+#undef MC
+
+  struct message_criteria ret;
+  WIPE (ret);
+  for (size_t i = 0; i < max; ++i)
+    {
+      unsigned mask = 1u << i;
+      if ((term->positive & mask) != 0)
+	message_cri_or (&ret, &(struct message_term){1u << i, mc_none});
+      else if ((term->negative & mask) != 0)
+	message_cri_or (&ret, &(struct message_term){mc_none, 1u << i});
+    }
+
+  return ret;
+}
+
+/* MUL((a&b + c&d), (e&f + g&h)) -> (a&b&e&f + a&b&g&h + c&d&e&f + c&d&g&h) */
+static void
+message_cri_mul (struct message_criteria *cri, struct message_criteria *rhs)
+{
+  struct message_criteria ret;
+  WIPE (ret);
+
+  for (size_t i = 0; i < cri->size; ++i)
+    for (size_t j = 0; j < rhs->size; ++j)
+      {
+	struct message_term t1 = cri->terms[i];
+	struct message_term *t2 = rhs->terms + j;
+	t1.positive |= t2->positive;
+	t1.negative |= t2->negative;
+	if (t1.positive & t1.negative)
+	  /* A ^ ~A -> drop the term.  */
+	  continue;
+	message_cri_or (&ret, &t1);
+      }
+
+  free (cri->terms);
+  *cri = ret;
+}
+
+/* Reject message if TERM passes.  */
+static void
+message_cri_and_not (struct message_criteria *cri, struct message_term *term)
+{
+  struct message_criteria tmp
+    = message_cri_neg (&(struct message_term) {term->negative, term->positive});
+  message_cri_mul (cri, &tmp);
+  free (tmp.terms);
+}
 
 /* Messages that are accepted (and made into warning).  */
 static struct message_criteria warning_criteria;
@@ -378,38 +425,42 @@ main (int argc, char *argv[])
   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
 
   /* Initialize warning & error criteria.  */
-  message_cri_or (&error_criteria,
-		  (struct message_term){mc_impact_4, mc_none});
-  message_cri_or (&error_criteria,
-		  (struct message_term){mc_error, mc_none});
-
   message_cri_or (&warning_criteria,
-		  (struct message_term){mc_none, mc_strings});
+		  &(struct message_term){mc_none, mc_none});
+
+  message_cri_or (&error_criteria,
+		  &(struct message_term){mc_impact_4, mc_none});
+  message_cri_or (&error_criteria,
+		  &(struct message_term){mc_error, mc_none});
 
   /* Configure warning & error criteria according to configuration.  */
   if (tolerate_nodebug)
     message_cri_and (&warning_criteria,
-		     (struct message_term){mc_none, mc_elf});
+		     &(struct message_term){mc_none, mc_elf});
 
   if (be_gnu)
     {
       message_cri_and (&warning_criteria,
-		       (struct message_term){mc_none, mc_acc_bloat});
+		       &(struct message_term){mc_none, mc_acc_bloat});
       if (!be_strict)
 	message_cri_and (&warning_criteria,
-			 (struct message_term){mc_none, mc_pubtypes});
+			 &(struct message_term){mc_none, mc_pubtypes});
     }
 
-  if (be_strict)
-    message_cri_and (&warning_criteria,
-		     (struct message_term){mc_strings, mc_none});
+  if (!be_strict)
+    {
+      message_cri_and (&warning_criteria,
+		       &(struct message_term){mc_none, mc_strings});
+      message_cri_and_not (&warning_criteria,
+			   &(struct message_term){mc_line | mc_header, mc_none});
+    }
 
   if (be_tolerant)
     {
       message_cri_and (&warning_criteria,
-		       (struct message_term){mc_none, mc_loc});
+		       &(struct message_term){mc_none, mc_loc});
       message_cri_and (&warning_criteria,
-		       (struct message_term){mc_none, mc_ranges});
+		       &(struct message_term){mc_none, mc_ranges});
     }
 
   if (be_verbose)
