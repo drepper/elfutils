@@ -1219,14 +1219,14 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
   else
     ranges_sound = false;
 
-  if (loc_data.data != NULL && cu_chain != NULL && do_high_level)
+  if (loc_data.data != NULL && cu_chain != NULL)
     check_loc_or_range_structural (&loc_data, cu_chain);
 
   if (aranges_data.data != NULL)
     {
       read_ctx_init (&ctx, dwarf, aranges_data.data);
       if (check_aranges_structural (&aranges_data, cu_chain)
-	  && ranges_sound)
+	  && ranges_sound && do_high_level)
 	check_matching_ranges (hlctx);
     }
 
