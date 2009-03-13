@@ -4852,7 +4852,7 @@ check_line_structural (struct section_data *data,
 	if (*ptr > include_directories.size) /* Not >=, dirs indexed from 1.  */
 	  {
 	    wr_message (mc_impact_4 | mc_line | mc_header, &where,
-			": file #%zd refers to directory #%zd, which wasn't defined.\n",
+			": file #%zd refers to directory #%" PRId64 ", which wasn't defined.\n",
 			files.size + 1, *ptr);
 	    /* Consumer might choke on that.  */
 	    retval = false;
