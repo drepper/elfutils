@@ -452,7 +452,8 @@ main (int argc, char *argv[])
       message_cri_and (&warning_criteria,
 		       &(struct message_term){mc_none, mc_strings});
       message_cri_and_not (&warning_criteria,
-			   &(struct message_term){mc_line | mc_header, mc_none});
+			   &(struct message_term)
+			    {mc_line | mc_header | mc_acc_bloat, mc_none});
     }
 
   if (be_tolerant)
@@ -4857,7 +4858,7 @@ check_line_structural (struct section_data *data,
 	    /* Consumer might choke on that.  */
 	    retval = false;
 	  }
-	if (*ptr != 0)
+	else if (*ptr != 0)
 	  include_directories.dirs[*ptr - 1].used = true;
 	return true;
       }
