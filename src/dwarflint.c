@@ -2280,8 +2280,9 @@ coverage_map_add (struct coverage_map *coverage_map,
 	= address < shdr->sh_addr ? 0 : address - shdr->sh_addr;
       uint64_t cov_end
 	= (end < s_end ? end - shdr->sh_addr
-	   : shdr->sh_size) - 1; /* -1 because coverage
+	   : shdr->sh_size - 1); /* -1 because coverage
 				    endpoint is inclusive.  */
+      assert (cov_begin <= cov_end);
 
       uint64_t r_cov_begin = cov_begin + shdr->sh_addr - address;
       uint64_t r_cov_end = cov_end + shdr->sh_addr - address;
