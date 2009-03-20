@@ -1513,7 +1513,7 @@ read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
 	  return false;
 	if (valuep != NULL)
 	  *valuep = v;
-	return false;
+	return true;
       }
     case DW_FORM_data2:
       {
@@ -1522,7 +1522,7 @@ read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
 	  return false;
 	if (valuep != NULL)
 	  *valuep = v;
-	return false;
+	return true;
       }
     case DW_FORM_data4:
       {
@@ -1531,7 +1531,7 @@ read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
 	  return false;
 	if (valuep != NULL)
 	  *valuep = v;
-	return false;
+	return true;
       }
     case DW_FORM_data8:
       return read_ctx_read_8ubyte (ctx, valuep);
