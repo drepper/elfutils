@@ -954,7 +954,7 @@ where_fmt (const struct where *wh, char *ptr)
 void
 where_fmt_chain (const struct where *wh, const char *severity)
 {
-  if (wh != NULL)
+  if (wh != NULL && show_refs)
     for (struct where *it = wh->next; it != NULL; it = it->next)
       printf ("%s: %s: caused by this reference.\n",
 	      severity, where_fmt (it, NULL));
@@ -4259,7 +4259,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
   uint64_t base = cu->base;
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (sec, show_refs ? wh : NULL);
+      struct where where = WHERE (sec, wh);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
 
 #define HAVE_OVERLAP						\
