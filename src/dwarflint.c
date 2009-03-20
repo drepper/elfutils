@@ -853,7 +853,7 @@ where_fmt (const struct where *wh, char *ptr)
       [sec_str] = {".debug_str", "offset", "%#"PRIx64,
 		   NULL, NULL, NULL, NULL},
 
-      [sec_line] = {".debug_line", "table", "%#"PRIx64,
+      [sec_line] = {".debug_line", "table", "%"PRId64,
 		    "offset", "%#"PRIx64, NULL, NULL},
 
       [sec_loc] = {".debug_loc", "loclist", "%#"PRIx64,
