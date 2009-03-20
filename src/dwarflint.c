@@ -5118,9 +5118,6 @@ check_line_structural (struct section_data *data,
 
 	  if (opcode != 0 || extended != DW_LNE_end_sequence)
 	    seen_opcode = true;
-
-	  if (terminated)
-	    break;
 	}
 
       for (size_t i = 0; i < include_directories.size; ++i)
@@ -5149,7 +5146,7 @@ check_line_structural (struct section_data *data,
 				       &WHERE (sec_line, NULL)))
 	wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
 			       read_ctx_get_offset (&sub_ctx),
-			       sub_ctx.end - sub_ctx.begin - 1);
+			       sub_ctx.end - sub_ctx.ptr - 1);
       }
 
       /* XXX overlaps in defined addresses are probably OK, one
