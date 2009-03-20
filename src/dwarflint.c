@@ -4786,8 +4786,13 @@ check_line_structural (struct section_data *data,
 	}
 
       /* Standard opcode lengths.  */
-      uint8_t std_opc_lengths[opcode_base];
-      for (unsigned i = 0; i < opcode_base; ++i)
+      if (opcode_base == 0)
+	{
+	  wr_error (&where, ": opcode base set to 0.\n");
+	  opcode_base = 1; // so that in following, our -1s don't underrun
+	}
+      uint8_t std_opc_lengths[opcode_base - 1]; /* -1, opcodes go from 1.  */
+      for (unsigned i = 0; i < (unsigned)(opcode_base - 1); ++i)
 	if (!read_ctx_read_ubyte (&sub_ctx, std_opc_lengths + i))
 	  {
 	    wr_error (&where,
@@ -4808,6 +4813,7 @@ check_line_structural (struct section_data *data,
 	struct include_directory_t *dirs;
       } include_directories;
       WIPE (include_directories);
+
       while (!read_ctx_eof (&sub_ctx))
 	{
 	  const char *name = read_ctx_read_str (&sub_ctx);
