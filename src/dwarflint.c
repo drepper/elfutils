@@ -1664,7 +1664,7 @@ abbrev_table_load (struct read_ctx *ctx)
 
 	    if (abbr_code == 0 && prev_abbr_code == 0
 		&& zero_seq_off == (uint64_t)-1)
-	      zero_seq_off = prev_abbr_off;
+	      zero_seq_off = abbr_off;
 
 	    if (abbr_code != 0)
 	      break;
@@ -1681,7 +1681,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	       padding.  */
 	    struct where wh = WHERE (where.section, NULL);
 	    wr_message_padding_0 (mc_abbrevs | mc_header, &wh,
-				  zero_seq_off, prev_abbr_off - 1);
+				  zero_seq_off, abbr_off - 1);
 	  }
       }
 
@@ -5145,8 +5145,8 @@ check_line_structural (struct section_data *data,
 	       && !check_zero_padding (&sub_ctx, mc_line,
 				       &WHERE (sec_line, NULL)))
 	wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
-			       read_ctx_get_offset (&sub_ctx),
-			       sub_ctx.end - sub_ctx.ptr - 1);
+			       /*begin*/read_ctx_get_offset (&sub_ctx),
+			       /*end*/sub_ctx.end - sub_ctx.begin - 1);
       }
 
       /* XXX overlaps in defined addresses are probably OK, one
