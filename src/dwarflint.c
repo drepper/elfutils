@@ -4926,6 +4926,7 @@ check_line_structural (struct section_data *data,
 
       bool terminated = false;
       bool first_file = true;
+      bool seen_opcode = false;
       while (!read_ctx_eof (&sub_ctx))
 	{
 	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
@@ -5114,6 +5115,12 @@ check_line_structural (struct section_data *data,
 	      use_file (1);
 	      first_file = false;
 	    }
+
+	  if (opcode != 0 || extended != DW_LNE_end_sequence)
+	    seen_opcode = true;
+
+	  if (terminated)
+	    break;
 	}
 
       for (size_t i = 0; i < include_directories.size; ++i)
@@ -5128,9 +5135,15 @@ check_line_structural (struct section_data *data,
 		      &where, ": the file #%zd `%s' is not used.\n",
 		      i + 1, files.files[i].name);
 
+      if (!seen_opcode)
+	wr_message (mc_line | mc_acc_bloat | mc_impact_3, &where,
+		    ": empty line number program.\n");
       if (!terminated)
-	wr_error (&where,
-		  ": sequence of opcodes not terminated with DW_LNE_end_sequence.\n");
+	{
+	  if (seen_opcode)
+	    wr_error (&where,
+		      ": sequence of opcodes not terminated with DW_LNE_end_sequence.\n");
+	}
       else if (sub_ctx.ptr != sub_ctx.end
 	       && !check_zero_padding (&sub_ctx, mc_line,
 				       &WHERE (sec_line, NULL)))
