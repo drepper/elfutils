@@ -4979,7 +4979,7 @@ check_line_structural (struct section_data *data,
 		    {
 		      uint64_t ctx_offset = read_ctx_get_offset (&sub_ctx);
 		      uint64_t addr;
-		      if (!read_ctx_read_offset (&sub_ctx, dwarf_64, &addr))
+		      if (!read_ctx_read_offset (&sub_ctx, data->file->addr_64, &addr))
 			{
 			  wr_error (&where, ": can't read operand of DW_LNE_set_address.\n");
 			  goto skip;
