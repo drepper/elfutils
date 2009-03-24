@@ -3391,7 +3391,7 @@ check_cu_structural (struct read_ctx *ctx,
 
   /* Abbrev offset.  */
   uint64_t abbrev_offset;
-  uint64_t ctx_offset = read_ctx_get_offset (ctx);
+  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
   if (!read_ctx_read_offset (ctx, dwarf_64, &abbrev_offset))
     {
       wr_error (&cu->where, ": can't read abbrev offset.\n");
