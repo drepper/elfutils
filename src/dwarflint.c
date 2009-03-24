@@ -4342,8 +4342,9 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	{
 	  if (base == (uint64_t)-1)
 	    {
-	      wr_error (&where, ": address range with no base address set.\n");
-	      base = (uint64_t)-2; /* Only report once.  */
+	      wr_error (&where,
+			": address range with no base address set (%#"
+			PRIx64 "..%#" PRIx64 ").\n", begin_addr, end_addr);
 	      /* This is not something that would derail high-level,
 		 so carry on.  */
 	    }
