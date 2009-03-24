@@ -799,6 +799,7 @@ static bool check_pub_structural (struct section_data *data,
 				  struct cu *cu_chain);
 
 static bool check_location_expression (struct read_ctx *ctx,
+				       uint64_t init_off,
 				       struct relocation_data *reloc,
 				       size_t length,
 				       struct where *wh,
@@ -3309,7 +3310,9 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (is_location_attrib (it->name))
 		  {
-		    if (!check_location_expression (ctx, reloc, length,
+		    uint64_t expr_start = cu->offset + read_ctx_get_offset (ctx);
+		    if (!check_location_expression (ctx, expr_start,
+						    reloc, length,
 						    &where, addr_64))
 		      return -1;
 		  }
@@ -4083,6 +4086,7 @@ get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
 
 static bool
 check_location_expression (struct read_ctx *parent_ctx,
+			   uint64_t init_off,
 			   struct relocation_data *reloc,
 			   size_t length,
 			   struct where *wh,
@@ -4095,7 +4099,6 @@ check_location_expression (struct read_ctx *parent_ctx,
       wr_error (wh, PRI_NOT_ENOUGH, "location expression");
       return false;
     }
-  uint64_t off0 = read_ctx_get_offset (parent_ctx);
 
   struct ref_record oprefs;
   WIPE (oprefs);
@@ -4106,7 +4109,7 @@ check_location_expression (struct read_ctx *parent_ctx,
   while (!read_ctx_eof (&ctx))
     {
       struct where where = WHERE (sec_locexpr, wh);
-      uint64_t opcode_off = read_ctx_get_offset (&ctx);
+      uint64_t opcode_off = read_ctx_get_offset (&ctx) + init_off;
       where_reset_1 (&where, opcode_off);
       addr_record_add (&opaddrs, opcode_off);
 
@@ -4129,7 +4132,7 @@ check_location_expression (struct read_ctx *parent_ctx,
       do {								\
 	if (OP != 0)							\
 	  {								\
-	    uint64_t _off = read_ctx_get_offset (&ctx);			\
+	    uint64_t _off = read_ctx_get_offset (&ctx) + init_off;	\
 	    uint64_t *_ptr = (PTR);					\
 	    if (!read_ctx_read_form (&ctx, addr_64, (OP),		\
 				     _ptr, &where, STR " operand"))	\
@@ -4141,7 +4144,7 @@ check_location_expression (struct read_ctx *parent_ctx,
 		goto out;						\
 	      }								\
 	    struct relocation *_rel;					\
-	    if ((_rel = relocation_next (reloc, _off + off0,		\
+	    if ((_rel = relocation_next (reloc, _off,			\
 					 &where, skip_mismatched)))	\
 	      relocate_one (reloc, _rel,				\
 			    addr_64 ? 8 : 4, _ptr, &where,		\
@@ -4380,7 +4383,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 
 	      /* location expression itself */
 	      uint64_t expr_start = read_ctx_get_offset (&ctx);
-	      if (!check_location_expression (&ctx, &data->rel, len, &where, addr_64))
+	      if (!check_location_expression (&ctx, expr_start, &data->rel,
+					      len, &where, addr_64))
 		return false;
 	      uint64_t expr_end = read_ctx_get_offset (&ctx);
 	      if (!overlap
