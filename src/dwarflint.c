@@ -442,9 +442,6 @@ main (int argc, char *argv[])
     {
       message_cri_and (&warning_criteria,
 		       &(struct message_term){mc_none, mc_acc_bloat});
-      if (!be_strict)
-	message_cri_and (&warning_criteria,
-			 &(struct message_term){mc_none, mc_pubtypes});
     }
 
   if (!be_strict)
@@ -454,6 +451,8 @@ main (int argc, char *argv[])
       message_cri_and_not (&warning_criteria,
 			   &(struct message_term)
 			    {mc_line | mc_header | mc_acc_bloat, mc_none});
+      message_cri_and (&warning_criteria,
+		       &(struct message_term){mc_none, mc_pubtypes});
     }
 
   if (be_tolerant)
