@@ -87,6 +87,13 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  libdw_visit_scopes.c \
 		  dwarf_entry_breakpoints.c
 
+# XXX need to figure out C++ dso crapola
+lib_LIBRARIES += libdwpp.a
+libdwpp_a_SOURCES = c++/values.cc \
+		    c++/known.cc \
+		    c++/line_info.cc \
+		    c++/edit-values.cc
+
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
 MAINTAINERCLEANFILES = $(srcdir)/known-dwarf.h

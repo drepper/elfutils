@@ -50,6 +50,8 @@
 #include <config.h>
 #include "dwarf_edit"
 
+#include <typeinfo>
+
 using namespace elfutils;
 
 
