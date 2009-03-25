@@ -1,5 +1,5 @@
 /* Internal definitions for libdw unwinder code.
-   Copyright (C) 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -96,7 +96,7 @@ struct dwarf_fde
 struct Dwarf_CFI_s
 {
   /* Data of the .debug_frame or .eh_frame section.  */
-  Elf_Data data;
+  Elf_Data *data;
   const unsigned char *e_ident;	/* For EI_DATA and EI_CLASS.  */
 
   /* True if the file has a byte order different from the host.  */
@@ -105,8 +105,6 @@ struct Dwarf_CFI_s
   /* True if the section data is in .eh_frame format.  */
   bool eh_frame;
 
-  /* True if data.d_buf came from gelf_rawchunk.  */
-  bool rawchunk;
   Elf *elf;			/* Originating ELF file.  */
 
   Dwarf_Addr frame_vaddr;  /* DW_EH_PE_pcrel, address of frame section.  */
@@ -135,7 +133,6 @@ struct Dwarf_CFI_s
   /* Binary search table in .eh_frame_hdr section.  */
   const uint8_t *search_table;
   Dwarf_Addr search_table_vaddr;
-  void *search_table_rawchunk;
   size_t search_table_entries;
   uint8_t search_table_encoding;
 };

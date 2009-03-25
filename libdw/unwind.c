@@ -1,5 +1,5 @@
 /* CFI program execution.
-   Copyright (C) 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -247,7 +247,7 @@ execute_cfi (Dwarf_CFI *cache,
 
 	case DW_CFA_expression:
 	  get_uleb128 (regno, program);
-	  offset = program - (const uint8_t *) cache->data.d_buf;
+	  offset = program - (const uint8_t *) cache->data->d_buf;
 	  /* DW_FORM_block is a ULEB128 length followed by that many bytes.  */
 	  get_uleb128 (operand, program);
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
@@ -258,7 +258,7 @@ execute_cfi (Dwarf_CFI *cache,
 	case DW_CFA_val_expression:
 	  get_uleb128 (regno, program);
 	  /* DW_FORM_block is a ULEB128 length followed by that many bytes.  */
-	  offset = program - (const uint8_t *) cache->data.d_buf;
+	  offset = program - (const uint8_t *) cache->data->d_buf;
 	  get_uleb128 (operand, program);
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
 	  register_rule (regno, val_expression, offset);

@@ -1,5 +1,5 @@
 /* Frame cache handling.
-   Copyright (C) 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -84,7 +84,4 @@ __libdw_destroy_frame_cache (Dwarf_CFI *cache)
   tdestroy (cache->fde_tree, free_fde);
   tdestroy (cache->cie_tree, free_cie);
   tdestroy (cache->expr_tree, free_expr);
-
-  if (cache->rawchunk)
-    gelf_freechunk (cache->elf, cache->data.d_buf);
 }

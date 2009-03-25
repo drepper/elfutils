@@ -1,5 +1,5 @@
 /* Get CFI from ELF file's exception-handling info.
-   Copyright (C) 2006 Red Hat, Inc.
+   Copyright (C) 2006, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -110,12 +110,13 @@ parse_eh_frame_hdr (const uint8_t *hdr, size_t hdr_size, GElf_Addr hdr_vaddr,
     return (void *) -1l;
 
   /* Dummy used by read_encoded_value.  */
+  Elf_Data dummy_cfi_hdr_data = { .d_buf = (void *) hdr, .d_size = hdr_size };
   Dwarf_CFI dummy_cfi =
     {
       .e_ident = ehdr->e_ident,
       .datarel = hdr_vaddr,
       .frame_vaddr = hdr_vaddr,
-      .data = { .d_buf = (void *) hdr, .d_size = hdr_size }
+      .data = &dummy_cfi_hdr_data,
     };
 
   *eh_frame_vaddr = read_encoded_value (&dummy_cfi, eh_frame_ptr_encoding, &h);
@@ -143,11 +144,11 @@ getcfi_gnu_eh_frame (Elf *elf, const GElf_Ehdr *ehdr, const GElf_Phdr *phdr)
   if (unlikely (phdr->p_filesz < 4))
     goto invalid;
 
-  void *const hdr = gelf_rawchunk (elf, phdr->p_offset, phdr->p_filesz);
-  if (hdr == NULL)
+  Elf_Data *data = elf_getdata_rawchunk (elf, phdr->p_offset, phdr->p_filesz,
+					 ELF_T_BYTE);
+  if (data == NULL)
     {
     invalid_hdr:
-      gelf_freechunk (elf, hdr);
     invalid:
       /* XXX might be read error or corrupt phdr */
       __libdw_seterrno (DWARF_E_INVALID_CFI);
@@ -157,7 +158,7 @@ getcfi_gnu_eh_frame (Elf *elf, const GElf_Ehdr *ehdr, const GElf_Phdr *phdr)
   Dwarf_Addr eh_frame_ptr;
   size_t search_table_entries;
   uint8_t search_table_encoding;
-  const uint8_t *search_table = parse_eh_frame_hdr (hdr, phdr->p_filesz,
+  const uint8_t *search_table = parse_eh_frame_hdr (data->d_buf, phdr->p_filesz,
 						    phdr->p_vaddr, ehdr,
 						    &eh_frame_ptr,
 						    &search_table_entries,
@@ -176,25 +177,16 @@ getcfi_gnu_eh_frame (Elf *elf, const GElf_Ehdr *ehdr, const GElf_Phdr *phdr)
   if (elf_rawfile (elf, &filesize) != NULL)
     eh_frame_size = filesize - eh_frame_offset;
 
-  Elf_Data data = { .d_version = EV_CURRENT };
-  data.d_buf = gelf_rawchunk (elf, eh_frame_offset, eh_frame_size);
-  data.d_size = eh_frame_size;
-  if (data.d_buf == NULL)
+  data = elf_getdata_rawchunk (elf, eh_frame_offset, eh_frame_size, ELF_T_BYTE);
+  if (data == NULL)
     {
       __libdw_seterrno (DWARF_E_INVALID_ELF); /* XXX might be read error */
-      gelf_freechunk (elf, hdr);
       return NULL;
     }
   Dwarf_CFI *cfi = allocate_cfi (elf, eh_frame_ptr);
-  if (cfi == NULL)
-    {
-      gelf_freechunk (elf, hdr);
-      gelf_freechunk (elf, data.d_buf);
-    }
-  else
+  if (cfi != NULL)
     {
       cfi->data = data;
-      cfi->rawchunk = true;
 
       if (search_table != NULL)
 	{
@@ -202,10 +194,7 @@ getcfi_gnu_eh_frame (Elf *elf, const GElf_Ehdr *ehdr, const GElf_Phdr *phdr)
 	  cfi->search_table_vaddr = phdr->p_vaddr;
 	  cfi->search_table_encoding = search_table_encoding;
 	  cfi->search_table_entries = search_table_entries;
-	  cfi->search_table_rawchunk = hdr;
 	}
-      else
-	gelf_freechunk (elf, hdr);
     }
   return cfi;
 }
@@ -244,7 +233,7 @@ getcfi_scn_eh_frame (Elf *elf, const GElf_Ehdr *ehdr,
   Dwarf_CFI *cfi = allocate_cfi (elf, shdr->sh_addr);
   if (cfi != NULL)
     {
-      cfi->data = *data;
+      cfi->data = data;
       if (hdr_scn != NULL)
 	{
 	  Elf_Data *hdr_data = elf_rawdata (hdr_scn, NULL);

@@ -1,5 +1,5 @@
 /* Get register location expression for frame.
-   Copyright (C) 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -124,7 +124,7 @@ dwarf_frame_register (fs, regno, ops_mem, ops, nops)
 				     ? 4 : 8);
 
 	Dwarf_Block block;
-	const uint8_t *p = fs->cache->data.d_buf + reg->value;
+	const uint8_t *p = fs->cache->data->d_buf + reg->value;
 	get_uleb128 (block.length, p);
 	block.data = (void *) p;
 

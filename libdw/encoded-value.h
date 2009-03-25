@@ -1,5 +1,5 @@
 /* DW_EH_PE_* support for libdw unwinder.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -98,7 +98,7 @@ read_encoded_value (const Dwarf_CFI *cache,
     case DW_EH_PE_absptr:
       break;
     case DW_EH_PE_pcrel:
-      base = cache->frame_vaddr + (*p - (const uint8_t *) cache->data.d_buf);
+      base = cache->frame_vaddr + (*p - (const uint8_t *) cache->data->d_buf);
       break;
     case DW_EH_PE_textrel:
       // ia64: segrel
@@ -116,7 +116,7 @@ read_encoded_value (const Dwarf_CFI *cache,
 	const size_t address_size
 	  = cache->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
 	size_t align = ((cache->frame_vaddr
-			 + (*p - (const uint8_t *) cache->data.d_buf))
+			 + (*p - (const uint8_t *) cache->data->d_buf))
 			& (address_size - 1));
 	if (align != 0)
 	  *p += address_size - align;

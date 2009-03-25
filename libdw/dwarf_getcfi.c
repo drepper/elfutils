@@ -1,5 +1,5 @@
 /* Get CFI from DWARF file.
-   Copyright (C) 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -68,14 +68,12 @@ dwarf_getcfi (dbg)
       Dwarf_CFI *cfi = libdw_typed_alloc (dbg, Dwarf_CFI);
 
       cfi->eh_frame = dbg->sectiondata[IDX_debug_frame] == NULL;
-      cfi->data = *dbg->sectiondata[cfi->eh_frame ? IDX_eh_frame
-				    : IDX_debug_frame];
-      cfi->rawchunk = false;
+      cfi->data = dbg->sectiondata[cfi->eh_frame ? IDX_eh_frame
+				   : IDX_debug_frame];
       cfi->elf = dbg->elf;
 
       cfi->search_table = NULL;
       cfi->search_table_vaddr = 0;
-      cfi->search_table_rawchunk = NULL;
       cfi->search_table_entries = 0;
       cfi->search_table_encoding = DW_EH_PE_omit;
 
