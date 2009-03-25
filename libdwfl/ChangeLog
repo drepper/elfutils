@@ -6,6 +6,90 @@
 	* dwfl_addrframe.c: New file.
 	* Makefile.am (libdwfl_a_SOURCES): Add them.
 
+2009-03-09  Roland McGrath  <roland@redhat.com>
+
+	* dwfl_module_build_id.c (__libdwfl_find_build_id): Move SHSTRNDX
+	variable to outer scope, so we cache it for the loop.
+
+	* relocate.c (__libdwfl_relocate_value): Add MOD->main.bias to sh_addr.
+
+2009-02-12  Roland McGrath  <roland@redhat.com>
+
+	* dwfl_module_build_id.c (__libdwfl_find_build_id): Use
+	__libdwfl_relocate_value to find correct sh_addr value.
+
+2009-02-10  Roland McGrath  <roland@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Take new arg SANITY.
+	If false, don't fail for NO_PHDR.
+	(dwfl_report_elf): Update caller.
+	* libdwflP.h: Update decl.
+	* offline.c (process_elf): Call it with false, so we don't refuse
+	dubiously-formed objects here.
+
+	* link_map.c (consider_executable): Don't assert dwfl_addrsegment
+	finds our module.  We shouldn't crash when we confuse some guesses.
+
+2009-02-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* open.c (decompress): Avoid crash with empty input file.
+
+2009-01-27  Roland McGrath  <roland@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Ignore trailing PT_LOAD
+	with zero vaddr and memsz.
+
+2009-01-22  Roland McGrath  <roland@redhat.com>
+
+	* open.c (decompress): Move BUFFER, SIZE decls outside #if.
+
+	* dwfl_segment_report_module.c (addr_segndx): Remove bogus adjustments
+	after address-matching loop.
+
+	* segment.c (lookup): Fix fencepost in checking for HINT match.
+
+2009-01-14  Roland McGrath  <roland@redhat.com>
+
+	* gzip.c [!BZLIB] (mapped_zImage): New function.
+	(unzip) [!BZLIB]: Grok Linux kernel zImage format.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* dwfl_error.c: Always use __thread.  Remove all !USE_TLS code.
+
+2009-01-08  Roland McGrath  <roland@redhat.com>
+
+	* linux-kernel-modules.c (dwfl_linux_kernel_report_offline):
+	Skip subdirectory named "source".
+	(dwfl_linux_kernel_find_elf): Likewise.
+
+2009-01-06  Roland McGrath  <roland@redhat.com>
+
+	* linux-kernel-modules.c (check_suffix): New function.
+	Match ".ko", ".ko.gz", and ".ko.bz2" suffixes.
+	(dwfl_linux_kernel_report_offline): Use it.
+	(dwfl_linux_kernel_find_elf): Likewise.
+
+2009-01-05  Roland McGrath  <roland@redhat.com>
+
+	* argp-std.c (parse_opt): Use __libdw_open_file for core file.
+	* dwfl_build_id_find_debuginfo.c: Use it to open the file.
+	* dwfl_build_id_find_elf.c: Likewise.
+	* dwfl_module_getdwarf.c (open_elf): Likewise.
+	* dwfl_report_elf.c: Likewise.
+	* find-debuginfo.c (validate): Likewise.
+	* offline.c (__libdwfl_report_offline): Likewise.
+
+	* libdwflP.h: Declare __libdw_open_file.
+	* open.c: New file.
+	* Makefile.am (libdwfl_a_SOURCES): Add it.
+
+	* gzip.c: New file.
+	* Makefile.am [ZLIB] (libdwfl_a_SOURCES): Add it.
+	* bzip2.c: New file.
+	* Makefile.am [BZLIB] (libdwfl_a_SOURCES): Add it.
+	* libdwflP.h: Declare __libdw_gunzip, __libdw_bunzip2.
+
 2008-12-16  Roland McGrath  <roland@redhat.com>
 
 	* dwfl_module_build_id.c (dwfl_module_build_id): Define with alias and

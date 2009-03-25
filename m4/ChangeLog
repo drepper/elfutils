@@ -1,3 +1,12 @@
+2009-02-01  Roland McGrath  <roland@redhat.com>
+
+	* zip.m4: Fix --with/--without argument handling.
+
+2009-01-08  Roland McGrath  <roland@redhat.com>
+
+	* zip.am: New file.
+	* Makefile.am (EXTRA_DIST): Add it.
+
 2007-06-05  Ulrich Drepper  <drepper@redhat.com>
 
 	* gettext.m4: Update from gettext 0.16.1.

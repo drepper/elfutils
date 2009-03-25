@@ -1,5 +1,5 @@
 /* Recover relocatibility for addresses computed from debug information.
-   Copyright (C) 2005, 2006, 2007, 2008 Red Hat, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -148,7 +148,7 @@ process_elf (Dwfl *dwfl, const char *name, const char *file_name, int fd,
 	     Elf *elf)
 {
   Dwfl_Module *mod = __libdwfl_report_elf (dwfl, name, file_name, fd, elf,
-					   dwfl->offline_next_address);
+					   dwfl->offline_next_address, false);
   if (mod != NULL)
     {
       /* If this is an ET_EXEC file with fixed addresses, the address range
@@ -288,7 +288,13 @@ __libdwfl_report_offline (Dwfl *dwfl, const char *name,
 			  int (*predicate) (const char *module,
 					    const char *file))
 {
-  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
+  Elf *elf;
+  Dwfl_Error error = __libdw_open_file (&fd, &elf, closefd, true);
+  if (error != DWFL_E_NOERROR)
+    {
+      __libdwfl_seterrno (error);
+      return NULL;
+    }
   Dwfl_Module *mod = process_file (dwfl, name, file_name, fd, elf, predicate);
   if (mod == NULL)
     {

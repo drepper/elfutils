@@ -1,7 +1,7 @@
 		      ToDo list for elfutils                      -*-outline-*-
                       ----------------------
 
-Time-stamp: <2008-02-03 14:15:41 drepper>
+Time-stamp: <2009-02-05 22:08:01 drepper>
 
 * mkinstalldirs
 
@@ -22,6 +22,13 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
    archives and only when having the archive handling separately this
    remains maintainable.
 
+** shdrs in read-only files
+
+   When reading (ELF_C_READ*) then there is no need to malloc Shdr
+   structure in elfXX_getshdr if file is mmaped and unaligned access
+   is allowed or the structure is aligned.  Use ELF_F_MALLOCED flag
+   to differentiate.
+
 
 * libdw
 
@@ -37,6 +44,20 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
 
 ** Rename dwarf_getabbrev
 
+
+* libcpu
+
+** x86
+
+*** Opcodes
+
+     crc32
+     extractps
+     pextrb
+     pextrd/pextrq
+     pextrw
+     pinsrq
+     popcnt 64-bit reg
 
 * nm:
 
@@ -89,6 +110,13 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
    Not implemented at all in the moment except for recognition of the option
    itself.
 
+** variables with aliases in executables
+
+   When linking an executable with a references against a variable in a
+   DSO, create symbol table entries for all the aliases of the variable
+   in the DSO and create a relocation for one of them (a non-weak
+   definition)
+
 * elflint
 
 ** additional checks
@@ -103,6 +131,8 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
    check whether any relocation is for a merge-able section
 
    check TLS relocation depencies
+
+   Check content of .eh_frame_hdr, .eh_frame, .gcc_except_table
 
 *** for x86
 
@@ -156,5 +186,5 @@ Time-stamp: <2008-02-03 14:15:41 drepper>
      -V    Print on standard error the version number of mcs.
 
 Local Variables:
-eval:(hide-body)
+eval:(hide-sublevels 3)
 End:

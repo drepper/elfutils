@@ -1,7 +1,6 @@
-/* Get attributes of the DIE.
-   Copyright (C) 2004, 2005, 2008, 2009 Red Hat, Inc.
+/* Decompression support for libdwfl: zlib (gzip) and/or bzlib (bzip2).
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -48,99 +47,106 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
+#include "../libelf/libelfP.h"
+#undef	_
+#include "libdwflP.h"
+
+#include <unistd.h>
+
+#if !USE_ZLIB
+# define __libdw_gunzip(...)	false
 #endif
 
-#include "libdwP.h"
+#if !USE_BZLIB
+# define __libdw_bunzip2(...)	false
+#endif
 
-
-ptrdiff_t
-dwarf_getattrs (Dwarf_Die *die, int (*callback) (Dwarf_Attribute *, void *),
-		void *arg, ptrdiff_t offset)
+/* Always consumes *ELF, never consumes FD.
+   Replaces *ELF on success.  */
+static Dwfl_Error
+decompress (int fd __attribute__ ((unused)), Elf **elf)
 {
-  if (die == NULL)
-    return -1l;
+  Dwfl_Error error = DWFL_E_BADELF;
+  void *buffer = NULL;
+  size_t size = 0;
 
-  if (unlikely (offset == 1))
-    return 1;
+#if USE_ZLIB || USE_BZLIB
+  const off64_t offset = (*elf)->start_offset;
+  void *const mapped = ((*elf)->map_address == NULL ? NULL
+			: (*elf)->map_address + (*elf)->start_offset);
+  const size_t mapped_size = (*elf)->maximum_size;
+  if (mapped_size == 0)
+    return error;
 
-  const unsigned char *die_addr = die->addr;
+  error = __libdw_gunzip (fd, offset, mapped, mapped_size, &buffer, &size);
+  if (error == DWFL_E_BADELF)
+    error = __libdw_bunzip2 (fd, offset, mapped, mapped_size, &buffer, &size);
+#endif
 
-  /* Get the abbreviation code.  */
-  unsigned int u128;
-  get_uleb128 (u128, die_addr);
+  elf_end (*elf);
+  *elf = NULL;
 
-  if (die->abbrev == NULL)
-    /* Find the abbreviation.  */
-    die->abbrev = __libdw_findabbrev (die->cu, u128);
-
-  if (unlikely (die->abbrev == DWARF_END_ABBREV))
+  if (error == DWFL_E_NOERROR)
     {
-    invalid_dwarf:
-      __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return -1l;
-    }
-
-  /* This is where the attributes start.  */
-  const unsigned char *attrp = die->abbrev->attrp;
-  const unsigned char *const offset_attrp = die->abbrev->attrp + offset;
-
-  /* Go over the list of attributes.  */
-  Dwarf *dbg = die->cu->dbg;
-  while (1)
-    {
-      /* Are we still in bounds?  */
-      if (unlikely (attrp
-		    >= ((unsigned char *) dbg->sectiondata[IDX_debug_abbrev]->d_buf
-			+ dbg->sectiondata[IDX_debug_abbrev]->d_size)))
-	goto invalid_dwarf;
-
-      /* Get attribute name and form.  */
-      Dwarf_Attribute attr;
-      const unsigned char *remembered_attrp = attrp;
-
-      // XXX Fix bound checks
-      get_uleb128 (attr.code, attrp);
-      get_uleb128 (attr.form, attrp);
-
-      /* We can stop if we found the attribute with value zero.  */
-      if (attr.code == 0 && attr.form == 0)
-	/* Do not return 0 here - there would be no way to
-	   distinguish this value from the attribute at offset 0.
-	   Instead we return +1 which would never be a valid
-	   offset of an attribute.  */
-        return 1l;
-
-      /* If we are not to OFFSET_ATTRP yet, we just have to skip
-	 the values of the intervening attributes.  */
-      if (remembered_attrp >= offset_attrp)
+      if (unlikely (size == 0))
 	{
-	  /* Fill in the rest.  */
-	  attr.valp = (unsigned char *) die_addr;
-	  attr.cu = die->cu;
-
-	  /* Now call the callback function.  */
-	  if (callback (&attr, arg) != DWARF_CB_OK)
-	    /* Return the offset of the start of the attribute, so that
-	       dwarf_getattrs() can be restarted from this point if the
-	       caller so desires.  */
-	    return remembered_attrp - die->abbrev->attrp;
+	  error = DWFL_E_BADELF;
+	  free (buffer);
 	}
-
-      /* Skip over the rest of this attribute (if there is any).  */
-      if (attr.form != 0)
+      else
 	{
-	  size_t len = __libdw_form_val_len (dbg, die->cu, attr.form,
-					     die_addr);
-
-	  if (unlikely (len == (size_t) -1l))
-	    /* Something wrong with the file.  */
-	    return -1l;
-
-	  // XXX We need better boundary checks.
-	  die_addr += len;
+	  *elf = elf_memory (buffer, size);
+	  if (*elf == NULL)
+	    {
+	      error = DWFL_E_LIBELF;
+	      free (buffer);
+	    }
+	  else
+	    (*elf)->flags |= ELF_F_MALLOCED;
 	}
     }
-  /* NOTREACHED */
+
+  return error;
+}
+
+Dwfl_Error internal_function
+__libdw_open_file (int *fdp, Elf **elfp, bool close_on_fail, bool archive_ok)
+{
+  bool close_fd = false;
+  Dwfl_Error error = DWFL_E_NOERROR;
+
+  Elf *elf = elf_begin (*fdp, ELF_C_READ_MMAP_PRIVATE, NULL);
+  Elf_Kind kind = elf_kind (elf);
+  if (unlikely (kind == ELF_K_NONE))
+    {
+      if (unlikely (elf == NULL))
+	error = DWFL_E_LIBELF;
+      else
+	{
+	  error = decompress (*fdp, &elf);
+	  if (error == DWFL_E_NOERROR)
+	    {
+	      close_fd = true;
+	      kind = elf_kind (elf);
+	    }
+	}
+    }
+
+  if (error == DWFL_E_NOERROR
+      && kind != ELF_K_ELF
+      && !(archive_ok && kind == ELF_K_AR))
+    {
+      elf_end (elf);
+      elf = NULL;
+      error = DWFL_E_BADELF;
+    }
+
+  if (error == DWFL_E_NOERROR ? close_fd : close_on_fail)
+    {
+      close (*fdp);
+      *fdp = -1;
+    }
+
+  *elfp = elf;
+  return error;
 }

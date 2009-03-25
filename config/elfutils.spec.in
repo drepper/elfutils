@@ -176,12 +176,25 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_includedir}/libelf.h
 %{_includedir}/gelf.h
 %{_includedir}/nlist.h
+%{_includedir}/elfutils/version.h
 %{_libdir}/libelf.so
 
 %files libelf-devel-static
 %{_libdir}/libelf.a
 
 %changelog
+* Mon Feb 16 2009 Ulrich Drepper <drepper@redhat.com> 0.140-1
+- libelf: Fix regression in creation of section header
+- libdwfl: Less strict behavior if DWARF reader ist just used to 
+  display data
+
+* Thu Jan 22 2009 Ulrich Drepper <drepper@redhat.com> 0.139-1
+- libcpu: Add Intel SSE4 disassembler support
+- readelf: Implement call frame information and exception handling 
+  dumping.          Add -e option.  Enable it implicitly for -a.
+- elflint: Check PT_GNU_EH_FRAME program header entry.
+- libdwfl: Support automatic gzip/bzip2 decompression of ELF files.
+
 * Wed Dec 31 2008 Roland McGrath <roland@redhat.com> 0.138-1
 - Install <elfutils/version.h> header file for applications to use in
   source version compatibility checks.

@@ -1,4 +1,4 @@
-/* Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+/* Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -48,10 +48,10 @@
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 
 /* Values for the various options.  */
@@ -958,7 +958,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2008");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -1183,11 +1183,12 @@ ld_new_searchdir (const char *dir)
 
   /* Enqueue the file.  */
   if (ld_state.tailpaths == NULL)
-    ld_state.paths = ld_state.tailpaths = newpath;
+    ld_state.paths = ld_state.tailpaths = newpath->next = newpath;
   else
     {
       ld_state.tailpaths->next = newpath;
       ld_state.tailpaths = newpath;
+      newpath->next = ld_state.paths;
     }
 }
 

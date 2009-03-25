@@ -1,5 +1,5 @@
 /* Combine stripped files with separate symbols and debug information.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Roland McGrath <roland@redhat.com>, 2007.
 
@@ -64,11 +64,10 @@
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *)
-  = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -235,7 +234,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2008");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Roland McGrath");
 }
 
