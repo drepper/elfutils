@@ -1,7 +1,6 @@
 #! /bin/sh
-# Copyright (C) 1999, 2000, 2002, 2003, 2004, 2005 Red Hat, Inc.
+# Copyright (C) 2009 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
-# Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
@@ -24,12 +23,4 @@
 # Network licensing program, please visit www.openinventionnetwork.com
 # <http://www.openinventionnetwork.com>.
 
-. $srcdir/test-subr.sh
-
-testfiles testfile
-
-testrun_compare $srcdir/dwarf-attributes.sh testfile <<\EOF
- <compile_unit offset=[0xb] stmt_list=0 high_pc=0x804845a low_pc=0x804842c name="m.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=0x1>
-EOF
-
-exit 0
+./dwarf-print "$@" | sed -n '/compile_unit/{p;q;}'
