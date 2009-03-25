@@ -228,25 +228,19 @@ namespace elfutils
   // One DWARF object file.
   class dwarf
   {
-  public:
-    static const char *known_attribute (int);
+  private:
     static const char *known_tag (int);
+    static const char *known_attribute (int);
 
-    static inline std::string tag_name (int code)
-    {
-      return subr::known_name<known_tag> (code);
-    }
+  public:
+    typedef subr::known<__typeof ("DW_TAG_"), known_tag> tags;
+    typedef subr::known<__typeof ("DW_AT_"), known_attribute> attributes;
 
     template<typename attribute>
     static inline std::string attribute_name (const attribute &attr)
     {
       int code = attr.first;
-      return attribute_name (code);
-    }
-
-    static inline std::string attribute_name (const unsigned int code)
-    {
-      return subr::known_name<known_attribute> (code);
+      return attributes::name (code);
     }
 
   private:
@@ -1765,7 +1759,7 @@ namespace elfutils
 
       inline std::string to_string () const
       {
-	std::string result = attribute_name (::dwarf_whatattr (thisattr ()));
+	std::string result = attributes::name (::dwarf_whatattr (thisattr ()));
 	result += "=";
 	result += second.to_string ();
 	return result;
