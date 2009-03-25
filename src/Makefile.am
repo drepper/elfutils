@@ -81,16 +81,10 @@ ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 
 libar_a_SOURCES = arlib.c arlib2.c
 
-# XXX need to figure out C++ dso crapola
-libdwplusplus_SOURCES = ../libdw/c++/values.cc ../libdw/c++/known.cc \
-		      	../libdw/c++/line_info.cc \
-		      	../libdw/c++/edit-values.cc
-
 dwarfcmp_SOURCES = dwarfcmp.cc
-dwarfcmp_SOURCES += $(libdwplusplus_SOURCES)
 
-dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc dwarflint-expected-at.cc dwarfstrings.c
-dwarflint_SOURCES += $(libdwplusplus_SOURCES) # XXX drop when we have the DSO
+dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc \
+		    dwarflint-expected-at.cc dwarfstrings.c
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 
@@ -121,6 +115,9 @@ endif
 libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
 
+# XXX later the C++ stuff will be in libdw.so directly
+libdwpp = ../libdw/libdwpp.a $(libdw)
+
 nm_no_Wformat = yes
 size_no_Wformat = yes
 strings_no_Wformat = yes
@@ -148,8 +145,8 @@ ranlib_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 strings_LDADD = $(libelf) $(libeu) $(libmudflap)
 ar_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
-dwarfcmp_LDADD = $(libdw) $(libmudflap) -ldl
-dwarflint_LDADD  = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
+dwarfcmp_LDADD = $(libdwpp) $(libmudflap) -ldl
+dwarflint_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 
 ldlex.o: ldscript.c
 ldlex_no_Werror = yes

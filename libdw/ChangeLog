@@ -1,3 +1,8 @@
+2009-03-24  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (libdwpp_a_SOURCES): New variable.
+	(lib_LIBRARIES): Add libdwpp.a to it.
+
 2009-02-26  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf (dwarf::attr_value): Add _m_tag private member.

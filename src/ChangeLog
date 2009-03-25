@@ -1,3 +1,10 @@
+2009-03-24  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (libdwplusplus_SOURCES): Variable removed.
+	(dwarfcmp_SOURCES, dwarflint_SOURCES): Don't use it.
+	(libdwpp): New variable.
+	(dwarfcmp_LDADD, dwarflint_LDADD): Use it.
+
 2009-03-05  Petr Machata  <pmachata@redhat.com>
 
 	* dwarflint.c: Add --nohl command line switch.

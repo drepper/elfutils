@@ -7,11 +7,61 @@
 
 #include <iterator>
 #include <functional>
+#include <cstring>
+#include <iostream>
+#include <sstream>
 
 namespace elfutils
 {
   namespace subr
   {
+    template<typename string>
+    struct name_equal : public std::binary_function<const char *, string, bool>
+    {
+      inline bool operator () (const char *me, const string &you)
+      {
+	return you == me;
+      }
+    };
+
+    // Explicit specialization.
+    template<>
+    struct name_equal<const char *>
+      : public std::binary_function<const char *, const char *, bool>
+    {
+      bool operator () (const char *me, const char *you)
+      {
+	return !strcmp (me, you);
+      }
+    };
+
+    static inline std::string hex_string (int code)
+    {
+      std::ostringstream os;
+      os.setf(std::ios::hex, std::ios::basefield);
+      os << code;
+      return os.str ();
+    }
+
+    template<typename prefix_type, const char *lookup_known (int)>
+    struct known
+    {
+      // The names in the table are the identifiers, with prefix.
+      static inline std::string identifier (int code)
+      {
+	const char *known = lookup_known (code);
+	return known == NULL ? hex_string (code) : std::string (known);
+      }
+
+      // For the pretty name, skip over the prefix.
+      static inline std::string name (int code)
+      {
+	const char *known = lookup_known (code);
+	return (known == NULL ? hex_string (code)
+		: std::string (&known[sizeof (prefix_type) - 1]));
+      }
+    };
+
     template<typename t1, typename t2>
     struct equal_to : public std::binary_function<t1, t2, bool>
     {

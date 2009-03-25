@@ -60,7 +60,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  find-prologues funcretval allregs rdwrmmap \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
-		  dwfl-bug-getmodules
+		  dwfl-bug-getmodules \
+		  dwarf-print
 # get-ciefde
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -184,6 +185,12 @@ endif
 libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
 endif !STANDALONE
+
+# XXX later the C++ stuff will be in libdw.so directly
+libdwpp = ../libdw/libdwpp.a $(libdw)
+
+dwarf_print_SOURCES = dwarf-print.cc
+dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
 arsymtest_LDADD = $(libelf) $(libmudflap)

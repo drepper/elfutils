@@ -55,9 +55,6 @@
 #include "subr.hh"
 #include <stdexcept>
 
-#include <cstring>
-#include <iostream>
-#include <sstream>
 #include <list>
 #include <map>
 #include <set>
@@ -232,46 +229,18 @@ namespace elfutils
   class dwarf
   {
   private:
-    template<const char *lookup_known (int)>
-    static inline std::string known_name (int code)
-    {
-      const char *known = lookup_known (code);
-      if (known != NULL)
-	return std::string (known);
-      std::ostringstream os;
-      os.setf(std::ios::hex, std::ios::basefield);
-      os << code;
-      return os.str ();
-    }
-
-    template<typename string>
-    struct name_equal : public std::binary_function<const char *, string, bool>
-    {
-      bool operator () (const char *me, const string &you)
-      {
-	return you == me;
-      }
-    };
+    static const char *known_tag (int);
+    static const char *known_attribute (int);
 
   public:
-    static const char *known_attribute (int);
-    static const char *known_tag (int);
-
-    static inline std::string tag_name (int code)
-    {
-      return known_name<known_tag> (code);
-    }
+    typedef subr::known<__typeof ("DW_TAG_"), known_tag> tags;
+    typedef subr::known<__typeof ("DW_AT_"), known_attribute> attributes;
 
     template<typename attribute>
     static inline std::string attribute_name (const attribute &attr)
     {
       int code = attr.first;
-      return attribute_name (code);
-    }
-
-    static inline std::string attribute_name (const unsigned int code)
-    {
-      return known_name<known_attribute> (code);
+      return attributes::name (code);
     }
 
   private:
@@ -1011,7 +980,8 @@ namespace elfutils
 	    if (other_size != 0 && other_size != size ())
 	      return false;
 	  }
-	return name_equal<typeof (other.name ())> () (name (), other.name ());
+	return subr::name_equal<typeof (other.name ())> () (name (),
+							    other.name ());
       }
       template<typename other_file>
       inline bool operator!= (const other_file &other) const
@@ -1134,11 +1104,11 @@ namespace elfutils
 	      return source_column () == other.source_column ();
 
 	    case VS_identifier:
-	      return name_equal<typeof (other.identifier ())> ()
+	      return subr::name_equal<typeof (other.identifier ())> ()
 		(identifier (), other.identifier ());
 
 	    case VS_string:
-	      return name_equal<typeof (other.string ())> ()
+	      return subr::name_equal<typeof (other.string ())> ()
 		(string (), other.string ());
 
 	    case VS_address:
@@ -1448,7 +1418,7 @@ namespace elfutils
 	typename table::const_iterator j = other.begin ();
 	return subr::container_equal
 	  (++i, end (), ++j, other.end (),
-	   name_equal<typename table::value_type> ());
+	   subr::name_equal<typename table::value_type> ());
       }
 
     public:
@@ -1789,7 +1759,7 @@ namespace elfutils
 
       inline std::string to_string () const
       {
-	std::string result = attribute_name (::dwarf_whatattr (thisattr ()));
+	std::string result = attributes::name (::dwarf_whatattr (thisattr ()));
 	result += "=";
 	result += second.to_string ();
 	return result;
@@ -2178,17 +2148,6 @@ namespace elfutils
 	    i = set.insert (joined).first;
 	  }
       }
-  };
-
-  // Explicit specialization used inside dwarf::directory_table::operator==.
-  template<>
-  struct dwarf::name_equal<const char *>
-    : public std::binary_function<const char *, const char *, bool>
-  {
-    bool operator () (const char *me, const char *you)
-    {
-      return !strcmp (me, you);
-    }
   };
 
   inline class dwarf::debug_info_entry::raw_children
