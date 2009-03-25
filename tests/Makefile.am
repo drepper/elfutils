@@ -61,7 +61,7 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules \
-		  dwarf-print
+		  dwarf-print dwarf-attributes
 # get-ciefde
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -88,7 +88,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh \
-	run-dwarfcmp-self.sh run-dwarflint-self.sh
+	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -191,6 +191,9 @@ libdwpp = ../libdw/libdwpp.a $(libdw)
 
 dwarf_print_SOURCES = dwarf-print.cc
 dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
+
+dwarf_attributes_SOURCES = dwarf-attributes.cc
+dwarf_attributes_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
 arsymtest_LDADD = $(libelf) $(libmudflap)
