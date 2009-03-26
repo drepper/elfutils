@@ -57,7 +57,8 @@ open_file (const char *fname)
 }
 
 static void
-print_die (const dwarf::debug_info_entry &die, unsigned int indent)
+print_die (const dwarf::debug_info_entry &die,
+	   unsigned int indent, unsigned int limit)
 {
   string prefix (indent, ' ');
   const string tag = dwarf::tags::name (die.tag ());
@@ -70,11 +71,17 @@ print_die (const dwarf::debug_info_entry &die, unsigned int indent)
 
   if (die.has_children ())
     {
+      if (indent >= limit)
+	{
+	  cout << ">...\n";
+	  return;
+	}
+
       cout << ">\n";
 
       for (dwarf::debug_info_entry::children::const_iterator i
 	     = die.children ().begin (); i != die.children ().end (); ++i)
-	print_die (*i, indent + 1);
+	print_die (*i, indent + 1, limit);
 
       cout << prefix << "</" << tag << ">\n";
     }
@@ -83,16 +90,17 @@ print_die (const dwarf::debug_info_entry &die, unsigned int indent)
 }
 
 static void
-process_file (const char *file)
+process_file (const char *file, unsigned int limit)
 {
   dwarf dw (open_file (file));
 
   cout << file << ":\n";
 
-  for (dwarf::compile_units::const_iterator i = dw.compile_units ().begin ();
-       i != dw.compile_units ().end ();
-       ++i)
-    print_die (*i, 1);
+  if (limit > 0)
+    for (dwarf::compile_units::const_iterator i = dw.compile_units ().begin ();
+	 i != dw.compile_units ().end ();
+	 ++i)
+      print_die (*i, 1, limit);
 }
 
 int
@@ -109,8 +117,15 @@ main (int argc, char *argv[])
 
   cout << hex << setiosflags (ios::showbase);
 
+  unsigned int depth = 1;
+  if (argc > 1 && sscanf (argv[1], "--depth=%u", &depth) == 1)
+    {
+      --argc;
+      ++argv;
+    }
+
   for (int i = 1; i < argc; ++i)
-    process_file (argv[i]);
+    process_file (argv[i], depth);
 
   return 0;
 }

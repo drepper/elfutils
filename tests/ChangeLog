@@ -4,6 +4,12 @@
 	* Makefile.am (noinst_PROGRAMS): Add it.
 	(dwarf_attributes_SOURCES, dwarf_attributes_LDADD): New variables.
 
+2009-03-25  Roland McGrath  <roland@redhat.com>
+
+	* dwarf-print.cc (print_die, process_file): Take LIMIT argument.
+	Punt recursion at that depth.
+	(main): Grok first argument --depth=N to set it.
+
 2009-03-24  Roland McGrath  <roland@redhat.com>
 
 	* dwarf-print.cc: New file.
