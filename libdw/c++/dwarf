@@ -595,7 +595,7 @@ namespace elfutils
 	}
 
 	inline const_iterator (const debug_info_entry &die, ptrdiff_t offset)
-	  : _m_die (die), _m_offset (offset) {}
+	  : _m_die (die), _m_offset (offset), _m_attr () {}
 
       public:
 	inline const_iterator (const const_iterator &i)
