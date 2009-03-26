@@ -637,7 +637,7 @@ namespace elfutils
 
 	inline attribute operator* () const
 	{
-	  if (unlikely (_m_offset == 1 && _m_attr.valp == NULL))
+	  if (unlikely (_m_attr.valp == NULL))
 	    throw std::runtime_error ("dereferencing end iterator");
 	  return attribute (_m_die, _m_attr);
 	}
