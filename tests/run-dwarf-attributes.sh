@@ -1,7 +1,6 @@
 #! /bin/sh
-# Copyright (C) 1999, 2000, 2002, 2003, 2004, 2005 Red Hat, Inc.
+# Copyright (C) 2009 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
-# Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
@@ -30,9 +29,9 @@ testfiles testfile
 
 testrun_compare ./dwarf-print --depth=1 testfile <<\EOF
 testfile:
- <compile_unit offset=[0xb] stmt_list=0 high_pc=0x804845a low_pc=0x804842c name="m.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=0x1>...
- <compile_unit offset=[0xca] stmt_list=0x4b high_pc=0x8048466 low_pc=0x804845c name="b.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=0x1>...
- <compile_unit offset=[0x15fc] stmt_list=0x1e0 high_pc=0x8048472 low_pc=0x8048468 name="f.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=0x1>...
+ <compile_unit offset=[0xb] stmt_list=0 high_pc=0x804845a low_pc=0x804842c name="m.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=C89>...
+ <compile_unit offset=[0xca] stmt_list=0x4b high_pc=0x8048466 low_pc=0x804845c name="b.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=C89>...
+ <compile_unit offset=[0x15fc] stmt_list=0x1e0 high_pc=0x8048472 low_pc=0x8048468 name="f.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=C89>...
 EOF
 
 exit 0

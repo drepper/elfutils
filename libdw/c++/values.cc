@@ -184,8 +184,10 @@ dwarf::attr_value::to_string () const
     case VS_lineptr:	// XXX punt for now, treat as constant
     case VS_macptr:	// XXX punt for now, treat as constant
     case VS_constant:
-    case VS_dwarf_constant:
       return hex_string (constant ());
+
+    case VS_dwarf_constant:
+      return dwarf_constant ().to_string ();
 
     case VS_source_line:
     case VS_source_column:
@@ -242,6 +244,31 @@ dwarf::attr_value::string () const
   xif (result == NULL);
   return result;
 }
+
+bool
+dwarf::attr_value::constant_is_integer () const
+{
+  switch (dwarf_whatform (thisattr ()))
+    {
+    case DW_FORM_block:
+    case DW_FORM_block1:
+    case DW_FORM_block2:
+    case DW_FORM_block4:
+      return false;
+
+    case DW_FORM_data1:
+    case DW_FORM_data2:
+    case DW_FORM_data4:
+    case DW_FORM_data8:
+    case DW_FORM_udata:
+    case DW_FORM_sdata:
+      return true;
+
+    default:
+      throw std::runtime_error ("XXX wrong form");
+    }
+}
+
 
 const_vector<uint8_t>
 dwarf::attr_value::constant_block () const

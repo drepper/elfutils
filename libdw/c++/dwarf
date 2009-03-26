@@ -243,6 +243,24 @@ namespace elfutils
       return attributes::name (code);
     }
 
+    template<int key>
+    class known_enum
+    {
+    public:
+      static size_t prefix_length ();
+      static const char *identifier (int);
+      inline static const char *name (int value)
+      {
+	const char *id = identifier (value);
+	return id != NULL ? id + prefix_length () : NULL;
+      }
+
+      // XXX perhaps have iterator/lookup methods like a read-only map?
+    };
+
+    typedef known_enum< ::DW_AT_producer> forms;
+    typedef known_enum< ::DW_AT_location> ops;
+
   private:
     // XXX make this an instance method to include irritant context
     static void throw_libdw (void) // XXX raises (...)
@@ -361,6 +379,7 @@ namespace elfutils
     class file_table;
     class line_table;
     class line_entry;
+    class dwarf_enum;
 
     class debug_info_entry
     {
@@ -996,12 +1015,17 @@ namespace elfutils
       friend class attribute;
       friend class location_attr;
       friend class range_list;
+      friend class dwarf_enum;
     private:
       const int _m_tag;
       ::Dwarf_Attribute _m_attr;
       inline ::Dwarf_Attribute *thisattr () const
       {
 	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
+      }
+      inline int whatattr () const
+      {
+	return ::dwarf_whatattr (thisattr ());
       }
 
       attr_value (int tag, const ::Dwarf_Attribute &attr)
@@ -1058,9 +1082,12 @@ namespace elfutils
       ::Dwarf_Word constant () const;
       ::Dwarf_Sword signed_constant () const;
       const_vector<uint8_t> constant_block () const;
+      bool constant_is_integer () const;
 
-      // XXX known enums
-      // dwarf_enum dwarf_constant () const;
+      inline const dwarf_enum dwarf_constant () const
+      {
+	return dwarf_enum (*this);
+      }
 
       inline const range_list ranges () const
       {
@@ -1094,9 +1121,15 @@ namespace elfutils
 
 	    case VS_macptr:	// XXX punt for now, treat as constant
 	      /*FALLTHRU*/
-	    case VS_constant:
 	    case VS_dwarf_constant:
 	      return constant () == other.constant ();
+
+	    case VS_constant:
+	      if (constant_is_integer ())
+		return (other.constant_is_integer ()
+			&& constant () == other.constant ());
+	      return (!other.constant_is_integer ()
+		      && constant_block () == other.constant_block ());
 
 	    case VS_source_line:
 	      return source_line () == other.source_line ();
@@ -1701,6 +1734,26 @@ namespace elfutils
       {
 	return !(*this == other);
       }
+    };
+
+    class dwarf_enum
+    {
+      friend class attr_value;
+    private:
+      const attr_value _m_attr;
+
+      dwarf_enum (const attr_value &attr) : _m_attr (attr) {}
+
+    public:
+      inline operator unsigned int () const
+      {
+	return _m_attr.constant ();
+      }
+
+      std::string to_string () const;
+
+      const char *identifier () const;
+      const char *name () const;
     };
 
     // This describes one attribute, equivalent to pair<const int, attr_value>.

@@ -84,7 +84,8 @@ dwarf_edit::attr_value::what_space () const
     return dwarf::VS_source_column;
   if (typeid (*_m_value) == typeid (value_address))
     return dwarf::VS_address;
-  if (typeid (*_m_value) == typeid (value_constant))
+  if (typeid (*_m_value) == typeid (value_constant)
+      || typeid (*_m_value) == typeid (value_constant_block))
     return dwarf::VS_constant;
   if (typeid (*_m_value) == typeid (value_location))
     return dwarf::VS_location;

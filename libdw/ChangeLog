@@ -1,3 +1,10 @@
+2009-03-25  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf, c++/values.cc: Proper dwarf_constant support.
+	* c++/dwarf_edit, c++/edit-values.cc: Likewise.
+	* c++/known.cc: New file.
+	* Makefile.am (libdwpp_a_SOURCES): Add it.
+
 2009-03-24  Petr Machata  <pmachata@redhat.com>
 
 	* c++/dwarf (dwarf::debug_info_entry::raw_attributes):

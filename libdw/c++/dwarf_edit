@@ -814,7 +814,10 @@ namespace elfutils
 	    _m_value = new value_address (other.address ());
 	    break;
 	  case dwarf::VS_constant:
-	    _m_value = new value_constant (other.constant ());
+	    if (other.constant_is_integer ())
+	      _m_value = new value_constant (other.constant ());
+	    else
+	      _m_value = new value_constant_block (other.constant_block ());
 	    break;
 	  case dwarf::VS_source_line:
 	    _m_value = new value_source_line (other.source_line ());
@@ -826,7 +829,7 @@ namespace elfutils
 	    _m_value = new value_source_file (other.source_file ());
 	    break;
 	  case dwarf::VS_dwarf_constant:
-	    _m_value = new value_dwarf_constant (other.constant ()); // XXX
+	    _m_value = new value_dwarf_constant (other.dwarf_constant ());
 	    break;
 	  case dwarf::VS_reference:
 	    _m_value = new value_reference (other.reference ());
@@ -967,7 +970,15 @@ namespace elfutils
 	  (variant<value_constant_block> ());
       }
 
-      // dwarf_constant<>
+      inline ::Dwarf_Word &dwarf_constant () const
+      {
+	return variant<value_dwarf_constant> ().word;
+      }
+
+      inline bool constant_is_integer () const
+      {
+	return dynamic_cast<value_constant *> (_m_value) != NULL;
+      }
 
       inline range_list &ranges () const
       {
@@ -1003,7 +1014,11 @@ namespace elfutils
 	    case dwarf::VS_lineptr:
 	      return line_info () == other.line_info ();
 	    case dwarf::VS_constant:
-	      return constant () == other.constant ();
+	      if (constant_is_integer ())
+		return (other.constant_is_integer ()
+			&& constant () == other.constant ());
+	      return (!other.constant_is_integer ()
+		      && constant_block () == other.constant_block ());
 	    case dwarf::VS_source_file:
 	      return source_file () == other.source_file ();
 	    case dwarf::VS_source_line:
