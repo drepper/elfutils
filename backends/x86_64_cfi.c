@@ -1,5 +1,5 @@
 /* x86-64 ABI-specified defaults for DWARF CFI.
-   Copyright (C) 2006 Red Hat, Inc.
+   Copyright (C) 2006, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -54,7 +54,7 @@ x86_64_abi_cfi (Ebl *ebl __attribute__ ((unused)), Dwarf_CIE *abi_info)
   abi_info->initial_instructions_end = &abi_cfi[sizeof abi_cfi];
   abi_info->data_alignment_factor = 8;
 
-  abi_info->return_address_register = 8; /* %eip */
+  abi_info->return_address_register = 16; /* %rip */
 
   return 0;
 }
