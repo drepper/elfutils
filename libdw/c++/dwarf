@@ -612,7 +612,7 @@ namespace elfutils
 	inline bool operator== (const const_iterator &other) const
 	{
 	  return (_m_die._m_die.addr == other._m_die._m_die.addr
-		  && _m_offset == other._m_offset);
+		  && _m_attr.valp == other._m_attr.valp);
 	}
 	inline bool operator!= (const const_iterator &other) const
 	{
@@ -637,7 +637,7 @@ namespace elfutils
 
 	inline attribute operator* () const
 	{
-	  if (unlikely (_m_offset == 1))
+	  if (unlikely (_m_attr.valp == NULL))
 	    throw std::runtime_error ("dereferencing end iterator");
 	  return attribute (_m_die, _m_attr);
 	}
