@@ -50,19 +50,26 @@ extern "C"
     sec_text		/* Some AX section, not necessarily .text.  */
   };
 
+  enum where_formatting
+  {
+    wf_plain = 0, /* Default formatting for given section.  */
+    wf_cudie,
+  };
+
   struct where
   {
     enum section_id section;
     uint64_t addr1; // E.g. a CU offset.
     uint64_t addr2; // E.g. a DIE address.
     uint64_t addr3; // E.g. an attribute.
+    enum where_formatting formatting;
     struct where *ref; // Related reference, e.g. an abbrev related to given DIE.
-    struct where *next; // Hierarchically superior location.
+    struct where *next; // For forming "caused-by" chains.
   };
 
 # define WHERE(SECTION, NEXT)						\
   ((struct where)							\
-    {(SECTION), (uint64_t)-1, (uint64_t)-1, (uint64_t)-1, NULL, NEXT})
+    {(SECTION), (uint64_t)-1, (uint64_t)-1, (uint64_t)-1, wf_plain, NULL, NEXT})
 
   extern const char *where_fmt (const struct where *wh, char *ptr);
   extern void where_fmt_chain (const struct where *wh, const char *severity);

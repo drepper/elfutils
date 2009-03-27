@@ -766,6 +766,7 @@ static void ref_record_free (struct ref_record *rr);
 struct cu
 {
   uint64_t offset;
+  uint64_t cudie_offset;
   uint64_t length;
   int address_size;             // Address size in bytes on the target machine.
   uint64_t base;                // DW_AT_low_pc value of CU DIE, 0 if not present.
@@ -875,8 +876,17 @@ where_fmt (const struct where *wh, char *ptr)
       [sec_text] = {"(exec data)", NULL, NULL, NULL, NULL, NULL, NULL},
     };
 
+  static struct section_info special_formats[] =
+    {
+      [wf_cudie] = {".debug_info", "CU DIE", "%"PRId64, NULL, NULL, NULL, NULL}
+    };
+
   assert (wh->section < sizeof (section_names) / sizeof (*section_names));
-  struct section_info *inf = section_names + wh->section;
+  struct section_info *inf
+    = (wh->formatting == wf_plain)
+    ? section_names + wh->section
+    : special_formats + wh->formatting;
+
   assert (inf->name);
 
   assert ((inf->addr1n == NULL) == (inf->addr1f == NULL));
@@ -3437,6 +3447,7 @@ check_cu_structural (struct read_ctx *ctx,
   struct ref_record local_die_refs;
   WIPE (local_die_refs);
 
+  cu->cudie_offset = read_ctx_get_offset (ctx) + cu->offset;
   if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
 		      die_refs, &local_die_refs, strings_coverage,
@@ -3672,19 +3683,20 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
   struct read_ctx ctx;
   read_ctx_init (&ctx, data->file->dwarf, data->data);
 
-  struct where where = WHERE (sec_aranges, NULL);
   bool retval = true;
 
   struct coverage_map *coverage_map;
   if ((coverage_map = coverage_map_alloc_XA (data->file->dwarf->elf,
 					     false)) == NULL)
     {
-      wr_error (&where, ": couldn't read ELF, skipping coverage analysis.\n");
+      wr_error (&WHERE (sec_aranges, NULL),
+		": couldn't read ELF, skipping coverage analysis.\n");
       retval = false;
     }
 
   while (!read_ctx_eof (&ctx))
     {
+      struct where where = WHERE (sec_aranges, NULL);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
       const unsigned char *atab_begin = ctx.ptr;
 
@@ -3747,9 +3759,14 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
       struct cu *cu = NULL;
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
+
+      struct where where_cudie;
       if (cu != NULL)
 	{
-	  where.ref = &cu->where;
+	  where_cudie = WHERE (sec_info, NULL);
+	  where_reset_1 (&where_cudie, cu->cudie_offset);
+	  where.ref = &where_cudie;
+	  where_cudie.formatting = wf_cudie;
 	  if (cu->has_arange)
 	    wr_message (mc_impact_2 | mc_aranges | mc_header, &where,
 			": there has already been arange section for this CU.\n");
