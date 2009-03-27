@@ -2270,7 +2270,7 @@ coverage_map_add (struct coverage_map *coverage_map,
       struct coverage *cov = &sco->cov;
 
       Elf64_Addr s_end = shdr->sh_addr + shdr->sh_size;
-      if (end < shdr->sh_addr || address >= s_end)
+      if (end <= shdr->sh_addr || address >= s_end)
 	/* no overlap */
 	continue;
 
@@ -2286,12 +2286,17 @@ coverage_map_add (struct coverage_map *coverage_map,
 
       found = true;
 
+      if (end == address)
+	/* Empty range.  That means no actual coverage, and we can
+	   also be sure that there are no more sections that this one
+	   falls into.  */
+	break;
+
       uint64_t cov_begin
 	= address < shdr->sh_addr ? 0 : address - shdr->sh_addr;
       uint64_t cov_end
 	= (end < s_end ? end - shdr->sh_addr
-	   : shdr->sh_size - 1); /* -1 because coverage
-				    endpoint is inclusive.  */
+	   : shdr->sh_size) - 1; /* -1 because cov_end is inclusive.  */
       assert (cov_begin <= cov_end);
 
       uint64_t r_cov_begin = cov_begin + shdr->sh_addr - address;
