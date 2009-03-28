@@ -1,5 +1,5 @@
 /* Get return address register for frame.
-   Copyright (C) 2006 Red Hat, Inc.
+   Copyright (C) 2006, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -58,6 +58,6 @@ dwarf_frame_return_address_register (fs, signalp)
      Dwarf_Frame *fs;
      bool *signalp;
 {
-  *signalp = fs->cie->signal_frame;
-  return fs->cie->return_address_register;
+  *signalp = fs->fde->cie->signal_frame;
+  return fs->fde->cie->return_address_register;
 }

@@ -61,7 +61,7 @@ free_cie (void *arg)
 {
   struct dwarf_cie *cie = arg;
 
-  free (cie->initial_state);
+  free ((Dwarf_Frame *) cie->initial_state);
   free (cie);
 }
 

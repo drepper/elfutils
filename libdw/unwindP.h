@@ -69,7 +69,7 @@ struct dwarf_cie
   const uint8_t *initial_instructions;
   const uint8_t *initial_instructions_end;
 
-  Dwarf_Frame *initial_state;
+  const Dwarf_Frame *initial_state;
 
   uint8_t fde_encoding;		/* DW_EH_PE_* for addresses in FDEs.  */
   uint8_t lsda_encoding;    /* DW_EH_PE_* for LSDA in FDE augmentation.  */
@@ -178,11 +178,13 @@ struct Dwarf_Frame_s
 {
   Dwarf_CFI *cache;
 
+  /* Previous state saved by DW_CFA_remember_state, or .cie->initial_state,
+     or NULL in an initial_state pseudo-frame.  */
   Dwarf_Frame *prev;
 
-  /* The CIE we got this FDE from.
-     This has the return_address_register and signal_frame flag.  */
-  struct dwarf_cie *cie;
+  /* The FDE that generated this frame state.  This points to its CIE,
+     which has the return_address_register and signal_frame flag.  */
+  struct dwarf_fde *fde;
 
   /* The CFA is unknown, is R+N, or is computed by a DWARF expression.  */
   enum { cfa_undefined, cfa_offset, cfa_expr } cfa_rule;

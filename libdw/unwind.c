@@ -63,7 +63,7 @@
 #define CFI_PRIMARY_MAX	0x3f
 
 static Dwarf_Frame *
-duplicate_frame_state (Dwarf_Frame *original,
+duplicate_frame_state (const Dwarf_Frame *original,
 		       Dwarf_Frame *prev)
 {
   size_t size = offsetof (Dwarf_Frame, regs[original->nregs]);
@@ -432,13 +432,14 @@ __libdw_frame_at_address (Dwarf_CFI *cache, struct dwarf_fde *fde,
       /* Now we have the initial state of things that all
 	 FDEs using this CIE will start from.  */
       cie_fs->cache = cache;
-      cie_fs->cie = fde->cie;
       fde->cie->initial_state = cie_fs;
     }
 
   Dwarf_Frame *fs = duplicate_frame_state (fde->cie->initial_state, NULL);
   if (unlikely (fs == NULL))
     return DWARF_E_NOMEM;
+
+  fs->fde = fde;
 
   int result = execute_cfi (cache, fde->cie, &fs,
 			    fde->instructions, fde->instructions_end, false,
