@@ -392,78 +392,100 @@ execute_cfi (Dwarf_CFI *cache,
   return result;
 }
 
+static int
+cie_cache_initial_state (Dwarf_CFI *cache, struct dwarf_cie *cie)
+{
+  int result = DWARF_E_NOERROR;
+
+  if (likely (cie->initial_state != NULL))
+    return result;
+
+  /* This CIE has not been used before.  Play out its initial
+     instructions and cache the initial state that results.
+     First we'll let the backend fill in the default initial
+     state for this machine's ABI.  */
+
+  Dwarf_CIE abi_info = { CIE_ID, 1, 1, -1, "", NULL, 0, 0, NULL, NULL };
+
+  /* Make sure we have a backend handle cached.  */
+  if (unlikely (cache->ebl == NULL))
+    {
+      cache->ebl = ebl_openbackend (cache->elf);
+      if (unlikely (cache->ebl == NULL))
+	cache->ebl = (void *) -1l;
+    }
+
+  /* Fetch the ABI's default CFI program.  */
+  if (likely (cache->ebl != (void *) -1l)
+      && unlikely (ebl_abi_cfi (cache->ebl, &abi_info) < 0))
+    return DWARF_E_UNKNOWN_ERROR;
+
+  Dwarf_Frame *cie_fs = calloc (1, sizeof (Dwarf_Frame));
+  if (unlikely (cie_fs == NULL))
+    return DWARF_E_NOMEM;
+
+  /* If the default state of any register is not "undefined"
+     (i.e. call-clobbered), then the backend supplies instructions
+     for the standard initial state.  */
+  if (abi_info.initial_instructions_end > abi_info.initial_instructions)
+    {
+      /* Dummy CIE for backend's instructions.  */
+      struct dwarf_cie abi_cie =
+	{
+	  .code_alignment_factor = abi_info.code_alignment_factor,
+	  .data_alignment_factor = abi_info.data_alignment_factor,
+	};
+      result = execute_cfi (cache, &abi_cie, &cie_fs,
+			    abi_info.initial_instructions,
+			    abi_info.initial_instructions_end, true,
+			    0, (Dwarf_Addr) -1l);
+    }
+
+  /* Now run the CIE's initial instructions.  */
+  if (cie->initial_instructions_end > cie->initial_instructions
+      && likely (result == DWARF_E_NOERROR))
+    result = execute_cfi (cache, cie, &cie_fs,
+			  cie->initial_instructions,
+			  cie->initial_instructions_end, false,
+			  0, (Dwarf_Addr) -1l);
+
+  if (unlikely (result != DWARF_E_NOERROR))
+    {
+      free (cie_fs);
+      return result;
+    }
+
+  /* Now we have the initial state of things that all
+     FDEs using this CIE will start from.  */
+  cie_fs->cache = cache;
+  cie->initial_state = cie_fs;
+
+  return result;
+}
+
 int
 internal_function
 __libdw_frame_at_address (Dwarf_CFI *cache, struct dwarf_fde *fde,
 			  Dwarf_Addr address, Dwarf_Frame **frame)
 {
-  if (fde->cie->initial_state == NULL)
+  int result = cie_cache_initial_state (cache, fde->cie);
+  if (likely (result == DWARF_E_NOERROR))
     {
-      /* This CIE has not been used before.  Play out its initial
-	 instructions and cache the initial state that results.  */
-
-      Dwarf_Frame *cie_fs = calloc (1, sizeof (Dwarf_Frame));
-      if (unlikely (cie_fs == NULL))
+      Dwarf_Frame *fs = duplicate_frame_state (fde->cie->initial_state, NULL);
+      if (unlikely (fs == NULL))
 	return DWARF_E_NOMEM;
 
-      int result = DWARF_E_NOERROR;
+      fs->fde = fde;
+      fs->start = fde->start;
+      fs->end = fde->end;
 
-      /* First we'll let the backend fill in the default initial
-	 state for this machine's ABI.  */
-
-      Dwarf_CIE abi_info = { CIE_ID, 1, 1, -1, "", NULL, 0, 0, NULL, NULL };
-      if (cache->ebl != NULL && ebl_abi_cfi (cache->ebl, &abi_info) < 0)
-	return DWARF_E_UNKNOWN_ERROR;
-
-      /* If the default state of any register is not "undefined"
-	 (i.e. call-clobbered), then the backend supplies instructions
-	 for the standard initial state.  */
-      if (abi_info.initial_instructions_end > abi_info.initial_instructions)
-	{
-	  /* Dummy CIE for backend's instructions.  */
-	  struct dwarf_cie abi_cie =
-	    {
-	      .code_alignment_factor = abi_info.code_alignment_factor,
-	      .data_alignment_factor = abi_info.data_alignment_factor,
-	    };
-	  result = execute_cfi (cache, &abi_cie, &cie_fs,
-				abi_info.initial_instructions,
-				abi_info.initial_instructions_end, true,
-				0, (Dwarf_Addr) -1l);
-	}
-
-      /* Now run the CIE's initial instructions.  */
-      if (fde->cie->initial_instructions_end > fde->cie->initial_instructions
-	  && result == DWARF_E_NOERROR)
-	result = execute_cfi (cache, fde->cie, &cie_fs,
-			      fde->cie->initial_instructions,
-			      fde->cie->initial_instructions_end, false,
-			      0, (Dwarf_Addr) -1l);
-
-      if (result != DWARF_E_NOERROR)
-	return result;
-
-      /* Now we have the initial state of things that all
-	 FDEs using this CIE will start from.  */
-      cie_fs->cache = cache;
-      fde->cie->initial_state = cie_fs;
-    }
-
-  Dwarf_Frame *fs = duplicate_frame_state (fde->cie->initial_state, NULL);
-  if (unlikely (fs == NULL))
-    return DWARF_E_NOMEM;
-
-  fs->fde = fde;
-  fs->start = fde->start;
-  fs->end = fde->end;
-
-  int result = execute_cfi (cache, fde->cie, &fs,
+      result = execute_cfi (cache, fde->cie, &fs,
 			    fde->instructions, fde->instructions_end, false,
 			    fde->start, address);
-  if (unlikely (result != DWARF_E_NOERROR))
-    free (fs);
-  else
-    *frame = fs;
-
+      if (unlikely (result != DWARF_E_NOERROR))
+	free (fs);
+      else
+	*frame = fs;
+    }
   return result;
 }

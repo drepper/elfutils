@@ -244,7 +244,6 @@ INTDECL (dwarf_next_cfi)
 INTDECL (dwarf_getcfi)
 INTDECL (dwarf_getcfi_elf)
 INTDECL (dwarf_cfi_end)
-INTDECL (dwarf_cfi_setebl)
 INTDECL (dwarf_cfi_addrframe)
 
 #endif	/* unwindP.h */

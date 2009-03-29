@@ -203,7 +203,6 @@ ELFUTILS_0.140_UNWIND {
     dwarf_getcfi_elf;
     dwarf_cfi_addrframe;
     dwarf_cfi_end;
-    dwarf_cfi_setebl;
     dwarf_frame_cfa;
     dwarf_frame_register;
     dwarf_frame_info;

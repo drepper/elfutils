@@ -2,7 +2,6 @@
 #define _libdw_unwind_h 1
 
 #include "libdw.h"
-struct ebl;
 
 /* This describes one Common Information Entry read from a CFI section.
    Pointers here point into the DATA->d_buf block passed to dwarf_next_cfi.  */
@@ -108,10 +107,6 @@ extern Dwarf_CFI *dwarf_getcfi_elf (Elf *elf);
 /* Release resources allocated by dwarf_getcfi_elf.  */
 extern int dwarf_cfi_end (Dwarf_CFI *cache);
 
-/* Associate an open backend from <libebl.h> with this Dwarf_CFI handle.
-   The backend may be required to perform CFI unwinding correctly.  */
-extern int dwarf_cfi_setebl (Dwarf_CFI *cache, struct ebl *ebl);
-
 
 /* Compute what's known about a call frame when the PC is at ADDRESS.
    Returns 0 for success or -1 for errors.
@@ -171,7 +166,6 @@ extern int dwarf_frame_register (Dwarf_Frame *frame, int regno,
 /* Find the CFI for this module.  Returns NULL if there is no CFI.
    On success, fills in *BIAS with the difference between addresses
    within the loaded module and those in the CFI referring to it.
-   This does dwarf_cfi_setebl for you, so another call is not required.
    The pointer returned can be used until the module is cleaned up.
    Calling this more than once returns the same pointer.  */
 extern Dwarf_CFI *dwfl_module_getcfi (Dwfl_Module *mod, Dwarf_Addr *bias);
