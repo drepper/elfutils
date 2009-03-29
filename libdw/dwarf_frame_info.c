@@ -54,10 +54,21 @@
 #include "unwindP.h"
 
 int
-dwarf_frame_return_address_register (fs, signalp)
+dwarf_frame_info (fs, start, end, signalp)
      Dwarf_Frame *fs;
+     Dwarf_Addr *start;
+     Dwarf_Addr *end;
      bool *signalp;
 {
-  *signalp = fs->fde->cie->signal_frame;
+  /* Maybe there was a previous error.  */
+  if (fs == NULL)
+    return -1;
+
+  if (start != NULL)
+    *start = fs->start;
+  if (end != NULL)
+    *end = fs->end;
+  if (signalp != NULL)
+    *signalp = fs->fde->cie->signal_frame;
   return fs->fde->cie->return_address_register;
 }

@@ -1,5 +1,5 @@
 /* Test program for CFI handling.
-   Copyright (C) 2006 Red Hat, Inc.
+   Copyright (C) 2006, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -94,10 +94,13 @@ handle_address (GElf_Addr pc, Dwfl *dwfl)
   if (result != 0)
     error (EXIT_FAILURE, 0, "dwfl_addrframe: %s", dwfl_errmsg (-1));
 
-  printf ("%#" PRIx64 ":\n", pc);
-
+  Dwarf_Addr start = pc;
+  Dwarf_Addr end = pc;
   bool signalp;
-  int ra_regno = dwarf_frame_return_address_register (frame, &signalp);
+  int ra_regno = dwarf_frame_info (frame, &start, &end, &signalp);
+
+  printf ("%#" PRIx64 " => [%#" PRIx64 ", %#" PRIx64 "):\n", pc, start, end);
+
   if (ra_regno < 0)
     printf ("\treturn address register unavailable (%s)\n",
 	    dwarf_errmsg (0));

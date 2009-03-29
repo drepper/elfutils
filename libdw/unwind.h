@@ -120,23 +120,24 @@ extern int dwarf_cfi_addrframe (Dwarf_CFI *cache,
 				Dwarf_Addr address, Dwarf_Frame **frame)
   __nonnull_attribute__ (3);
 
+/* Return the DWARF register number used in FRAME to denote
+   the return address in FRAME's caller frame.  The remaining
+   arguments can be non-null to fill in more information.
+
+   Fill [*START, *END) with the PC range to which FRAME's information applies.
+   Fill in *SIGNALP to indicate whether this is a signal-handling frame.
+   If true, this is the implicit call frame that calls a signal handler.
+   This frame's "caller" is actually the interrupted state, not a call;
+   its return address is an exact PC, not a PC after a call instruction.  */
+extern int dwarf_frame_info (Dwarf_Frame *frame,
+			     Dwarf_Addr *start, Dwarf_Addr *end, bool *signalp);
+
 /* Deliver a DWARF expression that yields the Canonical Frame Address at
    this frame state.  Returns -1 for errors, or the number of operations
    stored at *OPS.  That pointer can be used only as long as FRAME is alive
    and unchanged.  Returns zero if the CFA cannot be determined here.  */
 extern int dwarf_frame_cfa (Dwarf_Frame *frame, Dwarf_Op **ops)
   __nonnull_attribute__ (2);
-
-/* Return the DWARF register number used in FRAME to denote
-   the return address in FRAME's caller frame.
-
-   Fill in *SIGNALP to indicate whether this is a signal-handling frame.
-   If true, this is the implicit call frame that calls a signal handler.
-   This frame's "caller" is actually the interrupted state, not a call;
-   its return address is an exact PC, not a PC after a call instruction.  */
-extern int dwarf_frame_return_address_register (Dwarf_Frame *frame,
-						bool *signalp)
-  __nonnull_attribute__ (1, 2);
 
 /* Deliver a DWARF expression that yields the location or value of
    DWARF register number REGNO in the state described by FRAME.

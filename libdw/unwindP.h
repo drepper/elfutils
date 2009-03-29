@@ -176,6 +176,10 @@ struct dwarf_frame_register
    at a particular PC location described by an FDE.  */
 struct Dwarf_Frame_s
 {
+  /* This frame description covers PC values in [start, end).  */
+  Dwarf_Addr start;
+  Dwarf_Addr end;
+
   Dwarf_CFI *cache;
 
   /* Previous state saved by DW_CFA_remember_state, or .cie->initial_state,

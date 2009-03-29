@@ -195,7 +195,7 @@ ELFUTILS_0.138 {
     *;
 } ELFUTILS_0.136;
 
-ELFUTILS_0.138_UNWIND {
+ELFUTILS_0.140_UNWIND {
   global:
     # XXX new unwind stuff not decided yet
     dwarf_next_cfi;
@@ -206,7 +206,7 @@ ELFUTILS_0.138_UNWIND {
     dwarf_cfi_setebl;
     dwarf_frame_cfa;
     dwarf_frame_register;
-    dwarf_frame_return_address_register;
+    dwarf_frame_info;
     dwfl_addrframe;
     dwfl_module_getcfi;
 } ELFUTILS_0.138;

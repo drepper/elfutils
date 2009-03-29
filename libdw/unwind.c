@@ -133,6 +133,8 @@ execute_cfi (Dwarf_CFI *cache,
       Dwarf_Word operand = opcode & CFI_PRIMARY_MAX;
       switch (opcode)
 	{
+	  /* These cases move LOC, i.e. "create a new table row".  */
+
 	case DW_CFA_advance_loc1:
 	  operand = *program++;
 	case DW_CFA_advance_loc + 0 ... DW_CFA_advance_loc + CFI_PRIMARY_MAX:
@@ -154,6 +156,10 @@ execute_cfi (Dwarf_CFI *cache,
 	  loc = read_encoded_value (cache, cie->fde_encoding, &program);
 	  break;
 
+	  /* Now all following cases affect this row, but do not touch LOC.
+	     These cases end with 'continue'.  We only get out of the
+	     switch block for the row-copying (LOC-moving) cases above.  */
+
 	case DW_CFA_def_cfa:
 	  get_uleb128 (operand, program);
 	  get_uleb128 (offset, program);
@@ -164,13 +170,13 @@ execute_cfi (Dwarf_CFI *cache,
 	  /* Prime the rest of the Dwarf_Op so dwarf_frame_cfa can use it.  */
 	  fs->cfa_data.offset.atom = DW_OP_bregx;
 	  fs->cfa_data.offset.offset = 0;
-	  break;
+	  continue;
 
 	case DW_CFA_def_cfa_register:
 	  get_uleb128 (regno, program);
 	  cfi_assert (fs->cfa_rule == cfa_offset);
 	  fs->cfa_val_reg = regno;
-	  break;
+	  continue;
 
 	case DW_CFA_def_cfa_sf:
 	  get_uleb128 (operand, program);
@@ -183,7 +189,7 @@ execute_cfi (Dwarf_CFI *cache,
 	def_cfa_offset:
 	  cfi_assert (fs->cfa_rule == cfa_offset);
 	  fs->cfa_val_offset = offset;
-	  break;
+	  continue;
 
 	case DW_CFA_def_cfa_offset_sf:
 	  get_sleb128 (sf_offset, program);
@@ -198,17 +204,17 @@ execute_cfi (Dwarf_CFI *cache,
 	  fs->cfa_data.expr.data = (unsigned char *) program;
 	  fs->cfa_data.expr.length = operand;
 	  program += operand;
-	  break;
+	  continue;
 
 	case DW_CFA_undefined:
 	  get_uleb128 (regno, program);
 	  register_rule (regno, undefined, 0);
-	  break;
+	  continue;
 
 	case DW_CFA_same_value:
 	  get_uleb128 (regno, program);
 	  register_rule (regno, same_value, 0);
-	  break;
+	  continue;
 
 	case DW_CFA_offset_extended:
 	  get_uleb128 (operand, program);
@@ -217,7 +223,7 @@ execute_cfi (Dwarf_CFI *cache,
 	  offset *= cie->data_alignment_factor;
 	offset_extended:
 	  register_rule (operand, offset, offset);
-	  break;
+	  continue;
 
 	case DW_CFA_offset_extended_sf:
 	  get_uleb128 (operand, program);
@@ -231,7 +237,7 @@ execute_cfi (Dwarf_CFI *cache,
 	  offset *= cie->data_alignment_factor;
 	val_offset:
 	  register_rule (operand, val_offset, offset);
-	  break;
+	  continue;
 
 	case DW_CFA_val_offset_sf:
 	  get_uleb128 (operand, program);
@@ -243,7 +249,7 @@ execute_cfi (Dwarf_CFI *cache,
 	  get_uleb128 (regno, program);
 	  get_uleb128 (operand, program);
 	  register_rule (regno, register, operand);
-	  break;
+	  continue;
 
 	case DW_CFA_expression:
 	  get_uleb128 (regno, program);
@@ -253,7 +259,7 @@ execute_cfi (Dwarf_CFI *cache,
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
 	  register_rule (regno, expression, offset);
 	  program += operand;
-	  break;
+	  continue;
 
 	case DW_CFA_val_expression:
 	  get_uleb128 (regno, program);
@@ -263,7 +269,7 @@ execute_cfi (Dwarf_CFI *cache,
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
 	  register_rule (regno, val_expression, offset);
 	  program += operand;
-	  break;
+	  continue;
 
 	case DW_CFA_restore_extended:
 	  get_uleb128 (operand, program);
@@ -273,7 +279,7 @@ execute_cfi (Dwarf_CFI *cache,
 	    {
 	      /* Special case hack to give backend abi_cfi a shorthand.  */
 	      cache->default_same_value = true;
-	      break;
+	      continue;
 	    }
 
 	  /* This can't be used in the CIE's own initial instructions.  */
@@ -286,7 +292,7 @@ execute_cfi (Dwarf_CFI *cache,
 	    fs->regs[operand] = cie->initial_state->regs[operand];
 	  else
 	    fs->regs[operand].rule = reg_unspecified;
-	  break;
+	  continue;
 
 	case DW_CFA_remember_state:
 	  {
@@ -298,7 +304,7 @@ execute_cfi (Dwarf_CFI *cache,
 		goto out;
 	      }
 	    fs = copy;
-	    break;
+	    continue;
 	  }
 
 	case DW_CFA_restore_state:
@@ -309,10 +315,10 @@ execute_cfi (Dwarf_CFI *cache,
 	    free (fs);
 	    fs = prev;
 	  }
-	  break;
+	  continue;
 
 	case DW_CFA_nop:
-	  break;
+	  continue;
 
 	case DW_CFA_GNU_window_save:
 	  /* This is magic shorthand used only by SPARC.  It's equivalent
@@ -333,22 +339,29 @@ execute_cfi (Dwarf_CFI *cache,
 	      fs->regs[regno].rule = reg_offset;
 	      fs->regs[regno].value = (regno - 16) * address_size;
 	    }
-	  break;
+	  continue;
 
 	case DW_CFA_GNU_args_size:
 	  /* XXX is this useful for anything? */
 	  get_uleb128 (operand, program);
-	  break;
+	  continue;
 
 	default:
 	  cfi_assert (false);
-	  break;
+	  continue;
 	}
 
-      if (find_pc < loc)
-	/* We have just advanced past the address we're looking for.
-	   The state currently described is what we want to see.  */
-	break;
+      /* We get here only for the cases that have just moved LOC.  */
+      if (find_pc >= loc)
+	/* This advance has not yet reached FIND_PC.  */
+	fs->start = loc;
+      else
+	{
+	  /* We have just advanced past the address we're looking for.
+	     The state currently described is what we want to see.  */
+	  fs->end = loc;
+	  break;
+	}
     }
 
   /* "The end of the instruction stream can be thought of as a
@@ -357,7 +370,8 @@ execute_cfi (Dwarf_CFI *cache,
 
      When we fall off the end of the program without an advance_loc/set_loc
      that put us past FIND_PC, the final state left by the FDE program
-     applies to this address (the caller ensured it was inside the FDE).  */
+     applies to this address (the caller ensured it was inside the FDE).
+     This address (FDE->end) is already in FS->end as set by the caller.  */
 
 #undef register_rule
 #undef cfi_assert
@@ -440,6 +454,8 @@ __libdw_frame_at_address (Dwarf_CFI *cache, struct dwarf_fde *fde,
     return DWARF_E_NOMEM;
 
   fs->fde = fde;
+  fs->start = fde->start;
+  fs->end = fde->end;
 
   int result = execute_cfi (cache, fde->cie, &fs,
 			    fde->instructions, fde->instructions_end, false,
