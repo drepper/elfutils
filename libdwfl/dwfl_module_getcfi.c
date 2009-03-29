@@ -1,5 +1,5 @@
 /* Find CFI for a module in libdwfl.
-   Copyright (C) 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -61,15 +61,13 @@ dwfl_module_getcfi (mod, bias)
 
   if (mod->cfi == NULL)
     {
-      Elf *elf = INTUSE(dwfl_module_getelf) (mod, bias);
-      if (elf != NULL)
+      mod->cfi = INTUSE(dwarf_getcfi) (INTUSE(dwfl_module_getdwarf) (mod,
+								     bias));
+      if (mod->cfi == NULL && mod->main.elf != NULL)
 	{
-	  Dwarf *dw = INTUSE(dwfl_module_getdwarf) (mod, bias);
-	  mod->cfi_elf = dw == NULL;
-	  mod->cfi = (mod->cfi_elf ? INTUSE(dwarf_getcfi_elf) (elf)
-		      : INTUSE(dwarf_getcfi) (dw));
-	  if (mod->cfi == NULL)
-	    __libdwfl_seterrno (DWFL_E_LIBDW);
+	  mod->cfi_elf = true;
+	  *bias = mod->main.bias;
+	  mod->cfi = INTUSE(dwarf_getcfi_elf) (mod->main.elf);
 	}
 
       if (mod->cfi != NULL && mod->cfi->ebl == NULL)
