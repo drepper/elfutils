@@ -21,7 +21,7 @@ dwarf::attr_value::line_info () const
   CUDIE (cudie, _m_attr.cu);
   Dwarf_Lines *lines;
   size_t n;
-  xif (dwarf_getsrclines (&cudie, &lines, &n) < 0);
+  xif (thisattr (), dwarf_getsrclines (&cudie, &lines, &n) < 0);
 
   return line_info_table (_m_attr.cu->files);
 }
@@ -96,10 +96,10 @@ dwarf::source_file::mtime () const
 
   Dwarf_Files *files;
   Dwarf_Word idx;
-  xif (get_files (thisattr (), &files, &idx));
+  xif (thisattr (), get_files (thisattr (), &files, &idx));
 
   Dwarf_Word result;
-  xif (dwarf_filesrc (files, idx, &result, NULL) == NULL);
+  xif (thisattr (), dwarf_filesrc (files, idx, &result, NULL) == NULL);
   return result;
 }
 
@@ -111,10 +111,10 @@ dwarf::source_file::size () const
 
   Dwarf_Files *files;
   Dwarf_Word idx;
-  xif (get_files (thisattr (), &files, &idx));
+  xif (thisattr (), get_files (thisattr (), &files, &idx));
 
   Dwarf_Word result;
-  xif (dwarf_filesrc (files, idx, NULL, &result) == NULL);
+  xif (thisattr (), dwarf_filesrc (files, idx, NULL, &result) == NULL);
   return result;
 }
 
@@ -126,10 +126,10 @@ dwarf::source_file::name () const
 
   Dwarf_Files *files;
   Dwarf_Word idx;
-  xif (get_files (thisattr (), &files, &idx));
+  xif (thisattr (), get_files (thisattr (), &files, &idx));
 
   const char *result = dwarf_filesrc (files, idx, NULL, NULL);
-  xif (result == NULL);
+  xif (thisattr (), result == NULL);
   return result;
 }
 
@@ -147,12 +147,12 @@ dwarf::source_file::to_string () const
 
   Dwarf_Files *files;
   Dwarf_Word idx;
-  xif (get_files (thisattr (), &files, &idx));
+  xif (thisattr (), get_files (thisattr (), &files, &idx));
 
   Dwarf_Word file_mtime;
   Dwarf_Word file_size;
   const char *result = dwarf_filesrc (files, idx, &file_mtime, &file_size);
-  xif (result == NULL);
+  xif (thisattr (), result == NULL);
 
   if (likely (file_mtime == 0) && likely (file_size == 0))
     return plain_string (result);
@@ -214,7 +214,7 @@ dwarf::file_table::find (const source_file &src) const
       // Same table, just cons an iterator using its index.
       Dwarf_Files *files;
       Dwarf_Word idx;
-      xif (get_files (&src._m_attr, &files, &idx));
+      xif (files->cu, get_files (&src._m_attr, &files, &idx));
       return const_iterator (*this, idx);
     }
 
@@ -307,11 +307,11 @@ dwarf::line_entry::operator== (const dwarf::line_entry &other) const
   Dwarf_Word atime;
   Dwarf_Word asize;
   const char *aname = dwarf_linesrc (a, &atime, &asize);
-  xif (aname == NULL);
+  xif (a->files->cu, aname == NULL);
   Dwarf_Word btime;
   Dwarf_Word bsize;
   const char *bname = dwarf_linesrc (b, &btime, &bsize);
-  xif (bname == NULL);
+  xif (b->files->cu, bname == NULL);
 
   /* The mtime and size only count when encoded as nonzero.
      If either side is zero, we don't consider the field.  */

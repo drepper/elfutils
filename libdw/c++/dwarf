@@ -262,15 +262,27 @@ namespace elfutils
     typedef known_enum< ::DW_AT_location> ops;
 
   private:
-    // XXX make this an instance method to include irritant context
-    static void throw_libdw (void) // XXX raises (...)
-    {
-      throw std::runtime_error(::dwarf_errmsg (-1));
-    }
-    static inline void xif (bool fail)
+    static void throw_libdw (::Dwarf *dw); // XXX raises (...)
+    static void throw_libdw (::Dwarf_CU *); // XXX raises (...)
+
+    inline void xif (bool fail) const
     {
       if (unlikely (fail))
-	throw_libdw ();
+	throw_libdw (_m_dw);
+    }
+    static inline void xif (::Dwarf_CU *cu, bool fail)
+    {
+      if (unlikely (fail))
+	throw_libdw (cu);
+    }
+
+    static inline void xif (const ::Dwarf_Attribute *attr, bool fail)
+    {
+      xif (attr->cu, fail);
+    }
+    static inline void xif (const ::Dwarf_Die *die, bool fail)
+    {
+      xif (die->cu, fail);
     }
 
     template<typename raw, typename raw_element, typename element,
@@ -394,14 +406,19 @@ namespace elfutils
       friend class attr_value;
     protected:
 
+      inline void xif (bool fail) const
+      {
+	dwarf::xif (_m_die.cu, fail);
+      }
+
       inline debug_info_entry ()
       {
 	memset (&_m_die, 0, sizeof _m_die);
       }
 
-      inline debug_info_entry (::Dwarf *dw, ::Dwarf_Off off)
+      inline debug_info_entry (const dwarf &dw, ::Dwarf_Off off)
       {
-	xif (::dwarf_offdie (dw, off, &_m_die) == NULL);
+	dw.xif (::dwarf_offdie (dw._m_dw, off, &_m_die) == NULL);
       }
 
     public:
@@ -492,13 +509,13 @@ namespace elfutils
 	inline const_iterator (const debug_info_entry &parent)
 	{
 	  int result = ::dwarf_child (parent.thisdie (), &_m_die._m_die);
-	  xif (result < 0);
+	  parent.xif (result < 0);
 	}
 
 	// Construct from a reference attribute.
 	inline const_iterator (Dwarf_Attribute *attr)
 	{
-	  xif (::dwarf_formref_die (attr, &_m_die._m_die) == NULL);
+	  dwarf::xif (attr, ::dwarf_formref_die (attr, &_m_die._m_die) == NULL);
 	}
 
       public:
@@ -533,7 +550,7 @@ namespace elfutils
 	inline const_iterator &operator++ () // prefix
 	{
 	  int result = ::dwarf_siblingof (&_m_die._m_die, &_m_die._m_die);
-	  xif (result < 0);
+	  _m_die.xif (result < 0);
 	  if (result > 0)	// Hit the end.
 	    *this = const_iterator ();
 	  return *this;
@@ -643,7 +660,7 @@ namespace elfutils
 	  _m_attr.valp = NULL;
 	  int result = ::dwarf_getattrs (&_m_die._m_die, &getattrs_callback,
 					 (void *) this, _m_offset);
-	  xif (result < 0);
+	  _m_die.xif (result < 0);
 	  _m_offset = result;
 	  return *this;
 	}
