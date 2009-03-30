@@ -4222,8 +4222,9 @@ check_location_expression (struct read_ctx *parent_ctx,
 		  || opcode == DW_OP_deref_size
 		  || opcode == DW_OP_plus_uconst)
 	      && (value1 > (uint64_t)(uint32_t)-1))
-	    wr_error (&where, ": %s with operand %#" PRIx64 " on 32-bit machine.\n",
-		      dwarf_locexpr_opcode_string (opcode), value1);
+	    wr_message (mc_loc | mc_acc_bloat | mc_impact_3, &where,
+			": %s with operand %#" PRIx64 " on 32-bit machine.\n",
+			dwarf_locexpr_opcode_string (opcode), value1);
 	};
     }
 
