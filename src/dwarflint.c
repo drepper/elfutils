@@ -692,6 +692,8 @@ struct abbrev
   uint16_t tag;
   bool has_children;
 
+  struct where where;
+
   /* Whether some DIE uses this abbrev.  */
   bool used;
 
@@ -1714,6 +1716,7 @@ abbrev_table_load (struct read_ctx *ctx)
       WIPE (*cur);
 
       cur->code = abbr_code;
+      cur->where = where;
 
       /* Abbreviation tag.  */
       uint64_t abbr_tag;
@@ -3350,6 +3353,8 @@ read_die_chain (struct read_ctx *ctx,
 			": internal error: unhandled form 0x%x\n", form);
 	    }
 	}
+
+      where.ref = &abbrev->where;
 
       if (abbrev->has_children)
 	{
