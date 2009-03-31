@@ -2868,7 +2868,6 @@ read_die_chain (struct read_ctx *ctx,
 		struct abbrev_table *abbrevs,
 		Elf_Data *strings,
 		bool dwarf_64, bool addr_64,
-		struct ref_record *die_refs,
 		struct ref_record *local_die_refs,
 		struct coverage *strings_coverage,
 		struct relocation_data *reloc,
@@ -3362,7 +3361,7 @@ read_die_chain (struct read_ctx *ctx,
 	{
 	  int st = read_die_chain (ctx, cu, abbrevs, strings,
 				   dwarf_64, addr_64,
-				   die_refs, local_die_refs,
+				   local_die_refs,
 				   strings_coverage, reloc, file);
 	  if (st == -1)
 	    return -1;
@@ -3387,7 +3386,6 @@ check_cu_structural (struct read_ctx *ctx,
 		     struct abbrev_table *abbrev_chain,
 		     Elf_Data *strings,
 		     bool dwarf_64,
-		     struct ref_record *die_refs,
 		     struct coverage *strings_coverage,
 		     struct relocation_data *reloc,
 		     struct elf_file *file)
@@ -3462,7 +3460,7 @@ check_cu_structural (struct read_ctx *ctx,
   cu->cudie_offset = read_ctx_get_offset (ctx) + cu->offset;
   if (read_die_chain (ctx, cu, abbrevs, strings,
 		      dwarf_64, address_size == 8,
-		      die_refs, &local_die_refs, strings_coverage,
+		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
 		      file) >= 0)
     {
@@ -3581,7 +3579,7 @@ check_info_structural (struct section_data *data,
 	  cu_ctx.ptr = ctx.ptr;
 
 	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain,
-				    strings, dwarf_64, &die_refs,
+				    strings, dwarf_64,
 				    strings_coverage, reloc, data->file))
 	    {
 	      success = false;
