@@ -116,7 +116,6 @@ execute_cfi (Dwarf_CFI *cache,
       return true;
     }
 
-
 #define register_rule(regno, r_rule, r_value) do {	\
     if (unlikely (! enough_registers (regno)))		\
       goto out;						\
@@ -228,8 +227,16 @@ execute_cfi (Dwarf_CFI *cache,
 	case DW_CFA_offset_extended_sf:
 	  get_uleb128 (operand, program);
 	  get_sleb128 (sf_offset, program);
+	offset_extended_sf:
 	  offset = sf_offset * cie->data_alignment_factor;
 	  goto offset_extended;
+
+	case DW_CFA_GNU_negative_offset_extended:
+	  /* GNU extension obsoleted by DW_CFA_offset_extended_sf.  */
+	  get_uleb128 (operand, program);
+	  get_uleb128 (offset, program);
+	  sf_offset = -offset;
+	  goto offset_extended_sf;
 
 	case DW_CFA_val_offset:
 	  get_uleb128 (operand, program);
@@ -257,8 +264,8 @@ execute_cfi (Dwarf_CFI *cache,
 	  /* DW_FORM_block is a ULEB128 length followed by that many bytes.  */
 	  get_uleb128 (operand, program);
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
-	  register_rule (regno, expression, offset);
 	  program += operand;
+	  register_rule (regno, expression, offset);
 	  continue;
 
 	case DW_CFA_val_expression:
@@ -267,8 +274,8 @@ execute_cfi (Dwarf_CFI *cache,
 	  offset = program - (const uint8_t *) cache->data->d_buf;
 	  get_uleb128 (operand, program);
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
-	  register_rule (regno, val_expression, offset);
 	  program += operand;
+	  register_rule (regno, val_expression, offset);
 	  continue;
 
 	case DW_CFA_restore_extended:
