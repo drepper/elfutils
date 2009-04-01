@@ -68,14 +68,15 @@ expected_value_space (int attr, int tag)
 
     case DW_AT_byte_size:
     case DW_AT_byte_stride:
-    case DW_AT_bit_offset:
     case DW_AT_bit_size:
+    case DW_AT_bit_offset:
+    case DW_AT_bit_stride:
     case DW_AT_lower_bound:
     case DW_AT_upper_bound:
     case DW_AT_count:
     case DW_AT_allocated:
     case DW_AT_associated:
-      return VS(reference) | VS(constant);
+      return VS(reference) | VS(constant) | VS(location); // XXX non-loc expr
 
     case DW_AT_stmt_list:
       return VS(lineptr);
@@ -126,7 +127,6 @@ expected_value_space (int attr, int tag)
     case DW_AT_start_scope:
       return VS(constant);
 
-    case DW_AT_bit_stride:
     case DW_AT_binary_scale:
     case DW_AT_decimal_scale:
     case DW_AT_decimal_sign:

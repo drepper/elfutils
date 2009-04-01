@@ -90,6 +90,7 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 # XXX need to figure out C++ dso crapola
 lib_LIBRARIES += libdwpp.a
 libdwpp_a_SOURCES = c++/values.cc \
+		    c++/exception.cc \
 		    c++/known.cc \
 		    c++/line_info.cc \
 		    c++/edit-values.cc

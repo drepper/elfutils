@@ -1,3 +1,8 @@
+2009-03-29  Roland McGrath  <roland@redhat.com>
+
+	* c++/exception.cc: New file.
+	* Makefile.am (libdwpp_a_SOURCES): Add it.
+
 2009-03-25  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf, c++/values.cc: Proper dwarf_constant support.

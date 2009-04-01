@@ -71,7 +71,7 @@ print_die (const dwarf::debug_info_entry &die,
 
   if (die.has_children ())
     {
-      if (indent >= limit)
+      if (limit != 0 && indent >= limit)
 	{
 	  cout << ">...\n";
 	  return;
@@ -96,11 +96,10 @@ process_file (const char *file, unsigned int limit)
 
   cout << file << ":\n";
 
-  if (limit > 0)
-    for (dwarf::compile_units::const_iterator i = dw.compile_units ().begin ();
-	 i != dw.compile_units ().end ();
-	 ++i)
-      print_die (*i, 1, limit);
+  for (dwarf::compile_units::const_iterator i = dw.compile_units ().begin ();
+       i != dw.compile_units ().end ();
+       ++i)
+    print_die (*i, 1, limit);
 }
 
 int
@@ -117,7 +116,7 @@ main (int argc, char *argv[])
 
   cout << hex << setiosflags (ios::showbase);
 
-  unsigned int depth = 1;
+  unsigned int depth = 0;
   if (argc > 1 && sscanf (argv[1], "--depth=%u", &depth) == 1)
     {
       --argc;

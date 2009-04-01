@@ -70,8 +70,9 @@ using namespace std;
 dwarf::value_space
 dwarf::attr_value::what_space () const
 {
+  unsigned int expected = expected_value_space (dwarf_whatattr (thisattr ()),
+						_m_tag);
   unsigned int possible = 0;
-
   switch (dwarf_whatform (thisattr ()))
     {
     case DW_FORM_flag:
@@ -86,6 +87,9 @@ dwarf::attr_value::what_space () const
     case DW_FORM_block4:
       /* Location expression or target constant.  */
       possible = VS(location) | VS(constant);
+      if ((expected & possible) == possible)
+	/* When both are expected, a block is a location expression.  */
+	return VS_location;
       break;
 
     case DW_FORM_data1:
@@ -99,6 +103,9 @@ dwarf::attr_value::what_space () const
 		  | VS(source_file) | VS(source_line) | VS(source_column)
 		  | VS(location) // loclistptr
 		  | VS(lineptr) | VS(macptr) | VS(rangelistptr));
+      if ((expected & possible) == (VS(constant) | VS(location)))
+	/* When both are expected, a constant is not a loclistptr.  */
+	return VS_constant;
       break;
 
     case DW_FORM_string:
@@ -120,8 +127,6 @@ dwarf::attr_value::what_space () const
       throw std::runtime_error ("XXX bad form");
     }
 
-  unsigned int expected = expected_value_space (dwarf_whatattr (thisattr ()),
-						_m_tag);
   if (unlikely ((expected & possible) == 0))
     {
       if (expected == 0 && possible == (VS(unit_reference) | VS(reference)))
@@ -220,13 +225,13 @@ dwarf::attr_value::to_string () const
 }
 
 // A few cases are trivial.
-#define SIMPLE(type, name, form)				\
-  type								\
-  dwarf::attr_value::name () const				\
-  {								\
-    type result;						\
-    xif (dwarf_form##form (thisattr (), &result) < 0);	\
-    return result;						\
+#define SIMPLE(type, name, form)					\
+  type									\
+  dwarf::attr_value::name () const					\
+  {									\
+    type result;							\
+    xif (thisattr (), dwarf_form##form (thisattr (), &result) < 0);	\
+    return result;							\
   }
 
 SIMPLE (bool, flag, flag)
@@ -241,7 +246,7 @@ const char *
 dwarf::attr_value::string () const
 {
   const char *result = dwarf_formstring (thisattr ());
-  xif (result == NULL);
+  xif (thisattr(), result == NULL);
   return result;
 }
 
@@ -281,7 +286,7 @@ dwarf::attr_value::constant_block () const
     case DW_FORM_block1:
     case DW_FORM_block2:
     case DW_FORM_block4:
-      xif (dwarf_formblock (thisattr (), &block) < 0);
+      xif (thisattr(), dwarf_formblock (thisattr (), &block) < 0);
       break;
 
     case DW_FORM_data1:
@@ -413,8 +418,8 @@ range_list_advance (int secndx,
 dwarf::range_list::const_iterator &
 dwarf::range_list::const_iterator::operator++ ()
 {
-  xif (range_list_advance (IDX_debug_ranges, _m_cu, _m_base,
-			   _m_begin, _m_end, _m_offset, NULL));
+  xif (_m_cu, range_list_advance (IDX_debug_ranges, _m_cu, _m_base,
+				  _m_begin, _m_end, _m_offset, NULL));
   return *this;
 }
 
@@ -518,7 +523,8 @@ dwarf::location_attr::const_iterator::operator++ ()
   else
     {
       // Advance to next list entry.
-      xif (range_list_advance (IDX_debug_loc, _m_attr._m_attr._m_attr.cu,
+      xif (_m_attr._m_attr.thisattr (),
+	   range_list_advance (IDX_debug_loc, _m_attr._m_attr._m_attr.cu,
 			       _m_base, _m_begin, _m_end, _m_offset,
 			       &_m_attr._m_attr._m_attr.valp));
       if (_m_offset > 1)
@@ -537,5 +543,5 @@ dwarf::location_attr::to_string () const
 {
   if (is_list ())
     return hex_string (_m_attr.constant (), "#");
-  return "XXX";
+  return "XXX-expr";
 }
