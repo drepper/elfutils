@@ -2444,6 +2444,10 @@ check_global_die_references (struct cu *cu_chain)
 	    retval = false;
 	  }
 	else if (ref_cu == it)
+	  /* This is technically not a problem, so long as the
+	     reference is valid, which it is.  But warn about this
+	     anyway, perhaps local reference could be formed on fewer
+	     number of bytes.  */
 	  wr_message (mc_impact_2 | mc_acc_suboptimal | mc_die_rel,
 		      &ref->who,
 		      ": local reference to " PRI_DIE " formed as global.\n",
@@ -4684,7 +4688,8 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
 	{
 	  if (value != 0)
 	    wr_message (mc_impact_2 | mc_reloc, &where,
-			": SHR_RELA relocates a place with non-zero value.\n");
+			": SHR_RELA relocates a place with non-zero value (addend=%#"
+			PRIx64", value=%#"PRIx64").\n", rela->r_addend, value);
 	  cur->addend = rela->r_addend;
 	}
       else
