@@ -151,21 +151,7 @@ extern "C"
 				     struct where *wh,
 				     uint64_t start, uint64_t end);
 
-
-  /* Functions and data structures for handling of address range
-     coverage.  We use that to find holes of unused bytes in DWARF
-     string table.  */
-
-  typedef uint_fast32_t coverage_emt_type;
-  static const size_t coverage_emt_size = sizeof (coverage_emt_type);
-  static const size_t coverage_emt_bits = 8 * sizeof (coverage_emt_type);
-
-  struct coverage
-  {
-    size_t alloc;
-    uint64_t size;
-    coverage_emt_type *buf;
-  };
+# include "dwarflint-coverage.h"
 
   struct section_coverage
   {
@@ -183,14 +169,6 @@ extern "C"
     bool allow_overlap;
     struct section_coverage *scos;
   };
-
-  void coverage_init (struct coverage *ar, uint64_t size);
-  void coverage_add (struct coverage *ar, uint64_t begin, uint64_t end);
-  bool coverage_is_covered (struct coverage *ar, uint64_t address);
-  bool coverage_find_holes (struct coverage *ar,
-			    bool (*cb)(uint64_t begin, uint64_t end, void *data),
-			    void *data);
-  void coverage_free (struct coverage *ar);
 
   void section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
 			      GElf_Shdr *shdr);

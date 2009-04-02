@@ -107,22 +107,6 @@ static bool tolerate_nodebug = false;
 
 static void process_file (Dwarf *dwarf, const char *fname, bool only_one);
 
-#define REALLOC(A, BUF)						\
-  do {								\
-    typeof ((A)) _a = (A);					\
-    if (_a->size == _a->alloc)					\
-      {								\
-	if (_a->alloc == 0)					\
-	  _a->alloc = 8;					\
-	else							\
-	  _a->alloc *= 2;					\
-	_a->BUF = xrealloc (_a->BUF,				\
-			    sizeof (*_a->BUF) * _a->alloc);	\
-      }								\
-  } while (0)
-
-#define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
-
 struct message_term
 {
   /* Given a term like A && !B && C && !D, we decompose it thus: */
@@ -1988,148 +1972,43 @@ ref_record_free (struct ref_record *rr)
     free (rr->refs);
 }
 
-
-void
-coverage_init (struct coverage *ar, uint64_t size)
-{
-  size_t ctemts = size / coverage_emt_bits + 1;
-  ar->buf = xcalloc (ctemts, sizeof (ar->buf));
-  ar->alloc = ctemts;
-  ar->size = size;
-}
-
-void
-coverage_add (struct coverage *ar, uint64_t begin, uint64_t end)
-{
-  assert (ar);
-  assert (begin <= end);
-  assert (end <= ar->size);
-
-  uint64_t bi = begin / coverage_emt_bits;
-  uint64_t ei = end / coverage_emt_bits;
-
-  uint8_t bb = begin % coverage_emt_bits;
-  uint8_t eb = end % coverage_emt_bits;
-
-  coverage_emt_type bm = (coverage_emt_type)-1 >> bb;
-  coverage_emt_type em = (coverage_emt_type)-1 << (coverage_emt_bits - 1 - eb);
-
-  if (bi == ei)
-    ar->buf[bi] |= bm & em;
-  else
-    {
-      ar->buf[bi] |= bm;
-      ar->buf[ei] |= em;
-      memset (ar->buf + bi + 1, -1, coverage_emt_size * (ei - bi - 1));
-    }
-}
-
 bool
-coverage_is_covered (struct coverage *ar, uint64_t address)
-{
-  assert (ar);
-  assert (address <= ar->size);
-
-  uint64_t bi = address / coverage_emt_bits;
-  uint8_t bb = address % coverage_emt_bits;
-  coverage_emt_type bm = (coverage_emt_type)1 << (coverage_emt_bits - 1 - bb);
-  return !!(ar->buf[bi] & bm);
-}
-
-bool
-coverage_pristine (struct coverage *ar, uint64_t begin, uint64_t length)
+coverage_pristine (struct coverage *cov, uint64_t begin, uint64_t length)
 {
   for (uint64_t i = 0; i < length; ++i)
-    if (coverage_is_covered (ar, begin + i))
+    if (coverage_is_covered (cov, begin + i))
       return false;
   return true;
 }
 
 bool
-coverage_find_holes (struct coverage *ar,
-		     bool (*cb)(uint64_t begin, uint64_t end, void *user),
-		     void *user)
-{
-  bool hole;
-  uint64_t begin = 0;
-
-  void hole_begin (uint64_t a)
-  {
-    begin = a;
-    hole = true;
-  }
-
-  bool hole_end (uint64_t a)
-  {
-    assert (hole);
-    if (a != begin)
-      if (!cb (begin, a - 1, user))
-	return false;
-    hole = false;
-    return true;
-  }
-
-  hole_begin (0);
-  for (size_t i = 0; i < ar->alloc; ++i)
-    {
-      if (ar->buf[i] == (coverage_emt_type)-1)
-	{
-	  if (hole)
-	    if (!hole_end (i * coverage_emt_bits))
-	      return false;
-	}
-      else
-	{
-	  coverage_emt_type tmp = ar->buf[i];
-	  for (uint8_t j = 1; j <= coverage_emt_bits; ++j)
-	    {
-	      coverage_emt_type mask
-		= (coverage_emt_type)1 << (coverage_emt_bits - j);
-	      uint64_t addr = i * coverage_emt_bits + j - 1;
-	      if (addr > ar->size)
-		break;
-	      if (!hole && !(tmp & mask))
-		hole_begin (addr);
-	      else if (hole && (tmp & mask))
-		if (!hole_end (addr))
-		  return false;
-	    }
-	}
-    }
-  if (hole)
-    if (!hole_end (ar->size))
-      return false;
-
-  return true;
-}
-
-bool
-found_hole (uint64_t begin, uint64_t end, void *data)
+found_hole (uint64_t start, uint64_t length, void *data)
 {
   struct hole_info *info = (struct hole_info *)data;
   bool all_zeroes = true;
-  for (uint64_t i = begin; i <= end; ++i)
+  for (uint64_t i = start; i < start + length; ++i)
     if (((char*)info->data)[i] != 0)
       {
 	all_zeroes = false;
 	break;
       }
 
+  uint64_t end = start + length;
   if (all_zeroes)
     {
       /* Zero padding is valid, if it aligns on the bounds of
 	 info->align bytes, and is not excessive.  */
       if (!(info->align != 0 && info->align != 1
-	    && ((end + 1) % info->align == 0) && (begin % 4 != 0)
-	    && (end + 1 - begin < info->align)))
+	    && (end % info->align == 0) && (start % 4 != 0)
+	    && (length < info->align)))
 	wr_message_padding_0 (info->category, &WHERE (info->section, NULL),
-			      begin, end);
+			      start, end - 1);
     }
   else
     /* XXX: This actually lies when the unreferenced portion is
        composed of sequences of zeroes and non-zeroes.  */
     wr_message_padding_n0 (info->category, &WHERE (info->section, NULL),
-			   begin, end);
+			   start, end - 1);
 
   return true;
 }
@@ -2191,12 +2070,6 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
   return true;
 }
 
-void
-coverage_free (struct coverage *ar)
-{
-  free (ar->buf);
-}
-
 
 void
 section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
@@ -2208,7 +2081,7 @@ section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
 
   sco->scn = scn;
   sco->shdr = *shdr;
-  coverage_init (&sco->cov, shdr->sh_size);
+  WIPE (sco->cov);
   sco->hit = false;
 }
 
@@ -2264,7 +2137,7 @@ coverage_map_add (struct coverage_map *coverage_map,
      sections in coverage map.  Whatever is left uncovered doesn't
      fall anywhere and is reported.  */
   struct coverage range_cov;
-  coverage_init (&range_cov, length);
+  WIPE (range_cov);
 
   for (size_t i = 0; i < coverage_map->size; ++i)
     {
@@ -2289,7 +2162,7 @@ coverage_map_add (struct coverage_map *coverage_map,
 
       found = true;
 
-      if (end == address)
+      if (length == 0)
 	/* Empty range.  That means no actual coverage, and we can
 	   also be sure that there are no more sections that this one
 	   falls into.  */
@@ -2298,12 +2171,12 @@ coverage_map_add (struct coverage_map *coverage_map,
       uint64_t cov_begin
 	= address < shdr->sh_addr ? 0 : address - shdr->sh_addr;
       uint64_t cov_end
-	= (end < s_end ? end - shdr->sh_addr
-	   : shdr->sh_size) - 1; /* -1 because cov_end is inclusive.  */
-      assert (cov_begin <= cov_end);
+	= end < s_end ? end - shdr->sh_addr : shdr->sh_size;
+      assert (cov_begin < cov_end);
 
-      uint64_t r_cov_begin = cov_begin + shdr->sh_addr - address;
-      uint64_t r_cov_end = cov_end + shdr->sh_addr - address;
+      uint64_t r_delta = shdr->sh_addr - address;
+      uint64_t r_cov_begin = cov_begin + r_delta;
+      uint64_t r_cov_end = cov_end + r_delta;
 
       if (!overlap && !coverage_map->allow_overlap
 	  && !coverage_pristine (cov, cov_begin, cov_end - cov_begin))
@@ -2317,11 +2190,11 @@ coverage_map_add (struct coverage_map *coverage_map,
 	}
 
       /* Section coverage... */
-      coverage_add (cov, cov_begin, cov_end);
+      coverage_add (cov, cov_begin, cov_end - cov_begin);
       sco->hit = true;
 
       /* And range coverage... */
-      coverage_add (&range_cov, r_cov_begin, r_cov_end);
+      coverage_add (&range_cov, r_cov_begin, r_cov_end - r_cov_begin);
     }
 
   if (!found)
@@ -2331,18 +2204,18 @@ coverage_map_add (struct coverage_map *coverage_map,
 	      PRIx64 "..%#" PRIx64 " covers.\n", address, end);
   else
     {
-      bool range_hole (uint64_t h_begin, uint64_t h_end,
+      bool range_hole (uint64_t h_start, uint64_t h_length,
 		       void *user __attribute__ ((unused)))
       {
 	wr_error (where,
 		  ": portion %#" PRIx64 "..%#" PRIx64
 		  ", of the range %#" PRIx64 "..%#" PRIx64
 		  " doesn't fall into any ALLOC & EXEC section.\n",
-		  h_begin + address, h_end + address,
+		  h_start + address, h_start + address + h_length - 1,
 		  address, end);
 	return true;
       }
-      coverage_find_holes (&range_cov, range_hole, NULL);
+      coverage_find_holes (&range_cov, 0, length, range_hole, NULL);
     }
 
   coverage_free (&range_cov);
@@ -2350,7 +2223,7 @@ coverage_map_add (struct coverage_map *coverage_map,
 
 bool
 coverage_map_find_holes (struct coverage_map *coverage_map,
-			 bool (*cb) (uint64_t, uint64_t,
+			 bool (*cb) (uint64_t begin, uint64_t end,
 				     struct section_coverage *, void *),
 			 void *user)
 {
@@ -2358,12 +2231,12 @@ coverage_map_find_holes (struct coverage_map *coverage_map,
     {
       struct section_coverage *sco = coverage_map->scos + i;
 
-      bool wrap_cb (uint64_t h_begin, uint64_t h_end, void *h_user)
+      bool wrap_cb (uint64_t h_start, uint64_t h_length, void *h_user)
       {
-	return cb (h_begin, h_end, sco, h_user);
+	return cb (h_start, h_start + h_length - 1, sco, h_user);
       }
 
-      if (!coverage_find_holes (&sco->cov, wrap_cb, user))
+      if (!coverage_find_holes (&sco->cov, 0, sco->shdr.sh_size, wrap_cb, user))
 	return false;
     }
 
@@ -3141,10 +3014,9 @@ read_die_chain (struct read_ctx *ctx,
 		  {
 		    /* Record used part of .debug_str.  */
 		    const char *strp = (const char *)strings->d_buf + addr;
-		    uint64_t end = addr + strlen (strp);
 
 		    if (strings_coverage != NULL)
-		      coverage_add (strings_coverage, addr, end);
+		      coverage_add (strings_coverage, addr, strlen (strp) + 1);
 		  }
 
 		break;
@@ -3502,7 +3374,7 @@ check_info_structural (struct section_data *data,
   struct coverage strings_coverage_mem, *strings_coverage = NULL;
   if (strings != NULL && check_category (mc_strings))
     {
-      coverage_init (&strings_coverage_mem, strings->d_size);
+      WIPE (strings_coverage_mem);
       strings_coverage = &strings_coverage_mem;
     }
 
@@ -3641,7 +3513,7 @@ check_info_structural (struct section_data *data,
   if (strings_coverage != NULL)
     {
       if (success)
-	coverage_find_holes (strings_coverage, found_hole,
+	coverage_find_holes (strings_coverage, 0, strings->d_size, found_hole,
 			     &((struct hole_info)
 			       {sec_str, mc_strings, 0, strings->d_buf}));
       coverage_free (strings_coverage);
@@ -4282,7 +4154,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 
   if (coverage_is_covered (coverage, addr))
     {
-      wr_error (wh, ": reference to 0x%" PRIx64
+      wr_error (wh, ": reference to %#" PRIx64
 		" points at the middle of location or range list.\n", addr);
       retval = false;
     }
@@ -4443,7 +4315,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	}
 #undef HAVE_OVERLAP
 
-      coverage_add (coverage, where.addr1, read_ctx_get_offset (&ctx) - 1);
+      coverage_add (coverage, where.addr1, read_ctx_get_offset (&ctx) - where.addr1);
       if (done)
 	break;
     }
@@ -4476,7 +4348,7 @@ check_loc_or_range_structural (struct section_data *data,
 #endif
 
   struct coverage coverage;
-  coverage_init (&coverage, ctx.data->d_size);
+  WIPE (coverage);
 
   enum message_category cat = sec == sec_loc ? mc_loc : mc_ranges;
 
@@ -4545,7 +4417,7 @@ check_loc_or_range_structural (struct section_data *data,
       /* We check that all CUs have the same address size when building
 	 the CU chain.  So just take the address size of the first CU in
 	 chain.  */
-      coverage_find_holes (&coverage, found_hole,
+      coverage_find_holes (&coverage, 0, ctx.data->d_size, found_hole,
 			   &((struct hole_info)
 			     {sec, cat, cu_chain->address_size,
 			      ctx.data->d_buf}));

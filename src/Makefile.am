@@ -83,7 +83,7 @@ libar_a_SOURCES = arlib.c arlib2.c
 
 dwarfcmp_SOURCES = dwarfcmp.cc
 
-dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc \
+dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc dwarflint-coverage.c \
 		    dwarflint-expected-at.cc dwarfstrings.c
 
 readelf_SOURCES = readelf.c dwarfstrings.c
