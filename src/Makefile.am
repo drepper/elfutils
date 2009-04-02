@@ -83,13 +83,15 @@ libar_a_SOURCES = arlib.c arlib2.c
 
 dwarfcmp_SOURCES = dwarfcmp.cc
 
-dwarflint_SOURCES = dwarflint.c dwarflint-hl.cc \
-		    dwarflint-expected-at.cc dwarfstrings.c
+dwarflint_SOURCES = dwarflint.c dwarflint.h dwarflint-hl.cc \
+		    dwarflint-expected-at.cc dwarflint-expected.hh \
+		    dwarfstrings.c
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
-		 ldscript.h xelf.h unaligned.h
+		 ldscript.h xelf.h unaligned.h dwarfstrings.h \
+		 expr_opcodes.h
 
 EXTRA_DIST = elf32-i386.script libld_elf_i386.map $(ld_modules) arlib.h \
 	     debugpred.h

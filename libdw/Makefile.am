@@ -94,6 +94,7 @@ libdwpp_a_SOURCES = c++/values.cc \
 		    c++/known.cc \
 		    c++/line_info.cc \
 		    c++/edit-values.cc
+noinst_HEADERS    = c++/dwarf-knowledge.cc
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
@@ -144,7 +145,7 @@ endif
 
 libdw_a_LIBADD = $(addprefix ../libdwfl/,$(shell $(AR) t ../libdwfl/libdwfl.a))
 
-noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h
+noinst_HEADERS += libdwP.h memory-access.h dwarf_abbrev_hash.h known-dwarf.h
 
 EXTRA_DIST = libdw.map
 
