@@ -1,5 +1,5 @@
 /* Clean up Dwarf_CFI structure.
-   Copyright (C) 2006 Red Hat, Inc.
+   Copyright (C) 2006, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -52,7 +52,7 @@
 #endif
 
 #include "libdwP.h"
-#include "unwindP.h"
+#include "cfi.h"
 #include <stdlib.h>
 
 int

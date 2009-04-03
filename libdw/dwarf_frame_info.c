@@ -51,7 +51,7 @@
 # include <config.h>
 #endif
 
-#include "unwindP.h"
+#include "cfi.h"
 
 int
 dwarf_frame_info (fs, start, end, signalp)

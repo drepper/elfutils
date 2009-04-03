@@ -140,7 +140,7 @@ endif
 libdw_a_LIBADD = $(addprefix ../libdwfl/,$(shell $(AR) t ../libdwfl/libdwfl.a))
 
 noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
-		 unwindP.h encoded-value.h
+		 cfi.h encoded-value.h
 
 EXTRA_DIST = libdw.map
 

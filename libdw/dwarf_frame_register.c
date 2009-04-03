@@ -51,7 +51,7 @@
 # include <config.h>
 #endif
 
-#include "unwindP.h"
+#include "cfi.h"
 #include <dwarf.h>
 
 int

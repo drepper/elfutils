@@ -1,4 +1,4 @@
-/* Internal definitions for libdw unwinder code.
+/* Internal definitions for libdw CFI interpreter.
    Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 

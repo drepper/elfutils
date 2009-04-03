@@ -52,7 +52,7 @@
 #endif
 
 #include "libdwP.h"
-#include "unwindP.h"
+#include "cfi.h"
 #include <dwarf.h>
 
 Dwarf_CFI *

@@ -51,7 +51,7 @@
 # include <config.h>
 #endif
 
-#include "unwindP.h"
+#include "cfi.h"
 #include "encoded-value.h"
 #include <search.h>
 #include <stdlib.h>

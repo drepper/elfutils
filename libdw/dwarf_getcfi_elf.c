@@ -56,7 +56,7 @@
 #include <assert.h>
 
 #include "libdwP.h"
-#include "unwindP.h"
+#include "cfi.h"
 #include "encoded-value.h"
 #include <dwarf.h>
 

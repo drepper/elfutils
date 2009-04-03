@@ -1,5 +1,5 @@
 /* Release debugging handling context.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -56,7 +56,7 @@
 #include <stdlib.h>
 
 #include "libdwP.h"
-#include "unwindP.h"
+#include "cfi.h"
 
 
 static void

@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2006 Red Hat, Inc.
+   Copyright (C) 2006, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -48,7 +48,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "libdwflP.h"
-#include "../libdw/unwindP.h"	/* XXX */
+#include "../libdw/cfi.h"	/* XXX */
 
 int
 dwfl_addrframe (dwfl, address, frame)

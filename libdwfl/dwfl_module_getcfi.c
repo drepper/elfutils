@@ -48,8 +48,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "libdwflP.h"
-#include "../libdw/unwindP.h"
-#include "../libdw/unwind.h"	/* XXX */
+#include "../libdw/cfi.h"
 
 Dwarf_CFI *
 dwfl_module_getcfi (mod, bias)
