@@ -1,3 +1,8 @@
+2009-04-03  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (IDX_eh_frame): Remove it.
+	* dwarf_begin_elf.c (dwarf_scnnames): Remove its element.
+
 2009-04-01  Roland McGrath  <roland@redhat.com>
 
 	* dwarf.h: Add DW_CFA_GNU_negative_offset_extended.

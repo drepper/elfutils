@@ -90,8 +90,8 @@ typedef struct Dwarf_Frame_s Dwarf_Frame;
 /* Opaque type representing a CFI section found in a DWARF or ELF file.  */
 typedef struct Dwarf_CFI_s Dwarf_CFI;
 
-/* Use the CFI in the DWARF .debug_frame or .eh_frame section.
-   Returns NULL if there is no such section.
+/* Use the CFI in the DWARF .debug_frame section.
+   Returns NULL if there is no such section (not an error).
    The pointer returned can be used until dwarf_end is called on DWARF,
    and must not be passed to dwarf_cfi_end.
    Calling this more than once returns the same pointer.  */

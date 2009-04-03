@@ -84,7 +84,6 @@ enum
     IDX_debug_aranges,
     IDX_debug_line,
     IDX_debug_frame,
-    IDX_eh_frame,
     IDX_debug_loc,
     IDX_debug_pubnames,
     IDX_debug_str,

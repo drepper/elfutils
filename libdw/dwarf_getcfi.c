@@ -62,14 +62,12 @@ dwarf_getcfi (dbg)
   if (dbg == NULL)
     return NULL;
 
-  if (dbg->cfi == NULL && (dbg->sectiondata[IDX_debug_frame] != NULL
-			   || dbg->sectiondata[IDX_eh_frame] != NULL))
+  if (dbg->cfi == NULL && dbg->sectiondata[IDX_debug_frame] != NULL)
     {
       Dwarf_CFI *cfi = libdw_typed_alloc (dbg, Dwarf_CFI);
 
-      cfi->eh_frame = dbg->sectiondata[IDX_debug_frame] == NULL;
-      cfi->data = (Elf_Data_Scn *) dbg->sectiondata[cfi->eh_frame ? IDX_eh_frame
-						    : IDX_debug_frame];
+      cfi->eh_frame = false;
+      cfi->data = (Elf_Data_Scn *) dbg->sectiondata[IDX_debug_frame];
 
       cfi->search_table = NULL;
       cfi->search_table_vaddr = 0;
@@ -79,8 +77,6 @@ dwarf_getcfi (dbg)
       cfi->frame_vaddr = 0;
       cfi->textrel = 0;
       cfi->datarel = 0;
-      if (cfi->eh_frame)
-	cfi->frame_vaddr = -1; // XXX .eh_frame sh_addr
 
       cfi->e_ident = (unsigned char *) elf_getident (dbg->elf, NULL);
       cfi->other_byte_order = dbg->other_byte_order;
