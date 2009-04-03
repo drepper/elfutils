@@ -71,7 +71,6 @@ allocate_cfi (Elf *elf, GElf_Addr vaddr)
       return NULL;
     }
 
-  cfi->elf = elf;
   cfi->e_ident = (unsigned char *) elf_getident (elf, NULL);
   if (cfi->e_ident == NULL)
     {
@@ -110,7 +109,10 @@ parse_eh_frame_hdr (const uint8_t *hdr, size_t hdr_size, GElf_Addr hdr_vaddr,
     return (void *) -1l;
 
   /* Dummy used by read_encoded_value.  */
-  Elf_Data dummy_cfi_hdr_data = { .d_buf = (void *) hdr, .d_size = hdr_size };
+  Elf_Data_Scn dummy_cfi_hdr_data =
+    {
+      .d = { .d_buf = (void *) hdr, .d_size = hdr_size }
+    };
   Dwarf_CFI dummy_cfi =
     {
       .e_ident = ehdr->e_ident,
@@ -186,7 +188,7 @@ getcfi_gnu_eh_frame (Elf *elf, const GElf_Ehdr *ehdr, const GElf_Phdr *phdr)
   Dwarf_CFI *cfi = allocate_cfi (elf, eh_frame_ptr);
   if (cfi != NULL)
     {
-      cfi->data = data;
+      cfi->data = (Elf_Data_Scn *) data;
 
       if (search_table != NULL)
 	{
@@ -233,7 +235,7 @@ getcfi_scn_eh_frame (Elf *elf, const GElf_Ehdr *ehdr,
   Dwarf_CFI *cfi = allocate_cfi (elf, shdr->sh_addr);
   if (cfi != NULL)
     {
-      cfi->data = data;
+      cfi->data = (Elf_Data_Scn *) data;
       if (hdr_scn != NULL)
 	{
 	  Elf_Data *hdr_data = elf_rawdata (hdr_scn, NULL);

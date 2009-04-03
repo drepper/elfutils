@@ -260,7 +260,7 @@ execute_cfi (Dwarf_CFI *cache,
 
 	case DW_CFA_expression:
 	  get_uleb128 (regno, program);
-	  offset = program - (const uint8_t *) cache->data->d_buf;
+	  offset = program - (const uint8_t *) cache->data->d.d_buf;
 	  /* DW_FORM_block is a ULEB128 length followed by that many bytes.  */
 	  get_uleb128 (operand, program);
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
@@ -271,7 +271,7 @@ execute_cfi (Dwarf_CFI *cache,
 	case DW_CFA_val_expression:
 	  get_uleb128 (regno, program);
 	  /* DW_FORM_block is a ULEB128 length followed by that many bytes.  */
-	  offset = program - (const uint8_t *) cache->data->d_buf;
+	  offset = program - (const uint8_t *) cache->data->d.d_buf;
 	  get_uleb128 (operand, program);
 	  cfi_assert (operand <= (Dwarf_Word) (end - program));
 	  program += operand;
@@ -417,7 +417,7 @@ cie_cache_initial_state (Dwarf_CFI *cache, struct dwarf_cie *cie)
   /* Make sure we have a backend handle cached.  */
   if (unlikely (cache->ebl == NULL))
     {
-      cache->ebl = ebl_openbackend (cache->elf);
+      cache->ebl = ebl_openbackend (cache->data->s->elf);
       if (unlikely (cache->ebl == NULL))
 	cache->ebl = (void *) -1l;
     }

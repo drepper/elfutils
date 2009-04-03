@@ -124,7 +124,7 @@ dwarf_frame_register (fs, regno, ops_mem, ops, nops)
 				     ? 4 : 8);
 
 	Dwarf_Block block;
-	const uint8_t *p = fs->cache->data->d_buf + reg->value;
+	const uint8_t *p = fs->cache->data->d.d_buf + reg->value;
 	get_uleb128 (block.length, p);
 	block.data = (void *) p;
 

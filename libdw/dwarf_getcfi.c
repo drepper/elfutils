@@ -68,9 +68,8 @@ dwarf_getcfi (dbg)
       Dwarf_CFI *cfi = libdw_typed_alloc (dbg, Dwarf_CFI);
 
       cfi->eh_frame = dbg->sectiondata[IDX_debug_frame] == NULL;
-      cfi->data = dbg->sectiondata[cfi->eh_frame ? IDX_eh_frame
-				   : IDX_debug_frame];
-      cfi->elf = dbg->elf;
+      cfi->data = (Elf_Data_Scn *) dbg->sectiondata[cfi->eh_frame ? IDX_eh_frame
+						    : IDX_debug_frame];
 
       cfi->search_table = NULL;
       cfi->search_table_vaddr = 0;

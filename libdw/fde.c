@@ -143,7 +143,7 @@ fde_by_offset (Dwarf_CFI *cache, Dwarf_Addr address, Dwarf_Off offset)
   Dwarf_CFI_Entry entry;
   Dwarf_Off next_offset;
   int result = INTUSE(dwarf_next_cfi) (cache->e_ident,
-				       cache->data, cache->eh_frame,
+				       &cache->data->d, cache->eh_frame,
 				       offset, &next_offset, &entry);
   if (result != 0)
     {
@@ -176,10 +176,9 @@ fde_by_offset (Dwarf_CFI *cache, Dwarf_Addr address, Dwarf_Off offset)
 static Dwarf_Off
 binary_search_fde (Dwarf_CFI *cache, Dwarf_Addr address)
 {
-  const size_t size = 2 * encoded_value_size (cache->data, cache->e_ident,
+  const size_t size = 2 * encoded_value_size (&cache->data->d, cache->e_ident,
 					      cache->search_table_encoding,
 					      NULL);
-
 
   /* Dummy used by read_encoded_value.  */
   Dwarf_CFI dummy_cfi =
@@ -255,7 +254,7 @@ __libdw_find_fde (Dwarf_CFI *cache, Dwarf_Addr address)
       Dwarf_Off last_offset = cache->next_offset;
       Dwarf_CFI_Entry entry;
       int result = INTUSE(dwarf_next_cfi) (cache->e_ident,
-					   cache->data, cache->eh_frame,
+					   &cache->data->d, cache->eh_frame,
 					   last_offset, &cache->next_offset,
 					   &entry);
       if (result > 0)

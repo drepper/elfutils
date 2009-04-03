@@ -89,8 +89,7 @@ encoded_value_size (const Elf_Data *data, const unsigned char e_ident[],
 }
 
 static Dwarf_Addr __attribute__ ((unused))
-read_encoded_value (const Dwarf_CFI *cache,
-		    uint8_t encoding, const uint8_t **p)
+read_encoded_value (const Dwarf_CFI *cache, uint8_t encoding, const uint8_t **p)
 {
   Dwarf_Addr base = 0;
   switch (encoding & 0x70)
@@ -98,7 +97,7 @@ read_encoded_value (const Dwarf_CFI *cache,
     case DW_EH_PE_absptr:
       break;
     case DW_EH_PE_pcrel:
-      base = cache->frame_vaddr + (*p - (const uint8_t *) cache->data->d_buf);
+      base = cache->frame_vaddr + (*p - (const uint8_t *) cache->data->d.d_buf);
       break;
     case DW_EH_PE_textrel:
       // ia64: segrel
@@ -116,7 +115,7 @@ read_encoded_value (const Dwarf_CFI *cache,
 	const size_t address_size
 	  = cache->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
 	size_t align = ((cache->frame_vaddr
-			 + (*p - (const uint8_t *) cache->data->d_buf))
+			 + (*p - (const uint8_t *) cache->data->d.d_buf))
 			& (address_size - 1));
 	if (align != 0)
 	  *p += address_size - align;

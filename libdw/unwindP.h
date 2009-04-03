@@ -51,6 +51,7 @@
 #define _UNWINDP_H 1
 
 #include "libdwP.h"
+#include "libelfP.h"
 #include "unwind.h"		/* XXX */
 struct ebl;
 
@@ -96,7 +97,7 @@ struct dwarf_fde
 struct Dwarf_CFI_s
 {
   /* Data of the .debug_frame or .eh_frame section.  */
-  Elf_Data *data;
+  Elf_Data_Scn *data;
   const unsigned char *e_ident;	/* For EI_DATA and EI_CLASS.  */
 
   /* True if the file has a byte order different from the host.  */
@@ -104,8 +105,6 @@ struct Dwarf_CFI_s
 
   /* True if the section data is in .eh_frame format.  */
   bool eh_frame;
-
-  Elf *elf;			/* Originating ELF file.  */
 
   Dwarf_Addr frame_vaddr;  /* DW_EH_PE_pcrel, address of frame section.  */
   Dwarf_Addr textrel;		/* DW_EH_PE_textrel base address.  */

@@ -111,7 +111,7 @@ intern_new_cie (Dwarf_CFI *cache, Dwarf_Off offset, const Dwarf_CIE *info)
 	  cie->lsda_encoding = *data++;
 	  if (!cie->sized_augmentation_data)
 	    cie->fde_augmentation_data_size
-	      += encoded_value_size (cache->data, cache->e_ident,
+	      += encoded_value_size (&cache->data->d, cache->e_ident,
 				     cie->lsda_encoding, NULL);
 	  continue;
 
@@ -121,7 +121,7 @@ intern_new_cie (Dwarf_CFI *cache, Dwarf_Off offset, const Dwarf_CIE *info)
 
 	case 'P':		/* Skip personality routine.  */
 	  encoding = *data++;
-	  data += encoded_value_size (cache->data, cache->e_ident,
+	  data += encoded_value_size (&cache->data->d, cache->e_ident,
 				      encoding, data);
 	  continue;
 
@@ -165,7 +165,7 @@ __libdw_find_cie (Dwarf_CFI *cache, Dwarf_Off offset)
   Dwarf_Off next_offset = offset;
   Dwarf_CFI_Entry entry;
   int result = INTUSE(dwarf_next_cfi) (cache->e_ident,
-				       cache->data, cache->eh_frame,
+				       &cache->data->d, cache->eh_frame,
 				       offset, &next_offset, &entry);
   if (result != 0 || entry.cie.CIE_id != CIE_ID)
     {
