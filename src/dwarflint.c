@@ -2529,6 +2529,9 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
 
       reloc->index++;
 
+      if (rel->invalid)
+	continue;
+
       if (rel->offset < offset)
 	{
 	  if (st != skip_ok)
