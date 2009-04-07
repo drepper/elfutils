@@ -1,3 +1,9 @@
+2009-04-02  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (noinst_HEADERS): Add dwarfstrings.h here.
+	(dwarflint_SOURCES): Add dwarflint-expected.hh and dwarflint.h here.
+	(noinst_HEADERS): Add expr_opcodes.h too.
+
 2009-03-24  Roland McGrath  <roland@redhat.com>
 
 	* Makefile.am (libdwplusplus_SOURCES): Variable removed.
