@@ -4618,9 +4618,17 @@ read_rel (struct section_data *secdata, Elf_Data *reldata, bool elf_64)
 	  continue;
 	}
 
+      int cur_type = GELF_R_TYPE (rela->r_info);
+      if (cur_type == 0) /* No relocation.  */
+	{
+	  wr_message (mc_impact_3 | mc_reloc | mc_acc_bloat, &where,
+		      ": NONE relocation is superfluous.\n");
+	  goto skip;
+	}
+
       cur->offset = rela->r_offset;
       cur->symndx = GELF_R_SYM (rela->r_info);
-      cur->type = GELF_R_TYPE (rela->r_info);
+      cur->type = cur_type;
 
       where_reset_2 (&where, cur->offset);
 
