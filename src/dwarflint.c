@@ -2746,6 +2746,11 @@ reloc_target (uint8_t form, struct abbrev_attrib *at)
 	case DW_AT_high_pc:
 	case DW_AT_entry_pc:
 	  return sec_text;
+
+	case DW_AT_const_value:
+	  /* Appears in some kernel modules.  It's not allowed by the
+	     standard, but leave that for high-level checks.  */
+	  return rel_address;
 	};
 
       break;
