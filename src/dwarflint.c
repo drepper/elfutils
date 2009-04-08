@@ -5040,7 +5040,7 @@ check_line_structural (struct section_data *data,
 		      if ((rel = relocation_next (&data->rel, ctx_offset,
 						  &where, skip_mismatched)))
 			relocate_one (&data->rel, rel, data->file->addr_64 ? 8 : 4,
-				      &addr, &where, sec_text, NULL);
+				      &addr, &where, rel_address, NULL);
 		      else if (data->file->ehdr.e_type == ET_REL)
 			wr_message (mc_impact_2 | mc_line | mc_reloc, &where,
 				    PRI_LACK_RELOCATION, "DW_LNE_set_address");
