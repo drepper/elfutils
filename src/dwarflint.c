@@ -3284,10 +3284,9 @@ read_die_chain (struct read_ctx *ctx,
 						&where, skip_mismatched)))
 		      relocate_one (reloc, rel, 8, &value, &where,
 				    reloc_target (form, it), NULL);
-		    else if (type_is_rel
-			     && (check_locptr || check_rangeptr))
+		    else if (type_is_rel && check_ptr != check_nothing)
 		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
-				  | (check_rangeptr ? mc_ranges : mc_loc),
+				  | mc_check[check_ptr],
 				  &where, PRI_LACK_RELOCATION,
 				  dwarf_form_string (form));
 		  }
