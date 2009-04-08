@@ -686,6 +686,7 @@ struct sec
 {
   enum section_id id;
   GElf_Shdr shdr;
+  const char *name;
 };
 
 struct elf_file
@@ -1199,6 +1200,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
       struct secinfo *secentry = find_secentry (scnname);
       struct section_data *secdata = secentry != NULL ? secentry->dataptr : NULL;
       cursec->id = secentry != NULL ? secentry->sec : sec_invalid;
+      cursec->name = scnname;
 
       if (secdata != NULL)
 	{
@@ -2716,12 +2718,12 @@ relocate_one (struct relocation_data *reloc, struct relocation *rel,
 	  else if ((id = reloc->file->sec[section_index].id) != offset_into)
 	    {
 	      char *wh1 = id != sec_invalid
-		? strdup (where_fmt (&WHERE (id, NULL), NULL)) : "(?)";
+		? strdup (where_fmt (&WHERE (id, NULL), NULL))
+		: (char *)reloc->file->sec[section_index].name;
 	      char *wh2 = strdup (where_fmt (&WHERE (offset_into, NULL), NULL));
 	      wr_error (&reloc_where,
-			": relocation references section %s, but %s was expected"
-			" (section index: %" PRId64 ").\n",
-			wh1, wh2, section_index);
+			": relocation references section %s, but %s was expected.\n",
+			wh1, wh2);
 	      free (wh2);
 	      if (id != sec_invalid)
 		free (wh1);
