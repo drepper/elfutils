@@ -2317,11 +2317,12 @@ coverage_map_add (struct coverage_map *coverage_map,
     wr_error (where,
 	      ": couldn't find a section that the range %#"
 	      PRIx64 "..%#" PRIx64 " covers.\n", address, end);
-  else
+  else if (length > 0)
     {
       bool range_hole (uint64_t h_start, uint64_t h_length,
 		       void *user __attribute__ ((unused)))
       {
+	assert (h_length != 0);
 	wr_error (where,
 		  ": portion %#" PRIx64 "..%#" PRIx64
 		  ", of the range %#" PRIx64 "..%#" PRIx64
@@ -3903,8 +3904,13 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	  if (address == 0 && length == 0 && !address_relocated)
 	    break;
 
-	  /* Skip coverage analysis if we have errors.  */
-	  if (retval)
+	  if (length == 0)
+	    /* DWARF 3 spec, 6.1.2 Lookup by Address: Each descriptor
+	       is a pair consisting of the beginning address [...],
+	       followed by the _non-zero_ length of that range.  */
+	    wr_error (&where, ": zero-length address range.\n");
+	  else if (retval)
+	    /* Skip coverage analysis if we have errors.  */
 	    coverage_map_add (coverage_map, address, length, &where,
 			      mc_aranges);
 	}
