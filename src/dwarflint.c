@@ -2955,6 +2955,11 @@ read_die_chain (struct read_ctx *ctx,
 
       addr_record_add (&cu->die_addrs, cu->offset + die_off);
 
+      uint64_t low_pc = (uint64_t)-1, high_pc = (uint64_t)-1;
+      bool low_pc_relocated = false, high_pc_relocated = false;
+      GElf_Sym low_pc_symbol_mem, *low_pc_symbol = &low_pc_symbol_mem;
+      GElf_Sym high_pc_symbol_mem, *high_pc_symbol = &high_pc_symbol_mem;
+
       /* Attribute values.  */
       for (struct abbrev_attrib *it = abbrev->attribs;
 	   it->name != 0; ++it)
@@ -3176,10 +3181,32 @@ read_die_chain (struct read_ctx *ctx,
 		if (!read_ctx_read_offset (ctx, addr_64, &addr))
 		  goto cant_read;
 
+		uint64_t *addrp = NULL;
+		bool *relocatedp = NULL;
+		GElf_Sym **symbolp = NULL;
+
+		switch (it->name)
+		  {
+		  case DW_AT_low_pc:
+		    relocatedp = &low_pc_relocated;
+		    symbolp = &low_pc_symbol;
+		    addrp = &low_pc;
+		    break;
+
+		  case DW_AT_high_pc:
+		    relocatedp = &high_pc_relocated;
+		    symbolp = &high_pc_symbol;
+		    addrp = &high_pc;
+		  };
+
 		if ((rel = relocation_next (reloc, ctx_offset,
 					    &where, skip_mismatched)))
-		  relocate_one (reloc, rel, addr_64 ? 8 : 4, &addr, &where,
-				reloc_target (form, it), NULL);
+		  {
+		    relocate_one (reloc, rel, addr_64 ? 8 : 4, &addr, &where,
+				  reloc_target (form, it), symbolp);
+		    *relocatedp = true;
+		    *addrp = addr;
+		  }
 		else if (type_is_rel && addr != 0)
 		  /* In non-rel files, neither addr, nor ref_addr
 		     /need/ a relocation.  We at least check that
@@ -3190,9 +3217,10 @@ read_die_chain (struct read_ctx *ctx,
 
 		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
-		else if ((abbrev->tag == DW_TAG_compile_unit
-			  || abbrev->tag == DW_TAG_partial_unit)
-			 && it->name == DW_AT_low_pc)
+
+		if (it->name == DW_AT_low_pc
+		    && (abbrev->tag == DW_TAG_compile_unit
+			|| abbrev->tag == DW_TAG_partial_unit))
 		  cu->base = addr;
 
 		break;
@@ -3366,8 +3394,21 @@ read_die_chain (struct read_ctx *ctx,
 
 	    default:
 	      wr_error (&where,
-			": internal error: unhandled form 0x%x\n", form);
+			": internal error: unhandled form 0x%x.\n", form);
 	    }
+	}
+      where.ref = NULL;
+
+      if (high_pc != (uint64_t)-1 && low_pc != (uint64_t)-1)
+	{
+	  if (high_pc_relocated != low_pc_relocated)
+	    wr_message (mc_die_other | mc_impact_2 | mc_reloc, &where,
+			": only one of DW_AT_low_pc and DW_AT_high_pc is relocated.\n");
+	  else
+	    check_range_relocations (mc_die_other, &where,
+				     file,
+				     low_pc_symbol, high_pc_symbol,
+				     "DW_AT_low_pc and DW_AT_high_pc");
 	}
 
       where.ref = &abbrev->where;
