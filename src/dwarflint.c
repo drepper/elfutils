@@ -2854,6 +2854,24 @@ supported_version (unsigned version,
   return retval;
 }
 
+static void
+check_range_relocations (enum message_category cat,
+			 struct where *where,
+			 struct elf_file *file,
+			 GElf_Sym *begin_symbol,
+			 GElf_Sym *end_symbol,
+			 const char *description)
+{
+  if (begin_symbol != NULL
+      && end_symbol != NULL
+      && begin_symbol->st_shndx != end_symbol->st_shndx)
+    wr_message (cat | mc_impact_2 | mc_reloc, where,
+		": %s relocated against different sections (%s and %s).\n",
+		description,
+		file->sec[begin_symbol->st_shndx].name,
+		file->sec[end_symbol->st_shndx].name);
+}
+
 /*
   Returns:
     -1 in case of error
@@ -4348,19 +4366,17 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  if (begin_addr != escape)
 	    {
 	      if (!begin_relocated)
-		wr_message (cat | mc_impact_2, &where,
+		wr_message (cat | mc_impact_2 | mc_reloc, &where,
 			    ": end of address range is relocated, but the beginning wasn't.\n");
-	      else if (begin_symbol != NULL
-		       && end_symbol != NULL
-		       && begin_symbol->st_shndx != end_symbol->st_shndx)
-		wr_message (cat | mc_impact_2, &where,
-			    ": symbols of begin and end relocations reference"
-			    " different sections (%d and %d).\n",
-			    begin_symbol->st_shndx, end_symbol->st_shndx);
+	      else
+		check_range_relocations (cat, &where,
+					 data->file,
+					 begin_symbol, end_symbol,
+					 "begin and end address");
 	    }
 	}
       else if (begin_relocated)
-	wr_message (cat | mc_impact_2, &where,
+	wr_message (cat | mc_impact_2 | mc_reloc, &where,
 		    ": end of address range is not relocated, but the beginning was.\n");
 
       bool done = false;
