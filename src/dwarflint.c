@@ -1819,6 +1819,7 @@ abbrev_table_load (struct read_ctx *ctx)
 
       bool null_attrib;
       uint64_t sibling_attr = 0;
+      bool low_pc = false, high_pc = false;
       do
 	{
 	  uint64_t attr_off = read_ctx_get_offset (ctx);
@@ -1903,7 +1904,8 @@ abbrev_table_load (struct read_ctx *ctx)
 	    {
 	      if (!check_abbrev_location_form (attrib_form))
 		wr_error (&where,
-			  ": location attribute with invalid form \"%s\".\n",
+			  ": %s with invalid form \"%s\".\n",
+			  dwarf_attr_string (attrib_name),
 			  dwarf_form_string (attrib_form));
 	    }
 	  /* Similar for DW_AT_ranges.  */
@@ -1918,12 +1920,34 @@ abbrev_table_load (struct read_ctx *ctx)
 			  dwarf_attr_string (attrib_name),
 			  dwarf_form_string (attrib_form));
 	    }
+	  /* Similar for DW_AT_{low,high}_pc, plus also make sure we
+	     don't see high_pc without low_pc.  */
+	  else if (attrib_name == DW_AT_low_pc
+		   || attrib_name == DW_AT_high_pc)
+	    {
+	      if (attrib_form != DW_FORM_addr
+		  && attrib_form != DW_FORM_ref_addr)
+		wr_error (&where,
+			  ": %s with invalid form \"%s\".\n",
+			  dwarf_attr_string (attrib_name),
+			  dwarf_form_string (attrib_form));
+
+	      if (attrib_name == DW_AT_low_pc)
+		low_pc = true;
+	      else if (attrib_name == DW_AT_high_pc)
+		high_pc = true;
+	    }
 
 	  acur->name = attrib_name;
 	  acur->form = attrib_form;
 	  acur->where = where;
 	}
       while (!null_attrib);
+
+      where_reset_2 (&where, where.addr2); // drop addr 3
+      if (high_pc && !low_pc)
+	wr_error (&where,
+		  ": the abbrev has DW_AT_high_pc without also having DW_AT_low_pc.\n");
     }
 
   for (section = section_chain; section != NULL; section = section->next)
