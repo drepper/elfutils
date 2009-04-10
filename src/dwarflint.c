@@ -675,25 +675,6 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"
 
-struct sec
-{
-  enum section_id id;
-  GElf_Shdr shdr;
-  const char *name;
-};
-
-struct elf_file
-{
-  Dwarf *dwarf;
-  Ebl *ebl;
-  GElf_Ehdr ehdr;	/* Header of dwarf->elf.  */
-  bool addr_64;
-
-  struct sec *sec;	/* Array of sections.  */
-  size_t size;
-  size_t alloc;
-};
-
 struct relocation
 {
   uint64_t offset;
@@ -1190,6 +1171,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 
       struct secinfo *secentry = find_secentry (scnname);
       struct section_data *secdata = secentry != NULL ? secentry->dataptr : NULL;
+      cursec->scn = scn;
       cursec->id = secentry != NULL ? secentry->sec : sec_invalid;
       cursec->name = scnname;
 
@@ -2124,17 +2106,9 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
   struct coverage_map_hole_info *info = (struct coverage_map_hole_info *)user;
 
   struct where where = WHERE (info->info.section, NULL);
+  const char *scnname = sco->sec->name;
 
-  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (info->elf, &ehdr_mem);
-  if (ehdr == NULL)
-    {
-      wr_error (&where, ": invalid ELF, terminating coverage analysis.\n");
-      return false;
-    }
-  const char *scnname = elf_strptr (info->elf, ehdr->e_shstrndx,
-				    sco->shdr.sh_name) ?: "(unknown)";
-
-  Elf_Data *data = elf_getdata (sco->scn, NULL);
+  Elf_Data *data = elf_getdata (sco->sec->scn, NULL);
   if (data == NULL)
     {
       wr_error (&where, ": couldn't read the data of section %s.\n", scnname);
@@ -2150,7 +2124,7 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
 	  || strcmp (scnname, ".plt") == 0))
     return true;
 
-  uint64_t base = sco->shdr.sh_addr;
+  uint64_t base = sco->sec->shdr.sh_addr;
   /* If we get stripped debuginfo file, the data simply may not be
      available.  In that case simply report the hole.  */
   if (data->d_buf != NULL)
@@ -2176,21 +2150,19 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
 
 
 void
-section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
-		       GElf_Shdr *shdr)
+section_coverage_init (struct section_coverage *sco, struct sec *sec)
 {
   assert (sco != NULL);
-  assert (scn != NULL);
-  assert (shdr != NULL);
+  assert (sec != NULL);
 
-  sco->scn = scn;
-  sco->shdr = *shdr;
+  sco->sec = sec;
   WIPE (sco->cov);
   sco->hit = false;
 }
 
 bool
-coverage_map_init (struct coverage_map *coverage_map, Elf *elf,
+coverage_map_init (struct coverage_map *coverage_map,
+		   struct elf_file *elf,
 		   Elf64_Xword mask, bool allow_overlap)
 {
   assert (coverage_map != NULL);
@@ -2200,25 +2172,15 @@ coverage_map_init (struct coverage_map *coverage_map, Elf *elf,
   coverage_map->elf = elf;
   coverage_map->allow_overlap = allow_overlap;
 
-  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
-  if (ehdr == NULL)
-    return false;
-
-  for (size_t i = 0; i < ehdr->e_shnum; ++i)
+  for (size_t i = 0; i < elf->size; ++i)
     {
-      Elf_Scn *scn = elf_getscn (elf, i);
-      if (scn == NULL)
-	return false;
+      struct sec *sec = elf->sec + i;
 
-      GElf_Shdr shdr_mem, *shdr = gelf_getshdr (scn, &shdr_mem);
-      if (shdr == NULL)
-	return false;
-
-      if ((shdr->sh_flags & mask) == mask)
+      if ((sec->shdr.sh_flags & mask) == mask)
 	{
 	  REALLOC (coverage_map, scos);
 	  section_coverage_init (coverage_map->scos + coverage_map->size++,
-				 scn, shdr);
+				 sec);
 	}
     }
 
@@ -2246,7 +2208,7 @@ coverage_map_add (struct coverage_map *coverage_map,
   for (size_t i = 0; i < coverage_map->size; ++i)
     {
       struct section_coverage *sco = coverage_map->scos + i;
-      GElf_Shdr *shdr = &sco->shdr;
+      GElf_Shdr *shdr = &sco->sec->shdr;
       struct coverage *cov = &sco->cov;
 
       Elf64_Addr s_end = shdr->sh_addr + shdr->sh_size;
@@ -2341,7 +2303,8 @@ coverage_map_find_holes (struct coverage_map *coverage_map,
 	return cb (h_start, h_start + h_length - 1, sco, h_user);
       }
 
-      if (!coverage_find_holes (&sco->cov, 0, sco->shdr.sh_size, wrap_cb, user))
+      if (!coverage_find_holes (&sco->cov, 0, sco->sec->shdr.sh_size,
+				wrap_cb, user))
 	return false;
     }
 
@@ -3676,7 +3639,7 @@ check_info_structural (struct section_data *data,
 }
 
 static struct coverage_map *
-coverage_map_alloc_XA (Elf *elf, bool allow_overlap)
+coverage_map_alloc_XA (struct elf_file *elf, bool allow_overlap)
 {
   struct coverage_map *ret = xmalloc (sizeof (*ret));
   if (!coverage_map_init (ret, elf, SHF_ALLOC | SHF_EXECINSTR, allow_overlap))
@@ -3706,8 +3669,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
   bool retval = true;
 
   struct coverage_map *coverage_map;
-  if ((coverage_map = coverage_map_alloc_XA (data->file->dwarf->elf,
-					     false)) == NULL)
+  if ((coverage_map = coverage_map_alloc_XA (data->file, false)) == NULL)
     {
       wr_error (&WHERE (sec_aranges, NULL),
 		": couldn't read ELF, skipping coverage analysis.\n");

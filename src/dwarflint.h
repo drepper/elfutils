@@ -2,6 +2,7 @@
 #define DWARFLINT_HL_H
 
 #include "../libdw/libdw.h"
+#include "../libebl/libebl.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -153,26 +154,46 @@ extern "C"
 
 # include "dwarflint-coverage.h"
 
-  struct section_coverage
+  struct sec
   {
     Elf_Scn *scn;
     GElf_Shdr shdr;
+    enum section_id id;
+    const char *name;
+  };
+
+  struct elf_file
+  {
+    Dwarf *dwarf;
+    Ebl *ebl;
+    GElf_Ehdr ehdr;	/* Header of dwarf->elf.  */
+    bool addr_64;
+
+    struct sec *sec;	/* Array of sections.  */
+    size_t size;
+    size_t alloc;
+  };
+
+  struct section_coverage
+  {
+    struct sec *sec;
     struct coverage cov;
     bool hit; /* true if COV is not pristine.  */
   };
 
   struct coverage_map
   {
-    Elf *elf;
+    struct elf_file *elf;
+    bool allow_overlap;
+
+    struct section_coverage *scos;
     size_t size;
     size_t alloc;
-    bool allow_overlap;
-    struct section_coverage *scos;
   };
 
-  void section_coverage_init (struct section_coverage *sco, Elf_Scn *scn,
-			      GElf_Shdr *shdr);
-  bool coverage_map_init (struct coverage_map *coverage_map, Elf *elf,
+  void section_coverage_init (struct section_coverage *sco, struct sec *sec);
+  bool coverage_map_init (struct coverage_map *coverage_map,
+			  struct elf_file *elf,
 			  Elf64_Xword mask, bool allow_overlap);
   void coverage_map_add (struct coverage_map *coverage_map,
 			 uint64_t address, uint64_t length,
@@ -199,7 +220,7 @@ extern "C"
   struct coverage_map_hole_info
   {
     struct hole_info info;
-    Elf *elf;
+    struct elf_file *elf;
   };
 
   /* DATA has to be a pointer to an instance of struct hole_info.
