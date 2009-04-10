@@ -395,12 +395,12 @@ static bool be_tolerant = false; /* --tolerant */
 static bool show_refs = false; /* --ref */
 static bool do_high_level = true; /* ! --nohl */
 
-int
+static int
 layout_rel_file (Elf *elf)
 {
   GElf_Ehdr ehdr;
   if (gelf_getehdr (elf, &ehdr) == NULL)
-    return 2;
+    return 1;
 
   if (ehdr.e_type != ET_REL)
     return 0;
@@ -416,7 +416,7 @@ layout_rel_file (Elf *elf)
       GElf_Shdr shdr_mem;
       GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
       if (unlikely (shdr == NULL))
-	return 2;
+	return 1;
 
       if (shdr->sh_flags & SHF_ALLOC)
 	{
@@ -450,7 +450,7 @@ layout_rel_file (Elf *elf)
 		      GElf_Shdr *prev_shdr = gelf_getshdr (prev_scn,
 							   &prev_shdr_mem);
 		      if (unlikely (prev_shdr == NULL))
-			return 2;
+			return 1;
 		      if (prev_shdr->sh_flags & SHF_ALLOC)
 			{
 			  const GElf_Xword prev_align
@@ -462,7 +462,7 @@ layout_rel_file (Elf *elf)
 
 			  if (unlikely (! gelf_update_shdr (prev_scn,
 							    prev_shdr)))
-			    return 2;
+			    return 1;
 			}
 		    }
 		  while (prev_scn != scn);
@@ -472,7 +472,7 @@ layout_rel_file (Elf *elf)
 	      end = shdr->sh_addr + shdr->sh_size;
 	      if (likely (shdr->sh_addr != 0)
 		  && unlikely (! gelf_update_shdr (scn, shdr)))
-		return 2;
+		return 1;
 	    }
 	  else
 	    {
@@ -580,15 +580,8 @@ main (int argc, char *argv[])
       else
 	{
 	  unsigned int prev_error_count = error_count;
-	  switch (layout_rel_file (elf))
-	    {
-	    case 2:
-	      goto invalid_elf;
-	    case 1:
-	      wr_error (NULL, "Couldn't layout ET_REL file, the range analysis may be inaccurate.\n");
-	    default:
-	      ;
-	    }
+	  if (layout_rel_file (elf))
+	    goto invalid_elf;
 
 	  Dwarf *dwarf = dwarf_begin_elf (elf, DWARF_C_READ, NULL);
 	  if (dwarf == NULL)
