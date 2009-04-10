@@ -30,6 +30,7 @@ extern "C"
 			   relocation is applied to taget value, not a
 			   section offset.  */
     rel_address,	/* Same as above, but for addresses.  */
+    rel_exec,		/* Some as above, but we expect EXEC bit.  */
 
     /* Debuginfo sections:  */
     sec_info,
@@ -47,7 +48,6 @@ extern "C"
     /* Non-debuginfo sections:  */
     sec_rel,
     sec_rela,
-    sec_text		/* Some AX section, not necessarily .text.  */
   };
 
   enum where_formatting

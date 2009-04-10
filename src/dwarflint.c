@@ -965,8 +965,6 @@ where_fmt (const struct where *wh, char *ptr)
 		   "offset", "%#"PRIx64, NULL, NULL},
       [sec_rela] = {".rela", "relocation", "%"PRId64,
 		    "offset", "%#"PRIx64, NULL, NULL},
-
-      [sec_text] = {"(exec data)", NULL, NULL, NULL, NULL, NULL, NULL},
     };
 
   static struct section_info special_formats[] =
@@ -1207,8 +1205,6 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	  else
 	    wr_error (NULL, "Multiple occurrences of section %s.\n", scnname);
 	}
-      else if ((shdr->sh_flags & SHF_ALLOC) && (shdr->sh_flags & SHF_EXECINSTR))
-	cursec->id = sec_text;
       else if (shdr->sh_type == SHT_RELA || shdr->sh_type == SHT_REL)
 	{
 	  /* Get data of section that this REL(A) section relocates.  */
@@ -2668,7 +2664,8 @@ relocate_one (struct relocation_data *reloc, struct relocation *rel,
 
       /* It's target value, not section offset.  */
       if (offset_into == rel_value
-	  || offset_into == rel_address)
+	  || offset_into == rel_address
+	  || offset_into == rel_exec)
 	{
 	  /* If a target value is what's expected, then complain if
 	     it's not either SHN_ABS, an SHF_ALLOC section, or
@@ -2694,10 +2691,19 @@ relocate_one (struct relocation_data *reloc, struct relocation *rel,
 		wr_error (&reloc_where,
 			  ": couldn't obtain header of associated section #%" PRId64 ".\n",
 			  section_index);
-	      else if ((shdr->sh_flags & SHF_ALLOC) != SHF_ALLOC)
-		wr_message (mc_reloc | mc_impact_3, &reloc_where,
-			    ": associated section #%" PRId64 " isn't SHF_ALLOC.\n",
-			    section_index);
+	      else
+		{
+		  if ((shdr->sh_flags & SHF_ALLOC) != SHF_ALLOC)
+		    wr_message (mc_reloc | mc_impact_3, &reloc_where,
+				": associated section %s isn't SHF_ALLOC.\n",
+				reloc->file->sec[section_index].name);
+		  if (offset_into == rel_exec
+		      && (shdr->sh_flags & SHF_EXECINSTR) != SHF_EXECINSTR)
+		    /* This may still be kosher, but it's suspicious.  */
+		    wr_message (mc_reloc | mc_impact_2, &reloc_where,
+				": relocation against %s is suspicious, expected executable section.\n",
+				reloc->file->sec[section_index].name);
+		}
 	    }
 	}
       else
@@ -2741,7 +2747,7 @@ reloc_target (uint8_t form, struct abbrev_attrib *at)
 	case DW_AT_low_pc:
 	case DW_AT_high_pc:
 	case DW_AT_entry_pc:
-	  return sec_text;
+	  return rel_exec;
 
 	case DW_AT_const_value:
 	  /* Appears in some kernel modules.  It's not allowed by the
@@ -3878,7 +3884,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	    {
 	      address_relocated = true;
 	      relocate_one (&data->rel, rel, address_size,
-			    &address, &where, sec_text, NULL);
+			    &address, &where, rel_address, NULL);
 	    }
 	  else if (data->file->ehdr.e_type == ET_REL
 		   && address != 0)
