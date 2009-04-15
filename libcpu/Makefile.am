@@ -32,6 +32,7 @@ AM_CFLAGS =
 endif
 WEXTRA = @WEXTRA@
 AM_CFLAGS += -Wall -Wshadow -Wunused $(WEXTRA) -std=gnu99 -fpic \
+	     -fdollars-in-identifiers \
 	     $($(*F)_CFLAGS) \
 	     $(if $($(*F)_no_Werror),,-Werror)
 INCLUDES = -I$(srcdir) -I$(srcdir)/../lib -I$(srcdir)/../libelf \

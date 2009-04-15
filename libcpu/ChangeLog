@@ -1,3 +1,8 @@
+2009-04-14  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (AM_CFLAGS): Add -fdollars-in-identifiers; it is not the
+	default on every machine.
+
 2009-01-23  Roland McGrath  <roland@redhat.com>
 
 	* i386_disasm.c (i386_disasm): Add abort after assert-constant for old

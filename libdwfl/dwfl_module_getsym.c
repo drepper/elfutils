@@ -1,5 +1,5 @@
 /* Find debugging and symbol information for a module in libdwfl.
-   Copyright (C) 2006,2007 Red Hat, Inc.
+   Copyright (C) 2006,2007,2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -75,9 +75,22 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
     shndx = sym->st_shndx;
 
   if (shndxp != NULL)
-    *shndxp = shndx;
+    {
+      *shndxp = shndx;
 
-  switch (shndx)
+      /* Yield -1 in case of a non-SHF_ALLOC section.  */
+      if (sym->st_shndx == SHN_XINDEX
+	  || (sym->st_shndx < SHN_LORESERVE && sym->st_shndx != SHN_UNDEF))
+	{
+	  GElf_Shdr shdr_mem;
+	  GElf_Shdr *shdr = gelf_getshdr (elf_getscn (mod->symfile->elf, shndx),
+					  &shdr_mem);
+	  if (unlikely (shdr == NULL) || !(shdr->sh_flags & SHF_ALLOC))
+	    *shndxp = (GElf_Word) -1;
+	}
+    }
+
+  switch (sym->st_shndx)
     {
     case SHN_ABS:
     case SHN_UNDEF:
@@ -99,8 +112,9 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
 	      return NULL;
 	    }
 	}
-      /* Apply the bias to the symbol value.  */
-      sym->st_value += mod->symfile->bias;
+      else
+	/* Apply the bias to the symbol value.  */
+	sym->st_value += mod->symfile->bias;
       break;
     }
 
