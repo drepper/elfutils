@@ -3204,8 +3204,10 @@ read_die_chain (struct read_ctx *ctx,
 		  {
 		    relocate_one (reloc, rel, addr_64 ? 8 : 4, &addr, &where,
 				  reloc_target (form, it), symbolp);
-		    *relocatedp = true;
-		    *addrp = addr;
+		    if (relocatedp != NULL)
+		      *relocatedp = true;
+		    if (addrp != NULL)
+		      *addrp = addr;
 		  }
 		else if (type_is_rel && addr != 0)
 		  /* In non-rel files, neither addr, nor ref_addr
