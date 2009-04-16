@@ -2148,14 +2148,15 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
 	  || strcmp (scnname, ".plt") == 0))
     return true;
 
-  uint64_t base = sco->sec->shdr.sh_addr;
+  /* For REL files, don't print addresses mangled by our layout.  */
+  uint64_t base = info->elf->ehdr.e_type == ET_REL ? 0 : sco->sec->shdr.sh_addr;
+
   /* If we get stripped debuginfo file, the data simply may not be
      available.  In that case simply report the hole.  */
   if (data->d_buf != NULL)
     {
       bool zeroes = true;
       for (uint64_t j = begin; j < end; ++j)
-	/* XXX NOP run detection?  */
 	if (((char *)data->d_buf)[j] != 0)
 	  {
 	    zeroes = false;
@@ -3913,6 +3914,13 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 
       while (!read_ctx_eof (&sub_ctx))
 	{
+	  /* We would like to report aranges the same way that readelf
+    	     does.  But readelf uses index of the arange in the array
+    	     as returned by dwarf_getaranges, which sorts the aranges
+    	     beforehand.  We don't want to disturb the memory this
+    	     way, the better to catch structural errors accurately.
+    	     So report arange offset instead.  If this becomes a
+    	     problem, we will achieve this by two-pass analysis.  */
 	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
 
 	  /* Record address.  */
