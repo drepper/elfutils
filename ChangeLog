@@ -1,3 +1,12 @@
+2009-04-19  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (eu_version): Round down here, not in version.h macros.
+
+2009-04-17  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (eu_version): Compute number 1000 times larger,
+	let $PACKAGE_VERSION be x.y.z as well as x.y (implied x.y.0).
+
 2009-01-23  Roland McGrath  <roland@redhat.com>
 
 	* configure.ac: Check for __builtin_popcount.
