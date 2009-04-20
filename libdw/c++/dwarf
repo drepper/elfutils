@@ -1220,7 +1220,7 @@ namespace elfutils
       typedef ptrdiff_t difference_type;
       // XXX need proper type for exprs
       typedef const_vector<uint8_t> mapped_type;
-      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type;
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
       typedef std::pair<const key_type, mapped_type> value_type;
       class const_iterator;	// below
 
@@ -1283,9 +1283,9 @@ namespace elfutils
     {
       friend class location_attr;
     private:
-      ::Dwarf_Addr _m_base;
-      ::Dwarf_Addr _m_begin;
-      ::Dwarf_Addr _m_end;
+      ::Dwarf_Addr _m_base;	// XXX reloc
+      ::Dwarf_Addr _m_begin;	// XXX reloc
+      ::Dwarf_Addr _m_end;	// XXX reloc
       location_attr _m_attr;
       ptrdiff_t _m_offset;
 
@@ -1323,6 +1323,7 @@ namespace elfutils
     };
 
     /* The DW_AT_ranges attribute yields a range list.
+       XXX reloc
        This is equivalent to unordered_set<pair<Dwarf_Addr, Dwarf_Addr> >.  */
     class range_list
     {
@@ -1333,7 +1334,7 @@ namespace elfutils
       range_list (const attr_value &attr) : _m_attr (attr) {}
 
     public:
-      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type;
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
       typedef key_type value_type;
 
       range_list (const range_list &other) : _m_attr (other._m_attr) {}
@@ -1345,9 +1346,9 @@ namespace elfutils
       {
 	friend class range_list;
       private:
-	::Dwarf_Addr _m_base;
-	::Dwarf_Addr _m_begin;
-	::Dwarf_Addr _m_end;
+	::Dwarf_Addr _m_base;	// XXX reloc
+	::Dwarf_Addr _m_begin;	// XXX reloc
+	::Dwarf_Addr _m_end;	// XXX reloc
 	::Dwarf_CU *_m_cu;
 	ptrdiff_t _m_offset;
 
@@ -1849,7 +1850,7 @@ namespace elfutils
       ranges (const debug_info_entry &die) : _m_die (die) {}
 
     public:
-      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type;
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
       typedef key_type value_type;
 
       ranges (const ranges &other) : _m_die (other._m_die) {}
@@ -1862,9 +1863,9 @@ namespace elfutils
 	friend class ranges;
       private:
 	debug_info_entry _m_die;
-	::Dwarf_Addr _m_base;
-	::Dwarf_Addr _m_begin;
-	::Dwarf_Addr _m_end;
+	::Dwarf_Addr _m_base;	// XXX reloc
+	::Dwarf_Addr _m_begin;	// XXX reloc
+	::Dwarf_Addr _m_end;	// XXX reloc
 	ptrdiff_t _m_offset;
 
 	inline const_iterator (const debug_info_entry &die)
@@ -2156,6 +2157,7 @@ namespace elfutils
       return !(*this == other);
     }
 
+    // XXX reloc
     class arange_list
       : public std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> >
     {
