@@ -203,7 +203,7 @@ binary_search_fde (Dwarf_CFI *cache, Dwarf_Addr address)
 	  Dwarf_Addr fde = read_encoded_value (&dummy_cfi,
 					       cache->search_table_encoding,
 					       &p);
-	  if (address > start)
+	  if (address >= start)
 	    {
 	      l = idx + 1;
 

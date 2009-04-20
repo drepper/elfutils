@@ -38,7 +38,7 @@
 
 
 static void
-print_detail (int result, const Dwarf_Op *ops, size_t nops)
+print_detail (int result, const Dwarf_Op *ops, size_t nops, Dwarf_Addr bias)
 {
   if (result < 0)
     printf ("indeterminate (%s)\n", dwarf_errmsg (-1));
@@ -52,7 +52,9 @@ print_detail (int result, const Dwarf_Op *ops, size_t nops)
 	  printf (" %#x", ops[i].atom);
 	  if (ops[i].number2 == 0)
 	    {
-	      if (ops[i].number != 0)
+	      if (ops[i].atom == DW_OP_addr)
+		printf ("(%#" PRIx64 ")", ops[i].number + bias);
+	      else if (ops[i].number != 0)
 		printf ("(%" PRId64 ")", ops[i].number);
 	    }
 	  else
@@ -63,6 +65,12 @@ print_detail (int result, const Dwarf_Op *ops, size_t nops)
     }
 }
 
+struct stuff
+{
+  Dwarf_Frame *frame;
+  Dwarf_Addr bias;
+};
+
 static int
 print_register (void *arg,
 		int regno,
@@ -72,15 +80,15 @@ print_register (void *arg,
 		int bits __attribute__ ((unused)),
 		int type __attribute__ ((unused)))
 {
-  Dwarf_Frame *frame = arg;
+  struct stuff *stuff = arg;
 
   printf ("\t%s reg%u (%s%s): ", setname, regno, prefix, regname);
 
   Dwarf_Op ops_mem[2];
   Dwarf_Op *ops;
   size_t nops;
-  int result = dwarf_frame_register (frame, regno, ops_mem, &ops, &nops);
-  print_detail (result, ops, nops);
+  int result = dwarf_frame_register (stuff->frame, regno, ops_mem, &ops, &nops);
+  print_detail (result, ops, nops, stuff->bias);
 
   return DWARF_CB_OK;
 }
@@ -88,15 +96,21 @@ print_register (void *arg,
 static void
 handle_address (GElf_Addr pc, Dwfl *dwfl)
 {
-  Dwarf_Frame *frame;
-  int result = dwfl_addrframe (dwfl, pc, &frame);
+  struct stuff stuff;
+
+  int result = dwfl_addrframe (dwfl, pc, &stuff.frame, &stuff.bias);
   if (result != 0)
     error (EXIT_FAILURE, 0, "dwfl_addrframe: %s", dwfl_errmsg (-1));
 
   Dwarf_Addr start = pc;
   Dwarf_Addr end = pc;
   bool signalp;
-  int ra_regno = dwarf_frame_info (frame, &start, &end, &signalp);
+  int ra_regno = dwarf_frame_info (stuff.frame, &start, &end, &signalp);
+  if (ra_regno >= 0)
+    {
+      start += stuff.bias;
+      end += stuff.bias;
+    }
 
   printf ("%#" PRIx64 " => [%#" PRIx64 ", %#" PRIx64 "):\n", pc, start, end);
 
@@ -108,15 +122,15 @@ handle_address (GElf_Addr pc, Dwfl *dwfl)
 	    ra_regno, signalp ? " (signal frame)" : "");
 
   Dwarf_Op *cfa_ops;
-  int cfa_nops = dwarf_frame_cfa (frame, &cfa_ops);
+  int cfa_nops = dwarf_frame_cfa (stuff.frame, &cfa_ops);
   if (cfa_nops < 0)
     error (EXIT_FAILURE, 0, "dwarf_frame_cfa: %s", dwarf_errmsg (-1));
 
   printf ("\tCFA ");
-  print_detail (1, cfa_ops, cfa_nops);
+  print_detail (1, cfa_ops, cfa_nops, stuff.bias);
 
   (void) dwfl_module_register_names (dwfl_addrmodule (dwfl, pc),
-				     &print_register, frame);
+				     &print_register, &stuff);
 }
 
 int

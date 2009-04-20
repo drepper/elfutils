@@ -72,21 +72,21 @@ try_cfi (Dwarf_CFI *cfi, Dwarf_Addr *bias, bool hard,
 }
 
 int
-dwfl_addrframe (dwfl, address, frame)
+dwfl_addrframe (dwfl, address, frame, bias)
      Dwfl *dwfl;
      Dwarf_Addr address;
      Dwarf_Frame **frame;
+     Dwarf_Addr *bias;
 {
   Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (dwfl, address);
   if (mod == NULL)
     return -1;
 
   /* Try to get a .debug_frame match first, then a .eh_frame match.  */
-  Dwarf_Addr bias;
-  int result = try_cfi (INTUSE(dwfl_module_dwarf_cfi) (mod, &bias), &bias,
+  int result = try_cfi (INTUSE(dwfl_module_dwarf_cfi) (mod, bias), bias,
 			false, address, frame);
   if (result > 0)
-    result = try_cfi (INTUSE(dwfl_module_eh_cfi) (mod, &bias), &bias,
+    result = try_cfi (INTUSE(dwfl_module_eh_cfi) (mod, bias), bias,
 		      true, address, frame);
 
   return result;

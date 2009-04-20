@@ -565,13 +565,14 @@ extern int dwfl_module_register_names (Dwfl_Module *mod,
 extern Dwarf_CFI *dwfl_module_dwarf_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 extern Dwarf_CFI *dwfl_module_eh_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 
-// XXX needs module bias? for DW_OP_addr in exprs?
 /* Compute what's known about a call frame when the PC is at ADDRESS.
    This integrates both DWARF proper and EH information as available.
-   Returns 0 for success or -1 for errors.
-   On success, *FRAME is a malloc'd pointer.  */
-extern int dwfl_addrframe (Dwfl *dwfl, Dwarf_Addr address, Dwarf_Frame **frame)
-  __nonnull_attribute__ (3);
+   Returns 0 for success or -1 for errors.  On success, *FRAME is a
+   malloc'd pointer and *BIAS is the address bias for uses of
+   DW_OP_addr and the like in expressions extracted from *FRAME.  */
+extern int dwfl_addrframe (Dwfl *dwfl, Dwarf_Addr address,
+			   Dwarf_Frame **frame, Dwarf_Addr *bias)
+  __nonnull_attribute__ (3, 4);
 
 
 #ifdef __cplusplus
