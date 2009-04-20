@@ -1,10 +1,11 @@
-2007-02-10  Roland McGrath  <roland@redhat.com>
+2009-04-19  Roland McGrath  <roland@redhat.com>
 
-	* libdwflP.h (struct Dwfl_Module): New members `cfi', `cfi_elf'.
-	Add INTDECL for dwfl_module_getcfi.
-	* dwfl_module_getcfi.c: New file.
+	* dwfl_module_dwarf_cfi.c: New file.
+	* dwfl_module_eh_cfi.c: New file.
 	* dwfl_addrframe.c: New file.
 	* Makefile.am (libdwfl_a_SOURCES): Add them.
+	* libdwflP.h (struct Dwfl_Module): New members `dwarf_cfi', `eh_cfi.
+	Add INTDECL for dwfl_module_eh_cfi, dwfl_module_dwarf_cfi.
 
 2009-04-19  Roland McGrath  <roland@redhat.com>
 

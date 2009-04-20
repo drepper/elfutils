@@ -48,7 +48,28 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "libdwflP.h"
-#include "../libdw/cfi.h"	/* XXX */
+#include "../libdw/cfi.h"
+
+/* Return -1 for hard error, 0 for address match, 1 for no match.  */
+static int
+try_cfi (Dwarf_CFI *cfi, Dwarf_Addr *bias, bool hard,
+	 Dwarf_Addr address, Dwarf_Frame **frame)
+{
+  int result = INTUSE(dwarf_cfi_addrframe) (cfi, address - *bias, frame);
+  if (result != 0)
+    {
+      if (hard)
+	__libdwfl_seterrno (DWFL_E_LIBDW);
+      else
+	{
+	  int err = INTUSE(dwarf_errno) ();
+	  if (err == DWARF_E_NO_MATCH)
+	    return 1;
+	  __libdwfl_seterrno (DWFL_E (LIBDW, err));
+	}
+    }
+  return result;
+}
 
 int
 dwfl_addrframe (dwfl, address, frame)
@@ -56,14 +77,17 @@ dwfl_addrframe (dwfl, address, frame)
      Dwarf_Addr address;
      Dwarf_Frame **frame;
 {
-  Dwarf_Addr dwbias;
   Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (dwfl, address);
-  Dwarf_CFI *cfi = INTUSE(dwfl_module_getcfi) (mod, &dwbias);
-  if (cfi == NULL)
+  if (mod == NULL)
     return -1;
 
-  int result = INTUSE(dwarf_cfi_addrframe) (cfi, address - dwbias, frame);
-  if (result != 0)
-    __libdwfl_seterrno (DWFL_E_LIBDW);
+  /* Try to get a .debug_frame match first, then a .eh_frame match.  */
+  Dwarf_Addr bias;
+  int result = try_cfi (INTUSE(dwfl_module_dwarf_cfi) (mod, &bias), &bias,
+			false, address, frame);
+  if (result > 0)
+    result = try_cfi (INTUSE(dwfl_module_eh_cfi) (mod, &bias), &bias,
+		      true, address, frame);
+
   return result;
 }

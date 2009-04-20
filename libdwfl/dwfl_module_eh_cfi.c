@@ -1,5 +1,5 @@
-/* Find CFI for a module in libdwfl.
-   Copyright (C) 2006, 2007, 2009 Red Hat, Inc.
+/* Find EH CFI for a module in libdwfl.
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -51,39 +51,25 @@
 #include "../libdw/cfi.h"
 
 Dwarf_CFI *
-dwfl_module_getcfi (mod, bias)
+dwfl_module_eh_cfi (mod, bias)
      Dwfl_Module *mod;
      Dwarf_Addr *bias;
 {
   if (mod == NULL)
     return NULL;
 
-  if (mod->cfi == NULL)
-    {
-      mod->cfi = INTUSE(dwarf_getcfi) (INTUSE(dwfl_module_getdwarf) (mod,
-								     bias));
-      if (mod->cfi == NULL && mod->main.elf != NULL)
-	{
-	  mod->cfi_elf = true;
-	  *bias = mod->main.bias;
-	  mod->cfi = INTUSE(dwarf_getcfi_elf) (mod->main.elf);
-	}
+  if (mod->eh_cfi != NULL)
+    return mod->eh_cfi;
 
-      if (mod->cfi != NULL && mod->cfi->ebl == NULL)
-	{
-	  Dwfl_Error error = __libdwfl_module_getebl (mod);
-	  if (error == DWFL_E_NOERROR)
-	    mod->cfi->ebl = mod->ebl;
-	  else
-	    {
-	      if (mod->cfi_elf)
-		INTUSE(dwarf_cfi_end) (mod->cfi);
-	      mod->cfi = NULL;
-	      __libdwfl_seterrno (error);
-	    }
-	}
+  __libdwfl_getelf (mod);
+  if (mod->elferr != DWFL_E_NOERROR)
+    {
+      __libdwfl_seterrno (mod->elferr);
+      return NULL;
     }
 
-  return mod->cfi;
+  *bias = mod->main.bias;
+  return __libdwfl_set_cfi (mod, &mod->eh_cfi,
+			    INTUSE(dwarf_getcfi_elf) (mod->main.elf));
 }
-INTDEF (dwfl_module_getcfi)
+INTDEF (dwfl_module_eh_cfi)

@@ -265,7 +265,7 @@ getcfi_scn_eh_frame (Elf *elf, const GElf_Ehdr *ehdr,
   return cfi;
 }
 
-/* Search for the section named ".eh_frame".  */
+/* Search for the sections named ".eh_frame" and ".eh_frame_hdr".  */
 static Dwarf_CFI *
 getcfi_shdr (Elf *elf, const GElf_Ehdr *ehdr)
 {

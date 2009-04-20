@@ -412,7 +412,7 @@ cie_cache_initial_state (Dwarf_CFI *cache, struct dwarf_cie *cie)
      First we'll let the backend fill in the default initial
      state for this machine's ABI.  */
 
-  Dwarf_CIE abi_info = { CIE_ID, 1, 1, -1, "", NULL, 0, 0, NULL, NULL };
+  Dwarf_CIE abi_info = { DW_CIE_ID_64, NULL, NULL, 1, 1, -1, "", NULL, 0, 0 };
 
   /* Make sure we have a backend handle cached.  */
   if (unlikely (cache->ebl == NULL))

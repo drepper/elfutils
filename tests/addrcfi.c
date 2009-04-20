@@ -36,7 +36,6 @@
 #include <error.h>
 #include <string.h>
 
-#include "../libdw/unwind.h"	/* XXX */
 
 static void
 print_detail (int result, const Dwarf_Op *ops, size_t nops)

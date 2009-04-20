@@ -167,7 +167,7 @@ __libdw_find_cie (Dwarf_CFI *cache, Dwarf_Off offset)
   int result = INTUSE(dwarf_next_cfi) (cache->e_ident,
 				       &cache->data->d, cache->eh_frame,
 				       offset, &next_offset, &entry);
-  if (result != 0 || entry.cie.CIE_id != CIE_ID)
+  if (result != 0 || entry.cie.CIE_id != DW_CIE_ID_64)
     {
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
       return NULL;

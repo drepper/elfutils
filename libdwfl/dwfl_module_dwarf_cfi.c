@@ -1,5 +1,5 @@
-/* DW_EH_PE_* support for libdw unwinder.
-   Copyright (C) 2007, 2009 Red Hat, Inc.
+/* Find DWARF CFI for a module in libdwfl.
+   Copyright (C) 2006-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -47,128 +47,43 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef _ENCODED_VALUE_H
-#define _ENCODED_VALUE_H 1
+#include "libdwflP.h"
+#include "../libdw/cfi.h"
 
-#include <dwarf.h>
-#include <stdlib.h>
-#include "libdwP.h"
-
-
-static size_t __attribute__ ((unused))
-encoded_value_size (const Elf_Data *data, const unsigned char e_ident[],
-		    uint8_t encoding, const uint8_t *p)
+Dwarf_CFI *
+internal_function
+__libdwfl_set_cfi (Dwfl_Module *mod, Dwarf_CFI **slot, Dwarf_CFI *cfi)
 {
-  if (encoding == DW_EH_PE_omit)
-    return 0;
-
-  switch (encoding & 0x07)
+  if (cfi != NULL && cfi->ebl == NULL)
     {
-    case DW_EH_PE_udata2:
-      return 2;
-    case DW_EH_PE_udata4:
-      return 4;
-    case DW_EH_PE_udata8:
-      return 8;
-
-    case DW_EH_PE_absptr:
-      return e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
-
-    case DW_EH_PE_uleb128:
-      if (p != NULL)
-	{
-	  const uint8_t *end = p;
-	  while (end < (uint8_t *) data->d_buf + data->d_size)
-	    if (*end++ & 0x80u)
-	      return end - p;
-	}
-
-    default:
-      abort ();
-      return 0;
-    }
-}
-
-static Dwarf_Addr __attribute__ ((unused))
-read_encoded_value (const Dwarf_CFI *cache, uint8_t encoding, const uint8_t **p)
-{
-  Dwarf_Addr base = 0;
-  switch (encoding & 0x70)
-    {
-    case DW_EH_PE_absptr:
-      break;
-    case DW_EH_PE_pcrel:
-      base = cache->frame_vaddr + (*p - (const uint8_t *) cache->data->d.d_buf);
-      break;
-    case DW_EH_PE_textrel:
-      // ia64: segrel
-      base = cache->textrel;
-      break;
-    case DW_EH_PE_datarel:
-      // i386: GOTOFF
-      // ia64: gprel
-      base = cache->datarel;
-      break;
-    case DW_EH_PE_funcrel:	/* XXX */
-      break;
-    case DW_EH_PE_aligned:
-      {
-	const size_t address_size
-	  = cache->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
-	size_t align = ((cache->frame_vaddr
-			 + (*p - (const uint8_t *) cache->data->d.d_buf))
-			& (address_size - 1));
-	if (align != 0)
-	  *p += address_size - align;
-	break;
-      }
-
-    default:
-      abort ();
-    }
-
-  Dwarf_Addr value;
-  switch (encoding & 0x0f)
-    {
-    case DW_EH_PE_udata2:
-      value = read_2ubyte_unaligned_inc (cache, *p);
-      break;
-    case DW_EH_PE_udata4:
-      value = read_4ubyte_unaligned_inc (cache, *p);
-      break;
-    case DW_EH_PE_udata8:
-      value = read_8ubyte_unaligned_inc (cache, *p);
-      break;
-
-    case DW_EH_PE_sdata2:
-      value = read_2sbyte_unaligned_inc (cache, *p);
-      break;
-    case DW_EH_PE_sdata4:
-      value = read_4sbyte_unaligned_inc (cache, *p);
-      break;
-    case DW_EH_PE_sdata8:
-      value = read_8sbyte_unaligned_inc (cache, *p);
-      break;
-
-    case DW_EH_PE_absptr:
-      if (cache->e_ident[EI_CLASS] == ELFCLASS32)
-	value = read_4ubyte_unaligned_inc (cache, *p);
+      Dwfl_Error error = __libdwfl_module_getebl (mod);
+      if (error == DWFL_E_NOERROR)
+	cfi->ebl = mod->ebl;
       else
-	value = read_8ubyte_unaligned_inc (cache, *p);
-      break;
-
-    case DW_EH_PE_uleb128:
-      get_uleb128 (value, *p);
-      break;
-    case DW_EH_PE_sleb128:
-      get_sleb128 (value, *p);
-      break;
-
-    default:
-      abort ();
+	{
+	  if (slot == &mod->eh_cfi)
+	    INTUSE(dwarf_cfi_end) (cfi);
+	  __libdwfl_seterrno (error);
+	  return NULL;
+	}
     }
 
-  return base + value;
+  return *slot = cfi;
 }
 
-#endif	/* encoded-value.h */
+Dwarf_CFI *
+dwfl_module_dwarf_cfi (mod, bias)
+     Dwfl_Module *mod;
+     Dwarf_Addr *bias;
+{
+  if (mod == NULL)
+    return NULL;
+
+  if (mod->dwarf_cfi != NULL)
+    return mod->dwarf_cfi;
+
+  return __libdwfl_set_cfi (mod, &mod->dwarf_cfi,
+			    INTUSE(dwarf_getcfi)
+			    (INTUSE(dwfl_module_getdwarf) (mod, bias)));
+}
+INTDEF (dwfl_module_dwarf_cfi)

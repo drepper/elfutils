@@ -62,7 +62,6 @@
 #include <string.h>
 
 #include "../libdw/libdwP.h"	/* We need its INTDECLs.  */
-#include "../libdw/unwind.h"	/* XXX */
 
 /* gettext helper macros.  */
 #define _(Str) dgettext ("elfutils", Str)
@@ -183,8 +182,8 @@ struct Dwfl_Module
   struct dwfl_arange *aranges;	/* Mapping of addresses in module to CUs.  */
   unsigned int naranges;
 
-  Dwarf_CFI *cfi;		/* Cached CFI for this module.  */
-  bool cfi_elf;			/* cfi is from dwarf_getcfi_elf.  */
+  Dwarf_CFI *dwarf_cfi;		/* Cached DWARF CFI for this module.  */
+  Dwarf_CFI *eh_cfi;		/* Cached EH CFI for this module.  */
 
   int segment;			/* Index of first segment table entry.  */
   bool gc;			/* Mark/sweep flag.  */
@@ -277,6 +276,11 @@ extern Dwfl_Error __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf,
 
 /* Ensure that MOD->ebl is set up.  */
 extern Dwfl_Error __libdwfl_module_getebl (Dwfl_Module *mod) internal_function;
+
+/* Install a new Dwarf_CFI in *SLOT (MOD->eh_cfi or MOD->dwarf_cfi).  */
+extern Dwarf_CFI *__libdwfl_set_cfi (Dwfl_Module *mod, Dwarf_CFI **slot,
+				     Dwarf_CFI *cfi)
+  internal_function;
 
 /* Iterate through all the CU's in the module.  Start by passing a null
    LASTCU, and then pass the last *CU returned.  Success return with null
@@ -429,7 +433,8 @@ INTDECL (dwfl_linux_kernel_report_modules)
 INTDECL (dwfl_linux_kernel_report_offline)
 INTDECL (dwfl_offline_section_address)
 INTDECL (dwfl_module_relocate_address)
-INTDECL (dwfl_module_getcfi)
+INTDECL (dwfl_module_dwarf_cfi)
+INTDECL (dwfl_module_eh_cfi)
 
 /* Leading arguments standard to callbacks passed a Dwfl_Module.  */
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr

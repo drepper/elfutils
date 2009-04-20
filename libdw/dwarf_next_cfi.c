@@ -89,7 +89,7 @@ dwarf_next_cfi (e_ident, data, eh_frame_p, off, next_off, entry)
 
   uint64_t length = read_4ubyte_unaligned_inc (&dw, bytes);
   size_t offset_size = 4;
-  if (length == 0xffffffffu)
+  if (length == DWARF3_LENGTH_64_BIT)
     {
       /* This is the 64-bit DWARF format.  */
       offset_size = 8;
@@ -120,14 +120,14 @@ dwarf_next_cfi (e_ident, data, eh_frame_p, off, next_off, entry)
     {
       entry->cie.CIE_id = read_4ubyte_unaligned_inc (&dw, bytes);
       /* Canonicalize the 32-bit CIE_ID value to 64 bits.  */
-      if (!eh_frame_p && entry->cie.CIE_id == 0xffffffffu)
-	entry->cie.CIE_id = CIE_ID;
+      if (!eh_frame_p && entry->cie.CIE_id == DW_CIE_ID_32)
+	entry->cie.CIE_id = DW_CIE_ID_64;
     }
   if (eh_frame_p)
     {
       /* Canonicalize the .eh_frame CIE pointer to .debug_frame format.  */
       if (entry->cie.CIE_id == 0)
-	entry->cie.CIE_id = CIE_ID;
+	entry->cie.CIE_id = DW_CIE_ID_64;
       else
 	{
 	  /* In .eh_frame format, a CIE pointer is the distance from where
@@ -140,7 +140,7 @@ dwarf_next_cfi (e_ident, data, eh_frame_p, off, next_off, entry)
 	}
     }
 
-  if (entry->cie.CIE_id == CIE_ID)
+  if (entry->cie.CIE_id == DW_CIE_ID_64)
     {
       /* Read the version stamp.  Always an 8-bit value.  */
       uint8_t version = *bytes++;
