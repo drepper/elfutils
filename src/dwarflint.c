@@ -2648,8 +2648,6 @@ relocate_one (struct relocation_data *reloc, struct relocation *rel,
 	  sym_value = reloc->file->sec[section_index].shdr.sh_addr;
 	}
 
-      *value = rel->addend + sym_value;
-
       /* It's target value, not section offset.  */
       if (offset_into == rel_value
 	  || offset_into == rel_address
@@ -2716,6 +2714,15 @@ relocate_one (struct relocation_data *reloc, struct relocation *rel,
 	      if (id != sec_invalid)
 		free (wh1);
 	    }
+	}
+
+      /* Only do the actual relocation if we have ET_REL files.  For
+	 non-ET_REL files, only do the above checking.  */
+      if (reloc->file->ehdr.e_type == ET_REL)
+	{
+	  *value = rel->addend + sym_value;
+	  if (rel_width == 4)
+	    *value = *value & (uint64_t)(uint32_t)-1;
 	}
     }
 }
