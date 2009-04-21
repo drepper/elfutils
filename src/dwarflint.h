@@ -179,6 +179,8 @@ extern "C"
     struct sec *sec;
     struct coverage cov;
     bool hit; /* true if COV is not pristine.  */
+    bool warn; /* dwarflint should emit a warning if a coverage
+		  appears in this section */
   };
 
   struct coverage_map
@@ -191,10 +193,13 @@ extern "C"
     size_t alloc;
   };
 
-  void section_coverage_init (struct section_coverage *sco, struct sec *sec);
+  void section_coverage_init (struct section_coverage *sco,
+			      struct sec *sec, bool warn);
   bool coverage_map_init (struct coverage_map *coverage_map,
 			  struct elf_file *elf,
-			  Elf64_Xword mask, bool allow_overlap);
+			  Elf64_Xword mask,
+			  Elf64_Xword warn_mask,
+			  bool allow_overlap);
   void coverage_map_add (struct coverage_map *coverage_map,
 			 uint64_t address, uint64_t length,
 			 struct where *where, enum message_category cat);

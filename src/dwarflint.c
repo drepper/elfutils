@@ -2143,7 +2143,8 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
      are at least partially covered, we expect the same
      coverage criteria as for .text.  */
   if (!sco->hit
-      && (strcmp (scnname, ".init") == 0
+      && ((sco->sec->shdr.sh_flags & SHF_EXECINSTR) == 0
+	  || strcmp (scnname, ".init") == 0
 	  || strcmp (scnname, ".fini") == 0
 	  || strcmp (scnname, ".plt") == 0))
     return true;
@@ -2175,7 +2176,8 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
 
 
 void
-section_coverage_init (struct section_coverage *sco, struct sec *sec)
+section_coverage_init (struct section_coverage *sco,
+		       struct sec *sec, bool warn)
 {
   assert (sco != NULL);
   assert (sec != NULL);
@@ -2183,12 +2185,15 @@ section_coverage_init (struct section_coverage *sco, struct sec *sec)
   sco->sec = sec;
   WIPE (sco->cov);
   sco->hit = false;
+  sco->warn = warn;
 }
 
 bool
 coverage_map_init (struct coverage_map *coverage_map,
 		   struct elf_file *elf,
-		   Elf64_Xword mask, bool allow_overlap)
+		   Elf64_Xword mask,
+		   Elf64_Xword warn_mask,
+		   bool allow_overlap)
 {
   assert (coverage_map != NULL);
   assert (elf != NULL);
@@ -2201,11 +2206,13 @@ coverage_map_init (struct coverage_map *coverage_map,
     {
       struct sec *sec = elf->sec + i;
 
-      if ((sec->shdr.sh_flags & mask) == mask)
+      bool normal = (sec->shdr.sh_flags & mask) == mask;
+      bool warn = (sec->shdr.sh_flags & warn_mask) == warn_mask;
+      if (normal || warn)
 	{
 	  REALLOC (coverage_map, scos);
-	  section_coverage_init (coverage_map->scos + coverage_map->size++,
-				 sec);
+	  section_coverage_init
+	    (coverage_map->scos + coverage_map->size++, sec, !normal);
 	}
     }
 
@@ -2280,6 +2287,12 @@ coverage_map_add (struct coverage_map *coverage_map,
 	  overlap = true;
 	}
 
+      if (sco->warn)
+	wr_message (cat | mc_impact_2, where,
+		    ": the range %#" PRIx64 "..%#" PRIx64
+		    " covers section %s.\n",
+		    address, end, sco->sec->name);
+
       /* Section coverage... */
       coverage_add (cov, cov_begin, cov_end - cov_begin);
       sco->hit = true;
@@ -2302,7 +2315,7 @@ coverage_map_add (struct coverage_map *coverage_map,
 	wr_error (where,
 		  ": portion %#" PRIx64 "..%#" PRIx64
 		  ", of the range %#" PRIx64 "..%#" PRIx64
-		  " doesn't fall into any ALLOC & EXEC section.\n",
+		  " doesn't fall into any ALLOC section.\n",
 		  h_start + address, h_start + address + h_length - 1,
 		  address, end);
 	return true;
@@ -3735,7 +3748,10 @@ static struct coverage_map *
 coverage_map_alloc_XA (struct elf_file *elf, bool allow_overlap)
 {
   struct coverage_map *ret = xmalloc (sizeof (*ret));
-  if (!coverage_map_init (ret, elf, SHF_ALLOC | SHF_EXECINSTR, allow_overlap))
+  if (!coverage_map_init (ret, elf,
+			  SHF_EXECINSTR | SHF_ALLOC,
+			  SHF_ALLOC,
+			  allow_overlap))
     {
       free (ret);
       return NULL;
