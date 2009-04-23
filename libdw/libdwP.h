@@ -419,6 +419,31 @@ extern int __libdw_visit_scopes (unsigned int depth,
 extern int __dwarf_errno_internal (void);
 
 
+/* Reader hooks.  */
+
+
+int __libdw_read_addr_inc (Dwarf *dbg, Dwarf_Word *ret,
+			   unsigned char **addr,
+			   bool addr64)
+  internal_function;
+
+int __libdw_read_off_inc (Dwarf *dbg, Dwarf_Word *ret,
+			  int sec_index, Dwarf_Word *offset,
+			  bool addr64)
+  internal_function;
+
+int __libdw_read_addr (Dwarf *dbg, Dwarf_Word *ret,
+		       unsigned char *addr,
+		       bool addr64)
+  internal_function;
+
+int __libdw_read_off (Dwarf *dbg, Dwarf_Word *ret,
+		      int sec_index, Dwarf_Word offset,
+		      bool addr64)
+  internal_function;
+
+
+
 /* Aliases to avoid PLTs.  */
 INTDECL (dwarf_attr)
 INTDECL (dwarf_attr_integrate)

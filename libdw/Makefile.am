@@ -83,7 +83,7 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_func_inline.c dwarf_getsrc_file.c \
 		  libdw_findcu.c libdw_form.c libdw_alloc.c memory-access.c \
 		  libdw_visit_scopes.c \
-		  dwarf_entry_breakpoints.c
+		  dwarf_entry_breakpoints.c dwarf_readhooks.c
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h

@@ -1,3 +1,11 @@
+2009-04-23  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (__libdw_read_addr_inc, __libdw_read_off_inc,
+	__libdw_read_addr, __libdw_read_off): Declare four new internal
+	functions.
+	* dwarf_readhooks.c: New file, implements the above.
+	* Makefile.am (libdw_a_SOURCES): Add the new file
+
 2009-04-15  Roland McGrath  <roland@redhat.com>
 
 	* dwarf.h (DW_CIE_ID): Removed.
