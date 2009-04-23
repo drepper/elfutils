@@ -1,5 +1,13 @@
 2009-04-23  Petr Machata  <pmachata@redhat.com>
 
+	* dwarf_formaddr.c (dwarf_formaddr): Call __libdw_read_* instead
+	of read_*ubyte_unaligned.
+	* dwarf_formref_die.c (dwarf_formref_die): Likewise.
+	* dwarf_getlocation.c (dwarf_getlocation_addr): Likewise.
+	* dwarf_getpubnames.c (get_offsets, dwarf_getpubnames): Likewise.
+
+2009-04-23  Petr Machata  <pmachata@redhat.com>
+
 	* libdwP.h (__libdw_read_addr_inc, __libdw_read_off_inc,
 	__libdw_read_addr, __libdw_read_off): Declare four new internal
 	functions.

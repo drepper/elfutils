@@ -415,29 +415,19 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 
       Dwarf_Addr begin;
       Dwarf_Addr end;
-      if (attr->cu->address_size == 8)
-	{
-	  begin = read_8ubyte_unaligned_inc (attr->cu->dbg, readp);
-	  end = read_8ubyte_unaligned_inc (attr->cu->dbg, readp);
+      bool addr64 = attr->cu->address_size == 8;
+      Dwarf_Addr escape = addr64 ? (Elf64_Addr)-1 : (Elf64_Addr)(Elf32_Addr)-1;
 
-	  if (begin == (Elf64_Addr) -1l) /* Base address entry.  */
-	    {
-	      base = end;
-	      if (unlikely (base == (Dwarf_Addr) -1))
-		goto invalid;
-	      continue;
-	    }
-	}
-      else
-	{
-	  begin = read_4ubyte_unaligned_inc (attr->cu->dbg, readp);
-	  end = read_4ubyte_unaligned_inc (attr->cu->dbg, readp);
+      if (__libdw_read_addr_inc (attr->cu->dbg, &begin, &readp, addr64)
+	  || __libdw_read_addr_inc (attr->cu->dbg, &end, &readp, addr64))
+	goto invalid;
 
-	  if (begin == (Elf32_Addr) -1) /* Base address entry.  */
-	    {
-	      base = end;
-	      continue;
-	    }
+      if (begin == escape)
+	{
+	  base = end;
+	  if (unlikely (base == escape))
+	    goto invalid;
+	  continue;
 	}
 
       if (begin == 0 && end == 0) /* End of list entry.  */
