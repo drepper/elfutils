@@ -1,5 +1,5 @@
 /* Find debugging and symbol information for a module in libdwfl.
-   Copyright (C) 2006,2007,2009 Red Hat, Inc.
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -49,80 +49,40 @@
 
 #include "libdwflP.h"
 
-const char *
-dwfl_module_getsym (Dwfl_Module *mod, int ndx,
-		    GElf_Sym *sym, GElf_Word *shndxp)
+Elf *
+dwfl_module_getelf (Dwfl_Module *mod, GElf_Addr *loadbase)
 {
-  if (unlikely (mod == NULL))
+  if (mod == NULL)
     return NULL;
 
-  if (unlikely (mod->symdata == NULL))
+  __libdwfl_getelf (mod);
+  if (mod->elferr == DWFL_E_NOERROR)
     {
-      int result = INTUSE(dwfl_module_getsymtab) (mod);
-      if (result < 0)
-	return NULL;
-    }
-
-  GElf_Word shndx;
-  sym = gelf_getsymshndx (mod->symdata, mod->symxndxdata, ndx, sym, &shndx);
-  if (unlikely (sym == NULL))
-    {
-      __libdwfl_seterrno (DWFL_E_LIBELF);
-      return NULL;
-    }
-
-  if (sym->st_shndx != SHN_XINDEX)
-    shndx = sym->st_shndx;
-
-  /* Figure out whether this symbol points into an SHF_ALLOC section.  */
-  bool alloc = true;
-  if ((shndxp != NULL || mod->e_type != ET_REL)
-      && (sym->st_shndx == SHN_XINDEX
-	  || (sym->st_shndx < SHN_LORESERVE && sym->st_shndx != SHN_UNDEF)))
-    {
-      GElf_Shdr shdr_mem;
-      GElf_Shdr *shdr = gelf_getshdr (elf_getscn (mod->symfile->elf, shndx),
-				      &shdr_mem);
-      alloc = unlikely (shdr == NULL) || (shdr->sh_flags & SHF_ALLOC);
-    }
-
-  if (shndxp != NULL)
-    /* Yield -1 in case of a non-SHF_ALLOC section.  */
-    *shndxp = alloc ? shndx : (GElf_Word) -1;
-
-  switch (sym->st_shndx)
-    {
-    case SHN_ABS:		/* XXX sometimes should use bias?? */
-    case SHN_UNDEF:
-    case SHN_COMMON:
-      break;
-
-    default:
-      if (mod->e_type == ET_REL)
+      if (mod->e_type == ET_REL && ! mod->main.relocated)
 	{
-	  /* In an ET_REL file, the symbol table values are relative
-	     to the section, not to the module's load base.  */
-	  size_t symshstrndx = SHN_UNDEF;
-	  Dwfl_Error result = __libdwfl_relocate_value (mod, mod->symfile->elf,
-							&symshstrndx,
-							shndx, &sym->st_value);
-	  if (unlikely (result != DWFL_E_NOERROR))
+	  /* Before letting them get at the Elf handle,
+	     apply all the relocations we know how to.  */
+
+	  mod->main.relocated = true;
+	  if (likely (__libdwfl_module_getebl (mod) == DWFL_E_NOERROR))
 	    {
-	      __libdwfl_seterrno (result);
-	      return NULL;
+	      (void) __libdwfl_relocate (mod, mod->main.elf, false);
+
+	      if (mod->debug.elf == mod->main.elf)
+		mod->debug.relocated = true;
+	      else if (mod->debug.elf != NULL && ! mod->debug.relocated)
+		{
+		  mod->debug.relocated = true;
+		  (void) __libdwfl_relocate (mod, mod->debug.elf, false);
+		}
 	    }
 	}
-      else if (alloc)
-	/* Apply the bias to the symbol value.  */
-	sym->st_value += mod->symfile->bias;
-      break;
+
+      *loadbase = mod->main.bias;
+      return mod->main.elf;
     }
 
-  if (unlikely (sym->st_name >= mod->symstrdata->d_size))
-    {
-      __libdwfl_seterrno (DWFL_E_BADSTROFF);
-      return NULL;
-    }
-  return (const char *) mod->symstrdata->d_buf + sym->st_name;
+  __libdwfl_seterrno (mod->elferr);
+  return NULL;
 }
-INTDEF (dwfl_module_getsym)
+INTDEF (dwfl_module_getelf)
