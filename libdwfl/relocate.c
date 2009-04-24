@@ -59,6 +59,8 @@ internal_function
 __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf, size_t *shstrndx,
 			  Elf32_Word shndx, GElf_Addr *value)
 {
+  assert (mod->e_type == ET_REL);
+
   Elf_Scn *refscn = elf_getscn (elf, shndx);
   GElf_Shdr refshdr_mem, *refshdr = gelf_getshdr (refscn, &refshdr_mem);
   if (refshdr == NULL)
@@ -265,8 +267,14 @@ resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
 		  continue;
 
 		/* We found it!  */
-		if (shndx == SHN_ABS)
+		if (shndx == SHN_ABS) /* XXX maybe should apply bias? */
 		  return DWFL_E_NOERROR;
+
+		if (m->e_type != ET_REL)
+		  {
+		    sym->st_value += m->symfile->bias;
+		    return DWFL_E_NOERROR;
+		  }
 
 		/* In an ET_REL file, the symbol table values are relative
 		   to the section, not to the module's load base.  */
