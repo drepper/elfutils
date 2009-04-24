@@ -122,6 +122,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
 	     run-dwarfcmp-self.sh run-dwarflint-self.sh \
+	     run-dwarf-attributes.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -144,7 +145,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile44.S.bz2 testfile44.expect.bz2 run-disasm-x86.sh \
 	     testfile45.S.bz2 testfile45.expect.bz2 run-disasm-x86-64.sh \
 	     testfile46.bz2 testfile47.bz2 testfile48.bz2 testfile48.debug.bz2 \
-	     testfile49.bz2 run-dwarf-attributes.sh
+	     testfile49.bz2 testfile50.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
@@ -163,7 +164,7 @@ installcheck-local:
 endif !STANDALONE
 
 if MUDFLAP
-static_build=yes
+static_build = yes
 libmudflap = -lmudflap
 endif
 
@@ -174,7 +175,7 @@ libasm = -lasm
 libebl = -lebl
 else !STANDALONE
 if BUILD_STATIC
-libdw = ../libdw/libdw.a $(libelf) $(libebl) -ldl
+libdw = ../libdw/libdw.a $(zip_LIBS) $(libelf) $(libebl) -ldl
 libelf = ../libelf/libelf.a
 libasm = ../libasm/libasm.a
 else
@@ -234,7 +235,7 @@ asm_tst7_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
 asm_tst8_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
 asm_tst9_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
 dwflmodtest_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-rdwrmmap_LDADD = $(libelf)
+rdwrmmap_LDADD = $(libelf) $(libmudflap)
 dwfl_bug_addr_overflow_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 arls_LDADD = $(libelf) $(libmudflap)
 dwfl_bug_fd_leak_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
