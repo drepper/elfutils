@@ -51,53 +51,24 @@
 # include <config.h>
 #endif
 
-#include <dwarf.h>
 #include "libdwP.h"
 
-int
-__libdw_read_addr_inc (Dwarf *dbg, Dwarf_Word *ret,
-		       unsigned char **addr,
-		       bool addr64)
+internal_function int
+__libdw_relocate_address (Dwarf *dbg __attribute__ ((unused)),
+			  int sec_index __attribute__ ((unused)),
+			  uintptr_t addr __attribute__ ((unused)),
+			  int width __attribute__ ((unused)),
+			  Dwarf_Addr *val __attribute__ ((unused)))
 {
-  if (addr64)
-    *ret = read_8ubyte_unaligned_inc (dbg, *addr);
-  else
-    *ret = read_4ubyte_unaligned_inc (dbg, *addr);
   return 0;
 }
 
-int
-__libdw_read_off_inc (Dwarf *dbg, Dwarf_Word *ret,
-		      int sec_index, Dwarf_Word *offset,
-		      bool addr64)
+internal_function int
+__libdw_relocate_offset (Dwarf *dbg __attribute__ ((unused)),
+			 int sec_index __attribute__ ((unused)),
+			 uintptr_t addr __attribute__ ((unused)),
+			 int width __attribute__ ((unused)),
+			 Dwarf_Addr *val __attribute__ ((unused)))
 {
-  Elf_Data *data = dbg->sectiondata[sec_index];
-  if (*offset >= data->d_size
-      || *offset + addr64 ? 8 : 4 >= data->d_size)
-    {
-      __libdw_seterrno (DWARF_E_INVALID_OFFSET);
-      return 1;
-    }
-
-  unsigned char *buf = data->d_buf;
-  unsigned char *addr = buf + *offset;
-  int status = __libdw_read_addr_inc (dbg, ret, &addr, addr64);
-  *offset = addr - buf;
-  return status;
-}
-
-int
-__libdw_read_addr (Dwarf *dbg, Dwarf_Word *ret,
-		   unsigned char *addr,
-		   bool addr64)
-{
-  return __libdw_read_addr_inc (dbg, ret, &addr, addr64);
-}
-
-int
-__libdw_read_off (Dwarf *dbg, Dwarf_Word *ret,
-		  int sec_index, Dwarf_Word offset,
-		  bool addr64)
-{
-  return __libdw_read_off_inc (dbg, ret, sec_index, &offset, addr64);
+  return 0;
 }

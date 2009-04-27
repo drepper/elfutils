@@ -70,9 +70,10 @@ dwarf_formaddr (attr, return_addr)
       return -1;
     }
 
-  if (__libdw_read_addr (attr->cu->dbg, return_addr, attr->valp,
-			 attr->cu->address_size == 8))
-    return -1l;
+  if (__libdw_read_address (attr->cu->dbg,
+			    IDX_debug_info, attr->valp,
+			    attr->cu->address_size, return_addr))
+    return -1;
 
   return 0;
 }

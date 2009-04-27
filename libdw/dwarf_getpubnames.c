@@ -124,8 +124,8 @@ get_offsets (Dwarf *dbg)
 	}
 
       /* Get the CU offset.  */
-      if (__libdw_read_addr (dbg, &mem[cnt].cu_offset,
-			     readp + 2, len_bytes == 8))
+      if (__libdw_read_address (dbg, IDX_debug_pubnames, readp + 2, len_bytes,
+				&mem[cnt].cu_offset))
 	/* Error has been already set in reader.  */
 	goto err_return;
 
@@ -222,8 +222,9 @@ dwarf_getpubnames (dbg, callback, arg, offset)
       while (1)
 	{
 	  /* READP points to the next offset/name pair.  */
-	  if (__libdw_read_addr_inc (dbg, &gl.die_offset, &readp,
-				     dbg->pubnames_sets[cnt].address_len == 8))
+	  if (__libdw_read_address_inc (dbg, IDX_debug_pubnames, &readp,
+					dbg->pubnames_sets[cnt].address_len,
+					&gl.die_offset))
 	    return -1l;
 
 	  /* If the offset is zero we reached the end of the set.  */

@@ -415,11 +415,14 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 
       Dwarf_Addr begin;
       Dwarf_Addr end;
-      bool addr64 = attr->cu->address_size == 8;
-      Dwarf_Addr escape = addr64 ? (Elf64_Addr)-1 : (Elf64_Addr)(Elf32_Addr)-1;
+      Dwarf_Addr escape = ADDR_ESCAPE (attr->cu->address_size);
 
-      if (__libdw_read_addr_inc (attr->cu->dbg, &begin, &readp, addr64)
-	  || __libdw_read_addr_inc (attr->cu->dbg, &end, &readp, addr64))
+      if (__libdw_read_address_inc (attr->cu->dbg,
+				    IDX_debug_line, &readp,
+				    attr->cu->address_size, &begin)
+	  || __libdw_read_address_inc (attr->cu->dbg,
+				       IDX_debug_line, &readp,
+				       attr->cu->address_size, &end))
 	goto invalid;
 
       if (begin == escape)
