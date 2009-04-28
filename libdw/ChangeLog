@@ -1,3 +1,9 @@
+2009-04-28  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (__libdw_read_length_inc, __libdw_read_length):
+	New internal functions.
+	* dwarf_readhooks.c: Implement the above.
+
 2009-04-23  Petr Machata  <pmachata@redhat.com>
 
 	* dwarf_formaddr.c (dwarf_formaddr): Call __libdw_read_* instead

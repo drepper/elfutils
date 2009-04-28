@@ -448,6 +448,11 @@ int __libdw_relocate_offset (Dwarf *dbg,
 			     int width, Dwarf_Off *val)
   internal_function;
 
+int __libdw_relocate_length (Dwarf *dbg,
+			     int sec_index, uintptr_t addr,
+			     int width, Dwarf_Addr *val)
+  internal_function;
+
 #define READ_AND_RELOCATE(RELOC_HOOK)					\
   {									\
     int status;								\
@@ -488,6 +493,14 @@ __libdw_read_offset_inc (Dwarf *dbg,
   READ_AND_RELOCATE (__libdw_relocate_offset)
 }
 
+static inline int
+__libdw_read_length_inc (Dwarf *dbg,
+			 int sec_index, unsigned char **addr,
+			 int width, Dwarf_Addr *ret)
+{
+  READ_AND_RELOCATE (__libdw_relocate_length)
+}
+
 #undef READ_AND_RELOCATE
 
 static inline int
@@ -505,6 +518,15 @@ __libdw_read_offset (Dwarf *dbg,
 		     int width, Dwarf_Addr *ret)
 {
   return __libdw_read_offset_inc (dbg, sec_index, (unsigned char **)&addr,
+				  width, ret);
+}
+
+static inline int
+__libdw_read_length (Dwarf *dbg,
+		     int sec_index, const unsigned char *addr,
+		     int width, Dwarf_Word *ret)
+{
+  return __libdw_read_length_inc (dbg, sec_index, (unsigned char **)&addr,
 				  width, ret);
 }
 
