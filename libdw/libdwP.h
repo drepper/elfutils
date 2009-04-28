@@ -492,18 +492,20 @@ __libdw_read_offset_inc (Dwarf *dbg,
 
 static inline int
 __libdw_read_address (Dwarf *dbg,
-		      int sec_index, unsigned char *addr,
+		      int sec_index, const unsigned char *addr,
 		      int width, Dwarf_Addr *ret)
 {
-  return __libdw_read_address_inc (dbg, sec_index, &addr, width, ret);
+  return __libdw_read_address_inc (dbg, sec_index, (unsigned char **)&addr,
+				   width, ret);
 }
 
 static inline int
 __libdw_read_offset (Dwarf *dbg,
-		     int sec_index, unsigned char *addr,
+		     int sec_index, const unsigned char *addr,
 		     int width, Dwarf_Addr *ret)
 {
-  return __libdw_read_offset_inc (dbg, sec_index, &addr, width, ret);
+  return __libdw_read_offset_inc (dbg, sec_index, (unsigned char **)&addr,
+				  width, ret);
 }
 
 #define ADDR_ESCAPE(width) \
