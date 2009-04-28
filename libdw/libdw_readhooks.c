@@ -68,7 +68,7 @@ __libdw_relocate_offset (Dwarf *dbg __attribute__ ((unused)),
 			 int sec_index __attribute__ ((unused)),
 			 uintptr_t addr __attribute__ ((unused)),
 			 int width __attribute__ ((unused)),
-			 Dwarf_Addr *val __attribute__ ((unused)))
+			 Dwarf_Off *val __attribute__ ((unused)))
 {
   return 0;
 }

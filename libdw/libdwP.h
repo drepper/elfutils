@@ -445,7 +445,7 @@ int __libdw_relocate_address (Dwarf *dbg,
 
 int __libdw_relocate_offset (Dwarf *dbg,
 			     int sec_index, uintptr_t addr,
-			     int width, Dwarf_Addr *val)
+			     int width, Dwarf_Off *val)
   internal_function;
 
 #define READ_AND_RELOCATE(RELOC_HOOK)					\
@@ -455,7 +455,7 @@ int __libdw_relocate_offset (Dwarf *dbg,
       return status;							\
 									\
     uintptr_t addr0 = (uintptr_t)*addr;					\
-    Dwarf_Addr val;							\
+    __typeof (*ret) val;						\
 									\
     if (width == 4)							\
       val = read_4ubyte_unaligned_inc (dbg, *addr);			\
@@ -483,7 +483,7 @@ __libdw_read_address_inc (Dwarf *dbg,
 static inline int
 __libdw_read_offset_inc (Dwarf *dbg,
 			 int sec_index, unsigned char **addr,
-			 int width, Dwarf_Addr *ret)
+			 int width, Dwarf_Off *ret)
 {
   READ_AND_RELOCATE (__libdw_relocate_offset)
 }
