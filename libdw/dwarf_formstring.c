@@ -80,11 +80,9 @@ dwarf_formstring (attrp)
     }
 
   uint64_t off;
-  // XXX We need better boundary checks.
-  if (attrp->cu->offset_size == 8)
-    off = read_8ubyte_unaligned (dbg, attrp->valp);
-  else
-    off = read_4ubyte_unaligned (dbg, attrp->valp);
+  if (__libdw_read_offset (dbg, IDX_debug_info, attrp->valp,
+			   attrp->cu->offset_size, &off))
+    return NULL;
 
   if (off  >= dbg->sectiondata[IDX_debug_str]->d_size)
     goto invalid_error;

@@ -77,11 +77,11 @@ dwarf_formudata (attr, return_uval)
       break;
 
     case DW_FORM_data4:
-      *return_uval = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
-      break;
-
     case DW_FORM_data8:
-      *return_uval = read_8ubyte_unaligned (attr->cu->dbg, attr->valp);
+      if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
+			       attr->form == DW_FORM_data4 ? 4 : 8,
+			       return_uval))
+	return -1;
       break;
 
     case DW_FORM_sdata:
