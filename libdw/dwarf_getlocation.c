@@ -113,7 +113,7 @@ loc_compare (const void *p1, const void *p2)
 
 static int
 getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
-	     Dwarf_Op **llbuf, size_t *listlen)
+	     Dwarf_Op **llbuf, size_t *listlen, int sec_index)
 {
   Dwarf *dbg = cu->dbg;
 
@@ -151,24 +151,9 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	{
 	case DW_OP_addr:
 	  /* Address, depends on address size of CU.  */
-	  if (cu->address_size == 4)
-	    {
-	      if (unlikely (data + 4 > end_data))
-		{
-		invalid:
-		  __libdw_seterrno (DWARF_E_INVALID_DWARF);
-		  return -1;
-		}
-
-	      newloc->number = read_4ubyte_unaligned_inc (dbg, data);
-	    }
-	  else
-	    {
-	      if (unlikely (data + 8 > end_data))
-		goto invalid;
-
-	      newloc->number = read_8ubyte_unaligned_inc (dbg, data);
-	    }
+	  if (__libdw_read_address_inc (dbg, sec_index, (unsigned char **)&data,
+					cu->address_size, &newloc->number))
+	    return -1;
 	  break;
 
 	case DW_OP_deref:
@@ -211,7 +196,11 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	case DW_OP_deref_size:
 	case DW_OP_xderef_size:
 	  if (unlikely (data >= end_data))
-	    goto invalid;
+	    {
+	    invalid:
+	      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+	      return -1;
+	    }
 
 	  newloc->number = *data++;
 	  break;
@@ -352,7 +341,7 @@ dwarf_getlocation (attr, llbuf, listlen)
   if (INTUSE(dwarf_formblock) (attr, &block) != 0)
     return -1;
 
-  return getlocation (attr->cu, &block, llbuf, listlen);
+  return getlocation (attr->cu, &block, llbuf, listlen, IDX_debug_info);
 }
 
 int
@@ -376,7 +365,8 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
       if (maxlocs == 0)
 	return 0;
       if (llbufs != NULL &&
-	  getlocation (attr->cu, &block, &llbufs[0], &listlens[0]) != 0)
+	  getlocation (attr->cu, &block, &llbufs[0], &listlens[0],
+		       IDX_debug_info) != 0)
 	return -1;
       return listlens[0] == 0 ? 0 : 1;
     }
@@ -479,7 +469,8 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 	  /* This one matches the address.  */
 	  if (llbufs != NULL
 	      && unlikely (getlocation (attr->cu, &block,
-					&llbufs[got], &listlens[got]) != 0))
+					&llbufs[got], &listlens[got],
+					IDX_debug_line) != 0))
 	    return -1;
 	  ++got;
 	}
