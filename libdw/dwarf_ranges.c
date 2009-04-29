@@ -142,25 +142,18 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 
   Dwarf_Addr begin;
   Dwarf_Addr end;
-  if (die->cu->address_size == 8)
+  if (__libdw_read_address_inc (die->cu->dbg,
+				IDX_debug_ranges, &readp,
+				die->cu->address_size, &begin)
+      || __libdw_read_address_inc (die->cu->dbg,
+				   IDX_debug_ranges, &readp,
+				   die->cu->address_size, &end))
+    return -1l;
+
+  if (begin == ADDR_ESCAPE (die->cu->address_size))
     {
-      begin = read_8ubyte_unaligned_inc (die->cu->dbg, readp);
-      end = read_8ubyte_unaligned_inc (die->cu->dbg, readp);
-      if (begin == (uint64_t) -1l) /* Base address entry.  */
-	{
-	  *basep = end;
-	  goto next;
-	}
-    }
-  else
-    {
-      begin = read_4ubyte_unaligned_inc (die->cu->dbg, readp);
-      end = read_4ubyte_unaligned_inc (die->cu->dbg, readp);
-      if (begin == (uint32_t) -1) /* Base address entry.  */
-	{
-	  *basep = end;
-	  goto next;
-	}
+      *basep = end;
+      goto next;
     }
 
   if (begin == 0 && end == 0) /* End of list entry.  */
