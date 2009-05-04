@@ -124,16 +124,14 @@ get_offsets (Dwarf *dbg)
 	}
 
       /* Get the CU offset.  */
-      if (__libdw_read_address (dbg, IDX_debug_pubnames, readp + 2, len_bytes,
-				&mem[cnt].cu_offset))
+      if (__libdw_read_offset (dbg, IDX_debug_pubnames, readp + 2, len_bytes,
+			       &mem[cnt].cu_offset, IDX_debug_info))
 	/* Error has been already set in reader.  */
 	goto err_return;
 
       /* Determine the size of the CU header.  */
       if (unlikely (dbg->sectiondata[IDX_debug_info] == NULL
-		    || dbg->sectiondata[IDX_debug_info]->d_buf == NULL
-		    || (mem[cnt].cu_offset + 3
-			>= dbg->sectiondata[IDX_debug_info]->d_size)))
+		    || dbg->sectiondata[IDX_debug_info]->d_buf == NULL))
 	goto invalid_dwarf;
 
       unsigned char *infop
@@ -222,10 +220,10 @@ dwarf_getpubnames (dbg, callback, arg, offset)
       while (1)
 	{
 	  /* READP points to the next offset/name pair.  */
-	  if (__libdw_read_address_inc (dbg, IDX_debug_pubnames, &readp,
-					dbg->pubnames_sets[cnt].address_len,
-					&gl.die_offset))
-	    return -1l;
+	  if (dbg->pubnames_sets[cnt].address_len == 4)
+	    gl.die_offset = read_4ubyte_unaligned_inc (dbg, readp);
+	  else
+	    gl.die_offset = read_8ubyte_unaligned_inc (dbg, readp);
 
 	  /* If the offset is zero we reached the end of the set.  */
 	  if (gl.die_offset == 0)

@@ -422,7 +422,7 @@ extern int __dwarf_errno_internal (void);
 
 /* Reader hooks.  */
 
-static inline int
+static inline bool
 __libdw_in_section (Dwarf *dbg, int sec_index,
 		    unsigned char *addr, int width)
 {
@@ -432,12 +432,14 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
       || (void *)addr + width > data->d_buf + data->d_size)
     {
       __libdw_seterrno (DWARF_E_INVALID_OFFSET);
-      return 1;
+      return false;
     }
 
-  return 0;
+  return true;
 }
 
+/* Relocation hooks return -1 on error, 0 if there is no relocation
+   and 1 if a relocation was present.*/
 int __libdw_relocate_address (Dwarf *dbg,
 			      int sec_index, uintptr_t addr,
 			      int width, Dwarf_Addr *val)
@@ -448,60 +450,65 @@ int __libdw_relocate_offset (Dwarf *dbg,
 			     int width, Dwarf_Off *val)
   internal_function;
 
-int __libdw_relocate_length (Dwarf *dbg,
-			     int sec_index, uintptr_t addr,
-			     int width, Dwarf_Addr *val)
-  internal_function;
-
-#define READ_AND_RELOCATE(RELOC_HOOK)					\
-  {									\
-    int status;								\
-    if ((status = __libdw_in_section (dbg, sec_index, *addr, width)))	\
-      return status;							\
+#define READ_AND_RELOCATE(RELOC_HOOK, VAL)				\
+  ({									\
+    if (!__libdw_in_section (dbg, sec_index, *addr, width))		\
+      return -1;							\
 									\
-    uintptr_t addr0 = (uintptr_t)*addr;					\
-    __typeof (*ret) val;						\
+    uintptr_t addr0 = (uintptr_t) *addr;				\
 									\
     if (width == 4)							\
-      val = read_4ubyte_unaligned_inc (dbg, *addr);			\
+      VAL = read_4ubyte_unaligned_inc (dbg, *addr);			\
     else								\
       {									\
 	assert (width == 8);						\
-	val = read_8ubyte_unaligned_inc (dbg, *addr);			\
+	VAL = read_8ubyte_unaligned_inc (dbg, *addr);			\
       }									\
 									\
-    if ((status = RELOC_HOOK (dbg, sec_index, addr0, width, &val)))	\
+    int status = RELOC_HOOK (dbg, sec_index, addr0, width, &VAL);	\
+    if (status == -1)							\
       return status;							\
-									\
-    *ret = val;								\
-    return 0;								\
-  }
+    status;								\
+   })
 
 static inline int
 __libdw_read_address_inc (Dwarf *dbg,
 			  int sec_index, unsigned char **addr,
 			  int width, Dwarf_Addr *ret)
 {
-  READ_AND_RELOCATE (__libdw_relocate_address)
+  Dwarf_Addr val;
+  READ_AND_RELOCATE (__libdw_relocate_address, val);
+  *ret = val;
+  return 0;
 }
 
 static inline int
 __libdw_read_offset_inc (Dwarf *dbg,
 			 int sec_index, unsigned char **addr,
-			 int width, Dwarf_Off *ret)
+			 int width, Dwarf_Off *ret, int sec_ret)
 {
-  READ_AND_RELOCATE (__libdw_relocate_offset)
+  Dwarf_Off val;
+  READ_AND_RELOCATE (__libdw_relocate_offset, val);
+
+  Elf_Data *data = dbg->sectiondata[sec_ret];
+  if (!__libdw_in_section (dbg, sec_ret, data->d_buf + val, width))
+    return -1;
+
+  *ret = val;
+  return 0;
 }
 
-static inline int
-__libdw_read_length_inc (Dwarf *dbg,
-			 int sec_index, unsigned char **addr,
-			 int width, Dwarf_Addr *ret)
-{
-  READ_AND_RELOCATE (__libdw_relocate_length)
-}
-
-#undef READ_AND_RELOCATE
+/* Read up begin/end pair and increment read pointer.
+    - If it's normal range record, set up `*beginp' and `*endp' and return 0.
+    - If it's base address selection record, set up `*basep' and return 1.
+    - If it's end of rangelist, don't set anything and return 2
+    - If an error occurs, don't set anything and return <0.  */
+int
+__libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
+				 unsigned char **addr, int width,
+				 Dwarf_Addr *beginp, Dwarf_Addr *endp,
+				 Dwarf_Addr *basep)
+  internal_function;
 
 static inline int
 __libdw_read_address (Dwarf *dbg,
@@ -515,23 +522,11 @@ __libdw_read_address (Dwarf *dbg,
 static inline int
 __libdw_read_offset (Dwarf *dbg,
 		     int sec_index, const unsigned char *addr,
-		     int width, Dwarf_Addr *ret)
+		     int width, Dwarf_Off *ret, int sec_ret)
 {
   return __libdw_read_offset_inc (dbg, sec_index, (unsigned char **)&addr,
-				  width, ret);
+				  width, ret, sec_ret);
 }
-
-static inline int
-__libdw_read_length (Dwarf *dbg,
-		     int sec_index, const unsigned char *addr,
-		     int width, Dwarf_Word *ret)
-{
-  return __libdw_read_length_inc (dbg, sec_index, (unsigned char **)&addr,
-				  width, ret);
-}
-
-#define ADDR_ESCAPE(width) \
-  (width == 8 ? (Elf64_Addr)-1 : (Elf64_Addr)(Elf32_Addr)-1)
 
 
 

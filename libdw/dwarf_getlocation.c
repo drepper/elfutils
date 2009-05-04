@@ -405,26 +405,17 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 
       Dwarf_Addr begin;
       Dwarf_Addr end;
-      Dwarf_Addr escape = ADDR_ESCAPE (attr->cu->address_size);
 
-      if (__libdw_read_address_inc (attr->cu->dbg,
-				    IDX_debug_line, &readp,
-				    attr->cu->address_size, &begin)
-	  || __libdw_read_address_inc (attr->cu->dbg,
-				       IDX_debug_line, &readp,
-				       attr->cu->address_size, &end))
-	goto invalid;
-
-      if (begin == escape)
-	{
-	  base = end;
-	  if (unlikely (base == escape))
-	    goto invalid;
-	  continue;
-	}
-
-      if (begin == 0 && end == 0) /* End of list entry.  */
+      int status
+	= __libdw_read_begin_end_pair_inc (attr->cu->dbg, IDX_debug_loc,
+					   &readp, attr->cu->address_size,
+					   &begin, &end, &base);
+      if (status == 2) /* End of list entry.  */
 	break;
+      else if (status == 1) /* Base address selected.  */
+	continue;
+      else if (status < 0)
+	return status;
 
       if ((unsigned char *) d->d_buf + d->d_size - readp < 2)
 	goto invalid;
@@ -470,7 +461,7 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 	  if (llbufs != NULL
 	      && unlikely (getlocation (attr->cu, &block,
 					&llbufs[got], &listlens[got],
-					IDX_debug_line) != 0))
+					IDX_debug_loc) != 0))
 	    return -1;
 	  ++got;
 	}

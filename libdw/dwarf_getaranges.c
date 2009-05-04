@@ -151,12 +151,8 @@ dwarf_getaranges (dbg, aranges, naranges)
       Dwarf_Word offset;
       if (__libdw_read_offset_inc (dbg,
 				   IDX_debug_aranges, (unsigned char **)&readp,
-				   length_bytes, &offset))
+				   length_bytes, &offset, IDX_debug_info))
 	return -1;
-
-      /* Sanity-check the offset.  */
-      if (offset + 4 > dbg->sectiondata[IDX_debug_info]->d_size)
-	goto invalid;
 
       unsigned int address_size = *readp++;
       if (address_size != 4 && address_size != 8)
@@ -177,11 +173,13 @@ dwarf_getaranges (dbg, aranges, naranges)
 
 	  if (__libdw_read_address_inc (dbg, IDX_debug_aranges,
 					(unsigned char **)&readp,
-					address_size, &range_address)
-	      || __libdw_read_length_inc (dbg, IDX_debug_aranges,
-					  (unsigned char **)&readp,
-					  address_size, &range_length))
+					address_size, &range_address))
 	    return -1;
+
+	  if (address_size == 4)
+	    range_length = read_4ubyte_unaligned_inc (dbg, readp);
+	  else
+	    range_length = read_8ubyte_unaligned_inc (dbg, readp);
 
 	  /* Two zero values mark the end.  */
 	  if (range_address == 0 && range_length == 0)

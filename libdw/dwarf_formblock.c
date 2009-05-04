@@ -79,9 +79,7 @@ dwarf_formblock (attr, return_block)
       break;
 
     case DW_FORM_block4:
-      if (__libdw_read_length (attr->cu->dbg, IDX_debug_info, attr->valp,
-			       4, &return_block->length))
-	return -1;
+      return_block->length = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
       return_block->data = attr->valp + 4;
       break;
 

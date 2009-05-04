@@ -84,7 +84,7 @@ dwarf_nextcu (dwarf, off, next_off, header_sizep, abbrev_offsetp,
 
   /* This points into the .debug_info section to the beginning of the
      CU entry.  */
-  unsigned char *data = (unsigned char *) dwarf->sectiondata[IDX_debug_info]->d_buf;
+  unsigned char *data = dwarf->sectiondata[IDX_debug_info]->d_buf;
   unsigned char *bytes = data + off;
 
   /* The format of the CU header is described in dwarf2p1 7.5.1:
@@ -146,7 +146,7 @@ dwarf_nextcu (dwarf, off, next_off, header_sizep, abbrev_offsetp,
      depends on whether this is a 32-bit or 64-bit DWARF definition.  */
   uint64_t abbrev_offset;
   if (__libdw_read_offset_inc (dwarf, IDX_debug_info, &bytes,
-			       offset_size, &abbrev_offset))
+			       offset_size, &abbrev_offset, IDX_debug_abbrev))
     return -1;
 
   if (abbrev_offsetp != NULL)

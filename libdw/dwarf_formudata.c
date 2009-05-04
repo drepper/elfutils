@@ -78,9 +78,9 @@ dwarf_formudata (attr, return_uval)
 
     case DW_FORM_data4:
     case DW_FORM_data8:
-      if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
-			       attr->form == DW_FORM_data4 ? 4 : 8,
-			       return_uval))
+      if (__libdw_read_address (attr->cu->dbg, IDX_debug_info, attr->valp,
+				attr->form == DW_FORM_data4 ? 4 : 8,
+				return_uval))
 	return -1;
       break;
 

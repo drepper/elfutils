@@ -55,6 +55,51 @@
 #include <dwarf.h>
 #include <assert.h>
 
+/* Read up begin/end pair and increment read pointer.
+    - If it's normal range record, set up `*beginp' and `*endp' and return 0.
+    - If it's base address selection record, set up `*basep' and return 1.
+    - If it's end of rangelist, don't set anything and return 2
+    - If an error occurs, don't set anything and return -1.  */
+internal_function int
+__libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
+				 unsigned char **addr, int width,
+				 Dwarf_Addr *beginp, Dwarf_Addr *endp,
+				 Dwarf_Addr *basep)
+{
+  Dwarf_Addr escape
+    = width == 8 ? (Elf64_Addr) -1 : (Elf64_Addr) (Elf32_Addr) -1;
+  Dwarf_Addr begin, end;
+
+  bool begin_relocated
+    = !READ_AND_RELOCATE (__libdw_relocate_address, begin);
+  bool end_relocated
+    = !READ_AND_RELOCATE (__libdw_relocate_address, end);
+
+  /* Unrelocated escape for begin means base address selection.  */
+  if (begin == escape && !begin_relocated)
+    {
+      if (unlikely (end == escape))
+	{
+	  __libdw_seterrno (DWARF_E_INVALID_DWARF);
+	  return -1;
+	}
+
+      if (basep != NULL)
+	*basep = end;
+      return 1;
+    }
+
+  /* Unrelocated pair of zeroes means end of range list.  */
+  if (begin == 0 && end == 0 && !begin_relocated && !end_relocated)
+    return 2;
+
+  /* Don't check for begin_relocated == end_relocated.  Serve the data
+     to the client even though it may be buggy.  */
+  *beginp = begin;
+  *endp = end;
+
+  return 0;
+}
 
 ptrdiff_t
 dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
@@ -142,22 +187,20 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 
   Dwarf_Addr begin;
   Dwarf_Addr end;
-  if (__libdw_read_address_inc (die->cu->dbg,
-				IDX_debug_ranges, &readp,
-				die->cu->address_size, &begin)
-      || __libdw_read_address_inc (die->cu->dbg,
-				   IDX_debug_ranges, &readp,
-				   die->cu->address_size, &end))
-    return -1l;
 
-  if (begin == ADDR_ESCAPE (die->cu->address_size))
+  switch (__libdw_read_begin_end_pair_inc (die->cu->dbg, IDX_debug_ranges,
+					   &readp, die->cu->address_size,
+					   &begin, &end, basep))
     {
-      *basep = end;
+    case 0:
+      break;
+    case 1:
       goto next;
+    case 2:
+      return 0;
+    default:
+      return -1l;
     }
-
-  if (begin == 0 && end == 0) /* End of list entry.  */
-    return 0;
 
   /* We have an address range entry.  */
   *startp = *basep + begin;

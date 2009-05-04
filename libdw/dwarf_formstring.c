@@ -74,18 +74,14 @@ dwarf_formstring (attrp)
   if (unlikely (attrp->form != DW_FORM_strp)
       || dbg->sectiondata[IDX_debug_str] == NULL)
     {
-    invalid_error:
       __libdw_seterrno (DWARF_E_NO_STRING);
       return NULL;
     }
 
   uint64_t off;
   if (__libdw_read_offset (dbg, IDX_debug_info, attrp->valp,
-			   attrp->cu->offset_size, &off))
+			   attrp->cu->offset_size, &off, IDX_debug_str))
     return NULL;
-
-  if (off  >= dbg->sectiondata[IDX_debug_str]->d_size)
-    goto invalid_error;
 
   return (const char *) dbg->sectiondata[IDX_debug_str]->d_buf + off;
 }

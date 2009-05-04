@@ -79,11 +79,11 @@ __libdw_formref (attr, return_offset)
       break;
 
     case DW_FORM_ref4:
+      *return_offset = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
+      break;
+
     case DW_FORM_ref8:
-      if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
-			       attr->form == DW_FORM_ref4 ? 4 : 8,
-			       return_offset))
-	return -1;
+      *return_offset = read_8ubyte_unaligned (attr->cu->dbg, attr->valp);
       break;
 
     case DW_FORM_ref_udata:
