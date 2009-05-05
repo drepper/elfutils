@@ -135,19 +135,12 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
       /* Get the offset into the .debug_line section.  NB: this call
 	 also checks whether the previous dwarf_attr call failed.  */
-      Dwarf_Word offset;
-      if (INTUSE(dwarf_formudata) (stmt_list, &offset) != 0)
+      const unsigned char *lineendp, *linep
+	= __libdw_read_udata_addr (stmt_list, IDX_debug_line,
+				   DWARF_E_NO_DEBUG_LINE,
+				   (unsigned char **) &lineendp);
+      if (linep == NULL)
 	goto out;
-
-      Dwarf *dbg = cu->dbg;
-      if (dbg->sectiondata[IDX_debug_line] == NULL)
-	{
-	  __libdw_seterrno (DWARF_E_NO_DEBUG_LINE);
-	  goto out;
-	}
-      const uint8_t *linep = dbg->sectiondata[IDX_debug_line]->d_buf + offset;
-      const uint8_t *lineendp = (dbg->sectiondata[IDX_debug_line]->d_buf
-				 + dbg->sectiondata[IDX_debug_line]->d_size);
 
       /* Get the compilation directory.  */
       Dwarf_Attribute compdir_attr_mem;
@@ -162,6 +155,8 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	  __libdw_seterrno (DWARF_E_INVALID_DEBUG_LINE);
 	  goto out;
 	}
+
+      Dwarf *dbg = cu->dbg;
       Dwarf_Word unit_length = read_4ubyte_unaligned_inc (dbg, linep);
       unsigned int length = 4;
       if (unlikely (unit_length == DWARF3_LENGTH_64_BIT))

@@ -378,25 +378,17 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
       return -1;
     }
 
-  /* Must have the form data4 or data8 which act as an offset.  */
-  Dwarf_Word offset;
-  if (unlikely (INTUSE(dwarf_formudata) (attr, &offset) != 0))
+  unsigned char *endp, *readp
+    = __libdw_read_udata_addr (attr, IDX_debug_loc,
+			       DWARF_E_NO_LOCLIST, &endp);
+  if (readp == NULL)
     return -1;
 
-  const Elf_Data *d = attr->cu->dbg->sectiondata[IDX_debug_loc];
-  if (unlikely (d == NULL))
-    {
-      __libdw_seterrno (DWARF_E_NO_LOCLIST);
-      return -1;
-    }
-
   Dwarf_Addr base = (Dwarf_Addr) -1;
-  unsigned char *readp = d->d_buf + offset;
   size_t got = 0;
   while (got < maxlocs)
     {
-      if ((unsigned char *) d->d_buf + d->d_size - readp
-	  < attr->cu->address_size * 2)
+      if (endp - readp < attr->cu->address_size * 2)
 	{
 	invalid:
 	  __libdw_seterrno (DWARF_E_INVALID_DWARF);
@@ -417,14 +409,13 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
       else if (status < 0)
 	return status;
 
-      if ((unsigned char *) d->d_buf + d->d_size - readp < 2)
+      if (endp - readp < 2)
 	goto invalid;
 
       /* We have a location expression.  */
       block.length = read_2ubyte_unaligned_inc (attr->cu->dbg, readp);
       block.data = readp;
-      if ((unsigned char *) d->d_buf + d->d_size - readp
-	  < (ptrdiff_t) block.length)
+      if (endp - readp < (ptrdiff_t) block.length)
 	goto invalid;
       readp += block.length;
 

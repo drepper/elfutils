@@ -125,11 +125,11 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
   const Elf_Data *d = die->cu->dbg->sectiondata[IDX_debug_ranges];
   if (d == NULL && offset != 0)
     {
-    no_ranges:
       __libdw_seterrno (DWARF_E_NO_DEBUG_RANGES);
       return -1;
     }
 
+  unsigned char *readp, *readendp;
   if (offset == 0)
     {
       Dwarf_Attribute attr_mem;
@@ -139,13 +139,12 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 	/* No PC attributes in this DIE at all, so an empty range list.  */
 	return 0;
 
-      /* Must have the form data4 or data8 which act as an offset.  */
-      Dwarf_Word start_offset;
-      if (INTUSE(dwarf_formudata) (attr, &start_offset) != 0)
+      if ((readp = __libdw_read_udata_addr (attr, IDX_debug_ranges,
+					    DWARF_E_NO_DEBUG_RANGES,
+					    &readendp)) == NULL)
 	return -1;
 
-      if (d == NULL)
-	goto no_ranges;
+      Dwarf_Word start_offset = (void *) readp - d->d_buf;
 
       offset = start_offset;
       assert ((Dwarf_Word) offset == start_offset);
@@ -172,17 +171,20 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 	  return -1;
 	}
     }
-  else if (offset < 0 || (size_t) offset >= d->d_size)
+  else
     {
-      __libdw_seterrno (DWARF_E_INVALID_OFFSET);
-      return -1l;
+      if (offset < 0 || (size_t) offset >= d->d_size)
+	{
+	  __libdw_seterrno (DWARF_E_INVALID_OFFSET);
+	  return -1l;
+	}
+
+      readp = d->d_buf + offset;
+      readendp = d->d_buf + d->d_size;
     }
 
-  unsigned char *readp = d->d_buf + offset;
-
  next:
-  if ((unsigned char *) d->d_buf + d->d_size - readp
-      < die->cu->address_size * 2)
+  if (readendp - readp < die->cu->address_size * 2)
     goto invalid;
 
   Dwarf_Addr begin;

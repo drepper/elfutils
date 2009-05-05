@@ -1,3 +1,12 @@
+2009-05-05  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (__libdw_read_udata_addr): Declare new function.
+	* dwarf_formudata.c: Implement it here.
+	* dwarf_getlocation.c (dwarf_getlocation_addr):
+	Call it instead of hand-rolled offset handling code.
+	* dwarf_getsrclines.c (dwarf_getsrclines): Likewise.
+	* dwarf_ranges.c (dwarf_ranges): Likewise.
+
 2009-05-04  Petr Machata  <pmachata@redhat.com>
 
 	* libdwP.h (__libdw_read_begin_end_pair_inc): Declare new function.
