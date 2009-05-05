@@ -139,12 +139,11 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 	/* No PC attributes in this DIE at all, so an empty range list.  */
 	return 0;
 
+      Dwarf_Word start_offset;
       if ((readp = __libdw_formptr (attr, IDX_debug_ranges,
 				    DWARF_E_NO_DEBUG_RANGES,
-				    &readendp)) == NULL)
+				    &readendp, &start_offset)) == NULL)
 	return -1;
-
-      Dwarf_Word start_offset = (void *) readp - d->d_buf;
 
       offset = start_offset;
       assert ((Dwarf_Word) offset == start_offset);
@@ -173,11 +172,9 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
     }
   else
     {
-      if (offset < 0 || (size_t) offset >= d->d_size)
-	{
-	  __libdw_seterrno (DWARF_E_INVALID_OFFSET);
-	  return -1l;
-	}
+      if (!__libdw_offset_in_section (die->cu->dbg,
+				      IDX_debug_ranges, offset, 1))
+	return -1l;
 
       readp = d->d_buf + offset;
       readendp = d->d_buf + d->d_size;

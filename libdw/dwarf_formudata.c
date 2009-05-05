@@ -57,7 +57,8 @@
 
 internal_function unsigned char *
 __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
-		 int err_nodata, unsigned char **endpp)
+		 int err_nodata, unsigned char **endpp,
+		 Dwarf_Off *offsetp)
 {
   if (attr == NULL)
     return NULL;
@@ -93,7 +94,10 @@ __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
       return NULL;
     }
 
-  *endpp = endp;
+  if (endpp != NULL)
+    *endpp = endp;
+  if (offsetp != NULL)
+    *offsetp = offset;
   return readp;
 }
 

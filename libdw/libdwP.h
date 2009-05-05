@@ -438,6 +438,14 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
   return true;
 }
 
+static inline bool
+__libdw_offset_in_section (Dwarf *dbg, int sec_index,
+			   Dwarf_Off offset, int width)
+{
+  Elf_Data *data = dbg->sectiondata[sec_index];
+  return __libdw_in_section (dbg, sec_index, data->d_buf + offset, width);
+}
+
 /* Relocation hooks return -1 on error, 0 if there is no relocation
    and 1 if a relocation was present.*/
 int __libdw_relocate_address (Dwarf *dbg,
@@ -490,8 +498,7 @@ __libdw_read_offset_inc (Dwarf *dbg,
   Dwarf_Off val;
   READ_AND_RELOCATE (__libdw_relocate_offset, val);
 
-  Elf_Data *data = dbg->sectiondata[sec_ret];
-  if (!__libdw_in_section (dbg, sec_ret, data->d_buf + val, width))
+  if (!__libdw_offset_in_section (dbg, sec_ret, val, width))
     return -1;
 
   *ret = val;
@@ -512,7 +519,7 @@ __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
 
 unsigned char *
 __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
-		 int err_nodata, unsigned char **endpp)
+		 int err_nodata, unsigned char **endpp, Dwarf_Off *offsetp)
   internal_function;
 
 static inline int
