@@ -67,29 +67,31 @@ __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
     {
     case DW_FORM_data4:
     case DW_FORM_data8:
-      if (__libdw_read_address (attr->cu->dbg, IDX_debug_info, attr->valp,
-				attr->form == DW_FORM_data4 ? 4 : 8,
-				&offset))
+      if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
+			       attr->form == DW_FORM_data4 ? 4 : 8,
+			       &offset, sec_index))
 	return NULL;
       break;
 
     default:
-      __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return NULL;
+      if (INTUSE(dwarf_formudata) (attr, &offset))
+	return NULL;
     };
 
   const Elf_Data *d = attr->cu->dbg->sectiondata[sec_index];
   if (unlikely (d == NULL))
     {
-    invalid:
       __libdw_seterrno (err_nodata);
       return NULL;
     }
 
   unsigned char *readp = d->d_buf + offset;
   unsigned char *endp = d->d_buf + d->d_size;
-  if (readp >= endp)
-    goto invalid;
+  if (unlikely (readp >= endp))
+    {
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return NULL;
+    }
 
   *endpp = endp;
   return readp;
@@ -116,11 +118,11 @@ dwarf_formudata (attr, return_uval)
       break;
 
     case DW_FORM_data4:
-      *return_uval = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
-      break;
-
     case DW_FORM_data8:
-      *return_uval = read_8ubyte_unaligned (attr->cu->dbg, attr->valp);
+      if (__libdw_read_address (attr->cu->dbg, IDX_debug_info, attr->valp,
+				attr->form == DW_FORM_data4 ? 4 : 8,
+				return_uval))
+	return -1;
       break;
 
     case DW_FORM_sdata:
