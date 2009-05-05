@@ -511,8 +511,8 @@ __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
   internal_function;
 
 unsigned char *
-__libdw_read_udata_addr (Dwarf_Attribute *attr, int sec_index,
-			 int err_nodata, unsigned char **endpp)
+__libdw_formptr (Dwarf_Attribute *attr, int sec_index,
+		 int err_nodata, unsigned char **endpp)
   internal_function;
 
 static inline int

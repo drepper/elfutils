@@ -379,8 +379,8 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
     }
 
   unsigned char *endp, *readp
-    = __libdw_read_udata_addr (attr, IDX_debug_loc,
-			       DWARF_E_NO_LOCLIST, &endp);
+    = __libdw_formptr (attr, IDX_debug_loc,
+		       DWARF_E_NO_LOCLIST, &endp);
   if (readp == NULL)
     return -1;
 

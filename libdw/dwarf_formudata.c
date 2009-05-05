@@ -56,8 +56,8 @@
 #include "libdwP.h"
 
 internal_function unsigned char *
-__libdw_read_udata_addr (Dwarf_Attribute *attr, int sec_index,
-			 int err_nodata, unsigned char **endpp)
+__libdw_formptr (Dwarf_Attribute *attr, int sec_index,
+		 int err_nodata, unsigned char **endpp)
 {
   if (attr == NULL)
     return NULL;

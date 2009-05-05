@@ -139,9 +139,9 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
 	/* No PC attributes in this DIE at all, so an empty range list.  */
 	return 0;
 
-      if ((readp = __libdw_read_udata_addr (attr, IDX_debug_ranges,
-					    DWARF_E_NO_DEBUG_RANGES,
-					    &readendp)) == NULL)
+      if ((readp = __libdw_formptr (attr, IDX_debug_ranges,
+				    DWARF_E_NO_DEBUG_RANGES,
+				    &readendp)) == NULL)
 	return -1;
 
       Dwarf_Word start_offset = (void *) readp - d->d_buf;
