@@ -70,10 +70,8 @@ __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
     = width == 8 ? (Elf64_Addr) -1 : (Elf64_Addr) (Elf32_Addr) -1;
   Dwarf_Addr begin, end;
 
-  bool begin_relocated
-    = !READ_AND_RELOCATE (__libdw_relocate_address, begin);
-  bool end_relocated
-    = !READ_AND_RELOCATE (__libdw_relocate_address, end);
+  bool begin_relocated = READ_AND_RELOCATE (__libdw_relocate_address, begin);
+  bool end_relocated = READ_AND_RELOCATE (__libdw_relocate_address, end);
 
   /* Unrelocated escape for begin means base address selection.  */
   if (begin == escape && !begin_relocated)
