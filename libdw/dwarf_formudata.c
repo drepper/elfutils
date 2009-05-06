@@ -63,6 +63,13 @@ __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
   if (attr == NULL)
     return NULL;
 
+  const Elf_Data *d = attr->cu->dbg->sectiondata[sec_index];
+  if (unlikely (d == NULL))
+    {
+      __libdw_seterrno (err_nodata);
+      return NULL;
+    }
+
   Dwarf_Word offset;
   switch (attr->form)
     {
@@ -78,13 +85,6 @@ __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
       if (INTUSE(dwarf_formudata) (attr, &offset))
 	return NULL;
     };
-
-  const Elf_Data *d = attr->cu->dbg->sectiondata[sec_index];
-  if (unlikely (d == NULL))
-    {
-      __libdw_seterrno (err_nodata);
-      return NULL;
-    }
 
   unsigned char *readp = d->d_buf + offset;
   unsigned char *endp = d->d_buf + d->d_size;
