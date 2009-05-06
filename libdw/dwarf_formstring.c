@@ -80,7 +80,7 @@ dwarf_formstring (attrp)
 
   uint64_t off;
   if (__libdw_read_offset (dbg, IDX_debug_info, attrp->valp,
-			   attrp->cu->offset_size, &off, IDX_debug_str))
+			   attrp->cu->offset_size, &off, IDX_debug_str, 1))
     return NULL;
 
   return (const char *) dbg->sectiondata[IDX_debug_str]->d_buf + off;

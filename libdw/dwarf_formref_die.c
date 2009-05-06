@@ -72,9 +72,8 @@ dwarf_formref_die (attr, die_mem)
 			  ? attr->cu->address_size
 			  : attr->cu->offset_size);
 
-      if (__libdw_read_offset (attr->cu->dbg,
-			       IDX_debug_info, attr->valp,
-			       ref_size, &offset, IDX_debug_info))
+      if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
+			       ref_size, &offset, IDX_debug_info, 0))
 	return NULL;
     }
   else

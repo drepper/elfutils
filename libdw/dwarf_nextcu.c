@@ -145,8 +145,8 @@ dwarf_nextcu (dwarf, off, next_off, header_sizep, abbrev_offsetp,
   /* Get offset in .debug_abbrev.  Note that the size of the entry
      depends on whether this is a 32-bit or 64-bit DWARF definition.  */
   uint64_t abbrev_offset;
-  if (__libdw_read_offset_inc (dwarf, IDX_debug_info, &bytes,
-			       offset_size, &abbrev_offset, IDX_debug_abbrev))
+  if (__libdw_read_offset_inc (dwarf, IDX_debug_info, &bytes, offset_size,
+			       &abbrev_offset, IDX_debug_abbrev, 0))
     return -1;
 
   if (abbrev_offsetp != NULL)

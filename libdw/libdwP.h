@@ -448,12 +448,17 @@ __libdw_relocate_offset (Dwarf *dbg __attribute__ ((unused)),
 
 static inline bool
 __libdw_in_section (Dwarf *dbg, int sec_index,
-		    unsigned char *addr, int width)
+		    unsigned char *addr, int size)
 {
   Elf_Data *data = dbg->sectiondata[sec_index];
+  if (data == NULL || data->d_buf == NULL)
+    {
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return false;
+    }
 
   if ((void *) addr < data->d_buf
-      || (void *) addr + width > data->d_buf + data->d_size)
+      || (void *) addr + size > data->d_buf + data->d_size)
     {
       __libdw_seterrno (DWARF_E_INVALID_OFFSET);
       return false;
@@ -464,10 +469,15 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
 
 static inline bool
 __libdw_offset_in_section (Dwarf *dbg, int sec_index,
-			   Dwarf_Off offset, int width)
+			   Dwarf_Off offset, int size)
 {
   Elf_Data *data = dbg->sectiondata[sec_index];
-  return __libdw_in_section (dbg, sec_index, data->d_buf + offset, width);
+  if (data == NULL || data->d_buf == NULL)
+    {
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return false;
+    }
+  return __libdw_in_section (dbg, sec_index, data->d_buf + offset, size);
 }
 
 #define READ_AND_RELOCATE(RELOC_HOOK, VAL)				\
@@ -503,12 +513,13 @@ __libdw_read_address_inc (Dwarf *dbg,
 static inline int
 __libdw_read_offset_inc (Dwarf *dbg,
 			 int sec_index, unsigned char **addr,
-			 int width, Dwarf_Off *ret, int sec_ret)
+			 int width, Dwarf_Off *ret, int sec_ret,
+			 int size)
 {
   Dwarf_Off val;
   READ_AND_RELOCATE (__libdw_relocate_offset, val);
 
-  if (!__libdw_offset_in_section (dbg, sec_ret, val, width))
+  if (!__libdw_offset_in_section (dbg, sec_ret, val, size))
     return -1;
 
   *ret = val;
@@ -543,10 +554,11 @@ __libdw_read_address (Dwarf *dbg,
 static inline int
 __libdw_read_offset (Dwarf *dbg,
 		     int sec_index, const unsigned char *addr,
-		     int width, Dwarf_Off *ret, int sec_ret)
+		     int width, Dwarf_Off *ret, int sec_ret,
+		     int size)
 {
   return __libdw_read_offset_inc (dbg, sec_index, (unsigned char **)&addr,
-				  width, ret, sec_ret);
+				  width, ret, sec_ret, size);
 }
 
 

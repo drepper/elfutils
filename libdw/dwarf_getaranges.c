@@ -151,7 +151,7 @@ dwarf_getaranges (dbg, aranges, naranges)
       Dwarf_Word offset;
       if (__libdw_read_offset_inc (dbg,
 				   IDX_debug_aranges, (unsigned char **)&readp,
-				   length_bytes, &offset, IDX_debug_info))
+				   length_bytes, &offset, IDX_debug_info, 4))
 	return -1;
 
       unsigned int address_size = *readp++;

@@ -77,7 +77,7 @@ __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
     case DW_FORM_data8:
       if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
 			       attr->form == DW_FORM_data4 ? 4 : 8,
-			       &offset, sec_index))
+			       &offset, sec_index, 0))
 	return NULL;
       break;
 
