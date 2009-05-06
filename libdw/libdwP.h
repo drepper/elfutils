@@ -447,18 +447,10 @@ __libdw_relocate_offset (Dwarf *dbg __attribute__ ((unused)),
 }
 
 static inline bool
-__libdw_in_section (Dwarf *dbg, int sec_index,
-		    unsigned char *addr, int size)
+__libdw_offset_in_data (Elf_Data *data, Dwarf_Off offset, size_t size)
 {
-  Elf_Data *data = dbg->sectiondata[sec_index];
-  if (data == NULL || data->d_buf == NULL)
-    {
-      __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return false;
-    }
-
-  if ((void *) addr < data->d_buf
-      || (void *) addr + size > data->d_buf + data->d_size)
+  if (unlikely (offset > data->d_size)
+      || unlikely (data->d_size - offset < size))
     {
       __libdw_seterrno (DWARF_E_INVALID_OFFSET);
       return false;
@@ -467,17 +459,37 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
   return true;
 }
 
-static inline bool
-__libdw_offset_in_section (Dwarf *dbg, int sec_index,
-			   Dwarf_Off offset, int size)
+static inline Elf_Data *
+__libdw_checked_get_data (Dwarf *dbg, int sec_index)
 {
   Elf_Data *data = dbg->sectiondata[sec_index];
-  if (data == NULL || data->d_buf == NULL)
+  if (unlikely (data == NULL)
+      || unlikely (data->d_buf == NULL))
     {
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return false;
+      return NULL;
     }
-  return __libdw_in_section (dbg, sec_index, data->d_buf + offset, size);
+  return data;
+}
+
+static inline bool
+__libdw_offset_in_section (Dwarf *dbg, int sec_index,
+			   Dwarf_Off offset, size_t size)
+{
+  Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
+  if (data == NULL)
+    return false;
+  return __libdw_offset_in_data (data, offset, size);
+}
+
+static inline bool
+__libdw_in_section (Dwarf *dbg, int sec_index,
+		    void *addr, size_t size)
+{
+  Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
+  if (data == NULL)
+    return false;
+  return __libdw_offset_in_data (data, addr - data->d_buf, size);
 }
 
 #define READ_AND_RELOCATE(RELOC_HOOK, VAL)				\
@@ -514,7 +526,7 @@ static inline int
 __libdw_read_offset_inc (Dwarf *dbg,
 			 int sec_index, unsigned char **addr,
 			 int width, Dwarf_Off *ret, int sec_ret,
-			 int size)
+			 size_t size)
 {
   Dwarf_Off val;
   READ_AND_RELOCATE (__libdw_relocate_offset, val);
@@ -555,7 +567,7 @@ static inline int
 __libdw_read_offset (Dwarf *dbg,
 		     int sec_index, const unsigned char *addr,
 		     int width, Dwarf_Off *ret, int sec_ret,
-		     int size)
+		     size_t size)
 {
   return __libdw_read_offset_inc (dbg, sec_index, (unsigned char **)&addr,
 				  width, ret, sec_ret, size);
