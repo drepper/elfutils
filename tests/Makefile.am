@@ -60,7 +60,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  find-prologues funcretval allregs rdwrmmap \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
-		  dwfl-bug-getmodules
+		  dwfl-bug-getmodules \
+		  dwarf-print
 # get-ciefde
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -87,7 +88,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh \
-	run-dwarfcmp-self.sh run-dwarflint-self.sh
+	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -121,6 +122,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
 	     run-dwarfcmp-self.sh run-dwarflint-self.sh \
+	     run-dwarf-attributes.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -143,7 +145,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile44.S.bz2 testfile44.expect.bz2 run-disasm-x86.sh \
 	     testfile45.S.bz2 testfile45.expect.bz2 run-disasm-x86-64.sh \
 	     testfile46.bz2 testfile47.bz2 testfile48.bz2 testfile48.debug.bz2 \
-	     testfile49.bz2
+	     testfile49.bz2 testfile50.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
@@ -162,7 +164,7 @@ installcheck-local:
 endif !STANDALONE
 
 if MUDFLAP
-static_build=yes
+static_build = yes
 libmudflap = -lmudflap
 endif
 
@@ -173,7 +175,7 @@ libasm = -lasm
 libebl = -lebl
 else !STANDALONE
 if BUILD_STATIC
-libdw = ../libdw/libdw.a $(libelf) $(libebl) -ldl
+libdw = ../libdw/libdw.a $(zip_LIBS) $(libelf) $(libebl) -ldl
 libelf = ../libelf/libelf.a
 libasm = ../libasm/libasm.a
 else
@@ -184,6 +186,12 @@ endif
 libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
 endif !STANDALONE
+
+# XXX later the C++ stuff will be in libdw.so directly
+libdwpp = ../libdw/libdwpp.a $(libdw)
+
+dwarf_print_SOURCES = dwarf-print.cc
+dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
 arsymtest_LDADD = $(libelf) $(libmudflap)
@@ -227,7 +235,7 @@ asm_tst7_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
 asm_tst8_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
 asm_tst9_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
 dwflmodtest_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-rdwrmmap_LDADD = $(libelf)
+rdwrmmap_LDADD = $(libelf) $(libmudflap)
 dwfl_bug_addr_overflow_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 arls_LDADD = $(libelf) $(libmudflap)
 dwfl_bug_fd_leak_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl

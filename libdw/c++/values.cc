@@ -70,8 +70,9 @@ using namespace std;
 dwarf::value_space
 dwarf::attr_value::what_space () const
 {
+  unsigned int expected = expected_value_space (dwarf_whatattr (thisattr ()),
+						_m_tag);
   unsigned int possible = 0;
-
   switch (dwarf_whatform (thisattr ()))
     {
     case DW_FORM_flag:
@@ -86,6 +87,9 @@ dwarf::attr_value::what_space () const
     case DW_FORM_block4:
       /* Location expression or target constant.  */
       possible = VS(location) | VS(constant);
+      if ((expected & possible) == possible)
+	/* When both are expected, a block is a location expression.  */
+	return VS_location;
       break;
 
     case DW_FORM_data1:
@@ -99,6 +103,9 @@ dwarf::attr_value::what_space () const
 		  | VS(source_file) | VS(source_line) | VS(source_column)
 		  | VS(location) // loclistptr
 		  | VS(lineptr) | VS(macptr) | VS(rangelistptr));
+      if ((expected & possible) == (VS(constant) | VS(location)))
+	/* When both are expected, a constant is not a loclistptr.  */
+	return VS_constant;
       break;
 
     case DW_FORM_string:
@@ -119,9 +126,6 @@ dwarf::attr_value::what_space () const
     default:
       throw std::runtime_error ("XXX bad form");
     }
-
-  unsigned int expected = expected_value_space
-    (dwarf_whatattr (thisattr ()), 0); // XXX need tag!
 
   if (unlikely ((expected & possible) == 0))
     {
@@ -185,8 +189,10 @@ dwarf::attr_value::to_string () const
     case VS_lineptr:	// XXX punt for now, treat as constant
     case VS_macptr:	// XXX punt for now, treat as constant
     case VS_constant:
-    case VS_dwarf_constant:
       return hex_string (constant ());
+
+    case VS_dwarf_constant:
+      return dwarf_constant ().to_string ();
 
     case VS_source_line:
     case VS_source_column:
@@ -219,13 +225,13 @@ dwarf::attr_value::to_string () const
 }
 
 // A few cases are trivial.
-#define SIMPLE(type, name, form)				\
-  type								\
-  dwarf::attr_value::name () const				\
-  {								\
-    type result;						\
-    xif (dwarf_form##form (thisattr (), &result) < 0);	\
-    return result;						\
+#define SIMPLE(type, name, form)					\
+  type									\
+  dwarf::attr_value::name () const					\
+  {									\
+    type result;							\
+    xif (thisattr (), dwarf_form##form (thisattr (), &result) < 0);	\
+    return result;							\
   }
 
 SIMPLE (bool, flag, flag)
@@ -240,9 +246,34 @@ const char *
 dwarf::attr_value::string () const
 {
   const char *result = dwarf_formstring (thisattr ());
-  xif (result == NULL);
+  xif (thisattr(), result == NULL);
   return result;
 }
+
+bool
+dwarf::attr_value::constant_is_integer () const
+{
+  switch (dwarf_whatform (thisattr ()))
+    {
+    case DW_FORM_block:
+    case DW_FORM_block1:
+    case DW_FORM_block2:
+    case DW_FORM_block4:
+      return false;
+
+    case DW_FORM_data1:
+    case DW_FORM_data2:
+    case DW_FORM_data4:
+    case DW_FORM_data8:
+    case DW_FORM_udata:
+    case DW_FORM_sdata:
+      return true;
+
+    default:
+      throw std::runtime_error ("XXX wrong form");
+    }
+}
+
 
 const_vector<uint8_t>
 dwarf::attr_value::constant_block () const
@@ -255,7 +286,7 @@ dwarf::attr_value::constant_block () const
     case DW_FORM_block1:
     case DW_FORM_block2:
     case DW_FORM_block4:
-      xif (dwarf_formblock (thisattr (), &block) < 0);
+      xif (thisattr(), dwarf_formblock (thisattr (), &block) < 0);
       break;
 
     case DW_FORM_data1:
@@ -292,9 +323,7 @@ dwarf::attr_value::constant_block () const
       throw std::runtime_error ("XXX wrong form");
     }
 
-  const uint8_t *const begin = reinterpret_cast<const uint8_t *> (block.data);
-  const uint8_t *const end = begin + block.length;
-  return const_vector<uint8_t> (begin, end);
+  return const_vector<uint8_t> (block);
 }
 
 const dwarf::macro_info_table
@@ -307,40 +336,6 @@ dwarf::attr_value::macro_info () const
   return macro_info_table (die);
 }
 
-// dwarf::location_attr
-
-const dwarf::location_attr
-dwarf::attr_value::location () const
-{
-  if (what_space () != VS_location)
-    throw std::runtime_error ("XXX not a location");
-
-  return location_attr (*this);
-}
-
-bool
-dwarf::location_attr::singleton () const
-{
-  switch (dwarf_whatform (_m_attr.thisattr ()))
-    {
-    case DW_FORM_block:
-    case DW_FORM_block1:
-    case DW_FORM_block2:
-    case DW_FORM_block4:
-      return true;
-    }
-
-  return false;
-}
-
-string
-dwarf::location_attr::to_string () const
-{
-  if (singleton ())
-    return "XXX";
-  return hex_string (_m_attr.constant (), "#");
-}
-
 // dwarf::range_list
 
 dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr,
@@ -349,42 +344,48 @@ dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr,
 {
 }
 
-dwarf::range_list::const_iterator &
-dwarf::range_list::const_iterator::operator++ ()
+static bool
+range_list_advance (int secndx,
+		    Dwarf_CU *cu,
+		    Dwarf_Addr &base,
+		    Dwarf_Addr &begin,
+		    Dwarf_Addr &end,
+		    ptrdiff_t &offset,
+		    unsigned char **valp)
 {
-  const Elf_Data *d = _m_cu->dbg->sectiondata[IDX_debug_ranges];
+  const Elf_Data *d = cu->dbg->sectiondata[secndx];
   if (unlikely (d == NULL))
     throw std::runtime_error ("XXX no ranges");
 
-  if (unlikely (_m_offset < 0) || unlikely ((size_t) _m_offset >= d->d_size))
+  if (unlikely (offset < 0) || unlikely ((size_t) offset >= d->d_size))
     throw std::runtime_error ("XXX bad offset in ranges iterator");
 
-  unsigned char *readp = (reinterpret_cast<unsigned char *> (d->d_buf)
-			  + _m_offset);
+  unsigned char *readp = reinterpret_cast<unsigned char *> (d->d_buf) + offset;
+  unsigned char *const readendp
+    = reinterpret_cast<unsigned char *> (d->d_buf) + d->d_size;
 
   while (true)
     {
-      if ((unsigned char *) d->d_buf + d->d_size - readp
-	  < _m_cu->address_size * 2)
+      if (readendp - readp < cu->address_size * 2)
 	throw std::runtime_error ("XXX bad ranges");
 
-      if (_m_cu->address_size == 8)
+      if (cu->address_size == 8)
 	{
-	  _m_begin = read_8ubyte_unaligned_inc (_m_cu->dbg, readp);
-	  _m_end = read_8ubyte_unaligned_inc (_m_cu->dbg, readp);
-	  if (_m_begin == (uint64_t) -1l) /* Base address entry.  */
+	  begin = read_8ubyte_unaligned_inc (cu->dbg, readp);
+	  end = read_8ubyte_unaligned_inc (cu->dbg, readp);
+	  if (begin == (uint64_t) -1l) /* Base address entry.  */
 	    {
-	      _m_base = _m_end;
+	      base = end;
 	      continue;
 	    }
 	}
       else
 	{
-	  _m_begin = read_4ubyte_unaligned_inc (_m_cu->dbg, readp);
-	  _m_end = read_4ubyte_unaligned_inc (_m_cu->dbg, readp);
-	  if (_m_begin == (uint32_t) -1) /* Base address entry.  */
+	  begin = read_4ubyte_unaligned_inc (cu->dbg, readp);
+	  end = read_4ubyte_unaligned_inc (cu->dbg, readp);
+	  if (begin == (uint32_t) -1) /* Base address entry.  */
 	    {
-	      _m_base = _m_end;
+	      base = end;
 	      continue;
 	    }
 	}
@@ -392,15 +393,17 @@ dwarf::range_list::const_iterator::operator++ ()
       break;
     }
 
-  if (_m_begin == 0 && _m_end == 0) /* End of list entry.  */
-    _m_offset = 1;
+  if (begin == 0 && end == 0) /* End of list entry.  */
+    offset = 1;
   else
     {
-      _m_offset = readp - reinterpret_cast<unsigned char *> (d->d_buf);
+      if (valp)
+	*valp = readp;
+      offset = readp - reinterpret_cast<unsigned char *> (d->d_buf);
 
-      if (_m_base == (Dwarf_Addr) -1)
+      if (base == (Dwarf_Addr) -1)
 	{
-	  CUDIE (cudie, _m_cu);
+	  CUDIE (cudie, cu);
 
 	  /* Find the base address of the compilation unit.  It will
 	     normally be specified by DW_AT_low_pc.  In DWARF-3 draft 4,
@@ -408,19 +411,28 @@ dwarf::range_list::const_iterator::operator++ ()
 	     been removed, but GCC emits DW_AT_entry_pc and not DW_AT_lowpc
 	     for compilation units with discontinuous ranges.  */
 	  Dwarf_Attribute attr_mem;
-	  if (unlikely (dwarf_lowpc (&cudie, &_m_base) != 0)
+	  if (unlikely (dwarf_lowpc (&cudie, &base) != 0)
 	      && dwarf_formaddr (dwarf_attr (&cudie,
 					     DW_AT_entry_pc,
 					     &attr_mem),
-				 &_m_base) != 0)
+				 &base) != 0)
 	    {
-	      xif (true);		// XXX
+	      return true;	// XXX
 	    }
 	}
     }
 
+  return false;
+}
+
+dwarf::range_list::const_iterator &
+dwarf::range_list::const_iterator::operator++ ()
+{
+  xif (_m_cu, range_list_advance (IDX_debug_ranges, _m_cu, _m_base,
+				  _m_begin, _m_end, _m_offset, NULL));
   return *this;
 }
+
 
 template<typename container>
 string
@@ -482,4 +494,64 @@ dwarf::aranges () const
       (arange_list::value_type (r->addr, r->addr + r->length));
 
   return result;
+}
+
+// dwarf::location_attr
+
+const dwarf::location_attr
+dwarf::attr_value::location () const
+{
+  if (what_space () != VS_location)
+    throw std::runtime_error ("XXX not a location");
+
+  return location_attr (*this);
+}
+
+bool
+dwarf::location_attr::is_list () const
+{
+  switch (dwarf_whatform (_m_attr.thisattr ()))
+    {
+    case DW_FORM_block:
+    case DW_FORM_block1:
+    case DW_FORM_block2:
+    case DW_FORM_block4:
+      return false;
+    }
+
+  return true;
+}
+
+dwarf::location_attr::const_iterator &
+dwarf::location_attr::const_iterator::operator++ ()
+{
+  if (unlikely (_m_offset == 1))
+    throw std::runtime_error ("incrementing end iterator");
+  else if (_m_offset == 0)
+    // Singleton, now at end.
+    _m_offset = 1;
+  else
+    {
+      // Advance to next list entry.
+      xif (_m_attr._m_attr.thisattr (),
+	   range_list_advance (IDX_debug_loc, _m_attr._m_attr._m_attr.cu,
+			       _m_base, _m_begin, _m_end, _m_offset,
+			       &_m_attr._m_attr._m_attr.valp));
+      if (_m_offset > 1)
+	{
+	  _m_attr._m_attr._m_attr.form = DW_FORM_block2;
+	  _m_offset += read_2ubyte_unaligned (_m_attr._m_attr._m_attr.cu->dbg,
+					      _m_attr._m_attr._m_attr.valp);
+	}
+    }
+
+  return *this;
+}
+
+string
+dwarf::location_attr::to_string () const
+{
+  if (is_list ())
+    return hex_string (_m_attr.constant (), "#");
+  return "XXX-expr";
 }

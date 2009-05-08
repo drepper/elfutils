@@ -1,3 +1,21 @@
+2009-03-25  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf-attributes.cc: New file.
+	* Makefile.am (noinst_PROGRAMS): Add it.
+	(dwarf_attributes_SOURCES, dwarf_attributes_LDADD): New variables.
+
+2009-03-25  Roland McGrath  <roland@redhat.com>
+
+	* dwarf-print.cc (print_die, process_file): Take LIMIT argument.
+	Punt recursion at that depth.
+	(main): Grok first argument --depth=N to set it.
+
+2009-03-24  Roland McGrath  <roland@redhat.com>
+
+	* dwarf-print.cc: New file.
+	* Makefile.am (noinst_PROGRAMS): Add it.
+	(dwarf_print_SOURCES, dwarf_print_LDADD): New variables.
+
 2009-01-10  Roland McGrath  <roland@redhat.com>
 
 	* run-dwarfcmp-self.sh: Also run with -T.
@@ -19,6 +37,17 @@
 
 	* run-dwarfcmp-self.sh: New file.
 	* Makefile.am (TESTS, EXTRA_DIST) Add it.
+
+2009-04-23  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile [BUILD_STATIC] (libdw): Add $(zip_LIBS).
+	(rdwrmmap_LDADD): Add $(libmudflap).
+
+2009-04-21  Roland McGrath  <roland@redhat.com>
+
+	* testfile50.bz2: New data file.
+	* Makefile.am (EXTRA_DIST): Add it.
+	* run-dwfl-addr-sect.sh: Add a case using it.
 
 2008-12-31  Ulrich Drepper  <drepper@redhat.com>
 

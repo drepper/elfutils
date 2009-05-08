@@ -81,15 +81,17 @@ ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 
 libar_a_SOURCES = arlib.c arlib2.c
 
-# XXX need to figure out C++ dso crapola
-libdwplusplus_SOURCES = ../libdw/c++/values.cc ../libdw/c++/known.cc \
-		      	../libdw/c++/line_info.cc
-
 dwarfcmp_SOURCES = dwarfcmp.cc
-dwarfcmp_SOURCES += $(libdwplusplus_SOURCES)
+
+dwarflint_SOURCES = dwarflint.c dwarflint.h dwarflint-hl.cc \
+		    dwarflint-expected-at.cc dwarflint-expected.hh \
+		    dwarfstrings.c dwarflint-coverage.c dwarflint-coverage.h
+
+readelf_SOURCES = readelf.c dwarfstrings.c
 
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
-		 ldscript.h xelf.h unaligned.h
+		 ldscript.h xelf.h unaligned.h dwarfstrings.h \
+		 expr_opcodes.h
 
 EXTRA_DIST = elf32-i386.script libld_elf_i386.map $(ld_modules) arlib.h \
 	     debugpred.h
@@ -105,7 +107,7 @@ endif
 
 if BUILD_STATIC
 libasm = ../libasm/libasm.a
-libdw = ../libdw/libdw.a $(libelf) $(libebl) -ldl
+libdw = ../libdw/libdw.a $(zip_LIBS) $(libelf) $(libebl) -ldl
 libelf = ../libelf/libelf.a
 else
 libasm = ../libasm/libasm.so
@@ -114,6 +116,9 @@ libelf = ../libelf/libelf.so
 endif
 libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
+
+# XXX later the C++ stuff will be in libdw.so directly
+libdwpp = ../libdw/libdwpp.a $(libdw)
 
 nm_no_Wformat = yes
 size_no_Wformat = yes
@@ -141,10 +146,9 @@ objdump_LDADD  = $(libasm) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 ranlib_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 strings_LDADD = $(libelf) $(libeu) $(libmudflap)
 ar_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
-CFLAGS_ar = -DAR=\"$(shell echo ar|sed '$(transform)')\"
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
-dwarfcmp_LDADD = $(libdw) $(libmudflap) -ldl
-dwarflint_LDADD  = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
+dwarfcmp_LDADD = $(libdwpp) $(libmudflap) -ldl
+dwarflint_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 
 ldlex.o: ldscript.c
 ldlex_no_Werror = yes

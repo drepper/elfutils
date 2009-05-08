@@ -413,9 +413,9 @@ parse_opt (int key, char *arg,
 	{
 	  fputs (gettext ("No operation specified.\n"), stderr);
 	do_argp_help:
-	  argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
+	  argp_help (&argp, stderr, ARGP_HELP_SEE,
 		     program_invocation_short_name);
-	  exit (1);
+	  exit (EXIT_FAILURE);
 	}
       break;
     default:
@@ -2825,7 +2825,9 @@ print_attributes (Ebl *ebl, const GElf_Ehdr *ehdr)
       GElf_Shdr shdr_mem;
       GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
 
-      if (shdr == NULL || shdr->sh_type != SHT_GNU_ATTRIBUTES)
+      if (shdr == NULL || (shdr->sh_type != SHT_GNU_ATTRIBUTES
+			   && (shdr->sh_type != SHT_ARM_ATTRIBUTES
+			       || ehdr->e_machine != EM_ARM)))
 	continue;
 
       printf (gettext ("\
@@ -2872,8 +2874,9 @@ print_attributes (Ebl *ebl, const GElf_Ehdr *ehdr)
 
 	  printf (gettext ("  %-13s  %4" PRIu32 "\n"), name, len);
 
-	  if (q - name == sizeof "gnu"
-	      && !memcmp (name, "gnu", sizeof "gnu"))
+	  if (shdr->sh_type != SHT_GNU_ATTRIBUTES
+	      || (q - name == sizeof "gnu"
+		  && !memcmp (name, "gnu", sizeof "gnu")))
 	    while (q < p)
 	      {
 		const unsigned char *const sub = q;
@@ -3719,7 +3722,7 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_uleb128 (op2, readp);
-	    printf ("     same_value r%" PRIu64 " (%s) in r%" PRIu64 " (%s)\n",
+	    printf ("     register r%" PRIu64 " (%s) in r%" PRIu64 " (%s)\n",
 		    op1, regname (op1), op2, regname (op2));
 	    break;
 	  case DW_CFA_remember_state:
@@ -3749,16 +3752,16 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	  case DW_CFA_def_cfa_expression:
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);	/* Length of DW_FORM_block.  */
-	    printf ("     val_expression %" PRIu64 "\n", op1);
+	    printf ("     def_cfa_expression %" PRIu64 "\n", op1);
 	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op1, readp);
 	    readp += op1;
-	    error (1,0,"need to implement BLOCK reading");
 	    break;
 	  case DW_CFA_expression:
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_uleb128 (op2, readp);	/* Length of DW_FORM_block.  */
-	    printf ("     val_expression %" PRIu64 "\n", op1);
+	    printf ("     expression r%" PRIu64 " (%s) \n",
+		    op1, regname (op1));
 	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op2, readp);
 	    readp += op2;
 	    break;
@@ -3793,24 +3796,25 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_sleb128 (sop2, readp);
-	    printf ("     val_offset %" PRIu64 " at offset %" PRId64 "\n",
+	    printf ("     val_offset_sf %" PRIu64 " at offset %" PRId64 "\n",
 		    op1, sop2 * data_align);
 	    break;
 	  case DW_CFA_val_expression:
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);
 	    get_uleb128 (op2, readp);	/* Length of DW_FORM_block.  */
-	    printf ("     val_expression %" PRIu64 "\n", op1);
+	    printf ("     val_expression r%" PRIu64 " (%s)\n",
+		    op1, regname (op1));
 	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op2, readp);
 	    readp += op2;
 	    break;
 	  case DW_CFA_MIPS_advance_loc8:
 	    op1 = read_8ubyte_unaligned_inc (dbg, readp);
-	    printf ("     advance_loc2 %" PRIu64 " to %#" PRIx64 "\n",
+	    printf ("     MIPS_advance_loc8 %" PRIu64 " to %#" PRIx64 "\n",
 		    op1, pc += op1 * code_align);
 	    break;
 	  case DW_CFA_GNU_window_save:
-	    puts ("     window_save");
+	    puts ("     GNU_window_save");
 	    break;
 	  case DW_CFA_GNU_args_size:
 	    // XXX overflow check
@@ -4089,9 +4093,13 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
       if (unlikely (cieend > dataend || readp + 8 > dataend))
 	goto invalid_data;
 
-      Dwarf_Word cie_id;
+      Dwarf_Off cie_id;
       if (length == 4)
-	cie_id = read_4ubyte_unaligned_inc (dbg, readp);
+	{
+	  cie_id = read_4ubyte_unaligned_inc (dbg, readp);
+	  if (!is_eh_frame && cie_id == DW_CIE_ID_32)
+	    cie_id = DW_CIE_ID_64;
+	}
       else
 	cie_id = read_8ubyte_unaligned_inc (dbg, readp);
 
@@ -4102,7 +4110,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
       Dwarf_Word initial_location = 0;
       Dwarf_Word vma_base = 0;
 
-      if (cie_id == (is_eh_frame ? 0 : DW_CIE_ID))
+      if (cie_id == (is_eh_frame ? 0 : DW_CIE_ID_64))
 	{
 	  uint_fast8_t version = *readp++;
 	  const char *const augmentation = (const char *) readp;
@@ -6338,7 +6346,7 @@ handle_core_registers (Ebl *ebl, Elf *core, const void *desc,
   ssize_t maxnreg = ebl_register_info (ebl, 0, NULL, 0, NULL, NULL, NULL, NULL);
   if (maxnreg <= 0)
     error (EXIT_FAILURE, 0,
-	   gettext ("cannot register info: %s"), elf_errmsg (-1));
+	   gettext ("cannot get register info: %s"), elf_errmsg (-1));
 
   struct register_info regs[maxnreg];
   memset (regs, 0, sizeof regs);

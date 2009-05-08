@@ -55,9 +55,6 @@
 #include "subr.hh"
 #include <stdexcept>
 
-#include <cstring>
-#include <iostream>
-#include <sstream>
 #include <list>
 #include <map>
 #include <set>
@@ -180,6 +177,8 @@ namespace elfutils
       : _m_size (v._m_size), _m_array (v._m_array) {}
     const_vector (const elt *start, const elt *stop)
       : _m_size (stop - start), _m_array (start) {}
+    const_vector (const ::Dwarf_Block &b)
+      : _m_size (b.length), _m_array (reinterpret_cast<const elt *> (b.data)) {}
 
     inline const_vector &operator= (const const_vector &v)
     {
@@ -223,55 +222,67 @@ namespace elfutils
     {
       return !(*this == other);
     }
+
   };
 
   // One DWARF object file.
   class dwarf
   {
   private:
-    template<const char *lookup_known (int)>
-    static inline std::string known_name (int code)
-    {
-      const char *known = lookup_known (code);
-      if (known != NULL)
-	return std::string (known);
-      std::ostringstream os;
-      os.setf(std::ios::hex, std::ios::basefield);
-      os << code;
-      return os.str ();
-    }
+    static const char *known_tag (int);
+    static const char *known_attribute (int);
 
   public:
-    static const char *known_attribute (int);
-    static const char *known_tag (int);
-
-    static inline std::string tag_name (int code)
-    {
-      return known_name<known_tag> (code);
-    }
+    typedef subr::known<__typeof ("DW_TAG_"), known_tag> tags;
+    typedef subr::known<__typeof ("DW_AT_"), known_attribute> attributes;
 
     template<typename attribute>
     static inline std::string attribute_name (const attribute &attr)
     {
       int code = attr.first;
-      return attribute_name (code);
+      return attributes::name (code);
     }
 
-    static inline std::string attribute_name (const unsigned int code)
+    template<int key>
+    class known_enum
     {
-      return known_name<known_attribute> (code);
-    }
+    public:
+      static size_t prefix_length ();
+      static const char *identifier (int);
+      inline static const char *name (int value)
+      {
+	const char *id = identifier (value);
+	return id != NULL ? id + prefix_length () : NULL;
+      }
+
+      // XXX perhaps have iterator/lookup methods like a read-only map?
+    };
+
+    typedef known_enum< ::DW_AT_producer> forms;
+    typedef known_enum< ::DW_AT_location> ops;
 
   private:
-    // XXX make this an instance method to include irritant context
-    static void throw_libdw (void) // XXX raises (...)
-    {
-      throw std::runtime_error(::dwarf_errmsg (-1));
-    }
-    static inline void xif (bool fail)
+    static void throw_libdw (::Dwarf *dw); // XXX raises (...)
+    static void throw_libdw (::Dwarf_CU *); // XXX raises (...)
+
+    inline void xif (bool fail) const
     {
       if (unlikely (fail))
-	throw_libdw ();
+	throw_libdw (_m_dw);
+    }
+    static inline void xif (::Dwarf_CU *cu, bool fail)
+    {
+      if (unlikely (fail))
+	throw_libdw (cu);
+    }
+
+    static inline void xif (const ::Dwarf_Attribute *attr, bool fail)
+    {
+      xif (attr->cu, fail);
+    }
+    static inline void xif (const ::Dwarf_Die *die, bool fail)
+    {
+      xif (die->cu, fail);
     }
 
     template<typename raw, typename raw_element, typename element,
@@ -381,6 +392,7 @@ namespace elfutils
     class line_table;
     class line_entry;
     class macro_info_table;
+    class dwarf_enum;
 
     class debug_info_entry
     {
@@ -395,14 +407,19 @@ namespace elfutils
       friend class attr_value;
     protected:
 
+      inline void xif (bool fail) const
+      {
+	dwarf::xif (_m_die.cu, fail);
+      }
+
       inline debug_info_entry ()
       {
 	memset (&_m_die, 0, sizeof _m_die);
       }
 
-      inline debug_info_entry (::Dwarf *dw, ::Dwarf_Off off)
+      inline debug_info_entry (const dwarf &dw, ::Dwarf_Off off)
       {
-	xif (::dwarf_offdie (dw, off, &_m_die) == NULL);
+	dw.xif (::dwarf_offdie (dw._m_dw, off, &_m_die) == NULL);
       }
 
     public:
@@ -472,6 +489,8 @@ namespace elfutils
       inline raw_children (const debug_info_entry &die) : _m_die (die) {}
 
     public:
+      typedef debug_info_entry value_type;
+
       inline raw_children (const raw_children &c) : _m_die (c._m_die) {}
 
       bool empty () const
@@ -491,13 +510,13 @@ namespace elfutils
 	inline const_iterator (const debug_info_entry &parent)
 	{
 	  int result = ::dwarf_child (parent.thisdie (), &_m_die._m_die);
-	  xif (result < 0);
+	  parent.xif (result < 0);
 	}
 
 	// Construct from a reference attribute.
 	inline const_iterator (Dwarf_Attribute *attr)
 	{
-	  xif (::dwarf_formref_die (attr, &_m_die._m_die) == NULL);
+	  dwarf::xif (attr, ::dwarf_formref_die (attr, &_m_die._m_die) == NULL);
 	}
 
       public:
@@ -532,7 +551,7 @@ namespace elfutils
 	inline const_iterator &operator++ () // prefix
 	{
 	  int result = ::dwarf_siblingof (&_m_die._m_die, &_m_die._m_die);
-	  xif (result < 0);
+	  _m_die.xif (result < 0);
 	  if (result > 0)	// Hit the end.
 	    *this = const_iterator ();
 	  return *this;
@@ -556,7 +575,7 @@ namespace elfutils
       template<typename other_children>
       bool operator== (const other_children &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename other_children>
       bool operator!= (const other_children &other) const
@@ -577,6 +596,8 @@ namespace elfutils
       raw_attributes (const debug_info_entry &die) : _m_die (die) {}
 
     public:
+      typedef attribute value_type;
+
       inline raw_attributes (const raw_attributes &a) : _m_die (a._m_die) {}
 
       size_t size () const;
@@ -611,7 +632,7 @@ namespace elfutils
 	}
 
 	inline const_iterator (const debug_info_entry &die, ptrdiff_t offset)
-	  : _m_die (die), _m_offset (offset) {}
+	  : _m_die (die), _m_offset (offset), _m_attr () {}
 
       public:
 	inline const_iterator (const const_iterator &i)
@@ -628,7 +649,7 @@ namespace elfutils
 	inline bool operator== (const const_iterator &other) const
 	{
 	  return (_m_die._m_die.addr == other._m_die._m_die.addr
-		  && _m_offset == other._m_offset);
+		  && _m_attr.valp == other._m_attr.valp);
 	}
 	inline bool operator!= (const const_iterator &other) const
 	{
@@ -640,7 +661,7 @@ namespace elfutils
 	  _m_attr.valp = NULL;
 	  int result = ::dwarf_getattrs (&_m_die._m_die, &getattrs_callback,
 					 (void *) this, _m_offset);
-	  xif (result < 0);
+	  _m_die.xif (result < 0);
 	  _m_offset = result;
 	  return *this;
 	}
@@ -653,9 +674,9 @@ namespace elfutils
 
 	inline attribute operator* () const
 	{
-	  if (unlikely (_m_offset == 1))
+	  if (unlikely (_m_attr.valp == NULL))
 	    throw std::runtime_error ("dereferencing end iterator");
-	  return attribute (_m_attr);
+	  return attribute (_m_die, _m_attr);
 	}
       };
       inline const_iterator begin () const
@@ -690,6 +711,8 @@ namespace elfutils
 	: raw_children::raw_children (die) {}
 
     public:
+      typedef debug_info_entry value_type;
+
       inline children (const children &c) : raw_children (c) {}
 
       class const_iterator
@@ -797,7 +820,7 @@ namespace elfutils
       template<typename other_children>
       bool operator== (const other_children &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename other_children>
       bool operator!= (const other_children &other) const
@@ -830,6 +853,10 @@ namespace elfutils
 	: attributes_base (raw) {}
 
     public:
+      typedef int key_type;
+      typedef attr_value mapped_type;
+      typedef attribute value_type;
+
       inline attributes (const class attributes &a)
 	: attributes_base (a) {}
 
@@ -877,12 +904,12 @@ namespace elfutils
       {
 	/* Our container is unordered (i.e., in file order).  A set of
 	   attributes is conceptually equal if all the pairs match,
-	   regardless of the order.  But the std::equal algorithm will
+	   regardless of the order.  But the container_equal algorithm will
 	   compare corresponding elements in order.  So we need an ordered
 	   map of our attributes for the comparison.  */
 	const std::map<int, attr_value> mine = *this;
-	const std::map<int, attr_value> his = other;
-	return mine == his;
+	const std::map<int, typename attrs::mapped_type> his = other;
+	return mine.size () == his.size () && subr::container_equal (mine, his);
       }
 
       template<typename attrs>
@@ -984,9 +1011,9 @@ namespace elfutils
 	    if (other_size != 0 && other_size != size ())
 	      return false;
 	  }
-	return !strcmp (name (), other.name ());
+	return subr::name_equal<typeof (other.name ())> () (name (),
+							    other.name ());
       }
-
       template<typename other_file>
       inline bool operator!= (const other_file &other) const
       {
@@ -1000,14 +1027,26 @@ namespace elfutils
       friend class attribute;
       friend class location_attr;
       friend class range_list;
+      friend class dwarf_enum;
     private:
-      const ::Dwarf_Attribute _m_attr;
+      const int _m_tag;
+      ::Dwarf_Attribute _m_attr;
       inline ::Dwarf_Attribute *thisattr () const
       {
 	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
       }
+      inline int whatattr () const
+      {
+	return ::dwarf_whatattr (thisattr ());
+      }
 
-      attr_value (const ::Dwarf_Attribute &attr) : _m_attr (attr) {}
+      attr_value (int tag, const ::Dwarf_Attribute &attr)
+	: _m_tag (tag), _m_attr (attr) {}
+
+      inline bool same (const attr_value &other) const
+      {
+	return _m_attr.valp == other._m_attr.valp;
+      }
 
     public:
       // not copyable, don't worry about ref lifetime(?)
@@ -1021,6 +1060,11 @@ namespace elfutils
       inline debug_info_entry::raw_children::const_iterator reference () const
       {
 	return debug_info_entry::raw_children::const_iterator (thisattr ());
+      }
+      inline debug_info_entry::raw_children::const_iterator
+      unit_reference () const
+      {
+	return reference ();
       }
 
       // XXX reloc, dwfl
@@ -1037,14 +1081,25 @@ namespace elfutils
       }
 
       const dwarf::source_file source_file () const;
+      inline unsigned int source_line () const
+      {
+	return constant ();
+      }
+      inline unsigned int source_column () const
+      {
+	return constant ();
+      }
 
       // XXX reloc
       ::Dwarf_Word constant () const;
       ::Dwarf_Sword signed_constant () const;
       const_vector<uint8_t> constant_block () const;
+      bool constant_is_integer () const;
 
-      // XXX known enums
-      // dwarf_enum dwarf_constant () const;
+      inline const dwarf_enum dwarf_constant () const
+      {
+	return dwarf_enum (*this);
+      }
 
       inline const range_list ranges () const
       {
@@ -1063,8 +1118,8 @@ namespace elfutils
 	    {
 	    case VS_reference:
 	    case VS_unit_reference:
-	      // XXX Reference identity check (?)
-	      return reference ()->offset () == other.reference ()->offset ();
+	      return true; // XXX Reference identity check (?)
+	      //return reference ()->offset () == other.reference ()->offset ();
 
 	    case VS_flag:
 	      return flag () == other.flag ();
@@ -1078,17 +1133,28 @@ namespace elfutils
 	    case VS_macptr:
 	       return macro_info () == macro_info ();
 
-	    case VS_constant:
 	    case VS_dwarf_constant:
-	    case VS_source_line:
-	    case VS_source_column:
 	      return constant () == other.constant ();
 
+	    case VS_constant:
+	      if (constant_is_integer ())
+		return (other.constant_is_integer ()
+			&& constant () == other.constant ());
+	      return (!other.constant_is_integer ()
+		      && constant_block () == other.constant_block ());
+
+	    case VS_source_line:
+	      return source_line () == other.source_line ();
+	    case VS_source_column:
+	      return source_column () == other.source_column ();
+
 	    case VS_identifier:
-	      return !strcmp (identifier (), other.identifier ());
+	      return subr::name_equal<typeof (other.identifier ())> ()
+		(identifier (), other.identifier ());
 
 	    case VS_string:
-	      return !strcmp (string (), other.string ());
+	      return subr::name_equal<typeof (other.string ())> ()
+		(string (), other.string ());
 
 	    case VS_address:
 	      return address () == other.address ();
@@ -1097,14 +1163,15 @@ namespace elfutils
 	      return source_file () == other.source_file ();
 
 	    case VS_location:
-	      return location () == other; // XXX will be other.location ()
+	      return location () == other.location ();
 
 	    case VS_discr_list:
 	      throw std::runtime_error ("XXX unimplemented");
 	    }
 	return false;
       }
-      inline bool operator!= (const attr_value &other) const
+      template<typename value>
+      inline bool operator!= (const value &other) const
       {
 	return !(*this == other);
       }
@@ -1116,33 +1183,142 @@ namespace elfutils
     {
       friend class attr_value;
     private:
-      const attr_value _m_attr;
+      attr_value _m_attr;
 
       location_attr (const attr_value &attr) : _m_attr (attr) {}
 
-      bool singleton () const;	// XXX temp hack
+      inline bool same (const location_attr &it) const
+      {
+	return _m_attr.same (it._m_attr);
+      }
+
+      template<typename pair>
+      struct nonempty : public std::unary_function<pair, bool>
+      {
+	inline bool operator () (const pair &x)
+	{
+	  return !x.second.empty ();
+	}
+      };
+
+      template<typename pair>
+      struct any : public std::unary_function<pair, bool>
+      {
+	inline bool operator () (const pair &x)
+	{
+	  return true;
+	}
+      };
 
     public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      // XXX need proper type for exprs
+      typedef const_vector<uint8_t> mapped_type;
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
+      typedef std::pair<const key_type, mapped_type> value_type;
+      class const_iterator;	// below
+
       std::string to_string () const;
+
+      bool is_list () const;
+
+      inline mapped_type location () const
+      {
+	if (is_list ())
+	  throw std::runtime_error ("location is list, not single location");
+	return _m_attr.constant_block ();
+      }
+
+      inline const_iterator begin () const;
+      inline const_iterator end () const;
+
+      inline bool empty () const
+      {
+	if (is_list ())
+	  return std::find_if (begin (), end (),
+			       nonempty<value_type> ()) == end ();
+	return location ().empty ();
+      }
+      inline size_type size () const
+      {
+	if (is_list ())
+	  return std::count_if (begin (), end (), any<value_type> ());
+	return location ().empty () ? 0 : 1;
+      }
 
       template<typename other_attr>
       bool operator== (const other_attr &other) const
       {
-	// XXX hack, real location interface later
-	if (singleton ())
-	  return _m_attr.constant_block () == other.constant_block ();
-	// loclistptr XXX punt for now, treat as constant
-	return _m_attr.constant () == other.constant ();
-      }
+	if (empty ())
+	  return (other.empty ()
+		  || std::find_if (other.begin (), other.end (),
+				   nonempty<typename other_attr::value_type> ()
+				   ) == other.end ());
+	if (!is_list ())
+	  return (!other.is_list () && !other.empty ()
+		  && location () == other.location ());
 
+	return other.is_list () && subr::container_equal (*this, other);
+      }
       template<typename other_file>
       inline bool operator!= (const other_file &other) const
       {
 	return !(*this == other);
       }
+
+      /*
+	XXX missing: find, at; by key_type or by PC
+	XXX worse than that: multiple overlapping matches!
+       */
+    };
+
+    class location_attr::const_iterator
+      : public std::iterator<std::input_iterator_tag, location_attr::value_type>
+    {
+      friend class location_attr;
+    private:
+      ::Dwarf_Addr _m_base;	// XXX reloc
+      ::Dwarf_Addr _m_begin;	// XXX reloc
+      ::Dwarf_Addr _m_end;	// XXX reloc
+      location_attr _m_attr;
+      ptrdiff_t _m_offset;
+
+      const_iterator (const location_attr &loc, ptrdiff_t offset)
+	: _m_base (-1), _m_begin (1), _m_end (0),
+	  _m_attr (loc), _m_offset (offset) {}
+
+    public:
+
+      inline bool operator== (const const_iterator &it) const
+      {
+	return _m_offset == it._m_offset && _m_attr.same (it._m_attr);
+      }
+      inline bool operator!= (const const_iterator &it) const
+      {
+	return !(*this == it);
+      };
+
+      const_iterator &operator++ (); // prefix
+      inline const_iterator operator++ (int) // postfix
+      {
+	const_iterator prev = *this;
+	++*this;
+	return prev;
+      }
+
+      inline value_type operator* () const
+      {
+	if (unlikely (_m_offset == 1))
+	  throw std::runtime_error ("dereferencing end iterator");
+
+	return value_type (key_type (_m_base + _m_begin, _m_base + _m_end),
+			   _m_attr.location ());
+      }
     };
 
     /* The DW_AT_ranges attribute yields a range list.
+       XXX reloc
        This is equivalent to unordered_set<pair<Dwarf_Addr, Dwarf_Addr> >.  */
     class range_list
     {
@@ -1153,7 +1329,7 @@ namespace elfutils
       range_list (const attr_value &attr) : _m_attr (attr) {}
 
     public:
-      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type;
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
       typedef key_type value_type;
 
       range_list (const range_list &other) : _m_attr (other._m_attr) {}
@@ -1165,9 +1341,9 @@ namespace elfutils
       {
 	friend class range_list;
       private:
-	::Dwarf_Addr _m_base;
-	::Dwarf_Addr _m_begin;
-	::Dwarf_Addr _m_end;
+	::Dwarf_Addr _m_base;	// XXX reloc
+	::Dwarf_Addr _m_begin;	// XXX reloc
+	::Dwarf_Addr _m_end;	// XXX reloc
 	::Dwarf_CU *_m_cu;
 	ptrdiff_t _m_offset;
 
@@ -1277,15 +1453,6 @@ namespace elfutils
     private:
       ::Dwarf_Files *_m_files;
 
-      template<typename string>
-      struct name_equal
-	: public std::binary_function<const char *, string, bool>
-      {
-	bool operator () (const char *me, const string &you)
-	{
-	  return you == me;
-	}
-      };
       template<typename table>
       inline bool table_equal (const table &other) const
       {
@@ -1295,8 +1462,9 @@ namespace elfutils
 	   The directory table itself matches regardless.  */
 	const_iterator i = begin ();
 	typename table::const_iterator j = other.begin ();
-	return std::equal (++i, end (), ++j,
-			   name_equal<typename table::value_type> ());
+	return subr::container_equal
+	  (++i, end (), ++j, other.end (),
+	   subr::name_equal<typename table::value_type> ());
       }
 
     public:
@@ -1522,7 +1690,7 @@ namespace elfutils
       template<typename table>
       inline bool operator== (const table &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return size () == other.size () && subr::container_equal (*this, other);
       }
       template<typename table>
       inline bool operator!= (const table &other) const
@@ -1533,7 +1701,7 @@ namespace elfutils
       inline bool operator== (const line_table &other) const
       {
 	return (_m_lines == other._m_lines
-		|| std::equal (begin (), end (), other.begin ()));
+		|| subr::container_equal (*this, other));
       }
 
       // Look up by matching address.
@@ -1612,6 +1780,26 @@ namespace elfutils
       }
     };
 
+    class dwarf_enum
+    {
+      friend class attr_value;
+    private:
+      const attr_value _m_attr;
+
+      dwarf_enum (const attr_value &attr) : _m_attr (attr) {}
+
+    public:
+      inline operator unsigned int () const
+      {
+	return _m_attr.constant ();
+      }
+
+      std::string to_string () const;
+
+      const char *identifier () const;
+      const char *name () const;
+    };
+
     // This describes one attribute, equivalent to pair<const int, attr_value>.
     class attribute
     {
@@ -1638,8 +1826,8 @@ namespace elfutils
 	}
       };
 
-      attribute (const ::Dwarf_Attribute &attr)
-	: first (*this), second (attr) {}
+      attribute (const debug_info_entry &die, const ::Dwarf_Attribute &attr)
+	: first (*this), second (die.tag (), attr) {}
 
     public:
       lhs first;
@@ -1668,7 +1856,7 @@ namespace elfutils
 
       inline std::string to_string () const
       {
-	std::string result = attribute_name (::dwarf_whatattr (thisattr ()));
+	std::string result = attributes::name (::dwarf_whatattr (thisattr ()));
 	result += "=";
 	result += second.to_string ();
 	return result;
@@ -1688,7 +1876,7 @@ namespace elfutils
       ranges (const debug_info_entry &die) : _m_die (die) {}
 
     public:
-      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type;
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
       typedef key_type value_type;
 
       ranges (const ranges &other) : _m_die (other._m_die) {}
@@ -1701,9 +1889,9 @@ namespace elfutils
 	friend class ranges;
       private:
 	debug_info_entry _m_die;
-	::Dwarf_Addr _m_base;
-	::Dwarf_Addr _m_begin;
-	::Dwarf_Addr _m_end;
+	::Dwarf_Addr _m_base;	// XXX reloc
+	::Dwarf_Addr _m_begin;	// XXX reloc
+	::Dwarf_Addr _m_end;	// XXX reloc
 	ptrdiff_t _m_offset;
 
 	inline const_iterator (const debug_info_entry &die)
@@ -1717,7 +1905,7 @@ namespace elfutils
 
 	inline value_type operator* () const
 	{
-	  if (unlikely (_m_offset == 1))
+	  if (unlikely (_m_offset == 0))
 	    throw std::runtime_error ("dereferencing end iterator");
 	  return std::make_pair (_m_begin, _m_end);
 	}
@@ -1823,7 +2011,7 @@ namespace elfutils
     };
 
     // Container for raw CUs in file order, intended to be compatible
-    // with a read-only subset of std::list<raw_compile_unit>.
+    // with a read-only subset of std::list<compile_unit>.
     class raw_compile_units
     {
       friend class dwarf;
@@ -1833,6 +2021,8 @@ namespace elfutils
       raw_compile_units (const dwarf &file) : _m_file (file) {}
 
     public:
+      typedef compile_unit value_type;
+
       inline raw_compile_units (const raw_compile_units &u)
 	: _m_file (u._m_file) {}
 
@@ -1939,12 +2129,14 @@ namespace elfutils
       compile_units (class raw_compile_units raw) : compile_units_base (raw) {}
 
     public:
+      typedef compile_unit value_type;
+
       compile_units (const compile_units &u) : compile_units_base (u) {}
 
       template<typename units>
       bool operator== (const units &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename units>
       bool operator!= (const units &other) const
@@ -1991,11 +2183,16 @@ namespace elfutils
       return !(*this == other);
     }
 
+    // XXX reloc
     class arange_list
       : public std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> >
     {
     private:
       typedef std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> > _base;
+
+    protected:
+      template<typename iterator>
+      arange_list (iterator first, iterator last) : _base (first, last) {}
 
     public:
       typedef _base::key_type key_type;
@@ -2051,17 +2248,6 @@ namespace elfutils
       }
   };
 
-  // Explicit specialization used inside dwarf::directory_table::operator==.
-  template<>
-  struct dwarf::directory_table::name_equal<const char *>
-    : public std::binary_function<const char *, const char *, bool>
-  {
-    bool operator () (const char *me, const char *you)
-    {
-      return !strcmp (me, you);
-    }
-  };
-
   inline class dwarf::debug_info_entry::raw_children
   dwarf::debug_info_entry::raw_children () const
   {
@@ -2084,6 +2270,19 @@ namespace elfutils
   dwarf::debug_info_entry::attributes () const
   {
     return attributes::attributes (raw_attributes ());
+  }
+
+  inline dwarf::location_attr::const_iterator
+  dwarf::location_attr::begin () const
+  {
+    const_iterator it (*this, 0);
+    if (is_list ())
+      ++it;
+    return it;
+  }
+  inline dwarf::location_attr::const_iterator dwarf::location_attr::end () const
+  {
+    return const_iterator (*this, 1);
   }
 };
 
