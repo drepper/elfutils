@@ -38,6 +38,14 @@
 	* run-dwarfcmp-self.sh: New file.
 	* Makefile.am (TESTS, EXTRA_DIST) Add it.
 
+2009-05-07  Petr Machata  <pmachata@redhat.com>
+
+	* testfile51.bz2: New data file.
+	* dwarf-getmacros.c: New test core.
+	* run-dwarf-getmacros.sh: New test wrapper.
+	* Makefile.am (TESTS, EXTRA_DIST, noinst_PROGRAMS): Add them.
+	(dwarf_getmacros_LDADD): New variable.
+
 2009-04-23  Ulrich Drepper  <drepper@redhat.com>
 
 	* Makefile [BUILD_STATIC] (libdw): Add $(zip_LIBS).
