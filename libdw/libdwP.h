@@ -497,6 +497,7 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
     if (!__libdw_in_section (dbg, sec_index, *addr, width))		\
       return -1;							\
 									\
+    unsigned char *orig_addr = *addr;					\
     if (width == 4)							\
       VAL = read_4ubyte_unaligned_inc (dbg, *addr);			\
     else								\
@@ -505,7 +506,7 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
 	VAL = read_8ubyte_unaligned_inc (dbg, *addr);			\
       }									\
 									\
-    int status = RELOC_HOOK (dbg, sec_index, *addr, width, &VAL);	\
+    int status = RELOC_HOOK (dbg, sec_index, orig_addr, width, &VAL);	\
     if (status < 0)							\
       return status;							\
     status > 0;								\
