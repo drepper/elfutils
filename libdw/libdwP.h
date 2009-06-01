@@ -446,19 +446,6 @@ __libdw_relocate_offset (Dwarf *dbg __attribute__ ((unused)),
   return 0;
 }
 
-static inline bool
-__libdw_offset_in_data (Elf_Data *data, Dwarf_Off offset, size_t size)
-{
-  if (unlikely (offset > data->d_size)
-      || unlikely (data->d_size - offset < size))
-    {
-      __libdw_seterrno (DWARF_E_INVALID_OFFSET);
-      return false;
-    }
-
-  return true;
-}
-
 static inline Elf_Data *
 __libdw_checked_get_data (Dwarf *dbg, int sec_index)
 {
@@ -479,7 +466,14 @@ __libdw_offset_in_section (Dwarf *dbg, int sec_index,
   Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
   if (data == NULL)
     return false;
-  return __libdw_offset_in_data (data, offset, size);
+  if (unlikely (offset > data->d_size)
+      || unlikely (data->d_size - offset < size))
+    {
+      __libdw_seterrno (DWARF_E_INVALID_OFFSET);
+      return false;
+    }
+
+  return true;
 }
 
 static inline bool
@@ -489,7 +483,14 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
   Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
   if (data == NULL)
     return false;
-  return __libdw_offset_in_data (data, addr - data->d_buf, size);
+  if (unlikely (addr < data->d_buf)
+      || unlikely (addr >= data->d_buf + data->d_size - size))
+    {
+      __libdw_seterrno (DWARF_E_INVALID_OFFSET);
+      return false;
+    }
+
+  return true;
 }
 
 #define READ_AND_RELOCATE(RELOC_HOOK, VAL)				\
