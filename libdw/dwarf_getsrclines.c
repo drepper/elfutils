@@ -135,7 +135,8 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
       /* Get the offset into the .debug_line section.  NB: this call
 	 also checks whether the previous dwarf_attr call failed.  */
-      const unsigned char *lineendp, *linep
+      const unsigned char *lineendp;
+      const unsigned char *linep
 	= __libdw_formptr (stmt_list, IDX_debug_line, DWARF_E_NO_DEBUG_LINE,
 			   (unsigned char **) &lineendp, NULL);
       if (linep == NULL)

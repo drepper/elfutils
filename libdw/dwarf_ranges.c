@@ -66,9 +66,10 @@ __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
 				 Dwarf_Addr *beginp, Dwarf_Addr *endp,
 				 Dwarf_Addr *basep)
 {
-  Dwarf_Addr escape
-    = width == 8 ? (Elf64_Addr) -1 : (Elf64_Addr) (Elf32_Addr) -1;
-  Dwarf_Addr begin, end;
+  Dwarf_Addr escape = (width == 8 ? (Elf64_Addr) -1
+		       : (Elf64_Addr) (Elf32_Addr) -1);
+  Dwarf_Addr begin;
+  Dwarf_Addr end;
 
   unsigned char *addr = *addrp;
   bool begin_relocated = READ_AND_RELOCATE (__libdw_relocate_address, begin);
@@ -129,7 +130,8 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
       return -1;
     }
 
-  unsigned char *readp, *readendp;
+  unsigned char *readp;
+  unsigned char *readendp;
   if (offset == 0)
     {
       Dwarf_Attribute attr_mem;
