@@ -62,7 +62,7 @@
     - If an error occurs, don't set anything and return -1.  */
 internal_function int
 __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
-				 unsigned char **addr, int width,
+				 unsigned char **addrp, int width,
 				 Dwarf_Addr *beginp, Dwarf_Addr *endp,
 				 Dwarf_Addr *basep)
 {
@@ -70,8 +70,10 @@ __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
     = width == 8 ? (Elf64_Addr) -1 : (Elf64_Addr) (Elf32_Addr) -1;
   Dwarf_Addr begin, end;
 
+  unsigned char *addr = *addrp;
   bool begin_relocated = READ_AND_RELOCATE (__libdw_relocate_address, begin);
   bool end_relocated = READ_AND_RELOCATE (__libdw_relocate_address, end);
+  *addrp = addr;
 
   /* Unrelocated escape for begin means base address selection.  */
   if (begin == escape && !begin_relocated)
@@ -170,8 +172,8 @@ dwarf_ranges (Dwarf_Die *die, ptrdiff_t offset, Dwarf_Addr *basep,
     }
   else
     {
-      if (!__libdw_offset_in_section (die->cu->dbg,
-				      IDX_debug_ranges, offset, 1))
+      if (__libdw_offset_in_section (die->cu->dbg,
+				     IDX_debug_ranges, offset, 1))
 	return -1l;
 
       readp = d->d_buf + offset;
