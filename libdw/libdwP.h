@@ -483,7 +483,7 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
   if (data == NULL)
     return false;
   if (unlikely (addr < data->d_buf)
-      || unlikely (addr >= data->d_buf + data->d_size - size))
+      || unlikely (data->d_size - (addr - data->d_buf) < size))
     {
       __libdw_seterrno (DWARF_E_INVALID_OFFSET);
       return false;
