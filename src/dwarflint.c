@@ -2511,10 +2511,7 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
 
   while (reloc->index < reloc->size)
     {
-      struct where reloc_where = where_from_reloc (reloc, where);
-
       struct relocation *rel = reloc->rel + reloc->index;
-      where_reset_2 (&reloc_where, rel->offset);
 
       /* This relocation entry is ahead of us.  */
       if (rel->offset > offset)
@@ -2529,6 +2526,8 @@ relocation_next (struct relocation_data *reloc, uint64_t offset,
 	{
 	  if (st != skip_ok)
 	    {
+	      struct where reloc_where = where_from_reloc (reloc, where);
+	      where_reset_2 (&reloc_where, rel->offset);
 	      void (*w) (const struct where *, const char *, ...) = wr_error;
 	      (*w) (&reloc_where,
 		    ((const char *[])
