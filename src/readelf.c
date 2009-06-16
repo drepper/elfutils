@@ -609,7 +609,7 @@ process_elf_file (Dwfl_Module *dwflmod, int fd)
     }
 
   /* Determine the number of sections.  */
-  if (unlikely (elf_getshnum (ebl->elf, &shnum) < 0))
+  if (unlikely (elf_getshdrnum (ebl->elf, &shnum) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot determine number of sections: %s"),
 	   elf_errmsg (-1));
@@ -848,7 +848,7 @@ There are %d section headers, starting at offset %#" PRIx64 ":\n\
 	    ehdr->e_shnum, ehdr->e_shoff);
 
   /* Get the section header string table index.  */
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -991,7 +991,7 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1132,7 +1132,7 @@ handle_scngrp (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1314,7 +1314,7 @@ handle_dynamic (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
     return;
 
   /* Get the section header string table index.  */
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1512,7 +1512,7 @@ handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1698,7 +1698,7 @@ handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1908,7 +1908,7 @@ handle_symtab (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2162,7 +2162,7 @@ handle_verneed (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2228,7 +2228,7 @@ handle_verdef (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2306,7 +2306,7 @@ handle_versym (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2803,7 +2803,7 @@ handle_hash (Ebl *ebl)
 {
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2839,7 +2839,7 @@ print_liblist (Ebl *ebl)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2901,7 +2901,7 @@ print_attributes (Ebl *ebl, const GElf_Ehdr *ehdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -4104,7 +4104,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 {
   size_t shstrndx;
   /* We know this call will succeed since it did in the caller.  */
-  (void) elf_getshstrndx (ebl->elf, &shstrndx);
+  (void) elf_getshdrstrndx (ebl->elf, &shstrndx);
   const char *scnname = elf_strptr (ebl->elf, shstrndx, shdr->sh_name);
 
   Elf_Data *data = elf_rawdata (scn, NULL);
@@ -5809,7 +5809,7 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -6675,7 +6675,7 @@ handle_notes (Ebl *ebl, GElf_Ehdr *ehdr)
     {
       /* Get the section header string table index.  */
       size_t shstrndx;
-      if (elf_getshstrndx (ebl->elf, &shstrndx) < 0)
+      if (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0)
 	error (EXIT_FAILURE, 0,
 	       gettext ("cannot get section header string table index"));
 
@@ -6820,7 +6820,7 @@ for_each_section_argument (Elf *elf, const struct section_argument *list,
 {
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (elf_getshstrndx (elf, &shstrndx) < 0)
+  if (elf_getshdrstrndx (elf, &shstrndx) < 0)
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -6889,7 +6889,7 @@ print_strings (Ebl *ebl)
 {
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
