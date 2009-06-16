@@ -10,11 +10,25 @@
 #include <cstring>
 #include <iostream>
 #include <sstream>
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
+#include <vector>
+#include <algorithm>
 
 namespace elfutils
 {
   namespace subr
   {
+    // XXX
+    template<typename T>
+    struct hash { };
+
+    template <typename T>
+    inline void hash_combine (size_t &seed, const T &v)
+    {
+      seed ^= hash<T> (v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    }
+
     template<typename string>
     struct name_equal : public std::binary_function<const char *, string, bool>
     {
@@ -262,6 +276,174 @@ namespace elfutils
 	return indexed_iterator (_m_contents, _m_idx--);
       }
     };
+
+    // Pair of some value and its precomputed hash.
+    template<typename value_type>
+    class hashed_value
+      : public std::pair<size_t, const value_type>
+    {
+    private:
+      typedef std::pair<size_t, const value_type> _base;
+
+    public:
+      hashed_value (const value_type &v)
+	: _base (subr::hash<value_type> (v), v) {}
+      hashed_value (const hashed_value<value_type> &v)
+	: _base (v.first, v.second) {}
+
+      bool operator== (const hashed_value<value_type> &other)
+	const
+      {
+	return other.first == this->first && other.second == this->second;
+      }
+
+      struct hasher
+	: public std::unary_function<hashed_value<value_type>, size_t>
+      {
+	size_t operator () (const hashed_value<value_type> &v)
+	{
+	  return v.first;
+	}
+      };
+    };
+
+    // Set of hashed_value's.
+    template<typename value_type>
+    class value_set
+      : public std::tr1::unordered_set<hashed_value<value_type>,
+				       struct hashed_value<value_type>::hasher>
+    {
+    public:
+      typedef hashed_value<value_type> hashed_value_type;
+
+    private:
+      typedef std::tr1::unordered_set<hashed_value_type,
+				      struct hashed_value_type::hasher> _base;
+
+    public:
+      const value_type &add (const value_type &v)
+      {
+	std::pair<class _base::iterator, bool> p
+	  = _base::insert (hashed_value_type (v));
+	if (p.second)
+	  {
+	    // XXX hook for collection: abbrev building, etc.
+	  }
+	return *p.first;
+      };
+    };
+
+    // A vector of hashed_value's that itself acts like a hashed_value.
+    template<typename value_type>
+    class hashed_vector
+      : public std::vector<hashed_value<value_type> >
+    {
+    private:
+      typedef hashed_value<value_type> elt_type;
+      typedef std::vector<elt_type> _base;
+
+      size_t _m_hash;
+
+    public:
+      template<typename iterator>
+      hashed_vector (iterator first, iterator last)
+	: _base (first, last), _m_hash (0)
+      {
+	struct hashit
+	{
+	  size_t &_m_hash;
+	  hashit (size_t &h) : _m_hash (h) {}
+	  inline void operator () (const elt_type &p)
+	  {
+	    subr::hash_combine (_m_hash, p.first);
+	  }
+	};
+	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
+      }
+
+      template<typename container>
+      hashed_vector (const container &other)
+	: hashed_vector (other.begin (), other.end ())
+      {}
+
+      bool operator== (const hashed_vector &other) const
+      {
+	return (other._m_hash == _m_hash &&
+		other.size () == _base::size ()
+		&& std::equal (_base::begin (), _base::end (), other.begin ()));
+      }
+
+      struct hasher
+	: public std::unary_function<hashed_vector<value_type>, size_t>
+      {
+	size_t operator () (const hashed_vector<value_type> &v)
+	{
+	  return v._m_hash;
+	}
+      };
+    };
+
+    // An unordered_map of hashed_value's that itself acts like a hashed_value.
+    template<typename key_type, typename value_type>
+    class hashed_unordered_map
+      : public std::tr1::unordered_map<key_type,
+				       hashed_value<value_type>,
+				       class hashed_value<value_type>::hasher>
+    {
+    private:
+      typedef std::tr1::unordered_map<key_type,
+				      hashed_value<value_type>,
+				      class hashed_value<value_type>::hasher>
+      _base;
+
+      size_t _m_hash;
+
+    public:
+      template<typename iterator>
+      hashed_unordered_map (iterator first, iterator last)
+	: _base (first, last), _m_hash (0)
+      {
+	class hashit
+	{
+	  size_t &_m_hash;
+	  hashit (size_t &h) : _m_hash (h) {}
+
+	  void operator () (const typename _base::value_type &p)
+	  {
+	    subr::hash_combine (_m_hash, subr::hash<key_type> (p.first));
+	    subr::hash_combine (_m_hash, p.second.first);
+	  }
+	};
+	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
+      }
+
+      template<typename container>
+      hashed_unordered_map (const container &other)
+	: hashed_unordered_map (other.begin (), other.end ())
+      {}
+    };
+
+    template<typename T>
+    class auto_ref
+    {
+    private:
+      T *_m_ptr;
+
+    public:
+      auto_ref (const T &other)
+	: _m_ptr (&other)
+      {}
+
+      inline operator T& () const
+      {
+	return *_m_ptr;
+      }
+
+      auto_ref (const auto_ref<T> &other)
+	: _m_ptr (other._m_ptr)
+      {}
+    };
+
   };
 };
 

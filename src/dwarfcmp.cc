@@ -47,6 +47,7 @@
 #include "c++/dwarf_edit"
 #include "c++/dwarf_comparator"
 #include "c++/dwarf_tracker"
+#include "c++/dwarf_output"
 
 using namespace elfutils;
 using namespace std;
@@ -313,9 +314,26 @@ main (int argc, char *argv[])
 
       if (test_writer)
 	{
-	  dwarf_edit out1 (file1);
-	  dwarf_edit out2 (file2);
-	  test_classes (file1, file2, out1, out2, same);
+	  dwarf_edit edit1 (file1);
+	  dwarf_edit edit2 (file2);
+	  test_classes (file1, file2, edit1, edit2, same);
+
+	  {
+	    dwarf_output_collector c1;
+	    dwarf_output_collector c2;
+	    dwarf_output out1 (file1, &c1);
+	    dwarf_output out2 (file2, &c2);
+	    test_classes (file1, file2, out1, out2, same);
+	    test_classes (edit1, edit2, out1, out2, same);
+	  }
+	  {
+	    dwarf_output_collector c1;
+	    dwarf_output_collector c2;
+	    dwarf_output out1 (edit1, &c1);
+	    dwarf_output out2 (edit2, &c2);
+	    test_classes (file1, file2, out1, out2, same);
+	    test_classes (edit1, edit2, out1, out2, same);
+	  }
 	}
 
       result = !same;
