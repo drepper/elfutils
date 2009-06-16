@@ -295,7 +295,7 @@ namespace elfutils
       raw _m_raw;
 
     protected:
-      inline skipping_wrapper (const raw &raw) : _m_raw (raw) {}
+      inline skipping_wrapper (const raw &r) : _m_raw (r) {}
 
     public:
       inline skipping_wrapper (const skipping_wrapper &w) : _m_raw (w._m_raw) {}

@@ -139,8 +139,8 @@ namespace elfutils
 
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
-      template<typename die>
-      debug_info_entry (const die &die)
+      template<typename die_type>
+      debug_info_entry (const die_type &die)
 	: _m_tag (die.tag ()),
 	  _m_attributes (die.attributes ()),
 	  _m_children (die.children ())
@@ -197,8 +197,8 @@ namespace elfutils
 
       // XXX should be private
     public:
-      template<typename die>
-      compile_unit (const die &die) : debug_info_entry (die)
+      template<typename die_type>
+      compile_unit (const die_type &die) : debug_info_entry (die)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
 	  throw std::invalid_argument ("not a compile_unit entry");

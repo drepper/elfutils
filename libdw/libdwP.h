@@ -426,6 +426,7 @@ extern int __libdw_visit_scopes (unsigned int depth,
 extern int __dwarf_errno_internal (void);
 
 
+#ifndef __cplusplus
 /* Reader hooks.  */
 
 /* Relocation hooks return -1 on error (in that case the error code
@@ -573,7 +574,7 @@ unsigned char * __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
 				 int err_nodata, unsigned char **endpp,
 				 Dwarf_Off *offsetp)
   internal_function;
-
+#endif	/* Not C++ */
 
 
 /* Aliases to avoid PLTs.  */

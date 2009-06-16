@@ -1,3 +1,7 @@
+2009-06-15  Roland McGrath  <roland@redhat.com>
+
+	* dwarf-print.cc: Include <cstdio>.
+
 2009-03-25  Petr Machata  <pmachata@redhat.com>
 
 	* dwarf-attributes.cc: New file.
