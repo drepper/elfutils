@@ -133,7 +133,8 @@ dwarf_frame_register (fs, regno, ops_mem, ops, nops)
 				       fs->cache->other_byte_order,
 				       address_size,
 				       &fs->cache->expr_tree,
-				       &block, ops, nops) < 0)
+				       &block, ops, nops,
+				       IDX_debug_frame) < 0)
 	  result = -1;
 	break;
       }

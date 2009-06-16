@@ -87,7 +87,8 @@ dwarf_frame_cfa (fs, ops)
 						address_size,
 						&fs->cache->expr_tree,
 						&fs->cfa_data.expr,
-						ops, &nops);
+						ops, &nops,
+						IDX_debug_frame);
 	return result ?: (int) nops;
       }
 

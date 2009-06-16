@@ -270,7 +270,7 @@ static Dwarf_CFI *
 getcfi_shdr (Elf *elf, const GElf_Ehdr *ehdr)
 {
   size_t shstrndx;
-  if (elf_getshstrndx (elf, &shstrndx) != 0)
+  if (elf_getshdrstrndx (elf, &shstrndx) != 0)
     {
       __libdw_seterrno (DWARF_E_GETEHDR_ERROR);
       return NULL;
