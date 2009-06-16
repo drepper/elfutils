@@ -631,7 +631,10 @@ namespace elfutils
 	      (*this)[(*i).first] = mapped_type (x.begin (), x.end ());
 	    }
 	else
-	  (*this)[key_type (0, -1)] = other.location ();
+	  {
+	    mapped_type v = other.location ();
+	    (*this)[key_type (0, -1)] = v;
+	  }
 	return *this;
       }
 
