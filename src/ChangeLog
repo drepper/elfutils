@@ -1,3 +1,8 @@
+2009-06-19  Roland McGrath  <roland@redhat.com>
+
+	* dwarflint.c (abbrev_table_load): No-op control flow fiddle
+	silences gcc-4.4 -O3 warning.
+
 2009-04-02  Roland McGrath  <roland@redhat.com>
 
 	* Makefile.am (noinst_HEADERS): Add dwarfstrings.h here.
