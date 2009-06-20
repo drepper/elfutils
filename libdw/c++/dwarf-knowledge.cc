@@ -98,7 +98,7 @@ expected_value_space (int attr, int tag)
       return VS(discr_list);
 
     case DW_AT_import:
-      return VS(unit_reference);
+      return tag == DW_TAG_imported_unit ? VS(unit_reference) : VS(reference);
 
     case DW_AT_comp_dir:
       return VS(source_file);

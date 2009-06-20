@@ -49,7 +49,8 @@ endif
 include_HEADERS = dwarf.h
 pkginclude_HEADERS = libdw.h \
 		     c++/subr.hh \
-		     c++/dwarf c++/dwarf_edit
+		     c++/dwarf c++/dwarf_edit \
+		     c++/dwarf_tracker c++/dwarf_comparator
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \

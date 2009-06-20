@@ -50,6 +50,7 @@
 #include <config.h>
 #include <cassert>
 #include "dwarf"
+#include "dwarf_edit"
 
 extern "C"
 {
@@ -175,54 +176,76 @@ plain_string (const char *filename)
   return string ("\"") + filename + "\"";
 }
 
-string
-dwarf::attr_value::to_string () const
+static inline string
+plain_string (const string &filename)
 {
-  switch (what_space ())
+  return "\"" + filename + "\"";
+}
+
+template<class value_type>
+static inline string
+value_string (const value_type &value)
+{
+  switch (value.what_space ())
     {
-    case VS_flag:
-      return flag () ? "1" : "0";
+    case dwarf::VS_flag:
+      return value.flag () ? "1" : "0";
 
-    case VS_rangelistptr:
-      return ranges ().to_string ();
+    case dwarf::VS_rangelistptr:
+      return value.ranges ().to_string ();
 
-    case VS_lineptr:	// XXX punt for now, treat as constant
-    case VS_macptr:	// XXX punt for now, treat as constant
-    case VS_constant:
-      return hex_string (constant ());
+    case dwarf::VS_lineptr:	// XXX punt for now, treat as constant
+    case dwarf::VS_macptr:	// XXX punt for now, treat as constant
+    case dwarf::VS_constant:
+      return hex_string (value.constant ());
 
-    case VS_dwarf_constant:
-      return dwarf_constant ().to_string ();
+    case dwarf::VS_dwarf_constant:
+      return value.dwarf_constant ().to_string ();
 
-    case VS_source_line:
-    case VS_source_column:
-      return dec_string (constant ());
+    case dwarf::VS_source_line:
+    case dwarf::VS_source_column:
+      return dec_string (value.constant ());
 
-    case VS_identifier:
-      return plain_string (identifier ());
+    case dwarf::VS_identifier:
+      return plain_string (value.identifier ());
 
-    case VS_string:
-      return plain_string (string ());
+    case dwarf::VS_string:
+      return plain_string (value.string ());
 
-    case VS_address:
-      return addr_string (address ());
+    case dwarf::VS_address:
+      return addr_string (value.address ());
 
-    case VS_reference:
-    case VS_unit_reference:
-      return hex_string (reference ()->offset (), "[", "]");
+    case dwarf::VS_reference:
+    case dwarf::VS_unit_reference:
+      return hex_string (value.reference ()->offset (), "[", "]");
 
-    case VS_source_file:
-      return source_file ().to_string ();
+    case dwarf::VS_source_file:
+      return value.source_file ().to_string ();
 
-    case VS_location:
-      return location ().to_string ();
+    case dwarf::VS_location:
+      return value.location ().to_string ();
 
-    case VS_discr_list:
+    case dwarf::VS_discr_list:
       break;			// XXX DW_AT_discr_list unimplemented
     }
 
   throw std::runtime_error ("XXX unsupported value space");
 }
+
+template<>
+string
+to_string<dwarf::attr_value> (const dwarf::attr_value &value)
+{
+  return value_string (value);
+}
+
+template<>
+string
+to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &value)
+{
+  return value_string (value);
+}
+
 
 // A few cases are trivial.
 #define SIMPLE(type, name, form)					\

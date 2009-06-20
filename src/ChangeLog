@@ -1,5 +1,13 @@
 2009-06-19  Roland McGrath  <roland@redhat.com>
 
+	* dwarfcmp.cc: Revamp using dwarf_comparator.
+
+	* dwarflint-expected-at.cc: Include <config.h> first.
+	* dwarflint-expected.hh (expected_map::expectation_map):
+	Use dwarf::tags.
+	(to_string): Function removed.
+	* dwarflint-hl.cc (recursively_validate): Don't use it.
+
 	* dwarflint.c (abbrev_table_load): No-op control flow fiddle
 	silences gcc-4.4 -O3 warning.
 

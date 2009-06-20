@@ -1,0 +1,229 @@
+/* elfutils::dwarf_ref_tracker -- DWARF reference tracking in -*- C++ -*-
+   Copyright (C) 2009 Red Hat, Inc.
+   This file is part of Red Hat elfutils.
+
+   Red Hat elfutils is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by the
+   Free Software Foundation; version 2 of the License.
+
+   Red Hat elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License along
+   with Red Hat elfutils; if not, write to the Free Software Foundation,
+   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
+
+   In addition, as a special exception, Red Hat, Inc. gives You the
+   additional right to link the code of Red Hat elfutils with code licensed
+   under any Open Source Initiative certified open source license
+   (http://www.opensource.org/licenses/index.php) which requires the
+   distribution of source code with any binary distribution and to
+   distribute linked combinations of the two.  Non-GPL Code permitted under
+   this exception must only link to the code of Red Hat elfutils through
+   those well defined interfaces identified in the file named EXCEPTION
+   found in the source code files (the "Approved Interfaces").  The files
+   of Non-GPL Code may instantiate templates or use macros or inline
+   functions from the Approved Interfaces without causing the resulting
+   work to be covered by the GNU General Public License.  Only Red Hat,
+   Inc. may make changes or additions to the list of Approved Interfaces.
+   Red Hat's grant of this exception is conditioned upon your not adding
+   any new exceptions.  If you wish to add a new Approved Interface or
+   exception, please contact Red Hat.  You must obey the GNU General Public
+   License in all respects for all of the Red Hat elfutils code and other
+   code used in conjunction with Red Hat elfutils except the Non-GPL Code
+   covered by this exception.  If you modify this file, you may extend this
+   exception to your version of the file, but you are not obligated to do
+   so.  If you do not wish to provide this exception without modification,
+   you must delete this exception statement from your version and license
+   this file solely under the GPL without exception.
+
+   Red Hat elfutils is an included package of the Open Invention Network.
+   An included package of the Open Invention Network is a package for which
+   Open Invention Network licensees cross-license their patents.  No patent
+   license is granted, either expressly or impliedly, by designation as an
+   included package.  Should you wish to participate in the Open Invention
+   Network licensing program, please visit www.openinventionnetwork.com
+   <http://www.openinventionnetwork.com>.  */
+
+#ifndef _ELFUTILS_DWARF_TRACKER
+#define _ELFUTILS_DWARF_TRACKER	1
+
+#include "dwarf"
+#include "dwarf_comparator"
+
+namespace elfutils
+{
+  // Standard tracker.
+  template<class dwarf1, class dwarf2>
+  class dwarf_ref_tracker : public dwarf_tracker_base<dwarf1, dwarf2>
+  {
+  private:
+    typedef typename dwarf1::compile_units::const_iterator cu1;
+    typedef typename dwarf2::compile_units::const_iterator cu2;
+    typedef typename dwarf1::debug_info_entry::children::const_iterator die1;
+    typedef typename dwarf2::debug_info_entry::children::const_iterator die2;
+
+    /* We maintain the current path down the logical DIE tree from the CU
+       as a stack of iterators pointing to the DIE at each level.  */
+    template<typename cu, typename die>
+    struct tracker
+    {
+      cu _m_root;
+
+      typedef std::list<die> die_path;
+      die_path _m_path;
+
+      /* We record every DIE we have seen here, mapping its .identity ()
+	 to the die_path of parent DIEs taken to reach it.  */
+      typedef std::tr1::unordered_map< ::Dwarf_Off, const die_path> die_map;
+      die_map _m_seen;
+
+      ~tracker ()
+      {
+	// We should never be left with a partial walk on the books.
+	assert (_m_path.empty ());
+      }
+
+      inline const die_path &path_to (const die &a)
+      {
+	typename die_map::iterator it = _m_seen.find (a->identity ());
+	if (it == _m_seen.end ())
+	  {
+	    ::Dwarf_Off id = a->identity ();
+	    die_path path;
+	    if (!walk_to (*_m_root, id, path))
+	      throw std::runtime_error ("DIE not reachable from CU!");
+	    it = _m_seen.insert (std::make_pair (id, path)).first;
+	  }
+	return it->second;
+      }
+
+      // Return true if this is the droid we're looking for,
+      // or recurse on its children.
+      bool walk_to (const typename die::value_type from, ::Dwarf_Off to,
+		    die_path &path)
+      {
+	if (from.identity () == to)
+	  return true;
+	for (die it = from.children ().begin ();
+	     it != from.children ().end ();
+	     ++it)
+	  if (walk_to (it, to, path))
+	    return true;
+	return false;
+      }
+
+      // Recursing on a child, include FROM in the path if the child matches.
+      bool walk_to (const die from, ::Dwarf_Off to, die_path &path)
+      {
+	if (walk_to (*from, to, path))
+	  {
+	    path.push_front (from);
+	    return true;
+	  }
+	return false;
+      }
+
+      inline void start_walk (const cu &a)
+      {
+	assert (_m_path.empty ());
+	_m_root = a;
+      }
+
+      inline void finish_walk (const cu &a)
+      {
+	assert (_m_path.empty ());
+	_m_root = cu ();
+      }
+
+      inline void pre_order (const die &a)
+      {
+	// Record the path down from the CU to see this DIE.
+	_m_seen.insert (std::make_pair (a->identity (), _m_path));
+	// Append this DIE to the path we'll record for its children.
+	_m_path.push_back (a);
+      }
+
+      inline void post_order (const die &a)
+      {
+	_m_path.pop_back ();
+      }
+    };
+
+    typedef tracker<cu1, die1> tracker1;
+    typedef tracker<cu2, die2> tracker2;
+
+    tracker1 _m_left;
+    tracker2 _m_right;
+
+    /* Predicate for DIEs "equal enough" to match as context for a subtree.
+       The definition we use is that the DIE has the same tag and all its
+       attributes are equal, excepting that references in attribute values
+       are not compared.  */
+    struct equal_enough : public std::binary_function<die1, die2, bool>
+    {
+      inline bool operator () (const die1 &a, const die2 &b)
+      {
+	return (a->tag () == b->tag ()
+		&& (dwarf_comparator<dwarf1, dwarf2, true> ()
+		    .equals (a->attributes (), b->attributes ())));
+      }
+    };
+
+  public:
+    inline void start_walk (const cu1 &a, const cu2 &b)
+    {
+      _m_left.start_walk (a);
+      _m_right.start_walk (b);
+    }
+
+    inline void finish_walk (const cu1 &a, const cu2 &b)
+    {
+      _m_left.finish_walk (a);
+      _m_right.finish_walk (b);
+    }
+
+    inline void pre_order (const die1 &a, const die2 &b)
+    {
+      _m_left.pre_order (a);
+      _m_right.pre_order (b);
+    }
+
+    inline void post_order (const die1 &a, const die2 &b)
+    {
+      _m_left.post_order (a);
+      _m_right.post_order (b);
+    }
+
+    typedef std::list<die1> left_context_type;
+    inline const left_context_type &left_context (const die1 &die)
+    {
+      return _m_left.path_to (die);
+    }
+
+    typedef std::list<die2> right_context_type;
+    inline const right_context_type &right_context (const die2 &die)
+    {
+      return _m_right.path_to (die);
+    }
+
+    // Very cheap check for an obvious mismatch of contexts.
+    inline bool context_quick_mismatch (const left_context_type &a,
+					const right_context_type &b)
+
+    {
+      return a.size () != a.size ();
+    }
+
+    // Full match when context_quick_mismatch has returned false.
+    inline bool context_match (const left_context_type &a,
+			       const right_context_type &b)
+    {
+      return std::equal (a.begin (), a.end (), b.begin (), equal_enough ());
+    }
+  };
+};
+
+#endif	// <elfutils/dwarf_tracker>

@@ -77,6 +77,12 @@
 // DWARF manipulation interfaces (pure object construction)
 namespace elfutils
 {
+  template<typename elt>
+  inline bool operator== (const std::vector<elt> &a, const const_vector<elt> &b)
+  {
+    return a.size () == b.size () && subr::container_equal (a, b);
+  }
+
   class dwarf_edit
   {
   public:
@@ -117,6 +123,8 @@ namespace elfutils
 	typedef base_type::key_type key_type;
 	typedef base_type::value_type value_type;
 	typedef base_type::mapped_type mapped_type;
+
+	static const bool ordered = true;
 
 	template<typename attrs>
 	inline operator attrs () const
@@ -177,13 +185,24 @@ namespace elfutils
       template<typename die>
       bool operator== (const die &other) const
       {
-	return (other.attributes () == attributes ()
+	return (other.tag () == tag ()
+		&& other.attributes () == attributes ()
 		&& other.children () == children ());
       }
       template<typename die>
       bool operator!= (const die &other) const
       {
 	return !(*this == other);;
+      }
+
+      inline ::Dwarf_Off identity () const
+      {
+	return (uintptr_t) this;
+      }
+
+      inline ::Dwarf_Off offset () const
+      {
+	return identity ();
       }
     };
 
@@ -297,6 +316,8 @@ namespace elfutils
 	_m_size = 0;
 	return *this;
       }
+
+      std::string to_string () const;
 
       inline std::string &name ()
       {
@@ -598,6 +619,15 @@ namespace elfutils
       typedef std::map<dwarf::location_attr::key_type,
 		       std::vector<uint8_t> > _base;
 
+      template<typename pair>
+      struct nonempty : public std::unary_function<pair, bool>
+      {
+	inline bool operator () (const pair &x)
+	{
+	  return !x.second.empty ();
+	}
+      };
+
     public:
       typedef _base::size_type size_type;
       typedef _base::difference_type difference_type;
@@ -670,6 +700,87 @@ namespace elfutils
 	      return v.second;
 	  }
 	throw std::runtime_error ("location is list, not single location");
+      }
+
+      template<typename other_attr>
+      bool operator== (const other_attr &other) const
+      {
+	if (empty ())
+	  return (other.empty ()
+		  || std::find_if (other.begin (), other.end (),
+				   nonempty<typename other_attr::value_type> ()
+				   ) == other.end ());
+	if (!is_list ())
+	  return (!other.is_list () && !other.empty ()
+		  && subr::container_equal (location (), other.location ()));
+
+	return other.is_list () && subr::container_equal (*this, other);
+      }
+      template<typename other_attr>
+      inline bool operator!= (const other_attr &other) const
+      {
+	return !(*this == other);
+      }
+
+      std::string to_string () const;
+    };
+
+    class dwarf_enum
+    {
+    private:
+      ::Dwarf_Word _m_value;
+      unsigned int _m_which;
+
+    public:
+      inline dwarf_enum (unsigned int attr, unsigned int value)
+	: _m_value (value), _m_which (attr)
+      {}
+
+      template<typename constant>
+      inline dwarf_enum (const constant &other)
+	: _m_value (static_cast<unsigned int> (other)),
+	  _m_which (other.which ())
+      {}
+
+      // Return the DW_AT_* indicating which enum this value belongs to.
+      inline unsigned int which () const
+      {
+	return _m_which;
+      }
+
+      inline operator unsigned int () const
+      {
+	return _m_value;
+      }
+
+      inline dwarf_enum &operator= (const dwarf_enum& other)
+      {
+	_m_value = other._m_value;
+	_m_which = other._m_which;
+	return *this;
+      }
+
+      template<typename constant>
+      inline dwarf_enum &operator= (const constant& other)
+      {
+	return *this = dwarf_enum (other.which (), other);
+      }
+
+      std::string to_string () const;
+
+      const char *identifier () const;
+      const char *name () const;
+
+      template<typename constant>
+      inline bool operator== (const constant &other) const
+      {
+	return (static_cast<unsigned int> (*this)
+		== static_cast<unsigned int> (other));
+      }
+      template<typename constant>
+      inline bool operator!= (const constant &other) const
+      {
+	return !(*this == other);
       }
     };
 
@@ -761,9 +872,10 @@ namespace elfutils
 	: std::vector<uint8_t> (b.begin (), b.end ()) {}
     };
 
-    struct value_dwarf_constant : public value_constant
+    struct value_dwarf_constant : public value_dispatch, public dwarf_enum
     {
-      value_dwarf_constant (unsigned int x) : value_constant (x) {}
+      template<typename constant>
+      value_dwarf_constant (const constant &other) : dwarf_enum (other) {}
     };
 
     struct value_source_file : public value_dispatch, public source_file
@@ -905,7 +1017,7 @@ namespace elfutils
       }
 
       dwarf::value_space what_space () const;
-      std::string to_string () const;
+      inline std::string to_string () const;
 
       inline bool &flag () const
       {
@@ -973,9 +1085,9 @@ namespace elfutils
 	  (variant<value_constant_block> ());
       }
 
-      inline ::Dwarf_Word &dwarf_constant () const
+      inline dwarf_enum &dwarf_constant () const
       {
-	return variant<value_dwarf_constant> ().word;
+	return variant<value_dwarf_constant> ();
       }
 
       inline bool constant_is_integer () const
@@ -1033,7 +1145,7 @@ namespace elfutils
 	    case dwarf::VS_location:
 	      return location () == other.location ();
 	    case dwarf::VS_dwarf_constant:
-	      return constant () == other.constant (); // XXX
+	      return dwarf_constant () == other.dwarf_constant ();
 #if 0
 	    case dwarf::VS_macptr:
 	      return macptr () == other.macptr ();
@@ -1083,6 +1195,22 @@ namespace elfutils
       return !(*this == other);
     }
   };
+
+  // Explicit specializations.
+  template<>
+  std::string to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &);
+  template<>
+  std::string to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value&);
+  inline std::string dwarf_edit::attr_value::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+  template<>
+  std::string to_string<dwarf_edit::dwarf_enum> (const dwarf_edit::dwarf_enum&);
+  inline std::string dwarf_edit::dwarf_enum::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
 };
 
 #endif	// <elfutils/dwarf_edit>

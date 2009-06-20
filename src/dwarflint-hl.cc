@@ -229,10 +229,10 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
 	  elfutils::dwarf::value_space vs = (*jt).second.what_space ();
 	  if ((exp_vs & (1U << vs)) == 0)
 	    wr_message (cat (mc_impact_3, mc_info), &where,
-			": in DIE \"%s\", attribute \"%s\" has value of unexpected type \"%s\".\n",
+			": in DIE \"%s\", attribute \"%s\" has value of unexpected type \"%u\".\n",
 			dwarf_tag_string (parent_tag),
 			dwarf_attr_string (name),
-			to_string (vs).c_str ());
+			vs);
 	}
       catch (...)
 	{

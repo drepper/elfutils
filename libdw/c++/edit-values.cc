@@ -92,3 +92,30 @@ dwarf_edit::attr_value::what_space () const
 
   throw std::runtime_error ("XXX impossible");
 }
+
+template<>
+std::string
+to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &attr)
+{
+  std::string result = dwarf::attributes::name (attr.first);
+  result += "=";
+  result += attr.second.to_string ();
+  return result;
+}
+
+std::string
+dwarf_edit::source_file::to_string () const
+{
+  if (likely (_m_mtime == 0) && likely (_m_size == 0))
+    return "\"" + _m_name + "\"";
+
+  std::ostringstream os;
+  os << "{\"" << _m_name << "," << _m_mtime << "," << _m_size << "}";
+  return os.str ();
+}
+
+std::string
+dwarf_edit::location_attr::to_string () const
+{
+  return is_list () ? "XXX-loclist" : "XXX-expr";
+}

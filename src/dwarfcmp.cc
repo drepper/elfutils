@@ -45,6 +45,8 @@
 
 #include "c++/dwarf"
 #include "c++/dwarf_edit"
+#include "c++/dwarf_comparator"
+#include "c++/dwarf_tracker"
 
 using namespace elfutils;
 using namespace std;
@@ -121,139 +123,139 @@ open_file (const char *fname, int *fdp)
 
 
 // XXX make translation-friendly
-struct context
+
+template<class dwarf1, class dwarf2>
+struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 {
-  const dwarf::debug_info_entry *a_;
-  const dwarf::debug_info_entry *b_;
-  const char *container_;
+  typedef typename dwarf1::compile_units::const_iterator cu1;
+  typedef typename dwarf2::compile_units::const_iterator cu2;
+  typedef typename dwarf1::debug_info_entry::children::const_iterator die1;
+  typedef typename dwarf2::debug_info_entry::children::const_iterator die2;
+  typedef typename dwarf1::debug_info_entry::attributes::const_iterator attr1;
+  typedef typename dwarf2::debug_info_entry::attributes::const_iterator attr2;
 
-  context (const dwarf::debug_info_entry &a, const dwarf::debug_info_entry &b)
-    : a_ (&a), b_ (&b), container_ (NULL) {}
-  context () : a_ (NULL), b_ (NULL), container_ ("compilation units") {}
+  const typename dwarf1::debug_info_entry *a_;
+  const typename dwarf2::debug_info_entry *b_;
 
-  ostream &location () const
+  inline talker () : a_ (NULL), b_ (NULL) {}
+
+  inline ostream &location () const
   {
-    if (a_ == NULL)
-      cout << "files differ: ";
+    return cout << hex << a_->offset () << " vs " << b_->offset () << ": ";
+  }
+
+  inline void visit (const typename dwarf1::debug_info_entry &a,
+		     const typename dwarf2::debug_info_entry &b)
+  {
+    a_ = &a;
+    b_ = &b;
+    if (a.tag () != b.tag ())
+      location () << dwarf::tags::name (a.tag ())
+		  << " vs "
+		  << dwarf::tags::name (b.tag ());
+  }
+
+  inline void mismatch (const cu1 &it1, const cu1 &end1,
+			const cu2 &it2, const cu2 &end2)
+  {
+    if (it1 == end1)		// a lacks some of b's CUs.
+      cout << "files differ: "
+	   << dec << subr::length (it2, end2)
+	   << " extra compilation units "
+	   << endl;
+    else if (it2 == end2)	// b lacks some of a's CUs.
+      cout << "files differ: "
+	   << dec << subr::length (it1, end1)
+	   << " compilation units missing "
+	   << endl;
+    // Otherwise the differing CU will have announced itself.
+  }
+
+  inline void mismatch (const die1 &it1, const die1 &end1,
+			const die2 &it2, const die2 &end2)
+  {
+    if (it1 == end1)		// a_ lacks some of b_'s children.
+      location () << dec << subr::length (it2, end2)
+		  << " extra children " << endl;
+    else if (it2 == end2)	// b_ lacks some of a_'s children.
+      location () << dec << subr::length (it1, end1)
+		  << " children missing " << endl;
+    // Otherwise the differing child will have announced itself.
+  }
+
+  inline void mismatch (attr1 it1, const attr1 &end1,
+			attr2 it2, const attr2 &end2)
+  {
+    if (it1 == end1)		// a_ lacks some of b_'s attrs.
+      for (location () << " extra attributes:"; it2 != end2; ++it2)
+	cout << " " << to_string (*it2);
+    else if (it2 == end2)	// b_ lacks some of a_'s attrs.
+      for (location () << " missing attributes:"; it1 != end1; ++it1)
+	cout << " " << to_string (*it1);
     else
-      cout << hex << a_->offset () << " vs " << b_->offset () << ": ";
-    return cout;
-  }
-
-  void container (const char *msg) const
-  {
-    location () << msg << " " << container_ << endl;
-  }
-
-  void missing () const
-  {
-    container ("missing");
-  }
-
-  void extra () const
-  {
-    container ("extra");
-  }
-
-  void tag () const
-  {
-    location () << "different tag" << endl;
-  }
-
-  void attributes () const
-  {
-    location () << "different attributes" << endl;
-  }
-
-  void values (const string &a, const string &b) const
-  {
-    location () << "attribute " << a << " vs " << b << endl;
+      location () << to_string (*it1) << " vs " << to_string (*it2);
+    cout << endl;
   }
 };
 
-template<typename container1, typename container2>
-static int
-describe_mismatch (const container1 &a, const container2 &b, const context &say)
+// For a silent comparison we just use the standard ref tracker.
+template<class dwarf1, class dwarf2>
+struct quiet_cmp : public dwarf_comparator<dwarf1, dwarf2, false,
+					   dwarf_ref_tracker<dwarf1, dwarf2> >
+{};
+
+// To be noisy, the talker wraps the standard tracker with verbosity hooks.
+template<class dwarf1, class dwarf2>
+struct noisy_cmp : public dwarf_comparator<dwarf1, dwarf2, false,
+					   talker<dwarf1, dwarf2> >
+{};
+
+
+// Test that one comparison works as expected.
+template<class dwarf1, class dwarf2>
+static void
+test_compare (const dwarf1 &file1, const dwarf2 &file2, bool expect)
 {
-  typename container1::const_iterator i = a.begin ();
-  typename container2::const_iterator j = b.begin ();
-  int result = 0;
-  while (i != a.end ())
+  if (quiet_cmp<dwarf1, dwarf2> () (file1, file2) != expect)
     {
-      if (j == b.end ())
-	{
-	  say.missing ();	// b lacks some of a.
-	  result = 1;
-	  break;
-	}
-      result = describe_mismatch (*i, *j, say);
-      assert ((result != 0) == (*i != *j));
-      if (result != 0)
-	break;
-      ++i;
-      ++j;
+      if (expect)
+	noisy_cmp<dwarf1, dwarf2> () (file1, file2);
+      throw std::logic_error (__PRETTY_FUNCTION__);
     }
-  if (result == 0 && j != b.end ())
-    {
-      say.extra ();		// a lacks some of b.
-      result = 1;
-    }
-  return result;
 }
 
-template<>
-int
-describe_mismatch (const dwarf::debug_info_entry &a,
-		   const dwarf::debug_info_entry &b,
-		   const context &ctx)
+// Test all directions of two classes.
+template<class dwarf1, class dwarf2>
+static void
+test_classes (const dwarf1 &file1, const dwarf1 &file2,
+	      const dwarf2 &out1, const dwarf2 &out2,
+	      bool expect)
 {
-  context here (a, b);
+  // Compare self, same type.
+  test_compare (out1, out1, true);
+  test_compare (out2, out2, true);
 
-  int result = a.tag () != b.tag ();
-  if (result != 0)
-    here.tag ();
+  // Compare self, output == input.
+  test_compare (out1, file1, true);
+  test_compare (out2, file2, true);
 
-  if (result == 0)
-    {
-      here.container_ = "attributes";
-      result = describe_mismatch (a.attributes (), b.attributes (), here);
-      assert ((result != 0) == (a.attributes () != b.attributes ()));
-    }
-  if (result == 0)
-    {
-      here.container_ = "children";
-      result = describe_mismatch (a.children (), b.children (), here);
-      assert ((result != 0) == (a.children () != b.children ()));
-    }
-  return result;
+  // Compare self, input == output.
+  test_compare (file1, out1, true);
+  test_compare (file2, out2, true);
+
+  // Compare files, output == output.
+  test_compare (out1, out2, expect);
+  test_compare (out2, out1, expect);
+
+  // Compare files, output vs input.
+  test_compare (out1, file2, expect);
+  test_compare (out2, file1, expect);
+
+  // Compare files, input vs output.
+  test_compare (file2, out1, expect);
+  test_compare (file1, out2, expect);
 }
 
-template<>
-int
-describe_mismatch (const dwarf::compile_unit &a, const dwarf::compile_unit &b,
-		   const context &ctx)
-{
-  return describe_mismatch (static_cast<const dwarf::debug_info_entry &> (a),
-			    static_cast<const dwarf::debug_info_entry &> (b),
-			    ctx);
-}
-
-template<>
-int
-describe_mismatch (const dwarf::attribute &a, const dwarf::attribute &b,
-		   const context &say)
-{
-  int result = a.first != b.first;
-  if (result != 0)
-    say.attributes ();
-  else
-    {
-      result = a.second != b.second;
-      if (result != 0)
-	say.values (a.to_string (), b.to_string ());
-    }
-  return result;
-}
 
 int
 main (int argc, char *argv[])
@@ -304,52 +306,18 @@ main (int argc, char *argv[])
       dwarf file1 (dw1);
       dwarf file2 (dw2);
 
-      if (quiet)
-	result = !(file1 == file2);
-      else
-	result = describe_mismatch (file1.compile_units (),
-				    file2.compile_units (),
-				    context ());
+      bool same = (quiet
+		   ? quiet_cmp<dwarf, dwarf> () (file1, file2)
+		   : noisy_cmp<dwarf, dwarf> () (file1, file2));
 
       if (test_writer)
 	{
 	  dwarf_edit out1 (file1);
 	  dwarf_edit out2 (file2);
-
-# define compare_self(x, y)			\
-	  assert (x == y);			\
-	  assert (!(x != y))
-# define compare_other(x, y)			\
-	  assert (!(x == y) == result);		\
-	  assert (!(x != y) == !result)
-
-	  // Compare self, same type.
-	  compare_self (out1, out1);
-	  compare_self (out2, out2);
-
-	  // Compare self, output == input.
-	  compare_self (out1, file1);
-	  compare_self (out2, file2);
-
-	  // Compare self, input == output.
-	  compare_self (file1, out1);
-	  compare_self (file2, out2);
-
-	  // Compare files, output == output.
-	  compare_other (out1, out2);
-	  compare_other (out2, out1);
-
-	  // Compare files, output vs input.
-	  compare_other (out1, file2);
-	  compare_other (out2, file1);
-
-	  // Compare files, input vs output.
-	  compare_other (file2, out1);
-	  compare_other (file1, out2);
-
-#undef	compare_self
-#undef	compare_other
+	  test_classes (file1, file2, out1, out2, same);
 	}
+
+      result = !same;
     }
 
   return result;
