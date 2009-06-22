@@ -49,6 +49,7 @@
 
 #include <config.h>
 #include "dwarf"
+#include "dwarf_edit"
 #include "known-dwarf.h"
 
 using namespace elfutils;
@@ -155,14 +156,14 @@ namespace elfutils
 #undef KNOWN_ENUM_CASE
 };
 
-const char *
-dwarf::dwarf_enum::identifier () const
+static const char *
+known_identifier (unsigned int which, unsigned int value)
 {
-  switch (_m_attr.whatattr ())
+  switch (which)
     {
 # define KNOWN_ENUM(attr, enum)						\
       case DW_AT_##attr:						\
-	return dwarf::known_enum<DW_AT_##attr>::identifier (*this);
+	return dwarf::known_enum<DW_AT_##attr>::identifier (value);
 
       ALL_KNOWN_ENUM
 
@@ -170,28 +171,81 @@ dwarf::dwarf_enum::identifier () const
     }
 
   return NULL;
+}
+
+static const char *
+known_name (unsigned int which, unsigned int value)
+{
+  switch (which)
+    {
+# define KNOWN_ENUM(attr, enum)						\
+      case DW_AT_##attr:						\
+	return dwarf::known_enum<DW_AT_##attr>::name (value);
+
+      ALL_KNOWN_ENUM
+
+# undef KNOWN_ENUM
+    }
+
+  return NULL;
+}
+
+template<typename constant>
+static inline const char *
+enum_identifier (const constant &value)
+{
+  return known_identifier (value.which (), value);
+}
+
+template<typename constant>
+static inline const char *
+enum_name (const constant &value)
+{
+  return known_name (value.which (), value);
+}
+
+const char *
+dwarf::dwarf_enum::identifier () const
+{
+  return enum_identifier (*this);
 }
 
 const char *
 dwarf::dwarf_enum::name () const
 {
-  switch (_m_attr.whatattr ())
-    {
-# define KNOWN_ENUM(attr, enum)						\
-      case DW_AT_##attr:						\
-	return dwarf::known_enum<DW_AT_##attr>::name (*this);
-
-      ALL_KNOWN_ENUM
-
-# undef KNOWN_ENUM
-    }
-
-  return NULL;
+  return enum_name (*this);
 }
 
-std::string
-dwarf::dwarf_enum::to_string () const
+const char *
+dwarf_edit::dwarf_enum::identifier () const
 {
-  const char *known = name ();
-  return known == NULL ? subr::hex_string (*this) : std::string (known);
+  return enum_identifier (*this);
+}
+
+const char *
+dwarf_edit::dwarf_enum::name () const
+{
+  return enum_name (*this);
+}
+
+template<class value_type>
+static inline std::string
+enum_string (const value_type &value)
+{
+  const char *known = value.name ();
+  return known == NULL ? subr::hex_string (value) : std::string (known);
+}
+
+template<>
+string
+to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &value)
+{
+  return enum_string (value);
+}
+
+template<>
+string
+to_string<dwarf_edit::dwarf_enum> (const dwarf_edit::dwarf_enum &value)
+{
+  return enum_string (value);
 }

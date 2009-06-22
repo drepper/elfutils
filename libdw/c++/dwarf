@@ -62,6 +62,7 @@
 #include <stack>
 #include <algorithm>
 #include <functional>
+#include <tr1/unordered_map>
 
 /* Abstractly, one DWARF object file consists of a few containers.
    (We omit .debug_frame for now.  It does not interact with the others.)
@@ -154,6 +155,12 @@
 // DWARF reader interfaces: front end to <libdw.h> routines
 namespace elfutils
 {
+  template<typename type>
+  inline std::string to_string (const type &item)
+  {
+    return item.to_string ();
+  }
+
   template<typename key1, typename value1, class pair2>
   inline bool operator== (const std::pair<key1, value1> &a, const pair2 &b)
   {
@@ -169,6 +176,9 @@ namespace elfutils
     const elt *_m_array;
 
   public:
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef elt value_type;
     typedef const elt *const_iterator;
 
     const_vector ()
@@ -321,6 +331,11 @@ namespace elfutils
 
       public:
 
+	inline const_iterator ()
+	  : _m_raw (), _m_end ()
+	{
+	}
+
 	const_iterator (const const_iterator &i)
 	  : _m_raw (i._m_raw), _m_end (i._m_end) {}
 
@@ -456,7 +471,8 @@ namespace elfutils
       template<typename die>
       bool operator== (const die &other) const
       {
-	return (attributes () == other.attributes ()
+	return (tag () == other.tag ()
+		&& attributes () == other.attributes ()
 		&& children () == other.children ());
       }
       template<typename die>
@@ -473,6 +489,13 @@ namespace elfutils
       inline const dwarf::ranges ranges () const
       {
 	return dwarf::ranges (*this);
+      }
+
+      /* This is an identity pointer that only matches the very same
+	 DIE in the very same file (same opened Dwarf instance).  */
+      inline ::Dwarf_Off identity () const
+      {
+	return (uintptr_t) _m_die.addr;
       }
     };
 
@@ -505,7 +528,9 @@ namespace elfutils
       private:
 	debug_info_entry _m_die;
 
-	inline const_iterator () {}
+	inline const_iterator ()
+	{}
+
 	inline const_iterator (const debug_info_entry &parent)
 	{
 	  int result = ::dwarf_child (parent.thisdie (), &_m_die._m_die);
@@ -538,6 +563,13 @@ namespace elfutils
 	  return *this;
 	}
 
+	// Assign directly from a DIE, as if "taking its address".
+	inline const_iterator &operator= (const debug_info_entry &die)
+	{
+	  _m_die = die;
+	  return *this;
+	}
+
 	inline bool operator== (const const_iterator &other) const
 	{
 	  return _m_die._m_die.addr == other._m_die._m_die.addr;
@@ -566,7 +598,7 @@ namespace elfutils
       {
 	return const_iterator (_m_die);
       }
-      inline const_iterator end () const
+      static inline const_iterator end ()
       {
 	return const_iterator ();
       }
@@ -722,17 +754,16 @@ namespace elfutils
 
 	typedef raw_children::const_iterator raw_iterator;
 	std::stack<raw_iterator> _m_stack;
-	const raw_iterator _m_end;
 
-	/* Push and pop until either _m_stack.top () == _m_end or
-	   it's looking at a DIE other than DW_TAG_imported_unit.  */
+	/* Push and pop until either _m_stack.top () == raw_children::end ()
+	   or it's looking at a DIE other than DW_TAG_imported_unit.  */
 	inline void jiggle ()
 	{
 	  while (true)
 	    {
 	      raw_iterator &i = _m_stack.top ();
 
-	      if (i == _m_end)
+	      if (i == raw_children::end ())
 		{
 		  /* We're at the end of this raw DIE.
 		     Pop out to the iterator on the importing unit.  */
@@ -755,18 +786,25 @@ namespace elfutils
 	    }
 	}
 
-	inline const_iterator (const raw_iterator &end) : _m_end (end) {}
-
-	inline const_iterator (const raw_iterator &end, const raw_iterator &i)
-	  : _m_end (end)
+      public:
+	inline const_iterator (const raw_iterator &i)
 	{
 	  _m_stack.push (i);
 	  jiggle ();
 	}
 
-      public:
 	inline const_iterator (const const_iterator &i)
-	  : _m_stack (i._m_stack), _m_end (i._m_end) {}
+	  : _m_stack (i._m_stack)
+	{}
+
+	// Construct directly from a DIE, as if "taking its address".
+	inline const_iterator (const debug_info_entry &die)
+	{
+	  raw_iterator it;
+	  it = die;
+	  _m_stack.push (it);
+	  jiggle ();
+	}
 
 	inline const_iterator &operator= (const const_iterator &other)
 	{
@@ -808,8 +846,7 @@ namespace elfutils
 
       const_iterator begin () const
       {
-	return const_iterator (raw_children::end (),
-			       raw_children::begin ());
+	return const_iterator (raw_children::begin ());
       }
       const_iterator end () const
       {
@@ -855,6 +892,8 @@ namespace elfutils
       typedef int key_type;
       typedef attr_value mapped_type;
       typedef attribute value_type;
+
+      static const bool ordered = false;
 
       inline attributes (const class attributes &a)
 	: attributes_base (a) {}
@@ -1058,8 +1097,7 @@ namespace elfutils
       // attr_value (const attr_value &v) : _m_attr (v.attr) {}
 
       value_space what_space () const;
-
-      std::string to_string () const;
+      inline std::string to_string () const;
 
       // Return an iterator on which * will yield the referent debug_info_entry.
       inline debug_info_entry::raw_children::const_iterator reference () const
@@ -1124,8 +1162,9 @@ namespace elfutils
 	    {
 	    case VS_reference:
 	    case VS_unit_reference:
-	      return true; // XXX Reference identity check (?)
-	      //return reference ()->offset () == other.reference ()->offset ();
+	      // Stateless reference equality is just identity.
+	      return (reference ()->identity ()
+		      == other.reference ()->identity ());
 
 	    case VS_flag:
 	      return flag () == other.flag ();
@@ -1337,6 +1376,8 @@ namespace elfutils
       typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
       typedef key_type value_type;
 
+      static const bool ordered = false;
+
       range_list (const range_list &other) : _m_attr (other._m_attr) {}
 
       std::string to_string () const;
@@ -1469,7 +1510,8 @@ namespace elfutils
 	typename table::const_iterator j = other.begin ();
 	return subr::container_equal
 	  (++i, end (), ++j, other.end (),
-	   subr::name_equal<typename table::value_type> ());
+	   subr::deref<directory_table, table,
+	   	       subr::name_equal<typename table::value_type> > ());
       }
 
     public:
@@ -1772,6 +1814,24 @@ namespace elfutils
 
       const char *identifier () const;
       const char *name () const;
+
+      // Return the DW_AT_* indicating which enum this value belongs to.
+      unsigned int which () const
+      {
+	return _m_attr.whatattr ();
+      }
+
+      template<typename constant>
+      inline bool operator== (const constant &other) const
+      {
+	return (static_cast<unsigned int> (*this)
+		== static_cast<unsigned int> (other));
+      }
+      template<typename constant>
+      inline bool operator!= (const constant &other) const
+      {
+	return !(*this == other);
+      }
     };
 
     // This describes one attribute, equivalent to pair<const int, attr_value>.
@@ -2013,6 +2073,10 @@ namespace elfutils
 	  : _m_file (&file), _m_next (next) {}
 
       public:
+	inline const_iterator ()
+	  : _m_die (), _m_file (NULL), _m_next (-1)
+	{}
+
 	inline const_iterator (const const_iterator &i)
 	  : _m_die (i._m_die), _m_file (i._m_file), _m_next (i._m_next) {}
 
@@ -2174,11 +2238,40 @@ namespace elfutils
       typedef _base::iterator iterator;
       typedef _base::const_iterator const_iterator;
 
+      static const bool ordered = true;
+
       arange_list () {}
       arange_list (const arange_list &other)
 	: _base (static_cast<const _base &> (other)) {}
 
       std::string to_string () const;
+
+      template<typename list>
+      inline bool operator== (const list &other)
+      {
+	coalesce (*this);
+	if (subr::container_equal (*this, other))
+	  return true;
+	std::set<key_type> his = other;
+	coalesce (his);
+	return *this == his;
+      }
+
+      template<typename list>
+      inline bool operator== (const list &other) const
+      {
+	if (subr::container_equal (*this, other))
+	  return true;
+	std::set<key_type> his = other;
+	coalesce (his);
+	// We have to make a copy just to coalesce, since we're const.
+	// Don't bother if we couldn't possibly match afterwards.
+	if (size () <= his.size ())
+	  return false;
+	std::set<key_type> mine = *this;
+	coalesce (mine);
+	return mine == his;
+      }
     };
 
   private:
@@ -2200,26 +2293,26 @@ namespace elfutils
   private:
     static bool adjacency (const arange_list::key_type &a,
 			   const arange_list::key_type &b)
-      {
-	return a.second == b.first;
-      }
+    {
+      return a.second == b.first;
+    }
 
-      // Coalesce adjacent ranges.
-      static void coalesce (std::set<arange_list::key_type> &set)
-      {
-	for (std::set<arange_list::key_type>::iterator i = set.begin ();
-	     (i = std::adjacent_find (i, set.end (), adjacency)) != set.end ();
-	     ++i)
-	  {
-	    std::set<arange_list::key_type>::iterator j = i;
-	    std::set<arange_list::key_type>::iterator k = ++j;
-	    while (++k != set.end () && adjacency (*j, *k))
-	      ++j;
-	    const arange_list::key_type joined (i->first, j->second);
-	    set.erase (i, k);
-	    i = set.insert (joined).first;
-	  }
-      }
+    // Coalesce adjacent ranges.
+    static void coalesce (std::set<arange_list::key_type> &set)
+    {
+      for (std::set<arange_list::key_type>::iterator i = set.begin ();
+	   (i = std::adjacent_find (i, set.end (), adjacency)) != set.end ();
+	   ++i)
+	{
+	  std::set<arange_list::key_type>::iterator j = i;
+	  std::set<arange_list::key_type>::iterator k = ++j;
+	  while (++k != set.end () && adjacency (*j, *k))
+	    ++j;
+	  const arange_list::key_type joined (i->first, j->second);
+	  set.erase (i, k);
+	  i = set.insert (joined).first;
+	}
+    }
   };
 
   inline class dwarf::debug_info_entry::raw_children
@@ -2258,6 +2351,23 @@ namespace elfutils
   {
     return const_iterator (*this, 1);
   }
+
+  // Explicit specialization.
+  template<>
+  std::string to_string<dwarf::attr_value> (const dwarf::attr_value &);
+  inline std::string dwarf::attr_value::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+
+  // Explicit specialization.
+  template<>
+  std::string to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &);
+  inline std::string dwarf::dwarf_enum::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+
 };
 
 #endif	// <elfutils/dwarf>

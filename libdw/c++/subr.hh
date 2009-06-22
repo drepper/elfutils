@@ -18,7 +18,8 @@ namespace elfutils
     template<typename string>
     struct name_equal : public std::binary_function<const char *, string, bool>
     {
-      inline bool operator () (const char *me, const string &you)
+      template<typename mystring>
+      inline bool operator () (const mystring &me, const string &you)
       {
 	return you == me;
       }
@@ -32,6 +33,11 @@ namespace elfutils
       bool operator () (const char *me, const char *you)
       {
 	return !strcmp (me, you);
+      }
+      template<typename mystring>
+      inline bool operator () (const mystring &me, const char *you)
+      {
+	return me == you;
       }
     };
 
@@ -71,27 +77,76 @@ namespace elfutils
       }
     };
 
+    template<typename t1, typename t2, typename pred_type>
+    class deref
+      : public std::binary_function<typename t1::const_iterator,
+				    typename t2::const_iterator,
+				    bool>
+    {
+    private:
+      pred_type _m_pred;
+
+    public:
+      inline deref ()
+	: _m_pred ()
+      {}
+
+      inline deref (const pred_type &pred)
+	: _m_pred (pred)
+      {}
+
+      inline bool operator () (const typename t1::const_iterator &a,
+			       const typename t2::const_iterator &b)
+      {
+	return _m_pred (*a, *b);
+      }
+    };
+
+    template<typename t1, typename t2>
+    struct deref_equal_to
+      : public deref<t1, t2,
+		     equal_to<typename t1::value_type, typename t2::value_type>
+		     >
+    {};
+
     template<typename iter1, typename iter2, typename pred_type>
-    inline bool container_equal (iter1 first1, iter1 last1,
-				 iter2 first2, iter2 last2,
+    inline bool container_equal (iter1 &first1, const iter1 &last1,
+				 iter2 &first2, const iter2 &last2,
 				 pred_type pred)
     {
       while (first1 != last1)
-	if (first2 == last2 || !pred (*first1++, *first2++))
-	  return false;
+	{
+	  if (first2 == last2 || !pred (first1, first2))
+	    return false;
+	  ++first1;
+	  ++first2;
+	}
       return first2 == last2;
     }
 
-    template<typename t1, typename t2>
-    inline bool container_equal (const t1 &a, const t2 &b)
+    template<typename t1, typename t2, typename pred_type>
+    inline bool container_equal (const t1 &a, const t2 &b, pred_type pred)
     {
       typename t1::const_iterator first1 = a.begin ();
       typename t1::const_iterator last1 = a.end ();
       typename t2::const_iterator first2 = b.begin ();
       typename t2::const_iterator last2 = b.end ();
-      return container_equal (first1, last1, first2, last2,
-			      equal_to<typename t1::value_type,
-			               typename t2::value_type> ());
+      return container_equal (first1, last1, first2, last2, pred);
+    }
+
+    template<typename t1, typename t2>
+    inline bool container_equal (const t1 &a, const t2 &b)
+    {
+      return container_equal (a, b, deref_equal_to<t1, t2> ());
+    }
+
+    template<typename iter>
+    inline typename iter::difference_type length (iter i, const iter &end)
+    {
+      typename iter::difference_type n = 0;
+      while (i != end)
+	++i, ++n;
+      return n;
     }
 
     template<typename array, typename element = typename array::value_type>

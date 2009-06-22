@@ -1,0 +1,467 @@
+/* elfutils::dwarf_comparator -- -*- C++ -*- templates for comparing DWARF data
+   Copyright (C) 2009 Red Hat, Inc.
+   This file is part of Red Hat elfutils.
+
+   Red Hat elfutils is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by the
+   Free Software Foundation; version 2 of the License.
+
+   Red Hat elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License along
+   with Red Hat elfutils; if not, write to the Free Software Foundation,
+   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
+
+   In addition, as a special exception, Red Hat, Inc. gives You the
+   additional right to link the code of Red Hat elfutils with code licensed
+   under any Open Source Initiative certified open source license
+   (http://www.opensource.org/licenses/index.php) which requires the
+   distribution of source code with any binary distribution and to
+   distribute linked combinations of the two.  Non-GPL Code permitted under
+   this exception must only link to the code of Red Hat elfutils through
+   those well defined interfaces identified in the file named EXCEPTION
+   found in the source code files (the "Approved Interfaces").  The files
+   of Non-GPL Code may instantiate templates or use macros or inline
+   functions from the Approved Interfaces without causing the resulting
+   work to be covered by the GNU General Public License.  Only Red Hat,
+   Inc. may make changes or additions to the list of Approved Interfaces.
+   Red Hat's grant of this exception is conditioned upon your not adding
+   any new exceptions.  If you wish to add a new Approved Interface or
+   exception, please contact Red Hat.  You must obey the GNU General Public
+   License in all respects for all of the Red Hat elfutils code and other
+   code used in conjunction with Red Hat elfutils except the Non-GPL Code
+   covered by this exception.  If you modify this file, you may extend this
+   exception to your version of the file, but you are not obligated to do
+   so.  If you do not wish to provide this exception without modification,
+   you must delete this exception statement from your version and license
+   this file solely under the GPL without exception.
+
+   Red Hat elfutils is an included package of the Open Invention Network.
+   An included package of the Open Invention Network is a package for which
+   Open Invention Network licensees cross-license their patents.  No patent
+   license is granted, either expressly or impliedly, by designation as an
+   included package.  Should you wish to participate in the Open Invention
+   Network licensing program, please visit www.openinventionnetwork.com
+   <http://www.openinventionnetwork.com>.  */
+
+#ifndef _ELFUTILS_DWARF_COMPARATOR
+#define _ELFUTILS_DWARF_COMPARATOR	1
+
+#include "dwarf"
+
+namespace elfutils
+{
+  // Prototypical stub for reference tracker object.
+  // This keeps no state, and no two contexts ever match.
+  template<class dwarf1, class dwarf2>
+  class dwarf_tracker_base
+  {
+  protected:
+    typedef typename dwarf1::compile_units::const_iterator cu1;
+    typedef typename dwarf2::compile_units::const_iterator cu2;
+    typedef typename dwarf1::debug_info_entry::children::const_iterator die1;
+    typedef typename dwarf2::debug_info_entry::children::const_iterator die2;
+    typedef typename dwarf1::debug_info_entry::attributes::const_iterator attr1;
+    typedef typename dwarf2::debug_info_entry::attributes::const_iterator attr2;
+
+  public:
+    inline void start_walk (const cu1 &a, const cu2 &b)
+    {
+    }
+    inline void finish_walk (const cu1 &a, const cu2 &b)
+    {
+    }
+    inline void pre_order (const die1 &a, const die2 &b)
+    {
+    }
+    inline void post_order (const die1 &a, const die2 &b)
+    {
+    }
+
+    inline void visit (const typename dwarf1::debug_info_entry &a,
+		       const typename dwarf2::debug_info_entry &b)
+    {
+    }
+
+    inline void mismatch (const cu1 &it1, const cu1 &end1,
+			  const cu2 &it2, const cu2 &end2)
+    {
+    }
+
+    inline void mismatch (const die1 &it1, const die1 &end1,
+			  const die2 &it2, const die2 &end2)
+    {
+    }
+
+    inline void mismatch (const attr1 &it1, const attr1 &end1,
+			  const attr2 &it2, const attr2 &end2)
+    {
+    }
+
+    struct left_context_type {};
+    inline const left_context_type left_context (const die1 &die)
+    {
+      return left_context_type ();
+    }
+
+    struct right_context_type {};
+    inline const right_context_type right_context (const die2 &die)
+    {
+      return right_context_type ();
+    }
+
+    inline bool context_quick_mismatch (const left_context_type &a,
+					const right_context_type &b)
+
+    {
+      return true;
+    }
+
+    inline bool context_match (const left_context_type &a,
+			       const right_context_type &b)
+    {
+      return false;
+    }
+  };
+
+  template<class dwarf1, class dwarf2,
+	   bool ignore_refs = false,
+	   class tracker = dwarf_tracker_base<dwarf1, dwarf2>
+	   >
+  class dwarf_comparator
+    : public std::binary_function<dwarf1, dwarf2, bool>
+  {
+  private:
+    tracker _m_tracker;
+
+    template<typename item1, typename item2>
+    struct matcher : public std::binary_function<item1, item2, bool>
+    {
+      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
+      matcher (dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &cmp)
+	: _m_cmp (cmp)
+      {}
+
+      inline bool operator () (const item1 &a, const item2 &b)
+      {
+	return _m_cmp.match (a, b);
+      }
+    };
+#define MATCHER(item) \
+    matcher<typename dwarf1::item, typename dwarf2::item>
+
+    inline bool match (const dwarf1 &a, const dwarf2 &b)
+    {
+      return match (a.compile_units (), b.compile_units ());
+    }
+
+    typedef typename dwarf1::compile_units compile_units1;
+    typedef typename dwarf2::compile_units compile_units2;
+    typedef typename dwarf1::compile_units::const_iterator cu1_it;
+    typedef typename dwarf2::compile_units::const_iterator cu2_it;
+    inline bool match (const compile_units1 &a, const compile_units2 &b)
+    {
+      cu1_it it1 = a.begin ();
+      cu2_it it2 = b.begin ();
+      const cu1_it end1 = a.end ();
+      const cu2_it end2 = b.end ();
+      if (subr::container_equal
+	  (it1, end1, it2, end2,
+	   MATCHER (compile_units::const_iterator) (*this)))
+	return true;
+      _m_tracker.mismatch (it1, end1, it2, end2);
+      return false;
+    }
+
+    typedef typename dwarf1::debug_info_entry die1;
+    typedef typename dwarf2::debug_info_entry die2;
+    inline bool match (const cu1_it &a, const cu2_it &b)
+    {
+      bool result;
+      _m_tracker.start_walk (a, b);
+      try
+	{
+	  result = match (static_cast<die1> (*a), static_cast<die2> (*b));
+	}
+      catch (...)
+	{
+	  _m_tracker.finish_walk (a, b);
+	  throw;
+	}
+      _m_tracker.finish_walk (a, b);
+      return result;
+    }
+
+    inline bool match (const die1 &a, const die2 &b)
+    {
+      _m_tracker.visit (a, b);
+      return (a.tag () == b.tag ()
+	      && match (a.attributes (), b.attributes ())
+	      && match (a.children (), b.children ()));
+    }
+
+    template<typename in, typename out>
+    static inline void populate (out &o, const in &map)
+    {
+      for (typename in::const_iterator i = map.begin ();
+	   i != map.end ();
+	   ++i)
+	o.insert (std::make_pair ((*i).first, i));
+    }
+
+    typedef typename dwarf1::debug_info_entry::attributes attributes1;
+    typedef typename dwarf2::debug_info_entry::attributes attributes2;
+    typedef typename attributes1::const_iterator ait1;
+    typedef typename attributes2::const_iterator ait2;
+    typedef std::map<int, ait1> ait1_map;
+    typedef std::map<int, ait2> ait2_map;
+
+    struct match_lhs
+      : public std::binary_function<ait1, ait2, bool>
+    {
+      inline bool operator () (const ait1 &it1, const ait2 &it2)
+      {
+	return (*it1).first == (*it2).first;
+      }
+    };
+
+    struct match_rhs
+      : public std::binary_function<ait1, ait2, bool>
+    {
+      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
+      match_rhs (dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &cmp)
+	: _m_cmp (cmp)
+      {}
+
+      inline bool operator () (const ait1 &it1, const ait2 &it2)
+      {
+	return _m_cmp.match ((*it1).second, (*it2).second);
+      }
+    };
+
+    struct match_sorted
+      : public std::binary_function<typename ait1_map::value_type,
+				    typename ait2_map::value_type,
+				    bool>
+    {
+      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
+      match_sorted (dwarf_comparator<dwarf1, dwarf2,
+		    ignore_refs, tracker> &cmp)
+	: _m_cmp (cmp)
+      {}
+
+      inline bool operator () (const typename ait1_map::value_type &x,
+			       const typename ait2_map::value_type &y)
+      {
+	return (x.first == y.first
+		&& _m_cmp.match ((*x.second).second, (*y.second).second));
+      }
+    };
+
+    inline bool match (const attributes1 &a, const attributes2 &b)
+    {
+      ait1 it1 = a.begin ();
+      ait2 it2 = b.begin ();
+      const ait1 end1 = a.end ();
+      const ait2 end2 = b.end ();
+      if (subr::container_equal (it1, end1, it2, end2, match_lhs ()))
+	{
+	  // The set of attributes matches, in order.  Compare the values.
+	  it1 = a.begin ();
+	  it2 = b.begin ();
+	  if (subr::container_equal (it1, end1, it2, end2, match_rhs (*this)))
+	    return true;
+	  _m_tracker.mismatch (it1, end1, it2, end2);
+	  return false;
+	}
+
+      if (it1 != end1 && it2 != end2
+	  && !(attributes1::ordered && attributes2::ordered))
+	{
+	  /* We have the same number of attributes, but the names don't match.
+
+	   */
+
+	  ait1_map sorted1;
+	  populate (sorted1, a);
+
+	  ait2_map sorted2;
+	  populate (sorted2, b);
+
+	  std::pair<typename ait1_map::iterator,
+	    	    typename ait2_map::iterator> result
+	    = std::mismatch (sorted1.begin (), sorted1.end (),
+			     sorted2.begin (), match_sorted (*this));
+	  if (result.first == sorted1.end () && result.second == sorted2.end ())
+	    return true;
+
+	  it1 = result.first->second;
+	  it2 = result.second->second;
+	}
+
+      _m_tracker.mismatch (it1, end1, it2, end2);
+      return false;
+    }
+
+    typedef typename dwarf1::debug_info_entry::children children1;
+    typedef typename dwarf2::debug_info_entry::children children2;
+    typedef typename children1::const_iterator cit1;
+    typedef typename children2::const_iterator cit2;
+    struct die_matcher
+      : public std::binary_function<cit1, cit2, bool>
+    {
+      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
+      die_matcher (dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &cmp)
+	: _m_cmp (cmp)
+      {}
+
+      inline bool operator () (const cit1 &a, const cit2 &b)
+      {
+	bool result;
+	_m_cmp._m_tracker.pre_order (a, b);
+	try
+	  {
+	    result = _m_cmp.match (*a, *b);
+	  }
+	catch (...)
+	  {
+	    _m_cmp._m_tracker.post_order (a, b);
+	    throw;
+	  }
+	_m_cmp._m_tracker.post_order (a, b);
+	return result;
+      }
+    };
+    inline bool match (const children1 &a, const children2 &b)
+    {
+      cit1 it1 = a.begin ();
+      cit2 it2 = b.begin ();
+      const cit1 end1 = a.end ();
+      const cit2 end2 = b.end ();
+      if (subr::container_equal (it1, end1, it2, end2, die_matcher (*this)))
+	return true;
+      _m_tracker.mismatch (it1, end1, it2, end2);
+      return false;
+    }
+
+    typedef typename dwarf1::attribute attribute1;
+    typedef typename dwarf2::attribute attribute2;
+    inline bool match (const attribute1 &a, const attribute2 &b)
+    {
+      return a.first == b.first && match (a.second, b.second);
+    }
+
+    typedef typename dwarf1::attr_value attr_value1;
+    typedef typename dwarf2::attr_value attr_value2;
+    inline bool match (const attr_value1 &a, const attr_value2 &b)
+    {
+      const dwarf::value_space what = a.what_space ();
+      if (what == b.what_space ())
+	switch (what)
+	  {
+	  case dwarf::VS_reference:
+	  case dwarf::VS_unit_reference:
+	    return reference_match (a.reference (), b.reference ());
+
+	  case dwarf::VS_flag:
+	    return a.flag () == b.flag ();
+
+	  case dwarf::VS_rangelistptr:
+	    return a.ranges () == b.ranges ();
+
+	  case dwarf::VS_lineptr:
+	    return a.line_info () == b.line_info ();
+
+	  case dwarf::VS_macptr:	// XXX punt for now, treat as constant
+	    return a.constant () == b.constant ();
+
+	  case dwarf::VS_dwarf_constant:
+	    return a.dwarf_constant () == b.dwarf_constant ();
+
+	  case dwarf::VS_constant:
+	    if (a.constant_is_integer ())
+	      return (b.constant_is_integer ()
+		      && a.constant () == b.constant ());
+	    return (!b.constant_is_integer ()
+		    && subr::container_equal (a.constant_block (),
+					      b.constant_block ()));
+
+	  case dwarf::VS_source_line:
+	    return a.source_line () == b.source_line ();
+	  case dwarf::VS_source_column:
+	    return a.source_column () == b.source_column ();
+
+	  case dwarf::VS_identifier:
+	    return subr::name_equal<typeof (b.identifier ())> ()
+	      (a.identifier (), b.identifier ());
+
+	  case dwarf::VS_string:
+	    return subr::name_equal<typeof (b.string ())> ()
+	      (a.string (), b.string ());
+
+	  case dwarf::VS_address:
+	    return a.address () == b.address ();
+
+	  case dwarf::VS_source_file:
+	    return a.source_file () == b.source_file ();
+
+	  case dwarf::VS_location:
+	    return a.location () == b.location ();
+
+	  case dwarf::VS_discr_list:
+	    throw std::runtime_error ("XXX unimplemented");
+	  }
+      return false;
+    }
+
+    /* We call references equal if they are literally the same DIE,
+       or if they are identical subtrees sitting in matching contexts.
+       The tracker's context_match method decides what that means.  */
+    inline bool reference_match (const cit1 &ref1, const cit2 &ref2)
+    {
+      if (ignore_refs)
+	return true;
+
+      const die1 &a = *ref1;
+      const die2 &b = *ref2;
+
+      if (a.identity () == a.identity ()) // Object identity.
+	return true;
+
+      // Simplest mismatches with the cheapest checks first.
+      if (a.tag () != b.tag ()
+	  || a.has_children () != b.has_children ())
+	return false;
+
+      // Now we have to get the tracker involved.
+      const typename tracker::left_context_type &lhs
+	= _m_tracker.left_context (ref1);
+      const typename tracker::right_context_type &rhs
+	= _m_tracker.right_context (ref2);
+
+      // First do the cheap mismatch check on the contexts, then check the
+      // contents and contexts in ascending order of costliness of a check.
+      return (!_m_tracker.context_quick_mismatch (lhs, rhs)
+	      && match (a.attributes (), b.attributes ())
+	      && _m_tracker.context_match (lhs, rhs)
+	      && match (a.children (), b.children ()));
+    }
+
+  public:
+    inline bool operator () (const dwarf1 &a, const dwarf2 &b)
+    {
+      return match (a, b);
+    }
+
+    template<typename item1, typename item2>
+    inline bool equals (const item1 &a, const item2 &b)
+    {
+      return match (a, b);
+    }
+  };
+};
+
+#endif	// <elfutils/dwarf_comparator>

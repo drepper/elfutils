@@ -1735,7 +1735,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	uint64_t prev_abbr_code = (uint64_t)-1;
 	uint64_t zero_seq_off = (uint64_t)-1;
 
-	while (!read_ctx_eof (ctx))
+	do
 	  {
 	    abbr_off = read_ctx_get_offset (ctx);
 	    where_reset_2 (&where, abbr_off);
@@ -1756,11 +1756,11 @@ abbrev_table_load (struct read_ctx *ctx)
 	    prev_abbr_code = abbr_code;
 	    prev_abbr_off = abbr_off;
 	  }
+	while (!read_ctx_eof (ctx));
 
 	if (zero_seq_off != (uint64_t)-1)
 	  {
-	    /* Don't report abbrev address, this is section-wide
-	       padding.  */
+	    /* Don't report abbrev address, this is section-wide padding.  */
 	    struct where wh = WHERE (where.section, NULL);
 	    wr_message_padding_0 (mc_abbrevs | mc_header, &wh,
 				  zero_seq_off, abbr_off - 1);

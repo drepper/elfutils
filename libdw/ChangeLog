@@ -1,3 +1,20 @@
+2009-06-19  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_comparator: New file.
+	* c++/dwarf_tracker: New file.
+	* Makefile.am (pkginclude_HEADERS): Add them.
+
+	* c++/dwarf_edit: Miscellaneous fixes.
+	Support dwarf_enum, to_string for attributes.
+	* c++/known.cc: Support dwarf_edit::dwarf_enum.
+	* c++/edit-values.cc: Support to_string for attributes.
+	* c++/values.cc: Rejiggered accordingly.
+
+	* c++/dwarf-knowledge.cc (expected_value_space): Expect unit_reference
+	only for DW_TAG_imported_unit.
+
+	* c++/dwarf: Miscellaneous fixes.
+
 2009-04-02  Roland McGrath  <roland@redhat.com>
 
 	* Makefile.am (noinst_HEADERS): Add known-dwarf.h and
@@ -54,6 +71,15 @@
 
 	* c++/dwarf: New file.
 	* Makefile.am (pkginclude_HEADERS): Add it.
+
+2009-06-18  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (__libdw_read_address_inc): Constify.
+	(__libdw_read_offset_inc): Likewise.
+	* dwarf_getaranges.c: Likewise.
+	* dwarf_getlocation.c: Likewise.
+	* dwarf_getsrclines.c: Likewise.
+	* dwarf_nextcu.c: Likewise.
 
 2009-05-05  Petr Machata  <pmachata@redhat.com>
 
