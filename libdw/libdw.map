@@ -195,7 +195,7 @@ ELFUTILS_0.138 {
     *;
 } ELFUTILS_0.136;
 
-ELFUTILS_0.141_UNWIND {
+ELFUTILS_0.142 {
   global:
     dwarf_next_cfi;
     dwarf_getcfi;

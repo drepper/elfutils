@@ -1,6 +1,6 @@
-2009-04-19  Roland McGrath  <roland@redhat.com>
+2009-06-24  Roland McGrath  <roland@redhat.com>
 
-	* libdw.map (ELFUTILS_0.141): Add dwfl_addrframe,
+	* libdw.map (ELFUTILS_0.142): Add dwfl_addrframe,
 	dwfl_module_dwarf_cfi, dwfl_module_eh_cfi.
 
 	* libdwP.h (struct Dwarf): Add member `cfi'.
@@ -14,7 +14,7 @@
 	* dwarf_frame_return_address_register.c: New file.
 	* Makefile.am (libdw_a_SOURCES): Add them.
 	* unwind.h: Declare those functions.
-	* libdw.map (ELFUTILS_0.141): Export them.
+	* libdw.map (ELFUTILS_0.142): Export them.
 
 	* dwarf_getlocation.c (__libdw_intern_expression): New function,
 	broken out of ...
@@ -35,7 +35,8 @@
 	* Makefile.am (libdw_a_SOURCES): Add it.
 	* libdw.h (Dwarf_CIE, Dwarf_FDE, Dwarf_CIE_Entry): New types.
 	Declare dwarf_next_cfi.
-	* libdw.map (ELFUTILS_0.141): Add dwarf_next_cfi.
+	* libdw.map (ELFUTILS_0.142): New set, inherits from ELFUTILS_0.136.
+	Add dwarf_next_cfi.
 
 	* memory-access.h [! ALLOW_UNALIGNED]
 	(read_2ubyte_unaligned): Renamed to ...
