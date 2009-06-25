@@ -44,7 +44,7 @@
 #include "../libdw/libdwP.h"	// XXX
 
 #include "c++/dwarf"
-#include "c++/dwarf_edit"
+#include "c++/dwarf_output"
 #include "c++/dwarf_comparator"
 #include "c++/dwarf_tracker"
 
@@ -312,8 +312,8 @@ main (int argc, char *argv[])
 
       if (test_writer)
 	{
-	  dwarf_edit out1 (file1);
-	  dwarf_edit out2 (file2);
+	  dwarf_output out1 (file1);
+	  dwarf_output out2 (file2);
 	  test_classes (file1, file2, out1, out2, same);
 	}
 

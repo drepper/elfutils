@@ -67,15 +67,12 @@ namespace elfutils
 {
   class dwarf_output
   {
-  public:
-    class compile_units;
+    dwarf_edit _m_debug;
 
-    // XXX later
-    class attr_value : public dwarf::attr_value
-    {
-    public:
-      attr_value (const dwarf::attr_value &v) : dwarf::attr_value (v) {}
-    };
+  public:
+    class compile_unit;
+    class compile_units;
+    class debug_info_entry;
 
     class debug_info_entry
     {
@@ -84,6 +81,7 @@ namespace elfutils
       class children : public std::vector<debug_info_entry>
       {
 	friend class debug_info_entry;
+	friend class compile_unit;
       private:
         children () {}
 
@@ -92,28 +90,22 @@ namespace elfutils
 	  : std::vector<debug_info_entry> (other.begin (), other.end ()) {}
       };
 
-      class attributes : public std::map<int, attr_value>
-      {
-	friend class debug_info_entry;
-      private:
-	attributes () {}
-
-	template<typename attrs>
-	attributes (const attrs &other)
-	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
-
-      public:
-	template<typename attrs>
-	inline operator attrs () const
-	{
-	  return attrs (begin (), end ());
-	}
-      };
+      class attributes;
 
     private:
-      const int _m_tag;
-      const attributes _m_attributes;
-      const children _m_children;
+      // xxx should be const, but this is placed into vector, and
+      // vector moves its elements around with assignment operator in
+      // case the capacity is reached.
+      int _m_tag;
+      attributes *_m_attributes;
+      children _m_children;
+
+    protected:
+      debug_info_entry (int t, const attributes &attr, const children &c)
+	: _m_tag (t),
+	  _m_attributes (NULL /*attr*/), // xxx yyy
+	  _m_children (c)
+      {}
 
     public:
       /* The template constructor lets us copy in from any class that has
@@ -121,7 +113,7 @@ namespace elfutils
       template<typename die>
       debug_info_entry (const die &die)
 	: _m_tag (die.tag ()),
-	  _m_attributes (die.attributes ()),
+	  _m_attributes (NULL /*die.attributes ()*/), // xxx yyy
 	  _m_children (die.children ())
       {}
 
@@ -135,22 +127,14 @@ namespace elfutils
 	return !_m_children.empty ();
       }
 
-      inline class children &children ()
-      {
-	return _m_children;
-      }
       inline const class children &children () const
       {
 	return _m_children;
       }
 
-      inline class attributes &attributes ()
-      {
-	return _m_attributes;
-      }
       inline const class attributes &attributes () const
       {
-	return _m_attributes;
+	return *_m_attributes;
       }
 
       template<typename die>
@@ -162,14 +146,239 @@ namespace elfutils
       template<typename die>
       bool operator!= (const die &other) const
       {
-	return !(*this == other);;
+	return !(*this == other);
       }
+
+      // xxx
+      inline ::Dwarf_Off identity () const { return (uintptr_t) this; }
+      inline ::Dwarf_Off offset () const { return identity (); }
+    };
+
+    // xxx
+    // Same as set<pair<Dwarf_Addr, Dwarf_Addr>>.
+    class range_list : public dwarf::arange_list
+    {
+    public:
+      range_list () {} // xxx drop?
+      template<typename list>
+      range_list (const list &other)
+	: dwarf::arange_list (other.begin (), other.end ()) {}
+    };
+
+    class source_file
+    {
+    public:
+      // xxx
+      template <typename table>
+      bool operator == (const table &other) { return false; }
+      inline ::Dwarf_Word mtime () const { return 0; } // xxx
+      inline ::Dwarf_Word size () const { return 0; } // xxx
+      inline std::string name () const { return ""; } // xxx
+    };
+
+    class line_entry
+    {
+    public:
+      inline source_file file () const { return source_file (); } // xxx
+      bool epilogue_begin () const { return false; } // xxx
+      bool prologue_end () const { return false; } // xxx
+      bool end_sequence () const { return false; } // xxx
+      bool basic_block () const { return false; } // xxx
+      bool statement () const { return false; } // xxx
+      unsigned int line () const { return 0; } // xxx
+      unsigned int column () const { return 0; } // xxx
+      ::Dwarf_Addr address () const { return 0; } // xxx
+    };
+
+    class line_table
+    {
+    public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      typedef line_entry value_type;
+
+      typedef subr::indexed_iterator<line_table> const_iterator;
+
+      inline bool empty () const { return true; } // xxx
+      size_t size () const { return 0; } // xxx
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (*this, 0);
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator (*this, size ());
+      }
+
+      const line_entry at (size_t idx) const { return line_entry (); } // xxx
+
+      const line_entry operator[] (size_t idx) const
+      {
+	return at (idx);
+      }
+
+      template<typename table>
+      inline bool operator== (const table &other) const
+      {
+	return size () == other.size () && subr::container_equal (*this, other);
+      }
+      template<typename table>
+      inline bool operator!= (const table &other) const
+      {
+	return !(*this == other);
+      }
+
+      // Look up by matching address.
+      const_iterator find (::Dwarf_Addr) const { return begin (); } // xxx
+    };
+
+    class line_info_table
+    {
+    public:
+      // xxx
+      template <typename table>
+      bool operator == (const table &other) { return false; }
+      line_table lines () const { return line_table (); } // xxx
+      std::vector<std::string> include_directories () const { return std::vector<std::string> (); } // xxx
+    };
+
+    class location_attr : public std::map<dwarf::location_attr::key_type,
+					  std::vector<uint8_t> >
+    {
+    private:
+      typedef std::map<dwarf::location_attr::key_type,
+		       std::vector<uint8_t> > _base;
+
+    public:
+      // xxx
+      template <typename table>
+      bool operator == (const table &other) const { return false; } // xxx
+      bool empty () const { return false; } // xxx
+      bool is_list () const { return false; } // xxx
+      inline mapped_type location () const { return mapped_type (); } // xxx
+    };
+
+    // XXX later
+    class attr_value
+    {
+    public:
+      template <typename value>
+      attr_value (const value &val)
+      {
+	// xxx
+      }
+
+      dwarf::value_space what_space () const
+      {
+	// xxx
+	return dwarf::VS_location;
+      }
+
+      // Return an iterator on which * will yield the referent debug_info_entry.
+      inline debug_info_entry::children::const_iterator reference () const {
+	// xxx
+	return debug_info_entry::children::const_iterator (NULL);
+      }
+      inline bool flag () const {
+	// xxx
+	return false;
+      }
+      inline range_list ranges () const {
+	// xxx
+	// xxx return const&?
+	return range_list ();
+      }
+      inline line_info_table line_info () const {
+	// xxx
+	// xxx return const&?
+	return line_info_table ();
+      }
+      inline ::Dwarf_Word constant () const {
+	// xxx
+	return 0;
+      }
+      inline ::Dwarf_Word dwarf_constant () const {
+	// xxx
+	return 0;
+      }
+      inline bool constant_is_integer () const {
+	// xxx
+	return false;
+      }
+      inline std::vector<uint8_t> constant_block () const {
+	// xxx
+	// xxx return const&?
+	return std::vector<uint8_t> ();
+      }
+      inline unsigned int source_line () const {
+	// xxx
+	return 0;
+      }
+      inline unsigned int source_column () const {
+	// xxx
+	return 0;
+      }
+      inline std::string identifier () const {
+	// xxx
+	// xxx return const&?
+	return "";
+      }
+      inline std::string string () const {
+	// xxx
+	// xxx return const&?
+	return "";
+      }
+      inline ::Dwarf_Addr address () const {
+	// xxx
+	// xxx return const&?
+	return 0;
+      }
+      inline dwarf_output::source_file source_file () const {
+	// xxx
+	return dwarf_output::source_file ();
+      }
+      inline location_attr location () const {
+	// xxx
+	return location_attr ();
+      }
+    };
+
+    class debug_info_entry::attributes
+      : public std::map<int, attr_value>
+    {
+      friend class debug_info_entry;
+      friend class compile_unit;
+    private:
+      attributes () {}
+
+      template<typename attrs>
+      attributes (const attrs &other)
+	: std::map<int, attr_value> (other.begin (), other.end ()) {}
+
+    public:
+      template<typename attrs>
+      inline operator attrs () const
+      {
+	return attrs (begin (), end ());
+      }
+
+      static const bool ordered = true; // xxx?
     };
 
     typedef debug_info_entry::attributes::value_type attribute;
 
     class compile_unit : public debug_info_entry
     {
+    public:
+      // xxx
+      template <typename input>
+      compile_unit(const input &unit)
+	: debug_info_entry (unit.tag (),
+			    unit.attributes (),
+			    unit.children ())
+      {
+      }
     };
 
     // Main container anchoring all the output.
@@ -221,4 +430,12 @@ namespace elfutils
       return !(*this == other);
     }
   };
+
+  template<>
+  std::string to_string<dwarf_output::attribute> (const dwarf_output::attribute &)
+  {
+    return ""; //xxx
+  }
 }
+
+#endif	// <elfutils/dwarf_output>
