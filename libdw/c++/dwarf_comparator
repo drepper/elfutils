@@ -428,7 +428,7 @@ namespace elfutils
       const die1 &a = *ref1;
       const die2 &b = *ref2;
 
-      if (a.identity () == a.identity ()) // Object identity.
+      if (a.identity () == b.identity ()) // Object identity.
 	return true;
 
       // Simplest mismatches with the cheapest checks first.

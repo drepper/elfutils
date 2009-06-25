@@ -214,7 +214,7 @@ namespace elfutils
 					const right_context_type &b)
 
     {
-      return a.size () != a.size ();
+      return a.size () != b.size ();
     }
 
     // Full match when context_quick_mismatch has returned false.
