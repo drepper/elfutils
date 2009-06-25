@@ -52,6 +52,15 @@
 	* libdwP.h (IDX_eh_frame): Remove it.
 	* dwarf_begin_elf.c (dwarf_scnnames): Remove its element.
 
+2009-06-18  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (__libdw_read_address_inc): Constify.
+	(__libdw_read_offset_inc): Likewise.
+	* dwarf_getaranges.c: Likewise.
+	* dwarf_getlocation.c: Likewise.
+	* dwarf_getsrclines.c: Likewise.
+	* dwarf_nextcu.c: Likewise.
+
 2009-05-05  Petr Machata  <pmachata@redhat.com>
 
 	* libdwP.h (__libdw_formptr): Declare new function.

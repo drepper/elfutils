@@ -154,7 +154,7 @@ __libdw_intern_expression (Dwarf *dbg,
 	{
 	case DW_OP_addr:
 	  /* Address, depends on address size of CU.  */
-	  if (__libdw_read_address_inc (dbg, sec_index, (unsigned char **)&data,
+	  if (__libdw_read_address_inc (dbg, sec_index, &data,
 					address_size, &newloc->number))
 	    return -1;
 	  break;
