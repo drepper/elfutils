@@ -60,10 +60,12 @@ namespace elfutils
   class dwarf_ref_tracker : public dwarf_tracker_base<dwarf1, dwarf2>
   {
   private:
-    typedef typename dwarf1::compile_units::const_iterator cu1;
-    typedef typename dwarf2::compile_units::const_iterator cu2;
-    typedef typename dwarf1::debug_info_entry::children::const_iterator die1;
-    typedef typename dwarf2::debug_info_entry::children::const_iterator die2;
+    typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
+
+    typedef typename _base::cu1 cu1;
+    typedef typename _base::cu2 cu2;
+    typedef typename _base::die1 die1;
+    typedef typename _base::die2 die2;
 
     /* We maintain the current path down the logical DIE tree from the CU
        as a stack of iterators pointing to the DIE at each level.  */

@@ -209,9 +209,8 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
 	  };
     }
 
-  // Check present attributes for expected-ness, and validate value
-  // space.
-  for (elfutils::dwarf::debug_info_entry::attributes::const_iterator jt
+  // Check present attributes for expected-ness, and validate value space.
+  for (elfutils::dwarf::debug_info_entry::attributes_type::const_iterator jt
 	 = parent.attributes ().begin (), jte = parent.attributes ().end ();
        jt != jte; ++jt)
     {
@@ -244,9 +243,9 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
     }
 
   // Check children recursively.
-  class elfutils::dwarf::debug_info_entry::children const &children
+  elfutils::dwarf::debug_info_entry::children_type const &children
     = parent.children ();
-  for (elfutils::dwarf::debug_info_entry::children::const_iterator jt
+  for (elfutils::dwarf::debug_info_entry::children_type::const_iterator jt
 	 = children.begin (); jt != children.end (); ++jt)
     recursively_validate (cu, *jt);
 }

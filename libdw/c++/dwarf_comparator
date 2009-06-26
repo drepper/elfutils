@@ -62,10 +62,12 @@ namespace elfutils
   protected:
     typedef typename dwarf1::compile_units::const_iterator cu1;
     typedef typename dwarf2::compile_units::const_iterator cu2;
-    typedef typename dwarf1::debug_info_entry::children::const_iterator die1;
-    typedef typename dwarf2::debug_info_entry::children::const_iterator die2;
-    typedef typename dwarf1::debug_info_entry::attributes::const_iterator attr1;
-    typedef typename dwarf2::debug_info_entry::attributes::const_iterator attr2;
+    typedef typename dwarf1::debug_info_entry dwarf1_die;
+    typedef typename dwarf2::debug_info_entry dwarf2_die;
+    typedef typename dwarf1_die::children_type::const_iterator die1;
+    typedef typename dwarf2_die::children_type::const_iterator die2;
+    typedef typename dwarf1_die::attributes_type::const_iterator attr1;
+    typedef typename dwarf2_die::attributes_type::const_iterator attr2;
 
   public:
     inline void start_walk (const cu1 &a, const cu2 &b)
@@ -212,8 +214,8 @@ namespace elfutils
 	o.insert (std::make_pair ((*i).first, i));
     }
 
-    typedef typename dwarf1::debug_info_entry::attributes attributes1;
-    typedef typename dwarf2::debug_info_entry::attributes attributes2;
+    typedef typename dwarf1::debug_info_entry::attributes_type attributes1;
+    typedef typename dwarf2::debug_info_entry::attributes_type attributes2;
     typedef typename attributes1::const_iterator ait1;
     typedef typename attributes2::const_iterator ait2;
     typedef std::map<int, ait1> ait1_map;
@@ -306,8 +308,8 @@ namespace elfutils
       return false;
     }
 
-    typedef typename dwarf1::debug_info_entry::children children1;
-    typedef typename dwarf2::debug_info_entry::children children2;
+    typedef typename dwarf1::debug_info_entry::children_type children1;
+    typedef typename dwarf2::debug_info_entry::children_type children2;
     typedef typename children1::const_iterator cit1;
     typedef typename children2::const_iterator cit2;
     struct die_matcher

@@ -93,30 +93,30 @@ namespace elfutils
     {
     public:
 
-      class children : public std::list<debug_info_entry>
+      class children_type : public std::list<debug_info_entry>
       {
 	friend class debug_info_entry;
       private:
-        children () {}
+        children_type () {}
 
 	template<typename childrens>
-	children (const childrens &other)
+	children_type (const childrens &other)
 	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
 
       public:
 	typedef debug_info_entry value_type;
       };
 
-      class attributes : public std::map<int, attr_value>
+      class attributes_type : public std::map<int, attr_value>
       {
 	friend class debug_info_entry;
       private:
 	typedef std::map<int, attr_value> base_type;
 
-	attributes () {}
+	attributes_type () {}
 
 	template<typename attrs>
-	attributes (const attrs &other)
+	attributes_type (const attrs &other)
 	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
 
       public:
@@ -135,8 +135,8 @@ namespace elfutils
 
     private:
       const int _m_tag;
-      attributes _m_attributes;
-      children _m_children;
+      attributes_type _m_attributes;
+      children_type _m_children;
 
     public:
       debug_info_entry (int t) : _m_tag (t)
@@ -164,20 +164,20 @@ namespace elfutils
 	return !_m_children.empty ();
       }
 
-      inline class children &children ()
+      inline children_type &children ()
       {
 	return _m_children;
       }
-      inline const class children &children () const
+      inline const children_type &children () const
       {
 	return _m_children;
       }
 
-      inline class attributes &attributes ()
+      inline attributes_type &attributes ()
       {
 	return _m_attributes;
       }
-      inline const class attributes &attributes () const
+      inline const attributes_type &attributes () const
       {
 	return _m_attributes;
       }
@@ -206,7 +206,7 @@ namespace elfutils
       }
     };
 
-    typedef debug_info_entry::attributes::value_type attribute;
+    typedef debug_info_entry::attributes_type::value_type attribute;
 
     class compile_unit : public debug_info_entry
     {
@@ -813,8 +813,8 @@ namespace elfutils
 
     struct value_reference : public value_dispatch
     {
-      debug_info_entry::children::iterator ref;
-      value_reference (const debug_info_entry::children::iterator &i)
+      debug_info_entry::children_type::iterator ref;
+      value_reference (const debug_info_entry::children_type::iterator &i)
 	: ref (i) {}
 
       template<typename iter>	// XXX dummy
@@ -1030,7 +1030,7 @@ namespace elfutils
 	return variant<value_address> ().addr;
       }
 
-      inline debug_info_entry::children::iterator reference () const
+      inline debug_info_entry::children_type::iterator reference () const
       {
 	return variant<value_reference> ().ref;
       }

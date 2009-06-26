@@ -66,7 +66,7 @@ print_die (const dwarf::debug_info_entry &die,
 
   cout << prefix << "<" << tag << " offset=[" << die.offset () << "]";
 
-  for (dwarf::debug_info_entry::attributes::const_iterator i
+  for (dwarf::debug_info_entry::attributes_type::const_iterator i
 	 = die.attributes ().begin (); i != die.attributes ().end (); ++i)
     cout << " " << (*i).to_string ();
 
@@ -80,7 +80,7 @@ print_die (const dwarf::debug_info_entry &die,
 
       cout << ">\n";
 
-      for (dwarf::debug_info_entry::children::const_iterator i
+      for (dwarf::debug_info_entry::children_type::const_iterator i
 	     = die.children ().begin (); i != die.children ().end (); ++i)
 	print_die (*i, indent + 1, limit);
 

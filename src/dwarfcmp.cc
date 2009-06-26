@@ -127,12 +127,13 @@ open_file (const char *fname, int *fdp)
 template<class dwarf1, class dwarf2>
 struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 {
-  typedef typename dwarf1::compile_units::const_iterator cu1;
-  typedef typename dwarf2::compile_units::const_iterator cu2;
-  typedef typename dwarf1::debug_info_entry::children::const_iterator die1;
-  typedef typename dwarf2::debug_info_entry::children::const_iterator die2;
-  typedef typename dwarf1::debug_info_entry::attributes::const_iterator attr1;
-  typedef typename dwarf2::debug_info_entry::attributes::const_iterator attr2;
+  typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
+  typedef typename _base::cu1 cu1;
+  typedef typename _base::cu2 cu2;
+  typedef typename _base::die1 die1;
+  typedef typename _base::die2 die2;
+  typedef typename die1::value_type::attributes_type::const_iterator attr1;
+  typedef typename die2::value_type::attributes_type::const_iterator attr2;
 
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
