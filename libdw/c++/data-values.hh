@@ -1,4 +1,4 @@
-/* elfutils::dwarf_edit attribute value interfaces.
+/* elfutils::dwarf_data common internal templates.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -47,38 +47,51 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include <config.h>
-#include "dwarf_edit"
-#include "data-values.hh"
+#include "dwarf_data"
 
-using namespace elfutils;
+#include <typeinfo>
 
-template
-dwarf::value_space dwarf_data::attr_value<dwarf_edit>::what_space () const;
-
-template<>
-std::string
-to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &attr)
+namespace elfutils
 {
-  std::string result = dwarf::attributes::name (attr.first);
-  result += "=";
-  result += attr.second.to_string ();
-  return result;
-}
 
-std::string
-dwarf_data::source_file::to_string () const
-{
-  if (likely (_m_mtime == 0) && likely (_m_size == 0))
-    return "\"" + _m_name + "\"";
+  template<class impl>
+  dwarf::value_space
+  dwarf_data::attr_value<impl>::what_space () const
+  {
+    if (typeid (*_m_value) == typeid (value_flag))
+      return dwarf::VS_flag;
+    if (typeid (*_m_value) == typeid (value_dwarf_constant))
+      return dwarf::VS_dwarf_constant;
+    if (typeid (*_m_value) == typeid (value_reference<impl>))
+      return dwarf::VS_reference;
+    if (typeid (*_m_value) == typeid (value_unit_reference<impl>))
+      return dwarf::VS_unit_reference;
+    if (typeid (*_m_value) == typeid (value_lineptr<impl>))
+      return dwarf::VS_lineptr;
+    if (typeid (*_m_value) == typeid (value_macptr))
+      return dwarf::VS_macptr;
+    if (typeid (*_m_value) == typeid (value_rangelistptr))
+      return dwarf::VS_rangelistptr;
+    if (typeid (*_m_value) == typeid (value_identifier))
+      return dwarf::VS_identifier;
+    if (typeid (*_m_value) == typeid (value_string))
+      return dwarf::VS_string;
+    if (typeid (*_m_value) == typeid (value_source_file))
+      return dwarf::VS_source_file;
+    if (typeid (*_m_value) == typeid (value_source_line))
+      return dwarf::VS_source_line;
+    if (typeid (*_m_value) == typeid (value_source_column))
+      return dwarf::VS_source_column;
+    if (typeid (*_m_value) == typeid (value_address))
+      return dwarf::VS_address;
+    if (typeid (*_m_value) == typeid (value_constant)
+	|| typeid (*_m_value) == typeid (value_constant_block))
+      return dwarf::VS_constant;
+    if (typeid (*_m_value) == typeid (value_location))
+      return dwarf::VS_location;
 
-  std::ostringstream os;
-  os << "{\"" << _m_name << "," << _m_mtime << "," << _m_size << "}";
-  return os.str ();
-}
+    throw std::runtime_error ("XXX impossible");
+  }
 
-std::string
-dwarf_data::location_attr::to_string () const
-{
-  return is_list () ? "XXX-loclist" : "XXX-expr";
-}
+
+};

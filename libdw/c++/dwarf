@@ -1899,13 +1899,7 @@ namespace elfutils
 	return !(*this == other);
       }
 
-      inline std::string to_string () const
-      {
-	std::string result = attributes::name (::dwarf_whatattr (thisattr ()));
-	result += "=";
-	result += second.to_string ();
-	return result;
-      }
+      inline std::string to_string () const;
     };
 
     /* This works like range_list, but is based on a debug_info_entry using
@@ -2363,15 +2357,19 @@ namespace elfutils
     return const_iterator (*this, 1);
   }
 
-  // Explicit specialization.
+  // Explicit specializations.
+  template<>
+  std::string to_string<dwarf::attribute> (const dwarf::attribute &);
+  inline std::string dwarf::attribute::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
   template<>
   std::string to_string<dwarf::attr_value> (const dwarf::attr_value &);
   inline std::string dwarf::attr_value::to_string () const
   {
     return elfutils::to_string (*this); // Use that.
   }
-
-  // Explicit specialization.
   template<>
   std::string to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &);
   inline std::string dwarf::dwarf_enum::to_string () const

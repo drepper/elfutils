@@ -133,8 +133,8 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   typedef typename _base::cu2 cu2;
   typedef typename _base::die1 die1;
   typedef typename _base::die2 die2;
-  typedef typename die1::value_type::attributes_type::const_iterator attr1;
-  typedef typename die2::value_type::attributes_type::const_iterator attr2;
+  typedef typename _base::dwarf1_die::attributes_type::const_iterator attr1;
+  typedef typename _base::dwarf2_die::attributes_type::const_iterator attr2;
 
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;

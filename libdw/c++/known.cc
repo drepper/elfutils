@@ -217,13 +217,13 @@ dwarf::dwarf_enum::name () const
 }
 
 const char *
-dwarf_edit::dwarf_enum::identifier () const
+dwarf_data::dwarf_enum::identifier () const
 {
   return enum_identifier (*this);
 }
 
 const char *
-dwarf_edit::dwarf_enum::name () const
+dwarf_data::dwarf_enum::name () const
 {
   return enum_name (*this);
 }
@@ -245,7 +245,7 @@ to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &value)
 
 template<>
 string
-to_string<dwarf_edit::dwarf_enum> (const dwarf_edit::dwarf_enum &value)
+to_string<dwarf_data::dwarf_enum> (const dwarf_data::dwarf_enum &value)
 {
   return enum_string (value);
 }

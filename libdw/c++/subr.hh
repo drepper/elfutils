@@ -14,20 +14,91 @@
 #include <tr1/unordered_set>
 #include <vector>
 #include <algorithm>
+#include <utility>
 
 namespace elfutils
 {
   namespace subr
   {
-    // XXX
     template<typename T>
-    struct hash { };
+    struct hash : public T::hasher {};
 
     template <typename T>
     inline void hash_combine (size_t &seed, const T &v)
     {
-      seed ^= hash<T> (v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+      seed ^= hash<T> () (v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     }
+
+    template <typename T1, typename T2>
+    inline void hash_combine (size_t &seed, const std::pair<T1,T2> &v)
+    {
+      hash_combine (seed, v.first);
+      hash_combine (seed, v.second);
+    }
+
+    template<typename T>
+    struct integer_hash : public std::unary_function<T, size_t>
+    {
+      inline size_t operator () (const T &x) const
+      {
+	return x;
+      }
+    };
+    template<>
+    struct hash<int> : public integer_hash<int> {};
+    template<>
+    struct hash<uint64_t> : public integer_hash<uint64_t> {};
+
+    template<typename T>
+    struct container_hasher : public std::unary_function<T, size_t>
+    {
+      struct hasher
+      {
+	size_t _m_hash;
+	inline hasher () : _m_hash (0) {}
+	inline void operator () (const typename T::value_type &x)
+	{
+	  subr::hash_combine (_m_hash, subr::hash<typename T::value_type> (x));
+	}
+      };
+
+      inline size_t operator () (const T &x) const
+      {
+	hasher h;
+	std::for_each (x.begin (), x.end (), h);
+	return h._m_hash;
+      }
+    };
+
+    template<>
+    struct hash<std::string>
+    {
+    private:
+      struct hasher : public container_hasher<std::string>::hasher
+      {
+	inline void operator () (std::string::value_type c)
+	{
+	  _m_hash = 5 * _m_hash + c;
+	}
+      };
+    public:
+      inline size_t operator () (const std::string &x) const
+      {
+	hasher h;
+	std::for_each (x.begin (), x.end (), h);
+	return h._m_hash;
+      }
+    };
+
+    template<class T>
+    struct hashed_hasher
+      : public std::unary_function<T, size_t>
+    {
+      size_t operator () (const T &v)
+      {
+	return v._m_hash;
+      }
+    };
 
     template<typename string>
     struct name_equal : public std::binary_function<const char *, string, bool>
@@ -278,33 +349,34 @@ namespace elfutils
     };
 
     // Pair of some value and its precomputed hash.
-    template<typename value_type>
+    template<typename T>
     class hashed_value
-      : public std::pair<size_t, const value_type>
+      : public std::pair<size_t, const T>
     {
     private:
-      typedef std::pair<size_t, const value_type> _base;
+      typedef std::pair<size_t, const T> _base;
 
     public:
-      hashed_value (const value_type &v)
-	: _base (subr::hash<value_type> (v), v) {}
-      hashed_value (const hashed_value<value_type> &v)
-	: _base (v.first, v.second) {}
-
-      bool operator== (const hashed_value<value_type> &other)
-	const
-      {
-	return other.first == this->first && other.second == this->second;
-      }
+      typedef T value_type;
 
       struct hasher
-	: public std::unary_function<hashed_value<value_type>, size_t>
+	: public std::unary_function<hashed_value, size_t>
       {
-	size_t operator () (const hashed_value<value_type> &v)
+	inline size_t operator () (const hashed_value &v)
 	{
 	  return v.first;
 	}
       };
+
+      hashed_value (const value_type &v)
+	: _base (subr::hash<value_type> (v), v) {}
+      hashed_value (const hashed_value &v)
+	: _base (v.first, v.second) {}
+
+      bool operator== (const hashed_value &other) const
+      {
+	return other.first == this->first && other.second == this->second;
+      }
     };
 
     // Set of hashed_value's.
@@ -329,25 +401,26 @@ namespace elfutils
 	  {
 	    // XXX hook for collection: abbrev building, etc.
 	  }
-	return *p.first;
+	return p.first->second;
       };
     };
 
-    // A vector of hashed_value's that itself acts like a hashed_value.
-    template<typename value_type>
-    class hashed_vector
-      : public std::vector<hashed_value<value_type> >
+    // A container of hashed_value's that itself acts like a hashed_value.
+    // The parameter class should be a std::container<hashed_value<something>>.
+    template<typename container>
+    class hashed_container : public container
     {
     private:
-      typedef hashed_value<value_type> elt_type;
-      typedef std::vector<elt_type> _base;
-
-      size_t _m_hash;
+      typedef container _base;
+      typedef typename container::value_type elt_type;
 
     public:
-      template<typename iterator>
-      hashed_vector (iterator first, iterator last)
-	: _base (first, last), _m_hash (0)
+      typedef typename elt_type::value_type value_type;
+
+    private:
+      size_t _m_hash;
+
+      inline void set_hash ()
       {
 	struct hashit
 	{
@@ -361,29 +434,48 @@ namespace elfutils
 	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
       }
 
-      template<typename container>
-      hashed_vector (const container &other)
-	: hashed_vector (other.begin (), other.end ())
-      {}
+    public:
+      friend class hashed_hasher<hashed_container>;
+      typedef hashed_hasher<hashed_container> hasher;
 
-      bool operator== (const hashed_vector &other) const
+      template<typename iterator>
+      hashed_container (iterator first, iterator last)
+	: _base (first, last), _m_hash (0)
+      {
+	set_hash ();
+      }
+
+      template<typename other_container>
+      hashed_container (const other_container &other)
+	: _base (other.begin (), other.end ()), _m_hash (0)
+      {
+	set_hash ();
+      }
+
+      bool operator== (const hashed_container &other) const
       {
 	return (other._m_hash == _m_hash &&
 		other.size () == _base::size ()
 		&& std::equal (_base::begin (), _base::end (), other.begin ()));
       }
-
-      struct hasher
-	: public std::unary_function<hashed_vector<value_type>, size_t>
-      {
-	size_t operator () (const hashed_vector<value_type> &v)
-	{
-	  return v._m_hash;
-	}
-      };
     };
 
+    // A vector of hashed_value's that itself acts like a hashed_value.
+    template<typename value_type>
+    struct hashed_vector
+      : public hashed_container<std::vector<hashed_value<value_type> > >
+    {};
+
     // An unordered_map of hashed_value's that itself acts like a hashed_value.
+    template<typename key_type, typename value_type>
+    class hashed_unordered_map
+      : public hashed_container<std::tr1::unordered_map<
+				  key_type,
+				  hashed_value<value_type>,
+				  class hashed_value<value_type>::hasher>
+      				>
+    {};
+#if 0
     template<typename key_type, typename value_type>
     class hashed_unordered_map
       : public std::tr1::unordered_map<key_type,
@@ -398,17 +490,14 @@ namespace elfutils
 
       size_t _m_hash;
 
-    public:
-      template<typename iterator>
-      hashed_unordered_map (iterator first, iterator last)
-	: _base (first, last), _m_hash (0)
+      inline void set_hash ()
       {
-	class hashit
+	struct hashit
 	{
 	  size_t &_m_hash;
 	  hashit (size_t &h) : _m_hash (h) {}
 
-	  void operator () (const typename _base::value_type &p)
+	  inline void operator () (const typename _base::value_type &p)
 	  {
 	    subr::hash_combine (_m_hash, subr::hash<key_type> (p.first));
 	    subr::hash_combine (_m_hash, p.second.first);
@@ -417,11 +506,25 @@ namespace elfutils
 	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
       }
 
+    public:
+      friend class hashed_hasher<hashed_unordered_map>;
+      typedef hashed_hasher<hashed_unordered_map> hasher;
+
+      template<typename iterator>
+      hashed_unordered_map (iterator first, iterator last)
+	: _base (first, last), _m_hash (0)
+      {
+	set_hash ();
+      }
+
       template<typename container>
       hashed_unordered_map (const container &other)
-	: hashed_unordered_map (other.begin (), other.end ())
-      {}
+	: _base (other.begin (), other.end ()), _m_hash (0)
+      {
+	set_hash ();
+      }
     };
+#endif
 
     template<typename T>
     class auto_ref
@@ -442,8 +545,52 @@ namespace elfutils
       auto_ref (const auto_ref<T> &other)
 	: _m_ptr (other._m_ptr)
       {}
+
+      template<typename other>
+      inline bool operator== (const auto_ref<other> &x) const
+      {
+	return *_m_ptr == static_cast<other &> (x);
+      }
+      template<typename other>
+      inline bool operator== (const other &x) const
+      {
+	return *_m_ptr == x;
+      }
+      template<typename other>
+      inline bool operator!= (const other &x) const
+      {
+	return !(*this == x);
+      }
     };
 
+    /* A wrapped_input_iterator is like an input::const_iterator,
+       but *i returns wrapper (*i) instead; wrapper returns element
+       (or const element & or something).  */
+    template<typename input, typename wrapper,
+	     typename element = typename wrapper::result_type>
+    class wrapped_input_iterator : public input::const_iterator
+    {
+    private:
+      typedef typename input::const_iterator _base;
+
+      wrapper *_m_wrapper;
+
+    public:
+      typedef element value_type;
+
+      inline wrapped_input_iterator (const _base &i, wrapper &w)
+	: _base (static_cast<_base> (i)), _m_wrapper (&w)
+      {}
+
+      inline wrapped_input_iterator (const wrapped_input_iterator &i)
+	: _base (static_cast<_base> (i)), _m_wrapper (i._m_wrapper)
+      {}
+
+      inline typename wrapper::result_type operator* () const
+      {
+	return (*_m_wrapper) (_base::operator* ());
+      }
+    };
   };
 };
 
