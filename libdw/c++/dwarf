@@ -796,6 +796,10 @@ namespace elfutils
 	}
 
       public:
+	inline const_iterator ()
+	  : _m_stack ()
+	{}
+
 	inline const_iterator (const raw_iterator &i)
 	{
 	  _m_stack.push (i);
