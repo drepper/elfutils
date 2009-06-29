@@ -130,18 +130,20 @@ namespace elfutils
 
     struct reference_match
     {
-      inline bool quick_match (const die2 &)
+      inline bool cannot_match () const
       {
 	return false;
       }
-
-      inline void notice_match (const die2 &, bool)
+      inline void notice_match (const die2 &, bool) const
       {
       }
     };
-    inline reference_match reference_matched (const die1 &)
+
+    inline bool reference_matched (reference_match &,
+				   const left_context_type &, const die1 &,
+				   const right_context_type &, const die2 &)
     {
-      return reference_match ();
+      return false;
     }
 
     inline dwarf_tracker_base ()
@@ -473,10 +475,12 @@ namespace elfutils
 	= _m_tracker.right_context (ref2);
 
       // Maybe the tracker has already cached a correspondence of references.
-      typename tracker::reference_match matched
-	= _m_tracker.reference_matched (ref1);
-      if (matched.quick_match (ref2))
+      typename tracker::reference_match matched;
+      if (_m_tracker.reference_matched (matched, lhs, ref1, rhs, ref2))
 	return true;
+
+      if (matched.cannot_match ())
+	return false;
 
       std::cout << "considering ref "
 		<< std::hex << a.offset () << " vs "

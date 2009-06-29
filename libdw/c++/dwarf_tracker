@@ -202,7 +202,7 @@ namespace elfutils
     tracker2 _m_right;
 
     typedef std::tr1::unordered_map<
-      ::Dwarf_Off, std::pair<dwarf_ref_tracker *,
+      ::Dwarf_Off, std::pair<const std::list<die2> *,
 			     std::tr1::unordered_set< ::Dwarf_Off> >
       > equiv_map;
     equiv_map *_m_equiv;
@@ -291,13 +291,6 @@ namespace elfutils
     private:
       typename equiv_map::mapped_type *_m_elt;
 
-      inline reference_match (dwarf_ref_tracker *tracker,
-			      typename equiv_map::mapped_type *elt)
-	: _m_elt (elt)
-      {
-	_m_elt->first = tracker;
-      }
-
     public:
 
       inline reference_match ()
@@ -306,29 +299,39 @@ namespace elfutils
 
       inline ~reference_match ()
       {
-	_m_elt->first = NULL;
+	if (_m_elt != NULL)
+	  _m_elt->first = NULL;
       }
 
-      inline bool quick_match (const die2 &b)
+      inline bool cannot_match () const
       {
-	return _m_elt->second.find (b->identity ()) != _m_elt->second.end ();
+	return _m_elt == NULL;
       }
 
-      inline void notice_match (const die2 &b, bool matches)
+      inline void notice_match (const die2 &b, bool matches) const
       {
-	if (matches)
+	if (matches && _m_elt != NULL)
 	  _m_elt->second.insert (b->identity ());
       }
     };
 
-    inline reference_match reference_matched (const die1 &a)
+    inline bool
+    reference_matched (reference_match &matched,
+		       const left_context_type &lhs, const die1 &a,
+		       const right_context_type &rhs, const die2 &b)
     {
       typename equiv_map::mapped_type *elt = &(*_m_equiv)[a->identity ()];
       if (elt->first == NULL)
-	return reference_match (this, elt);
+	{
+	  elt->first = &rhs;
+	  matched._m_elt = elt;
+	  return elt->second.find (b->identity ()) != elt->second.end ();
+	}
+
+      std::cout << "recursing? on " << std::hex << a->offset () << std::endl;
 
       // We have a circularity.
-      std::cout << "recursing? on " << std::hex << a->offset () << std::endl;
+      return elt->first == &rhs; // ???
 
       throw std::logic_error ("XXX can't handle circularity");
     }
