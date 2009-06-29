@@ -54,40 +54,40 @@
 namespace elfutils
 {
 
-  template<class impl>
+  template<class impl, typename arg>
   dwarf::value_space
-  dwarf_data::attr_value<impl>::what_space () const
+  dwarf_data::attr_value<impl, arg>::what_space () const
   {
-    if (typeid (*_m_value) == typeid (value_flag))
+    if (typeid (*_m_value) == typeid (typename v::value_flag))
       return dwarf::VS_flag;
-    if (typeid (*_m_value) == typeid (value_dwarf_constant))
+    if (typeid (*_m_value) == typeid (typename v::value_dwarf_constant))
       return dwarf::VS_dwarf_constant;
-    if (typeid (*_m_value) == typeid (value_reference<impl>))
+    if (typeid (*_m_value) == typeid (typename v::value_reference))
       return dwarf::VS_reference;
-    if (typeid (*_m_value) == typeid (value_unit_reference<impl>))
+    if (typeid (*_m_value) == typeid (typename v::value_unit_reference))
       return dwarf::VS_unit_reference;
-    if (typeid (*_m_value) == typeid (value_lineptr<impl>))
+    if (typeid (*_m_value) == typeid (typename v::value_lineptr))
       return dwarf::VS_lineptr;
-    if (typeid (*_m_value) == typeid (value_macptr))
+    if (typeid (*_m_value) == typeid (typename v::value_macptr))
       return dwarf::VS_macptr;
-    if (typeid (*_m_value) == typeid (value_rangelistptr))
+    if (typeid (*_m_value) == typeid (typename v::value_rangelistptr))
       return dwarf::VS_rangelistptr;
-    if (typeid (*_m_value) == typeid (value_identifier))
+    if (typeid (*_m_value) == typeid (typename v::value_identifier))
       return dwarf::VS_identifier;
-    if (typeid (*_m_value) == typeid (value_string))
+    if (typeid (*_m_value) == typeid (typename v::value_string))
       return dwarf::VS_string;
-    if (typeid (*_m_value) == typeid (value_source_file))
+    if (typeid (*_m_value) == typeid (typename v::value_source_file))
       return dwarf::VS_source_file;
-    if (typeid (*_m_value) == typeid (value_source_line))
+    if (typeid (*_m_value) == typeid (typename v::value_source_line))
       return dwarf::VS_source_line;
-    if (typeid (*_m_value) == typeid (value_source_column))
+    if (typeid (*_m_value) == typeid (typename v::value_source_column))
       return dwarf::VS_source_column;
-    if (typeid (*_m_value) == typeid (value_address))
+    if (typeid (*_m_value) == typeid (typename v::value_address))
       return dwarf::VS_address;
-    if (typeid (*_m_value) == typeid (value_constant)
-	|| typeid (*_m_value) == typeid (value_constant_block))
+    if (typeid (*_m_value) == typeid (typename v::value_constant)
+	|| typeid (*_m_value) == typeid (typename v::value_constant_block))
       return dwarf::VS_constant;
-    if (typeid (*_m_value) == typeid (value_location))
+    if (typeid (*_m_value) == typeid (typename v::value_location))
       return dwarf::VS_location;
 
     throw std::runtime_error ("XXX impossible");

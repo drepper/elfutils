@@ -281,6 +281,8 @@ namespace elfutils
     typedef dwarf_data::dwarf_enum dwarf_enum;
     typedef dwarf_data::range_list range_list;
     typedef dwarf_data::location_attr location_attr;
+    typedef dwarf_data::attr_value<dwarf_output,
+				   dwarf_output_collector *> attr_value;
 
   protected:
     template<typename input>
@@ -357,7 +359,6 @@ namespace elfutils
   public:
 
     class compile_units;
-    class attr_value;
 
     class debug_info_entry
     {
@@ -534,20 +535,6 @@ namespace elfutils
       bool operator!= (const other_children &other) const
       {
 	return !(*this == other);
-      }
-    };
-
-    class attr_value : public dwarf_data::attr_value<dwarf_output>
-    {
-    private:
-      typedef dwarf_data::attr_value<dwarf_output> _base;
-
-    public:
-      template<typename value>
-      attr_value (const value &other, dwarf_output_collector *c)
-	: _base (other)
-      {
-	// XXX
       }
     };
 
