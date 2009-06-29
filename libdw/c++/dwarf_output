@@ -51,6 +51,7 @@
 #define _ELFUTILS_DWARF_OUTPUT	1
 
 #include "dwarf_edit"
+#include <functional>
 
 /* Read the comments for elfutils::dwarf first.
 
@@ -280,17 +281,46 @@ namespace elfutils
     typedef dwarf_data::dwarf_enum dwarf_enum;
     typedef dwarf_data::range_list range_list;
     typedef dwarf_data::location_attr location_attr;
-    typedef dwarf_data::attr_value<dwarf_output> attr_value;
 
   protected:
     template<typename input>
     static inline const range_list &
     collect (dwarf_output_collector *, const typename input::range_list &);
 
+    template<typename input, typename output>
+    struct make_any
+      : public std::binary_function<typename input::value_type,
+				    dwarf_output_collector *,
+				    typename output::value_type>
+    {
+      inline typename output::value_type
+      operator () (const typename input::value_type &x,
+		   dwarf_output_collector *c)
+      {
+	return typename output::value_type (x, c);
+      }
+    };
+
+    template<typename input, typename output>
+    struct make_attribute
+      : public std::binary_function<typename input::value_type,
+				    dwarf_output_collector *,
+				    typename output::value_type>
+    {
+      inline typename output::value_type
+      operator () (const typename input::value_type &x,
+		   dwarf_output_collector *c)
+      {
+	return std::make_pair
+	  (x.first, typename output::value_type::second_type (x.second, c));
+      }
+    };
+
     /* An iterator adapter for use in iterator-based constructors.
        collectify (iterator) yields an iterator on input where *i
        constructs output::value_type (input::value_type v, collector).  */
-    template<typename input, typename output>
+    template<typename input, typename output,
+	     typename make_outlet = make_any<input, output> >
     struct collectify
       : public std::unary_function<typename input::const_iterator,
 				   typename output::iterator>
@@ -310,7 +340,7 @@ namespace elfutils
 
 	inline outlet operator () (const inlet &x) const
 	{
-	  return outlet (x, _m_collector);
+	  return make_outlet () (x, _m_collector);
 	}
       } _m_maker;
 
@@ -325,7 +355,9 @@ namespace elfutils
     };
 
   public:
+
     class compile_units;
+    class attr_value;
 
     class debug_info_entry
     {
@@ -337,9 +369,12 @@ namespace elfutils
       private:
         children_type () {}
 
-	template<typename childrens>
-	children_type (const childrens &other)
-	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
+	template<typename input>
+	inline children_type (const input &other, dwarf_output_collector *c)
+	  : std::list<debug_info_entry>
+	    (collectify<input, children_type> (c) (other.begin ()),
+	     collectify<input, children_type> (c) (other.end ()))
+	{}
 
       public:
 	typedef debug_info_entry value_type;
@@ -353,9 +388,15 @@ namespace elfutils
 
 	attributes_type () {}
 
-	template<typename attrs>
-	attributes_type (const attrs &other)
-	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
+	template<typename input>
+	inline attributes_type (const input &other, dwarf_output_collector *c)
+	  : base_type (collectify<input, attributes_type,
+		       		  make_attribute<input, attributes_type> > (c)
+		       (other.begin ()),
+		       collectify<input, attributes_type,
+		       		  make_attribute<input, attributes_type> > (c)
+		       (other.end ()))
+	{}
 
       public:
 	typedef base_type::key_type key_type;
@@ -377,19 +418,11 @@ namespace elfutils
       children_type _m_children;
 
     public:
-      explicit debug_info_entry (int t) : _m_tag (t)
-      {
-	if (unlikely (t <= 0))
-	  throw std::invalid_argument ("invalid tag");
-      }
-
-      /* The template constructor lets us copy in from any class that has
-	 compatibly iterable containers for attributes and children.  */
       template<typename die_type>
-      debug_info_entry (const die_type &die)
+      debug_info_entry (const die_type &die, dwarf_output_collector *c)
 	: _m_tag (die.tag ()),
-	  _m_attributes (die.attributes ()),
-	  _m_children (die.children ())
+	  _m_attributes (die.attributes (), c),
+	  _m_children (die.children (), c)
       {}
 
       inline int tag () const
@@ -449,14 +482,12 @@ namespace elfutils
     class compile_unit : public debug_info_entry
     {
       friend class compile_units;
-    private:
-      inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
 
       // XXX should be private
     public:
       template<typename die_type>
       compile_unit (const die_type &die, dwarf_output_collector *c)
-	: debug_info_entry (die)
+	: debug_info_entry (die, c)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
 	  throw std::invalid_argument ("not a compile_unit entry");
@@ -503,6 +534,20 @@ namespace elfutils
       bool operator!= (const other_children &other) const
       {
 	return !(*this == other);
+      }
+    };
+
+    class attr_value : public dwarf_data::attr_value<dwarf_output>
+    {
+    private:
+      typedef dwarf_data::attr_value<dwarf_output> _base;
+
+    public:
+      template<typename value>
+      attr_value (const value &other, dwarf_output_collector *c)
+	: _base (other)
+      {
+	// XXX
       }
     };
 
