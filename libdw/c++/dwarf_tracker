@@ -52,6 +52,8 @@
 
 #include "dwarf"
 #include "dwarf_comparator"
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
 
 namespace elfutils
 {
@@ -110,10 +112,12 @@ namespace elfutils
 
       ~tracker ()
       {
-	// We should never be left with a partial walk on the books.
-	assert (_m_path.empty ());
 	if (_m_delete_seen)
-	  delete _m_seen;
+	  {
+	    delete _m_seen;
+	    // We should never be left with a partial walk on the books.
+	    assert (_m_path.empty ());
+	  }
       }
 
       inline const die_path &path_to (const die &a)
@@ -135,10 +139,7 @@ namespace elfutils
 	    found.first = _m_seen->insert (found.first,
 					   std::make_pair (id, path));
 	  }
-
-	if (bad_die_path (found.first->second))
-	  abort ();		// XXX
-
+	assert (!bad_die_path (found.first->second));
 	return found.first->second;
       }
 
@@ -200,6 +201,13 @@ namespace elfutils
     tracker1 _m_left;
     tracker2 _m_right;
 
+    typedef std::tr1::unordered_map<
+      ::Dwarf_Off, std::pair<dwarf_ref_tracker *,
+			     std::tr1::unordered_set< ::Dwarf_Off> >
+      > equiv_map;
+    equiv_map *_m_equiv;
+    bool _m_delete_equiv;
+
     /* Predicate for DIEs "equal enough" to match as context for a subtree.
        The definition we use is that the DIE has the same tag and all its
        attributes are equal, excepting that references in attribute values
@@ -216,7 +224,15 @@ namespace elfutils
 
   public:
     inline dwarf_ref_tracker ()
+      : _m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
+
+    inline void reset ()
+    {
+      _m_equiv->clear ();
+      assert (!_m_right->_m_delete_seen);
+      _m_right._m_seen->clear ();
+    }
 
     inline void start_walk (const cu1 &a, const cu2 &b)
     {
@@ -269,14 +285,66 @@ namespace elfutils
       return std::equal (a.begin (), a.end (), b.begin (), equal_enough ());
     }
 
+    class reference_match
+    {
+      friend class dwarf_ref_tracker;
+    private:
+      typename equiv_map::mapped_type *_m_elt;
+
+      inline reference_match (dwarf_ref_tracker *tracker,
+			      typename equiv_map::mapped_type *elt)
+	: _m_elt (elt)
+      {
+	_m_elt->first = tracker;
+      }
+
+    public:
+
+      inline reference_match ()
+	: _m_elt (NULL)
+      {}
+
+      inline ~reference_match ()
+      {
+	_m_elt->first = NULL;
+      }
+
+      inline bool quick_match (const die2 &b)
+      {
+	return _m_elt->second.find (b->identity ()) != _m_elt->second.end ();
+      }
+
+      inline void notice_match (const die2 &b, bool matches)
+      {
+	if (matches)
+	  _m_elt->second.insert (b->identity ());
+      }
+    };
+
+    inline reference_match reference_matched (const die1 &a)
+    {
+      typename equiv_map::mapped_type *elt = &(*_m_equiv)[a->identity ()];
+      if (elt->first == NULL)
+	return reference_match (this, elt);
+
+      // We have a circularity.
+      std::cout << "recursing? on " << std::hex << a->offset () << std::endl;
+
+      throw std::logic_error ("XXX can't handle circularity");
+    }
+
     // Share the _m_seen maps with the prototype tracker,
     // but start a fresh walk from the given starting point.
     inline dwarf_ref_tracker (const dwarf_ref_tracker &proto,
-			      const left_context_type &lhs, const die1 &,
-			      const right_context_type &rhs, const die2 &)
+			      reference_match &matched,
+			      const left_context_type &lhs, const die1 &a,
+			      const right_context_type &rhs, const die2 &b)
       : _m_left (tracker1 (proto._m_left, lhs)),
-	_m_right (tracker2 (proto._m_right, rhs))
-    {}
+	_m_right (tracker2 (proto._m_right, rhs)),
+	_m_equiv (proto._m_equiv), _m_delete_equiv (false)
+    {
+      // We are starting a recursive consideration of a vs b.
+    }
   };
 };
 
