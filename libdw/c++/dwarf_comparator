@@ -127,6 +127,23 @@ namespace elfutils
     {
       return false;
     }
+
+    inline dwarf_tracker_base ()
+    {}
+
+    inline dwarf_tracker_base (const dwarf_tracker_base &,
+			       const left_context_type &, const die1 &,
+			       const right_context_type &, const die2 &)
+    {}
+
+    inline bool quick_reference_match (const die1 &, const die2 &)
+    {
+      return false;
+    }
+
+    inline void notice_reference_match (const die1 &, const die2 &)
+    {
+    }
   };
 
   template<class dwarf1, class dwarf2,
@@ -142,8 +159,8 @@ namespace elfutils
     template<typename item1, typename item2>
     struct matcher : public std::binary_function<item1, item2, bool>
     {
-      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
-      matcher (dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &cmp)
+      dwarf_comparator &_m_cmp;
+      matcher (dwarf_comparator &cmp)
 	: _m_cmp (cmp)
       {}
 
@@ -233,8 +250,8 @@ namespace elfutils
     struct match_rhs
       : public std::binary_function<ait1, ait2, bool>
     {
-      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
-      match_rhs (dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &cmp)
+      dwarf_comparator &_m_cmp;
+      match_rhs (dwarf_comparator &cmp)
 	: _m_cmp (cmp)
       {}
 
@@ -249,7 +266,7 @@ namespace elfutils
 				    typename ait2_map::value_type,
 				    bool>
     {
-      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
+      dwarf_comparator &_m_cmp;
       match_sorted (dwarf_comparator<dwarf1, dwarf2,
 		    ignore_refs, tracker> &cmp)
 	: _m_cmp (cmp)
@@ -315,8 +332,8 @@ namespace elfutils
     struct die_matcher
       : public std::binary_function<cit1, cit2, bool>
     {
-      dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &_m_cmp;
-      die_matcher (dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &cmp)
+      dwarf_comparator &_m_cmp;
+      die_matcher (dwarf_comparator &cmp)
 	: _m_cmp (cmp)
       {}
 
@@ -434,8 +451,11 @@ namespace elfutils
 	return true;
 
       // Simplest mismatches with the cheapest checks first.
-      if (a.tag () != b.tag ()
-	  || a.has_children () != b.has_children ())
+      if (a.tag () != b.tag ())
+	return false;
+
+      const bool any_children = a.has_children ();
+      if (any_children != b.has_children ())
 	return false;
 
       // Now we have to get the tracker involved.
@@ -444,15 +464,40 @@ namespace elfutils
       const typename tracker::right_context_type &rhs
 	= _m_tracker.right_context (ref2);
 
-      // First do the cheap mismatch check on the contexts, then check the
-      // contents and contexts in ascending order of costliness of a check.
-      return (!_m_tracker.context_quick_mismatch (lhs, rhs)
-	      && match (a.attributes (), b.attributes ())
-	      && _m_tracker.context_match (lhs, rhs)
-	      && match (a.children (), b.children ()));
+      // Maybe the tracker has already cached a correspondence of references.
+      if (_m_tracker.quick_reference_match (ref1, ref2))
+	return true;
+
+      /* First do the cheap mismatch check on the contexts, then check the
+	 contents and contexts in ascending order of costliness of a check.  */
+      if (_m_tracker.context_quick_mismatch (lhs, rhs)
+	  || !match (a.attributes (), b.attributes ())
+	  || !_m_tracker.context_match (lhs, rhs))
+	return false;
+
+      /* To compare the children, we have to clone the tracker and use a
+	 new one.  The new tracker jump-starts its walk to the referenced
+	 DIE from the root of the CU.  */
+      bool result = !any_children || (dwarf_comparator (tracker (_m_tracker,
+								 lhs, ref1,
+								 rhs, ref2))
+				      .match (a.children (), b.children ()));
+
+      // Let the tracker cache a known match for its quick_reference_match.
+      if (result)
+	_m_tracker.notice_reference_match (ref1, ref2);
+
+      return result;
     }
 
+    inline explicit dwarf_comparator (const tracker &t)
+      : _m_tracker (t)
+    {}
+
   public:
+    inline dwarf_comparator ()
+    {}
+
     inline bool operator () (const dwarf1 &a, const dwarf2 &b)
     {
       return match (a, b);

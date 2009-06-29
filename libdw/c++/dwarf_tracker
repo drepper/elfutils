@@ -72,34 +72,74 @@ namespace elfutils
     template<typename cu, typename die>
     struct tracker
     {
-      cu _m_root;
-
       typedef std::list<die> die_path;
-      die_path _m_path;
 
       /* We record every DIE we have seen here, mapping its .identity ()
 	 to the die_path of parent DIEs taken to reach it.  */
       typedef std::tr1::unordered_map< ::Dwarf_Off, const die_path> die_map;
-      die_map _m_seen;
+      die_map *_m_seen;
+      bool _m_delete_seen;
+
+      cu _m_root;
+
+      die_path _m_path;
+
+      static const die_path bad_die_path ()
+      {
+	return die_path (1);
+      }
+
+      static bool bad_die_path (const die_path &path)
+      {
+	typename die_path::const_iterator it = path.begin ();
+	if (it == path.end ())
+	  return false;
+	const die &elt = *it;
+	return ++it == path.end () && elt == die ();
+      }
+
+      inline tracker ()
+	: _m_seen (new die_map), _m_delete_seen (true)
+      {}
+
+      inline tracker (const tracker &proto, const die_path &context)
+	: _m_seen (proto._m_seen), _m_delete_seen (false),
+	  _m_root (proto._m_root), _m_path (context)
+      {
+      }
 
       ~tracker ()
       {
 	// We should never be left with a partial walk on the books.
 	assert (_m_path.empty ());
+	if (_m_delete_seen)
+	  delete _m_seen;
       }
 
       inline const die_path &path_to (const die &a)
       {
-	typename die_map::iterator it = _m_seen.find (a->identity ());
-	if (it == _m_seen.end ())
+	::Dwarf_Off id = a->identity ();
+	std::pair<typename die_map::iterator, bool> found
+	  = _m_seen->insert (std::make_pair (id, bad_die_path ()));
+	if (found.second)
 	  {
-	    ::Dwarf_Off id = a->identity ();
+	    /* We have a forward reference.  That is, we didn't
+	       already hit this DIE in our top-level walk and so
+	       it is not in _m_seen yet.  We must do a separate
+	       walk to find it.  */
+
 	    die_path path;
 	    if (!walk_to (*_m_root, id, path))
 	      throw std::runtime_error ("DIE not reachable from CU!");
-	    it = _m_seen.insert (std::make_pair (id, path)).first;
+	    _m_seen->erase (found.first);
+	    found.first = _m_seen->insert (found.first,
+					   std::make_pair (id, path));
 	  }
-	return it->second;
+
+	if (bad_die_path (found.first->second))
+	  abort ();		// XXX
+
+	return found.first->second;
       }
 
       // Return true if this is the droid we're looking for,
@@ -143,7 +183,7 @@ namespace elfutils
       inline void pre_order (const die &a)
       {
 	// Record the path down from the CU to see this DIE.
-	_m_seen.insert (std::make_pair (a->identity (), _m_path));
+	_m_seen->insert (std::make_pair (a->identity (), _m_path));
 	// Append this DIE to the path we'll record for its children.
 	_m_path.push_back (a);
       }
@@ -175,6 +215,9 @@ namespace elfutils
     };
 
   public:
+    inline dwarf_ref_tracker ()
+    {}
+
     inline void start_walk (const cu1 &a, const cu2 &b)
     {
       _m_left.start_walk (a);
@@ -225,6 +268,15 @@ namespace elfutils
     {
       return std::equal (a.begin (), a.end (), b.begin (), equal_enough ());
     }
+
+    // Share the _m_seen maps with the prototype tracker,
+    // but start a fresh walk from the given starting point.
+    inline dwarf_ref_tracker (const dwarf_ref_tracker &proto,
+			      const left_context_type &lhs, const die1 &,
+			      const right_context_type &rhs, const die2 &)
+      : _m_left (tracker1 (proto._m_left, lhs)),
+	_m_right (tracker2 (proto._m_right, rhs))
+    {}
   };
 };
 
