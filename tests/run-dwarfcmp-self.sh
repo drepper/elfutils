@@ -30,12 +30,9 @@ runtest()
 {
   for file; do
     if [ -f $file ]; then
-      {
-(set -x
-       testrun ../src/dwarfcmp -q -i $file $file &&
+      { testrun ../src/dwarfcmp -q -i $file $file &&
 	testrun ../src/dwarfcmp -i $file $file &&
 	testrun ../src/dwarfcmp -T -q -i $file $file
-) > dwarfcmp-${file//\//_}.out 2>&1
       } ||
       { echo "*** failure in $file"; status=1; }
     fi
