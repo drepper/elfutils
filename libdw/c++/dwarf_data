@@ -651,15 +651,22 @@ namespace elfutils
   public:
     struct nothing {};
 
-    class value_dispatch
-    {
-    public:
-      virtual ~value_dispatch () {}
-    };
-
     template<typename impl, typename constructor_arg_type>
     struct value
     {
+      class value_dispatch
+      {
+      public:
+	virtual ~value_dispatch () {}
+      };
+
+      template<typename flavor, typename input>
+      static inline value_dispatch *
+      make (flavor *&result, const input &x, const constructor_arg_type &arg)
+      {
+	return result = new flavor (x, arg);
+      }
+
       struct value_string : public value_dispatch, public std::string
       {
 	template<typename string>
@@ -816,7 +823,7 @@ namespace elfutils
     class attr_value
     {
     private:
-      value_dispatch *_m_value;
+      typename vw::value_dispatch *_m_value;
 
       template<typename value>
       inline void init (const value &other,
@@ -825,69 +832,46 @@ namespace elfutils
       {
 	switch (other.what_space ())
 	  {
-	  case dwarf::VS_identifier:
-	    _m_value = new typename vw::value_identifier (other.identifier (),
-							  arg);
-	    break;
-	  case dwarf::VS_string:
-	    _m_value = new typename vw::value_string (other.string (), arg);
-	    break;
-	  case dwarf::VS_flag:
-	    _m_value = new typename vw::value_flag (other.flag (), arg);
-	    break;
-	  case dwarf::VS_rangelistptr:
-	    _m_value = new typename vw::value_rangelistptr (other.ranges (),
-							    arg);
-	    break;
-	  case dwarf::VS_lineptr:
-	    _m_value = new typename vw::value_lineptr (other.line_info (), arg);
-	    break;
-	  case dwarf::VS_address:
-	    _m_value = new typename vw::value_address (other.address (), arg);
-	    break;
+#define _DWARF_DATA_AV_MAKE(flavor, fetch)				      \
+	  case dwarf::VS_##flavor:					      \
+	    {								      \
+	      typename vw::value_##flavor *p;				      \
+	      _m_value = vw::make (p, other.fetch (), arg);		      \
+	    }								      \
+	    break
+
+	  _DWARF_DATA_AV_MAKE (identifier, identifier);
+	  _DWARF_DATA_AV_MAKE (string, string);
+	  _DWARF_DATA_AV_MAKE (flag, flag);
+	  _DWARF_DATA_AV_MAKE (rangelistptr, ranges);
+	  _DWARF_DATA_AV_MAKE (lineptr, line_info);
+	  _DWARF_DATA_AV_MAKE (address, address);
+	  _DWARF_DATA_AV_MAKE (source_line, source_line);
+	  _DWARF_DATA_AV_MAKE (source_file, source_file);
+	  _DWARF_DATA_AV_MAKE (dwarf_constant, dwarf_constant);
+	  _DWARF_DATA_AV_MAKE (reference, reference);
+	  _DWARF_DATA_AV_MAKE (unit_reference, unit_reference);
+	  _DWARF_DATA_AV_MAKE (location, location);
+	  //_DWARF_DATA_AV_MAKE (macptr, macros); 	XXX
+
 	  case dwarf::VS_constant:
 	    if (other.constant_is_integer ())
-	      _m_value = new typename vw::value_constant (other.constant (),
-							  arg);
+	      {
+		typename vw::value_constant *p;
+		_m_value = vw::make (p, other.constant (), arg);
+	      }
 	    else
-	      _m_value = new typename vw::value_constant_block
-		(other.constant_block (), arg);
+	      {
+		typename vw::value_constant_block *p;
+		_m_value = vw::make (p, other.constant_block (), arg);
+	      }
 	    break;
-	  case dwarf::VS_source_line:
-	    _m_value = new typename vw::value_source_line (other.source_line (),
-							   arg);
-	    break;
-	  case dwarf::VS_source_column:
-	    _m_value = new typename vw::value_source_column
-	      (other.source_column (), arg);
-	    break;
-	  case dwarf::VS_source_file:
-	    _m_value = new typename vw::value_source_file (other.source_file (),
-							   arg);
-	    break;
-	  case dwarf::VS_dwarf_constant:
-	    _m_value = new typename vw::value_dwarf_constant
-	      (other.dwarf_constant (), arg);
-	    break;
-	  case dwarf::VS_reference:
-	    _m_value = new typename vw::value_reference (other.reference (),
-							 arg);
-	    break;
-	  case dwarf::VS_unit_reference:
-	    _m_value = new typename vw::value_unit_reference
-	      (other.unit_reference (), arg);
-	    break;
-	  case dwarf::VS_location:
-	    _m_value = new typename vw::value_location (other.location (), arg);
-	    break;
-#if 0
-	  case dwarf::VS_macptr:
-	    _m_value = new typename vw::value_macptr (other.macptr (), arg);
-	    break;
-#endif
+
 	  default:
 	  case dwarf::VS_discr_list:
 	    throw std::runtime_error ("XXX unimplemented");
+
+#undef _DWARF_DATA_AV_MAKE
 	  }
       }
 

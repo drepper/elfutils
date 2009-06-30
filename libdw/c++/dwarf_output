@@ -334,7 +334,7 @@ namespace elfutils
     struct value_wrapper
       : public dwarf_data::value<dwarf_output, dwarf_output_collector *>
     {
-      struct value_string : public dwarf_data::value_dispatch
+      struct value_string : public value_dispatch
       {
 	const std::string &_m_str;
 
