@@ -295,35 +295,6 @@ namespace elfutils
     static inline const range_list &
     collect (dwarf_output_collector *, const typename input::range_list &);
 
-    template<typename input, typename output>
-    struct make_any
-      : public std::binary_function<typename input::value_type,
-				    dwarf_output_collector *,
-				    typename output::value_type>
-    {
-      inline typename output::value_type
-      operator () (const typename input::value_type &x,
-		   dwarf_output_collector *c)
-      {
-	return typename output::value_type (x, c);
-      }
-    };
-
-    template<typename input, typename output>
-    struct make_attribute
-      : public std::binary_function<typename input::value_type,
-				    dwarf_output_collector *,
-				    typename output::value_type>
-    {
-      inline typename output::value_type
-      operator () (const typename input::value_type &x,
-		   dwarf_output_collector *c)
-      {
-	return std::make_pair
-	  (x.first, typename output::value_type::second_type (x.second, c));
-      }
-    };
-
     /* An iterator adapter for use in iterator-based constructors.
        collectify (iterator) yields an iterator on input where *i
        constructs output::value_type (input::value_type v, collector).  */
