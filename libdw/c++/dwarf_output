@@ -281,10 +281,16 @@ namespace elfutils
     typedef dwarf_data::dwarf_enum dwarf_enum;
     typedef dwarf_data::range_list range_list;
     typedef dwarf_data::location_attr location_attr;
-    typedef dwarf_data::attr_value<dwarf_output,
-				   dwarf_output_collector *> attr_value;
+
+    class compile_units;
+    class debug_info_entry;
 
   protected:
+
+    template<typename input>
+    static inline const std::string &
+    collect_string (dwarf_output_collector *, const input &);
+
     template<typename input>
     static inline const range_list &
     collect (dwarf_output_collector *, const typename input::range_list &);
@@ -321,42 +327,42 @@ namespace elfutils
     /* An iterator adapter for use in iterator-based constructors.
        collectify (iterator) yields an iterator on input where *i
        constructs output::value_type (input::value_type v, collector).  */
-    template<typename input, typename output,
-	     typename make_outlet = make_any<input, output> >
-    struct collectify
-      : public std::unary_function<typename input::const_iterator,
-				   typename output::iterator>
+    typedef dwarf_data::constructor_arg_adapter<dwarf_output,
+						dwarf_output_collector *>
+    collectify;
+
+    struct value_wrapper
+      : public dwarf_data::value<dwarf_output, dwarf_output_collector *>
     {
-      typedef typename input::const_iterator inny;
-      typedef typename output::iterator outty;
-      typedef typename input::value_type inlet;
-      typedef typename output::value_type outlet;
-
-      /* Wrapper worker passed to wrapped_input_iterator.
-	 This object holds the collector pointer.  */
-      struct maker
-	: public std::unary_function<inlet, outlet>
+      struct value_string : public dwarf_data::value_dispatch
       {
-	dwarf_output_collector *_m_collector;
-	explicit inline maker (dwarf_output_collector *c) : _m_collector (c) {}
+	const std::string &_m_str;
 
-	inline outlet operator () (const inlet &x) const
+	template<typename string>
+	inline value_string (const string &s, dwarf_output_collector *c)
+	  : _m_str (collect_string (c, s))
+	{}
+
+	inline operator const std::string & () const
 	{
-	  return make_outlet () (x, _m_collector);
+	  return _m_str;
 	}
-      } _m_maker;
 
-      explicit inline collectify (dwarf_output_collector *c) : _m_maker (c) {}
-
-      typedef subr::wrapped_input_iterator<input, maker> wrapped;
-
-      inline wrapped operator () (const inny &i)
-      {
-	return wrapped (i, _m_maker);
-      }
+	std::string to_string () const
+	{
+	  std::string result ("\"");
+	  result += _m_str;
+	  result += "\"";
+	  return result;
+	}
+      };
     };
 
   public:
+
+    typedef dwarf_data::attr_value<dwarf_output,
+				   dwarf_output_collector *,
+				   value_wrapper> attr_value;
 
     class compile_units;
 
@@ -373,44 +379,29 @@ namespace elfutils
 	template<typename input>
 	inline children_type (const input &other, dwarf_output_collector *c)
 	  : std::list<debug_info_entry>
-	    (collectify<input, children_type> (c) (other.begin ()),
-	     collectify<input, children_type> (c) (other.end ()))
+	    (collectify::argify<input, children_type> (c) (other.begin ()),
+	     collectify::argify<input, children_type> (c) (other.end ()))
 	{}
 
       public:
 	typedef debug_info_entry value_type;
       };
 
-      class attributes_type : public std::map<int, attr_value>
+      class attributes_type
+	: public dwarf_data::attributes_type<dwarf_output,
+					     dwarf_output_collector *,
+					     value_wrapper>
       {
 	friend class debug_info_entry;
       private:
-	typedef std::map<int, attr_value> base_type;
-
-	attributes_type () {}
+	typedef dwarf_data::attributes_type<dwarf_output,
+					    dwarf_output_collector *,
+					    value_wrapper> base_type;
 
 	template<typename input>
 	inline attributes_type (const input &other, dwarf_output_collector *c)
-	  : base_type (collectify<input, attributes_type,
-		       		  make_attribute<input, attributes_type> > (c)
-		       (other.begin ()),
-		       collectify<input, attributes_type,
-		       		  make_attribute<input, attributes_type> > (c)
-		       (other.end ()))
+	  : base_type (other, c)
 	{}
-
-      public:
-	typedef base_type::key_type key_type;
-	typedef base_type::value_type value_type;
-	typedef base_type::mapped_type mapped_type;
-
-	static const bool ordered = true;
-
-	template<typename attrs>
-	inline operator attrs () const
-	{
-	  return attrs (begin (), end ());
-	}
       };
 
     private:
@@ -516,8 +507,8 @@ namespace elfutils
       // Constructor copying CUs from input container.
       template<typename input>
       compile_units (const input &units, dwarf_output_collector *c)
-	: _base (collectify<input, compile_units> (c) (units.begin ()),
-		 collectify<input, compile_units> (c) (units.end ()))
+	: _base (collectify::argify<input, compile_units> (c) (units.begin ()),
+		 collectify::argify<input, compile_units> (c) (units.end ()))
       {
       }
 
@@ -589,9 +580,17 @@ namespace elfutils
     friend class dwarf_output;
 
   private:
+    subr::value_set<std::string> _m_strings;
     subr::value_set<dwarf_output::range_list> _m_ranges;
 
   };
+
+  template<typename input>
+  inline const std::string &
+  dwarf_output::collect_string (dwarf_output_collector *c, const input &s)
+  {
+    return c->_m_strings.add (s);
+  }
 
   template<typename input>
   inline const dwarf_output::range_list &

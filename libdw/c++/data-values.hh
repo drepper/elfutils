@@ -54,9 +54,9 @@
 namespace elfutils
 {
 
-  template<class impl, typename arg>
+  template<class impl, typename arg, typename v>
   dwarf::value_space
-  dwarf_data::attr_value<impl, arg>::what_space () const
+  dwarf_data::attr_value<impl, arg, v>::what_space () const
   {
     if (typeid (*_m_value) == typeid (typename v::value_flag))
       return dwarf::VS_flag;

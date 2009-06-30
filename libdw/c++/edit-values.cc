@@ -53,8 +53,7 @@
 
 using namespace elfutils;
 
-template
-dwarf::value_space dwarf_data::attr_value<dwarf_edit>::what_space () const;
+template dwarf::value_space dwarf_edit::attr_value::what_space () const;
 
 template<>
 std::string

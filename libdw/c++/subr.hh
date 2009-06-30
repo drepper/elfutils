@@ -23,10 +23,16 @@ namespace elfutils
     template<typename T>
     struct hash : public T::hasher {};
 
+    template<typename T>
+    static inline size_t hash_this (const T &v)
+    {
+      return hash<T> () (v);
+    }
+
     template <typename T>
     inline void hash_combine (size_t &seed, const T &v)
     {
-      seed ^= hash<T> () (v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+      seed ^= hash_this (v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     }
 
     template <typename T1, typename T2>
@@ -58,7 +64,7 @@ namespace elfutils
 	inline hasher () : _m_hash (0) {}
 	inline void operator () (const typename T::value_type &x)
 	{
-	  subr::hash_combine (_m_hash, subr::hash<typename T::value_type> (x));
+	  subr::hash_combine (_m_hash, hash_this (x));
 	}
       };
 
@@ -94,7 +100,7 @@ namespace elfutils
     struct hashed_hasher
       : public std::unary_function<T, size_t>
     {
-      size_t operator () (const T &v)
+      size_t operator () (const T &v) const
       {
 	return v._m_hash;
       }
@@ -104,7 +110,7 @@ namespace elfutils
     struct name_equal : public std::binary_function<const char *, string, bool>
     {
       template<typename mystring>
-      inline bool operator () (const mystring &me, const string &you)
+      inline bool operator () (const mystring &me, const string &you) const
       {
 	return you == me;
       }
@@ -115,12 +121,12 @@ namespace elfutils
     struct name_equal<const char *>
       : public std::binary_function<const char *, const char *, bool>
     {
-      bool operator () (const char *me, const char *you)
+      bool operator () (const char *me, const char *you) const
       {
 	return !strcmp (me, you);
       }
       template<typename mystring>
-      inline bool operator () (const mystring &me, const char *you)
+      inline bool operator () (const mystring &me, const char *you) const
       {
 	return me == you;
       }
@@ -156,7 +162,7 @@ namespace elfutils
     template<typename t1, typename t2>
     struct equal_to : public std::binary_function<t1, t2, bool>
     {
-      inline bool operator () (const t1 &a, const t2 &b)
+      inline bool operator () (const t1 &a, const t2 &b) const
       {
 	return a == b;
       }
@@ -181,7 +187,7 @@ namespace elfutils
       {}
 
       inline bool operator () (const typename t1::const_iterator &a,
-			       const typename t2::const_iterator &b)
+			       const typename t2::const_iterator &b) const
       {
 	return _m_pred (*a, *b);
       }
@@ -362,14 +368,14 @@ namespace elfutils
       struct hasher
 	: public std::unary_function<hashed_value, size_t>
       {
-	inline size_t operator () (const hashed_value &v)
+	inline size_t operator () (const hashed_value &v) const
 	{
 	  return v.first;
 	}
       };
 
       hashed_value (const value_type &v)
-	: _base (subr::hash<value_type> (v), v) {}
+	: _base (hash_this (v), v) {}
       hashed_value (const hashed_value &v)
 	: _base (v.first, v.second) {}
 
@@ -403,6 +409,12 @@ namespace elfutils
 	  }
 	return p.first->second;
       };
+
+      template<typename input>
+      const value_type &add (const input &v)
+      {
+	return add (value_type (v));
+      }
     };
 
     // A container of hashed_value's that itself acts like a hashed_value.
@@ -499,7 +511,7 @@ namespace elfutils
 
 	  inline void operator () (const typename _base::value_type &p)
 	  {
-	    subr::hash_combine (_m_hash, subr::hash<key_type> (p.first));
+	    subr::hash_combine (_m_hash, hash_this (p.first));
 	    subr::hash_combine (_m_hash, p.second.first);
 	  }
 	};

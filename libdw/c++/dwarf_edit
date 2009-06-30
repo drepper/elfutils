@@ -117,30 +117,19 @@ namespace elfutils
 	typedef debug_info_entry value_type;
       };
 
-      class attributes_type : public std::map<int, attr_value>
+      class attributes_type
+	: public dwarf_data::attributes_type<dwarf_edit>
       {
 	friend class debug_info_entry;
       private:
-	typedef std::map<int, attr_value> base_type;
+	typedef dwarf_data::attributes_type<dwarf_edit> base_type;
 
-	attributes_type () {}
-
-	template<typename attrs>
-	attributes_type (const attrs &other)
-	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
-
-      public:
-	typedef base_type::key_type key_type;
-	typedef base_type::value_type value_type;
-	typedef base_type::mapped_type mapped_type;
-
-	static const bool ordered = true;
+	inline attributes_type () {}
 
 	template<typename attrs>
-	inline operator attrs () const
-	{
-	  return attrs (begin (), end ());
-	}
+	inline attributes_type (const attrs &other)
+	  : base_type (other, dwarf_data::nothing ())
+	{}
       };
 
     private:

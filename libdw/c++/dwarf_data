@@ -651,15 +651,15 @@ namespace elfutils
   public:
     struct nothing {};
 
+    class value_dispatch
+    {
+    public:
+      virtual ~value_dispatch () {}
+    };
+
     template<typename impl, typename constructor_arg_type>
     struct value
     {
-      class value_dispatch
-      {
-      public:
-	virtual ~value_dispatch () {}
-      };
-
       struct value_string : public value_dispatch, public std::string
       {
 	template<typename string>
@@ -809,13 +809,14 @@ namespace elfutils
       };
     };
 
-    template<class impl, typename constructor_arg_type = nothing>
+    template<class impl,
+	     typename constructor_arg_type = nothing,
+	     typename vw = value<impl, constructor_arg_type>
+	     >
     class attr_value
     {
     private:
-      typedef value<impl, constructor_arg_type> v;
-
-      typename v::value_dispatch *_m_value;
+      value_dispatch *_m_value;
 
       template<typename value>
       inline void init (const value &other,
@@ -825,63 +826,63 @@ namespace elfutils
 	switch (other.what_space ())
 	  {
 	  case dwarf::VS_identifier:
-	    _m_value = new typename v::value_identifier (other.identifier (),
-							 arg);
+	    _m_value = new typename vw::value_identifier (other.identifier (),
+							  arg);
 	    break;
 	  case dwarf::VS_string:
-	    _m_value = new typename v::value_string (other.string (), arg);
+	    _m_value = new typename vw::value_string (other.string (), arg);
 	    break;
 	  case dwarf::VS_flag:
-	    _m_value = new typename v::value_flag (other.flag (), arg);
+	    _m_value = new typename vw::value_flag (other.flag (), arg);
 	    break;
 	  case dwarf::VS_rangelistptr:
-	    _m_value = new typename v::value_rangelistptr (other.ranges (),
-							   arg);
+	    _m_value = new typename vw::value_rangelistptr (other.ranges (),
+							    arg);
 	    break;
 	  case dwarf::VS_lineptr:
-	    _m_value = new typename v::value_lineptr (other.line_info (), arg);
+	    _m_value = new typename vw::value_lineptr (other.line_info (), arg);
 	    break;
 	  case dwarf::VS_address:
-	    _m_value = new typename v::value_address (other.address (), arg);
+	    _m_value = new typename vw::value_address (other.address (), arg);
 	    break;
 	  case dwarf::VS_constant:
 	    if (other.constant_is_integer ())
-	      _m_value = new typename v::value_constant (other.constant (),
-							 arg);
+	      _m_value = new typename vw::value_constant (other.constant (),
+							  arg);
 	    else
-	      _m_value = new typename v::value_constant_block
+	      _m_value = new typename vw::value_constant_block
 		(other.constant_block (), arg);
 	    break;
 	  case dwarf::VS_source_line:
-	    _m_value = new typename v::value_source_line (other.source_line (),
-							  arg);
+	    _m_value = new typename vw::value_source_line (other.source_line (),
+							   arg);
 	    break;
 	  case dwarf::VS_source_column:
-	    _m_value = new typename v::value_source_column
+	    _m_value = new typename vw::value_source_column
 	      (other.source_column (), arg);
 	    break;
 	  case dwarf::VS_source_file:
-	    _m_value = new typename v::value_source_file (other.source_file (),
-							  arg);
+	    _m_value = new typename vw::value_source_file (other.source_file (),
+							   arg);
 	    break;
 	  case dwarf::VS_dwarf_constant:
-	    _m_value = new typename v::value_dwarf_constant
+	    _m_value = new typename vw::value_dwarf_constant
 	      (other.dwarf_constant (), arg);
 	    break;
 	  case dwarf::VS_reference:
-	    _m_value = new typename v::value_reference (other.reference (),
-							arg);
+	    _m_value = new typename vw::value_reference (other.reference (),
+							 arg);
 	    break;
 	  case dwarf::VS_unit_reference:
-	    _m_value = new typename v::value_unit_reference
+	    _m_value = new typename vw::value_unit_reference
 	      (other.unit_reference (), arg);
 	    break;
 	  case dwarf::VS_location:
-	    _m_value = new typename v::value_location (other.location (), arg);
+	    _m_value = new typename vw::value_location (other.location (), arg);
 	    break;
 #if 0
 	  case dwarf::VS_macptr:
-	    _m_value = new typename v::value_macptr (other.macptr (), arg);
+	    _m_value = new typename vw::value_macptr (other.macptr (), arg);
 	    break;
 #endif
 	  default:
@@ -910,13 +911,6 @@ namespace elfutils
 	: _m_value (NULL)
       {
 	init (other, arg);
-      }
-
-      template<typename value>
-      attr_value (const value &other)
-	: _m_value (NULL)
-      {
-	init (other, constructor_arg_type ()); // XXX
       }
 
       inline attr_value ()
@@ -956,38 +950,38 @@ namespace elfutils
 
       inline bool &flag () const
       {
-	return variant<typename v::value_flag> ().flag;
+	return variant<typename vw::value_flag> ().flag;
       }
 
       // XXX dwfl, reloc
       inline ::Dwarf_Addr &address () const
       {
-	return variant<typename v::value_address> ().addr;
+	return variant<typename vw::value_address> ().addr;
       }
 
       inline typename impl::debug_info_entry::children_type::iterator
       reference () const
       {
-	return variant<typename v::value_reference> ().ref;
+	return variant<typename vw::value_reference> ().ref;
       }
       inline typename impl::compile_units::iterator
       unit_reference () const
       {
-	return variant<typename v::value_unit_reference> ().ref;
+	return variant<typename vw::value_unit_reference> ().ref;
       }
 
       inline location_attr &location () const
       {
 	return static_cast<location_attr &>
-	  (variant<typename v::value_location> ());
+	  (variant<typename vw::value_location> ());
       }
 
-      inline std::string &string () const
+      inline const std::string &string () const
       {
-	return static_cast<std::string &>
-	  (variant<typename v::value_string> ());
+	return static_cast<const std::string &>
+	  (variant<typename vw::value_string> ());
       }
-      inline std::string &identifier () const
+      inline const std::string &identifier () const
       {
 	return string ();
       }
@@ -995,55 +989,55 @@ namespace elfutils
       inline typename impl::source_file &source_file () const
       {
 	return static_cast<typename impl::source_file &>
-	  (variant<typename v::value_source_file> ());
+	  (variant<typename vw::value_source_file> ());
       }
 
       inline unsigned int &source_line () const
       {
-	return variant<typename v::value_source_line> ().n;
+	return variant<typename vw::value_source_line> ().n;
       }
 
       inline unsigned int &source_column () const
       {
-	return variant<typename v::value_source_column> ().n;
+	return variant<typename vw::value_source_column> ().n;
       }
 
       inline ::Dwarf_Word &constant () const
       {
-	return variant<typename v::value_constant> ().word;
+	return variant<typename vw::value_constant> ().word;
       }
 
       inline ::Dwarf_Sword &signed_constant () const
       {
-	return variant<typename v::value_constant> ().sword;
+	return variant<typename vw::value_constant> ().sword;
       }
 
       inline std::vector<uint8_t> &constant_block () const
       {
 	return static_cast<std::vector<uint8_t> &>
-	  (variant<typename v::value_constant_block> ());
+	  (variant<typename vw::value_constant_block> ());
       }
 
       inline typename impl::dwarf_enum &dwarf_constant () const
       {
-	return variant<typename v::value_dwarf_constant> ();
+	return variant<typename vw::value_dwarf_constant> ();
       }
 
       inline bool constant_is_integer () const
       {
-	return dynamic_cast<typename v::value_constant *> (_m_value) != NULL;
+	return dynamic_cast<typename vw::value_constant *> (_m_value) != NULL;
       }
 
       inline typename impl::range_list &ranges () const
       {
 	return static_cast<range_list &>
-	  (variant<typename v::value_rangelistptr> ());
+	  (variant<typename vw::value_rangelistptr> ());
       }
 
       inline typename impl::line_info_table &line_info () const
       {
 	return static_cast<typename impl::line_info_table &>
-	  (variant<typename v::value_lineptr> ());
+	  (variant<typename vw::value_lineptr> ());
       }
 
       // macptr
@@ -1104,6 +1098,126 @@ namespace elfutils
       }
     };
 
+    template<class dwarf_output, typename constructor_arg_type = nothing>
+    struct constructor_arg_adapter
+    {
+      template<typename input, typename output>
+      struct make_any
+	: public std::binary_function<typename input::value_type,
+				      constructor_arg_type,
+				      typename output::value_type>
+      {
+	inline typename output::value_type
+	operator () (const typename input::value_type &x,
+		     const constructor_arg_type &c) const
+	{
+	  return typename output::value_type (x, c);
+	}
+      };
+
+      template<typename input, typename output>
+      struct make_attribute
+	: public std::binary_function<typename input::value_type,
+				      constructor_arg_type,
+				      typename output::value_type>
+      {
+	inline typename output::value_type
+	operator () (const typename input::value_type &x,
+		     const constructor_arg_type &c) const
+	{
+	  return std::make_pair
+	    (x.first, typename output::value_type::second_type (x.second, c));
+	}
+      };
+
+      /* An iterator adapter for use in iterator-based constructors.
+	 collectify (iterator) yields an iterator on input where *i
+	 constructs output::value_type (input::value_type v, collector).  */
+      template<typename input, typename output,
+	       typename make_outlet = make_any<input, output> >
+      struct argify
+	: public std::unary_function<typename input::const_iterator,
+				     typename output::iterator>
+      {
+	typedef typename input::const_iterator inny;
+	typedef typename output::iterator outty;
+	typedef typename input::value_type inlet;
+	typedef typename output::value_type outlet;
+
+	/* Wrapper worker passed to wrapped_input_iterator.
+	   This object holds the collector pointer.  */
+	struct maker
+	  : public std::unary_function<inlet, outlet>
+	{
+	  constructor_arg_type _m_arg;
+	  explicit inline maker (const constructor_arg_type &c) : _m_arg (c) {}
+
+	  inline outlet operator () (const inlet &x) const
+	  {
+	    return make_outlet () (x, _m_arg);
+	  }
+	} _m_maker;
+
+	explicit inline argify (const constructor_arg_type &c)
+	  : _m_maker (c)
+	{}
+
+	typedef subr::wrapped_input_iterator<input, maker> wrapped;
+
+	inline wrapped operator () (const inny &i)
+	{
+	  return wrapped (i, _m_maker);
+	}
+      };
+
+      template<class input>
+      static inline argify<
+	input, typename dwarf_output::debug_info_entry::attributes_type,
+	make_attribute<input,
+		       typename dwarf_output::debug_info_entry::attributes_type>
+	> attr (const input &, const constructor_arg_type &c)
+      {
+	return argify<
+	  input, typename dwarf_output::debug_info_entry::attributes_type,
+	  make_attribute<
+	    input, typename dwarf_output::debug_info_entry::attributes_type>
+	    > (c);
+      };
+    };
+
+    template<class impl, typename arg = nothing, typename v = value<impl, arg> >
+    class attributes_type
+      : public std::map<int, attr_value<impl, arg, v> >
+    {
+      friend class impl::debug_info_entry;
+    private:
+      typedef std::map<int, attr_value<impl, arg, v> > base_type;
+      typedef constructor_arg_adapter<impl, arg> argify;
+
+    protected:
+      inline attributes_type () {}
+
+    public: // XXX should be protected
+      template<typename input>
+      inline attributes_type (const input &other, const arg &c)
+	: base_type (argify::attr (other, c) (other.begin ()),
+		     argify::attr (other, c) (other.end ()))
+      {}
+
+    public:
+      typedef typename base_type::key_type key_type;
+      typedef typename base_type::value_type value_type;
+      typedef typename base_type::mapped_type mapped_type;
+
+      static const bool ordered = true;
+
+      template<typename attrs>
+      inline operator attrs () const
+      {
+	return attrs (base_type::begin (), base_type::end ());
+      }
+    };
+
   };
 
   // Explicit specializations.
@@ -1114,8 +1228,8 @@ namespace elfutils
     return elfutils::to_string (*this); // Use that.
   }
 
-  template<class impl, typename arg>
-  inline std::string dwarf_data::attr_value<impl, arg>::to_string () const
+  template<class impl, typename arg, typename v>
+  inline std::string dwarf_data::attr_value<impl, arg, v>::to_string () const
   {
     return elfutils::to_string (*this); // Use that.
   }
