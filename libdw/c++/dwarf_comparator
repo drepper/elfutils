@@ -57,9 +57,8 @@ namespace elfutils
   // Prototypical stub for reference tracker object.
   // This keeps no state, and no two contexts ever match.
   template<class dwarf1, class dwarf2>
-  class dwarf_tracker_base
+  struct dwarf_tracker_base
   {
-  protected:
     typedef typename dwarf1::compile_units::const_iterator cu1;
     typedef typename dwarf2::compile_units::const_iterator cu2;
     typedef typename dwarf1::debug_info_entry dwarf1_die;
@@ -69,7 +68,6 @@ namespace elfutils
     typedef typename dwarf1_die::attributes_type::const_iterator attr1;
     typedef typename dwarf2_die::attributes_type::const_iterator attr2;
 
-  public:
     inline void start_walk (const cu1 &a, const cu2 &b)
     {
     }
@@ -104,12 +102,27 @@ namespace elfutils
     }
 
     struct left_context_type {};
+    struct right_context_type {};
+
+    // Return the lhs context of the current walk.
+    inline const left_context_type left_context ()
+    {
+      return left_context_type ();
+    }
+
+    // Return the lhs context of an arbitrary DIE.
     inline const left_context_type left_context (const die1 &die)
     {
       return left_context_type ();
     }
 
-    struct right_context_type {};
+    // Return the rhs context of the current walk.
+    inline const right_context_type right_context ()
+    {
+      return right_context_type ();
+    }
+
+    // Return the rhs context of an arbitrary DIE.
     inline const right_context_type right_context (const die2 &die)
     {
       return right_context_type ();
@@ -154,6 +167,55 @@ namespace elfutils
 			       const right_context_type &, const die2 &)
     {}
 
+  };
+
+  struct dwarf_tracker_utils
+  {
+    /* A walk object does start_walk when constructed and finish_walk
+       when destroyed, so finish_walk always runs even for exceptions.  */
+    template<typename tracker>
+    struct walk
+    {
+      typedef typename tracker::cu1 cu1;
+      typedef typename tracker::cu2 cu2;
+
+      tracker *_m_walker;
+      const cu1 &_m_a;
+      const cu2 &_m_b;
+
+      inline walk (tracker *w, const cu1 &a, const cu2 &b)
+	: _m_walker (w), _m_a (a), _m_b (b)
+      {
+	_m_walker->start_walk (_m_a, _m_b);
+      }
+      inline ~walk ()
+      {
+	_m_walker->finish_walk (_m_a, _m_b);
+      }
+    };
+
+    /* A step object does pre_order when constructed and post_order
+       when destroyed, so post_order always runs even for exceptions.  */
+    template<typename tracker>
+    struct step
+    {
+      typedef typename tracker::die1 die1;
+      typedef typename tracker::die2 die2;
+
+      tracker *_m_walker;
+      const die1 &_m_a;
+      const die2 &_m_b;
+
+      inline step (tracker *w, const die1 &a, const die2 &b)
+	: _m_walker (w), _m_a (a), _m_b (b)
+      {
+	_m_walker->pre_order (_m_a, _m_b);
+      }
+      inline ~step ()
+      {
+	_m_walker->post_order (_m_a, _m_b);
+      }
+    };
   };
 
   template<class dwarf1, class dwarf2,
@@ -209,19 +271,8 @@ namespace elfutils
     typedef typename dwarf2::debug_info_entry die2;
     inline bool match (const cu1_it &a, const cu2_it &b)
     {
-      bool result;
-      _m_tracker.start_walk (a, b);
-      try
-	{
-	  result = match (static_cast<die1> (*a), static_cast<die2> (*b));
-	}
-      catch (...)
-	{
-	  _m_tracker.finish_walk (a, b);
-	  throw;
-	}
-      _m_tracker.finish_walk (a, b);
-      return result;
+      dwarf_tracker_utils::walk<tracker> in (&_m_tracker, a, b);
+      return match (static_cast<die1> (*a), static_cast<die2> (*b));
     }
 
     inline bool match (const die1 &a, const die2 &b)
@@ -349,18 +400,27 @@ namespace elfutils
 
       inline bool operator () (const cit1 &a, const cit2 &b)
       {
-	bool result;
-	_m_cmp._m_tracker.pre_order (a, b);
-	try
-	  {
-	    result = _m_cmp.match (*a, *b);
-	  }
-	catch (...)
-	  {
-	    _m_cmp._m_tracker.post_order (a, b);
-	    throw;
-	  }
-	_m_cmp._m_tracker.post_order (a, b);
+#if 0 // XXX
+	// Maybe the tracker has already cached a correspondence of DIEs.
+	typename tracker::reference_match matched;
+	if (_m_cmp._m_tracker.reference_matched
+	    (matched,
+	     _m_cmp._m_tracker.left_context (), a,
+	     _m_cmp._m_tracker.right_context (), b))
+	  return true;
+
+	if (matched.cannot_match ())
+	  return false;
+#endif
+
+	dwarf_tracker_utils::step<tracker> into (&_m_cmp._m_tracker, a, b);
+	bool result = _m_cmp.match (*a, *b);
+
+#if 0 // XXX
+	// Let the tracker cache a result for its reference_matched.
+	matched.notice_match (b, result);
+#endif
+
 	return result;
       }
     };
@@ -503,7 +563,7 @@ namespace elfutils
 								 rhs, ref2))
 				      .match (a.children (), b.children ()));
 
-      // Let the tracker cache a result for its reference_match::quick_match.
+      // Let the tracker cache a result for its reference_matched.
       matched.notice_match (ref2, result);
 
       return result;
