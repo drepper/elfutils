@@ -68,18 +68,27 @@ namespace elfutils
     typedef typename dwarf1_die::attributes_type::const_iterator attr1;
     typedef typename dwarf2_die::attributes_type::const_iterator attr2;
 
-    inline void start_walk (const cu1 &a, const cu2 &b)
+    // This object is created to start a walk and destroyed to finish one.
+    struct walk
     {
-    }
-    inline void finish_walk (const cu1 &a, const cu2 &b)
+      inline walk (dwarf_tracker_base *, const cu1 &a, const cu2 &b)
+      {
+      }
+      inline ~walk ()
+      {
+      }
+    };
+
+    // This object is created in pre-order and destroyed in post-order.
+    struct step
     {
-    }
-    inline void pre_order (const die1 &a, const die2 &b)
-    {
-    }
-    inline void post_order (const die1 &a, const die2 &b)
-    {
-    }
+      inline step (dwarf_tracker_base *, const die1 &a, const die2 &b)
+      {
+      }
+      inline ~step ()
+      {
+      }
+    };
 
     inline void visit (const typename dwarf1::debug_info_entry &a,
 		       const typename dwarf2::debug_info_entry &b)
@@ -169,55 +178,6 @@ namespace elfutils
 
   };
 
-  struct dwarf_tracker_utils
-  {
-    /* A walk object does start_walk when constructed and finish_walk
-       when destroyed, so finish_walk always runs even for exceptions.  */
-    template<typename tracker>
-    struct walk
-    {
-      typedef typename tracker::cu1 cu1;
-      typedef typename tracker::cu2 cu2;
-
-      tracker *_m_walker;
-      const cu1 &_m_a;
-      const cu2 &_m_b;
-
-      inline walk (tracker *w, const cu1 &a, const cu2 &b)
-	: _m_walker (w), _m_a (a), _m_b (b)
-      {
-	_m_walker->start_walk (_m_a, _m_b);
-      }
-      inline ~walk ()
-      {
-	_m_walker->finish_walk (_m_a, _m_b);
-      }
-    };
-
-    /* A step object does pre_order when constructed and post_order
-       when destroyed, so post_order always runs even for exceptions.  */
-    template<typename tracker>
-    struct step
-    {
-      typedef typename tracker::die1 die1;
-      typedef typename tracker::die2 die2;
-
-      tracker *_m_walker;
-      const die1 &_m_a;
-      const die2 &_m_b;
-
-      inline step (tracker *w, const die1 &a, const die2 &b)
-	: _m_walker (w), _m_a (a), _m_b (b)
-      {
-	_m_walker->pre_order (_m_a, _m_b);
-      }
-      inline ~step ()
-      {
-	_m_walker->post_order (_m_a, _m_b);
-      }
-    };
-  };
-
   template<class dwarf1, class dwarf2,
 	   bool ignore_refs = false,
 	   class tracker = dwarf_tracker_base<dwarf1, dwarf2>
@@ -242,7 +202,8 @@ namespace elfutils
       }
     };
 #define MATCHER(item) \
-    matcher<typename dwarf1::item, typename dwarf2::item>
+    matcher<typename dwarf1::item::const_iterator, \
+	    typename dwarf2::item::const_iterator> (*this)
 
     inline bool match (const dwarf1 &a, const dwarf2 &b)
     {
@@ -260,8 +221,7 @@ namespace elfutils
       const cu1_it end1 = a.end ();
       const cu2_it end2 = b.end ();
       if (subr::container_equal
-	  (it1, end1, it2, end2,
-	   MATCHER (compile_units::const_iterator) (*this)))
+	  (it1, end1, it2, end2, MATCHER (compile_units)))
 	return true;
       _m_tracker.mismatch (it1, end1, it2, end2);
       return false;
@@ -271,7 +231,7 @@ namespace elfutils
     typedef typename dwarf2::debug_info_entry die2;
     inline bool match (const cu1_it &a, const cu2_it &b)
     {
-      dwarf_tracker_utils::walk<tracker> in (&_m_tracker, a, b);
+      typename tracker::walk in (&_m_tracker, a, b);
       return match (static_cast<die1> (*a), static_cast<die2> (*b));
     }
 
@@ -390,47 +350,49 @@ namespace elfutils
     typedef typename dwarf2::debug_info_entry::children_type children2;
     typedef typename children1::const_iterator cit1;
     typedef typename children2::const_iterator cit2;
-    struct die_matcher
-      : public std::binary_function<cit1, cit2, bool>
+
+    inline bool match_child (const cit1 &a, const cit2 &b)
     {
-      dwarf_comparator &_m_cmp;
-      die_matcher (dwarf_comparator &cmp)
-	: _m_cmp (cmp)
-      {}
+      typename tracker::step into (&_m_tracker, a, b);
+      return match (*a, *b);
+    }
 
-      inline bool operator () (const cit1 &a, const cit2 &b)
-      {
+    inline bool match (const cit1 &a, const cit2 &b)
+    {
 #if 0 // XXX
-	// Maybe the tracker has already cached a correspondence of DIEs.
-	typename tracker::reference_match matched;
-	if (_m_cmp._m_tracker.reference_matched
-	    (matched,
-	     _m_cmp._m_tracker.left_context (), a,
-	     _m_cmp._m_tracker.right_context (), b))
+      // Maybe the tracker has already cached a correspondence of DIEs.
+      typename tracker::reference_match matched;
+      if (_m_tracker.reference_matched (matched,
+					_m_tracker.left_context (), a,
+					_m_tracker.right_context (), b))
+	{
+	  std::cout << "short-circuit DIE match " << std::hex << a->offset ()
+		    << std::endl;
 	  return true;
+	}
 
-	if (matched.cannot_match ())
-	  return false;
+      if (matched.cannot_match ())
+	return false;
 #endif
 
-	dwarf_tracker_utils::step<tracker> into (&_m_cmp._m_tracker, a, b);
-	bool result = _m_cmp.match (*a, *b);
+      bool result = match_child (a, b);
 
 #if 0 // XXX
-	// Let the tracker cache a result for its reference_matched.
-	matched.notice_match (b, result);
+      // Let the tracker cache a result for its reference_matched.
+      matched.notice_match (b, result);
 #endif
 
-	return result;
-      }
-    };
+      return result;
+    }
+
     inline bool match (const children1 &a, const children2 &b)
     {
       cit1 it1 = a.begin ();
       cit2 it2 = b.begin ();
       const cit1 end1 = a.end ();
       const cit2 end2 = b.end ();
-      if (subr::container_equal (it1, end1, it2, end2, die_matcher (*this)))
+      if (subr::container_equal (it1, end1, it2, end2,
+				 MATCHER (debug_info_entry::children_type)))
 	return true;
       _m_tracker.mismatch (it1, end1, it2, end2);
       return false;
@@ -537,7 +499,11 @@ namespace elfutils
       // Maybe the tracker has already cached a correspondence of references.
       typename tracker::reference_match matched;
       if (_m_tracker.reference_matched (matched, lhs, ref1, rhs, ref2))
-	return true;
+	{
+	  std::cout << "short-circuit ref match " << std::hex << a.offset ()
+		    << std::endl;
+	  return true;
+	}
 
       if (matched.cannot_match ())
 	return false;

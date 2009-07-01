@@ -30,9 +30,13 @@ runtest()
 {
   for file; do
     if [ -f $file ]; then
-      { testrun ../src/dwarfcmp -q -i $file $file &&
+      {
+(set -x
+        testrun ../src/dwarfcmp -q -i $file $file &&
 	testrun ../src/dwarfcmp -i $file $file &&
-	testrun ../src/dwarfcmp -T -q -i $file $file
+:
+#	testrun ../src/dwarfcmp -T -q -i $file $file
+) > dwarfcmp-${file//\//_}.out 2>&1
       } ||
       { echo "*** failure in $file"; status=1; }
     fi
@@ -41,6 +45,7 @@ runtest()
 
 runtest ../src/addr2line
 runtest ../src/dwarfcmp
+runtest ../src/dwarflint
 runtest ../src/elfcmp
 runtest ../src/elflint
 runtest ../src/findtextrel
