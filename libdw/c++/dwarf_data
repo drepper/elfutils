@@ -730,23 +730,6 @@ namespace elfutils
 	  : ref () {}
       };
 
-      struct value_unit_reference : public value_dispatch
-      {
-	typename impl::compile_units::iterator ref;
-
-	template<typename arg_type>
-	inline value_unit_reference
-	(const typename impl::compile_units::iterator &i,
-	 const arg_type &arg)
-	  : ref (i)
-	{}
-
-	template<typename iter, typename arg_type>	// XXX dummy
-	inline value_unit_reference (const iter &i, const arg_type &arg)
-	  : ref ()
-	{}
-      };
-
       struct value_flag : public value_dispatch
       {
 	bool flag;
@@ -905,7 +888,6 @@ namespace elfutils
 	      _DWARF_DATA_AV_MAKE (source_file, source_file);
 	      _DWARF_DATA_AV_MAKE (dwarf_constant, dwarf_constant);
 	      _DWARF_DATA_AV_MAKE (reference, reference);
-	      _DWARF_DATA_AV_MAKE (unit_reference, unit_reference);
 	      _DWARF_DATA_AV_MAKE (location, location);
 	      //_DWARF_DATA_AV_MAKE (macptr, macros); 	XXX
 
@@ -1019,11 +1001,6 @@ namespace elfutils
       reference () const
       {
 	return variant<typename vw::value_reference> ().ref;
-      }
-      inline typename impl::compile_units::iterator
-      unit_reference () const
-      {
-	return variant<typename vw::value_unit_reference> ().ref;
       }
 
       inline location_attr &location () const
@@ -1169,8 +1146,6 @@ namespace elfutils
 	      return string () == other.string ();
 	    case dwarf::VS_reference:
 	      return reference () == other.reference ();
-	    case dwarf::VS_unit_reference:
-	      return unit_reference () == other.unit_reference ();
 	    case dwarf::VS_flag:
 	      return flag () == other.flag ();
 	    case dwarf::VS_rangelistptr:

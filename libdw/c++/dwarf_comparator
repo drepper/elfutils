@@ -391,7 +391,6 @@ namespace elfutils
 	switch (what)
 	  {
 	  case dwarf::VS_reference:
-	  case dwarf::VS_unit_reference:
 	    return reference_match (a.reference (), b.reference ());
 
 	  case dwarf::VS_flag:

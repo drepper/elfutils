@@ -1,5 +1,12 @@
 2009-07-02  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf: Get rid of VS::unit_reference.
+	* c++/dwarf-knowledge.cc: Likewise.
+	* c++/dwarf_comparator: Likewise.
+	* c++/dwarf_data: Likewise.
+	* libdw/c++/values.cc: Likewise.
+	* c++/data-values.hh: Likewise.
+
 	* c++/dwarf_output: Rewrite.
 	* c++/subr.hh: New helpers for dwarf_output/dwarf_data.
 

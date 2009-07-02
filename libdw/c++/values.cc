@@ -122,7 +122,7 @@ dwarf::attr_value::what_space () const
     case DW_FORM_ref4:
     case DW_FORM_ref8:
     case DW_FORM_ref_udata:
-      possible = VS(unit_reference) | VS(reference);
+      possible = VS(reference);
       break;
 
     default:
@@ -131,10 +131,6 @@ dwarf::attr_value::what_space () const
 
   if (unlikely ((expected & possible) == 0))
     {
-      if (expected == 0 && possible == (VS(unit_reference) | VS(reference)))
-	// An unknown reference is a reference, not a unit_reference.
-	return VS_reference;
-
       // Otherwise we don't know enough to treat it robustly.
       throw std::runtime_error ("XXX ambiguous form in unexpected attribute");
     }
@@ -217,7 +213,6 @@ value_string (const value_type &value)
       return addr_string (value.address ());
 
     case dwarf::VS_reference:
-    case dwarf::VS_unit_reference:
       return hex_string (value.reference ()->offset (), "[", "]");
 
     case dwarf::VS_source_file:

@@ -1011,7 +1011,6 @@ namespace elfutils
 	VS_dwarf_constant,	// Known DW_X_* space of integer constants.
 	VS_discr_list,		// Block as used for DW_AT_discr_list.
 	VS_reference,		// Pointer to another DIE.
-	VS_unit_reference,	// Pointer to another CU DIE.
 	VS_lineptr,		// Pointer into .debug_line section.
 	VS_macptr,		// Pointer into .debug_macinfo section.
 	VS_rangelistptr,	// Pointer into .debug_ranges section.
@@ -1119,11 +1118,6 @@ namespace elfutils
 	return (debug_info_entry::raw_children_type::const_iterator
 		(thisattr ()));
       }
-      inline debug_info_entry::raw_children_type::const_iterator
-      unit_reference () const
-      {
-	return reference ();
-      }
 
       // XXX reloc, dwfl
       ::Dwarf_Addr address () const;
@@ -1176,7 +1170,6 @@ namespace elfutils
 	  switch (what)
 	    {
 	    case VS_reference:
-	    case VS_unit_reference:
 	      // Stateless reference equality is just identity.
 	      return (reference ()->identity ()
 		      == other.reference ()->identity ());

@@ -146,7 +146,6 @@ operator << (std::ostream &o, elfutils::dwarf::value_space vs)
     case dwarf::VS_dwarf_constant: return o << "dwarf_constant";
     case dwarf::VS_discr_list: return o << "discr_list";
     case dwarf::VS_reference: return o << "reference";
-    case dwarf::VS_unit_reference: return o << "unit_reference";
     case dwarf::VS_lineptr: return o << "lineptr";
     case dwarf::VS_macptr: return o << "macptr";
     case dwarf::VS_rangelistptr: return o << "rangelistptr";

@@ -64,8 +64,6 @@ namespace elfutils
       return dwarf::VS_dwarf_constant;
     if (typeid (*_m_value) == typeid (typename v::value_reference))
       return dwarf::VS_reference;
-    if (typeid (*_m_value) == typeid (typename v::value_unit_reference))
-      return dwarf::VS_unit_reference;
     if (typeid (*_m_value) == typeid (typename v::value_lineptr))
       return dwarf::VS_lineptr;
     if (typeid (*_m_value) == typeid (typename v::value_macptr))
