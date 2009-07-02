@@ -29,6 +29,7 @@
 #include <libintl.h>
 #include <ostream>
 #include <iomanip>
+#include <tr1/unordered_map>
 
 static bool print_offset;
 
@@ -61,10 +62,34 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
     }
 }
 
+typedef tr1::unordered_map< ::Dwarf_Off, int> refs_map;
+
+static void
+finish_refs_map (refs_map &refs)
+{
+  int id = 0;
+  for (refs_map::iterator it = refs.begin (); it != refs.end (); ++it)
+    it->second = ++id;
+}
+
+template<typename file>
+static void
+prewalk_die (const typename file::debug_info_entry &die, refs_map &refs)
+{
+  for (typename file::debug_info_entry::children_type::const_iterator i
+	 = die.children ().begin (); i != die.children ().end (); ++i)
+    prewalk_die<file> (*i, refs);
+
+  for (typename file::debug_info_entry::attributes_type::const_iterator i
+	 = die.attributes ().begin (); i != die.attributes ().end (); ++i)
+    if ((*i).second.what_space () == dwarf::VS_reference)
+      refs[(*i).second.reference ()->identity ()];
+}
+
 template<typename file>
 static void
 print_die (const typename file::debug_info_entry &die,
-	   unsigned int indent, unsigned int limit)
+	   unsigned int indent, unsigned int limit, refs_map &refs)
 {
   string prefix (indent, ' ');
   const string tag = dwarf::tags::name (die.tag ());
@@ -72,10 +97,22 @@ print_die (const typename file::debug_info_entry &die,
   cout << prefix << "<" << tag;
   if (print_offset)
     cout << " offset=[" << die.offset () << "]";
+  else
+    {
+      refs_map::const_iterator it = refs.find (die.identity ());
+      if (it != refs.end ())
+	cout << " ref=\"" << hex << it->second << "\"";
+    }
 
   for (typename file::debug_info_entry::attributes_type::const_iterator i
 	 = die.attributes ().begin (); i != die.attributes ().end (); ++i)
-    cout << " " << to_string (*i);
+    {
+      if (!print_offset && (*i).second.what_space () == dwarf::VS_reference)
+	cout << " " << dwarf::attributes::name ((*i).first) << "=\"#"
+	     << hex << refs[(*i).second.reference ()->identity ()] << "\"";
+      else
+	cout << " " << to_string (*i);
+    }
 
   if (die.has_children ())
     {
@@ -89,7 +126,7 @@ print_die (const typename file::debug_info_entry &die,
 
       for (typename file::debug_info_entry::children_type::const_iterator i
 	     = die.children ().begin (); i != die.children ().end (); ++i)
-	print_die<file> (*i, indent + 1, limit);
+	print_die<file> (*i, indent + 1, limit, refs);
 
       cout << prefix << "</" << tag << ">\n";
     }
@@ -101,8 +138,18 @@ template<typename file>
 static void
 print_cu (const typename file::compile_unit &cu, const unsigned int limit)
 {
-  print_die<file> (static_cast<const typename file::debug_info_entry &> (cu),
-		   1, limit);
+  const typename file::debug_info_entry &die = cu;
+  // static_cast<const typename file::debug_info_entry &> (cu),
+
+  refs_map refs;
+
+  if (!print_offset)
+    {
+      prewalk_die<file> (die, refs);
+      finish_refs_map (refs);
+    }
+
+  print_die<file> (die, 1, limit, refs);
 }
 
 template<typename file>

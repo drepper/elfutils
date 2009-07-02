@@ -47,11 +47,18 @@ main (int argc, char **argv)
 
   cu.attributes ()[DW_AT_name].source_file () = "source-file.c";
 
-  dwarf_edit::debug_info_entry &ent = cu.add_entry (DW_TAG_subprogram);
+  dwarf_edit::debug_info_entry::pointer bt = cu.add_entry (DW_TAG_base_type);
+  bt->attributes ()[DW_AT_name].identifier () = "int";
+
+  dwarf_edit::debug_info_entry &ent = *cu.add_entry (DW_TAG_subprogram);
 
   ent.attributes ()[DW_AT_name].identifier () = "foo";
 
   ent.attributes ()[DW_AT_description] = ent.attributes ()[DW_AT_name];
+
+  ent.attributes ()[DW_AT_external].flag ();
+
+  ent.attributes ()[DW_AT_type].reference () = bt;
 
   print_file ("consed", f, depth);
 

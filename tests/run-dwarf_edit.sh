@@ -28,7 +28,8 @@
 testrun_compare ./dwarf_edit <<\EOF
 consed:
  <compile_unit name="source-file.c">
-  <subprogram name="foo" description="foo"/>
+  <base_type ref="0x1" name="int"/>
+  <subprogram name="foo" external=1 type="#0x1" description="foo"/>
  </compile_unit>
 EOF
 
