@@ -143,10 +143,10 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     : a_ (NULL), b_ (NULL)
   {}
 
-  inline talker (const talker &proto,
+  inline talker (const talker &proto, typename _tracker::reference_match &m,
 		 const typename _tracker::left_context_type &l, const die1 &a,
 		 const typename _tracker::right_context_type &r, const die2 &b)
-    : _tracker (static_cast<const _tracker &> (proto), l, a, r, b),
+    : _tracker (static_cast<const _tracker &> (proto), m, l, a, r, b),
       a_ (NULL), b_ (NULL)
   {
   }

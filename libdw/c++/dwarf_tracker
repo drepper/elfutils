@@ -168,25 +168,6 @@ namespace elfutils
 	}
       };
 
-      static bool print_path (const die_path &path,
-			      bool before, bool result,
-			      const char *what, const die &there)
-      {
-	if (before)
-	  std::cout << what << std::hex
-		    << "(" << there->offset () << ")";
-	else
-	  std::cout << "after " << what << std::hex
-		    << "(" << there->offset () << (result ? "=>T)" : "=>F)");
-	for (typename die_path::const_iterator it = path.begin ();
-	     it != path.end ();
-	     ++it)
-	  std::cout << "->" << (*it)->offset ();
-	std::cout << std::endl;
-	return result;
-      }
-#define W(w,r) (print_path(_m_path,true,false,#w,a),print_path(_m_path,false,w r,#w,a))
-
       // Random access to a DIE, find the path of the walk that gets there.
       inline const die_path &path_to (const die &a)
       {
@@ -203,9 +184,9 @@ namespace elfutils
 	       this is a forward reference, we don't have to start a
 	       fresh walk from the root, just momentarily wind forward
 	       from where we are.  */
-	    && !W(walk_down_to, (a, found.first))
-	    && !W(walk_over_to, (a, found.first))
-	    && !W(walk_up_to, (a, found.first)))
+	    && !walk_down_to (a, found.first)
+	    && !walk_over_to (a, found.first)
+	    && !walk_up_to (a, found.first))
 	  throw std::runtime_error ("DIE not reachable from CU!");
 	assert (&found.first->second != NULL);
 	assert (!bad_die_path (found.first->second));
@@ -227,20 +208,15 @@ namespace elfutils
 	  {
 	    if (it == there)
 	      {
-		// XXX is this iterator really still valid for erase/insert?
-		// XXX note there may have been other insertions since
-	print_path(_m_path,false,true, "walk_to", there);
-
-		typename die_map::iterator x
-		  = _m_seen->find (there->identity ());
-		assert (cache == x);
-		_m_seen->erase (x);
-		cache = _m_seen->insert (x,
+		/* We can't keep the old CACHE iterator and avoid this
+		   find (hash lookup), because there could have been
+		   other insertions in the map since it was taken.
+		   Those can invalidate old iterators.  */
+		cache = _m_seen->find (there->identity ());
+		_m_seen->erase (cache);
+		cache = _m_seen->insert (cache,
 					 std::make_pair (there->identity (),
 							 _m_path));
-		printf("walk_to %#x insert %p\n",
-		       there->offset(), &cache->second);
-
 		return true;
 	      }
 	    else
