@@ -52,6 +52,8 @@
 
 #include "dwarf"
 #include "dwarf_comparator"
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
 
 namespace elfutils
 {
@@ -62,17 +64,33 @@ namespace elfutils
   private:
     typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
 
+  public:
     typedef typename _base::cu1 cu1;
     typedef typename _base::cu2 cu2;
     typedef typename _base::die1 die1;
     typedef typename _base::die2 die2;
 
-    /* We maintain the current path down the logical DIE tree from the CU
-       as a stack of iterators pointing to the DIE at each level.  */
+  private:
     template<typename cu, typename die>
     struct tracker
     {
+      /* We maintain the current path down the logical DIE tree from the CU
+	 as a stack of iterators pointing to the DIE at each level.  */
       typedef std::list<die> die_path;
+
+      // We use a singleton list of a default-constructed iterator as a marker.
+      static inline const die_path bad_die_path ()
+      {
+	return die_path (1);
+      }
+      static inline bool bad_die_path (const die_path &path)
+      {
+	typename die_path::const_iterator it = path.begin ();
+	if (it == path.end ())
+	  return false;
+	const die &elt = *it;
+	return ++it == path.end () && elt == die ();
+      }
 
       /* We record every DIE we have seen here, mapping its .identity ()
 	 to the die_path of parent DIEs taken to reach it.  */
@@ -84,113 +102,224 @@ namespace elfutils
 
       die_path _m_path;
 
-      static const die_path bad_die_path ()
-      {
-	return die_path (1);
-      }
-
-      static bool bad_die_path (const die_path &path)
-      {
-	typename die_path::const_iterator it = path.begin ();
-	if (it == path.end ())
-	  return false;
-	const die &elt = *it;
-	return ++it == path.end () && elt == die ();
-      }
-
+      // Default constructor: an original tracker.
       inline tracker ()
 	: _m_seen (new die_map), _m_delete_seen (true)
       {}
 
-      inline tracker (const tracker &proto, const die_path &context)
+      // Construct a derived tracker: does its own walk, but sharing caches.
+      inline tracker (const tracker &proto,
+		      const die_path &context, const die &there)
 	: _m_seen (proto._m_seen), _m_delete_seen (false),
 	  _m_root (proto._m_root), _m_path (context)
       {
+	_m_path.push_back (there);
       }
 
-      ~tracker ()
+      inline ~tracker ()
       {
-	// We should never be left with a partial walk on the books.
-	assert (_m_path.empty ());
 	if (_m_delete_seen)
-	  delete _m_seen;
+	  {
+	    delete _m_seen;
+	    // We should never be left with a partial walk on the books.
+	    assert (_m_path.empty ());
+	  }
       }
 
+      // Main hooks for a normal walk.
+
+      /* A walk object does set-up work when constructed and tear-down
+	 work when destroyed, so tear-down is done even for exceptions.  */
+      struct walk
+      {
+	tracker *_m_tracker;
+	inline walk (tracker *w, const cu &root)
+	  : _m_tracker (w)
+	{
+	  assert (_m_tracker->_m_path.empty ());
+	  _m_tracker->_m_root = root;
+	}
+	inline ~walk ()
+	{
+	  assert (_m_tracker->_m_path.empty ());
+	  _m_tracker->_m_root = cu ();
+	}
+      };
+
+      /* A step object does pre-order work when constructed and post-order
+	 work when destroyed, so post-order is done even for exceptions.
+	 While this object lives, HERE is on the _m_path stack.  */
+      struct step
+      {
+	tracker *_m_walker;
+	inline step (tracker *w, const die &here)
+	  : _m_walker (w)
+	{
+	  // Record the path down from the CU to see this DIE.
+	  _m_walker->_m_seen->insert (std::make_pair (here->identity (),
+						      _m_walker->_m_path));
+
+	  // Append this DIE to the path we'll record for its children.
+	  _m_walker->_m_path.push_back (here);
+	}
+	inline ~step ()
+	{
+	  _m_walker->_m_path.pop_back ();
+	}
+      };
+
+      // Random access to a DIE, find the path of the walk that gets there.
       inline const die_path &path_to (const die &a)
       {
 	::Dwarf_Off id = a->identity ();
 	std::pair<typename die_map::iterator, bool> found
 	  = _m_seen->insert (std::make_pair (id, bad_die_path ()));
-	if (found.second)
-	  {
-	    /* We have a forward reference.  That is, we didn't
-	       already hit this DIE in our top-level walk and so
-	       it is not in _m_seen yet.  We must do a separate
-	       walk to find it.  */
+	if (found.second
+	    /* It's not in our _m_seen map.  Our main walk recording
+	       into _m_seen is exhaustive, so this can only be a forward
+	       reference.  That is, we didn't already hit this DIE in
+	       our top-level walk and so it is not in _m_seen yet.
 
-	    die_path path;
-	    if (!walk_to (*_m_root, id, path))
-	      throw std::runtime_error ("DIE not reachable from CU!");
-	    _m_seen->erase (found.first);
-	    found.first = _m_seen->insert (found.first,
-					   std::make_pair (id, path));
-	  }
-
-	if (bad_die_path (found.first->second))
-	  abort ();		// XXX
-
+	       We must do a separate walk to find it.  Since we know
+	       this is a forward reference, we don't have to start a
+	       fresh walk from the root, just momentarily wind forward
+	       from where we are.  */
+	    && !walk_down_to (a, found.first)
+	    && !walk_over_to (a, found.first)
+	    && !walk_up_to (a, found.first))
+	  throw std::runtime_error ("DIE not reachable from CU!");
+	assert (&found.first->second != NULL);
+	assert (!bad_die_path (found.first->second));
 	return found.first->second;
       }
 
-      // Return true if this is the droid we're looking for,
-      // or recurse on its children.
-      bool walk_to (const typename die::value_type from, ::Dwarf_Off to,
-		    die_path &path)
+      inline bool walk_to (const typename die::value_type &here,
+			   const die &there, typename die_map::iterator &cache)
       {
-	if (from.identity () == to)
-	  return true;
-	for (die it = from.children ().begin ();
-	     it != from.children ().end ();
-	     ++it)
-	  if (walk_to (it, to, path))
-	    return true;
-	return false;
+	return walk_to (here.children ().begin (),
+			here.children ().end (),
+			there, cache);
       }
 
-      // Recursing on a child, include FROM in the path if the child matches.
-      bool walk_to (const die from, ::Dwarf_Off to, die_path &path)
+      bool walk_to (die it, const die &end,
+		    const die &there, typename die_map::iterator &cache)
       {
-	if (walk_to (*from, to, path))
+	for (; it != end; ++it)
 	  {
-	    path.push_front (from);
-	    return true;
+	    if (it == there)
+	      {
+		/* We can't keep the old CACHE iterator and avoid this
+		   find (hash lookup), because there could have been
+		   other insertions in the map since it was taken.
+		   Those can invalidate old iterators.  */
+		cache = _m_seen->find (there->identity ());
+		_m_seen->erase (cache);
+		cache = _m_seen->insert (cache,
+					 std::make_pair (there->identity (),
+							 _m_path));
+		return true;
+	      }
+	    else
+	      {
+		/* Do "step into" even for !has_children ()
+		   because it records this child in _m_seen,
+		   which we will rely on later.  */
+		step into (this, it);
+		const typename die::value_type &child = *it;
+		if (child.has_children () && walk_to (child, there, cache))
+		  return true;
+	      }
 	  }
 	return false;
       }
 
-      inline void start_walk (const cu &a)
+      /* First descend into the current DIE's children.
+	 _m_path already has the current DIE, so it is ready to go.  */
+      // XXX is a reference to an owned DIE really possible??
+      inline bool walk_down_to (const die &there,
+				typename die_map::iterator &cache)
       {
-	assert (_m_path.empty ());
-	_m_root = a;
+	const die &start = _m_path.back ();
+	const typename die::value_type &here = *start;
+
+	/* It's common to have a reference to the next sibling DIE.
+	   So bypass the descent to HERE's children if THERE is
+	   HERE's immediate next sibling.  */
+	if (!here.has_children () || there == ++die (start))
+	  return false;
+
+	return walk_to (here, there, cache);
       }
 
-      inline void finish_walk (const cu &a)
+      /* A step_back object pops the current DIE off _m_path when
+	 constructed, and pushes it back when destroyed.  */
+      struct step_back
       {
-	assert (_m_path.empty ());
-	_m_root = cu ();
+	tracker *_m_walker;
+	const die _m_here;
+	inline step_back (tracker *w, die &copy)
+	  : _m_walker (w), _m_here (w->_m_path.back ())
+	{
+	  w->_m_path.pop_back ();
+	  copy = _m_here;
+	}
+	inline ~step_back ()
+	{
+	  _m_walker->_m_path.push_back (_m_here);
+	}
+      };
+
+      /* Now wind the walk forward starting from the current DIE's
+	 immediate sibling.  */
+      inline bool walk_over_to (const die &there,
+				typename die_map::iterator &cache)
+      {
+	die next;
+	step_back from (this, next);
+	++next;
+
+	return walk_to (next, (_m_path.empty ()
+			       ? (*_m_root).children ().end ()
+			       : _m_path.back ()->children ().end ()),
+			there, cache);
       }
 
-      inline void pre_order (const die &a)
+      /* A step_up object saves _m_path when constructed
+	 and restores it when destroyed.  */
+      struct step_up
       {
-	// Record the path down from the CU to see this DIE.
-	_m_seen->insert (std::make_pair (a->identity (), _m_path));
-	// Append this DIE to the path we'll record for its children.
-	_m_path.push_back (a);
-      }
+	tracker *_m_walker;
+	die_path _m_save;
+	inline step_up (tracker *w)
+	  : _m_walker (w), _m_save (w->_m_path)
+	{
+	}
+	inline ~step_up ()
+	{
+	  _m_walker->_m_path.swap (_m_save);
+	}
+      };
 
-      inline void post_order (const die &a)
+      /* Now wind the walk forward starting from the current DIE's
+	 parent's immediate sibling.  */
+      inline bool walk_up_to (const die &there,
+			      typename die_map::iterator &cache)
       {
-	_m_path.pop_back ();
+	if (_m_path.empty ())
+	  return false;
+
+	step_up from (this);
+
+	do
+	  {
+	    _m_path.pop_back ();
+	    assert (!_m_path.empty ());
+	    if (walk_over_to (there, cache))
+	      return true;
+	  }
+	while (!_m_path.empty ());
+
+	return false;
       }
     };
 
@@ -199,6 +328,13 @@ namespace elfutils
 
     tracker1 _m_left;
     tracker2 _m_right;
+
+    typedef std::tr1::unordered_map<
+      ::Dwarf_Off, std::pair<const die2 *,
+			     std::tr1::unordered_set< ::Dwarf_Off> >
+      > equiv_map;
+    equiv_map *_m_equiv;
+    bool _m_delete_equiv;
 
     /* Predicate for DIEs "equal enough" to match as context for a subtree.
        The definition we use is that the DIE has the same tag and all its
@@ -216,39 +352,43 @@ namespace elfutils
 
   public:
     inline dwarf_ref_tracker ()
+      : _m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
 
-    inline void start_walk (const cu1 &a, const cu2 &b)
+    inline void reset ()
     {
-      _m_left.start_walk (a);
-      _m_right.start_walk (b);
+      _m_equiv->clear ();
+      assert (!_m_right->_m_delete_seen);
+      _m_right._m_seen->clear ();
     }
 
-    inline void finish_walk (const cu1 &a, const cu2 &b)
+    struct walk
     {
-      _m_left.finish_walk (a);
-      _m_right.finish_walk (b);
-    }
+      typename tracker1::walk _m_left;
+      typename tracker2::walk _m_right;
 
-    inline void pre_order (const die1 &a, const die2 &b)
+      inline walk (dwarf_ref_tracker *w, const cu1 &a, const cu2 &b)
+	: _m_left (&w->_m_left, a), _m_right (&w->_m_right, b)
+      {}
+    };
+
+    struct step
     {
-      _m_left.pre_order (a);
-      _m_right.pre_order (b);
-    }
+      typename tracker1::step _m_left;
+      typename tracker2::step _m_right;
 
-    inline void post_order (const die1 &a, const die2 &b)
-    {
-      _m_left.post_order (a);
-      _m_right.post_order (b);
-    }
+      inline step (dwarf_ref_tracker *w, const die1 &a, const die2 &b)
+	: _m_left (&w->_m_left, a), _m_right (&w->_m_right, b)
+      {}
+    };
 
-    typedef std::list<die1> left_context_type;
+    typedef typename tracker1::die_path left_context_type;
     inline const left_context_type &left_context (const die1 &die)
     {
       return _m_left.path_to (die);
     }
 
-    typedef std::list<die2> right_context_type;
+    typedef typename tracker2::die_path right_context_type;
     inline const right_context_type &right_context (const die2 &die)
     {
       return _m_right.path_to (die);
@@ -269,14 +409,79 @@ namespace elfutils
       return std::equal (a.begin (), a.end (), b.begin (), equal_enough ());
     }
 
+    class reference_match
+    {
+      friend class dwarf_ref_tracker;
+    private:
+      typename equiv_map::mapped_type *_m_elt;
+
+    public:
+
+      inline reference_match ()
+	: _m_elt (NULL)
+      {}
+
+      inline ~reference_match ()
+      {
+	if (_m_elt != NULL)
+	  _m_elt->first = NULL;
+      }
+
+      inline bool cannot_match () const
+      {
+	return _m_elt == NULL;
+      }
+
+      inline void notice_match (const die2 &b, bool matches) const
+      {
+	if (matches && _m_elt != NULL)
+	  _m_elt->second.insert (b->identity ());
+      }
+    };
+
+    inline bool
+    reference_matched (reference_match &matched, const die1 &a, const die2 &b)
+    {
+      typename equiv_map::mapped_type *elt = &(*_m_equiv)[a->identity ()];
+      if (elt->first == NULL)
+	{
+	  /* Record that we have a walk in progress crossing A.
+	     When MATCHED goes out of scope in our caller, its
+	     destructor will reset ELT->first to clear this record.  */
+	  elt->first = &b;
+	  matched._m_elt = elt;
+
+	  // Short-circuit if we have already matched B to A.
+	  return elt->second.find (b->identity ()) != elt->second.end ();
+	}
+
+      /* We have a circularity.  We can tell because ELT->first remains
+	 set from an outer recursion still in progress.
+
+	 The circular chain of references rooted at A matches B if B is
+	 also the root of its own circularity and everything along those
+	 parallel chains matches.  If the chains hadn't matched so far,
+	 we would not have kept following them to get here.
+
+	 We recorded the B that arrived at the first comparison with A.
+	 We actually record the pointer on the caller's stack rather
+	 than a copy of B, just because the iterator might be larger.  */
+
+      return *elt->first == b;
+    }
+
     // Share the _m_seen maps with the prototype tracker,
     // but start a fresh walk from the given starting point.
     inline dwarf_ref_tracker (const dwarf_ref_tracker &proto,
-			      const left_context_type &lhs, const die1 &,
-			      const right_context_type &rhs, const die2 &)
-      : _m_left (tracker1 (proto._m_left, lhs)),
-	_m_right (tracker2 (proto._m_right, rhs))
-    {}
+			      reference_match &matched,
+			      const left_context_type &lhs, const die1 &a,
+			      const right_context_type &rhs, const die2 &b)
+      : _m_left (tracker1 (proto._m_left, lhs, a)),
+	_m_right (tracker2 (proto._m_right, rhs, b)),
+	_m_equiv (proto._m_equiv), _m_delete_equiv (false)
+    {
+      // We are starting a recursive consideration of a vs b.
+    }
   };
 };
 
