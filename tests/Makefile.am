@@ -52,6 +52,8 @@ else
 tests_rpath = no
 endif
 
+noinst_HEADERS = print-die.hh
+
 noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  showptable update1 update2 update3 update4 test-nlist \
 		  show-die-info get-files get-lines get-pubnames \
@@ -88,7 +90,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
-	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh
+	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh \
+	dwarf_edit
 # run-show-ciefde.sh
 
 if !STANDALONE
