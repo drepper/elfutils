@@ -41,6 +41,7 @@ runtest()
 
 runtest ../src/addr2line
 runtest ../src/dwarfcmp
+runtest ../src/dwarflint
 runtest ../src/elfcmp
 runtest ../src/elflint
 runtest ../src/findtextrel
