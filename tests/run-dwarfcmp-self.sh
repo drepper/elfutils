@@ -26,15 +26,20 @@
 . $srcdir/test-subr.sh
 
 status=0
+run_one()
+{
+  file="$1"; shift
+  testrun ../src/dwarfcmp "$@" "$file" "$file" ||
+  { echo "*** failure in dwarfcmp-self $* on $file"; status=1; }
+}
+
 runtest()
 {
   for file; do
     if [ -f $file ]; then
-      { testrun ../src/dwarfcmp -q -i $file $file &&
-	testrun ../src/dwarfcmp -i $file $file &&
-	testrun ../src/dwarfcmp -T -q -i $file $file
-      } ||
-      { echo "*** failure in $file"; status=1; }
+      run_one "$file" -i -q
+      run_one "$file" -i
+      run_one "$file" -i -q -T
     fi
   done
 }
