@@ -325,8 +325,10 @@ main (int argc, char *argv[])
 
       if (test_writer)
 	{
-	  dwarf_edit edit1 (file1);
-	  dwarf_edit edit2 (file2);
+	  dwarf_ref_tracker<dwarf_edit, dwarf> t1;
+	  dwarf_ref_tracker<dwarf_edit, dwarf> t2;
+	  dwarf_edit edit1 (file1, &t1);
+	  dwarf_edit edit2 (file2, &t2);
 	  test_classes (file1, file2, edit1, edit2, same);
 
 	  {

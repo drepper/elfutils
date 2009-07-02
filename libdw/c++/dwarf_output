@@ -291,19 +291,20 @@ namespace elfutils
     static inline const std::string &
     collect_string (dwarf_output_collector *, const input &);
 
-    template<typename input>
-    static inline const range_list &
-    collect (dwarf_output_collector *, const typename input::range_list &);
-
     /* An iterator adapter for use in iterator-based constructors.
        collectify (iterator) yields an iterator on input where *i
        constructs output::value_type (input::value_type v, collector).  */
-    typedef dwarf_data::constructor_arg_adapter<dwarf_output,
-						dwarf_output_collector *>
-    collectify;
+    template<typename input, typename output>
+    static inline typename subr::argifier<input, output,
+					  dwarf_output_collector *>::wrapped
+    collectify (const typename input::const_iterator &in,
+		dwarf_output_collector *c)
+    {
+      return subr::argifier<input, output, dwarf_output_collector *> (c) (in);
+    }
 
     struct value_wrapper
-      : public dwarf_data::value<dwarf_output, dwarf_output_collector *>
+      : public dwarf_data::value<dwarf_output>
     {
       struct value_string : public value_dispatch
       {
@@ -331,9 +332,7 @@ namespace elfutils
 
   public:
 
-    typedef dwarf_data::attr_value<dwarf_output,
-				   dwarf_output_collector *,
-				   value_wrapper> attr_value;
+    typedef dwarf_data::attr_value<dwarf_output, value_wrapper> attr_value;
 
     class compile_units;
 
@@ -350,8 +349,8 @@ namespace elfutils
 	template<typename input>
 	inline children_type (const input &other, dwarf_output_collector *c)
 	  : std::list<debug_info_entry>
-	    (collectify::argify<input, children_type> (c) (other.begin ()),
-	     collectify::argify<input, children_type> (c) (other.end ()))
+	    (collectify<input, children_type> (other.begin (), c),
+	     collectify<input, children_type> (other.end (), c))
 	{}
 
       public:
@@ -478,8 +477,8 @@ namespace elfutils
       // Constructor copying CUs from input container.
       template<typename input>
       compile_units (const input &units, dwarf_output_collector *c)
-	: _base (collectify::argify<input, compile_units> (c) (units.begin ()),
-		 collectify::argify<input, compile_units> (c) (units.end ()))
+	: _base (collectify<input, compile_units> (units.begin (), c),
+		 collectify<input, compile_units> (units.end (), c))
       {
       }
 
@@ -561,14 +560,6 @@ namespace elfutils
   dwarf_output::collect_string (dwarf_output_collector *c, const input &s)
   {
     return c->_m_strings.add (s);
-  }
-
-  template<typename input>
-  inline const dwarf_output::range_list &
-  dwarf_output::collect (dwarf_output_collector *c,
-			 const typename input::range_list &rl)
-  {
-    return c->_m_ranges.add (rl);
   }
 
 };

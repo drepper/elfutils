@@ -603,6 +603,98 @@ namespace elfutils
 	return (*_m_wrapper) (_base::operator* ());
       }
     };
+
+    /* An iterator adapter for use in iterator-based constructors.
+       collectify (iterator) yields an iterator on input where *i
+       constructs output::value_type (input::value_type v, collector).  */
+    template<typename input, typename output, typename arg_type>
+    struct argifier
+      : public std::unary_function<typename input::const_iterator,
+				   typename output::iterator>
+    {
+      typedef typename input::const_iterator inny;
+      typedef typename output::iterator outty;
+      typedef typename input::value_type inlet;
+      typedef typename output::value_type outlet;
+
+      /* Wrapper worker passed to wrapped_input_iterator.
+	 This object holds the collector pointer.  */
+      struct maker
+	: public std::unary_function<inlet, outlet>
+      {
+	arg_type _m_arg;
+	explicit inline maker (const arg_type &c) : _m_arg (c) {}
+
+	inline outlet operator () (const inlet &x) const
+	{
+	  return outlet (x, _m_arg);
+	}
+      } _m_maker;
+
+      explicit inline argifier (const arg_type &c)
+	: _m_maker (c)
+      {}
+
+      typedef subr::wrapped_input_iterator<input, maker> wrapped;
+
+      inline wrapped operator () (const inny &i)
+      {
+	return wrapped (i, _m_maker);
+      }
+    };
+
+    template<typename input, typename output, typename arg_type>
+    static inline typename argifier<input, output, arg_type>::wrapped
+    argify (const typename input::const_iterator &in, const arg_type &arg)
+    {
+      return argifier<input, output, arg_type> (arg) (in);
+    }
+
+    template<typename input, typename output, typename arg_type>
+    struct argifier2nd
+      : public std::unary_function<typename input::const_iterator,
+				   typename output::iterator>
+    {
+      typedef typename input::const_iterator inny;
+      typedef typename output::iterator outty;
+      typedef typename input::value_type inlet;
+      typedef typename output::value_type outlet;
+
+      /* Wrapper worker passed to wrapped_input_iterator.
+	 This object holds the collector pointer.  */
+      struct maker
+	: public std::unary_function<inlet, outlet>
+      {
+	arg_type _m_arg;
+	explicit inline maker (const arg_type &c) : _m_arg (c) {}
+
+	inline outlet operator () (const inlet &x) const
+	{
+	  return std::make_pair (x.first,
+				 typename outlet::second_type (x.second,
+							       _m_arg));
+	}
+      } _m_maker;
+
+      explicit inline argifier2nd (const arg_type &c)
+	: _m_maker (c)
+      {}
+
+      typedef subr::wrapped_input_iterator<input, maker> wrapped;
+
+      inline wrapped operator () (const inny &i)
+      {
+	return wrapped (i, _m_maker);
+      }
+    };
+
+    template<typename input, typename output, typename arg_type>
+    static inline typename argifier2nd<input, output, arg_type>::wrapped
+    argify2nd (const typename input::const_iterator &in, const arg_type &arg)
+    {
+      return argifier2nd<input, output, arg_type> (arg) (in);
+    }
+
   };
 };
 
