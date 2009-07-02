@@ -1,7 +1,8 @@
 2009-07-02  Roland McGrath  <roland@redhat.com>
 
+	* run-dwarf_edit.sh: New file.
 	* dwarf_edit.cc: New file.
-	* Makefile.am (noinst_PROGRAMS, TESTS): Add it.
+	* Makefile.am (noinst_PROGRAMS, TESTS, EXTRA_DIST): Add them.
 	(dwarf_edit_SOURCES, dwarf_edit_LDADD): New variables.
 
 	* dwarf-print.cc (print_die): Templatify and move ...

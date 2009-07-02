@@ -1,3 +1,36 @@
+/* Pseudo-XMLish printing for elfutils::dwarf* tests.
+   Copyright (C) 2009 Red Hat, Inc.
+   This file is part of Red Hat elfutils.
+
+   Red Hat elfutils is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by the
+   Free Software Foundation; version 2 of the License.
+
+   Red Hat elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License along
+   with Red Hat elfutils; if not, write to the Free Software Foundation,
+   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
+
+   Red Hat elfutils is an included package of the Open Invention Network.
+   An included package of the Open Invention Network is a package for which
+   Open Invention Network licensees cross-license their patents.  No patent
+   license is granted, either expressly or impliedly, by designation as an
+   included package.  Should you wish to participate in the Open Invention
+   Network licensing program, please visit www.openinventionnetwork.com
+   <http://www.openinventionnetwork.com>.  */
+
+#include <cstring>
+#include <cstdio>
+#include <clocale>
+#include <libintl.h>
+#include <ostream>
+#include <iomanip>
+
+static bool print_offset;
 
 static void
 print_die_main (int &argc, char **&argv, unsigned int &depth)
@@ -12,6 +45,13 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
   (void) textdomain (PACKAGE_TARNAME);
 
   cout << hex << setiosflags (ios::showbase);
+
+  if (argc > 1 && !strcmp (argv[1], "--offsets"))
+    {
+      print_offset = true;
+      --argc;
+      ++argv;
+    }
 
   depth = 0;
   if (argc > 1 && sscanf (argv[1], "--depth=%u", &depth) == 1)
@@ -29,7 +69,9 @@ print_die (const typename file::debug_info_entry &die,
   string prefix (indent, ' ');
   const string tag = dwarf::tags::name (die.tag ());
 
-  cout << prefix << "<" << tag << " offset=[" << die.offset () << "]";
+  cout << prefix << "<" << tag;
+  if (print_offset)
+    cout << " offset=[" << die.offset () << "]";
 
   for (typename file::debug_info_entry::attributes_type::const_iterator i
 	 = die.attributes ().begin (); i != die.attributes ().end (); ++i)

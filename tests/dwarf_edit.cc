@@ -27,15 +27,6 @@
 # include <config.h>
 #endif
 
-#include <errno.h>
-#include <error.h>
-#include <fcntl.h>
-#include <clocale>
-#include <cstdio>
-#include <libintl.h>
-#include <ostream>
-#include <iomanip>
-
 #include "c++/dwarf_edit"
 
 using namespace elfutils;
