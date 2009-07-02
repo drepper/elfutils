@@ -610,7 +610,7 @@ namespace elfutils
     template<typename input, typename output, typename arg_type>
     struct argifier
       : public std::unary_function<typename input::const_iterator,
-				   typename output::iterator>
+				   typename output::iterator> // not really
     {
       typedef typename input::const_iterator inny;
       typedef typename output::iterator outty;
@@ -635,16 +635,16 @@ namespace elfutils
 	: _m_maker (c)
       {}
 
-      typedef subr::wrapped_input_iterator<input, maker> wrapped;
+      typedef subr::wrapped_input_iterator<input, maker> result_type;
 
-      inline wrapped operator () (const inny &i)
+      inline result_type operator () (const inny &i)
       {
-	return wrapped (i, _m_maker);
+	return result_type (i, _m_maker);
       }
     };
 
     template<typename input, typename output, typename arg_type>
-    static inline typename argifier<input, output, arg_type>::wrapped
+    static inline typename argifier<input, output, arg_type>::result_type
     argify (const typename input::const_iterator &in, const arg_type &arg)
     {
       return argifier<input, output, arg_type> (arg) (in);
@@ -680,16 +680,16 @@ namespace elfutils
 	: _m_maker (c)
       {}
 
-      typedef subr::wrapped_input_iterator<input, maker> wrapped;
+      typedef subr::wrapped_input_iterator<input, maker> const_iterator;
 
-      inline wrapped operator () (const inny &i)
+      inline const_iterator operator () (const inny &i)
       {
-	return wrapped (i, _m_maker);
+	return const_iterator (i, _m_maker);
       }
     };
 
     template<typename input, typename output, typename arg_type>
-    static inline typename argifier2nd<input, output, arg_type>::wrapped
+    static inline typename argifier2nd<input, output, arg_type>::const_iterator
     argify2nd (const typename input::const_iterator &in, const arg_type &arg)
     {
       return argifier2nd<input, output, arg_type> (arg) (in);

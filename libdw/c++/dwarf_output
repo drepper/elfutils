@@ -296,7 +296,7 @@ namespace elfutils
        constructs output::value_type (input::value_type v, collector).  */
     template<typename input, typename output>
     static inline typename subr::argifier<input, output,
-					  dwarf_output_collector *>::wrapped
+					  dwarf_output_collector *>::result_type
     collectify (const typename input::const_iterator &in,
 		dwarf_output_collector *c)
     {
