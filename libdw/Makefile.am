@@ -96,7 +96,8 @@ libdwpp_a_SOURCES = c++/values.cc \
 		    c++/line_info.cc \
 		    c++/edit-values.cc \
 		    c++/output-values.cc
-noinst_HEADERS    = c++/dwarf-knowledge.cc
+noinst_HEADERS    = c++/dwarf-knowledge.cc \
+		    c++/data-values.hh
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
