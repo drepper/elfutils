@@ -349,11 +349,7 @@ namespace elfutils
       // Maybe the tracker has already cached a correspondence of DIEs.
       typename tracker::reference_match matched;
       if (_m_tracker.reference_matched (matched, a, b))
-	{
-	  std::cout << "short-circuit DIE match " << std::hex << a->offset ()
-		    << std::endl;
-	  return true;
-	}
+	return true;
 
       if (matched.cannot_match ())
 	return false;
@@ -474,18 +470,10 @@ namespace elfutils
       // Maybe the tracker has already cached a correspondence of references.
       typename tracker::reference_match matched;
       if (_m_tracker.reference_matched (matched, ref1, ref2))
-	{
-	  std::cout << "short-circuit ref match " << std::hex << a.offset ()
-		    << std::endl;
-	  return true;
-	}
+	return true;
 
       if (matched.cannot_match ())
 	return false;
-
-      std::cout << "considering ref "
-		<< std::hex << a.offset () << " vs "
-		<< std::hex << b.offset () << std::endl;
 
       // Now we really have to get the tracker involved.
       const typename tracker::left_context_type &lhs
