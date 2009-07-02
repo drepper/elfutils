@@ -56,8 +56,11 @@ main (int argc, char **argv)
 
   cu.attributes ()[DW_AT_name].source_file () = "source-file.c";
 
-  cu.add_entry (DW_TAG_subprogram)
-    .attributes ()[DW_AT_name].identifier () = "foo";
+  dwarf_edit::debug_info_entry &ent = cu.add_entry (DW_TAG_subprogram);
+
+  ent.attributes ()[DW_AT_name].identifier () = "foo";
+
+  ent.attributes ()[DW_AT_description] = ent.attributes ()[DW_AT_name];
 
   print_file ("consed", f, depth);
 

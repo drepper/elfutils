@@ -129,6 +129,7 @@ template<class dwarf1, class dwarf2>
 struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 {
   typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
+  typedef dwarf_ref_tracker<dwarf1, dwarf2> _tracker;
   typedef typename _base::cu1 cu1;
   typedef typename _base::cu2 cu2;
   typedef typename _base::die1 die1;
@@ -139,7 +140,17 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
 
-  inline talker () : a_ (NULL), b_ (NULL) {}
+  inline talker ()
+    : a_ (NULL), b_ (NULL)
+  {}
+
+  inline talker (const talker &proto, typename _tracker::reference_match &m,
+		 const typename _tracker::left_context_type &l, const die1 &a,
+		 const typename _tracker::right_context_type &r, const die2 &b)
+    : _tracker (static_cast<const _tracker &> (proto), m, l, a, r, b),
+      a_ (NULL), b_ (NULL)
+  {
+  }
 
   inline ostream &location () const
   {
@@ -314,8 +325,10 @@ main (int argc, char *argv[])
 
       if (test_writer)
 	{
-	  dwarf_edit edit1 (file1);
-	  dwarf_edit edit2 (file2);
+	  dwarf_ref_tracker<dwarf_edit, dwarf> t1;
+	  dwarf_ref_tracker<dwarf_edit, dwarf> t2;
+	  dwarf_edit edit1 (file1, &t1);
+	  dwarf_edit edit2 (file2, &t2);
 	  test_classes (file1, file2, edit1, edit2, same);
 
 	  {

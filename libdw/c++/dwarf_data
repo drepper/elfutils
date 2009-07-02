@@ -673,7 +673,7 @@ namespace elfutils
   public:
     struct nothing {};
 
-    template<typename impl, typename constructor_arg_type>
+    template<typename impl>
     struct value
     {
       struct value_dispatch
@@ -681,9 +681,9 @@ namespace elfutils
 	virtual ~value_dispatch () {}
       };
 
-      template<typename flavor, typename input>
+      template<typename flavor, typename input, typename arg_type>
       static inline value_dispatch *
-      make (flavor *&result, const input &x, const constructor_arg_type &arg)
+      make (flavor *&result, const input &x, const arg_type &arg)
       {
 	return result = new flavor (x, arg);
       }
@@ -692,8 +692,8 @@ namespace elfutils
       {
 	inline value_string () {}
 
-	template<typename string>
-	inline value_string (const string &s, const constructor_arg_type &arg)
+	template<typename string, typename arg_type>
+	inline value_string (const string &s, const arg_type &arg)
 	  : std::string (s)
 	{}
 
@@ -708,8 +708,8 @@ namespace elfutils
 
       struct value_identifier : public value_string
       {
-	template<typename id>
-	inline value_identifier (const id &s, const constructor_arg_type &arg)
+	template<typename id, typename arg_type>
+	inline value_identifier (const id &s, const arg_type &arg)
 	  : value_string (s, arg)
 	{}
       };
@@ -717,29 +717,32 @@ namespace elfutils
       struct value_reference : public value_dispatch
       {
 	typename impl::debug_info_entry::children_type::iterator ref;
+
+	template<typename arg_type>
 	inline value_reference
 	(const typename impl::debug_info_entry::children_type::iterator &i,
-	 const constructor_arg_type &arg)
+	 const arg_type &arg)
 	  : ref (i)
 	{}
 
-	template<typename iter>	// XXX dummy
-	value_reference (const iter &i, const constructor_arg_type &arg)
+	template<typename iter, typename arg_type>	// XXX dummy
+	inline value_reference (const iter &i, const arg_type &arg)
 	  : ref () {}
       };
 
       struct value_unit_reference : public value_dispatch
       {
 	typename impl::compile_units::iterator ref;
+
+	template<typename arg_type>
 	inline value_unit_reference
 	(const typename impl::compile_units::iterator &i,
-	 const constructor_arg_type &arg)
+	 const arg_type &arg)
 	  : ref (i)
 	{}
 
-	template<typename iter>	// XXX dummy
-	value_unit_reference (const iter &i,
-			      const constructor_arg_type &arg)
+	template<typename iter, typename arg_type>	// XXX dummy
+	inline value_unit_reference (const iter &i, const arg_type &arg)
 	  : ref ()
 	{}
       };
@@ -752,7 +755,8 @@ namespace elfutils
 	  : flag (true)
 	{}
 
-	inline value_flag (bool t, const constructor_arg_type &arg)
+	template<typename arg_type>
+	inline value_flag (bool t, const arg_type &arg)
 	  : flag (t)
 	{}
       };
@@ -766,31 +770,28 @@ namespace elfutils
 	  : addr (0)
 	{}
 
-	inline value_address (::Dwarf_Addr a, const constructor_arg_type &arg)
-	  : addr (a)
+	template<typename arg_type>
+	inline value_address (::Dwarf_Addr x, const arg_type &arg)
+	  : addr (x)
 	{}
       };
 
       struct value_rangelistptr : public value_dispatch, public range_list
       {
-	inline value_rangelistptr ()
-	{}
+	inline value_rangelistptr () {}
 
-	template<typename list>
-	inline value_rangelistptr (const list &other,
-				   const constructor_arg_type &arg)
+	template<typename list, typename arg_type>
+	inline value_rangelistptr (const list &other, const arg_type &arg)
 	  : range_list (other)
 	{}
       };
 
       struct value_lineptr : public value_dispatch, public impl::line_info_table
       {
-	inline value_lineptr ()
-	{}
+	inline value_lineptr () {}
 
-	template<typename table>
-	inline value_lineptr (const table &other,
-			      const constructor_arg_type &arg)
+	template<typename table, typename arg_type>
+	inline value_lineptr (const table &other, const arg_type &arg)
 	  : impl::line_info_table (other)
 	{}
       };
@@ -807,7 +808,8 @@ namespace elfutils
 	  : word (0)
 	{}
 
-	inline value_constant (::Dwarf_Word x, const constructor_arg_type &arg)
+	template<typename arg_type>
+	inline value_constant (::Dwarf_Word x, const arg_type &arg)
 	  : word (x)
 	{}
       };
@@ -817,9 +819,8 @@ namespace elfutils
       {
 	inline value_constant_block () {}
 
-	template<typename block>
-	inline value_constant_block (const block &b,
-				     const constructor_arg_type &arg)
+	template<typename block, typename arg_type>
+	inline value_constant_block (const block &b, const arg_type &arg)
 	  : std::vector<uint8_t> (b.begin (), b.end ())
 	{}
       };
@@ -828,21 +829,20 @@ namespace elfutils
       {
 	inline value_dwarf_constant () {}
 
-	template<typename constant>
-	inline value_dwarf_constant (const constant &other,
-				     const constructor_arg_type &arg)
-	  : dwarf_enum (other) {}
+	template<typename constant, typename arg_type>
+	inline value_dwarf_constant (const constant &other, const arg_type &arg)
+	  : dwarf_enum (other)
+	{}
       };
 
       struct value_source_file : public value_dispatch, public source_file
       {
-	inline value_source_file ()
-	{}
+	inline value_source_file () {}
 
-	template<typename file>
-	inline value_source_file (const file &other,
-				  const constructor_arg_type &arg)
-	  : source_file (other) {}
+	template<typename file, typename arg_type>
+	inline value_source_file (const file &other, const arg_type &arg)
+	  : source_file (other)
+	{}
       };
 
       struct value_source_line : public value_dispatch
@@ -853,8 +853,8 @@ namespace elfutils
 	  : n (0)
 	{}
 
-	inline value_source_line (unsigned int m,
-				  const constructor_arg_type &arg)
+	template<typename arg_type>
+	inline value_source_line (unsigned int m, const arg_type &arg)
 	  : n (m)
 	{}
       };
@@ -864,75 +864,72 @@ namespace elfutils
 
       struct value_location : public value_dispatch, public location_attr
       {
-	inline value_location ()
-	{}
+	inline value_location () {}
 
-	template<typename loc>
-	inline value_location (const loc &other,
-			       const constructor_arg_type &arg)
+	template<typename loc, typename arg_type>
+	inline value_location (const loc &other, const arg_type &arg)
 	  : location_attr (other)
 	{}
       };
     };
 
-    template<class impl,
-	     typename constructor_arg_type = nothing,
-	     typename vw = value<impl, constructor_arg_type>
-	     >
+    template<class impl, typename vw = value<impl> >
     class attr_value
     {
     private:
       typename vw::value_dispatch *_m_value;
 
-      template<typename value>
-      inline void init (const value &other,
-			const constructor_arg_type &arg
-			= constructor_arg_type ())
+      template<typename value, typename arg_type = nothing>
+      struct init
       {
-	switch (other.what_space ())
-	  {
-#define _DWARF_DATA_AV_MAKE(flavor, fetch)				      \
-	  case dwarf::VS_##flavor:					      \
-	    {								      \
-	      typename vw::value_##flavor *p;				      \
-	      _m_value = vw::make (p, other.fetch (), arg);		      \
-	    }								      \
-	    break
+	inline init (attr_value *av,
+		     const value &other, const arg_type &arg = arg_type ())
+	{
+	  switch (other.what_space ())
+	    {
+#define _DWARF_DATA_AV_MAKE(flavor, fetch)				\
+	      case dwarf::VS_##flavor:					\
+		{							\
+		  typename vw::value_##flavor *p;			\
+		  av->_m_value = vw::make (p, other.fetch (), arg);	\
+		}							\
+	      break
 
-	  _DWARF_DATA_AV_MAKE (identifier, identifier);
-	  _DWARF_DATA_AV_MAKE (string, string);
-	  _DWARF_DATA_AV_MAKE (flag, flag);
-	  _DWARF_DATA_AV_MAKE (rangelistptr, ranges);
-	  _DWARF_DATA_AV_MAKE (lineptr, line_info);
-	  _DWARF_DATA_AV_MAKE (address, address);
-	  _DWARF_DATA_AV_MAKE (source_line, source_line);
-	  _DWARF_DATA_AV_MAKE (source_file, source_file);
-	  _DWARF_DATA_AV_MAKE (dwarf_constant, dwarf_constant);
-	  _DWARF_DATA_AV_MAKE (reference, reference);
-	  _DWARF_DATA_AV_MAKE (unit_reference, unit_reference);
-	  _DWARF_DATA_AV_MAKE (location, location);
-	  //_DWARF_DATA_AV_MAKE (macptr, macros); 	XXX
+	      _DWARF_DATA_AV_MAKE (identifier, identifier);
+	      _DWARF_DATA_AV_MAKE (string, string);
+	      _DWARF_DATA_AV_MAKE (flag, flag);
+	      _DWARF_DATA_AV_MAKE (rangelistptr, ranges);
+	      _DWARF_DATA_AV_MAKE (lineptr, line_info);
+	      _DWARF_DATA_AV_MAKE (address, address);
+	      _DWARF_DATA_AV_MAKE (source_line, source_line);
+	      _DWARF_DATA_AV_MAKE (source_file, source_file);
+	      _DWARF_DATA_AV_MAKE (dwarf_constant, dwarf_constant);
+	      _DWARF_DATA_AV_MAKE (reference, reference);
+	      _DWARF_DATA_AV_MAKE (unit_reference, unit_reference);
+	      _DWARF_DATA_AV_MAKE (location, location);
+	      //_DWARF_DATA_AV_MAKE (macptr, macros); 	XXX
 
-	  case dwarf::VS_constant:
-	    if (other.constant_is_integer ())
-	      {
-		typename vw::value_constant *p;
-		_m_value = vw::make (p, other.constant (), arg);
-	      }
-	    else
-	      {
-		typename vw::value_constant_block *p;
-		_m_value = vw::make (p, other.constant_block (), arg);
-	      }
-	    break;
+	    case dwarf::VS_constant:
+	      if (other.constant_is_integer ())
+		{
+		  typename vw::value_constant *p;
+		  av->_m_value = vw::make (p, other.constant (), arg);
+		}
+	      else
+		{
+		  typename vw::value_constant_block *p;
+		  av->_m_value = vw::make (p, other.constant_block (), arg);
+		}
+	      break;
 
-	  default:
-	  case dwarf::VS_discr_list:
-	    throw std::runtime_error ("XXX unimplemented");
+	    default:
+	    case dwarf::VS_discr_list:
+	      throw std::runtime_error ("XXX unimplemented");
 
 #undef _DWARF_DATA_AV_MAKE
-	  }
-      }
+	    }
+	}
+      };
 
       template<typename flavor>
       inline flavor &const_variant () const
@@ -962,14 +959,14 @@ namespace elfutils
 	: _m_value (NULL)
       {
 	if (other._m_value != NULL)
-	  init (other);
+	  init<attr_value> me (this, other);
       }
 
-      template<typename value>
-      attr_value (const value &other, const constructor_arg_type &arg)
+      template<typename value, typename arg_type>
+      attr_value (const value &other, const arg_type &arg)
 	: _m_value (NULL)
       {
-	init (other, arg);
+	init<value, arg_type> me (this, other, arg);
       }
 
       inline attr_value ()
@@ -989,7 +986,7 @@ namespace elfutils
 	    delete _m_value;
 	    _m_value = NULL;
 	  }
-	init (other);
+	init<attr_value> me (this, other);
 	return *this;
       }
       template<typename value>
@@ -1000,7 +997,7 @@ namespace elfutils
 	    delete _m_value;
 	    _m_value = NULL;
 	  }
-	init (other);
+	init<value> me (this, other);
 	return *this;
       }
 
@@ -1215,110 +1212,24 @@ namespace elfutils
       }
     };
 
-    template<class dwarf_output, typename constructor_arg_type = nothing>
-    struct constructor_arg_adapter
-    {
-      template<typename input, typename output>
-      struct make_any
-	: public std::binary_function<typename input::value_type,
-				      constructor_arg_type,
-				      typename output::value_type>
-      {
-	inline typename output::value_type
-	operator () (const typename input::value_type &x,
-		     const constructor_arg_type &c) const
-	{
-	  return typename output::value_type (x, c);
-	}
-      };
-
-      template<typename input, typename output>
-      struct make_attribute
-	: public std::binary_function<typename input::value_type,
-				      constructor_arg_type,
-				      typename output::value_type>
-      {
-	inline typename output::value_type
-	operator () (const typename input::value_type &x,
-		     const constructor_arg_type &c) const
-	{
-	  return std::make_pair
-	    (x.first, typename output::value_type::second_type (x.second, c));
-	}
-      };
-
-      /* An iterator adapter for use in iterator-based constructors.
-	 collectify (iterator) yields an iterator on input where *i
-	 constructs output::value_type (input::value_type v, collector).  */
-      template<typename input, typename output,
-	       typename make_outlet = make_any<input, output> >
-      struct argify
-	: public std::unary_function<typename input::const_iterator,
-				     typename output::iterator>
-      {
-	typedef typename input::const_iterator inny;
-	typedef typename output::iterator outty;
-	typedef typename input::value_type inlet;
-	typedef typename output::value_type outlet;
-
-	/* Wrapper worker passed to wrapped_input_iterator.
-	   This object holds the collector pointer.  */
-	struct maker
-	  : public std::unary_function<inlet, outlet>
-	{
-	  constructor_arg_type _m_arg;
-	  explicit inline maker (const constructor_arg_type &c) : _m_arg (c) {}
-
-	  inline outlet operator () (const inlet &x) const
-	  {
-	    return make_outlet () (x, _m_arg);
-	  }
-	} _m_maker;
-
-	explicit inline argify (const constructor_arg_type &c)
-	  : _m_maker (c)
-	{}
-
-	typedef subr::wrapped_input_iterator<input, maker> wrapped;
-
-	inline wrapped operator () (const inny &i)
-	{
-	  return wrapped (i, _m_maker);
-	}
-      };
-
-      template<class input>
-      static inline argify<
-	input, typename dwarf_output::debug_info_entry::attributes_type,
-	make_attribute<input,
-		       typename dwarf_output::debug_info_entry::attributes_type>
-	> attr (const input &, const constructor_arg_type &c)
-      {
-	return argify<
-	  input, typename dwarf_output::debug_info_entry::attributes_type,
-	  make_attribute<
-	    input, typename dwarf_output::debug_info_entry::attributes_type>
-	    > (c);
-      };
-    };
-
-    template<class impl, typename arg = nothing, typename v = value<impl, arg> >
+    template<class impl, typename arg = nothing, typename v = value<impl> >
     class attributes_type
-      : public std::map<int, attr_value<impl, arg, v> >
+      : public std::map<int, attr_value<impl, v> >
     {
       friend class impl::debug_info_entry;
     private:
-      typedef std::map<int, attr_value<impl, arg, v> > base_type;
-      typedef constructor_arg_adapter<impl, arg> argify;
+      typedef std::map<int, attr_value<impl, v> > base_type;
 
     protected:
       inline attributes_type () {}
 
     public: // XXX should be protected
-      template<typename input>
-      inline attributes_type (const input &other, const arg &c)
-	: base_type (argify::attr (other, c) (other.begin ()),
-		     argify::attr (other, c) (other.end ()))
+      template<typename input, typename arg_type>
+      inline attributes_type (const input &other, const arg_type &c)
+	: base_type (subr::argify2nd<input, attributes_type, arg_type>
+		     (other.begin (), c),
+		     subr::argify2nd<input, attributes_type, arg_type>
+		     (other.end (), c))
       {}
 
     public:
@@ -1345,8 +1256,8 @@ namespace elfutils
     return elfutils::to_string (*this); // Use that.
   }
 
-  template<class impl, typename arg, typename v>
-  inline std::string dwarf_data::attr_value<impl, arg, v>::to_string () const
+  template<class impl, typename v>
+  inline std::string dwarf_data::attr_value<impl, v>::to_string () const
   {
     return elfutils::to_string (*this); // Use that.
   }
