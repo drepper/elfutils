@@ -138,24 +138,21 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
-  int depth_;
 
   inline talker ()
-    : a_ (NULL), b_ (NULL), depth_ (0)
+    : a_ (NULL), b_ (NULL)
   {}
 
   inline talker (const talker &proto,
-		 typename _tracker::reference_match &matched,
 		 const typename _tracker::left_context_type &l, const die1 &a,
 		 const typename _tracker::right_context_type &r, const die2 &b)
-    : _tracker (static_cast<const _tracker &> (proto), matched, l, a, r, b),
-      a_ (NULL), b_ (NULL), depth_ (proto.depth_ + 1)
+    : _tracker (static_cast<const _tracker &> (proto), l, a, r, b),
+      a_ (NULL), b_ (NULL)
   {
   }
 
   inline ostream &location () const
   {
-    cout << std::string(depth_, ' ');
     return cout << hex << a_->offset () << " vs " << b_->offset () << ": ";
   }
 
@@ -164,7 +161,6 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   {
     a_ = &a;
     b_ = &b;
-    location () << "visiting\n";
     if (a.tag () != b.tag ())
       location () << dwarf::tags::name (a.tag ())
 		  << " vs "
