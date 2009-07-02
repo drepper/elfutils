@@ -115,6 +115,12 @@ namespace elfutils
 
       public:
 	typedef debug_info_entry value_type;
+
+	inline debug_info_entry &add_entry (int tag)
+	{
+	  push_back (debug_info_entry (tag));
+	  return back ();
+	}
       };
 
       class attributes_type
@@ -203,6 +209,12 @@ namespace elfutils
       {
 	return identity ();
       }
+
+      // Convenience entry points.
+      inline debug_info_entry &add_entry (int child_tag)
+      {
+	return children ().add_entry (child_tag);
+      }
     };
 
     typedef debug_info_entry::attributes_type::value_type attribute;
@@ -248,10 +260,9 @@ namespace elfutils
       typedef _base::iterator iterator;
       typedef _base::const_iterator const_iterator;
 
-      inline compile_unit &new_unit ()
+      inline compile_unit &add_unit ()
       {
-	compile_unit nu;
-	push_back (nu);
+	push_back (compile_unit ());
 	return back ();
       }
 
@@ -281,9 +292,9 @@ namespace elfutils
     }
 
     // Convenience entry point.
-    inline compile_unit &new_unit ()
+    inline compile_unit &add_unit ()
     {
-      return compile_units ().new_unit ();
+      return compile_units ().add_unit ();
     }
 
   public:
