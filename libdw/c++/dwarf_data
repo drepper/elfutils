@@ -52,6 +52,7 @@
 
 #include "dwarf"
 #include <bitset>
+#include <typeinfo>
 
 /* This contains common classes/templates used by dwarf_output and dwarf_edit.
 
@@ -470,7 +471,12 @@ namespace elfutils
     private:
       typedef std::pair< ::Dwarf_Word, unsigned int> _base;
 
+      inline dwarf_enum ()
+	: _base (0, 0)
+      {}
+
     public:
+
       inline dwarf_enum (unsigned int attr, unsigned int value)
 	: _base (value, attr)
       {}
@@ -491,10 +497,26 @@ namespace elfutils
 	return this->first;
       }
 
+      inline dwarf_enum &operator= (::Dwarf_Word value)
+      {
+	this->first = value;
+	return *this;
+      }
+
       inline dwarf_enum &operator= (const dwarf_enum& other)
       {
+	if (this->second == 0)
+	  {
+	    throw std::logic_error("dwarf_enum default constructed");
+	    this->second = other.second;
+	  }
+	else if (this->second != other.second)
+	  throw std::runtime_error
+	    ("cannot assign dwarf_constant () from "
+	     + dwarf::attributes::name (other.second) + "to "
+	     + dwarf::attributes::name (this->second));
+
 	this->first = other.first;
-	this->second = other.second;
 	return *this;
       }
 
@@ -654,9 +676,8 @@ namespace elfutils
     template<typename impl, typename constructor_arg_type>
     struct value
     {
-      class value_dispatch
+      struct value_dispatch
       {
-      public:
 	virtual ~value_dispatch () {}
       };
 
@@ -669,6 +690,8 @@ namespace elfutils
 
       struct value_string : public value_dispatch, public std::string
       {
+	inline value_string () {}
+
 	template<typename string>
 	inline value_string (const string &s, const constructor_arg_type &arg)
 	  : std::string (s)
@@ -724,6 +747,11 @@ namespace elfutils
       struct value_flag : public value_dispatch
       {
 	bool flag;
+
+	inline value_flag ()
+	  : flag (true)
+	{}
+
 	inline value_flag (bool t, const constructor_arg_type &arg)
 	  : flag (t)
 	{}
@@ -733,6 +761,11 @@ namespace elfutils
       {
 	// XXX dwfl, reloc
 	::Dwarf_Addr addr;
+
+	inline value_address ()
+	  : addr (0)
+	{}
+
 	inline value_address (::Dwarf_Addr a, const constructor_arg_type &arg)
 	  : addr (a)
 	{}
@@ -740,6 +773,9 @@ namespace elfutils
 
       struct value_rangelistptr : public value_dispatch, public range_list
       {
+	inline value_rangelistptr ()
+	{}
+
 	template<typename list>
 	inline value_rangelistptr (const list &other,
 				   const constructor_arg_type &arg)
@@ -749,6 +785,9 @@ namespace elfutils
 
       struct value_lineptr : public value_dispatch, public impl::line_info_table
       {
+	inline value_lineptr ()
+	{}
+
 	template<typename table>
 	inline value_lineptr (const table &other,
 			      const constructor_arg_type &arg)
@@ -763,6 +802,11 @@ namespace elfutils
 	  ::Dwarf_Word word;
 	  ::Dwarf_Sword sword;
 	};
+
+	inline value_constant ()
+	  : word (0)
+	{}
+
 	inline value_constant (::Dwarf_Word x, const constructor_arg_type &arg)
 	  : word (x)
 	{}
@@ -771,6 +815,8 @@ namespace elfutils
       struct value_constant_block : public value_dispatch,
 				    public std::vector<uint8_t>
       {
+	inline value_constant_block () {}
+
 	template<typename block>
 	inline value_constant_block (const block &b,
 				     const constructor_arg_type &arg)
@@ -780,6 +826,8 @@ namespace elfutils
 
       struct value_dwarf_constant : public value_dispatch, public dwarf_enum
       {
+	inline value_dwarf_constant () {}
+
 	template<typename constant>
 	inline value_dwarf_constant (const constant &other,
 				     const constructor_arg_type &arg)
@@ -788,6 +836,9 @@ namespace elfutils
 
       struct value_source_file : public value_dispatch, public source_file
       {
+	inline value_source_file ()
+	{}
+
 	template<typename file>
 	inline value_source_file (const file &other,
 				  const constructor_arg_type &arg)
@@ -797,6 +848,11 @@ namespace elfutils
       struct value_source_line : public value_dispatch
       {
 	unsigned int n;
+
+	inline value_source_line ()
+	  : n (0)
+	{}
+
 	inline value_source_line (unsigned int m,
 				  const constructor_arg_type &arg)
 	  : n (m)
@@ -808,6 +864,9 @@ namespace elfutils
 
       struct value_location : public value_dispatch, public location_attr
       {
+	inline value_location ()
+	{}
+
 	template<typename loc>
 	inline value_location (const loc &other,
 			       const constructor_arg_type &arg)
@@ -876,7 +935,7 @@ namespace elfutils
       }
 
       template<typename flavor>
-      inline flavor &variant () const
+      inline flavor &const_variant () const
       {
 	flavor *p = dynamic_cast<flavor *> (_m_value);
 	if (p == NULL)
@@ -884,10 +943,26 @@ namespace elfutils
 	return *p;
       }
 
-    public:
-      attr_value (const attr_value &other) : _m_value (NULL)
+      template<typename flavor>
+      inline flavor &variant () const
       {
-	init (other);
+	return const_variant<flavor> ();
+      }
+
+      template<typename flavor>
+      inline flavor &variant ()
+      {
+	if (_m_value == NULL)
+	  _m_value = new flavor;
+	return const_variant<flavor> ();
+      }
+
+    public:
+      attr_value (const attr_value &other)
+	: _m_value (NULL)
+      {
+	if (other._m_value != NULL)
+	  init (other);
       }
 
       template<typename value>
@@ -960,49 +1035,95 @@ namespace elfutils
 	  (variant<typename vw::value_location> ());
       }
 
+      inline std::string &string ()
+      {
+	return static_cast<std::string &>
+	  (variant<typename vw::value_string> ());
+      }
       inline const std::string &string () const
       {
 	return static_cast<const std::string &>
 	  (variant<typename vw::value_string> ());
+      }
+      inline std::string &identifier ()
+      {
+	return string ();
       }
       inline const std::string &identifier () const
       {
 	return string ();
       }
 
-      inline typename impl::source_file &source_file () const
+      inline const typename impl::source_file &source_file () const
       {
 	return static_cast<typename impl::source_file &>
 	  (variant<typename vw::value_source_file> ());
       }
 
-      inline unsigned int &source_line () const
+      inline typename impl::source_file &source_file ()
+      {
+	return static_cast<typename impl::source_file &>
+	  (variant<typename vw::value_source_file> ());
+      }
+
+      inline const unsigned int &source_line () const
       {
 	return variant<typename vw::value_source_line> ().n;
       }
 
-      inline unsigned int &source_column () const
+      inline unsigned int &source_line ()
+      {
+	return variant<typename vw::value_source_line> ().n;
+      }
+
+      inline const unsigned int &source_column () const
       {
 	return variant<typename vw::value_source_column> ().n;
       }
 
-      inline ::Dwarf_Word &constant () const
+      inline unsigned int &source_column ()
+      {
+	return variant<typename vw::value_source_column> ().n;
+      }
+
+      inline const ::Dwarf_Word &constant () const
       {
 	return variant<typename vw::value_constant> ().word;
       }
 
-      inline ::Dwarf_Sword &signed_constant () const
+      inline ::Dwarf_Word &constant ()
+      {
+	return variant<typename vw::value_constant> ().word;
+      }
+
+      inline const ::Dwarf_Sword &signed_constant () const
       {
 	return variant<typename vw::value_constant> ().sword;
       }
 
-      inline std::vector<uint8_t> &constant_block () const
+      inline ::Dwarf_Sword &signed_constant ()
+      {
+	return variant<typename vw::value_constant> ().sword;
+      }
+
+      inline const std::vector<uint8_t> &constant_block () const
       {
 	return static_cast<std::vector<uint8_t> &>
 	  (variant<typename vw::value_constant_block> ());
       }
 
-      inline typename impl::dwarf_enum &dwarf_constant () const
+      inline std::vector<uint8_t> &constant_block ()
+      {
+	return static_cast<std::vector<uint8_t> &>
+	  (variant<typename vw::value_constant_block> ());
+      }
+
+      inline const typename impl::dwarf_enum &dwarf_constant () const
+      {
+	return variant<typename vw::value_dwarf_constant> ();
+      }
+
+      inline typename impl::dwarf_enum &dwarf_constant ()
       {
 	return variant<typename vw::value_dwarf_constant> ();
       }
@@ -1012,13 +1133,25 @@ namespace elfutils
 	return dynamic_cast<typename vw::value_constant *> (_m_value) != NULL;
       }
 
-      inline typename impl::range_list &ranges () const
+      inline const typename impl::range_list &ranges () const
       {
 	return static_cast<range_list &>
 	  (variant<typename vw::value_rangelistptr> ());
       }
 
-      inline typename impl::line_info_table &line_info () const
+      inline typename impl::range_list &ranges ()
+      {
+	return static_cast<range_list &>
+	  (variant<typename vw::value_rangelistptr> ());
+      }
+
+      inline const typename impl::line_info_table &line_info () const
+      {
+	return static_cast<typename impl::line_info_table &>
+	  (variant<typename vw::value_lineptr> ());
+      }
+
+      inline typename impl::line_info_table &line_info ()
       {
 	return static_cast<typename impl::line_info_table &>
 	  (variant<typename vw::value_lineptr> ());

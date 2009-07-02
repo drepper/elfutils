@@ -60,7 +60,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  find-prologues funcretval allregs rdwrmmap \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
-		  dwfl-bug-getmodules dwarf-getmacros dwarf-print
+		  dwfl-bug-getmodules dwarf-getmacros dwarf-print \
+		  dwarf_edit
 # get-ciefde
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -192,6 +193,9 @@ libdwpp = ../libdw/libdwpp.a $(libdw)
 
 dwarf_print_SOURCES = dwarf-print.cc
 dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
+
+dwarf_edit_SOURCES = dwarf_edit.cc
+dwarf_edit_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
 arsymtest_LDADD = $(libelf) $(libmudflap)

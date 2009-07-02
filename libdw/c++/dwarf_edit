@@ -280,6 +280,12 @@ namespace elfutils
       return _m_units;
     }
 
+    // Convenience entry point.
+    inline compile_unit &new_unit ()
+    {
+      return compile_units ().new_unit ();
+    }
+
   public:
     // Default constructor: an empty container, no CUs.
     inline dwarf_edit () {}

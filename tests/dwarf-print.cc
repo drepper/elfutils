@@ -41,6 +41,8 @@
 using namespace elfutils;
 using namespace std;
 
+#include "print-die.hh"
+
 static Dwarf *
 open_file (const char *fname)
 {
@@ -57,75 +59,14 @@ open_file (const char *fname)
   return dw;
 }
 
-static void
-print_die (const dwarf::debug_info_entry &die,
-	   unsigned int indent, unsigned int limit)
-{
-  string prefix (indent, ' ');
-  const string tag = dwarf::tags::name (die.tag ());
-
-  cout << prefix << "<" << tag << " offset=[" << die.offset () << "]";
-
-  for (dwarf::debug_info_entry::attributes_type::const_iterator i
-	 = die.attributes ().begin (); i != die.attributes ().end (); ++i)
-    cout << " " << (*i).to_string ();
-
-  if (die.has_children ())
-    {
-      if (limit != 0 && indent >= limit)
-	{
-	  cout << ">...\n";
-	  return;
-	}
-
-      cout << ">\n";
-
-      for (dwarf::debug_info_entry::children_type::const_iterator i
-	     = die.children ().begin (); i != die.children ().end (); ++i)
-	print_die (*i, indent + 1, limit);
-
-      cout << prefix << "</" << tag << ">\n";
-    }
-  else
-    cout << "/>\n";
-}
-
-static void
-process_file (const char *file, unsigned int limit)
-{
-  dwarf dw (open_file (file));
-
-  cout << file << ":\n";
-
-  for (dwarf::compile_units::const_iterator i = dw.compile_units ().begin ();
-       i != dw.compile_units ().end ();
-       ++i)
-    print_die (*i, 1, limit);
-}
-
 int
 main (int argc, char *argv[])
 {
-  /* Set locale.  */
-  (void) setlocale (LC_ALL, "");
-
-  /* Make sure the message catalog can be found.  */
-  (void) bindtextdomain (PACKAGE_TARNAME, LOCALEDIR);
-
-  /* Initialize the message catalog.  */
-  (void) textdomain (PACKAGE_TARNAME);
-
-  cout << hex << setiosflags (ios::showbase);
-
-  unsigned int depth = 0;
-  if (argc > 1 && sscanf (argv[1], "--depth=%u", &depth) == 1)
-    {
-      --argc;
-      ++argv;
-    }
+  unsigned int depth;
+  print_die_main (argc, argv, depth);
 
   for (int i = 1; i < argc; ++i)
-    process_file (argv[i], depth);
+    print_file (argv[i], dwarf (open_file (argv[i])), depth);
 
   return 0;
 }
