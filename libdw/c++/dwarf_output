@@ -50,7 +50,8 @@
 #ifndef _ELFUTILS_DWARF_OUTPUT
 #define _ELFUTILS_DWARF_OUTPUT	1
 
-#include "dwarf"
+#include "dwarf_edit"
+#include <functional>
 
 /* Read the comments for elfutils::dwarf first.
 
@@ -65,10 +66,31 @@
 
 namespace elfutils
 {
+  class dwarf_output_collector;
+
+#if 0
   class dwarf_output
   {
   public:
     class compile_units;
+    class debug_info_entry;
+    typedef debug_info_entry compile_unit;
+
+  private:
+    template<typename input>
+    static inline const input &
+    collect (dwarf_output_collector *c,
+	     const subr::auto_ref<const input> &p)
+    {
+      return static_cast<const input &> (p);
+    }
+
+    template<typename input>
+    static inline const debug_info_entry &
+    collect (dwarf_output_collector *,
+	     const typename input::debug_info_entry &);
+
+  public:
 
     // XXX later
     class attr_value : public dwarf::attr_value
@@ -79,52 +101,33 @@ namespace elfutils
 
     class debug_info_entry
     {
+      friend class dwarf_output;
+
     public:
-
-      class children : public std::vector<debug_info_entry>
-      {
-	friend class debug_info_entry;
-      private:
-        children () {}
-
-	template<typename childrens>
-	children (const childrens &other)
-	  : std::vector<debug_info_entry> (other.begin (), other.end ()) {}
-      };
-
-      class attributes : public std::map<int, attr_value>
-      {
-	friend class debug_info_entry;
-      private:
-	attributes () {}
-
-	template<typename attrs>
-	attributes (const attrs &other)
-	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
-
-      public:
-	template<typename attrs>
-	inline operator attrs () const
-	{
-	  return attrs (begin (), end ());
-	}
-      };
+      typedef subr::hashed_unordered_map<int, attr_value> attributes_type;
+      typedef subr::hashed_vector<debug_info_entry> children_type;
 
     private:
       const int _m_tag;
-      const attributes _m_attributes;
-      const children _m_children;
+      const attributes_type _m_attributes;
+      const children_type _m_children;
+      size_t _m_hash;
 
-    public:
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
-      template<typename die>
-      debug_info_entry (const die &die)
+      template<typename die_type>
+      debug_info_entry (const die_type &die, dwarf_output_collector *c)
 	: _m_tag (die.tag ()),
 	  _m_attributes (die.attributes ()),
-	  _m_children (die.children ())
-      {}
+	  _m_children (die.children ()),
+	  _m_hash (0)
+      {
+	subr::hash_combine (_m_hash, _m_tag);
+	subr::hash_combine (_m_hash, _m_attributes);
+	subr::hash_combine (_m_hash, _m_children);
+      }
 
+    public:
       inline int tag () const
       {
 	return _m_tag;
@@ -135,20 +138,12 @@ namespace elfutils
 	return !_m_children.empty ();
       }
 
-      inline class children &children ()
-      {
-	return _m_children;
-      }
-      inline const class children &children () const
+      inline const children_type &children () const
       {
 	return _m_children;
       }
 
-      inline class attributes &attributes ()
-      {
-	return _m_attributes;
-      }
-      inline const class attributes &attributes () const
+      inline const attributes_type &attributes () const
       {
 	return _m_attributes;
       }
@@ -162,37 +157,79 @@ namespace elfutils
       template<typename die>
       bool operator!= (const die &other) const
       {
-	return !(*this == other);;
+	return !(*this == other);
       }
     };
 
-    typedef debug_info_entry::attributes::value_type attribute;
+    typedef debug_info_entry::attributes_type::value_type attribute;
 
-    class compile_unit : public debug_info_entry
-    {
-    };
+  public:
+    /* Main container anchoring all the output.
 
-    // Main container anchoring all the output.
-    class compile_units : public std::vector<compile_unit>
+       This is the only container that actually lives in the dwarf_output
+       object.  All others live in the dwarf_output_collector's sets, and
+       we return const references to those copies.
+
+       This vector is actually mutable as a std::vector.  But note that you
+       should never remove a compile_unit, though you can reorder the
+       vector.  Nothing is ever removed from the collector, so your final
+       output file can wind up with unreferenced data being encoded.  If
+       you do remove any elements, then you should start a fresh collector
+       and construct a new dwarf_output object by copying using that
+       collector (or, equivalently, call o.compile_units ().recollect (C)
+       on the new collector C).  */
+    class compile_units
+      : public std::vector<subr::auto_ref<const debug_info_entry> >
     {
       friend class dwarf_output;
     private:
+      typedef std::vector<subr::auto_ref<const debug_info_entry> > _base;
+
+      template<typename input>
+      struct make
+	: public std::binary_function<typename input::value_type,
+				      dwarf_output_collector *,
+				      _base::value_type>
+      {
+	_base::value_type operator () (const typename input::value_type &cu,
+				       dwarf_output_collector *c) const
+	{
+	  return _base::value_type (collect (c, cu));
+	}
+      };
+
+      // Construct empty container.
+      compile_units ()
+	: _base ()
+      {}
+
       // Constructor copying CUs from input container.
       template<typename input>
-      compile_units(const input &units)
-	: std::vector<compile_unit> (units.begin (), units.end ())
-      {}
+      compile_units (const input &units, dwarf_output_collector *c)
+	: _base ()
+      {
+	for (typename input::const_iterator it = units.begin ();
+	     it != units.end ();
+	     ++it)
+	  push_back (make<input> () (*it, c));
+      }
 
     public:
       template<typename other_children>
       bool operator== (const other_children &other) const
       {
-	return std::equal (begin (), end (), other.begin ());
+	return subr::container_equal (*this, other);
       }
       template<typename other_children>
       bool operator!= (const other_children &other) const
       {
 	return !(*this == other);
+      }
+
+      void recollect (dwarf_output_collector *c)
+      {
+	std::transform (begin (), end (), begin (),
+			std::bind2nd (make<compile_units> (), c));
       }
     };
 
@@ -206,9 +243,17 @@ namespace elfutils
     }
 
   public:
-    // Constructor copying CUs from an input file (dwarf or dwarf_output).
+    // Constructor for an empty file, can add to its compile_units ().
+    dwarf_output ()
+      : _m_units ()
+    {}
+
+    // Constructor copying CUs from an input file (can be any of dwarf,
+    // dwarf_edit, or dwarf_output).
     template<typename input>
-    dwarf_output (const input &dw) : _m_units (dw.compile_units ()) {}
+    dwarf_output (const input &dw, dwarf_output_collector *c)
+      : _m_units (dw.compile_units (), c)
+    {}
 
     template<typename file>
     inline bool operator== (const file &other) const
@@ -221,4 +266,324 @@ namespace elfutils
       return !(*this == other);
     }
   };
-}
+
+#else  // XXX temp
+
+  class dwarf_output
+  {
+  public:
+    typedef dwarf_data::source_file source_file;
+    typedef dwarf_data::directory_table directory_table;
+    typedef dwarf_data::line_entry<source_file> line_entry;
+    typedef dwarf_data::line_table<line_entry> line_table;
+    typedef dwarf_data::line_info_table<directory_table,
+					line_table> line_info_table;
+    typedef dwarf_data::dwarf_enum dwarf_enum;
+    typedef dwarf_data::range_list range_list;
+    typedef dwarf_data::location_attr location_attr;
+
+    class compile_units;
+    class debug_info_entry;
+
+  protected:
+
+    template<typename input>
+    static inline const std::string &
+    collect_string (dwarf_output_collector *, const input &);
+
+    /* An iterator adapter for use in iterator-based constructors.
+       collectify (iterator) yields an iterator on input where *i
+       constructs output::value_type (input::value_type v, collector).  */
+    template<typename input, typename output>
+    static inline typename subr::argifier<input, output,
+					  dwarf_output_collector *>::wrapped
+    collectify (const typename input::const_iterator &in,
+		dwarf_output_collector *c)
+    {
+      return subr::argifier<input, output, dwarf_output_collector *> (c) (in);
+    }
+
+    struct value_wrapper
+      : public dwarf_data::value<dwarf_output>
+    {
+      struct value_string : public value_dispatch
+      {
+	const std::string &_m_str;
+
+	template<typename string>
+	inline value_string (const string &s, dwarf_output_collector *c)
+	  : _m_str (collect_string (c, s))
+	{}
+
+	inline operator const std::string & () const
+	{
+	  return _m_str;
+	}
+
+	std::string to_string () const
+	{
+	  std::string result ("\"");
+	  result += _m_str;
+	  result += "\"";
+	  return result;
+	}
+      };
+
+      template<typename flavor, typename input>
+      static inline value_dispatch *
+      make (flavor *&result, const input &x, const dwarf_data::nothing &)
+      {
+	throw std::logic_error ("dwarf_output cannot be default-constructed");
+      }
+
+      template<typename flavor, typename input, typename arg_type>
+      static inline value_dispatch *
+      make (flavor *&result, const input &x, const arg_type &arg)
+      {
+	return result = new flavor (x, arg);
+      }
+
+      template<typename input>
+      static inline value_dispatch *
+      make (value_string *&result, const input &x, dwarf_output_collector *c)
+      {
+	return result = new value_string (x, c);
+      }
+
+    };
+
+  public:
+
+    typedef dwarf_data::attr_value<dwarf_output, value_wrapper> attr_value;
+
+    class compile_units;
+
+    class debug_info_entry
+    {
+    public:
+
+      class children_type : public std::list<debug_info_entry>
+      {
+	friend class debug_info_entry;
+      private:
+        children_type () {}
+
+	template<typename input>
+	inline children_type (const input &other, dwarf_output_collector *c)
+	  : std::list<debug_info_entry>
+	    (collectify<input, children_type> (other.begin (), c),
+	     collectify<input, children_type> (other.end (), c))
+	{}
+
+      public:
+	typedef debug_info_entry value_type;
+      };
+
+      class attributes_type
+	: public dwarf_data::attributes_type<dwarf_output,
+					     dwarf_output_collector *,
+					     value_wrapper>
+      {
+	friend class debug_info_entry;
+      private:
+	typedef dwarf_data::attributes_type<dwarf_output,
+					    dwarf_output_collector *,
+					    value_wrapper> base_type;
+
+	template<typename input>
+	inline attributes_type (const input &other, dwarf_output_collector *c)
+	  : base_type (other, c)
+	{}
+      };
+
+    private:
+      const int _m_tag;
+      attributes_type _m_attributes;
+      children_type _m_children;
+
+    public:
+      template<typename die_type>
+      debug_info_entry (const die_type &die, dwarf_output_collector *c)
+	: _m_tag (die.tag ()),
+	  _m_attributes (die.attributes (), c),
+	  _m_children (die.children (), c)
+      {}
+
+      inline int tag () const
+      {
+	return _m_tag;
+      }
+
+      inline bool has_children () const
+      {
+	return !_m_children.empty ();
+      }
+
+      inline children_type &children ()
+      {
+	return _m_children;
+      }
+      inline const children_type &children () const
+      {
+	return _m_children;
+      }
+
+      inline attributes_type &attributes ()
+      {
+	return _m_attributes;
+      }
+      inline const attributes_type &attributes () const
+      {
+	return _m_attributes;
+      }
+
+      template<typename die>
+      bool operator== (const die &other) const
+      {
+	return (other.tag () == tag ()
+		&& other.attributes () == attributes ()
+		&& other.children () == children ());
+      }
+      template<typename die>
+      bool operator!= (const die &other) const
+      {
+	return !(*this == other);;
+      }
+
+      inline ::Dwarf_Off identity () const
+      {
+	return (uintptr_t) this;
+      }
+
+      inline ::Dwarf_Off offset () const
+      {
+	return identity ();
+      }
+    };
+
+    typedef debug_info_entry::attributes_type::value_type attribute;
+
+    class compile_unit : public debug_info_entry
+    {
+      friend class compile_units;
+
+      // XXX should be private
+    public:
+      template<typename die_type>
+      compile_unit (const die_type &die, dwarf_output_collector *c)
+	: debug_info_entry (die, c)
+      {
+	if (die.tag () != ::DW_TAG_compile_unit)
+	  throw std::invalid_argument ("not a compile_unit entry");
+      }
+
+      /* XXX doesn't help
+	public:
+	compile_unit (const compile_unit &u) : debug_info_entry (u) {}
+      */
+    };
+
+    // Main container anchoring all the output.
+    class compile_units
+      : public std::list<compile_unit>
+    {
+      friend class dwarf_output;
+    private:
+      typedef std::list<compile_unit> _base;
+
+      // Default constructor: an empty container, no CUs.
+      inline compile_units ()
+	: _base ()
+      {}
+
+      // Constructor copying CUs from input container.
+      template<typename input>
+      compile_units (const input &units, dwarf_output_collector *c)
+	: _base (collectify<input, compile_units> (units.begin (), c),
+		 collectify<input, compile_units> (units.end (), c))
+      {
+      }
+
+    public:
+      typedef compile_unit value_type;
+      typedef _base::iterator iterator;
+      typedef _base::const_iterator const_iterator;
+
+      template<typename other_children>
+      bool operator== (const other_children &other) const
+      {
+	return subr::container_equal (*this, other);
+      }
+      template<typename other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+  private:
+    compile_units _m_units;
+
+  public:
+    class compile_units &compile_units ()
+    {
+      return _m_units;
+    }
+    const class compile_units &compile_units () const
+    {
+      return _m_units;
+    }
+
+  public:
+    // Constructor for an empty file, can add to its compile_units ().
+    dwarf_output ()
+      : _m_units ()
+    {}
+
+    // Constructor copying CUs from an input file (can be any of dwarf,
+    // dwarf_edit, or dwarf_output).
+    template<typename input>
+    dwarf_output (const input &dw, dwarf_output_collector *c)
+      : _m_units (dw.compile_units (), c)
+    {}
+
+    template<typename file>
+    inline bool operator== (const file &other) const
+    {
+      return compile_units () == other.compile_units ();
+    }
+    template<typename file>
+    inline bool operator!= (const file &other) const
+    {
+      return !(*this == other);
+    }
+  };
+
+  // Explicit specializations.
+  template<>
+  std::string to_string<dwarf_output::attribute> (const dwarf_output::attribute &);
+  template<>
+  std::string to_string<dwarf_output::attr_value> (const dwarf_output::attr_value&);
+
+#endif
+
+  class dwarf_output_collector
+  {
+    friend class dwarf_output;
+
+  private:
+    subr::value_set<std::string> _m_strings;
+    subr::value_set<dwarf_output::range_list> _m_ranges;
+
+  };
+
+  template<typename input>
+  inline const std::string &
+  dwarf_output::collect_string (dwarf_output_collector *c, const input &s)
+  {
+    return c->_m_strings.add (s);
+  }
+
+};
+
+#endif	// <elfutils/dwarf_output>

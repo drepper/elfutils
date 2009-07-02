@@ -47,6 +47,7 @@
 #include "c++/dwarf_edit"
 #include "c++/dwarf_comparator"
 #include "c++/dwarf_tracker"
+#include "c++/dwarf_output"
 
 using namespace elfutils;
 using namespace std;
@@ -133,8 +134,8 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   typedef typename _base::cu2 cu2;
   typedef typename _base::die1 die1;
   typedef typename _base::die2 die2;
-  typedef typename die1::value_type::attributes_type::const_iterator attr1;
-  typedef typename die2::value_type::attributes_type::const_iterator attr2;
+  typedef typename _base::dwarf1_die::attributes_type::const_iterator attr1;
+  typedef typename _base::dwarf2_die::attributes_type::const_iterator attr2;
 
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
@@ -324,9 +325,28 @@ main (int argc, char *argv[])
 
       if (test_writer)
 	{
-	  dwarf_edit out1 (file1);
-	  dwarf_edit out2 (file2);
-	  test_classes (file1, file2, out1, out2, same);
+	  dwarf_ref_tracker<dwarf_edit, dwarf> t1;
+	  dwarf_ref_tracker<dwarf_edit, dwarf> t2;
+	  dwarf_edit edit1 (file1, &t1);
+	  dwarf_edit edit2 (file2, &t2);
+	  test_classes (file1, file2, edit1, edit2, same);
+
+	  {
+	    dwarf_output_collector c1;
+	    dwarf_output_collector c2;
+	    dwarf_output out1 (file1, &c1);
+	    dwarf_output out2 (file2, &c2);
+	    test_classes (file1, file2, out1, out2, same);
+	    test_classes (edit1, edit2, out1, out2, same);
+	  }
+	  {
+	    dwarf_output_collector c1;
+	    dwarf_output_collector c2;
+	    dwarf_output out1 (edit1, &c1);
+	    dwarf_output out2 (edit2, &c2);
+	    test_classes (file1, file2, out1, out2, same);
+	    test_classes (edit1, edit2, out1, out2, same);
+	  }
 	}
 
       result = !same;

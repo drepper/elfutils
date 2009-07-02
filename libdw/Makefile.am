@@ -48,8 +48,8 @@ endif
 
 include_HEADERS = dwarf.h
 pkginclude_HEADERS = libdw.h \
-		     c++/subr.hh \
-		     c++/dwarf c++/dwarf_edit \
+		     c++/subr.hh c++/dwarf_data \
+		     c++/dwarf c++/dwarf_edit c++/dwarf_output \
 		     c++/dwarf_tracker c++/dwarf_comparator
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
@@ -94,8 +94,10 @@ libdwpp_a_SOURCES = c++/values.cc \
 		    c++/exception.cc \
 		    c++/known.cc \
 		    c++/line_info.cc \
-		    c++/edit-values.cc
-noinst_HEADERS    = c++/dwarf-knowledge.cc
+		    c++/edit-values.cc \
+		    c++/output-values.cc
+noinst_HEADERS    = c++/dwarf-knowledge.cc \
+		    c++/data-values.hh
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h

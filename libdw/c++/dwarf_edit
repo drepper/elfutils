@@ -51,7 +51,8 @@
 #define _ELFUTILS_DWARF_EDIT	1
 
 #include "dwarf"
-#include <bitset>
+#include "dwarf_data"
+#include "dwarf_tracker"
 
 /* Read the comments for elfutils::dwarf first.
 
@@ -86,8 +87,18 @@ namespace elfutils
   class dwarf_edit
   {
   public:
+    typedef dwarf_data::source_file source_file;
+    typedef dwarf_data::directory_table directory_table;
+    typedef dwarf_data::line_entry<source_file> line_entry;
+    typedef dwarf_data::line_table<line_entry> line_table;
+    typedef dwarf_data::line_info_table<directory_table,
+					line_table> line_info_table;
+    typedef dwarf_data::dwarf_enum dwarf_enum;
+    typedef dwarf_data::range_list range_list;
+    typedef dwarf_data::location_attr location_attr;
+    typedef dwarf_data::attr_value<dwarf_edit> attr_value;
+
     class compile_units;
-    class attr_value;
 
     class debug_info_entry
     {
@@ -99,38 +110,36 @@ namespace elfutils
       private:
         children_type () {}
 
-	template<typename childrens>
-	children_type (const childrens &other)
-	  : std::list<debug_info_entry> (other.begin (), other.end ()) {}
+	template<typename input, typename tracker>
+	children_type (const input &other, tracker *t)
+	  : std::list<debug_info_entry>
+	    (subr::argify<input, children_type, tracker *> (other.begin (), t),
+	     subr::argify<input, children_type, tracker *> (other.end (), t))
+	{}
 
       public:
 	typedef debug_info_entry value_type;
+
+	inline debug_info_entry &add_entry (int tag)
+	{
+	  push_back (debug_info_entry (tag));
+	  return back ();
+	}
       };
 
-      class attributes_type : public std::map<int, attr_value>
+      class attributes_type
+	: public dwarf_data::attributes_type<dwarf_edit>
       {
 	friend class debug_info_entry;
       private:
-	typedef std::map<int, attr_value> base_type;
+	typedef dwarf_data::attributes_type<dwarf_edit> base_type;
 
-	attributes_type () {}
+	inline attributes_type () {}
 
-	template<typename attrs>
-	attributes_type (const attrs &other)
-	  : std::map<int, attr_value> (other.begin (), other.end ()) {}
-
-      public:
-	typedef base_type::key_type key_type;
-	typedef base_type::value_type value_type;
-	typedef base_type::mapped_type mapped_type;
-
-	static const bool ordered = true;
-
-	template<typename attrs>
-	inline operator attrs () const
-	{
-	  return attrs (begin (), end ());
-	}
+	template<typename attrs, typename tracker>
+	inline attributes_type (const attrs &other, tracker *t)
+	  : base_type (other, t)
+	{}
       };
 
     private:
@@ -147,11 +156,11 @@ namespace elfutils
 
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
-      template<typename die_type>
-      debug_info_entry (const die_type &die)
+      template<typename die_type, typename tracker>
+      debug_info_entry (const die_type &die, tracker *t)
 	: _m_tag (die.tag ()),
-	  _m_attributes (die.attributes ()),
-	  _m_children (die.children ())
+	  _m_attributes (die.attributes (), t),
+	  _m_children (die.children (), t)
       {}
 
       inline int tag () const
@@ -204,6 +213,12 @@ namespace elfutils
       {
 	return identity ();
       }
+
+      // Convenience entry points.
+      inline debug_info_entry &add_entry (int child_tag)
+      {
+	return children ().add_entry (child_tag);
+      }
     };
 
     typedef debug_info_entry::attributes_type::value_type attribute;
@@ -216,8 +231,9 @@ namespace elfutils
 
       // XXX should be private
     public:
-      template<typename die_type>
-      compile_unit (const die_type &die) : debug_info_entry (die)
+      template<typename die_type, typename tracker>
+      inline compile_unit (const die_type &die, tracker *t)
+	: debug_info_entry (die, t)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
 	  throw std::invalid_argument ("not a compile_unit entry");
@@ -237,22 +253,26 @@ namespace elfutils
       typedef std::list<compile_unit> _base;
 
       // Default constructor: an empty container, no CUs.
-      inline compile_units () {}
+      inline compile_units ()
+      {}
 
       // Constructor copying CUs from input container.
-      template<typename input>
-      compile_units(const input &units)
-	: _base (units.begin (), units.end ()) {}
+      template<typename input, typename tracker>
+      inline compile_units (const input &units, tracker *t)
+	: _base (subr::argify<input, compile_units, tracker *>
+		 (units.begin (), t),
+		 subr::argify<input, compile_units, tracker *>
+		 (units.end (), t))
+      {}
 
     public:
       typedef compile_unit value_type;
       typedef _base::iterator iterator;
       typedef _base::const_iterator const_iterator;
 
-      inline compile_unit &new_unit ()
+      inline compile_unit &add_unit ()
       {
-	compile_unit nu;
-	push_back (nu);
+	push_back (compile_unit ());
 	return back ();
       }
 
@@ -263,901 +283,6 @@ namespace elfutils
       }
       template<typename other_children>
       bool operator!= (const other_children &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-    // Same as set<pair<Dwarf_Addr, Dwarf_Addr>>.
-    class range_list : public dwarf::arange_list
-    {
-    public:
-      template<typename list>
-      range_list (const list &other)
-	: dwarf::arange_list (other.begin (), other.end ()) {}
-    };
-
-    class source_file
-    {
-    private:
-      std::string _m_name;
-      ::Dwarf_Word _m_mtime;
-      ::Dwarf_Word _m_size;
-
-    public:
-      source_file () : _m_name (), _m_mtime (0), _m_size (0) {}
-      source_file (const std::string &n, ::Dwarf_Word m = 0, ::Dwarf_Word s = 0)
-	: _m_name (n), _m_mtime (m), _m_size (s) {}
-
-      template<typename file>
-      source_file (const file &other)
-	: _m_name (other.name ()),
-	  _m_mtime (other.mtime ()), _m_size (other.size ()) {}
-
-      template<typename file>
-      inline source_file &operator= (const file &other)
-      {
-	_m_name = other.name ();
-	_m_mtime = other.mtime ();
-	_m_size = other.size ();
-	return *this;
-      }
-      inline source_file &operator= (const std::string &n)
-      {
-	_m_name = n;
-	_m_mtime = 0;
-	_m_size = 0;
-	return *this;
-      }
-      inline source_file &operator= (const char *n)
-      {
-	_m_name = n;
-	_m_mtime = 0;
-	_m_size = 0;
-	return *this;
-      }
-
-      std::string to_string () const;
-
-      inline std::string &name ()
-      {
-	return _m_name;
-      }
-      inline const std::string &name () const
-      {
-	return _m_name;
-      }
-      inline ::Dwarf_Word &mtime ()
-      {
-	return _m_mtime;
-      }
-      inline ::Dwarf_Word mtime () const
-      {
-	return _m_mtime;
-      }
-      inline ::Dwarf_Word &size ()
-      {
-	return _m_size;
-      }
-      inline ::Dwarf_Word size () const
-      {
-	return _m_size;
-      }
-
-      template<typename other_file>
-      bool operator== (const other_file &other) const
-      {
-	if (mtime () != 0)
-	  {
-	    ::Dwarf_Word other_mtime = other.mtime ();
-	    if (other_mtime != 0 && other_mtime != mtime ())
-	      return false;
-	  }
-	if (size () != 0)
-	  {
-	    ::Dwarf_Word other_size = other.size ();
-	    if (other_size != 0 && other_size != size ())
-	      return false;
-	  }
-	return name () == other.name ();
-      }
-      template<typename other_file>
-      inline bool operator!= (const other_file &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-    // This describes a CU's directory table, a simple array of strings.
-    class directory_table : public std::vector<std::string>
-    {
-    private:
-      typedef std::vector<std::string> _base;
-
-    public:
-      directory_table () {}
-
-      template<typename table>
-      directory_table (const table &other)
-	: _base (other.begin (), other.end ()) {}
-
-      template<typename table>
-      inline bool operator== (const table &other) const
-      {
-	return size () == other.size () && subr::container_equal (*this, other);
-      }
-      template<typename table>
-      inline bool operator!= (const table &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-    class line_entry
-    {
-    private:
-      ::Dwarf_Addr _m_addr;	// XXX dwfl, reloc
-      source_file _m_file;
-      unsigned int _m_line;
-      unsigned int _m_column;
-
-      enum flag_bit
-	{
-	  flag_statement,
-	  flag_basic_block,
-	  flag_end_sequence,
-	  flag_prologue_end,
-	  flag_epilogue_begin,
-	  flag_count
-	};
-      std::bitset<flag_count> _m_flags;
-
-    public:
-      line_entry (::Dwarf_Addr addr)
-	: _m_addr (addr), _m_file (), _m_line (0), _m_column (0) {}
-
-      template<typename entry>
-      line_entry (const entry &other)
-	: _m_addr (0), _m_file (), _m_line (0), _m_column (0)
-      {
-	*this = other;
-      }
-
-      template<typename entry>
-      line_entry &operator= (const entry &other)
-      {
-	_m_addr = other.address ();
-	_m_file = other.file ();
-	_m_line = other.line ();
-	_m_column = other.column ();
-	statement () = other.statement ();
-	basic_block () = other.basic_block ();
-	end_sequence () = other.end_sequence ();
-	prologue_end () = other.prologue_end ();
-	epilogue_begin () = other.epilogue_begin ();
-	return *this;
-      }
-
-      inline ::Dwarf_Addr &address ()
-      {
-	return _m_addr;
-      }
-      inline ::Dwarf_Addr address () const
-      {
-	return _m_addr;
-      }
-      inline source_file &file ()
-      {
-	return _m_file;
-      }
-      inline const source_file &file () const
-      {
-	return _m_file;
-      }
-      inline unsigned int &line ()
-      {
-	return _m_line;
-      }
-      inline unsigned int line () const
-      {
-	return _m_line;
-      }
-      inline unsigned int &column ()
-      {
-	return _m_column;
-      }
-      inline unsigned int column () const
-      {
-	return _m_column;
-      }
-
-#define _DWARF_EDIT_LE_FLAG(what)			\
-      bool what () const				\
-      {							\
-	return _m_flags[flag_##what];			\
-      }							\
-      std::bitset<flag_count>::reference what ()	\
-      {							\
-	return _m_flags[flag_##what];			\
-      }
-      _DWARF_EDIT_LE_FLAG (statement)
-      _DWARF_EDIT_LE_FLAG (basic_block)
-      _DWARF_EDIT_LE_FLAG (end_sequence)
-      _DWARF_EDIT_LE_FLAG (prologue_end)
-      _DWARF_EDIT_LE_FLAG (epilogue_begin)
-#undef	_DWARF_EDIT_LE_FLAG
-
-      template<typename entry>
-      bool operator< (const entry &other) const
-      {
-	return address () < other.address ();
-      }
-      template<typename entry>
-      bool operator> (const entry &other) const
-      {
-	return address () > other.address ();
-      }
-      template<typename entry>
-      bool operator<= (const entry &other) const
-      {
-	return address () <= other.address ();
-      }
-      template<typename entry>
-      bool operator>= (const entry &other) const
-      {
-	return address () >= other.address ();
-      }
-
-      template<typename entry>
-      inline bool operator== (const entry &other) const
-      {
-	return (address () == other.address ()
-		&& line () == other.line ()
-		&& column () == other.column ()
-		&& statement () == other.statement ()
-		&& basic_block () == other.basic_block ()
-		&& end_sequence () == other.end_sequence ()
-		&& prologue_end () == other.prologue_end ()
-		&& epilogue_begin () == other.epilogue_begin ()
-		&& file () == other.file ());
-      }
-      template<typename entry>
-      inline bool operator!= (const entry &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-    class line_table : public std::vector<line_entry>
-    {
-    private:
-      typedef std::vector<line_entry> _base;
-
-    public:
-      typedef _base::size_type size_type;
-      typedef _base::difference_type difference_type;
-      typedef _base::value_type value_type;
-      typedef _base::iterator iterator;
-      typedef _base::const_iterator const_iterator;
-
-      line_table () {}
-
-      template<typename table>
-      line_table (const table &other) : _base (other.begin (), other.end ()) {}
-
-      template<typename table>
-      inline bool operator== (const table &other) const
-      {
-	return size () == other.size () && subr::container_equal (*this, other);
-      }
-      template<typename table>
-      inline bool operator!= (const table &other) const
-      {
-	return !(*this == other);
-      }
-
-      // Look up by matching address.
-      iterator find (::Dwarf_Addr);
-      const_iterator find (::Dwarf_Addr) const;
-    };
-
-    class line_info_table
-    {
-    private:
-      directory_table _m_dirs;
-      line_table _m_lines;
-
-    public:
-      line_info_table () : _m_dirs (), _m_lines () {}
-
-      template<typename table>
-      line_info_table (const table &other)
-	: _m_dirs (other.include_directories ()), _m_lines (other.lines ()) {}
-
-      template<typename table>
-      inline line_info_table &operator= (const table &other)
-      {
-	_m_dirs = directory_table (other.include_directories ());
-	_m_lines = line_table (other.lines ());
-	return *this;
-      }
-
-      inline directory_table &include_directories ()
-      {
-	return _m_dirs;
-      }
-      inline const directory_table &include_directories () const
-      {
-	return _m_dirs;
-      }
-      inline line_table &lines ()
-      {
-	return _m_lines;
-      }
-      inline const line_table &lines () const
-      {
-	return _m_lines;
-      }
-
-      template<typename table>
-      inline bool operator== (const table &other) const
-      {
-	return (include_directories () == other.include_directories ()
-		&& lines () == other.lines ());
-      }
-      template<typename table>
-      inline bool operator!= (const table &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-    class location_attr : public std::map<dwarf::location_attr::key_type,
-					  std::vector<uint8_t> >
-    {
-    private:
-      typedef std::map<dwarf::location_attr::key_type,
-		       std::vector<uint8_t> > _base;
-
-      template<typename pair>
-      struct nonempty : public std::unary_function<pair, bool>
-      {
-	inline bool operator () (const pair &x)
-	{
-	  return !x.second.empty ();
-	}
-      };
-
-    public:
-      typedef _base::size_type size_type;
-      typedef _base::difference_type difference_type;
-      typedef _base::key_type key_type;
-      typedef _base::mapped_type mapped_type;
-      typedef _base::value_type value_type;
-      typedef _base::iterator iterator;
-      typedef _base::const_iterator const_iterator;
-
-      inline location_attr () : _base () {}
-      inline location_attr (const location_attr &other)
-	: _base (static_cast<const _base &> (other)) {}
-      template<typename loc>
-      inline location_attr (const loc &other) : _base ()
-      {
-	*this = other;
-      }
-
-      template<typename loc>
-      inline location_attr &operator= (const loc &other)
-      {
-	clear ();
-	if (other.empty ())
-	  ;
-	else if (other.is_list ())
-	  for (typename loc::const_iterator i = other.begin ();
-	       i != other.end ();
-	       ++i)
-	    {
-	      const typename loc::mapped_type &x = (*i).second;
-	      (*this)[(*i).first] = mapped_type (x.begin (), x.end ());
-	    }
-	else
-	  {
-	    mapped_type v = other.location ();
-	    (*this)[key_type (0, -1)] = v;
-	  }
-	return *this;
-      }
-
-      inline bool is_list () const
-      {
-	if (empty ())
-	  return false;
-	if (size () > 1)
-	  return true;
-
-	const key_type &elt = begin ()->first;
-	return !(elt.first == 0 && elt.second == (Dwarf_Addr) -1);
-      }
-
-      inline mapped_type &location ()
-      {
-	if (empty ())
-	  return (*this)[key_type (0, -1)];
-
-	value_type &v = *begin ();
-	if (v.first.first != 0 || v.first.second != (Dwarf_Addr) -1
-	    || size () > 1)
-	  throw std::runtime_error ("location is list, not single location");
-
-	return v.second;
-      }
-      inline const mapped_type &location () const
-      {
-	if (size () == 1)
-	  {
-	    const value_type &v = *begin ();
-	    if (v.first.first == 0 && v.first.second == (Dwarf_Addr) -1)
-	      return v.second;
-	  }
-	throw std::runtime_error ("location is list, not single location");
-      }
-
-      template<typename other_attr>
-      bool operator== (const other_attr &other) const
-      {
-	if (empty ())
-	  return (other.empty ()
-		  || std::find_if (other.begin (), other.end (),
-				   nonempty<typename other_attr::value_type> ()
-				   ) == other.end ());
-	if (!is_list ())
-	  return (!other.is_list () && !other.empty ()
-		  && subr::container_equal (location (), other.location ()));
-
-	return other.is_list () && subr::container_equal (*this, other);
-      }
-      template<typename other_attr>
-      inline bool operator!= (const other_attr &other) const
-      {
-	return !(*this == other);
-      }
-
-      std::string to_string () const;
-    };
-
-    class dwarf_enum
-    {
-    private:
-      ::Dwarf_Word _m_value;
-      unsigned int _m_which;
-
-    public:
-      inline dwarf_enum (unsigned int attr, unsigned int value)
-	: _m_value (value), _m_which (attr)
-      {}
-
-      template<typename constant>
-      inline dwarf_enum (const constant &other)
-	: _m_value (static_cast<unsigned int> (other)),
-	  _m_which (other.which ())
-      {}
-
-      // Return the DW_AT_* indicating which enum this value belongs to.
-      inline unsigned int which () const
-      {
-	return _m_which;
-      }
-
-      inline operator unsigned int () const
-      {
-	return _m_value;
-      }
-
-      inline dwarf_enum &operator= (const dwarf_enum& other)
-      {
-	_m_value = other._m_value;
-	_m_which = other._m_which;
-	return *this;
-      }
-
-      template<typename constant>
-      inline dwarf_enum &operator= (const constant& other)
-      {
-	return *this = dwarf_enum (other.which (), other);
-      }
-
-      std::string to_string () const;
-
-      const char *identifier () const;
-      const char *name () const;
-
-      template<typename constant>
-      inline bool operator== (const constant &other) const
-      {
-	return (static_cast<unsigned int> (*this)
-		== static_cast<unsigned int> (other));
-      }
-      template<typename constant>
-      inline bool operator!= (const constant &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-  private:
-    class value_dispatch
-    {
-    public:
-      virtual ~value_dispatch () {}
-    };
-
-    struct value_string : public value_dispatch, public std::string
-    {
-      template<typename string>
-      value_string (const string &s) : std::string (s) {}
-
-      std::string to_string () const
-      {
-	std::string result ("\"");
-	result += *this;
-	result += "\"";
-	return result;
-      }
-    };
-
-    struct value_identifier : public value_string
-    {
-      template<typename id>
-      value_identifier (const id &s) : value_string (s) {}
-    };
-
-    struct value_reference : public value_dispatch
-    {
-      debug_info_entry::children_type::iterator ref;
-      value_reference (const debug_info_entry::children_type::iterator &i)
-	: ref (i) {}
-
-      template<typename iter>	// XXX dummy
-      value_reference (const iter &i) : ref () {}
-    };
-    struct value_unit_reference : public value_dispatch
-    {
-      compile_units::iterator ref;
-      value_unit_reference (const compile_units::iterator &i) : ref (i) {}
-
-      template<typename iter>	// XXX dummy
-      value_unit_reference (const iter &i) : ref () {}
-    };
-
-    struct value_flag : public value_dispatch
-    {
-      bool flag;
-      value_flag (bool t) : flag (t) {}
-    };
-
-    struct value_address : public value_dispatch
-    {
-      // XXX dwfl, reloc
-      ::Dwarf_Addr addr;
-      value_address (::Dwarf_Addr a) : addr (a) {}
-    };
-
-    struct value_rangelistptr : public value_dispatch, public range_list
-    {
-      template<typename list>
-      value_rangelistptr (const list &other) : range_list (other) {}
-    };
-
-    struct value_lineptr : public value_dispatch, public line_info_table
-    {
-      template<typename table>
-      value_lineptr (const table &other) : line_info_table (other) {}
-    };
-
-    struct value_constant : public value_dispatch
-    {
-      union
-      {
-	::Dwarf_Word word;
-	::Dwarf_Sword sword;
-      };
-      value_constant (::Dwarf_Word x) : word (x) {}
-    };
-
-    struct value_constant_block : public value_dispatch,
-				  public std::vector<uint8_t>
-    {
-      template<typename block>
-      value_constant_block (const block &b)
-	: std::vector<uint8_t> (b.begin (), b.end ()) {}
-    };
-
-    struct value_dwarf_constant : public value_dispatch, public dwarf_enum
-    {
-      template<typename constant>
-      value_dwarf_constant (const constant &other) : dwarf_enum (other) {}
-    };
-
-    struct value_source_file : public value_dispatch, public source_file
-    {
-      template<typename file>
-      value_source_file (const file &other) : source_file (other) {}
-    };
-
-    struct value_source_line : public value_dispatch
-    {
-      unsigned int n;
-      value_source_line (unsigned int m) : n (m) {}
-    };
-    typedef value_source_line value_source_column;
-
-    struct value_macptr : public value_dispatch {};
-
-    struct value_location : public value_dispatch, public location_attr
-    {
-      template<typename loc>
-      value_location (const loc &other) : location_attr (other) {}
-    };
-
-  public:
-    class attr_value
-    {
-    private:
-      value_dispatch *_m_value;
-
-      template<typename value>
-      inline void init (const value &other)
-      {
-	switch (other.what_space ())
-	  {
-	  case dwarf::VS_identifier:
-	    _m_value = new value_identifier (other.identifier ());
-	    break;
-	  case dwarf::VS_string:
-	    _m_value = new value_string (other.string ());
-	    break;
-	  case dwarf::VS_flag:
-	    _m_value = new value_flag (other.flag ());
-	    break;
-	  case dwarf::VS_rangelistptr:
-	    _m_value = new value_rangelistptr (other.ranges ());
-	    break;
-	  case dwarf::VS_lineptr:
-	    _m_value = new value_lineptr (other.line_info ());
-	    break;
-	  case dwarf::VS_address:
-	    _m_value = new value_address (other.address ());
-	    break;
-	  case dwarf::VS_constant:
-	    if (other.constant_is_integer ())
-	      _m_value = new value_constant (other.constant ());
-	    else
-	      _m_value = new value_constant_block (other.constant_block ());
-	    break;
-	  case dwarf::VS_source_line:
-	    _m_value = new value_source_line (other.source_line ());
-	    break;
-	  case dwarf::VS_source_column:
-	    _m_value = new value_source_column (other.source_column ());
-	    break;
-	  case dwarf::VS_source_file:
-	    _m_value = new value_source_file (other.source_file ());
-	    break;
-	  case dwarf::VS_dwarf_constant:
-	    _m_value = new value_dwarf_constant (other.dwarf_constant ());
-	    break;
-	  case dwarf::VS_reference:
-	    _m_value = new value_reference (other.reference ());
-	    break;
-	  case dwarf::VS_unit_reference:
-	    _m_value = new value_unit_reference (other.unit_reference ());
-	    break;
-	  case dwarf::VS_location:
-	    _m_value = new value_location (other.location ());
-	    break;
-#if 0
-	  case dwarf::VS_macptr:
-	    _m_value = new value_macptr (other.macptr ());
-	    break;
-#endif
-	  default:
-	  case dwarf::VS_discr_list:
-	    throw std::runtime_error ("XXX unimplemented");
-	  }
-      }
-
-      template<typename flavor>
-      inline flavor &variant () const
-      {
-	flavor *p = dynamic_cast<flavor *> (_m_value);
-	if (p == NULL)
-	  throw std::runtime_error ("wrong value type");
-	return *p;
-      }
-
-    public:
-      attr_value (const attr_value &other) : _m_value (NULL)
-      {
-	init (other);
-      }
-      template<typename value>
-      attr_value (const value &other) : _m_value (NULL)
-      {
-	init (other);
-      }
-
-      attr_value () : _m_value (NULL) {}
-
-      ~attr_value ()
-      {
-	if (_m_value != NULL)
-	  delete _m_value;
-      }
-
-      inline attr_value &operator= (const attr_value &other)
-      {
-	if (_m_value != NULL)
-	  {
-	    delete _m_value;
-	    _m_value = NULL;
-	  }
-	init (other);
-	return *this;
-      }
-      template<typename value>
-      inline attr_value &operator= (const value &other)
-      {
-	if (_m_value != NULL)
-	  {
-	    delete _m_value;
-	    _m_value = NULL;
-	  }
-	init (other);
-	return *this;
-      }
-
-      dwarf::value_space what_space () const;
-      inline std::string to_string () const;
-
-      inline bool &flag () const
-      {
-	return variant<value_flag> ().flag;
-      }
-
-      // XXX dwfl, reloc
-      inline ::Dwarf_Addr &address () const
-      {
-	return variant<value_address> ().addr;
-      }
-
-      inline debug_info_entry::children_type::iterator reference () const
-      {
-	return variant<value_reference> ().ref;
-      }
-      inline compile_units::iterator unit_reference () const
-      {
-	return variant<value_unit_reference> ().ref;
-      }
-
-      inline location_attr &location () const
-      {
-	return static_cast<location_attr &> (variant<value_location> ());
-      }
-
-      inline std::string &string () const
-      {
-	return static_cast<std::string &> (variant<value_string> ());
-      }
-      inline std::string &identifier () const
-      {
-	return string ();
-      }
-
-      inline dwarf_edit::source_file &source_file () const
-      {
-	return static_cast<dwarf_edit::source_file &>
-	  (variant<value_source_file> ());
-      }
-
-      inline unsigned int &source_line () const
-      {
-	return variant<value_source_line> ().n;
-      }
-
-      inline unsigned int &source_column () const
-      {
-	return variant<value_source_column> ().n;
-      }
-
-      inline ::Dwarf_Word &constant () const
-      {
-	return variant<value_constant> ().word;
-      }
-
-      inline ::Dwarf_Sword &signed_constant () const
-      {
-	return variant<value_constant> ().sword;
-      }
-
-      inline std::vector<uint8_t> &constant_block () const
-      {
-	return static_cast<std::vector<uint8_t> &>
-	  (variant<value_constant_block> ());
-      }
-
-      inline dwarf_enum &dwarf_constant () const
-      {
-	return variant<value_dwarf_constant> ();
-      }
-
-      inline bool constant_is_integer () const
-      {
-	return dynamic_cast<value_constant *> (_m_value) != NULL;
-      }
-
-      inline range_list &ranges () const
-      {
-	return static_cast<range_list &> (variant<value_rangelistptr> ());
-      }
-
-      inline line_info_table &line_info () const
-      {
-	return static_cast<line_info_table &> (variant<value_lineptr> ());
-      }
-
-      // macptr
-
-      template<typename value>
-      inline bool operator== (const value &other) const
-      {
-	const dwarf::value_space what = what_space ();
-	if (likely (other.what_space () == what))
-	  switch (what)
-	    {
-	    case dwarf::VS_identifier:
-	      return identifier () == other.identifier ();
-	    case dwarf::VS_string:
-	      return string () == other.string ();
-	    case dwarf::VS_reference:
-	      return reference () == other.reference ();
-	    case dwarf::VS_unit_reference:
-	      return unit_reference () == other.unit_reference ();
-	    case dwarf::VS_flag:
-	      return flag () == other.flag ();
-	    case dwarf::VS_rangelistptr:
-	      return ranges () == other.ranges ();
-	    case dwarf::VS_lineptr:
-	      return line_info () == other.line_info ();
-	    case dwarf::VS_constant:
-	      if (constant_is_integer ())
-		return (other.constant_is_integer ()
-			&& constant () == other.constant ());
-	      return (!other.constant_is_integer ()
-		      && constant_block () == other.constant_block ());
-	    case dwarf::VS_source_file:
-	      return source_file () == other.source_file ();
-	    case dwarf::VS_source_line:
-	      return source_line () == other.source_line ();
-	    case dwarf::VS_source_column:
-	      return source_column () == other.source_column ();
-	    case dwarf::VS_address:
-	      return address () == other.address ();
-	    case dwarf::VS_location:
-	      return location () == other.location ();
-	    case dwarf::VS_dwarf_constant:
-	      return dwarf_constant () == other.dwarf_constant ();
-#if 0
-	    case dwarf::VS_macptr:
-	      return macptr () == other.macptr ();
-#endif
-	    default:
-	    case dwarf::VS_discr_list:
-	      throw std::runtime_error ("XXX unimplemented");
-	    }
-	return false;
-      }
-      template<typename value>
-      inline bool operator!= (const value &other) const
       {
 	return !(*this == other);
       }
@@ -1176,13 +301,21 @@ namespace elfutils
       return _m_units;
     }
 
+    // Convenience entry point.
+    inline compile_unit &add_unit ()
+    {
+      return compile_units ().add_unit ();
+    }
+
   public:
     // Default constructor: an empty container, no CUs.
     inline dwarf_edit () {}
 
     // Constructor copying CUs from an input file (dwarf or dwarf_edit).
-    template<typename input>
-    dwarf_edit (const input &dw) : _m_units (dw.compile_units ()) {}
+    template<typename input, typename tracker>
+    dwarf_edit (const input &dw, tracker *t)
+      : _m_units (dw.compile_units (), t)
+    {}
 
     template<typename file>
     inline bool operator== (const file &other) const
@@ -1200,17 +333,7 @@ namespace elfutils
   template<>
   std::string to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &);
   template<>
-  std::string to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value&);
-  inline std::string dwarf_edit::attr_value::to_string () const
-  {
-    return elfutils::to_string (*this); // Use that.
-  }
-  template<>
-  std::string to_string<dwarf_edit::dwarf_enum> (const dwarf_edit::dwarf_enum&);
-  inline std::string dwarf_edit::dwarf_enum::to_string () const
-  {
-    return elfutils::to_string (*this); // Use that.
-  }
+  std::string to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &);
 };
 
 #endif	// <elfutils/dwarf_edit>

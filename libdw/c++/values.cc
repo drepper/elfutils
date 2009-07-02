@@ -51,6 +51,7 @@
 #include <cassert>
 #include "dwarf"
 #include "dwarf_edit"
+#include "dwarf_output"
 
 extern "C"
 {
@@ -234,6 +235,16 @@ value_string (const value_type &value)
 
 template<>
 string
+to_string<dwarf::attribute> (const dwarf::attribute &attr)
+{
+  std::string result = dwarf::attributes::name (attr.first);
+  result += "=";
+  result += attr.second.to_string ();
+  return result;
+}
+
+template<>
+string
 to_string<dwarf::attr_value> (const dwarf::attr_value &value)
 {
   return value_string (value);
@@ -246,6 +257,12 @@ to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &value)
   return value_string (value);
 }
 
+template<>
+string
+to_string<dwarf_output::attr_value> (const dwarf_output::attr_value &value)
+{
+  return value_string (value);
+}
 
 // A few cases are trivial.
 #define SIMPLE(type, name, form)					\

@@ -1,4 +1,4 @@
-/* elfutils::dwarf_edit attribute value interfaces.
+/* elfutils::dwarf_output attribute value interfaces.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -48,36 +48,21 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include <config.h>
-#include "dwarf_edit"
+#include "dwarf_output"
 #include "data-values.hh"
+
+#include <typeinfo>
 
 using namespace elfutils;
 
-template dwarf::value_space dwarf_edit::attr_value::what_space () const;
+template dwarf::value_space dwarf_output::attr_value::what_space () const;
 
 template<>
 std::string
-to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &attr)
+to_string<dwarf_output::attribute> (const dwarf_output::attribute &attr)
 {
   std::string result = dwarf::attributes::name (attr.first);
   result += "=";
   result += attr.second.to_string ();
   return result;
-}
-
-std::string
-dwarf_data::source_file::to_string () const
-{
-  if (likely (_m_mtime == 0) && likely (_m_size == 0))
-    return "\"" + _m_name + "\"";
-
-  std::ostringstream os;
-  os << "{\"" << _m_name << "," << _m_mtime << "," << _m_size << "}";
-  return os.str ();
-}
-
-std::string
-dwarf_data::location_attr::to_string () const
-{
-  return is_list () ? "XXX-loclist" : "XXX-expr";
 }
