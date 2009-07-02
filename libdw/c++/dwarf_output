@@ -379,6 +379,9 @@ namespace elfutils
 	typedef debug_info_entry value_type;
       };
 
+      typedef children_type::const_iterator const_pointer;
+      typedef children_type::const_iterator pointer;
+
       class attributes_type
 	: public dwarf_data::attributes_type<dwarf_output,
 					     dwarf_output_collector *,

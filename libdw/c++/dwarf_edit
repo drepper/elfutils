@@ -120,12 +120,19 @@ namespace elfutils
       public:
 	typedef debug_info_entry value_type;
 
-	inline debug_info_entry &add_entry (int tag)
+	inline iterator add_entry (int tag, const iterator &pos)
 	{
-	  push_back (debug_info_entry (tag));
-	  return back ();
+	  return insert (pos, debug_info_entry (tag));
+	}
+
+	inline iterator add_entry (int tag)
+	{
+	  return add_entry (tag, end ());
 	}
       };
+
+      typedef children_type::iterator pointer;
+      typedef children_type::const_iterator const_pointer;
 
       class attributes_type
 	: public dwarf_data::attributes_type<dwarf_edit>
@@ -214,8 +221,8 @@ namespace elfutils
 	return identity ();
       }
 
-      // Convenience entry points.
-      inline debug_info_entry &add_entry (int child_tag)
+      // Convenience entry point.
+      inline pointer add_entry (int child_tag)
       {
 	return children ().add_entry (child_tag);
       }

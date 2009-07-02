@@ -716,18 +716,26 @@ namespace elfutils
 
       struct value_reference : public value_dispatch
       {
-	typename impl::debug_info_entry::children_type::iterator ref;
+	typedef typename impl::debug_info_entry::pointer value_type;
+	value_type ref;
 
-	template<typename arg_type>
-	inline value_reference
-	(const typename impl::debug_info_entry::children_type::iterator &i,
-	 const arg_type &arg)
+	// Default constructor: reference to nowhere, invalid.
+	inline value_reference ()
+	  : ref ()
+	{}
+
+	/* This is only kosher for a pointer into the same dwarf_edit
+	   object.  This is what plain assignment does.  This just uses
+	   this pointer, rather than translating it from another file
+	   into this one (which requires a tracker).  */
+	inline value_reference (const value_type &i, const nothing &)
 	  : ref (i)
 	{}
 
-	template<typename iter, typename arg_type>	// XXX dummy
-	inline value_reference (const iter &i, const arg_type &arg)
-	  : ref () {}
+	template<typename iter, typename tracker>
+	inline value_reference (const iter &i, tracker *t)
+	  : ref ()
+	{}
       };
 
       struct value_flag : public value_dispatch
@@ -918,7 +926,8 @@ namespace elfutils
       {
 	flavor *p = dynamic_cast<flavor *> (_m_value);
 	if (p == NULL)
-	  throw std::runtime_error ("wrong value type");
+	  throw std::runtime_error (_m_value != NULL ? "wrong value type"
+				    : "uninitialized attr_value (const?)");
 	return *p;
       }
 
@@ -991,14 +1000,29 @@ namespace elfutils
 	return variant<typename vw::value_flag> ().flag;
       }
 
+      inline bool &flag ()
+      {
+	return variant<typename vw::value_flag> ().flag;
+      }
+
       // XXX dwfl, reloc
       inline ::Dwarf_Addr &address () const
       {
 	return variant<typename vw::value_address> ().addr;
       }
 
-      inline typename impl::debug_info_entry::children_type::iterator
-      reference () const
+      // XXX dwfl, reloc
+      inline ::Dwarf_Addr &address ()
+      {
+	return variant<typename vw::value_address> ().addr;
+      }
+
+      inline typename impl::debug_info_entry::pointer &reference () const
+      {
+	return variant<typename vw::value_reference> ().ref;
+      }
+
+      inline typename impl::debug_info_entry::pointer &reference ()
       {
 	return variant<typename vw::value_reference> ().ref;
       }
@@ -1009,21 +1033,30 @@ namespace elfutils
 	  (variant<typename vw::value_location> ());
       }
 
-      inline std::string &string ()
+      inline location_attr &location ()
       {
-	return static_cast<std::string &>
-	  (variant<typename vw::value_string> ());
+	return static_cast<location_attr &>
+	  (variant<typename vw::value_location> ());
       }
+
       inline const std::string &string () const
       {
 	return static_cast<const std::string &>
 	  (variant<typename vw::value_string> ());
       }
-      inline std::string &identifier ()
+
+      inline std::string &string ()
+      {
+	return static_cast<std::string &>
+	  (variant<typename vw::value_string> ());
+      }
+
+      inline const std::string &identifier () const
       {
 	return string ();
       }
-      inline const std::string &identifier () const
+
+      inline std::string &identifier ()
       {
 	return string ();
       }
