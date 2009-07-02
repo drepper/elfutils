@@ -113,22 +113,10 @@ namespace elfutils
     struct left_context_type {};
     struct right_context_type {};
 
-    // Return the lhs context of the current walk.
-    inline const left_context_type left_context ()
-    {
-      return left_context_type ();
-    }
-
     // Return the lhs context of an arbitrary DIE.
     inline const left_context_type left_context (const die1 &die)
     {
       return left_context_type ();
-    }
-
-    // Return the rhs context of the current walk.
-    inline const right_context_type right_context ()
-    {
-      return right_context_type ();
     }
 
     // Return the rhs context of an arbitrary DIE.
@@ -162,8 +150,7 @@ namespace elfutils
     };
 
     inline bool reference_matched (reference_match &,
-				   const left_context_type &, const die1 &,
-				   const right_context_type &, const die2 &)
+				   const die1 &, const die2 &)
     {
       return false;
     }
@@ -359,12 +346,9 @@ namespace elfutils
 
     inline bool match (const cit1 &a, const cit2 &b)
     {
-#if 0 // XXX
       // Maybe the tracker has already cached a correspondence of DIEs.
       typename tracker::reference_match matched;
-      if (_m_tracker.reference_matched (matched,
-					_m_tracker.left_context (), a,
-					_m_tracker.right_context (), b))
+      if (_m_tracker.reference_matched (matched, a, b))
 	{
 	  std::cout << "short-circuit DIE match " << std::hex << a->offset ()
 		    << std::endl;
@@ -373,14 +357,11 @@ namespace elfutils
 
       if (matched.cannot_match ())
 	return false;
-#endif
 
       bool result = match_child (a, b);
 
-#if 0 // XXX
       // Let the tracker cache a result for its reference_matched.
       matched.notice_match (b, result);
-#endif
 
       return result;
     }
@@ -490,15 +471,9 @@ namespace elfutils
       if (has_children != b.has_children ())
 	return false;
 
-      // Now we have to get the tracker involved.
-      const typename tracker::left_context_type &lhs
-	= _m_tracker.left_context (ref1);
-      const typename tracker::right_context_type &rhs
-	= _m_tracker.right_context (ref2);
-
       // Maybe the tracker has already cached a correspondence of references.
       typename tracker::reference_match matched;
-      if (_m_tracker.reference_matched (matched, lhs, ref1, rhs, ref2))
+      if (_m_tracker.reference_matched (matched, ref1, ref2))
 	{
 	  std::cout << "short-circuit ref match " << std::hex << a.offset ()
 		    << std::endl;
@@ -511,6 +486,12 @@ namespace elfutils
       std::cout << "considering ref "
 		<< std::hex << a.offset () << " vs "
 		<< std::hex << b.offset () << std::endl;
+
+      // Now we really have to get the tracker involved.
+      const typename tracker::left_context_type &lhs
+	= _m_tracker.left_context (ref1);
+      const typename tracker::right_context_type &rhs
+	= _m_tracker.right_context (ref2);
 
       /* First do the cheap mismatch check on the contexts, then check the
 	 contents and contexts in ascending order of costliness of a check.  */

@@ -71,23 +71,12 @@ namespace elfutils
     typedef typename _base::die2 die2;
 
   private:
-    /* We maintain the current path down the logical DIE tree from the CU
-       as a stack of iterators pointing to the DIE at each level.  */
     template<typename cu, typename die>
     struct tracker
     {
+      /* We maintain the current path down the logical DIE tree from the CU
+	 as a stack of iterators pointing to the DIE at each level.  */
       typedef std::list<die> die_path;
-
-      /* We record every DIE we have seen here, mapping its .identity ()
-	 to the die_path of parent DIEs taken to reach it.  */
-      typedef std::tr1::unordered_map< ::Dwarf_Off, const die_path> die_map;
-      die_map *_m_seen;
-      bool _m_delete_seen;
-
-      cu _m_root;
-
-      die_path _m_path;
-      const die_path *_m_context;
 
       // We use a singleton list of a default-constructed iterator as a marker.
       static inline const die_path bad_die_path ()
@@ -103,19 +92,27 @@ namespace elfutils
 	return ++it == path.end () && elt == die ();
       }
 
+      /* We record every DIE we have seen here, mapping its .identity ()
+	 to the die_path of parent DIEs taken to reach it.  */
+      typedef std::tr1::unordered_map< ::Dwarf_Off, const die_path> die_map;
+      die_map *_m_seen;
+      bool _m_delete_seen;
+
+      cu _m_root;
+
+      die_path _m_path;
+
       // Default constructor: an original tracker.
       inline tracker ()
-	: _m_seen (new die_map), _m_delete_seen (true), _m_context (NULL)
+	: _m_seen (new die_map), _m_delete_seen (true)
       {}
 
       // Construct a derived tracker: does its own walk, but sharing caches.
       inline tracker (const tracker &proto,
 		      const die_path &context, const die &there)
 	: _m_seen (proto._m_seen), _m_delete_seen (false),
-	  _m_root (proto._m_root), _m_path (context), _m_context (&context)
+	  _m_root (proto._m_root), _m_path (context)
       {
-	printf("derived tracker context %p from %p\n",
-	       _m_context, proto._m_context);
 	_m_path.push_back (there);
       }
 
@@ -126,7 +123,6 @@ namespace elfutils
 	    delete _m_seen;
 	    // We should never be left with a partial walk on the books.
 	    assert (_m_path.empty ());
-	    assert (_m_context == NULL);
 	  }
       }
 
@@ -142,14 +138,11 @@ namespace elfutils
 	{
 	  assert (_m_tracker->_m_path.empty ());
 	  _m_tracker->_m_root = root;
-	  //???	  _m_tracker->_m_context = &(*_m_tracker->_m_seen)[(*root).identity ()];
-	  printf("walk CU %#x context %p\n", (*root).offset (), _m_tracker->_m_context);
 	}
 	inline ~walk ()
 	{
 	  assert (_m_tracker->_m_path.empty ());
 	  _m_tracker->_m_root = cu ();
-	  //???	  _m_tracker->_m_context = NULL;
 	}
       };
 
@@ -159,35 +152,18 @@ namespace elfutils
       struct step
       {
 	tracker *_m_walker;
-	const die_path *_m_old_context;
 	inline step (tracker *w, const die &here)
-	  : _m_walker (w), _m_old_context (w->_m_context)
+	  : _m_walker (w)
 	{
-	  _m_walker->print_path (_m_walker->_m_path, true, false, "pre_order", here);
-
-	  printf ("ctx{%p} %d vs path %u\n",
-		  _m_walker->_m_context,
-		  _m_walker->_m_context?
-		  _m_walker->_m_context->size():-1,_m_walker->_m_path.size());
-
 	  // Record the path down from the CU to see this DIE.
-	  _m_walker->_m_context = &(_m_walker->_m_seen->insert
-				    (std::make_pair (here->identity (),
-						     _m_walker->_m_path))
-				    .first->second);
-
-	  printf("pre_order context %p from %p",
-		 _m_walker->_m_context, _m_old_context);
-	  _m_walker->print_path (*_m_walker->_m_context, true, false, ":", here);
+	  _m_walker->_m_seen->insert (std::make_pair (here->identity (),
+						      _m_walker->_m_path));
 
 	  // Append this DIE to the path we'll record for its children.
 	  _m_walker->_m_path.push_back (here);
 	}
 	inline ~step ()
 	{
-	  printf("post_order context %p from %p\n",
-		 _m_walker->_m_context, _m_old_context);
-	  _m_walker->_m_context = _m_old_context;
 	  _m_walker->_m_path.pop_back ();
 	}
       };
@@ -231,6 +207,7 @@ namespace elfutils
 	    && !W(walk_over_to, (a, found.first))
 	    && !W(walk_up_to, (a, found.first)))
 	  throw std::runtime_error ("DIE not reachable from CU!");
+	assert (&found.first->second != NULL);
 	assert (!bad_die_path (found.first->second));
 	return found.first->second;
       }
@@ -377,7 +354,7 @@ namespace elfutils
     tracker2 _m_right;
 
     typedef std::tr1::unordered_map<
-      ::Dwarf_Off, std::pair<const std::list<die2> *,
+      ::Dwarf_Off, std::pair<const die2 *,
 			     std::tr1::unordered_set< ::Dwarf_Off> >
       > equiv_map;
     equiv_map *_m_equiv;
@@ -429,23 +406,13 @@ namespace elfutils
       {}
     };
 
-    typedef std::list<die1> left_context_type;
-    inline const left_context_type &left_context ()
-    {
-      return *_m_left._m_context;
-    }
-
+    typedef typename tracker1::die_path left_context_type;
     inline const left_context_type &left_context (const die1 &die)
     {
       return _m_left.path_to (die);
     }
 
-    typedef std::list<die2> right_context_type;
-    inline const right_context_type &right_context ()
-    {
-      return *_m_right._m_context;
-    }
-
+    typedef typename tracker2::die_path right_context_type;
     inline const right_context_type &right_context (const die2 &die)
     {
       return _m_right.path_to (die);
@@ -497,50 +464,34 @@ namespace elfutils
     };
 
     inline bool
-    reference_matched (reference_match &matched,
-		       const left_context_type &lhs, const die1 &a,
-		       const right_context_type &rhs, const die2 &b)
+    reference_matched (reference_match &matched, const die1 &a, const die2 &b)
     {
-      if (&lhs) _m_left.print_path (lhs, true, false, "r_m lhs", a);
-      else puts("r_m lhs NULL!");
-      if (&rhs) _m_right.print_path (rhs, true, false, "r_m rhs", b);
-      else puts("r_m rhs NULL!");
       typename equiv_map::mapped_type *elt = &(*_m_equiv)[a->identity ()];
       if (elt->first == NULL)
 	{
-	  printf("r_m {%p, %#x} vs {%p, %#x}\n",
-		 &lhs, a->offset (),
-		 &rhs, b->offset ());
-
 	  /* Record that we have a walk in progress crossing A.
 	     When MATCHED goes out of scope in our caller, its
 	     destructor will reset ELT->first to clear this record.  */
-	  elt->first = &rhs;
+	  elt->first = &b;
 	  matched._m_elt = elt;
 
 	  // Short-circuit if we have already matched B to A.
 	  return elt->second.find (b->identity ()) != elt->second.end ();
 	}
 
-      printf("r_m circ %p {%p, %#x} vs {%p, %#x}\n",
-	     elt->first,
-	     &lhs, a->offset (),
-	     &rhs, b->offset ());
-
       /* We have a circularity.  We can tell because ELT->first remains
 	 set from an outer recursion still in progress.
 
-	 The circular chain of references rooted at A matches B if B
-	 is also the root of its own circularity and everything
-	 along those parallel chains matches.  If the chains hadn't
-	 matched, we would not kept following the chain to get here.
+	 The circular chain of references rooted at A matches B if B is
+	 also the root of its own circularity and everything along those
+	 parallel chains matches.  If the chains hadn't matched so far,
+	 we would not have kept following them to get here.
 
-	 We recorded the RHS that arrived at the first comparison with A.
-	 The same B has the same RHS pointer into the _m_right._m_seen map,
-	 so simple pointer equality here checks that this B matches the B
-	 in the first comparison to A.  */
+	 We recorded the B that arrived at the first comparison with A.
+	 We actually record the pointer on the caller's stack rather
+	 than a copy of B, just because the iterator might be larger.  */
 
-      return elt->first == &rhs;
+      return *elt->first == b;
     }
 
     // Share the _m_seen maps with the prototype tracker,
