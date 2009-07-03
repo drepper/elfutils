@@ -1064,6 +1064,12 @@ where_reset_3 (struct where *wh, uint64_t addr)
 
 #define WHERE_SECDATA(DATA, PARENT) (WHERE (data_get_sec (DATA)->id, PARENT))
 
+static bool
+address_aligned (uint64_t addr, uint64_t align)
+{
+  return align < 2 || (addr % align == 0);
+}
+
 static void
 process_file (Dwarf *dwarf, const char *fname, bool only_one)
 {
@@ -1168,6 +1174,11 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 					shdr->sh_name);
       if (scnname == NULL)
 	goto invalid_elf;
+
+      if (!address_aligned (shdr->sh_addr, shdr->sh_addralign))
+	wr_error (NULL, "Base address of section %s, %#" PRIx64
+		  ", should have an alignment of %" PRId64 ".\n",
+		  scnname, shdr->sh_addr, shdr->sh_addralign);
 
       struct secinfo *secentry = find_secentry (scnname);
       struct section_data *secdata = secentry != NULL ? secentry->dataptr : NULL;
