@@ -342,13 +342,21 @@ wr_message (enum message_category category, const struct where *wh,
   va_end (ap);
 }
 
+char *
+range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end)
+{
+  snprintf (buf, buf_size, "[%#" PRIx64 ", %#" PRIx64 ")", start, end);
+  return buf;
+}
+
 void
 wr_format_padding_message (enum message_category category,
 			   struct where *wh,
 			   uint64_t start, uint64_t end, char *kind)
 {
-  wr_message (category, wh,
-	      ": 0x%" PRIx64 "..0x%" PRIx64 ": %s.\n", start, end, kind);
+  char msg[128];
+  wr_message (category, wh, ": %s: %s.\n",
+	      range_fmt (msg, sizeof msg, start, end), kind);
 }
 
 void
@@ -1774,7 +1782,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	    /* Don't report abbrev address, this is section-wide padding.  */
 	    struct where wh = WHERE (where.section, NULL);
 	    wr_message_padding_0 (mc_abbrevs | mc_header, &wh,
-				  zero_seq_off, abbr_off - 1);
+				  zero_seq_off, abbr_off);
 	  }
       }
 
@@ -2123,17 +2131,18 @@ found_hole (uint64_t start, uint64_t length, void *data)
 	    && (end % info->align == 0) && (start % 4 != 0)
 	    && (length < info->align)))
 	wr_message_padding_0 (info->category, &WHERE (info->section, NULL),
-			      start, end - 1);
+			      start, end);
     }
   else
     /* XXX: This actually lies when the unreferenced portion is
        composed of sequences of zeroes and non-zeroes.  */
     wr_message_padding_n0 (info->category, &WHERE (info->section, NULL),
-			   start, end - 1);
+			   start, end);
 
   return true;
 }
 
+/* begin is inclusive, end is exclusive. */
 bool
 coverage_map_found_hole (uint64_t begin, uint64_t end,
 			 struct section_coverage *sco, void *user)
@@ -2143,12 +2152,15 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
   struct where where = WHERE (info->info.section, NULL);
   const char *scnname = sco->sec->name;
 
-  Elf_Data *data = elf_getdata (sco->sec->scn, NULL);
+  struct sec *sec = sco->sec;
+  Elf_Data *data = elf_getdata (sec->scn, NULL);
   if (data == NULL)
     {
       wr_error (&where, ": couldn't read the data of section %s.\n", scnname);
       return false;
     }
+
+  GElf_Xword align = sec->shdr.sh_addralign;
 
   /* We don't expect some sections to be covered.  But if they
      are at least partially covered, we expect the same
@@ -2163,8 +2175,10 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
   /* For REL files, don't print addresses mangled by our layout.  */
   uint64_t base = info->elf->ehdr.e_type == ET_REL ? 0 : sco->sec->shdr.sh_addr;
 
-  /* If we get stripped debuginfo file, the data simply may not be
-     available.  In that case simply report the hole.  */
+  /* If the hole is filled with NUL bytes, don't report it.  But if we
+     get stripped debuginfo file, the data may not be available.  In
+     that case don't report the hole, if it seems to be alignment
+     padding.  */
   if (data->d_buf != NULL)
     {
       bool zeroes = true;
@@ -2177,11 +2191,13 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
       if (!zeroes)
 	return true;
     }
+  else if (address_aligned (base + end, align) && end - begin < align)
+    return true;
 
+  char buf[128];
   wr_message (info->info.category | mc_acc_suboptimal | mc_impact_4, &where,
-	      ": addresses %#" PRIx64 "..%#" PRIx64
-	      " of section %s are not covered.\n",
-	      begin + base, end + base, scnname);
+	      ": addresses %s of section %s are not covered.\n",
+	      range_fmt (buf, sizeof buf, begin + base, end + base), scnname);
   return true;
 }
 
@@ -2243,6 +2259,7 @@ coverage_map_add (struct coverage_map *coverage_map,
   bool crosses_boundary = false;
   bool overlap = false;
   uint64_t end = address + length;
+  char buf[128]; // for messages
 
   /* This is for analyzing how much of the current range falls into
      sections in coverage map.  Whatever is left uncovered doesn't
@@ -2265,9 +2282,8 @@ coverage_map_add (struct coverage_map *coverage_map,
 	{
 	  /* While probably not an error, it's very suspicious.  */
 	  wr_message (cat | mc_impact_2, where,
-		      ": the range %#" PRIx64 "..%#" PRIx64
-		      " crosses section boundaries.\n",
-		      address, end);
+		      ": the range %s crosses section boundaries.\n",
+		      range_fmt (buf, sizeof buf, address, end));
 	  crosses_boundary = true;
 	}
 
@@ -2294,17 +2310,15 @@ coverage_map_add (struct coverage_map *coverage_map,
 	{
 	  /* Not a show stopper, this shouldn't derail high-level.  */
 	  wr_message (cat | mc_impact_2 | mc_error, where,
-		      ": the range %#" PRIx64 "..%#" PRIx64
-		      " overlaps with another one.\n",
-		      address, end);
+		      ": the range %s overlaps with another one.\n",
+		      range_fmt (buf, sizeof buf, address, end));
 	  overlap = true;
 	}
 
       if (sco->warn)
 	wr_message (cat | mc_impact_2, where,
-		    ": the range %#" PRIx64 "..%#" PRIx64
-		    " covers section %s.\n",
-		    address, end, sco->sec->name);
+		    ": the range %s covers section %s.\n",
+		    range_fmt (buf, sizeof buf, address, end), sco->sec->name);
 
       /* Section coverage... */
       coverage_add (cov, cov_begin, cov_end - cov_begin);
@@ -2317,20 +2331,21 @@ coverage_map_add (struct coverage_map *coverage_map,
   if (!found)
     /* Not a show stopper.  */
     wr_error (where,
-	      ": couldn't find a section that the range %#"
-	      PRIx64 "..%#" PRIx64 " covers.\n", address, end);
+	      ": couldn't find a section that the range %s covers.\n",
+	      range_fmt (buf, sizeof buf, address, end));
   else if (length > 0)
     {
       bool range_hole (uint64_t h_start, uint64_t h_length,
 		       void *user __attribute__ ((unused)))
       {
+	char buf2[128];
 	assert (h_length != 0);
 	wr_error (where,
-		  ": portion %#" PRIx64 "..%#" PRIx64
-		  ", of the range %#" PRIx64 "..%#" PRIx64
-		  " doesn't fall into any ALLOC section.\n",
-		  h_start + address, h_start + address + h_length - 1,
-		  address, end);
+		  ": portion %s of the range %s "
+		  "doesn't fall into any ALLOC section.\n",
+		  range_fmt (buf, sizeof buf,
+			     h_start + address, h_start + address + h_length),
+		  range_fmt (buf2, sizeof buf2, address, end));
 	return true;
       }
       coverage_find_holes (&range_cov, 0, length, range_hole, NULL);
@@ -2351,7 +2366,7 @@ coverage_map_find_holes (struct coverage_map *coverage_map,
 
       bool wrap_cb (uint64_t h_start, uint64_t h_length, void *h_user)
       {
-	return cb (h_start, h_start + h_length - 1, sco, h_user);
+	return cb (h_start, h_start + h_length, sco, h_user);
       }
 
       if (!coverage_find_holes (&sco->cov, 0, sco->sec->shdr.sh_size,
@@ -3680,7 +3695,7 @@ check_info_structural (struct section_data *data,
 	      && !check_zero_padding (&cu_ctx, mc_info, &where))
 	    wr_message_padding_n0 (mc_info, &where,
 				   read_ctx_get_offset (&ctx),
-				   read_ctx_get_offset (&ctx) + size - 1);
+				   read_ctx_get_offset (&ctx) + size);
 	}
 
       if (!read_ctx_skip (&ctx, size))
@@ -4011,7 +4026,7 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	  wr_message_padding_n0 (mc_pubtables | mc_error,
 				 &WHERE (where.section, NULL),
 				 read_ctx_get_offset (&sub_ctx),
-				 read_ctx_get_offset (&sub_ctx) + size - 1);
+				 read_ctx_get_offset (&sub_ctx) + size);
 	  retval = false;
 	}
 
@@ -4177,7 +4192,7 @@ check_pub_structural (struct section_data *data,
 	  wr_message_padding_n0 (mc_pubtables | mc_error,
 				 &WHERE (sec, NULL),
 				 read_ctx_get_offset (&sub_ctx),
-				 read_ctx_get_offset (&sub_ctx) + size - 1);
+				 read_ctx_get_offset (&sub_ctx) + size);
 	  retval = false;
 	}
 
@@ -4360,6 +4375,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 			struct where *wh,
 			enum message_category cat)
 {
+  char buf[128]; // messages
   struct read_ctx ctx;
   read_ctx_init (&ctx, parent_ctx->dbg, parent_ctx->data);
 
@@ -4473,16 +4489,15 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	  if (base == (uint64_t)-1)
 	    {
 	      wr_error (&where,
-			": address range with no base address set (%#"
-			PRIx64 "..%#" PRIx64 ").\n", begin_addr, end_addr);
+			": address range with no base address set: %s.\n",
+			range_fmt (buf, sizeof buf, begin_addr, end_addr));
 	      /* This is not something that would derail high-level,
 		 so carry on.  */
 	    }
 
 	  if (end_addr < begin_addr)
-	    wr_message (cat | mc_error, &where,
-			": has negative range 0x%" PRIx64 "..0x%" PRIx64 ".\n",
-			begin_addr, end_addr);
+	    wr_message (cat | mc_error, &where,	": has negative range %s.\n",
+			range_fmt (buf, sizeof buf, begin_addr, end_addr));
 	  else if (begin_addr == end_addr)
 	    /* 2.6.6: A location list entry [...] whose beginning
 	       and ending addresses are equal has no effect.  */
@@ -4650,10 +4665,13 @@ check_loc_or_range_structural (struct section_data *data,
 			      ctx.data->d_buf}));
 
       if (coverage_map)
+	{
+      puts ("2");
 	coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
 				 &(struct coverage_map_hole_info)
 				 {{sec, cat, 0, NULL},
 				   coverage_map->elf});
+	}
     }
 
 
@@ -5064,7 +5082,7 @@ check_line_structural (struct section_data *data,
 	  if (!check_zero_padding (&sub_ctx, mc_line | mc_header, &where))
 	    wr_message_padding_n0 (mc_line | mc_header, &WHERE (sec_line, NULL),
 				   read_ctx_get_offset (&sub_ctx),
-				   program_start - sub_ctx.begin - 1);
+				   program_start - sub_ctx.begin);
 	  sub_ctx.ptr = program_start;
 	}
 
@@ -5187,7 +5205,7 @@ check_line_structural (struct section_data *data,
 			&& !check_zero_padding (&sub_ctx, mc_line, &where))
 		      wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
 					     read_ctx_get_offset (&sub_ctx),
-					     next - sub_ctx.begin - 1);
+					     next - sub_ctx.begin);
 		    sub_ctx.ptr = next;
 		  }
 		break;
@@ -5290,7 +5308,7 @@ check_line_structural (struct section_data *data,
 				       &WHERE (sec_line, NULL)))
 	wr_message_padding_n0 (mc_line, &WHERE (sec_line, NULL),
 			       /*begin*/read_ctx_get_offset (&sub_ctx),
-			       /*end*/sub_ctx.end - sub_ctx.begin - 1);
+			       /*end*/sub_ctx.end - sub_ctx.begin);
       }
 
       /* XXX overlaps in defined addresses are probably OK, one

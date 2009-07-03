@@ -154,6 +154,8 @@ extern "C"
 
 # include "dwarflint-coverage.h"
 
+  extern char *range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end);
+
   struct sec
   {
     Elf_Scn *scn;

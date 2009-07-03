@@ -86,6 +86,7 @@ check_matching_ranges (hl_ctx *hlctx)
   where_ar.ref = &where_ref;
   struct where where_r = WHERE (sec_ranges, NULL);
   where_r.ref = &where_ref;
+  char buf[128];
 
   const elfutils::dwarf::aranges_map &aranges = hlctx->dw.aranges ();
   for (elfutils::dwarf::aranges_map::const_iterator i = aranges.begin ();
@@ -110,9 +111,8 @@ check_matching_ranges (hl_ctx *hlctx)
       for (range_vec::iterator it = missing.begin ();
 	   it != missing.end (); ++it)
 	wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_r,
-		    ": missing range %#" PRIx64 "..%#" PRIx64
-		    ", present in .debug_aranges.\n",
-		    it->first, it->second);
+		    ": missing range %s, present in .debug_aranges.\n",
+		    range_fmt (buf, sizeof buf, it->first, it->second));
 
       missing.clear ();
       std::set_difference (cu_ranges.begin (), cu_ranges.end (),
@@ -122,9 +122,8 @@ check_matching_ranges (hl_ctx *hlctx)
       for (range_vec::iterator it = missing.begin ();
 	   it != missing.end (); ++it)
 	wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_ar,
-		    ": missing range %#" PRIx64 "..%#" PRIx64
-		    ", present in .debug_ranges.\n",
-		    it->first, it->second);
+		    ": missing range %s, present in .debug_ranges.\n",
+		    range_fmt (buf, sizeof buf, it->first, it->second));
     }
 
   return true;
