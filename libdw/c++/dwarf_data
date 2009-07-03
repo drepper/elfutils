@@ -545,16 +545,8 @@ namespace elfutils
     };
 
     // Same as set<pair<Dwarf_Addr, Dwarf_Addr>>.
-    class range_list : public dwarf::arange_list
-    {
-    public:
-      struct hasher : public subr::container_hasher<range_list> {};
-
-      template<typename list>
-      range_list (const list &other)
-	: dwarf::arange_list (other.begin (), other.end ()) {}
-    };
-
+    typedef dwarf::arange_list range_list;
+;
     class location_attr
       : public std::map<dwarf::location_attr::key_type, std::vector<uint8_t> >
     {

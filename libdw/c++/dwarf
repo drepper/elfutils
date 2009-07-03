@@ -1394,8 +1394,14 @@ namespace elfutils
       typedef key_type value_type;
 
       static const bool ordered = false;
+      inline bool canonical () const
+      {
+	return false;
+      }
 
-      range_list (const range_list &other) : _m_attr (other._m_attr) {}
+      inline range_list (const range_list &other)
+	: _m_attr (other._m_attr)
+      {}
 
       std::string to_string () const;
 
@@ -1507,6 +1513,12 @@ namespace elfutils
       inline bool operator!= (const ranges &other) const
       {
 	return !(*this == other);
+      }
+
+      // Not very wise to call.
+      size_t size () const
+      {
+	return subr::length (begin (), end ());
       }
     };
 
@@ -2239,10 +2251,6 @@ namespace elfutils
     private:
       typedef std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> > _base;
 
-    protected:
-      template<typename iterator>
-      arange_list (iterator first, iterator last) : _base (first, last) {}
-
     public:
       typedef _base::key_type key_type;
       typedef _base::value_type value_type;
@@ -2251,37 +2259,100 @@ namespace elfutils
 
       static const bool ordered = true;
 
-      arange_list () {}
-      arange_list (const arange_list &other)
-	: _base (static_cast<const _base &> (other)) {}
+      struct hasher : public subr::container_hasher<arange_list> {};
+
+      inline arange_list () {}
+      inline arange_list (const arange_list &other)
+	: _base (static_cast<const _base &> (other))
+      {}
+
+      template<typename iterator>
+      arange_list (iterator first, iterator last)
+	: _base (first, last)
+      {}
+
+      template<typename input>
+      inline arange_list (const input &other)
+	: _base (other.begin (), other.end ())
+      {}
 
       std::string to_string () const;
+
+      inline std::string to_string ()
+      {
+	coalesce (*this);
+	return ((const arange_list *) this)->to_string ();
+      }
+
+      inline bool canonical () const
+      {
+	// Can't be sure.
+	return false;
+      }
+
+      inline bool canonical ()
+      {
+	// Make it so.
+	coalesce (*this);
+	return true;
+      }
+
+      inline bool operator== (arange_list &other)
+      {
+	// Since we are not const, coalesce both in place.
+	coalesce (other);
+	if (size () < other.size ())
+	  // Coalescing can only make us smaller.
+	  return false;
+	coalesce (*this);
+	return size () == other.size () && subr::container_equal (*this, other);
+      }
 
       template<typename list>
       inline bool operator== (const list &other)
       {
+	// Since we are not const, coalesce in place.
 	coalesce (*this);
+
+	if (list::ordered && other.canonical ()
+	    && size () != other.size ())
+	  return false;
+
+	// If he happens to be sorted and canonical, we'll match.
 	if (subr::container_equal (*this, other))
 	  return true;
-	std::set<key_type> his = other;
+
+	// If he was sorted and canonical and we didn't match, it's conclusive.
+	if (list::ordered && other.canonical ())
+	  return false;
+
+	// Make a sorted and canonicalized copy to compare to.
+	_base his (other);
+	if (size () > his.size ()
+	    || (list::ordered && size () == his.size ()))
+	  // Coalescing can only make him smaller.
+	  return false;
 	coalesce (his);
-	return *this == his;
+	return subr::container_equal (*this, his);
       }
 
       template<typename list>
       inline bool operator== (const list &other) const
       {
+	if (list::ordered && other.canonical ()
+	    && size () < other.size ())
+	  // Coalescing can only make us smaller.
+	  return false;
+
+	// If we both happen to be sorted and canonical, we'll match.
 	if (subr::container_equal (*this, other))
 	  return true;
-	std::set<key_type> his = other;
-	coalesce (his);
-	// We have to make a copy just to coalesce, since we're const.
-	// Don't bother if we couldn't possibly match afterwards.
-	if (size () <= his.size ())
-	  return false;
-	std::set<key_type> mine = *this;
-	coalesce (mine);
-	return mine == his;
+
+	// Make a non-const copy that will coalesce in its operator==.
+	if (list::ordered && other.canonical ())
+	  return size () != other.size () && arange_list (*this) == other;
+
+	return arange_list (other) == *this;
       }
     };
 
