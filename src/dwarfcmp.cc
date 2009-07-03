@@ -114,7 +114,8 @@ open_file (const char *fname, int *fdp)
   if (dw == NULL)
     {
       int code = dwarf_errno ();
-      if (code != DWARF_E_NO_DWARF || !missing_ok)
+      if (code != DWARF_E_NO_DWARF
+	  || (!missing_ok && (!test_writer || (exit (77), false))))
 	error (2, 0,
 	       gettext ("cannot create DWARF descriptor for '%s': %s"),
 	       fname, dwarf_errmsg (code));
