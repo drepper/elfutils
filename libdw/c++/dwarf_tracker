@@ -473,8 +473,7 @@ namespace elfutils
 
     // Share the _m_seen maps with the prototype tracker,
     // but start a fresh walk from the given starting point.
-    inline dwarf_ref_tracker (const dwarf_ref_tracker &proto,
-			      reference_match &matched,
+    inline dwarf_ref_tracker (const dwarf_ref_tracker &proto, reference_match &,
 			      const left_context_type &lhs, const die1 &a,
 			      const right_context_type &rhs, const die2 &b)
       : _m_left (tracker1 (proto._m_left, lhs, a)),

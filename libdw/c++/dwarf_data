@@ -51,8 +51,8 @@
 #define _ELFUTILS_DWARF_DATA	1
 
 #include "dwarf"
+#include <cassert>
 #include <bitset>
-#include <typeinfo>
 
 /* This contains common classes/templates used by dwarf_output and dwarf_edit.
 
@@ -685,7 +685,7 @@ namespace elfutils
 	inline value_string () {}
 
 	template<typename string, typename arg_type>
-	inline value_string (const string &s, arg_type &arg)
+	inline value_string (const string &s, arg_type &)
 	  : std::string (s)
 	{}
 
@@ -741,7 +741,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_flag (bool t, arg_type &arg)
+	inline value_flag (bool t, arg_type &)
 	  : flag (t)
 	{}
       };
@@ -756,7 +756,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_address (::Dwarf_Addr x, arg_type &arg)
+	inline value_address (::Dwarf_Addr x, arg_type &)
 	  : addr (x)
 	{}
       };
@@ -766,7 +766,7 @@ namespace elfutils
 	inline value_rangelistptr () {}
 
 	template<typename list, typename arg_type>
-	inline value_rangelistptr (const list &other, arg_type &arg)
+	inline value_rangelistptr (const list &other, arg_type &)
 	  : range_list (other)
 	{}
       };
@@ -776,7 +776,7 @@ namespace elfutils
 	inline value_lineptr () {}
 
 	template<typename table, typename arg_type>
-	inline value_lineptr (const table &other, arg_type &arg)
+	inline value_lineptr (const table &other, arg_type &)
 	  : impl::line_info_table (other)
 	{}
       };
@@ -794,7 +794,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_constant (::Dwarf_Word x, arg_type &arg)
+	inline value_constant (::Dwarf_Word x, arg_type &)
 	  : word (x)
 	{}
       };
@@ -805,7 +805,7 @@ namespace elfutils
 	inline value_constant_block () {}
 
 	template<typename block, typename arg_type>
-	inline value_constant_block (const block &b, arg_type &arg)
+	inline value_constant_block (const block &b, arg_type &)
 	  : std::vector<uint8_t> (b.begin (), b.end ())
 	{}
       };
@@ -815,7 +815,7 @@ namespace elfutils
 	inline value_dwarf_constant () {}
 
 	template<typename constant, typename arg_type>
-	inline value_dwarf_constant (const constant &other, arg_type &arg)
+	inline value_dwarf_constant (const constant &other, arg_type &)
 	  : dwarf_enum (other)
 	{}
       };
@@ -825,7 +825,7 @@ namespace elfutils
 	inline value_source_file () {}
 
 	template<typename file, typename arg_type>
-	inline value_source_file (const file &other, arg_type &arg)
+	inline value_source_file (const file &other, arg_type &)
 	  : source_file (other)
 	{}
       };
@@ -839,7 +839,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_source_line (unsigned int m, arg_type &arg)
+	inline value_source_line (unsigned int m, arg_type &)
 	  : n (m)
 	{}
       };
@@ -852,7 +852,7 @@ namespace elfutils
 	inline value_location () {}
 
 	template<typename loc, typename arg_type>
-	inline value_location (const loc &other, arg_type &arg)
+	inline value_location (const loc &other, arg_type &)
 	  : location_attr (other)
 	{}
       };

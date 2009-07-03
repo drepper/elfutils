@@ -1,3 +1,9 @@
+2009-07-03  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (AM_CXXFLAGS): New variable (from ../src/Makefile.am).
+
+	* print-die.hh: Grok --edit/--output options to print a copied object.
+
 2009-07-02  Roland McGrath  <roland@redhat.com>
 
 	* run-dwarf_edit.sh: New file.

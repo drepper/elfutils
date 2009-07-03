@@ -35,6 +35,8 @@ AM_CFLAGS = -Wall -Werror -Wextra -std=gnu99 \
 BUILT_RPATH = \$$ORIGIN/../libasm:\$$ORIGIN/../libdw:\$$ORIGIN/../backends:\$$ORIGIN/../libelf
 endif
 
+AM_CXXFLAGS = $(AM_CFLAGS:gnu99=gnu++0x)
+
 AM_LDFLAGS =
 
 if !STANDALONE

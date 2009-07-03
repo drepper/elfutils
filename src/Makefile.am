@@ -40,8 +40,7 @@ INCLUDES = -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwfl \
 	   -I$(srcdir)/../libasm -I$(srcdir)/../lib -I..
 
-AM_CXXFLAGS = $(AM_CFLAGS:gnu99=gnu++0x) \
-	      -Wno-unused-parameter
+AM_CXXFLAGS = $(AM_CFLAGS:gnu99=gnu++0x)
 
 AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 

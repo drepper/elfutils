@@ -1265,7 +1265,7 @@ namespace elfutils
       template<typename pair>
       struct any : public std::unary_function<pair, bool>
       {
-	inline bool operator () (const pair &x)
+	inline bool operator () (const pair &)
 	{
 	  return true;
 	}

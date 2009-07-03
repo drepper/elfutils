@@ -25,13 +25,19 @@
 
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <clocale>
 #include <libintl.h>
 #include <ostream>
 #include <iomanip>
 #include <tr1/unordered_map>
 
+#include "c++/dwarf_edit"
+#include "c++/dwarf_output"
+
 static bool print_offset;
+
+static enum { copy_none, copy_edit, copy_output } make_copy;
 
 static void
 print_die_main (int &argc, char **&argv, unsigned int &depth)
@@ -50,6 +56,19 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
   if (argc > 1 && !strcmp (argv[1], "--offsets"))
     {
       print_offset = true;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--edit"))
+    {
+      make_copy = copy_edit;
+      --argc;
+      ++argv;
+    }
+  else if (argc > 1 && !strcmp (argv[1], "--output"))
+    {
+      make_copy = copy_output;
       --argc;
       ++argv;
     }
@@ -154,11 +173,33 @@ print_cu (const typename file::compile_unit &cu, const unsigned int limit)
 
 template<typename file>
 static void
+print_file (const file &dw, const unsigned int limit)
+{
+  for (typename file::compile_units::const_iterator i
+	 = dw.compile_units ().begin (); i != dw.compile_units ().end (); ++i)
+    print_cu<file> (*i, limit);
+}
+
+template<typename file>
+static void
 print_file (const char *name, const file &dw, const unsigned int limit)
 {
   cout << name << ":\n";
 
-  for (typename file::compile_units::const_iterator i
-	 = dw.compile_units ().begin (); i != dw.compile_units ().end (); ++i)
-    print_cu<file> (*i, limit);
+  switch (make_copy)
+    {
+    case copy_none:
+      print_file (dw, limit);
+      break;
+    case copy_edit:
+      print_file (dwarf_edit (dw), limit);
+      break;
+#if 0 // XXX
+    case copy_output:
+      print_file (dwarf_output (dw), limit);
+      break;
+#endif
+    default:
+      abort ();
+    }
 }

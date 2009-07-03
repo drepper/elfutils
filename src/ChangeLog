@@ -1,5 +1,7 @@
 2009-07-03  Roland McGrath  <roland@redhat.com>
 
+	* Makefile.am (AM_CXXFLAGS): Drop -Wno-unused-parameter.
+
 	* dwarfcmp.cc (open_file): Exit 77 for no DWARF under -T.
 
 2009-07-02  Roland McGrath  <roland@redhat.com>

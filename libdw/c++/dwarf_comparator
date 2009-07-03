@@ -72,7 +72,7 @@ namespace elfutils
     // This object is created to start a walk and destroyed to finish one.
     struct walk
     {
-      inline walk (dwarf_tracker_base *, const cu1 &a, const cu2 &b)
+      inline walk (dwarf_tracker_base *, const cu1 &, const cu2 &)
       {
       }
       inline ~walk ()
@@ -83,7 +83,7 @@ namespace elfutils
     // This object is created in pre-order and destroyed in post-order.
     struct step
     {
-      inline step (dwarf_tracker_base *, const die1 &a, const die2 &b)
+      inline step (dwarf_tracker_base *, const die1 &, const die2 &)
       {
       }
       inline ~step ()
@@ -91,23 +91,23 @@ namespace elfutils
       }
     };
 
-    inline void visit (const typename dwarf1::debug_info_entry &a,
-		       const typename dwarf2::debug_info_entry &b)
+    inline void visit (const typename dwarf1::debug_info_entry &,
+		       const typename dwarf2::debug_info_entry &)
     {
     }
 
-    inline void mismatch (const cu1 &it1, const cu1 &end1,
-			  const cu2 &it2, const cu2 &end2)
+    inline void mismatch (const cu1 &, const cu1 &, // at, end
+			  const cu2 &, const cu2 &)
     {
     }
 
-    inline void mismatch (const die1 &it1, const die1 &end1,
-			  const die2 &it2, const die2 &end2)
+    inline void mismatch (const die1 &, const die1 &, // at, end
+			  const die2 &, const die2 &)
     {
     }
 
-    inline void mismatch (const attr1 &it1, const attr1 &end1,
-			  const attr2 &it2, const attr2 &end2)
+    inline void mismatch (const attr1 &, const attr1 &, // at, end
+			  const attr2 &, const attr2 &)
     {
     }
 
@@ -115,26 +115,26 @@ namespace elfutils
     struct right_context_type {};
 
     // Return the lhs context of an arbitrary DIE.
-    inline const left_context_type left_context (const die1 &die)
+    inline const left_context_type left_context (const die1 &)
     {
       return left_context_type ();
     }
 
     // Return the rhs context of an arbitrary DIE.
-    inline const right_context_type right_context (const die2 &die)
+    inline const right_context_type right_context (const die2 &)
     {
       return right_context_type ();
     }
 
-    inline bool context_quick_mismatch (const left_context_type &a,
-					const right_context_type &b)
+    inline bool context_quick_mismatch (const left_context_type &,
+					const right_context_type &)
 
     {
       return true;
     }
 
-    inline bool context_match (const left_context_type &a,
-			       const right_context_type &b)
+    inline bool context_match (const left_context_type &,
+			       const right_context_type &)
     {
       return false;
     }

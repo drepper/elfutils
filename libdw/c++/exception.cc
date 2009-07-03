@@ -63,7 +63,7 @@ using namespace std;
 /* Throw
  */
 void
-dwarf::throw_libdw (::Dwarf *dw)
+dwarf::throw_libdw (::Dwarf *)
 {
   throw std::runtime_error (::dwarf_errmsg (-1));
 }
