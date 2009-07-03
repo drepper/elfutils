@@ -57,9 +57,8 @@ namespace elfutils
   // Prototypical stub for reference tracker object.
   // This keeps no state, and no two contexts ever match.
   template<class dwarf1, class dwarf2>
-  class dwarf_tracker_base
+  struct dwarf_tracker_base
   {
-  protected:
     typedef typename dwarf1::compile_units::const_iterator cu1;
     typedef typename dwarf2::compile_units::const_iterator cu2;
     typedef typename dwarf1::debug_info_entry dwarf1_die;
@@ -68,20 +67,29 @@ namespace elfutils
     typedef typename dwarf2_die::children_type::const_iterator die2;
     typedef typename dwarf1_die::attributes_type::const_iterator attr1;
     typedef typename dwarf2_die::attributes_type::const_iterator attr2;
+    typedef typename dwarf1_die::children_type::iterator dwarf1_ref;
 
-  public:
-    inline void start_walk (const cu1 &a, const cu2 &b)
+    // This object is created to start a walk and destroyed to finish one.
+    struct walk
     {
-    }
-    inline void finish_walk (const cu1 &a, const cu2 &b)
+      inline walk (dwarf_tracker_base *, const cu1 &a, const cu2 &b)
+      {
+      }
+      inline ~walk ()
+      {
+      }
+    };
+
+    // This object is created in pre-order and destroyed in post-order.
+    struct step
     {
-    }
-    inline void pre_order (const die1 &a, const die2 &b)
-    {
-    }
-    inline void post_order (const die1 &a, const die2 &b)
-    {
-    }
+      inline step (dwarf_tracker_base *, const die1 &a, const die2 &b)
+      {
+      }
+      inline ~step ()
+      {
+      }
+    };
 
     inline void visit (const typename dwarf1::debug_info_entry &a,
 		       const typename dwarf2::debug_info_entry &b)
@@ -104,12 +112,15 @@ namespace elfutils
     }
 
     struct left_context_type {};
+    struct right_context_type {};
+
+    // Return the lhs context of an arbitrary DIE.
     inline const left_context_type left_context (const die1 &die)
     {
       return left_context_type ();
     }
 
-    struct right_context_type {};
+    // Return the rhs context of an arbitrary DIE.
     inline const right_context_type right_context (const die2 &die)
     {
       return right_context_type ();
@@ -128,22 +139,30 @@ namespace elfutils
       return false;
     }
 
-    inline dwarf_tracker_base ()
-    {}
+    struct reference_match
+    {
+      inline bool cannot_match () const
+      {
+	return false;
+      }
+      inline void notice_match (const die2 &, bool) const
+      {
+      }
+    };
 
-    inline dwarf_tracker_base (const dwarf_tracker_base &,
-			       const left_context_type &, const die1 &,
-			       const right_context_type &, const die2 &)
-    {}
-
-    inline bool quick_reference_match (const die1 &, const die2 &)
+    inline bool reference_matched (reference_match &,
+				   const die1 &, const die2 &)
     {
       return false;
     }
 
-    inline void notice_reference_match (const die1 &, const die2 &)
-    {
-    }
+    inline dwarf_tracker_base ()
+    {}
+
+    inline dwarf_tracker_base (const dwarf_tracker_base &, reference_match &,
+			       const left_context_type &, const die1 &,
+			       const right_context_type &, const die2 &)
+    {}
   };
 
   template<class dwarf1, class dwarf2,
@@ -170,7 +189,8 @@ namespace elfutils
       }
     };
 #define MATCHER(item) \
-    matcher<typename dwarf1::item, typename dwarf2::item>
+    matcher<typename dwarf1::item::const_iterator, \
+	    typename dwarf2::item::const_iterator> (*this)
 
     inline bool match (const dwarf1 &a, const dwarf2 &b)
     {
@@ -188,8 +208,7 @@ namespace elfutils
       const cu1_it end1 = a.end ();
       const cu2_it end2 = b.end ();
       if (subr::container_equal
-	  (it1, end1, it2, end2,
-	   MATCHER (compile_units::const_iterator) (*this)))
+	  (it1, end1, it2, end2, MATCHER (compile_units)))
 	return true;
       _m_tracker.mismatch (it1, end1, it2, end2);
       return false;
@@ -199,19 +218,8 @@ namespace elfutils
     typedef typename dwarf2::debug_info_entry die2;
     inline bool match (const cu1_it &a, const cu2_it &b)
     {
-      bool result;
-      _m_tracker.start_walk (a, b);
-      try
-	{
-	  result = match (static_cast<die1> (*a), static_cast<die2> (*b));
-	}
-      catch (...)
-	{
-	  _m_tracker.finish_walk (a, b);
-	  throw;
-	}
-      _m_tracker.finish_walk (a, b);
-      return result;
+      typename tracker::walk in (&_m_tracker, a, b);
+      return match (*a, *b);
     }
 
     inline bool match (const die1 &a, const die2 &b)
@@ -329,38 +337,39 @@ namespace elfutils
     typedef typename dwarf2::debug_info_entry::children_type children2;
     typedef typename children1::const_iterator cit1;
     typedef typename children2::const_iterator cit2;
-    struct die_matcher
-      : public std::binary_function<cit1, cit2, bool>
-    {
-      dwarf_comparator &_m_cmp;
-      die_matcher (dwarf_comparator &cmp)
-	: _m_cmp (cmp)
-      {}
 
-      inline bool operator () (const cit1 &a, const cit2 &b)
-      {
-	bool result;
-	_m_cmp._m_tracker.pre_order (a, b);
-	try
-	  {
-	    result = _m_cmp.match (*a, *b);
-	  }
-	catch (...)
-	  {
-	    _m_cmp._m_tracker.post_order (a, b);
-	    throw;
-	  }
-	_m_cmp._m_tracker.post_order (a, b);
-	return result;
-      }
-    };
+    inline bool match_child (const cit1 &a, const cit2 &b)
+    {
+      typename tracker::step into (&_m_tracker, a, b);
+      return match (*a, *b);
+    }
+
+    inline bool match (const cit1 &a, const cit2 &b)
+    {
+      // Maybe the tracker has already cached a correspondence of DIEs.
+      typename tracker::reference_match matched;
+      if (_m_tracker.reference_matched (matched, a, b))
+	return true;
+
+      if (matched.cannot_match ())
+	return false;
+
+      bool result = match_child (a, b);
+
+      // Let the tracker cache a result for its reference_matched.
+      matched.notice_match (b, result);
+
+      return result;
+    }
+
     inline bool match (const children1 &a, const children2 &b)
     {
       cit1 it1 = a.begin ();
       cit2 it2 = b.begin ();
       const cit1 end1 = a.end ();
       const cit2 end2 = b.end ();
-      if (subr::container_equal (it1, end1, it2, end2, die_matcher (*this)))
+      if (subr::container_equal (it1, end1, it2, end2,
+				 MATCHER (debug_info_entry::children_type)))
 	return true;
       _m_tracker.mismatch (it1, end1, it2, end2);
       return false;
@@ -382,7 +391,6 @@ namespace elfutils
 	switch (what)
 	  {
 	  case dwarf::VS_reference:
-	  case dwarf::VS_unit_reference:
 	    return reference_match (a.reference (), b.reference ());
 
 	  case dwarf::VS_flag:
@@ -454,19 +462,23 @@ namespace elfutils
       if (a.tag () != b.tag ())
 	return false;
 
-      const bool any_children = a.has_children ();
-      if (any_children != b.has_children ())
+      const bool has_children = a.has_children ();
+      if (has_children != b.has_children ())
 	return false;
 
-      // Now we have to get the tracker involved.
+      // Maybe the tracker has already cached a correspondence of references.
+      typename tracker::reference_match matched;
+      if (_m_tracker.reference_matched (matched, ref1, ref2))
+	return true;
+
+      if (matched.cannot_match ())
+	return false;
+
+      // Now we really have to get the tracker involved.
       const typename tracker::left_context_type &lhs
 	= _m_tracker.left_context (ref1);
       const typename tracker::right_context_type &rhs
 	= _m_tracker.right_context (ref2);
-
-      // Maybe the tracker has already cached a correspondence of references.
-      if (_m_tracker.quick_reference_match (ref1, ref2))
-	return true;
 
       /* First do the cheap mismatch check on the contexts, then check the
 	 contents and contexts in ascending order of costliness of a check.  */
@@ -476,16 +488,17 @@ namespace elfutils
 	return false;
 
       /* To compare the children, we have to clone the tracker and use a
-	 new one.  The new tracker jump-starts its walk to the referenced
-	 DIE from the root of the CU.  */
-      bool result = !any_children || (dwarf_comparator (tracker (_m_tracker,
+	 new one, in case of any reference attributes in their subtrees.
+	 The new tracker jump-starts its walk to the referenced DIE from
+	 the root of the CU.  */
+      bool result = !has_children || (dwarf_comparator (tracker (_m_tracker,
+								 matched,
 								 lhs, ref1,
 								 rhs, ref2))
 				      .match (a.children (), b.children ()));
 
-      // Let the tracker cache a known match for its quick_reference_match.
-      if (result)
-	_m_tracker.notice_reference_match (ref1, ref2);
+      // Let the tracker cache a result for its reference_matched.
+      matched.notice_match (ref2, result);
 
       return result;
     }

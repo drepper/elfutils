@@ -449,6 +449,8 @@ namespace elfutils
       class attributes_type;
       attributes_type attributes () const;
 
+      class const_pointer;
+
       inline int tag () const
       {
 	int t = ::dwarf_tag (thisdie ());
@@ -857,6 +859,9 @@ namespace elfutils
 	}
       };
 
+      // Actually always const.
+      typedef const_iterator iterator;
+
       const_iterator begin () const
       {
 	return const_iterator (raw_children_type::begin ());
@@ -877,6 +882,10 @@ namespace elfutils
 	return !(*this == other);
       }
     };
+
+    class debug_info_entry::const_pointer
+      : public debug_info_entry::children_type::const_iterator
+    {};
 
   private:
     static inline bool skip_sibling (const attribute &attr)
@@ -1011,7 +1020,6 @@ namespace elfutils
 	VS_dwarf_constant,	// Known DW_X_* space of integer constants.
 	VS_discr_list,		// Block as used for DW_AT_discr_list.
 	VS_reference,		// Pointer to another DIE.
-	VS_unit_reference,	// Pointer to another CU DIE.
 	VS_lineptr,		// Pointer into .debug_line section.
 	VS_macptr,		// Pointer into .debug_macinfo section.
 	VS_rangelistptr,	// Pointer into .debug_ranges section.
@@ -1113,16 +1121,11 @@ namespace elfutils
       inline std::string to_string () const;
 
       // Return an iterator on which * will yield the referent debug_info_entry.
-      inline debug_info_entry::raw_children_type::const_iterator
+      inline debug_info_entry::children_type::const_iterator
       reference () const
       {
 	return (debug_info_entry::raw_children_type::const_iterator
 		(thisattr ()));
-      }
-      inline debug_info_entry::raw_children_type::const_iterator
-      unit_reference () const
-      {
-	return reference ();
       }
 
       // XXX reloc, dwfl
@@ -1176,7 +1179,6 @@ namespace elfutils
 	  switch (what)
 	    {
 	    case VS_reference:
-	    case VS_unit_reference:
 	      // Stateless reference equality is just identity.
 	      return (reference ()->identity ()
 		      == other.reference ()->identity ());
@@ -1392,8 +1394,14 @@ namespace elfutils
       typedef key_type value_type;
 
       static const bool ordered = false;
+      inline bool canonical () const
+      {
+	return false;
+      }
 
-      range_list (const range_list &other) : _m_attr (other._m_attr) {}
+      inline range_list (const range_list &other)
+	: _m_attr (other._m_attr)
+      {}
 
       std::string to_string () const;
 
@@ -1505,6 +1513,12 @@ namespace elfutils
       inline bool operator!= (const ranges &other) const
       {
 	return !(*this == other);
+      }
+
+      // Not very wise to call.
+      size_t size () const
+      {
+	return subr::length (begin (), end ());
       }
     };
 
@@ -1903,13 +1917,7 @@ namespace elfutils
 	return !(*this == other);
       }
 
-      inline std::string to_string () const
-      {
-	std::string result = attributes::name (::dwarf_whatattr (thisattr ()));
-	result += "=";
-	result += second.to_string ();
-	return result;
-      }
+      inline std::string to_string () const;
     };
 
     /* This works like range_list, but is based on a debug_info_entry using
@@ -2243,10 +2251,6 @@ namespace elfutils
     private:
       typedef std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> > _base;
 
-    protected:
-      template<typename iterator>
-      arange_list (iterator first, iterator last) : _base (first, last) {}
-
     public:
       typedef _base::key_type key_type;
       typedef _base::value_type value_type;
@@ -2255,37 +2259,100 @@ namespace elfutils
 
       static const bool ordered = true;
 
-      arange_list () {}
-      arange_list (const arange_list &other)
-	: _base (static_cast<const _base &> (other)) {}
+      struct hasher : public subr::container_hasher<arange_list> {};
+
+      inline arange_list () {}
+      inline arange_list (const arange_list &other)
+	: _base (static_cast<const _base &> (other))
+      {}
+
+      template<typename iterator>
+      arange_list (iterator first, iterator last)
+	: _base (first, last)
+      {}
+
+      template<typename input>
+      inline arange_list (const input &other)
+	: _base (other.begin (), other.end ())
+      {}
 
       std::string to_string () const;
+
+      inline std::string to_string ()
+      {
+	coalesce (*this);
+	return ((const arange_list *) this)->to_string ();
+      }
+
+      inline bool canonical () const
+      {
+	// Can't be sure.
+	return false;
+      }
+
+      inline bool canonical ()
+      {
+	// Make it so.
+	coalesce (*this);
+	return true;
+      }
+
+      inline bool operator== (arange_list &other)
+      {
+	// Since we are not const, coalesce both in place.
+	coalesce (other);
+	if (size () < other.size ())
+	  // Coalescing can only make us smaller.
+	  return false;
+	coalesce (*this);
+	return size () == other.size () && subr::container_equal (*this, other);
+      }
 
       template<typename list>
       inline bool operator== (const list &other)
       {
+	// Since we are not const, coalesce in place.
 	coalesce (*this);
+
+	if (list::ordered && other.canonical ()
+	    && size () != other.size ())
+	  return false;
+
+	// If he happens to be sorted and canonical, we'll match.
 	if (subr::container_equal (*this, other))
 	  return true;
-	std::set<key_type> his = other;
+
+	// If he was sorted and canonical and we didn't match, it's conclusive.
+	if (list::ordered && other.canonical ())
+	  return false;
+
+	// Make a sorted and canonicalized copy to compare to.
+	_base his (other);
+	if (size () > his.size ()
+	    || (list::ordered && size () == his.size ()))
+	  // Coalescing can only make him smaller.
+	  return false;
 	coalesce (his);
-	return *this == his;
+	return subr::container_equal (*this, his);
       }
 
       template<typename list>
       inline bool operator== (const list &other) const
       {
+	if (list::ordered && other.canonical ()
+	    && size () < other.size ())
+	  // Coalescing can only make us smaller.
+	  return false;
+
+	// If we both happen to be sorted and canonical, we'll match.
 	if (subr::container_equal (*this, other))
 	  return true;
-	std::set<key_type> his = other;
-	coalesce (his);
-	// We have to make a copy just to coalesce, since we're const.
-	// Don't bother if we couldn't possibly match afterwards.
-	if (size () <= his.size ())
-	  return false;
-	std::set<key_type> mine = *this;
-	coalesce (mine);
-	return mine == his;
+
+	// Make a non-const copy that will coalesce in its operator==.
+	if (list::ordered && other.canonical ())
+	  return size () != other.size () && arange_list (*this) == other;
+
+	return arange_list (other) == *this;
       }
     };
 
@@ -2367,15 +2434,19 @@ namespace elfutils
     return const_iterator (*this, 1);
   }
 
-  // Explicit specialization.
+  // Explicit specializations.
+  template<>
+  std::string to_string<dwarf::attribute> (const dwarf::attribute &);
+  inline std::string dwarf::attribute::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
   template<>
   std::string to_string<dwarf::attr_value> (const dwarf::attr_value &);
   inline std::string dwarf::attr_value::to_string () const
   {
     return elfutils::to_string (*this); // Use that.
   }
-
-  // Explicit specialization.
   template<>
   std::string to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &);
   inline std::string dwarf::dwarf_enum::to_string () const

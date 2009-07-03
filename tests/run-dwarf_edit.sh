@@ -25,13 +25,12 @@
 
 . $srcdir/test-subr.sh
 
-testfiles testfile
-
-testrun_compare ./dwarf-print --offsets --depth=1 testfile <<\EOF
-testfile:
- <compile_unit offset=[0xb] stmt_list=0 high_pc=0x804845a low_pc=0x804842c name="m.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=C89>...
- <compile_unit offset=[0xca] stmt_list=0x4b high_pc=0x8048466 low_pc=0x804845c name="b.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=C89>...
- <compile_unit offset=[0x15fc] stmt_list=0x1e0 high_pc=0x8048472 low_pc=0x8048468 name="f.c" comp_dir="/home/drepper/gnu/new-bu/build/ttt" producer="GNU C 2.96 20000731 (Red Hat Linux 7.0)" language=C89>...
+testrun_compare ./dwarf_edit <<\EOF
+consed:
+ <compile_unit name="source-file.c">
+  <base_type ref="0x1" name="int"/>
+  <subprogram name="foo" external=1 type="#0x1" description="foo"/>
+ </compile_unit>
 EOF
 
 exit 0

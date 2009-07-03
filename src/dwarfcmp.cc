@@ -47,6 +47,7 @@
 #include "c++/dwarf_edit"
 #include "c++/dwarf_comparator"
 #include "c++/dwarf_tracker"
+#include "c++/dwarf_output"
 
 using namespace elfutils;
 using namespace std;
@@ -113,7 +114,8 @@ open_file (const char *fname, int *fdp)
   if (dw == NULL)
     {
       int code = dwarf_errno ();
-      if (code != DWARF_E_NO_DWARF || !missing_ok)
+      if (code != DWARF_E_NO_DWARF
+	  || (!missing_ok && (!test_writer || (exit (77), false))))
 	error (2, 0,
 	       gettext ("cannot create DWARF descriptor for '%s': %s"),
 	       fname, dwarf_errmsg (code));
@@ -133,8 +135,8 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   typedef typename _base::cu2 cu2;
   typedef typename _base::die1 die1;
   typedef typename _base::die2 die2;
-  typedef typename die1::value_type::attributes_type::const_iterator attr1;
-  typedef typename die2::value_type::attributes_type::const_iterator attr2;
+  typedef typename _base::dwarf1_die::attributes_type::const_iterator attr1;
+  typedef typename _base::dwarf2_die::attributes_type::const_iterator attr2;
 
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
@@ -143,10 +145,10 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     : a_ (NULL), b_ (NULL)
   {}
 
-  inline talker (const talker &proto,
+  inline talker (const talker &proto, typename _tracker::reference_match &m,
 		 const typename _tracker::left_context_type &l, const die1 &a,
 		 const typename _tracker::right_context_type &r, const die2 &b)
-    : _tracker (static_cast<const _tracker &> (proto), l, a, r, b),
+    : _tracker (static_cast<const _tracker &> (proto), m, l, a, r, b),
       a_ (NULL), b_ (NULL)
   {
   }
@@ -324,9 +326,28 @@ main (int argc, char *argv[])
 
       if (test_writer)
 	{
-	  dwarf_edit out1 (file1);
-	  dwarf_edit out2 (file2);
-	  test_classes (file1, file2, out1, out2, same);
+	  dwarf_edit edit1 (file1);
+	  dwarf_edit edit2 (file2);
+	  test_classes (file1, file2, edit1, edit2, same);
+
+	  /*
+	  {
+	    dwarf_output_collector c1;
+	    dwarf_output_collector c2;
+	    dwarf_output out1 (file1, c1);
+	    dwarf_output out2 (file2, c2);
+	    test_classes (file1, file2, out1, out2, same);
+	    test_classes (edit1, edit2, out1, out2, same);
+	  }
+	  {
+	    dwarf_output_collector c1;
+	    dwarf_output_collector c2;
+	    dwarf_output out1 (edit1, c1);
+	    dwarf_output out2 (edit2, c2);
+	    test_classes (file1, file2, out1, out2, same);
+	    test_classes (edit1, edit2, out1, out2, same);
+	  }
+	  */
 	}
 
       result = !same;

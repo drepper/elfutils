@@ -52,6 +52,8 @@ else
 tests_rpath = no
 endif
 
+noinst_HEADERS = print-die.hh
+
 noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  showptable update1 update2 update3 update4 test-nlist \
 		  show-die-info get-files get-lines get-pubnames \
@@ -60,7 +62,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  find-prologues funcretval allregs rdwrmmap \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
-		  dwfl-bug-getmodules dwarf-getmacros dwarf-print
+		  dwfl-bug-getmodules dwarf-getmacros dwarf-print \
+		  dwarf_edit
 # get-ciefde
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -87,7 +90,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
-	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh
+	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh \
+	run-dwarf_edit.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -122,7 +126,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
 	     run-dwarf-getmacros.sh \
 	     run-dwarfcmp-self.sh run-dwarflint-self.sh \
-	     run-dwarf-attributes.sh \
+	     run-dwarf-attributes.sh run-dwarf_edit.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -192,6 +196,9 @@ libdwpp = ../libdw/libdwpp.a $(libdw)
 
 dwarf_print_SOURCES = dwarf-print.cc
 dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
+
+dwarf_edit_SOURCES = dwarf_edit.cc
+dwarf_edit_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
 arsymtest_LDADD = $(libelf) $(libmudflap)

@@ -1,3 +1,47 @@
+2009-07-03  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf: Fix range_list canonicalizing comparisons.
+
+	* c++/dwarf_edit: Fix copy construction using a ref-maker.
+	* c++/dwarf_data: Updates.
+	* c++/subr.hh: Updates.
+	* c++/dwarf_ref_maker: New file.
+	* Makefile.am (pkginclude_HEADERS): Add it.
+
+2009-07-02  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf: Get rid of VS::unit_reference.
+	* c++/dwarf-knowledge.cc: Likewise.
+	* c++/dwarf_comparator: Likewise.
+	* c++/dwarf_data: Likewise.
+	* libdw/c++/values.cc: Likewise.
+	* c++/data-values.hh: Likewise.
+
+	* c++/dwarf_output: Rewrite.
+	* c++/subr.hh: New helpers for dwarf_output/dwarf_data.
+
+	* c++/dwarf_edit: Much guts moved to ...
+	* c++/dwarf_data: ... here, new file.
+	* c++/known.cc: Update specializations.
+
+	* libdw/c++/edit-values.cc (what_space): Moved to ...
+	* c++/data-values.hh: ... here, new file.
+
+	* Makefile.am (noinst_HEADERS): Add it.
+
+	* c++/output-values.cc: New file.
+	* Makefile.am (libdwpp_a_SOURCES): Add it.
+	Makefile.am (pkginclude_HEADERS): Add dwarf_data, dwarf_output.
+
+	* c++/dwarf: Use to_string function overload, not to_string method.
+	* c++/values.cc: Define to_string specializations.
+
+2009-07-01  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_tracker: Major revamp for efficiency and to handle
+	circular reference chains.
+	* c++/dwarf_comparator: Tracker interface changes.
+
 2009-06-19  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_comparator: New file.

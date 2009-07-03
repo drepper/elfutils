@@ -1,4 +1,4 @@
-/* Test program for elfutils::dwarf basics.
+/* Test program for elfutils::dwarf_edit basics.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -27,41 +27,40 @@
 # include <config.h>
 #endif
 
-#include <errno.h>
-#include <error.h>
-#include <fcntl.h>
-
-#include "c++/dwarf"
+#include "c++/dwarf_edit"
 
 using namespace elfutils;
 using namespace std;
 
 #include "print-die.hh"
 
-static Dwarf *
-open_file (const char *fname)
-{
-  int fd = open (fname, O_RDONLY);
-  if (unlikely (fd == -1))
-    error (2, errno, gettext ("cannot open '%s'"), fname);
-  Dwarf *dw = dwarf_begin (fd, DWARF_C_READ);
-  if (dw == NULL)
-    {
-      error (2, 0,
-	     gettext ("cannot create DWARF descriptor for '%s': %s"),
-	     fname, dwarf_errmsg (-1));
-    }
-  return dw;
-}
 
 int
-main (int argc, char *argv[])
+main (int argc, char **argv)
 {
   unsigned int depth;
   print_die_main (argc, argv, depth);
 
-  for (int i = 1; i < argc; ++i)
-    print_file (argv[i], dwarf (open_file (argv[i])), depth);
+  dwarf_edit f;
+
+  dwarf_edit::compile_unit &cu = f.add_unit ();
+
+  cu.attributes ()[DW_AT_name].source_file () = "source-file.c";
+
+  dwarf_edit::debug_info_entry::pointer bt = cu.add_entry (DW_TAG_base_type);
+  bt->attributes ()[DW_AT_name].identifier () = "int";
+
+  dwarf_edit::debug_info_entry &ent = *cu.add_entry (DW_TAG_subprogram);
+
+  ent.attributes ()[DW_AT_name].identifier () = "foo";
+
+  ent.attributes ()[DW_AT_description] = ent.attributes ()[DW_AT_name];
+
+  ent.attributes ()[DW_AT_external].flag ();
+
+  ent.attributes ()[DW_AT_type].reference () = bt;
+
+  print_file ("consed", f, depth);
 
   return 0;
 }

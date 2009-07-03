@@ -51,6 +51,7 @@
 #include <cassert>
 #include "dwarf"
 #include "dwarf_edit"
+#include "dwarf_output"
 
 extern "C"
 {
@@ -121,7 +122,7 @@ dwarf::attr_value::what_space () const
     case DW_FORM_ref4:
     case DW_FORM_ref8:
     case DW_FORM_ref_udata:
-      possible = VS(unit_reference) | VS(reference);
+      possible = VS(reference);
       break;
 
     default:
@@ -130,10 +131,6 @@ dwarf::attr_value::what_space () const
 
   if (unlikely ((expected & possible) == 0))
     {
-      if (expected == 0 && possible == (VS(unit_reference) | VS(reference)))
-	// An unknown reference is a reference, not a unit_reference.
-	return VS_reference;
-
       // Otherwise we don't know enough to treat it robustly.
       throw std::runtime_error ("XXX ambiguous form in unexpected attribute");
     }
@@ -216,7 +213,6 @@ value_string (const value_type &value)
       return addr_string (value.address ());
 
     case dwarf::VS_reference:
-    case dwarf::VS_unit_reference:
       return hex_string (value.reference ()->offset (), "[", "]");
 
     case dwarf::VS_source_file:
@@ -234,6 +230,16 @@ value_string (const value_type &value)
 
 template<>
 string
+to_string<dwarf::attribute> (const dwarf::attribute &attr)
+{
+  std::string result = dwarf::attributes::name (attr.first);
+  result += "=";
+  result += attr.second.to_string ();
+  return result;
+}
+
+template<>
+string
 to_string<dwarf::attr_value> (const dwarf::attr_value &value)
 {
   return value_string (value);
@@ -246,6 +252,12 @@ to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &value)
   return value_string (value);
 }
 
+template<>
+string
+to_string<dwarf_output::attr_value> (const dwarf_output::attr_value &value)
+{
+  return value_string (value);
+}
 
 // A few cases are trivial.
 #define SIMPLE(type, name, form)					\
