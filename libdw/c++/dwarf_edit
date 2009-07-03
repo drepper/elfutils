@@ -52,7 +52,7 @@
 
 #include "dwarf"
 #include "dwarf_data"
-#include "dwarf_tracker"
+#include "dwarf_ref_maker"
 
 /* Read the comments for elfutils::dwarf first.
 
@@ -108,14 +108,23 @@ namespace elfutils
       {
 	friend class debug_info_entry;
       private:
-        children_type () {}
+        inline children_type () {}
 
 	template<typename input, typename tracker>
-	children_type (const input &other, tracker *t)
-	  : std::list<debug_info_entry>
-	    (subr::argify<input, children_type, tracker *> (other.begin (), t),
-	     subr::argify<input, children_type, tracker *> (other.end (), t))
-	{}
+	inline children_type (const input &other, tracker &t)
+	{
+	  for (typename input::const_iterator in = other.begin ();
+	       in != other.end ();
+	       ++in)
+	    {
+	      /* Don't copy-construct the entry from *in here because that
+		 copies it again into the list and destroys the first copy.  */
+	      push_back (debug_info_entry ());
+	      iterator out = --end ();
+	      out->set (*in, t);
+	      t.equivalence (out, in);
+	    }
+	}
 
       public:
 	typedef debug_info_entry value_type;
@@ -144,18 +153,35 @@ namespace elfutils
 	inline attributes_type () {}
 
 	template<typename attrs, typename tracker>
-	inline attributes_type (const attrs &other, tracker *t)
+	inline attributes_type (const attrs &other, tracker &t)
 	  : base_type (other, t)
 	{}
       };
 
-    private:
-      const int _m_tag;
+    protected:
+      int _m_tag;
       attributes_type _m_attributes;
       children_type _m_children;
 
+      // This is can only be used by the children_type constructor,
+      // which immediately calls set.
+      inline debug_info_entry ()
+	: _m_tag (-1), _m_attributes (), _m_children ()
+      {}
+
+      template<typename die_type, typename arg_type>
+      inline void set (const die_type &die, arg_type &arg)
+      {
+	_m_attributes.clear ();
+	_m_children.clear ();
+	_m_tag = die.tag ();
+	_m_attributes.swap (attributes_type (die.attributes (), arg));
+	_m_children.swap (children_type (die.children (), arg));
+      }
+
     public:
-      debug_info_entry (int t) : _m_tag (t)
+      inline debug_info_entry (int t)
+	: _m_tag (t), _m_attributes (), _m_children ()
       {
 	if (unlikely (t <= 0))
 	  throw std::invalid_argument ("invalid tag");
@@ -164,7 +190,7 @@ namespace elfutils
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
       template<typename die_type, typename tracker>
-      debug_info_entry (const die_type &die, tracker *t)
+      debug_info_entry (const die_type &die, tracker &t)
 	: _m_tag (die.tag ()),
 	  _m_attributes (die.attributes (), t),
 	  _m_children (die.children (), t)
@@ -239,7 +265,7 @@ namespace elfutils
       // XXX should be private
     public:
       template<typename die_type, typename tracker>
-      inline compile_unit (const die_type &die, tracker *t)
+      inline compile_unit (const die_type &die, tracker &t)
 	: debug_info_entry (die, t)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
@@ -260,17 +286,32 @@ namespace elfutils
       typedef std::list<compile_unit> _base;
 
       // Default constructor: an empty container, no CUs.
-      inline compile_units ()
-      {}
+      inline compile_units () {}
 
       // Constructor copying CUs from input container.
       template<typename input, typename tracker>
-      inline compile_units (const input &units, tracker *t)
-	: _base (subr::argify<input, compile_units, tracker *>
+      inline compile_units (const input &other, tracker &t)
+      {
+	for (typename input::const_iterator in = other.begin ();
+	     in != other.end ();
+	     ++in)
+	  {
+	    /* Don't copy-construct the entry from *in here because that
+	       copies it again into the list and destroys the first copy.  */
+	    push_back (compile_unit ());
+	    iterator out = --end ();
+	    out->set (*in, t);
+	  }
+      }
+#if 0				// dwarf_output might use this (?)
+      template<typename input, typename tracker>
+      inline compile_units (const input &units, tracker &t)
+	: _base (subr::argify<input, compile_units, tracker &>
 		 (units.begin (), t),
-		 subr::argify<input, compile_units, tracker *>
+		 subr::argify<input, compile_units, tracker &>
 		 (units.end (), t))
       {}
+#endif
 
     public:
       typedef compile_unit value_type;
@@ -316,13 +357,30 @@ namespace elfutils
 
   public:
     // Default constructor: an empty container, no CUs.
-    inline dwarf_edit () {}
+    inline dwarf_edit ()
+      : _m_units ()
+    {}
 
     // Constructor copying CUs from an input file (dwarf or dwarf_edit).
     template<typename input, typename tracker>
-    dwarf_edit (const input &dw, tracker *t)
-      : _m_units (dw.compile_units (), t)
-    {}
+    inline dwarf_edit (const input &dw, tracker &t,
+		       subr::guard<tracker> guard = subr::guard<tracker> ())
+      : _m_units (dw.compile_units (), guard (t))
+    {
+      guard.clear ();
+    }
+
+    // Copying constructor with default ref-maker.
+    template<typename input>
+    inline dwarf_edit (const input &dw,
+		       dwarf_ref_maker<dwarf_edit, input> t
+		       = dwarf_ref_maker<dwarf_edit, input> (),
+		       subr::guard<dwarf_ref_maker<dwarf_edit, input> > guard
+		       = subr::guard<dwarf_ref_maker<dwarf_edit, input> > ())
+      : _m_units (dw.compile_units (), guard (t))
+    {
+      guard.clear ();
+    }
 
     template<typename file>
     inline bool operator== (const file &other) const

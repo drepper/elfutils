@@ -449,6 +449,8 @@ namespace elfutils
       class attributes_type;
       attributes_type attributes () const;
 
+      class const_pointer;
+
       inline int tag () const
       {
 	int t = ::dwarf_tag (thisdie ());
@@ -857,6 +859,9 @@ namespace elfutils
 	}
       };
 
+      // Actually always const.
+      typedef const_iterator iterator;
+
       const_iterator begin () const
       {
 	return const_iterator (raw_children_type::begin ());
@@ -877,6 +882,10 @@ namespace elfutils
 	return !(*this == other);
       }
     };
+
+    class debug_info_entry::const_pointer
+      : public debug_info_entry::children_type::const_iterator
+    {};
 
   private:
     static inline bool skip_sibling (const attribute &attr)
@@ -1112,7 +1121,7 @@ namespace elfutils
       inline std::string to_string () const;
 
       // Return an iterator on which * will yield the referent debug_info_entry.
-      inline debug_info_entry::raw_children_type::const_iterator
+      inline debug_info_entry::children_type::const_iterator
       reference () const
       {
 	return (debug_info_entry::raw_children_type::const_iterator

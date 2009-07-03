@@ -683,7 +683,7 @@ namespace elfutils
 
       template<typename flavor, typename input, typename arg_type>
       static inline value_dispatch *
-      make (flavor *&result, const input &x, const arg_type &arg)
+      make (flavor *&result, const input &x, arg_type &arg)
       {
 	return result = new flavor (x, arg);
       }
@@ -693,7 +693,7 @@ namespace elfutils
 	inline value_string () {}
 
 	template<typename string, typename arg_type>
-	inline value_string (const string &s, const arg_type &arg)
+	inline value_string (const string &s, arg_type &arg)
 	  : std::string (s)
 	{}
 
@@ -709,7 +709,7 @@ namespace elfutils
       struct value_identifier : public value_string
       {
 	template<typename id, typename arg_type>
-	inline value_identifier (const id &s, const arg_type &arg)
+	inline value_identifier (const id &s, arg_type &arg)
 	  : value_string (s, arg)
 	{}
       };
@@ -733,9 +733,11 @@ namespace elfutils
 	{}
 
 	template<typename iter, typename tracker>
-	inline value_reference (const iter &i, tracker *t)
-	  : ref ()
-	{}
+	inline value_reference (const iter &i, tracker &t)
+	  : ref ()		// Invalid until t.finish ().
+	{
+	  t.refer (&ref, i);
+	}
       };
 
       struct value_flag : public value_dispatch
@@ -747,7 +749,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_flag (bool t, const arg_type &arg)
+	inline value_flag (bool t, arg_type &arg)
 	  : flag (t)
 	{}
       };
@@ -762,7 +764,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_address (::Dwarf_Addr x, const arg_type &arg)
+	inline value_address (::Dwarf_Addr x, arg_type &arg)
 	  : addr (x)
 	{}
       };
@@ -772,7 +774,7 @@ namespace elfutils
 	inline value_rangelistptr () {}
 
 	template<typename list, typename arg_type>
-	inline value_rangelistptr (const list &other, const arg_type &arg)
+	inline value_rangelistptr (const list &other, arg_type &arg)
 	  : range_list (other)
 	{}
       };
@@ -782,7 +784,7 @@ namespace elfutils
 	inline value_lineptr () {}
 
 	template<typename table, typename arg_type>
-	inline value_lineptr (const table &other, const arg_type &arg)
+	inline value_lineptr (const table &other, arg_type &arg)
 	  : impl::line_info_table (other)
 	{}
       };
@@ -800,7 +802,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_constant (::Dwarf_Word x, const arg_type &arg)
+	inline value_constant (::Dwarf_Word x, arg_type &arg)
 	  : word (x)
 	{}
       };
@@ -811,7 +813,7 @@ namespace elfutils
 	inline value_constant_block () {}
 
 	template<typename block, typename arg_type>
-	inline value_constant_block (const block &b, const arg_type &arg)
+	inline value_constant_block (const block &b, arg_type &arg)
 	  : std::vector<uint8_t> (b.begin (), b.end ())
 	{}
       };
@@ -821,7 +823,7 @@ namespace elfutils
 	inline value_dwarf_constant () {}
 
 	template<typename constant, typename arg_type>
-	inline value_dwarf_constant (const constant &other, const arg_type &arg)
+	inline value_dwarf_constant (const constant &other, arg_type &arg)
 	  : dwarf_enum (other)
 	{}
       };
@@ -831,7 +833,7 @@ namespace elfutils
 	inline value_source_file () {}
 
 	template<typename file, typename arg_type>
-	inline value_source_file (const file &other, const arg_type &arg)
+	inline value_source_file (const file &other, arg_type &arg)
 	  : source_file (other)
 	{}
       };
@@ -845,7 +847,7 @@ namespace elfutils
 	{}
 
 	template<typename arg_type>
-	inline value_source_line (unsigned int m, const arg_type &arg)
+	inline value_source_line (unsigned int m, arg_type &arg)
 	  : n (m)
 	{}
       };
@@ -858,23 +860,29 @@ namespace elfutils
 	inline value_location () {}
 
 	template<typename loc, typename arg_type>
-	inline value_location (const loc &other, const arg_type &arg)
+	inline value_location (const loc &other, arg_type &arg)
 	  : location_attr (other)
 	{}
       };
     };
 
+    // Forward decl.
+    template<class impl, typename v = value<impl> > class attributes_type;
+
     template<class impl, typename vw = value<impl> >
     class attr_value
     {
+      friend class attributes_type<impl, vw>;
+
     private:
       typename vw::value_dispatch *_m_value;
+      typedef typename impl::debug_info_entry::pointer die_ptr;
 
-      template<typename value, typename arg_type = nothing>
+      template<typename value, typename arg_type = const nothing>
       struct init
       {
 	inline init (attr_value *av,
-		     const value &other, const arg_type &arg = arg_type ())
+		     const value &other, arg_type &arg = arg_type ())
 	{
 	  switch (other.what_space ())
 	    {
@@ -921,6 +929,14 @@ namespace elfutils
 	}
       };
 
+      // This kosher only when freshly default-constructed.
+      template<typename value, typename arg_type>
+      inline void set (const value &other, arg_type &arg)
+      {
+	assert (_m_value == NULL);
+	init<value, arg_type> me (this, other, arg);
+      }
+
       template<typename flavor>
       inline flavor &const_variant () const
       {
@@ -954,10 +970,10 @@ namespace elfutils
       }
 
       template<typename value, typename arg_type>
-      attr_value (const value &other, const arg_type &arg)
+      attr_value (const value &other, arg_type &arg)
 	: _m_value (NULL)
       {
-	init<value, arg_type> me (this, other, arg);
+	set (this, other, arg);
       }
 
       inline attr_value ()
@@ -1017,12 +1033,12 @@ namespace elfutils
 	return variant<typename vw::value_address> ().addr;
       }
 
-      inline typename impl::debug_info_entry::pointer &reference () const
+      inline die_ptr &reference () const
       {
 	return variant<typename vw::value_reference> ().ref;
       }
 
-      inline typename impl::debug_info_entry::pointer &reference ()
+      inline die_ptr &reference ()
       {
 	return variant<typename vw::value_reference> ().ref;
       }
@@ -1220,7 +1236,7 @@ namespace elfutils
       }
     };
 
-    template<class impl, typename arg = nothing, typename v = value<impl> >
+    template<class impl, typename v>
     class attributes_type
       : public std::map<int, attr_value<impl, v> >
     {
@@ -1232,13 +1248,34 @@ namespace elfutils
       inline attributes_type () {}
 
     public: // XXX should be protected
+
+      /* We don't use the base_type (begin, end) iterator constructor here
+	 for good reason.  The ref-maker needs to collect back-pointers
+	 into our mapped_value (attr_value) objects.  It would not fly to
+	 have that done in a temporary attr_value object that gets copied
+	 into the map cell by assignment.  We must make sure that when a
+	 value_reference is constructed, it is really the one sitting in
+	 our map that the ref-maker will want to update later.  */
       template<typename input, typename arg_type>
-      inline attributes_type (const input &other, const arg_type &c)
-	: base_type (subr::argify2nd<input, attributes_type, arg_type>
+      inline attributes_type (const input &other, arg_type &c)
+	: base_type ()
+      {
+	for (typename input::const_iterator attr = other.begin ();
+	     attr != other.end ();
+	     ++attr)
+	  (*this)[(*attr).first].set ((*attr).second, c);
+      }
+
+#if 0
+      // dwarf_output probably will do it this way (?)
+      template<typename input, typename arg_type>
+      inline attributes_type (const input &other, arg_type &c)
+	: base_type (subr::argify2nd<input, attributes_type, arg_type &>
 		     (other.begin (), c),
-		     subr::argify2nd<input, attributes_type, arg_type>
+		     subr::argify2nd<input, attributes_type, arg_type &>
 		     (other.end (), c))
       {}
+#endif
 
     public:
       typedef typename base_type::key_type key_type;

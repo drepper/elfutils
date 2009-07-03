@@ -69,6 +69,7 @@ namespace elfutils
     typedef typename _base::cu2 cu2;
     typedef typename _base::die1 die1;
     typedef typename _base::die2 die2;
+    typedef typename _base::dwarf1_ref dwarf1_ref;
 
   private:
     template<typename cu, typename die>

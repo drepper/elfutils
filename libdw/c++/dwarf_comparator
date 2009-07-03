@@ -67,6 +67,7 @@ namespace elfutils
     typedef typename dwarf2_die::children_type::const_iterator die2;
     typedef typename dwarf1_die::attributes_type::const_iterator attr1;
     typedef typename dwarf2_die::attributes_type::const_iterator attr2;
+    typedef typename dwarf1_die::children_type::iterator dwarf1_ref;
 
     // This object is created to start a walk and destroyed to finish one.
     struct walk
@@ -162,7 +163,6 @@ namespace elfutils
 			       const left_context_type &, const die1 &,
 			       const right_context_type &, const die2 &)
     {}
-
   };
 
   template<class dwarf1, class dwarf2,
@@ -219,7 +219,7 @@ namespace elfutils
     inline bool match (const cu1_it &a, const cu2_it &b)
     {
       typename tracker::walk in (&_m_tracker, a, b);
-      return match (static_cast<die1> (*a), static_cast<die2> (*b));
+      return match (*a, *b);
     }
 
     inline bool match (const die1 &a, const die2 &b)

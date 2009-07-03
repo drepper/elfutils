@@ -578,20 +578,21 @@ namespace elfutils
     /* A wrapped_input_iterator is like an input::const_iterator,
        but *i returns wrapper (*i) instead; wrapper returns element
        (or const element & or something).  */
-    template<typename input, typename wrapper,
+    template<typename input, class wrapper,
 	     typename element = typename wrapper::result_type>
     class wrapped_input_iterator : public input::const_iterator
     {
     private:
       typedef typename input::const_iterator _base;
 
-      wrapper *_m_wrapper;
+      wrapper _m_wrapper;
 
     public:
       typedef element value_type;
 
-      inline wrapped_input_iterator (const _base &i, wrapper &w)
-	: _base (static_cast<_base> (i)), _m_wrapper (&w)
+      template<typename arg_type>
+      inline wrapped_input_iterator (const _base &i, const arg_type &arg)
+	: _base (static_cast<_base> (i)), _m_wrapper (arg)
       {}
 
       inline wrapped_input_iterator (const wrapped_input_iterator &i)
@@ -600,7 +601,7 @@ namespace elfutils
 
       inline typename wrapper::result_type operator* () const
       {
-	return (*_m_wrapper) (_base::operator* ());
+	return _m_wrapper (_base::operator* ());
       }
     };
 
@@ -622,8 +623,15 @@ namespace elfutils
       struct maker
 	: public std::unary_function<inlet, outlet>
       {
-	arg_type _m_arg;
-	explicit inline maker (const arg_type &c) : _m_arg (c) {}
+	const arg_type _m_arg;
+
+	inline maker (const arg_type &c)
+	  : _m_arg (c)
+	{}
+
+	inline maker (const maker &m)
+	  : _m_arg (m._m_arg)
+	{}
 
 	inline outlet operator () (const inlet &x) const
 	{
@@ -635,7 +643,7 @@ namespace elfutils
 	: _m_maker (c)
       {}
 
-      typedef subr::wrapped_input_iterator<input, maker> result_type;
+      typedef wrapped_input_iterator<input, maker> result_type;
 
       inline result_type operator () (const inny &i)
       {
@@ -662,17 +670,19 @@ namespace elfutils
 
       /* Wrapper worker passed to wrapped_input_iterator.
 	 This object holds the collector pointer.  */
-      struct maker
-	: public std::unary_function<inlet, outlet>
+      struct pair_maker
+	: public argifier<input, output, arg_type>::maker
       {
-	arg_type _m_arg;
-	explicit inline maker (const arg_type &c) : _m_arg (c) {}
+	typedef typename argifier<input, output, arg_type>::maker maker;
+
+	inline pair_maker (const arg_type &c) : maker (c) {}
+	inline pair_maker (const pair_maker &m) : maker (m) {}
 
 	inline outlet operator () (const inlet &x) const
 	{
 	  return std::make_pair (x.first,
 				 typename outlet::second_type (x.second,
-							       _m_arg));
+							       this->_m_arg));
 	}
       } _m_maker;
 
@@ -680,7 +690,7 @@ namespace elfutils
 	: _m_maker (c)
       {}
 
-      typedef subr::wrapped_input_iterator<input, maker> const_iterator;
+      typedef subr::wrapped_input_iterator<input, pair_maker> const_iterator;
 
       inline const_iterator operator () (const inny &i)
       {
@@ -695,6 +705,85 @@ namespace elfutils
       return argifier2nd<input, output, arg_type> (arg) (in);
     }
 
+    /* A guard object is intended to be ephemeral, existing solely to be
+       destroyed in exception paths where it was not cleared explicitly.
+       In that case, it calls tracker::soiled ().
+
+       For convenience, it can be constructed from a tracker reference or
+       pointer, or default-constructed and then filled.  It's fillable by
+       calling the guard object as a function, passing it the tracker
+       reference or pointer, which it passes through on return:
+
+	       guard<tracker> g;
+	       use (g (t));
+	       g.clear ();
+
+       This first calls T.start ().  When G goes out of scope,
+       it calls T.abort () iff G.clear () was never called.  */
+
+    template<typename tracker>
+    class guard
+    {
+    private:
+      tracker *_m_tracker;
+
+      inline void start ()
+      {
+	_m_tracker->start ();
+      }
+
+    public:
+      inline guard (tracker *t)
+	: _m_tracker (t)
+      {
+	start ();
+      }
+
+      inline guard (tracker &t)
+	: _m_tracker (&t)
+      {
+	start ();
+      }
+
+      inline guard ()
+	: _m_tracker (NULL)
+      {}
+
+      inline tracker *operator () (tracker *t)
+      {
+	_m_tracker = t;
+	start ();
+	return t;
+      }
+
+      inline tracker &operator () (tracker &t)
+      {
+	_m_tracker = &t;
+	start ();
+	return t;
+      }
+
+      inline operator tracker * () const
+      {
+	return _m_tracker;
+      }
+
+      inline operator tracker & () const
+      {
+	return *_m_tracker;
+      }
+
+      inline void clear ()
+      {
+	_m_tracker = NULL;
+      }
+
+      inline ~guard ()
+      {
+	if (unlikely (_m_tracker != NULL))
+	  _m_tracker->abort ();
+      }
+    };
   };
 };
 

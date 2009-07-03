@@ -1,3 +1,11 @@
+2009-07-03  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_edit: Fix copy construction using a ref-maker.
+	* c++/dwarf_data: Updates.
+	* c++/subr.hh: Updates.
+	* c++/dwarf_ref_maker: New file.
+	* Makefile.am (pkginclude_HEADERS): Add it.
+
 2009-07-02  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf: Get rid of VS::unit_reference.

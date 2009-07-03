@@ -79,7 +79,7 @@ namespace elfutils
   private:
     template<typename input>
     static inline const input &
-    collect (dwarf_output_collector *c,
+    collect (dwarf_output_collector &c,
 	     const subr::auto_ref<const input> &p)
     {
       return static_cast<const input &> (p);
@@ -87,7 +87,7 @@ namespace elfutils
 
     template<typename input>
     static inline const debug_info_entry &
-    collect (dwarf_output_collector *,
+    collect (dwarf_output_collector &,
 	     const typename input::debug_info_entry &);
 
   public:
@@ -116,7 +116,7 @@ namespace elfutils
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
       template<typename die_type>
-      debug_info_entry (const die_type &die, dwarf_output_collector *c)
+      debug_info_entry (const die_type &die, dwarf_output_collector &c)
 	: _m_tag (die.tag ()),
 	  _m_attributes (die.attributes ()),
 	  _m_children (die.children ()),
@@ -188,11 +188,11 @@ namespace elfutils
       template<typename input>
       struct make
 	: public std::binary_function<typename input::value_type,
-				      dwarf_output_collector *,
+				      dwarf_output_collector &,
 				      _base::value_type>
       {
 	_base::value_type operator () (const typename input::value_type &cu,
-				       dwarf_output_collector *c) const
+				       dwarf_output_collector &c) const
 	{
 	  return _base::value_type (collect (c, cu));
 	}
@@ -205,7 +205,7 @@ namespace elfutils
 
       // Constructor copying CUs from input container.
       template<typename input>
-      compile_units (const input &units, dwarf_output_collector *c)
+      compile_units (const input &units, dwarf_output_collector &c)
 	: _base ()
       {
 	for (typename input::const_iterator it = units.begin ();
@@ -226,7 +226,7 @@ namespace elfutils
 	return !(*this == other);
       }
 
-      void recollect (dwarf_output_collector *c)
+      void recollect (dwarf_output_collector &c)
       {
 	std::transform (begin (), end (), begin (),
 			std::bind2nd (make<compile_units> (), c));
@@ -251,7 +251,7 @@ namespace elfutils
     // Constructor copying CUs from an input file (can be any of dwarf,
     // dwarf_edit, or dwarf_output).
     template<typename input>
-    dwarf_output (const input &dw, dwarf_output_collector *c)
+    dwarf_output (const input &dw, dwarf_output_collector &c)
       : _m_units (dw.compile_units (), c)
     {}
 
@@ -289,18 +289,18 @@ namespace elfutils
 
     template<typename input>
     static inline const std::string &
-    collect_string (dwarf_output_collector *, const input &);
+    collect_string (dwarf_output_collector &c, const input &);
 
     /* An iterator adapter for use in iterator-based constructors.
        collectify (iterator) yields an iterator on input where *i
        constructs output::value_type (input::value_type v, collector).  */
     template<typename input, typename output>
     static inline typename subr::argifier<input, output,
-					  dwarf_output_collector *>::result_type
+					  dwarf_output_collector &>::result_type
     collectify (const typename input::const_iterator &in,
-		dwarf_output_collector *c)
+		dwarf_output_collector &c)
     {
-      return subr::argifier<input, output, dwarf_output_collector *> (c) (in);
+      return subr::argifier<input, output, dwarf_output_collector &> (c) (in);
     }
 
     struct value_wrapper
@@ -311,7 +311,7 @@ namespace elfutils
 	const std::string &_m_str;
 
 	template<typename string>
-	inline value_string (const string &s, dwarf_output_collector *c)
+	inline value_string (const string &s, dwarf_output_collector &c)
 	  : _m_str (collect_string (c, s))
 	{}
 
@@ -345,7 +345,7 @@ namespace elfutils
 
       template<typename input>
       static inline value_dispatch *
-      make (value_string *&result, const input &x, dwarf_output_collector *c)
+      make (value_string *&result, const input &x, dwarf_output_collector &c)
       {
 	return result = new value_string (x, c);
       }
@@ -369,7 +369,7 @@ namespace elfutils
         children_type () {}
 
 	template<typename input>
-	inline children_type (const input &other, dwarf_output_collector *c)
+	inline children_type (const input &other, dwarf_output_collector &c)
 	  : std::list<debug_info_entry>
 	    (collectify<input, children_type> (other.begin (), c),
 	     collectify<input, children_type> (other.end (), c))
@@ -383,18 +383,15 @@ namespace elfutils
       typedef children_type::const_iterator pointer;
 
       class attributes_type
-	: public dwarf_data::attributes_type<dwarf_output,
-					     dwarf_output_collector *,
-					     value_wrapper>
+	: public dwarf_data::attributes_type<dwarf_output, value_wrapper>
       {
 	friend class debug_info_entry;
       private:
 	typedef dwarf_data::attributes_type<dwarf_output,
-					    dwarf_output_collector *,
 					    value_wrapper> base_type;
 
 	template<typename input>
-	inline attributes_type (const input &other, dwarf_output_collector *c)
+	inline attributes_type (const input &other, dwarf_output_collector &c)
 	  : base_type (other, c)
 	{}
       };
@@ -406,7 +403,7 @@ namespace elfutils
 
     public:
       template<typename die_type>
-      debug_info_entry (const die_type &die, dwarf_output_collector *c)
+      debug_info_entry (const die_type &die, dwarf_output_collector &c)
 	: _m_tag (die.tag ()),
 	  _m_attributes (die.attributes (), c),
 	  _m_children (die.children (), c)
@@ -473,7 +470,7 @@ namespace elfutils
       // XXX should be private
     public:
       template<typename die_type>
-      compile_unit (const die_type &die, dwarf_output_collector *c)
+      compile_unit (const die_type &die, dwarf_output_collector &c)
 	: debug_info_entry (die, c)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
@@ -501,7 +498,7 @@ namespace elfutils
 
       // Constructor copying CUs from input container.
       template<typename input>
-      compile_units (const input &units, dwarf_output_collector *c)
+      compile_units (const input &units, dwarf_output_collector &c)
 	: _base (collectify<input, compile_units> (units.begin (), c),
 		 collectify<input, compile_units> (units.end (), c))
       {
@@ -546,7 +543,7 @@ namespace elfutils
     // Constructor copying CUs from an input file (can be any of dwarf,
     // dwarf_edit, or dwarf_output).
     template<typename input>
-    dwarf_output (const input &dw, dwarf_output_collector *c)
+    dwarf_output (const input &dw, dwarf_output_collector &c)
       : _m_units (dw.compile_units (), c)
     {}
 
@@ -578,13 +575,20 @@ namespace elfutils
     subr::value_set<std::string> _m_strings;
     subr::value_set<dwarf_output::range_list> _m_ranges;
 
+  public:
+
+    template<typename die1, typename die2> // XXX
+    inline void equivalence (const die1 &a, const die2 &b) {}
+
+    template<typename die1, typename die2> // XXX
+    inline void refer (die1 *ref, const die2 &b) {}
   };
 
   template<typename input>
   inline const std::string &
-  dwarf_output::collect_string (dwarf_output_collector *c, const input &s)
+  dwarf_output::collect_string (dwarf_output_collector &c, const input &s)
   {
-    return c->_m_strings.add (s);
+    return c._m_strings.add (s);
   }
 
 };
