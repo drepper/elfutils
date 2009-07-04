@@ -101,8 +101,6 @@ namespace elfutils
     typedef dwarf_data::location_attr location_attr;
     typedef dwarf_data::attr_value<dwarf_edit> attr_value;
 
-    class compile_units;
-
     class debug_info_entry
     {
       friend class subr::create_container;
@@ -271,54 +269,33 @@ namespace elfutils
     typedef dwarf_data::compile_unit<dwarf_edit> compile_unit;
 
     // Main container anchoring all the output.
-    class compile_units : public std::list<compile_unit>
+    class compile_units
+      : public dwarf_data::compile_units<dwarf_edit>
     {
       friend class dwarf_edit;
-      friend class subr::create_container;
 
     private:
-      typedef std::list<compile_unit> _base;
-
-      // Default constructor: an empty container, no CUs.
-      inline compile_units () {}
-
       // Constructor copying CUs from input container.
       template<typename input, typename tracker>
       inline compile_units (const input &other, tracker &t)
+	: dwarf_data::compile_units<dwarf_edit> (other, t)
+      {}
+
+      inline compile_units (const compile_units &)
+	: dwarf_data::compile_units<dwarf_edit> ()
       {
-	subr::create_container (this, other, t);
+	throw std::logic_error
+	  ("must copy-construct top-level dwarf_edit object instead");
       }
 
-#if 0				// dwarf_output might use this (?)
-      template<typename input, typename tracker>
-      inline compile_units (const input &units, tracker &t)
-	: _base (subr::argify<input, compile_units, tracker &>
-		 (units.begin (), t),
-		 subr::argify<input, compile_units, tracker &>
-		 (units.end (), t))
-      {}
-#endif
-
     public:
-      typedef compile_unit value_type;
-      typedef _base::iterator iterator;
-      typedef _base::const_iterator const_iterator;
+      // Default constructor: an empty container, no CUs.
+      inline compile_units () {}
 
       inline compile_unit &add_unit ()
       {
 	push_back (compile_unit ());
 	return back ();
-      }
-
-      template<typename other_children>
-      bool operator== (const other_children &other) const
-      {
-	return subr::container_equal (*this, other);
-      }
-      template<typename other_children>
-      bool operator!= (const other_children &other) const
-      {
-	return !(*this == other);
       }
     };
 
@@ -344,9 +321,7 @@ namespace elfutils
     }
 
     // Default constructor: an empty container, no CUs.
-    inline dwarf_edit ()
-      : _m_units ()
-    {}
+    inline dwarf_edit () {}
 
     // Constructor copying CUs from an input file (dwarf or dwarf_edit).
     template<typename input, typename tracker>

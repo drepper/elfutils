@@ -68,6 +68,38 @@ namespace elfutils
   {
   public:
 
+    // Main container anchoring all the output.
+    template<class impl>
+    class compile_units : public std::list<typename impl::compile_unit>
+    {
+      friend class subr::create_container;
+
+    protected:
+      typedef std::list<typename impl::compile_unit> _base;
+
+      // Constructor copying CUs from input container.
+      template<typename input, typename tracker>
+      inline compile_units (const input &other, tracker &t)
+      {
+	subr::create_container (this, other, t);
+      }
+
+    public:
+      // Default constructor: an empty container, no CUs.
+      inline compile_units () {}
+
+      template<typename other_children>
+      bool operator== (const other_children &other) const
+      {
+	return subr::container_equal (*this, other);
+      }
+      template<typename other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
     template<class impl>
     class compile_unit : public impl::debug_info_entry
     {
