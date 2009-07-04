@@ -175,13 +175,20 @@ namespace elfutils
       template<typename die_type, typename arg_type>
       inline void set (const die_type &die, arg_type &arg)
       {
-	/* Clear the old containers first so in exceptions we can't leave
-	   the tag changed but the old containers intact.  */
-	_m_attributes.clear ();
-	_m_children.clear ();
-	_m_tag = die.tag ();
-	_m_attributes = std::move (attributes_type (die.attributes (), arg));
-	_m_children = std::move (children_type (die.children (), arg));
+	try
+	  {
+	    _m_tag = die.tag ();
+	    _m_attributes.swap (attributes_type (die.attributes (), arg));
+	    _m_children.swap (children_type (die.children (), arg));
+	  }
+	catch (...)
+	  {
+	    // Never leave a partially-formed DIE.
+	    _m_tag = -1;
+	    _m_attributes.clear ();
+	    _m_children.clear ();
+	    throw;
+	  };
       }
 
     public:
@@ -287,6 +294,7 @@ namespace elfutils
     class compile_units : public std::list<compile_unit>
     {
       friend class dwarf_edit;
+
     private:
       typedef std::list<compile_unit> _base;
 
