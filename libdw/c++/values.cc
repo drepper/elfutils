@@ -153,10 +153,10 @@ hex_string (Dwarf_Word value, const char *before = "", const char *after = "")
 }
 
 static string
-dec_string (Dwarf_Word value)
+dec_string (Dwarf_Word value, const char *before = "", const char *after = "")
 {
   std::ostringstream os;
-  os << value;
+  os << before << value << after;
   return os.str ();
 }
 
@@ -191,7 +191,9 @@ value_string (const value_type &value)
     case dwarf::VS_rangelistptr:
       return value.ranges ().to_string ();
 
-    case dwarf::VS_lineptr:	// XXX punt for now, treat as constant
+    case dwarf::VS_lineptr:
+      return value.line_info ().to_string ();
+
     case dwarf::VS_macptr:	// XXX punt for now, treat as constant
     case dwarf::VS_constant:
       return hex_string (value.constant ());
@@ -200,8 +202,10 @@ value_string (const value_type &value)
       return value.dwarf_constant ().to_string ();
 
     case dwarf::VS_source_line:
+      return dec_string (value.source_line ());
+
     case dwarf::VS_source_column:
-      return dec_string (value.constant ());
+      return dec_string (value.source_column ());
 
     case dwarf::VS_identifier:
       return plain_string (value.identifier ());
@@ -547,36 +551,130 @@ dwarf::location_attr::is_list () const
   return true;
 }
 
+inline void
+dwarf::location_attr::const_iterator::advance ()
+{
+  xif (_m_cu, range_list_advance (IDX_debug_loc, _m_cu,
+				  _m_base, _m_begin, _m_end, _m_offset,
+				  &_m_block.data));
+  if (_m_offset > 1)
+    _m_offset += 2 + (_m_block.length
+		      = read_2ubyte_unaligned_inc (_m_cu->dbg, _m_block.data));
+  else
+    // End iterator.
+    _m_block = Dwarf_Block ();
+}
+
+dwarf::location_attr::const_iterator
+dwarf::location_attr::begin () const
+{
+  const_iterator i (_m_attr.thisattr (), 0);
+  if (is_list ())
+    i.advance ();
+  else
+    xif (_m_attr.thisattr (),
+	 dwarf_formblock (_m_attr.thisattr (), &i._m_block) < 0);
+
+  return i;
+}
+
 dwarf::location_attr::const_iterator &
 dwarf::location_attr::const_iterator::operator++ ()
 {
   if (unlikely (_m_offset == 1))
     throw std::runtime_error ("incrementing end iterator");
-  else if (_m_offset == 0)
+
+  if (_m_offset == 0)
     // Singleton, now at end.
     _m_offset = 1;
   else
-    {
-      // Advance to next list entry.
-      xif (_m_attr._m_attr.thisattr (),
-	   range_list_advance (IDX_debug_loc, _m_attr._m_attr._m_attr.cu,
-			       _m_base, _m_begin, _m_end, _m_offset,
-			       &_m_attr._m_attr._m_attr.valp));
-      if (_m_offset > 1)
-	{
-	  _m_attr._m_attr._m_attr.form = DW_FORM_block2;
-	  _m_offset += read_2ubyte_unaligned (_m_attr._m_attr._m_attr.cu->dbg,
-					      _m_attr._m_attr._m_attr.valp);
-	}
-    }
+    // Advance to next list entry.
+    advance ();
 
   return *this;
+}
+
+template<typename locattr>
+static string
+locattr_string (const locattr *loc)
+{
+  return (loc->is_list () ? dec_string (loc->size (), "{loclist ", " entries}")
+	  : "{locexpr}");
 }
 
 string
 dwarf::location_attr::to_string () const
 {
-  if (is_list ())
-    return hex_string (_m_attr.constant (), "#");
-  return "XXX-expr";
+  return locattr_string (this);
 }
+
+string
+dwarf_data::location_attr::to_string () const
+{
+  return locattr_string (this);
+}
+
+// dwarf::line_info_table
+
+template<typename line_info_table>
+static inline std::string
+line_info_string (const line_info_table *table)
+{
+  return ("[" + table->include_directories ().to_string ()
+	  + ", " + table->lines ().to_string () + "]");
+}
+
+std::string
+dwarf::line_info_table::to_string () const
+{
+  return line_info_string (this);
+}
+
+namespace elfutils
+{
+  template<>
+  std::string
+  dwarf_edit::line_info_table::to_string () const
+  {
+    return line_info_string (this);
+  }
+
+};
+
+// dwarf::directory_table
+
+static std::string
+dirtable_string (size_t ndirs)
+{
+  return dec_string (ndirs, "{", " dirs}");
+}
+
+std::string
+dwarf::directory_table::to_string () const
+{
+  return dirtable_string (_m_files->ndirs);
+}
+
+std::string
+dwarf_data::directory_table::to_string () const
+{
+  return dirtable_string (size ());
+}
+
+// dwarf::line_table
+
+std::string
+dwarf::line_table::to_string () const
+{
+  return dec_string (_m_lines->nlines, "{", " line entries}");
+}
+
+namespace elfutils
+{
+  template<>
+  std::string
+  dwarf_edit::line_table::to_string () const
+  {
+    return dec_string (size (), "{", " line entries}");
+  }
+};

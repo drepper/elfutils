@@ -75,9 +75,3 @@ dwarf_data::source_file::to_string () const
   os << "{\"" << _m_name << "," << _m_mtime << "," << _m_size << "}";
   return os.str ();
 }
-
-std::string
-dwarf_data::location_attr::to_string () const
-{
-  return is_list () ? "XXX-loclist" : "XXX-expr";
-}

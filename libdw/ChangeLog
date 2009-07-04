@@ -1,5 +1,12 @@
 2009-07-03  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf: Give line info stubby to_string methods.
+	* c++/dwarf_data: Likewise.
+	* c++/edit-values.cc: Likewise.
+
+	* c++/dwarf: Fix location_attr iterators.
+	* c++/values.cc: Likewise.
+
 	* Makefile.am (AM_CXXFLAGS): New variable (from ../src/Makefile.am).
 
 	* c++/dwarf: Fix range_list canonicalizing comparisons.

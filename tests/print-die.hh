@@ -31,11 +31,14 @@
 #include <ostream>
 #include <iomanip>
 #include <tr1/unordered_map>
+#include <functional>
+#include <algorithm>
 
 #include "c++/dwarf_edit"
 #include "c++/dwarf_output"
 
 static bool print_offset;
+static bool sort_attrs;
 
 static enum { copy_none, copy_edit, copy_output } make_copy;
 
@@ -56,6 +59,13 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
   if (argc > 1 && !strcmp (argv[1], "--offsets"))
     {
       print_offset = true;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--sort-attrs"))
+    {
+      sort_attrs = true;
       --argc;
       ++argv;
     }
@@ -81,14 +91,76 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
     }
 }
 
+static int next_ref = 1;
 typedef tr1::unordered_map< ::Dwarf_Off, int> refs_map;
 
-static void
-finish_refs_map (refs_map &refs)
+template<typename attrs_type,
+	 void (*act) (const typename attrs_type::value_type &, refs_map &)
+	 >
+class attr_walker
 {
-  int id = 0;
-  for (refs_map::iterator it = refs.begin (); it != refs.end (); ++it)
-    it->second = ++id;
+private:
+  refs_map &refs;
+  inline attr_walker (refs_map &r) : refs (r) {}
+
+  typedef typename attrs_type::const_iterator iterator;
+  typedef typename iterator::value_type attr_type;
+
+public:
+  inline void operator () (const pair<int, iterator> &p) const
+  {
+    (*act) (*p.second, refs);
+  }
+
+  static inline void walk (const attrs_type &attrs, refs_map &r)
+  {
+    if (attrs_type::ordered || !sort_attrs)
+      for (iterator i = attrs.begin (); i != attrs.end (); ++i)
+	(*act) (*i, r);
+    else
+      {
+	map<int, iterator> sorted;
+	for (iterator i = attrs.begin (); i != attrs.end (); ++i)
+	  sorted[(*i).first] = i;
+	for_each (sorted.begin (), sorted.end (),
+		  attr_walker<attrs_type, act> (r));
+      }
+  }
+};
+
+template<typename attrs_type>
+void
+print_attr (const typename attrs_type::value_type &attr, refs_map &refs)
+{
+  if (!print_offset && attr.second.what_space () == dwarf::VS_reference)
+    cout << " " << dwarf::attributes::name (attr.first) << "=\"#ref"
+	 << dec << refs[attr.second.reference ()->identity ()] << "\"";
+  else
+    cout << " " << to_string (attr);
+}
+
+template<typename attrs_type>
+static void
+print_attrs (const attrs_type &attrs, refs_map &refs)
+{
+  attr_walker<attrs_type, print_attr<attrs_type> >::walk (attrs, refs);
+}
+
+template<typename attrs_type>
+void
+prewalk_attr (const typename attrs_type::value_type &attr, refs_map &refs)
+{
+  if (attr.second.what_space () == dwarf::VS_reference
+      && refs.insert (make_pair (attr.second.reference ()->identity (),
+				 next_ref)).second)
+    ++next_ref;
+}
+
+template<typename attrs_type>
+static void
+prewalk_attrs (const attrs_type &attrs, refs_map &refs)
+{
+  attr_walker<attrs_type, prewalk_attr<attrs_type> >::walk (attrs, refs);
 }
 
 template<typename file>
@@ -99,10 +171,7 @@ prewalk_die (const typename file::debug_info_entry &die, refs_map &refs)
 	 = die.children ().begin (); i != die.children ().end (); ++i)
     prewalk_die<file> (*i, refs);
 
-  for (typename file::debug_info_entry::attributes_type::const_iterator i
-	 = die.attributes ().begin (); i != die.attributes ().end (); ++i)
-    if ((*i).second.what_space () == dwarf::VS_reference)
-      refs[(*i).second.reference ()->identity ()];
+  prewalk_attrs (die.attributes (), refs);
 }
 
 template<typename file>
@@ -120,18 +189,10 @@ print_die (const typename file::debug_info_entry &die,
     {
       refs_map::const_iterator it = refs.find (die.identity ());
       if (it != refs.end ())
-	cout << " ref=\"" << hex << it->second << "\"";
+	cout << " ref=\"ref" << dec << it->second << "\"";
     }
 
-  for (typename file::debug_info_entry::attributes_type::const_iterator i
-	 = die.attributes ().begin (); i != die.attributes ().end (); ++i)
-    {
-      if (!print_offset && (*i).second.what_space () == dwarf::VS_reference)
-	cout << " " << dwarf::attributes::name ((*i).first) << "=\"#"
-	     << hex << refs[(*i).second.reference ()->identity ()] << "\"";
-      else
-	cout << " " << to_string (*i);
-    }
+  print_attrs (die.attributes (), refs);
 
   if (die.has_children ())
     {
@@ -163,10 +224,7 @@ print_cu (const typename file::compile_unit &cu, const unsigned int limit)
   refs_map refs;
 
   if (!print_offset)
-    {
-      prewalk_die<file> (die, refs);
-      finish_refs_map (refs);
-    }
+    prewalk_die<file> (die, refs);
 
   print_die<file> (die, 1, limit, refs);
 }

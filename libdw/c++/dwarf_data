@@ -188,6 +188,8 @@ namespace elfutils
       directory_table (const table &other)
 	: _base (other.begin (), other.end ()) {}
 
+      std::string to_string () const;
+
       template<typename table>
       inline bool operator== (const table &other) const
       {
@@ -393,6 +395,8 @@ namespace elfutils
       template<typename table>
       line_table (const table &other) : _base (other.begin (), other.end ()) {}
 
+      std::string to_string () const;
+
       template<typename table>
       inline bool operator== (const table &other) const
       {
@@ -434,6 +438,8 @@ namespace elfutils
 	this->second = line_table (other.lines ());
 	return *this;
       }
+
+      std::string to_string () const;
 
       inline directory_table &include_directories ()
       {
