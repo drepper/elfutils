@@ -331,14 +331,14 @@ namespace elfutils
 
       template<typename flavor, typename input>
       static inline value_dispatch *
-      make (flavor *&result, const input &x, const dwarf_data::nothing &)
+      make (flavor *&, const input &, const dwarf_data::nothing &)
       {
 	throw std::logic_error ("dwarf_output cannot be default-constructed");
       }
 
       template<typename flavor, typename input, typename arg_type>
       static inline value_dispatch *
-      make (flavor *&result, const input &x, const arg_type &arg)
+      make (flavor *&result, const input &x, arg_type &arg)
       {
 	return result = new flavor (x, arg);
       }
@@ -536,14 +536,12 @@ namespace elfutils
 
   public:
     // Constructor for an empty file, can add to its compile_units ().
-    dwarf_output ()
-      : _m_units ()
-    {}
+    inline dwarf_output () {}
 
     // Constructor copying CUs from an input file (can be any of dwarf,
     // dwarf_edit, or dwarf_output).
     template<typename input>
-    dwarf_output (const input &dw, dwarf_output_collector &c)
+    inline dwarf_output (const input &dw, dwarf_output_collector &c)
       : _m_units (dw.compile_units (), c)
     {}
 
@@ -578,10 +576,12 @@ namespace elfutils
   public:
 
     template<typename die1, typename die2> // XXX
-    inline void equivalence (const die1 &a, const die2 &b) {}
+    inline void equivalence (const die1 &, const die2 &)
+    {}
 
     template<typename die1, typename die2> // XXX
-    inline void refer (die1 *ref, const die2 &b) {}
+    inline void refer (die1 *, const die2 &)
+    {}
   };
 
   template<typename input>

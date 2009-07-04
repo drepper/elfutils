@@ -252,11 +252,12 @@ print_file (const char *name, const file &dw, const unsigned int limit)
     case copy_edit:
       print_file (dwarf_edit (dw), limit);
       break;
-#if 0 // XXX
     case copy_output:
-      print_file (dwarf_output (dw), limit);
+      {
+	dwarf_output_collector c; // We'll just throw it away.
+	print_file (dwarf_output (dw, c), limit);
+      }
       break;
-#endif
     default:
       abort ();
     }
