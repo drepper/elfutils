@@ -1007,11 +1007,11 @@ namespace elfutils
       {
 	return line_info ().include_directories ();
       }
-      const file_table files () const
+      inline const file_table files () const
       {
 	return line_info ().files ();
       }
-      const line_table lines () const
+      inline const line_table lines () const
       {
 	return line_info ().lines ();
       }

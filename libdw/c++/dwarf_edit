@@ -268,28 +268,7 @@ namespace elfutils
 
     typedef debug_info_entry::attributes_type::value_type attribute;
 
-    class compile_unit : public debug_info_entry
-    {
-      friend class subr::create_container;
-      friend class compile_units;
-    private:
-      inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
-
-      // XXX should be private
-    public:
-      template<typename die_type, typename tracker>
-      inline compile_unit (const die_type &die, tracker &t)
-	: debug_info_entry (die, t)
-      {
-	if (die.tag () != ::DW_TAG_compile_unit)
-	  throw std::invalid_argument ("not a compile_unit entry");
-      }
-
-      /* XXX doesn't help
-	public:
-	compile_unit (const compile_unit &u) : debug_info_entry (u) {}
-      */
-    };
+    typedef dwarf_data::compile_unit<dwarf_edit> compile_unit;
 
     // Main container anchoring all the output.
     class compile_units : public std::list<compile_unit>
