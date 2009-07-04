@@ -361,7 +361,8 @@ namespace elfutils
       friend class subr::create_container;
 
     public:
-      typedef dwarf_data::attributes_type<dwarf_output> attributes_type;
+      typedef dwarf_data::attributes_type<dwarf_output,
+					  value_wrapper> attributes_type;
 
       class children_type : public std::list<debug_info_entry>
       {
@@ -563,13 +564,6 @@ namespace elfutils
   template<>
   std::string
   to_string<dwarf_output::attr_value> (const dwarf_output::attr_value&);
-
-  template<>
-  std::string
-  to_string<dwarf_data::attr_value<dwarf_output,
-				   dwarf_data::value<dwarf_output> > >
-  (const dwarf_data::attr_value<dwarf_output,
-				dwarf_data::value<dwarf_output> > &);
 
 #endif
 
