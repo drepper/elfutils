@@ -352,6 +352,8 @@ namespace elfutils
   private:
     compile_units _m_units;
 
+    typedef dwarf_ref_maker<dwarf_edit, dwarf_edit> edit_ref_maker;
+
   public:
     class compile_units &compile_units ()
     {
@@ -368,7 +370,6 @@ namespace elfutils
       return compile_units ().add_unit ();
     }
 
-  public:
     // Default constructor: an empty container, no CUs.
     inline dwarf_edit ()
       : _m_units ()
@@ -390,6 +391,16 @@ namespace elfutils
 		       = dwarf_ref_maker<dwarf_edit, input> (),
 		       subr::guard<dwarf_ref_maker<dwarf_edit, input> > guard
 		       = subr::guard<dwarf_ref_maker<dwarf_edit, input> > ())
+      : _m_units (dw.compile_units (), guard (t))
+    {
+      guard.clear ();
+    }
+
+    // We have to write this explicitly or it will do default-copying!
+    inline dwarf_edit (const dwarf_edit &dw,
+		       edit_ref_maker t = edit_ref_maker (),
+		       subr::guard<edit_ref_maker > guard
+		       = subr::guard<edit_ref_maker > ())
       : _m_units (dw.compile_units (), guard (t))
     {
       guard.clear ();
