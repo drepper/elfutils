@@ -356,11 +356,12 @@ namespace elfutils
 
     typedef dwarf_data::attr_value<dwarf_output, value_wrapper> attr_value;
 
-    class compile_units;
-
     class debug_info_entry
     {
+      friend class subr::create_container;
+
     public:
+      typedef dwarf_data::attributes_type<dwarf_output> attributes_type;
 
       class children_type : public std::list<debug_info_entry>
       {
@@ -368,45 +369,82 @@ namespace elfutils
       private:
         inline children_type () {}
 
-	template<typename input>
-	inline children_type (const input &other, dwarf_output_collector &c)
-	  : std::list<debug_info_entry>
-	    (collectify<input, children_type> (other.begin (), c),
-	     collectify<input, children_type> (other.end (), c))
-	{}
+	template<typename input, typename tracker>
+	static inline void
+	equivalence (const iterator &out,
+		     const typename input::const_iterator &in, tracker &t)
+	{
+	  t.equivalence (out, in);
+	}
+
+	template<typename input, typename tracker>
+	inline children_type (const input &other, tracker &t)
+	{
+	  subr::create_container (this, other, t, equivalence<input, tracker>);
+	}
 
       public:
 	typedef debug_info_entry value_type;
+
+	inline iterator add_entry (int tag, const iterator &pos)
+	{
+	  return insert (pos, debug_info_entry (tag));
+	}
+
+	inline iterator add_entry (int tag)
+	{
+	  return add_entry (tag, end ());
+	}
       };
 
+      typedef children_type::iterator pointer;
       typedef children_type::const_iterator const_pointer;
-      typedef children_type::const_iterator pointer;
 
-      class attributes_type
-	: public dwarf_data::attributes_type<dwarf_output, value_wrapper>
-      {
-	friend class debug_info_entry;
-      private:
-	typedef dwarf_data::attributes_type<dwarf_output,
-					    value_wrapper> base_type;
-
-	template<typename input>
-	inline attributes_type (const input &other, dwarf_output_collector &c)
-	  : base_type (other, c)
-	{}
-      };
-
-    private:
-      const int _m_tag;
+    protected:
+      int _m_tag;
       attributes_type _m_attributes;
       children_type _m_children;
 
+      // This is can only be used by the children_type constructor,
+      // which immediately calls set.
+      inline debug_info_entry ()
+	: _m_tag (-1), _m_attributes (), _m_children ()
+      {}
+
+      template<typename die_type, typename arg_type>
+      inline void set (const die_type &die, arg_type &arg)
+      {
+	try
+	  {
+	    _m_tag = die.tag ();
+	    _m_attributes.swap (attributes_type (die.attributes (), arg));
+	    _m_children.swap (children_type (die.children (), arg));
+	  }
+	catch (...)
+	  {
+	    // Never leave a partially-formed DIE.
+	    _m_tag = -1;
+	    _m_attributes.clear ();
+	    _m_children.clear ();
+	    throw;
+	  };
+      }
+
     public:
-      template<typename die_type>
-      debug_info_entry (const die_type &die, dwarf_output_collector &c)
+      inline debug_info_entry (int t)
+	: _m_tag (t), _m_attributes (), _m_children ()
+      {
+	if (unlikely (t <= 0))
+	  throw std::invalid_argument ("invalid tag");
+      }
+
+      /* The template constructor lets us copy in from any class that has
+	 compatibly iterable containers for attributes and children.  */
+      template<typename die_type, typename tracker>
+      debug_info_entry (const die_type &die, tracker &t)
 	: _m_tag (die.tag ()),
-	  _m_attributes (die.attributes (), c),
-	  _m_children (die.children (), c)
+	  _m_attributes (die.attributes (), t),
+	  _m_children (die.children (), t)
       {}
 
       inline int tag () const
@@ -419,19 +457,11 @@ namespace elfutils
 	return !_m_children.empty ();
       }
 
-      inline children_type &children ()
-      {
-	return _m_children;
-      }
       inline const children_type &children () const
       {
 	return _m_children;
       }
 
-      inline attributes_type &attributes ()
-      {
-	return _m_attributes;
-      }
       inline const attributes_type &attributes () const
       {
 	return _m_attributes;
@@ -463,62 +493,31 @@ namespace elfutils
 
     typedef debug_info_entry::attributes_type::value_type attribute;
 
-    class compile_unit : public debug_info_entry
-    {
-      friend class compile_units;
-
-      // XXX should be private
-    public:
-      template<typename die_type>
-      compile_unit (const die_type &die, dwarf_output_collector &c)
-	: debug_info_entry (die, c)
-      {
-	if (die.tag () != ::DW_TAG_compile_unit)
-	  throw std::invalid_argument ("not a compile_unit entry");
-      }
-
-      /* XXX doesn't help
-	public:
-	compile_unit (const compile_unit &u) : debug_info_entry (u) {}
-      */
-    };
+    typedef dwarf_data::compile_unit<dwarf_output> compile_unit;
 
     // Main container anchoring all the output.
     class compile_units
-      : public std::list<compile_unit>
+      : public dwarf_data::compile_units<dwarf_output>
     {
       friend class dwarf_output;
-    private:
-      typedef std::list<compile_unit> _base;
 
-      // Default constructor: an empty container, no CUs.
-      inline compile_units ()
-	: _base ()
+    private:
+      // Constructor copying CUs from input container.
+      template<typename input, typename tracker>
+      inline compile_units (const input &other, tracker &t)
+	: dwarf_data::compile_units<dwarf_output> (other, t)
       {}
 
-      // Constructor copying CUs from input container.
-      template<typename input>
-      compile_units (const input &units, dwarf_output_collector &c)
-	: _base (collectify<input, compile_units> (units.begin (), c),
-		 collectify<input, compile_units> (units.end (), c))
+      inline compile_units (const compile_units &)
+	: dwarf_data::compile_units<dwarf_output> ()
       {
+	throw std::logic_error
+	  ("must copy-construct top-level dwarf_output object instead");
       }
 
     public:
-      typedef compile_unit value_type;
-      typedef _base::iterator iterator;
-      typedef _base::const_iterator const_iterator;
-
-      template<typename other_children>
-      bool operator== (const other_children &other) const
-      {
-	return subr::container_equal (*this, other);
-      }
-      template<typename other_children>
-      bool operator!= (const other_children &other) const
-      {
-	return !(*this == other);
-      }
+      // Default constructor: an empty container, no CUs.
+      inline compile_units () {}
     };
 
   private:
@@ -559,9 +558,18 @@ namespace elfutils
 
   // Explicit specializations.
   template<>
-  std::string to_string<dwarf_output::attribute> (const dwarf_output::attribute &);
+  std::string
+  to_string<dwarf_output::attribute> (const dwarf_output::attribute &);
   template<>
-  std::string to_string<dwarf_output::attr_value> (const dwarf_output::attr_value&);
+  std::string
+  to_string<dwarf_output::attr_value> (const dwarf_output::attr_value&);
+
+  template<>
+  std::string
+  to_string<dwarf_data::attr_value<dwarf_output,
+				   dwarf_data::value<dwarf_output> > >
+  (const dwarf_data::attr_value<dwarf_output,
+				dwarf_data::value<dwarf_output> > &);
 
 #endif
 

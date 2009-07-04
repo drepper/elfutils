@@ -256,9 +256,13 @@ to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &value)
   return value_string (value);
 }
 
+// Really.
 template<>
 string
-to_string<dwarf_output::attr_value> (const dwarf_output::attr_value &value)
+to_string<dwarf_data::attr_value<dwarf_output,
+				 dwarf_data::value<dwarf_output> > >
+(const dwarf_data::attr_value<dwarf_output,
+ 			      dwarf_data::value<dwarf_output> > &value)
 {
   return value_string (value);
 }

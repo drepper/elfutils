@@ -106,6 +106,7 @@ namespace elfutils
       friend class subr::create_container;
 
     public:
+      typedef dwarf_data::attributes_type<dwarf_edit> attributes_type;
 
       class children_type : public std::list<debug_info_entry>
       {
@@ -143,21 +144,6 @@ namespace elfutils
 
       typedef children_type::iterator pointer;
       typedef children_type::const_iterator const_pointer;
-
-      class attributes_type
-	: public dwarf_data::attributes_type<dwarf_edit>
-      {
-	friend class debug_info_entry;
-      private:
-	typedef dwarf_data::attributes_type<dwarf_edit> base_type;
-
-	inline attributes_type () {}
-
-	template<typename attrs, typename tracker>
-	inline attributes_type (const attrs &other, tracker &t)
-	  : base_type (other, t)
-	{}
-      };
 
     protected:
       int _m_tag;
@@ -370,7 +356,7 @@ namespace elfutils
   template<>
   std::string to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &);
   template<>
-  std::string to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &);
+  std::string to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value&);
 };
 
 #endif	// <elfutils/dwarf_edit>
