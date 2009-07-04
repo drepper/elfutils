@@ -331,7 +331,7 @@ namespace elfutils
 
       template<typename flavor, typename input>
       static inline value_dispatch *
-      make (flavor *&, const input &, const dwarf_data::nothing &)
+      make (flavor *&, const input &, const subr::nothing &)
       {
 	throw std::logic_error ("dwarf_output cannot be default-constructed");
       }
@@ -366,7 +366,7 @@ namespace elfutils
       {
 	friend class debug_info_entry;
       private:
-        children_type () {}
+        inline children_type () {}
 
 	template<typename input>
 	inline children_type (const input &other, dwarf_output_collector &c)

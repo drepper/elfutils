@@ -669,8 +669,6 @@ namespace elfutils
     };
 
   public:
-    struct nothing {};
-
     template<typename impl>
     struct value
     {
@@ -726,7 +724,7 @@ namespace elfutils
 	   object.  This is what plain assignment does.  This just uses
 	   this pointer, rather than translating it from another file
 	   into this one (which requires a tracker).  */
-	inline value_reference (const value_type &i, const nothing &)
+	inline value_reference (const value_type &i, const subr::nothing &)
 	  : ref (i)
 	{}
 
@@ -876,7 +874,7 @@ namespace elfutils
       typename vw::value_dispatch *_m_value;
       typedef typename impl::debug_info_entry::pointer die_ptr;
 
-      template<typename value, typename arg_type = const nothing>
+      template<typename value, typename arg_type = const subr::nothing>
       struct init
       {
 	inline init (attr_value *av,

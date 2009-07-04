@@ -105,6 +105,8 @@ namespace elfutils
 
     class debug_info_entry
     {
+      friend class subr::create_container;
+
     public:
 
       class children_type : public std::list<debug_info_entry>
@@ -114,19 +116,17 @@ namespace elfutils
         inline children_type () {}
 
 	template<typename input, typename tracker>
+	static inline void
+	equivalence (const iterator &out,
+		     const typename input::const_iterator &in, tracker &t)
+	{
+	  t.equivalence (out, in);
+	}
+
+	template<typename input, typename tracker>
 	inline children_type (const input &other, tracker &t)
 	{
-	  for (typename input::const_iterator in = other.begin ();
-	       in != other.end ();
-	       ++in)
-	    {
-	      /* Don't copy-construct the entry from *in here because that
-		 copies it again into the list and destroys the first copy.  */
-	      push_back (debug_info_entry ());
-	      iterator out = --end ();
-	      out->set (*in, t);
-	      t.equivalence (out, in);
-	    }
+	  subr::create_container (this, other, t, equivalence<input, tracker>);
 	}
 
       public:
@@ -270,6 +270,7 @@ namespace elfutils
 
     class compile_unit : public debug_info_entry
     {
+      friend class subr::create_container;
       friend class compile_units;
     private:
       inline compile_unit () : debug_info_entry (::DW_TAG_compile_unit) {}
@@ -294,6 +295,7 @@ namespace elfutils
     class compile_units : public std::list<compile_unit>
     {
       friend class dwarf_edit;
+      friend class subr::create_container;
 
     private:
       typedef std::list<compile_unit> _base;
@@ -305,17 +307,9 @@ namespace elfutils
       template<typename input, typename tracker>
       inline compile_units (const input &other, tracker &t)
       {
-	for (typename input::const_iterator in = other.begin ();
-	     in != other.end ();
-	     ++in)
-	  {
-	    /* Don't copy-construct the entry from *in here because that
-	       copies it again into the list and destroys the first copy.  */
-	    push_back (compile_unit ());
-	    iterator out = --end ();
-	    out->set (*in, t);
-	  }
+	subr::create_container (this, other, t);
       }
+
 #if 0				// dwarf_output might use this (?)
       template<typename input, typename tracker>
       inline compile_units (const input &units, tracker &t)

@@ -784,6 +784,34 @@ namespace elfutils
 	  _m_tracker->abort ();
       }
     };
+
+    struct nothing
+    {
+      template<typename... args>
+      inline void operator () (args&&...) const {}
+    };
+
+    // Class instead of function so it can be a friend.
+    struct create_container
+    {
+      template<typename container, typename input, typename arg_type,
+	       typename hook_type = const nothing>
+      inline create_container (container *me, const input &other,
+			       arg_type &arg, hook_type &hook = hook_type ())
+      	{
+	  for (typename input::const_iterator in = other.begin ();
+	       in != other.end ();
+	       ++in)
+	    {
+	      /* Don't copy-construct the entry from *in here because that
+		 copies it again into the list and destroys the first copy.  */
+	      me->push_back (typename container::value_type ());
+	      typename container::iterator out = --me->end ();
+	      out->set (*in, arg);
+	      hook (out, in, arg);
+	    }
+	}
+    };
   };
 };
 
