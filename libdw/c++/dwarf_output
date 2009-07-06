@@ -51,6 +51,7 @@
 #define _ELFUTILS_DWARF_OUTPUT	1
 
 #include "dwarf_edit"
+#include "dwarf_ref_maker"
 #include <functional>
 
 /* Read the comments for elfutils::dwarf first.
@@ -286,6 +287,7 @@ namespace elfutils
     class debug_info_entry;
 
   protected:
+    template<typename input> class copier; // Below.
 
     template<typename input>
     static inline const std::string &
@@ -310,8 +312,8 @@ namespace elfutils
       {
 	const std::string &_m_str;
 
-	template<typename string>
-	inline value_string (const string &s, dwarf_output_collector &c)
+	template<typename string, typename input>
+	inline value_string (const string &s, dwarf_output::copier<input> &c)
 	  : _m_str (collect_string (c, s))
 	{}
 
@@ -534,6 +536,13 @@ namespace elfutils
       return _m_units;
     }
 
+  private:
+    // Bind default copy-constructor and prevent it.
+    inline dwarf_output (const dwarf_output &)
+    {
+      throw std::logic_error ("copying dwarf_output requires a collector");
+    }
+
   public:
     // Constructor for an empty file, can add to its compile_units ().
     inline dwarf_output () {}
@@ -541,9 +550,8 @@ namespace elfutils
     // Constructor copying CUs from an input file (can be any of dwarf,
     // dwarf_edit, or dwarf_output).
     template<typename input>
-    inline dwarf_output (const input &dw, dwarf_output_collector &c)
-      : _m_units (dw.compile_units (), c)
-    {}
+    inline dwarf_output (const input &, dwarf_output_collector &,
+			 copier<input> = copier<input> ());
 
     template<typename file>
     inline bool operator== (const file &other) const
@@ -577,14 +585,39 @@ namespace elfutils
 
   public:
 
-    template<typename die1, typename die2> // XXX
-    inline void equivalence (const die1 &, const die2 &)
+  };
+
+  template<class input>
+  class dwarf_output::copier
+    : public dwarf_ref_maker<dwarf_output, input> // XXX temporary
+  {
+    friend class dwarf_output;
+  private:
+    dwarf_output_collector *_m_collector;
+
+    inline copier ()
+      : _m_collector (NULL)
     {}
 
-    template<typename die1, typename die2> // XXX
-    inline void refer (die1 *, const die2 &)
-    {}
+    copier &operator () (dwarf_output_collector &c)
+    {
+      _m_collector = &c;
+      return *this;
+    }
+
+    inline operator dwarf_output_collector & ()
+    {
+      return *_m_collector;
+    }
   };
+
+  // Copy construction instantiates a copier derived from the collector.
+  template<typename input>
+  inline dwarf_output::dwarf_output (const input &dw,
+				     dwarf_output_collector &c,
+				     copier<input> maker)
+    : _m_units (dw.compile_units (), maker (c))
+  {}
 
   template<typename input>
   inline const std::string &

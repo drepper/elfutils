@@ -330,7 +330,6 @@ main (int argc, char *argv[])
 	  dwarf_edit edit2 (file2);
 	  test_classes (file1, file2, edit1, edit2, same);
 
-	  /*
 	  {
 	    dwarf_output_collector c1;
 	    dwarf_output_collector c2;
@@ -347,7 +346,6 @@ main (int argc, char *argv[])
 	    test_classes (file1, file2, out1, out2, same);
 	    test_classes (edit1, edit2, out1, out2, same);
 	  }
-	  */
 	}
 
       result = !same;
