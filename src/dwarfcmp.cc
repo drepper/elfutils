@@ -100,7 +100,7 @@ static bool quiet;
 static bool missing_ok;
 
 /* Nonzero to test writer classes.  */
-static bool test_writer;
+static int test_writer;
 
 
 static Dwarf *
@@ -270,6 +270,21 @@ test_classes (const dwarf1 &file1, const dwarf1 &file2,
   test_compare (file1, out2, expect);
 }
 
+template<class input>
+static void
+test_output (const dwarf &file1, const dwarf &file2,
+	     bool two_tests, const input &in1, const input &in2, bool same)
+{
+  dwarf_output_collector c1;
+  dwarf_output_collector c2;
+  dwarf_output out1 (in1, c1);
+  dwarf_output out2 (in2, c2);
+
+  test_classes (file1, file2, out1, out2, same);
+
+  if (two_tests)
+    test_classes (in1, in2, out1, out2, same);
+}
 
 int
 main (int argc, char *argv[])
@@ -324,28 +339,15 @@ main (int argc, char *argv[])
 		   ? quiet_cmp<dwarf, dwarf> () (file1, file2)
 		   : noisy_cmp<dwarf, dwarf> () (file1, file2));
 
-      if (test_writer)
+      if (test_writer & 1)
+	test_output (file1, file2, false, file1, file2, same);
+      if (test_writer & 2)
 	{
 	  dwarf_edit edit1 (file1);
 	  dwarf_edit edit2 (file2);
 	  test_classes (file1, file2, edit1, edit2, same);
-
-	  {
-	    dwarf_output_collector c1;
-	    dwarf_output_collector c2;
-	    dwarf_output out1 (file1, c1);
-	    dwarf_output out2 (file2, c2);
-	    test_classes (file1, file2, out1, out2, same);
-	    test_classes (edit1, edit2, out1, out2, same);
-	  }
-	  {
-	    dwarf_output_collector c1;
-	    dwarf_output_collector c2;
-	    dwarf_output out1 (edit1, c1);
-	    dwarf_output out2 (edit2, c2);
-	    test_classes (file1, file2, out1, out2, same);
-	    test_classes (edit1, edit2, out1, out2, same);
-	  }
+	  if (test_writer & 1)
+	    test_output (file1, file2, true, edit1, edit2, same);
 	}
 
       result = !same;
@@ -383,7 +385,7 @@ parse_opt (int key, char *, struct argp_state *)
       break;
 
     case 'T':
-      test_writer = true;
+      ++test_writer;
       break;
 
     default:
