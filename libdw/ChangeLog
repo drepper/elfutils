@@ -1,3 +1,8 @@
+2009-07-06  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_tracker (tracker): Break out private class into ...
+	(dwarf_path_finder): ... here.
+
 2009-07-03  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf: Give line info stubby to_string methods.
