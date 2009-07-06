@@ -794,6 +794,8 @@ namespace elfutils
 
       struct value_identifier : public value_string
       {
+	inline value_identifier () {}
+
 	template<typename id, typename arg_type>
 	inline value_identifier (const id &s, arg_type &arg)
 	  : value_string (s, arg)
@@ -1155,12 +1157,14 @@ namespace elfutils
 
       inline const std::string &identifier () const
       {
-	return string ();
+	return static_cast<const std::string &>
+	  (variant<typename vw::value_identifier> ());
       }
 
       inline std::string &identifier ()
       {
-	return string ();
+	return static_cast<std::string &>
+	  (variant<typename vw::value_identifier> ());
       }
 
       inline const typename impl::source_file &source_file () const
