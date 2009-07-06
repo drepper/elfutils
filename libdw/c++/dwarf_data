@@ -183,6 +183,8 @@ namespace elfutils
       source_file () : _m_name (), _m_mtime (0), _m_size (0) {}
       source_file (const std::string &n, ::Dwarf_Word m = 0, ::Dwarf_Word s = 0)
 	: _m_name (n), _m_mtime (m), _m_size (s) {}
+      source_file (const char *n, ::Dwarf_Word m = 0, ::Dwarf_Word s = 0)
+	: _m_name (n), _m_mtime (m), _m_size (s) {}
 
       template<typename file>
       source_file (const file &other)
@@ -514,6 +516,18 @@ namespace elfutils
       typedef std::pair<directory_table, line_table> _base;
 
     public:
+      struct hasher
+	: public std::unary_function<line_info_table, size_t>
+      {
+	size_t operator () (const line_info_table &v) const
+	{
+	  size_t hash = 0;
+	  subr::hash_combine (hash, v.first);
+	  subr::hash_combine (hash, v.second);
+	  return hash;
+	}
+      };
+
       inline line_info_table () : _base () {}
 
       template<typename table>
@@ -572,6 +586,14 @@ namespace elfutils
       {}
 
     public:
+      struct hasher
+	: public std::unary_function<dwarf_enum, size_t>
+      {
+	size_t operator () (const dwarf_enum &v) const
+	{
+	  return v.first;
+	}
+      };
 
       inline dwarf_enum (unsigned int attr, unsigned int value)
 	: _base (value, attr)
@@ -603,7 +625,7 @@ namespace elfutils
       {
 	if (this->second == 0)
 	  {
-	    throw std::logic_error("dwarf_enum default constructed");
+	    throw std::logic_error ("dwarf_enum default constructed");
 	    this->second = other.second;
 	  }
 	else if (this->second != other.second)
@@ -642,7 +664,7 @@ namespace elfutils
 
     // Same as set<pair<Dwarf_Addr, Dwarf_Addr>>.
     typedef dwarf::arange_list range_list;
-;
+
     class location_attr
       : public std::map<dwarf::location_attr::key_type, std::vector<uint8_t> >
     {
