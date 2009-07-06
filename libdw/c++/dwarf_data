@@ -780,7 +780,7 @@ namespace elfutils
 
       template<typename flavor, typename input, typename arg_type>
       static inline value_dispatch *
-      make (flavor *&result, const input &x, arg_type &arg)
+      make (flavor *&result, int /*whatattr*/, const input &x, arg_type &arg)
       {
 	assert (alloc_values);
 	return result = new flavor (x, arg);
@@ -1077,17 +1077,17 @@ namespace elfutils
       template<typename value, typename arg_type = const subr::nothing>
       struct init
       {
-	inline init (attr_value *av,
+	inline init (attr_value *av, int whatattr,
 		     const value &other, arg_type &arg = arg_type ())
 	{
 	  switch (other.what_space ())
 	    {
-#define _DWARF_DATA_AV_MAKE(flavor, fetch)				\
-	      case dwarf::VS_##flavor:					\
-		{							\
-		  typename vw::value_##flavor *p;			\
-		  av->_m_value = vw::make (p, other.fetch (), arg);	\
-		}							\
+#define _DWARF_DATA_AV_MAKE(flavor, fetch)				      \
+	      case dwarf::VS_##flavor:					      \
+		{							      \
+		  typename vw::value_##flavor *p;			      \
+		  av->_m_value = vw::make (p, whatattr, other.fetch (), arg); \
+		}							      \
 	      break
 
 	      _DWARF_DATA_AV_MAKE (identifier, identifier);
@@ -1107,12 +1107,13 @@ namespace elfutils
 	      if (other.constant_is_integer ())
 		{
 		  typename vw::value_constant *p;
-		  av->_m_value = vw::make (p, other.constant (), arg);
+		  av->_m_value = vw::make (p, whatattr, other.constant (), arg);
 		}
 	      else
 		{
 		  typename vw::value_constant_block *p;
-		  av->_m_value = vw::make (p, other.constant_block (), arg);
+		  av->_m_value = vw::make (p, whatattr,
+					   other.constant_block (), arg);
 		}
 	      break;
 
@@ -1125,12 +1126,12 @@ namespace elfutils
 	}
       };
 
-      // This kosher only when freshly default-constructed.
+      // This is kosher only when freshly default-constructed.
       template<typename value, typename arg_type>
-      inline void set (const value &other, arg_type &arg)
+      inline void set (int whatattr, const value &other, arg_type &arg)
       {
 	assert (_m_value == NULL);
-	init<value, arg_type> me (this, other, arg);
+	init<value, arg_type> me (this, whatattr, other, arg);
       }
 
       template<typename flavor>
@@ -1162,14 +1163,7 @@ namespace elfutils
 	: _m_value (NULL)
       {
 	if (other._m_value != NULL)
-	  init<attr_value> me (this, other);
-      }
-
-      template<typename value, typename arg_type>
-      attr_value (const value &other, arg_type &arg)
-	: _m_value (NULL)
-      {
-	set (this, other, arg);
+	  init<attr_value> me (this, 0, other);
       }
 
       inline attr_value ()
@@ -1189,7 +1183,7 @@ namespace elfutils
 	    delete _m_value;
 	    _m_value = NULL;
 	  }
-	init<attr_value> me (this, other);
+	init<attr_value> me (this, 0, other);
 	return *this;
       }
       template<typename value>
@@ -1200,7 +1194,7 @@ namespace elfutils
 	    delete _m_value;
 	    _m_value = NULL;
 	  }
-	init<value> me (this, other);
+	init<value> me (this, 0, other);
 	return *this;
       }
 
@@ -1462,7 +1456,7 @@ namespace elfutils
 	for (typename input::const_iterator attr = other.begin ();
 	     attr != other.end ();
 	     ++attr)
-	  (*this)[(*attr).first].set ((*attr).second, c);
+	  (*this)[(*attr).first].set ((*attr).first, (*attr).second, c);
       }
 
 #if 0
