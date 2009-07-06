@@ -516,6 +516,9 @@ namespace elfutils
       typedef std::pair<directory_table, line_table> _base;
 
     public:
+      friend class subr::base_hasher<line_info_table, _base>;
+      typedef subr::base_hasher<line_info_table, _base> hasher;
+
       inline line_info_table () : _base () {}
 
       template<typename table>
@@ -574,14 +577,8 @@ namespace elfutils
       {}
 
     public:
-      struct hasher
-	: public std::unary_function<dwarf_enum, size_t>
-      {
-	size_t operator () (const dwarf_enum &v) const
-	{
-	  return subr::hash_this<_base> (v);
-	}
-      };
+      friend class subr::base_hasher<dwarf_enum, _base>;
+      typedef subr::base_hasher<dwarf_enum, _base> hasher;
 
       inline dwarf_enum (unsigned int attr, unsigned int value)
 	: _base (value, attr)
@@ -1055,6 +1052,11 @@ namespace elfutils
 
 	template<typename loc, typename arg_type>
 	inline value_location (const loc &other, arg_type &)
+	  : location_attr (other)
+	{}
+
+	template<typename loc>
+	inline value_location (const loc &other)
 	  : location_attr (other)
 	{}
       };

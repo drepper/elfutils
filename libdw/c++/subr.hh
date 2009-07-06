@@ -42,6 +42,15 @@ namespace elfutils
       hash_combine (seed, v.second);
     }
 
+    template<typename T, typename B>
+    struct base_hasher : public std::unary_function<T, size_t>
+    {
+      size_t operator () (const T &v) const
+      {
+	return subr::hash_this<B> (v);
+      }
+    };
+
     template<typename T>
     struct integer_hash : public std::unary_function<T, size_t>
     {
@@ -437,6 +446,12 @@ namespace elfutils
       const value_type *add (const input &v)
       {
 	return add (value_type (v));
+      }
+
+      template<typename input, typename arg_type>
+      const value_type *add (const input &v, arg_type &arg)
+      {
+	return add (value_type (v, arg));
       }
     };
 

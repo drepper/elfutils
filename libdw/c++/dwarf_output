@@ -317,14 +317,6 @@ namespace elfutils
 	throw std::logic_error ("dwarf_output cannot be default-constructed");
       }
 
-      // XXX temporary
-      template<typename flavor, typename input, typename input_dw>
-      static inline value_dispatch *
-      make (flavor *&result, const input &x, copier<input_dw> &c)
-      {
-	return result = new flavor (x, c);
-      }
-
       template<typename input, typename input_dw>
       static inline const value_dispatch *
       make (value_string *&, const input &x, copier<input_dw> &c)
@@ -339,7 +331,12 @@ namespace elfutils
 	return c.add_identifier (x);
       }
 
-      // XXX reference
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_reference *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_reference (x);
+      }
 
       template<typename input, typename input_dw>
       static inline const value_dispatch *
@@ -362,14 +359,12 @@ namespace elfutils
 	return c.add_ranges (x);
       }
 
-      /* XXX lineptr
       template<typename input, typename input_dw>
       static inline const value_dispatch *
       make (value_lineptr *&, const input &x, copier<input_dw> &c)
       {
 	return c.add_line_info (x);
       }
-      */
 
       template<typename input, typename input_dw>
       static inline const value_dispatch *
@@ -414,7 +409,14 @@ namespace elfutils
       }
 
       // XXX macptr
-      // XXX location
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_location *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_location (x);
+      }
+
     };
 
   public:
@@ -646,12 +648,14 @@ namespace elfutils
     subr::value_set<dwarf_output::value::value_identifier> _m_identifiers;
     subr::value_set<dwarf_output::value::value_address> _m_address;
     subr::value_set<dwarf_output::value::value_rangelistptr> _m_ranges;
+    subr::value_set<dwarf_output::value::value_lineptr> _m_line_info;
     subr::value_set<dwarf_output::value::value_constant> _m_constants;
     subr::value_set<dwarf_output::value::value_constant_block> _m_const_block;
     subr::value_set<dwarf_output::value::value_dwarf_constant> _m_dwarf_const;
     subr::value_set<dwarf_output::value::value_source_file> _m_source_file;
     subr::value_set<dwarf_output::value::value_source_line> _m_source_line;
     subr::value_set<dwarf_output::value::value_source_column> _m_source_column;
+    subr::value_set<dwarf_output::value::value_location> _m_locations;
 
     static const dwarf_output::value::value_flag flag_true;
     static const dwarf_output::value::value_flag flag_false;
@@ -697,6 +701,13 @@ namespace elfutils
     }
 
     template<typename input>
+    inline const value::value_reference *add_reference (const input &x)
+    {
+      // XXX temporary kludge
+      return new value::value_reference (x, *this);
+    }
+
+    template<typename input>
     inline const value::value_flag *add_flag (const input &x)
     {
       return dwarf_output_collector::flag (x);
@@ -712,6 +723,12 @@ namespace elfutils
     inline const value::value_rangelistptr *add_ranges (const input &x)
     {
       return _m_collector->_m_ranges.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_lineptr *add_line_info (const input &x)
+    {
+      return _m_collector->_m_line_info.add (x, *_m_collector);
     }
 
     template<typename input>
@@ -750,6 +767,12 @@ namespace elfutils
     inline const value::value_source_column *add_source_column (const input &x)
     {
       return _m_collector->_m_source_column.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_location *add_location (const input &x)
+    {
+      return _m_collector->_m_locations.add (x);
     }
   };
 
