@@ -53,7 +53,23 @@ namespace elfutils
     template<>
     struct hash<int> : public integer_hash<int> {};
     template<>
+    struct hash<unsigned int> : public integer_hash<unsigned int> {};
+    template<>
     struct hash<uint64_t> : public integer_hash<uint64_t> {};
+    template<>
+    struct hash<uint8_t> : public integer_hash<uint8_t> {};
+
+    template<typename T1, typename T2>
+    struct hash<std::pair<T1, T2> >
+      : public std::unary_function<std::pair<T1, T2>, size_t>
+    {
+      inline size_t operator () (const std::pair<T1, T2> &x) const
+      {
+	size_t h = 0;
+	subr::hash_combine (h, x);
+	return h;
+      }
+    };
 
     template<typename T>
     struct container_hasher : public std::unary_function<T, size_t>
@@ -76,8 +92,15 @@ namespace elfutils
       }
     };
 
+    template<typename T>
+    struct hash<std::vector<T> >
+      : public container_hasher<std::vector<T> >
+    {
+    };
+
     template<>
     struct hash<std::string>
+      : public container_hasher<std::string>
     {
     private:
       struct hasher : public container_hasher<std::string>::hasher
@@ -399,7 +422,7 @@ namespace elfutils
 				      struct hashed_value_type::hasher> _base;
 
     public:
-      const value_type &add (const value_type &v)
+      const value_type *add (const value_type &v)
       {
 	std::pair<class _base::iterator, bool> p
 	  = _base::insert (hashed_value_type (v));
@@ -407,11 +430,11 @@ namespace elfutils
 	  {
 	    // XXX hook for collection: abbrev building, etc.
 	  }
-	return p.first->second;
+	return &p.first->second;
       };
 
       template<typename input>
-      const value_type &add (const input &v)
+      const value_type *add (const input &v)
       {
 	return add (value_type (v));
       }

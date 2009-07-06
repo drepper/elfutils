@@ -272,6 +272,8 @@ namespace elfutils
 
   class dwarf_output
   {
+    friend class dwarf_output_collector;
+
   public:
     typedef dwarf_data::source_file source_file;
     typedef dwarf_data::directory_table directory_table;
@@ -289,10 +291,6 @@ namespace elfutils
   protected:
     template<typename input> class copier; // Below.
 
-    template<typename input>
-    static inline const std::string &
-    collect_string (dwarf_output_collector &c, const input &);
-
     /* An iterator adapter for use in iterator-based constructors.
        collectify (iterator) yields an iterator on input where *i
        constructs output::value_type (input::value_type v, collector).  */
@@ -305,31 +303,12 @@ namespace elfutils
       return subr::argifier<input, output, dwarf_output_collector &> (c) (in);
     }
 
-    struct value_wrapper
-      : public dwarf_data::value<dwarf_output>
+    struct value
+      : public dwarf_data::value<dwarf_output, false>
     {
-      struct value_string : public value_dispatch
-      {
-	const std::string &_m_str;
+      typedef const value_dispatch value_cell_type;
 
-	template<typename string, typename input>
-	inline value_string (const string &s, dwarf_output::copier<input> &c)
-	  : _m_str (collect_string (c, s))
-	{}
-
-	inline operator const std::string & () const
-	{
-	  return _m_str;
-	}
-
-	std::string to_string () const
-	{
-	  std::string result ("\"");
-	  result += _m_str;
-	  result += "\"";
-	  return result;
-	}
-      };
+      typedef dwarf_data::value<dwarf_output> data;
 
       template<typename flavor, typename input>
       static inline value_dispatch *
@@ -338,33 +317,116 @@ namespace elfutils
 	throw std::logic_error ("dwarf_output cannot be default-constructed");
       }
 
-      template<typename flavor, typename input, typename arg_type>
+      // XXX temporary
+      template<typename flavor, typename input, typename input_dw>
       static inline value_dispatch *
-      make (flavor *&result, const input &x, arg_type &arg)
+      make (flavor *&result, const input &x, copier<input_dw> &c)
       {
-	return result = new flavor (x, arg);
+	return result = new flavor (x, c);
       }
 
-      template<typename input>
-      static inline value_dispatch *
-      make (value_string *&result, const input &x, dwarf_output_collector &c)
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_string *&, const input &x, copier<input_dw> &c)
       {
-	return result = new value_string (x, c);
+	return c.add_string (x);
       }
 
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_identifier *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_identifier (x);
+      }
+
+      // XXX reference
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_flag *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_flag (x);
+      }
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_address *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_address (x);
+      }
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_rangelistptr *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_ranges (x);
+      }
+
+      /* XXX lineptr
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_lineptr *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_line_info (x);
+      }
+      */
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_constant *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_constant (x);
+      }
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_constant_block *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_constant_block (x);
+      }
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_dwarf_constant *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_dwarf_constant (x);
+      }
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_source_file *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_source_file (x);
+      }
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_source_line *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_source_line (x);
+      }
+
+      template<typename input, typename input_dw>
+      static inline const value_dispatch *
+      make (value_source_column *&, const input &x, copier<input_dw> &c)
+      {
+	return c.add_source_column (x);
+      }
+
+      // XXX macptr
+      // XXX location
     };
 
   public:
 
-    typedef dwarf_data::attr_value<dwarf_output, value_wrapper> attr_value;
+    typedef dwarf_data::attr_value<dwarf_output, value> attr_value;
 
     class debug_info_entry
     {
       friend class subr::create_container;
 
     public:
-      typedef dwarf_data::attributes_type<dwarf_output,
-					  value_wrapper> attributes_type;
+      typedef dwarf_data::attributes_type<dwarf_output, value> attributes_type;
 
       class children_type : public std::list<debug_info_entry>
       {
@@ -580,16 +642,28 @@ namespace elfutils
     friend class dwarf_output;
 
   private:
-    subr::value_set<std::string> _m_strings;
-    subr::value_set<dwarf_output::range_list> _m_ranges;
+    subr::value_set<dwarf_output::value::value_string> _m_strings;
+    subr::value_set<dwarf_output::value::value_identifier> _m_identifiers;
+    subr::value_set<dwarf_output::value::value_address> _m_address;
+    subr::value_set<dwarf_output::value::value_rangelistptr> _m_ranges;
+    subr::value_set<dwarf_output::value::value_constant> _m_constants;
+    subr::value_set<dwarf_output::value::value_constant_block> _m_const_block;
+    subr::value_set<dwarf_output::value::value_dwarf_constant> _m_dwarf_const;
+    subr::value_set<dwarf_output::value::value_source_file> _m_source_file;
+    subr::value_set<dwarf_output::value::value_source_line> _m_source_line;
+    subr::value_set<dwarf_output::value::value_source_column> _m_source_column;
 
-  public:
-
+    static const dwarf_output::value::value_flag flag_true;
+    static const dwarf_output::value::value_flag flag_false;
+    static inline const dwarf_output::value::value_flag *flag (bool flag)
+    {
+      return flag ? &flag_true : &flag_false;
+    }
   };
 
-  template<class input>
+  template<class dw>
   class dwarf_output::copier
-    : public dwarf_ref_maker<dwarf_output, input> // XXX temporary
+    : public dwarf_ref_maker<dwarf_output, dw> // XXX temporary
   {
     friend class dwarf_output;
   private:
@@ -609,6 +683,74 @@ namespace elfutils
     {
       return *_m_collector;
     }
+
+    template<typename input>
+    inline const value::value_string *add_string (const input &x)
+    {
+      return _m_collector->_m_strings.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_string *add_identifier (const input &x)
+    {
+      return _m_collector->_m_identifiers.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_flag *add_flag (const input &x)
+    {
+      return dwarf_output_collector::flag (x);
+    }
+
+    template<typename input>
+    inline const value::value_address *add_address (const input &x)
+    {
+      return _m_collector->_m_address.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_rangelistptr *add_ranges (const input &x)
+    {
+      return _m_collector->_m_ranges.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_constant *add_constant (const input &x)
+    {
+      return _m_collector->_m_constants.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_constant_block *
+    add_constant_block (const input &x)
+    {
+      return _m_collector->_m_const_block.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_dwarf_constant *
+    add_dwarf_constant (const input &x)
+    {
+      return _m_collector->_m_dwarf_const.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_source_file *add_source_file (const input &x)
+    {
+      return _m_collector->_m_source_file.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_source_line *add_source_line (const input &x)
+    {
+      return _m_collector->_m_source_line.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_source_column *add_source_column (const input &x)
+    {
+      return _m_collector->_m_source_column.add (x);
+    }
   };
 
   // Copy construction instantiates a copier derived from the collector.
@@ -618,14 +760,6 @@ namespace elfutils
 				     copier<input> maker)
     : _m_units (dw.compile_units (), maker (c))
   {}
-
-  template<typename input>
-  inline const std::string &
-  dwarf_output::collect_string (dwarf_output_collector &c, const input &s)
-  {
-    return c._m_strings.add (s);
-  }
-
 };
 
 #endif	// <elfutils/dwarf_output>
