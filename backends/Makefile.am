@@ -41,7 +41,7 @@ modules = i386 sh x86_64 ia64 alpha arm sparc ppc ppc64 s390
 libebl_pic = libebl_i386_pic.a libebl_sh_pic.a libebl_x86_64_pic.a \
 	     libebl_ia64_pic.a libebl_alpha_pic.a libebl_arm_pic.a \
 	     libebl_sparc_pic.a libebl_ppc_pic.a libebl_ppc64_pic.a \
-	     libebl_s390_pic.a
+	     libebl_s390_pic.a libebl_parisc_pic.a
 noinst_LIBRARIES = $(libebl_pic)
 noinst_DATA = $(libebl_pic:_pic.a=.so)
 
@@ -108,6 +108,10 @@ am_libebl_ppc64_pic_a_OBJECTS = $(ppc64_SRCS:.c=.os)
 s390_SRCS = s390_init.c s390_symbol.c s390_regs.c s390_retval.c
 libebl_s390_pic_a_SOURCES = $(s390_SRCS)
 am_libebl_s390_pic_a_OBJECTS = $(s390_SRCS:.c=.os)
+
+parisc_SRCS = parisc_init.c parisc_corenote.c parisc64_corenote.c
+libebl_parisc_pic_a_SOURCES = $(parisc_SRCS)
+am_libebl_parisc_pic_a_OBJECTS = $(parisc_SRCS:.c=.os)
 
 
 libebl_%.so: libebl_%_pic.a libebl_%.map $(libelf) $(libdw) \

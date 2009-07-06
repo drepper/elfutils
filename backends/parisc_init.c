@@ -1,5 +1,5 @@
-/* Alpha specific core note handling.
-   Copyright (C) 2007 Red Hat, Inc.
+/* Initialization of HPPA specific backend library.
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -27,41 +27,40 @@
 # include <config.h>
 #endif
 
-#include <elf.h>
-#include <inttypes.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <sys/time.h>
-
-#define BACKEND	alpha_
+#define BACKEND		parisc_
+#define RELOC_PREFIX	R_PARISC_
 #include "libebl_CPU.h"
 
-static const Ebl_Register_Location prstatus_regs[] =
-  {
-    { .offset = 0, .regno = 0, .count = 31, .bits = 64 }, /* r0-r30 */
-    { .offset = 32 * 8, .regno = 64, .count = 1, .bits = 64 }, /* pc */
-    { .offset = 33 * 8, .regno = 66, .count = 1, .bits = 64 }, /* unique */
-  };
-#define PRSTATUS_REGS_SIZE	(33 * 8)
+/* This defines the common reloc hooks based on parisc_reloc.def.  */
+//#include "common-reloc.c"
 
-static const Ebl_Register_Location fpregset_regs[] =
-  {
-    { .offset = 0, .regno = 32, .count = 32, .bits = 64 }, /* f0-f30, fpcr */
-  };
-#define FPREGSET_SIZE		(32 * 8)
+extern __typeof (EBLHOOK (core_note)) parisc64_core_note attribute_hidden;
 
-#define ULONG			uint64_t
-#define ALIGN_ULONG		8
-#define TYPE_ULONG		ELF_T_XWORD
-#define TYPE_LONG		ELF_T_SXWORD
-#define PID_T			int32_t
-#define	UID_T			uint32_t
-#define	GID_T			uint32_t
-#define ALIGN_PID_T		4
-#define ALIGN_UID_T		4
-#define ALIGN_GID_T		4
-#define TYPE_PID_T		ELF_T_SWORD
-#define TYPE_UID_T		ELF_T_WORD
-#define TYPE_GID_T		ELF_T_WORD
+const char *
+parisc_init (elf, machine, eh, ehlen)
+     Elf *elf __attribute__ ((unused));
+     GElf_Half machine __attribute__ ((unused));
+     Ebl *eh;
+     size_t ehlen;
+{
+  /* Check whether the Elf_BH object has a sufficent size.  */
+  if (ehlen < sizeof (Ebl))
+    return NULL;
 
-#include "linux-core-note.c"
+  /* We handle it.  */
+  eh->name = "HPPA";
+  //  hppa_init_reloc (eh);
+  //  HOOK (eh, reloc_simple_type);
+  //  HOOK (eh, gotpc_reloc_check);
+  if (eh->class == ELFCLASS64)
+    eh->core_note = parisc64_core_note;
+  else
+    HOOK (eh, core_note);
+  //  HOOK (eh, return_value_location);
+  //  HOOK (eh, register_info);
+  //  HOOK (eh, syscall_abi);
+  //  HOOK (eh, auxv_info);
+  //  HOOK (eh, disasm);
+
+  return MODVERSION;
+}
