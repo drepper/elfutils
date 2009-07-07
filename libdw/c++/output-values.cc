@@ -55,8 +55,7 @@
 
 using namespace elfutils;
 
-// Actually both the same thing!
-template dwarf::value_space dwarf_output::attr_value::what_space () const;
+template class dwarf_data::attr_value<dwarf_output, dwarf_output::value>;
 
 template<>
 std::string

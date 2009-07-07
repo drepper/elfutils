@@ -67,6 +67,10 @@ namespace elfutils
     struct hash<uint64_t> : public integer_hash<uint64_t> {};
     template<>
     struct hash<uint8_t> : public integer_hash<uint8_t> {};
+#if UINT64_MAX != UINTPTR_MAX
+    template<>
+    struct hash<uintptr_t> : public integer_hash<uintptr_t> {};
+#endif
 
     template<typename T1, typename T2>
     struct hash<std::pair<T1, T2> >
@@ -467,7 +471,7 @@ namespace elfutils
     public:
       typedef typename elt_type::value_type value_type;
 
-    private:
+    protected:
       size_t _m_hash;
 
       inline void set_hash ()
@@ -478,7 +482,7 @@ namespace elfutils
 	  hashit (size_t &h) : _m_hash (h) {}
 	  inline void operator () (const elt_type &p)
 	  {
-	    subr::hash_combine (_m_hash, p.first);
+	    subr::hash_combine (_m_hash, p);
 	  }
 	};
 	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));

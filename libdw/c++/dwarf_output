@@ -53,6 +53,7 @@
 #include "dwarf_edit"
 #include "dwarf_ref_maker"
 #include <functional>
+#include <tr1/unordered_set>
 
 /* Read the comments for elfutils::dwarf first.
 
@@ -287,6 +288,7 @@ namespace elfutils
 
     class compile_units;
     class debug_info_entry;
+    class attr_value;
 
   protected:
     template<typename input> class copier; // Below.
@@ -422,14 +424,55 @@ namespace elfutils
 
   public:
 
-    typedef dwarf_data::attr_value<dwarf_output, value> attr_value;
-
     class debug_info_entry
     {
       friend class subr::create_container;
 
     public:
-      typedef dwarf_data::attributes_type<dwarf_output, value> attributes_type;
+      class attributes_type
+	: public dwarf_data::attributes_type<dwarf_output, value>
+      {
+	friend class debug_info_entry;
+
+      private:
+	typedef dwarf_data::attributes_type<dwarf_output, value> _base;
+
+	size_t _m_hash;
+
+	inline attributes_type ()
+	  : _base (), _m_hash (0)
+	{}
+
+	struct same_attr : public std::equal_to<value_type>
+	{
+	  bool operator () (const value_type &a,
+			    const value_type &b) const
+	  {
+	    return a.first == b.first && a.second.is (b.second);
+	  }
+	};
+
+      public:
+	friend class subr::hashed_hasher<attributes_type>;
+	typedef subr::hashed_hasher<attributes_type> hasher;
+
+	template<typename input, typename arg_type>
+	inline attributes_type (const input &other, arg_type &c)
+	  : _base (other, c), _m_hash (0)
+	{
+	  // Precompute our hash value based on our contents.
+	  for (iterator i = begin (); i != end (); ++i)
+	    subr::hash_combine (_m_hash, *i);
+	}
+
+	inline bool are (const attributes_type &these) const
+	{
+	  return (_m_hash == these._m_hash
+		  && size () == these.size ()
+		  && std::equal (begin (), end (), these.begin (),
+				 same_attr ()));
+	}
+      };
 
       class children_type : public std::list<debug_info_entry>
       {
@@ -460,29 +503,30 @@ namespace elfutils
 
     protected:
       int _m_tag;
-      attributes_type _m_attributes;
+      const attributes_type *_m_attributes;
       children_type _m_children;
 
       // This is can only be used by the children_type constructor,
       // which immediately calls set.
       inline debug_info_entry ()
-	: _m_tag (-1), _m_attributes (), _m_children ()
+	: _m_tag (-1), _m_attributes (NULL), _m_children ()
       {}
 
-      template<typename die_type, typename arg_type>
-      inline void set (const die_type &die, arg_type &arg)
+      template<typename die_type, typename input_dw>
+      inline void set (const die_type &die, copier<input_dw> &c)
       {
+	assert (_m_attributes == NULL);
 	try
 	  {
 	    _m_tag = die.tag ();
-	    _m_attributes.swap (attributes_type (die.attributes (), arg));
-	    _m_children.swap (children_type (die.children (), arg));
+	    _m_attributes = c.add_attributes (die.attributes ());
+	    _m_children.swap (children_type (die.children (), c));
 	  }
 	catch (...)
 	  {
 	    // Never leave a partially-formed DIE.
 	    _m_tag = -1;
-	    _m_attributes.clear ();
+	    _m_attributes = NULL;
 	    _m_children.clear ();
 	    throw;
 	  };
@@ -490,7 +534,7 @@ namespace elfutils
 
     public:
       inline debug_info_entry (int t)
-	: _m_tag (t), _m_attributes (), _m_children ()
+	: _m_tag (t), _m_attributes (NULL), _m_children ()
       {
 	if (unlikely (t <= 0))
 	  throw std::invalid_argument ("invalid tag");
@@ -498,11 +542,11 @@ namespace elfutils
 
       /* The template constructor lets us copy in from any class that has
 	 compatibly iterable containers for attributes and children.  */
-      template<typename die_type, typename tracker>
-      debug_info_entry (const die_type &die, tracker &t)
+      template<typename die_type, typename input_dw>
+      debug_info_entry (const die_type &die, copier<input_dw> &c)
 	: _m_tag (die.tag ()),
-	  _m_attributes (die.attributes (), t),
-	  _m_children (die.children (), t)
+	  _m_attributes (c.add_attributes (die.attributes ())),
+	  _m_children (die.children (), c)
       {}
 
       inline int tag () const
@@ -522,7 +566,7 @@ namespace elfutils
 
       inline const attributes_type &attributes () const
       {
-	return _m_attributes;
+	return *_m_attributes;
       }
 
       template<typename die>
@@ -547,6 +591,55 @@ namespace elfutils
       {
 	return identity ();
       }
+    };
+
+    class attr_value
+      : public dwarf_data::attr_value<dwarf_output, value>
+    {
+    private:
+      typedef dwarf_data::attr_value<dwarf_output, value> _base;
+
+    public:
+
+      /* These constructors can only be used by the containers
+	 used in the collector.  The attributes_type map in an
+	 actual debug_info_entry object is always const.  */
+      inline attr_value ()
+	: _base ()
+      {}
+
+      inline attr_value (const attr_value &other)
+	: _base ()
+      {
+	this->_m_value = other._m_value;
+      }
+
+      /* Two identical values in fact share the same cell in the collector.
+	 So we can use simple pointer comparison here.  */
+      inline bool is (const attr_value &that) const
+      {
+	return this->_m_value == that._m_value;
+      }
+
+      // The is () test works only on a dwarf_output sharing the same collector.
+      inline bool operator== (const attr_value &other) const
+      {
+	return is (other) || _base::operator== (other);
+      }
+      inline bool operator!= (const attr_value &other) const
+      {
+	return !(*this == other);
+      }
+
+      /* We can use the _m_value pointer itself as a perfect hash, because
+	 all identical values share the same cell in the collector.  */
+      struct hasher : public std::unary_function<attr_value, size_t>
+      {
+	inline size_t operator () (const attr_value &v) const
+	{
+	  return (uintptr_t) v._m_value;
+	}
+      };
     };
 
     typedef debug_info_entry::attributes_type::value_type attribute;
@@ -620,6 +713,15 @@ namespace elfutils
     }
   };
 
+  /*
+template<typename flavor>
+  inline flavor &dwarf_output::attr_value::_base::flavor ()
+  {
+    assert (!"should be impossible");
+    throw std::logic_error ("should be impossible");
+  }
+  */
+
   // Explicit specializations.
   template<>
   std::string
@@ -635,6 +737,9 @@ namespace elfutils
     friend class dwarf_output;
 
   private:
+    typedef dwarf_output::debug_info_entry die_type;
+    typedef die_type::attributes_type attrs_type;
+
     subr::value_set<dwarf_output::value::value_string> _m_strings;
     subr::value_set<dwarf_output::value::value_identifier> _m_identifiers;
     subr::value_set<dwarf_output::value::value_address> _m_address;
@@ -654,6 +759,32 @@ namespace elfutils
     {
       return flag ? &flag_true : &flag_false;
     }
+
+    struct same_attrs : public std::equal_to<die_type::attributes_type>
+    {
+      bool operator () (const die_type::attributes_type &a,
+			const die_type::attributes_type &b) const
+      {
+	return a.are (b);
+      }
+    };
+
+    typedef std::tr1::unordered_set<attrs_type, attrs_type::hasher,
+				    same_attrs> attrs_set;
+    attrs_set _m_attr_sets;
+
+    template<typename input, typename copier_type>
+    inline const attrs_type *add_attributes (const input &x, copier_type &c)
+    {
+      std::pair<attrs_set::iterator, bool> p
+	= _m_attr_sets.insert (attrs_type (x, c));
+      if (p.second)
+	{
+	  // XXX hook for collection: abbrev building, etc.
+	}
+      return &(*p.first);
+    }
+
   };
 
   template<class dw>
@@ -765,6 +896,13 @@ namespace elfutils
     inline const value::value_location *add_location (const input &x)
     {
       return _m_collector->_m_locations.add (x);
+    }
+
+    template<typename input>
+    inline const debug_info_entry::attributes_type *
+    add_attributes (const input &x)
+    {
+      return _m_collector->add_attributes (x, *this);
     }
   };
 

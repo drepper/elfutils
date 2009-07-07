@@ -765,7 +765,6 @@ namespace elfutils
       std::string to_string () const;
     };
 
-  public:
     template<typename impl, bool alloc_values = true>
     struct value
     {
@@ -777,6 +776,31 @@ namespace elfutils
       typedef value_dispatch value_cell_type;
 
       static const bool delete_value = alloc_values;
+
+      template<typename flavor>
+      static inline flavor &
+      variant (flavor *&, const value_dispatch *&)
+      {
+	assert (!alloc_values);
+	throw std::logic_error ("can't happen!");
+      }
+
+      template<typename flavor>
+      static inline flavor &
+      variant (flavor *&result, value_dispatch *&value)
+      {
+	assert (alloc_values);
+	if (value == NULL)
+	 {
+	   result = new flavor;
+	   value = result;
+	   return *result;
+	 }
+	result = dynamic_cast<flavor *> (value);
+	if (result == NULL)
+	  throw std::runtime_error ("wrong value type");
+	return *result;
+      }
 
       template<typename flavor, typename input, typename arg_type>
       static inline value_dispatch *
@@ -1069,8 +1093,9 @@ namespace elfutils
     class attr_value
     {
       friend class attributes_type<impl, vw>;
+      friend class value<impl>;
 
-    private:
+    protected:
       typename vw::value_cell_type *_m_value;
       typedef typename impl::debug_info_entry::pointer die_ptr;
 
@@ -1153,9 +1178,8 @@ namespace elfutils
       template<typename flavor>
       inline flavor &variant ()
       {
-	if (_m_value == NULL)
-	  _m_value = new flavor;
-	return const_variant<flavor> ();
+	flavor *p;
+	return vw::variant (p, _m_value);
       }
 
     public:
@@ -1431,14 +1455,23 @@ namespace elfutils
 
     template<class impl, typename v>
     class attributes_type
-      : public std::map<int, attr_value<impl, v> >
+      : public std::map<int, typename impl::attr_value>
     {
       friend class impl::debug_info_entry;
     private:
-      typedef std::map<int, attr_value<impl, v> > base_type;
+      typedef std::map<int, typename impl::attr_value> base_type;
 
     protected:
       inline attributes_type () {}
+
+      template<typename input, typename arg_type>
+      inline void set (const input &other, arg_type &c)
+      {
+	for (typename input::const_iterator attr = other.begin ();
+	     attr != other.end ();
+	     ++attr)
+	  (*this)[(*attr).first].set ((*attr).first, (*attr).second, c);
+      }
 
     public: // XXX should be protected
 
@@ -1453,22 +1486,8 @@ namespace elfutils
       inline attributes_type (const input &other, arg_type &c)
 	: base_type ()
       {
-	for (typename input::const_iterator attr = other.begin ();
-	     attr != other.end ();
-	     ++attr)
-	  (*this)[(*attr).first].set ((*attr).first, (*attr).second, c);
+	set (other, c);
       }
-
-#if 0
-      // dwarf_output probably will do it this way (?)
-      template<typename input, typename arg_type>
-      inline attributes_type (const input &other, arg_type &c)
-	: base_type (subr::argify2nd<input, attributes_type, arg_type &>
-		     (other.begin (), c),
-		     subr::argify2nd<input, attributes_type, arg_type &>
-		     (other.end (), c))
-      {}
-#endif
 
     public:
       typedef typename base_type::key_type key_type;
