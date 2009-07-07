@@ -387,33 +387,29 @@ namespace elfutils
     };
 
     // Pair of some value and its precomputed hash.
-    template<typename T>
-    class hashed_value
-      : public std::pair<size_t, const T>
+    template<typename T, typename value_hasher = subr::hash<T> >
+    struct hashed_value
     {
-    private:
-      typedef std::pair<size_t, const T> _base;
-
-    public:
       typedef T value_type;
 
-      struct hasher
-	: public std::unary_function<hashed_value, size_t>
-      {
-	inline size_t operator () (const hashed_value &v) const
-	{
-	  return v.first;
-	}
-      };
+      const T _m_value;
+      size_t _m_hash;
 
-      hashed_value (const value_type &v)
-	: _base (hash_this (v), v) {}
-      hashed_value (const hashed_value &v)
-	: _base (v.first, v.second) {}
+      friend class hashed_hasher<hashed_value>;
+      typedef hashed_hasher<hashed_value> hasher;
+
+      inline hashed_value (const hashed_value &v)
+	: _m_value (v._m_value), _m_hash (v._m_hash)
+      {}
+
+      template<typename... argtypes>
+      inline hashed_value (argtypes&&...args)
+	: _m_value (args...), _m_hash (value_hasher () (_m_value))
+      {}
 
       bool operator== (const hashed_value &other) const
       {
-	return other.first == this->first && other.second == this->second;
+	return other._m_hash == _m_hash && other._m_value == _m_value;
       }
     };
 
@@ -439,7 +435,7 @@ namespace elfutils
 	  {
 	    // XXX hook for collection: abbrev building, etc.
 	  }
-	return &p.first->second;
+	return &p.first->_m_value;
       };
 
       template<typename input>
@@ -628,9 +624,9 @@ namespace elfutils
     public:
       typedef element value_type;
 
-      template<typename arg_type>
-      inline wrapped_input_iterator (const _base &i, const arg_type &arg)
-	: _base (static_cast<_base> (i)), _m_wrapper (arg)
+      template<typename... argtypes>
+      inline wrapped_input_iterator (const _base &i, argtypes&&...args)
+	: _base (static_cast<_base> (i)), _m_wrapper (args...)
       {}
 
       inline wrapped_input_iterator (const wrapped_input_iterator &i)
@@ -833,13 +829,18 @@ namespace elfutils
     struct create_container
     {
       template<typename container, typename input, typename arg_type,
-	       typename hook_type = const nothing>
+	       typename hook_type = const nothing,
+	       typename hook2_type = const nothing>
       inline create_container (container *me, const input &other,
-			       arg_type &arg, hook_type &hook = hook_type ())
+			       arg_type &arg,
+			       hook_type &hook = hook_type (),
+			       hook2_type &hook2 = hook2_type ())
       	{
-	  for (typename input::const_iterator in = other.begin ();
-	       in != other.end ();
-	       ++in)
+	  typename input::const_iterator in = other.begin ();
+	  if (in == other.end ())
+	    return;
+	  bool last;
+	  do
 	    {
 	      /* Don't copy-construct the entry from *in here because that
 		 copies it again into the list and destroys the first copy.  */
@@ -847,7 +848,10 @@ namespace elfutils
 	      typename container::iterator out = --me->end ();
 	      out->set (*in, arg);
 	      hook (out, in, arg);
+	      last = ++in == other.end ();
+	      hook2 (out, last, arg);
 	    }
+	  while (!last);
 	}
     };
   };

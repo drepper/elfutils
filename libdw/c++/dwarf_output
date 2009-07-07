@@ -488,10 +488,19 @@ namespace elfutils
 	  t.equivalence (out, in);
 	}
 
-	template<typename input, typename tracker>
-	inline children_type (const input &other, tracker &t)
+	template<typename input_dw>
+	static inline void
+	add_shape (const iterator &out, bool no_sibling, copier<input_dw> &c)
 	{
-	  subr::create_container (this, other, t, equivalence<input, tracker>);
+	  c.add_shape (*out, no_sibling);
+	}
+
+	template<typename input, typename input_dw>
+	inline children_type (const input &other, copier<input_dw> &c)
+	{
+	  subr::create_container (this, other, c,
+				  equivalence<input, copier<input_dw> >,
+				  add_shape<input_dw>);
 	}
 
       public:
@@ -760,16 +769,27 @@ template<typename flavor>
       return flag ? &flag_true : &flag_false;
     }
 
-    struct same_attrs : public std::equal_to<die_type::attributes_type>
+    class shape;
+
+    struct attrs_shape : public attrs_type
     {
-      bool operator () (const die_type::attributes_type &a,
-			const die_type::attributes_type &b) const
+      shape *_m_shape;
+
+      template<typename input, typename copier_type>
+      inline attrs_shape (const input &x, copier_type &c)
+	: attrs_type (x, c), _m_shape (NULL)
+      {}
+    };
+
+    struct same_attrs : public std::equal_to<attrs_type>
+    {
+      bool operator () (const attrs_shape &a, const attrs_shape &b) const
       {
 	return a.are (b);
       }
     };
 
-    typedef std::tr1::unordered_set<attrs_type, attrs_type::hasher,
+    typedef std::tr1::unordered_set<attrs_shape, attrs_shape::hasher,
 				    same_attrs> attrs_set;
     attrs_set _m_attr_sets;
 
@@ -777,12 +797,59 @@ template<typename flavor>
     inline const attrs_type *add_attributes (const input &x, copier_type &c)
     {
       std::pair<attrs_set::iterator, bool> p
-	= _m_attr_sets.insert (attrs_type (x, c));
-      if (p.second)
+	= _m_attr_sets.insert (attrs_shape (x, c));
+      assert (p.second == (p.first->_m_shape == NULL));
+      return &*p.first;
+    }
+
+    typedef subr::container_hasher<std::map<int, int> > map_hasher;
+
+    struct shape
+      : public subr::hashed_value<std::map<int, int>, map_hasher>
+    {
+      typedef subr::hashed_value<std::map<int, int>, map_hasher> _base;
+      typedef _base::value_type::value_type shape_pair;
+
+      enum context
 	{
-	  // XXX hook for collection: abbrev building, etc.
+	  no_children_no_sibling,
+	  no_children_has_sibling,
+	  has_children_no_sibling,
+	  has_children_has_sibling,
+	  shape_context_bits
+	};
+      std::bitset<shape_context_bits> _m_used;
+
+      struct make_shape_pair
+	: public std::unary_function<attrs_type::value_type, shape_pair>
+      {
+	inline shape_pair operator () (const attrs_type::value_type &attr) const
+	{
+	  return shape_pair (attr.first,
+			     (int) DW_FORM_indirect); // XXX
 	}
-      return &(*p.first);
+      };
+
+      typedef subr::wrapped_input_iterator<attrs_type, make_shape_pair> maker;
+
+      inline shape (const attrs_type &attrs)
+	: _base (maker (attrs.begin ()), maker (attrs.end ())), _m_used ()
+      {}
+
+      inline void user (bool has_children, bool has_sibling)
+      {
+	_m_used.set (has_children * 2 + has_sibling);
+      }
+    };
+
+    subr::value_set<shape> _m_shapes;
+
+    inline void add_shape (const die_type &die, bool no_sibling)
+    {
+      const attrs_shape &attrs = const_cast<attrs_shape &>
+	(static_cast<const attrs_shape &> (die.attributes ()));
+      assert (attrs._m_shape == NULL && (no_sibling || !no_sibling));
+      // XXX hook for collection: abbrev building, etc.
     }
 
   };
@@ -904,7 +971,13 @@ template<typename flavor>
     {
       return _m_collector->add_attributes (x, *this);
     }
-  };
+
+    inline void add_shape (const dwarf_output::debug_info_entry &die,
+			   bool no_sibling)
+    {
+      _m_collector->add_shape (die, no_sibling);
+    }
+ };
 
   // Copy construction instantiates a copier derived from the collector.
   template<typename input>
