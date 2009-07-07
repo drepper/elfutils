@@ -52,6 +52,7 @@
 
 #include "dwarf_edit"
 #include "dwarf_ref_maker"
+#include "dwarf_tracker"
 #include <algorithm>
 #include <functional>
 #include <iterator>
@@ -723,6 +724,8 @@ namespace elfutils
     friend class dwarf_output;
 
   private:
+    dwarf_path_finder<dwarf_output> _m_tracker;
+
     typedef dwarf_output::debug_info_entry die_type;
     typedef die_type::children_type::const_iterator die_ptr;
     typedef die_type::attributes_type attrs_type;
@@ -798,24 +801,53 @@ namespace elfutils
     shape_map _m_shapes;
 
     void add_shape (die_type &die, bool last_sibling);
-
   };
 
-  template<class dw>
+  template<typename dw>
   class dwarf_output::copier
     : public dwarf_ref_maker<dwarf_output, dw> // XXX temporary
   {
     friend class dwarf_output;
   private:
+
+    struct tracker
+      : public dwarf_ref_tracker<dwarf_output, dw>
+    {
+      typedef dwarf_ref_tracker<dwarf_output, dw> _base;
+
+      inline tracker (const dwarf_output_collector &c)
+	: _base (c._m_tracker)
+      {}
+
+      inline tracker (const tracker &proto,
+		      typename _base::reference_match &matched,
+		      const typename _base::left_context_type &lhs,
+		      const typename _base::die1 &a,
+		      const typename _base::right_context_type &rhs,
+		      const typename _base::die2 &b)
+	: _base (proto, matched, lhs, a, b)
+      {}
+
+    };
+
     dwarf_output_collector *_m_collector;
+    tracker *_m_tracker;
 
     inline copier ()
-      : _m_collector (NULL)
+      : _m_collector (NULL), _m_tracker (NULL)
     {}
+
+    inline ~copier ()
+    {
+      if (_m_tracker != NULL)
+	delete _m_tracker;
+    }
 
     copier &operator () (dwarf_output_collector &c)
     {
       _m_collector = &c;
+      assert (_m_tracker == NULL);
+      _m_tracker = new tracker (c);
       return *this;
     }
 

@@ -115,6 +115,12 @@ namespace elfutils
 	impl::debug_info_entry::set (die, arg);
       }
 
+      explicit inline compile_unit ()
+	: impl::debug_info_entry ()
+      {
+	this->_m_tag = ::DW_TAG_compile_unit;
+      }
+
     public:
 
       // Fetch the CU's DW_AT_stmt_list.
