@@ -2229,11 +2229,9 @@ coverage_map_init (struct coverage_map *coverage_map,
   coverage_map->elf = elf;
   coverage_map->allow_overlap = allow_overlap;
 
-  for (size_t i = 0; i < elf->size; ++i)
+  for (size_t i = 1; i < elf->size; ++i)
     {
       struct sec *sec = elf->sec + i;
-      if (elf->sec[i].id == sec_invalid)
-	continue;
 
       bool normal = (sec->shdr.sh_flags & mask) == mask;
       bool warn = (sec->shdr.sh_flags & warn_mask) == warn_mask;
