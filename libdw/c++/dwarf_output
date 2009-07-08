@@ -52,7 +52,10 @@
 
 #include "dwarf_edit"
 #include "dwarf_ref_maker"
+#include <algorithm>
 #include <functional>
+#include <iterator>
+#include <vector>
 #include <tr1/unordered_set>
 
 /* Read the comments for elfutils::dwarf first.
@@ -293,6 +296,7 @@ namespace elfutils
   protected:
     template<typename input> class copier; // Below.
 
+#if 0
     /* An iterator adapter for use in iterator-based constructors.
        collectify (iterator) yields an iterator on input where *i
        constructs output::value_type (input::value_type v, collector).  */
@@ -304,6 +308,7 @@ namespace elfutils
     {
       return subr::argifier<input, output, dwarf_output_collector &> (c) (in);
     }
+#endif
 
     /* Every kind of value is made by calling into the copier, which
        returns a const pointer into a value_set living in the collector.  */
@@ -426,6 +431,7 @@ namespace elfutils
 
     class debug_info_entry
     {
+      friend class dwarf_output_collector;
       friend class subr::create_container;
 
     public:
@@ -480,18 +486,18 @@ namespace elfutils
       private:
         inline children_type () {}
 
-	template<typename input, typename tracker>
+	template<typename input, typename copier>
 	static inline void
-	equivalence (const iterator &out,
-		     const typename input::const_iterator &in, tracker &t)
+	copied (const iterator &out, const typename input::const_iterator &in,
+		bool last_sibling, copier &c)
 	{
-	  t.equivalence (out, in);
+	  c.copied (out, in, last_sibling);
 	}
 
-	template<typename input, typename tracker>
-	inline children_type (const input &other, tracker &t)
+	template<typename input, typename copier>
+	inline children_type (const input &other, copier &c)
 	{
-	  subr::create_container (this, other, t, equivalence<input, tracker>);
+	  subr::create_container (this, other, c, copied<input, copier>);
 	}
 
       public:
@@ -505,11 +511,12 @@ namespace elfutils
       int _m_tag;
       const attributes_type *_m_attributes;
       children_type _m_children;
+      void *_m_shape;
 
       // This is can only be used by the children_type constructor,
       // which immediately calls set.
       inline debug_info_entry ()
-	: _m_tag (-1), _m_attributes (NULL), _m_children ()
+	: _m_tag (-1), _m_attributes (NULL), _m_children (), _m_shape (NULL)
       {}
 
       template<typename die_type, typename input_dw>
@@ -533,21 +540,6 @@ namespace elfutils
       }
 
     public:
-      inline debug_info_entry (int t)
-	: _m_tag (t), _m_attributes (NULL), _m_children ()
-      {
-	if (unlikely (t <= 0))
-	  throw std::invalid_argument ("invalid tag");
-      }
-
-      /* The template constructor lets us copy in from any class that has
-	 compatibly iterable containers for attributes and children.  */
-      template<typename die_type, typename input_dw>
-      debug_info_entry (const die_type &die, copier<input_dw> &c)
-	: _m_tag (die.tag ()),
-	  _m_attributes (c.add_attributes (die.attributes ())),
-	  _m_children (die.children (), c)
-      {}
 
       inline int tag () const
       {
@@ -697,9 +689,12 @@ namespace elfutils
 
     // Constructor copying CUs from an input file (can be any of dwarf,
     // dwarf_edit, or dwarf_output).
+    // Copy construction instantiates a copier derived from the collector.
     template<typename input>
-    inline dwarf_output (const input &, dwarf_output_collector &,
-			 copier<input> = copier<input> ());
+    inline dwarf_output (const input &dw, dwarf_output_collector &c,
+			 copier<input> maker = copier<input> ())
+      : _m_units (dw.compile_units (), maker (c))
+    {}
 
     template<typename file>
     inline bool operator== (const file &other) const
@@ -712,15 +707,6 @@ namespace elfutils
       return !(*this == other);
     }
   };
-
-  /*
-template<typename flavor>
-  inline flavor &dwarf_output::attr_value::_base::flavor ()
-  {
-    assert (!"should be impossible");
-    throw std::logic_error ("should be impossible");
-  }
-  */
 
   // Explicit specializations.
   template<>
@@ -738,6 +724,7 @@ template<typename flavor>
 
   private:
     typedef dwarf_output::debug_info_entry die_type;
+    typedef die_type::children_type::const_iterator die_ptr;
     typedef die_type::attributes_type attrs_type;
 
     subr::value_set<dwarf_output::value::value_string> _m_strings;
@@ -776,14 +763,41 @@ template<typename flavor>
     template<typename input, typename copier_type>
     inline const attrs_type *add_attributes (const input &x, copier_type &c)
     {
-      std::pair<attrs_set::iterator, bool> p
-	= _m_attr_sets.insert (attrs_type (x, c));
-      if (p.second)
-	{
-	  // XXX hook for collection: abbrev building, etc.
-	}
-      return &(*p.first);
+      return &*_m_attr_sets.insert (attrs_type (x, c)).first;
     }
+
+    struct shape_type
+    {
+      typedef std::vector<std::pair<int, int> > attrs_type;
+      attrs_type _m_attrs;
+      bool _m_has_children;
+      size_t _m_hash;
+
+      friend class subr::hashed_hasher<shape_type>;
+      typedef subr::hashed_hasher<shape_type> hasher;
+
+      inline void hashnadd (int name, int form);
+      inline shape_type (const die_type &die, bool last_sibling);
+
+      inline bool operator== (const shape_type &other) const
+      {
+	return (_m_hash == other._m_hash
+		&& _m_has_children == other._m_has_children
+		&& _m_attrs == other._m_attrs);
+      }
+      inline bool operator!= (const shape_type &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    typedef subr::nothing shape_info;
+
+    typedef std::tr1::unordered_map<shape_type, shape_info,
+				    shape_type::hasher> shape_map;
+    shape_map _m_shapes;
+
+    void add_shape (die_type &die, bool last_sibling);
 
   };
 
@@ -904,15 +918,15 @@ template<typename flavor>
     {
       return _m_collector->add_attributes (x, *this);
     }
-  };
 
-  // Copy construction instantiates a copier derived from the collector.
-  template<typename input>
-  inline dwarf_output::dwarf_output (const input &dw,
-				     dwarf_output_collector &c,
-				     copier<input> maker)
-    : _m_units (dw.compile_units (), maker (c))
-  {}
+    template<typename input_iter>
+    inline void copied (const debug_info_entry::children_type::iterator &out,
+			const input_iter &in, bool last_sibling)
+    {
+      equivalence (out, in);
+      _m_collector->add_shape (*out, last_sibling);
+    }
+  };
 };
 
 #endif	// <elfutils/dwarf_output>

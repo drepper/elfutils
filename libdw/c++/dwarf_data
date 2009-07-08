@@ -106,22 +106,14 @@ namespace elfutils
       friend class subr::create_container;
       friend class impl::compile_units;
     private:
-      inline compile_unit () :
-	impl::debug_info_entry (::DW_TAG_compile_unit)
-      {}
 
-      template<typename die_type>
-      static inline const die_type &require_cu (const die_type &die)
+      template<typename die_type, typename arg_type>
+      inline void set (const die_type &die, arg_type &arg)
       {
 	if (die.tag () != ::DW_TAG_compile_unit)
 	  throw std::invalid_argument ("not a compile_unit entry");
-	return die;
+	impl::debug_info_entry::set (die, arg);
       }
-
-      template<typename die_type, typename tracker>
-      inline compile_unit (const die_type &die, tracker &t)
-	: impl::debug_info_entry (require_cu (die), t)
-      {}
 
     public:
 

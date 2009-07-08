@@ -117,7 +117,9 @@ namespace elfutils
 	template<typename input, typename tracker>
 	static inline void
 	equivalence (const iterator &out,
-		     const typename input::const_iterator &in, tracker &t)
+		     const typename input::const_iterator &in,
+		     bool,	// last-sibling
+		     tracker &t)
 	{
 	  t.equivalence (out, in);
 	}

@@ -98,7 +98,7 @@ libdwpp_a_SOURCES = c++/values.cc \
 		    c++/known.cc \
 		    c++/line_info.cc \
 		    c++/edit-values.cc \
-		    c++/output-values.cc
+		    c++/output-values.cc c++/output-shape.cc
 noinst_HEADERS    = c++/dwarf-knowledge.cc \
 		    c++/data-values.hh
 

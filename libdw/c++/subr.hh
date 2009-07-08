@@ -67,6 +67,8 @@ namespace elfutils
     struct hash<uint64_t> : public integer_hash<uint64_t> {};
     template<>
     struct hash<uint8_t> : public integer_hash<uint8_t> {};
+    template<>
+    struct hash<bool> : public integer_hash<bool> {};
 
     template<typename T1, typename T2>
     struct hash<std::pair<T1, T2> >
@@ -837,16 +839,18 @@ namespace elfutils
       inline create_container (container *me, const input &other,
 			       arg_type &arg, hook_type &hook = hook_type ())
       	{
-	  for (typename input::const_iterator in = other.begin ();
-	       in != other.end ();
-	       ++in)
+	  typename input::const_iterator in = other.begin ();
+	  bool last = in == other.end ();
+	  while (!last)
 	    {
 	      /* Don't copy-construct the entry from *in here because that
 		 copies it again into the list and destroys the first copy.  */
 	      me->push_back (typename container::value_type ());
 	      typename container::iterator out = --me->end ();
 	      out->set (*in, arg);
-	      hook (out, in, arg);
+	      const typename input::const_iterator here = in++;
+	      last = in == other.end ();
+	      hook (out, in, last, arg);
 	    }
 	}
     };
