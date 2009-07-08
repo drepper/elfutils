@@ -36,12 +36,14 @@ expected_value_space (int attr, int tag)
     case DW_AT_location:
     case DW_AT_string_length:
     case DW_AT_return_addr:
-    case DW_AT_data_member_location:
     case DW_AT_frame_base:
     case DW_AT_segment:
     case DW_AT_static_link:
     case DW_AT_vtable_elem_location:
       return VS(location);
+
+    case DW_AT_data_member_location:
+      return VS(location) | VS(constant);
 
     case DW_AT_name:
       switch (tag)

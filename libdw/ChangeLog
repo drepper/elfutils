@@ -1,5 +1,10 @@
 2009-07-08  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf-knowledge.cc (expected_value_space):
+	DW_AT_data_member_location can be constant or location.
+	* c++/values.cc (what_space): Treat only data[48] as *ptr when those
+	are expected.  No other data forms can be *ptr.
+
 	* c++/output-shape.cc: New file.
 	* Makefile.am (libdwpp_a_SOURCES): Add it.
 	* c++/dwarf_output: Call add_shape method there.

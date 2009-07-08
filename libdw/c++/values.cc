@@ -94,20 +94,21 @@ dwarf::attr_value::what_space () const
 	return VS_location;
       break;
 
-    case DW_FORM_data1:
-    case DW_FORM_data2:
     case DW_FORM_data4:
     case DW_FORM_data8:
+      // *ptr can only be these forms.  Otherwise these are constants.
+      possible = VS(location) | VS(lineptr) | VS(macptr) | VS(rangelistptr);
+      if (expected & possible)
+	break;
+      /* Fall through.  */
+
+    case DW_FORM_data1:
+    case DW_FORM_data2:
     case DW_FORM_udata:
     case DW_FORM_sdata:
-      /* Target constant, known DWARF constant, or *ptr.  */
+      /* Target constant, known DWARF constant.  */
       possible = (VS(dwarf_constant) | VS(constant)
-		  | VS(source_file) | VS(source_line) | VS(source_column)
-		  | VS(location) // loclistptr
-		  | VS(lineptr) | VS(macptr) | VS(rangelistptr));
-      if ((expected & possible) == (VS(constant) | VS(location)))
-	/* When both are expected, a constant is not a loclistptr.  */
-	return VS_constant;
+		  | VS(source_file) | VS(source_line) | VS(source_column));
       break;
 
     case DW_FORM_string:
