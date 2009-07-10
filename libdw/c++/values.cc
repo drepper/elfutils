@@ -52,6 +52,7 @@
 #include "dwarf"
 #include "dwarf_edit"
 #include "dwarf_output"
+#include "data-values.hh"
 
 extern "C"
 {
@@ -237,10 +238,7 @@ template<>
 string
 to_string<dwarf::attribute> (const dwarf::attribute &attr)
 {
-  std::string result = dwarf::attributes::name (attr.first);
-  result += "=";
-  result += attr.second.to_string ();
-  return result;
+  return attribute_string (attr);
 }
 
 template<>

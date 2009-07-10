@@ -59,10 +59,7 @@ template<>
 std::string
 to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &attr)
 {
-  std::string result = dwarf::attributes::name (attr.first);
-  result += "=";
-  result += attr.second.to_string ();
-  return result;
+  return attribute_string (attr);
 }
 
 std::string

@@ -631,6 +631,10 @@ namespace elfutils
     public:
       typedef element value_type;
 
+      inline wrapped_input_iterator ()
+	: _base ()
+      {}
+
       template<typename arg_type>
       inline wrapped_input_iterator (const _base &i, const arg_type &arg)
 	: _base (static_cast<_base> (i)), _m_wrapper (arg)
@@ -643,6 +647,30 @@ namespace elfutils
       inline typename wrapper::result_type operator* () const
       {
 	return _m_wrapper (_base::operator* ());
+      }
+
+      inline element *operator-> () const
+      {
+	return &(_m_wrapper (_base::operator* ()));
+      }
+
+      inline wrapped_input_iterator &operator++ () // prefix
+      {
+	_base::operator++ ();
+	return *this;
+      }
+      inline wrapped_input_iterator operator++ (int magic) // postfix
+      {
+	return wrapped_input_iterator (_base::operator++ (magic));
+      }
+      inline wrapped_input_iterator &operator-- () // prefix
+      {
+	_base::operator-- ();
+	return *this;
+      }
+      inline wrapped_input_iterator operator-- (int magic) // postfix
+      {
+	return wrapped_input_iterator (_base::operator-- (magic));
       }
     };
 
@@ -855,6 +883,28 @@ namespace elfutils
 	    }
 	}
     };
+
+    template<typename T>
+    struct is : public std::equal_to<T>
+    {
+      bool operator () (const T &a, const T &b) const
+      {
+	return a.is (b);
+      }
+    };
+
+    template<typename T>
+    struct identity_set
+      : public std::tr1::unordered_set<T, typename T::hasher, is<T> >
+    {};
+
+    template<typename key_type, typename mapped_type>
+    struct identity_map
+      : public std::tr1::unordered_map<key_type, mapped_type,
+				       typename key_type::hasher,
+				       is<key_type> >
+    {};
+
   };
 };
 

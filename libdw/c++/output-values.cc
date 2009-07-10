@@ -61,10 +61,7 @@ template<>
 std::string
 to_string<dwarf_output::attribute> (const dwarf_output::attribute &attr)
 {
-  std::string result = dwarf::attributes::name (attr.first);
-  result += "=";
-  result += attr.second.to_string ();
-  return result;
+  return attribute_string (attr);
 }
 
 const dwarf_output::value::value_flag dwarf_output_collector::flag_true (1);

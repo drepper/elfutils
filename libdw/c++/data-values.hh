@@ -53,7 +53,6 @@
 
 namespace elfutils
 {
-
   template<class impl, typename v>
   dwarf::value_space
   dwarf_data::attr_value<impl, v>::what_space () const
@@ -91,5 +90,14 @@ namespace elfutils
     throw std::runtime_error ("XXX impossible");
   }
 
+  template<typename attr_pair>
+  static inline std::string
+  attribute_string (const attr_pair &attr)
+  {
+    std::string result = dwarf::attributes::name (attr.first);
+    result += "=";
+    result += attr.second.to_string ();
+    return result;
+  }
 
 };
