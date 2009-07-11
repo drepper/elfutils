@@ -288,7 +288,9 @@ test_output (const dwarf &file1, const dwarf &file2,
   dwarf_output_collector c1;
   dwarf_output_collector c2;
   dwarf_output out1 (in1, c1);
+  c1.stats ();
   dwarf_output out2 (in2, c2);
+  c2.stats ();
 
   test_classes (file1, file2, out1, out2, same);
 

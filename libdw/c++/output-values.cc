@@ -64,5 +64,14 @@ to_string<dwarf_output::attribute> (const dwarf_output::attribute &attr)
   return attribute_string (attr);
 }
 
+namespace elfutils
+{
+  template<>
+  std::string to_string (const dwarf_output::debug_info_entry &die)
+  {
+    return die_string (die);
+  }
+};
+
 const dwarf_output::value::value_flag dwarf_output_collector::flag_true (1);
 const dwarf_output::value::value_flag dwarf_output_collector::flag_false (0);

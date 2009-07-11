@@ -194,6 +194,8 @@ namespace elfutils
 	  _m_children (die.children (), t)
       {}
 
+      inline std::string to_string () const;
+
       inline int tag () const
       {
 	return _m_tag;
@@ -370,6 +372,13 @@ namespace elfutils
   };
 
   // Explicit specializations.
+  template<>
+  std::string to_string<dwarf_edit::debug_info_entry>
+  (const dwarf_edit::debug_info_entry &);
+  inline std::string dwarf_edit::debug_info_entry::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
   template<>
   std::string to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &);
   template<>

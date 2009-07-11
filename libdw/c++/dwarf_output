@@ -403,6 +403,8 @@ namespace elfutils
 		&& _m_children == that._m_children);
       }
 
+      inline std::string to_string () const;
+
       inline int tag () const
       {
 	return _m_tag;
@@ -585,6 +587,13 @@ namespace elfutils
 
   // Explicit specializations.
   template<>
+  std::string to_string<dwarf_output::debug_info_entry>
+  (const dwarf_output::debug_info_entry &);
+  inline std::string dwarf_output::debug_info_entry::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+  template<>
   std::string
   to_string<dwarf_output::attribute> (const dwarf_output::attribute &);
   template<>
@@ -602,6 +611,7 @@ namespace elfutils
 
   private:
     dwarf_path_finder<dwarf_output> _m_tracker;
+    unsigned int _m_total;
 
     typedef dwarf_output::debug_info_entry die_type;
     typedef die_type::attributes_type attrs_type;
@@ -671,6 +681,7 @@ namespace elfutils
 	= *_m_unique.insert (std::make_pair (die_type (other, c),
 					     die_info ())).first;
       x.second.uses++;
+      ++_m_total;
       if (has_sibling)
 	x.second.with_sibling = true;
       else
@@ -710,6 +721,26 @@ namespace elfutils
     shape_map _m_shapes;
 
     void add_shape (die_type &die, bool last_sibling);
+
+  public:
+    inline dwarf_output_collector ()
+      : _m_total (0)
+    {}
+
+    static void die_stats (const die_map::value_type &elt)
+    {
+      std::cout << to_string (elt.first) << " uses="
+		<< std::dec << elt.second.uses
+		<< " (" << elt.second.with_sibling
+		<< "," << elt.second.without_sibling << ")\n";
+    }
+
+    void stats () const
+    {
+      std::cout << "collected " << std::dec << _m_unique.size ()
+		<< " unique of " << _m_total << " total DIEs\n";
+      std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
+    }
   };
 
   template<typename dw>

@@ -363,6 +363,15 @@ dwarf::attr_value::constant_block () const
 
   return const_vector<uint8_t> (block);
 }
+
+namespace elfutils
+{
+  template<>
+  std::string to_string (const dwarf::debug_info_entry &die)
+  {
+    return die_string (die);
+  }
+};
 
 // dwarf::range_list
 
