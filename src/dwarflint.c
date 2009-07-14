@@ -1078,6 +1078,12 @@ address_aligned (uint64_t addr, uint64_t align)
   return align < 2 || (addr % align == 0);
 }
 
+static bool
+necessary_alignment (uint64_t start, uint64_t length, uint64_t align)
+{
+  return address_aligned (start + length, align) && length < align;
+}
+
 static void
 process_file (Dwarf *dwarf, const char *fname, bool only_one)
 {
@@ -2198,7 +2204,7 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
       if (zeroes)
 	return true;
     }
-  else if (address_aligned (base + end, align) && end - begin < align)
+  else if (necessary_alignment (base + begin, end - begin, align))
     return true;
 
   char buf[128];
