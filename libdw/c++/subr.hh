@@ -850,7 +850,7 @@ namespace elfutils
 	      out->set (*in, arg);
 	      const typename input::const_iterator here = in++;
 	      last = in == other.end ();
-	      hook (out, in, last, arg);
+	      hook (out, here, last, arg);
 	    }
 	}
     };

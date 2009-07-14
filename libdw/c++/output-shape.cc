@@ -76,17 +76,22 @@ attr_form (int tag, const dwarf_output::attribute &attr)
       /* Fall through.  */
 
     case dwarf::VS_dwarf_constant:
-    case dwarf::VS_lineptr:
-    case dwarf::VS_macptr:
-    case dwarf::VS_rangelistptr:
     case dwarf::VS_source_line:
     case dwarf::VS_source_column:
       return DW_FORM_udata;
 
     case dwarf::VS_location:
-      return (attr.second.location ().is_list ()
-	      ? DW_FORM_udata : DW_FORM_block);
+      if (!attr.second.location ().is_list ())
+	return DW_FORM_block;
+      /* Fall through.  */
 
+    case dwarf::VS_lineptr:
+    case dwarf::VS_macptr:
+    case dwarf::VS_rangelistptr:
+      /* For class *ptr (including loclistptr), the one of data[48] that
+	 matches offset_size is the only form encoding to use.  Other data*
+	 forms can mean the attribute is class constant instead.  */
+      return DW_FORM_data4;
 
     case dwarf::VS_source_file:
       switch (attr.first)
