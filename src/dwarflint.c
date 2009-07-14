@@ -61,8 +61,6 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_ref        303
 #define ARGP_nohl       304
 
-#undef FIND_SECTION_HOLES
-
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
 {
@@ -867,15 +865,27 @@ struct cu
 static void cu_free (struct cu *cu_chain);
 static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 
+struct cu_coverage
+{
+  struct coverage cov;
+  bool need_ranges;	/* If all CU DIEs have high_pc/low_pc
+			   attribute pair, we don't need separate
+			   range pass.  Otherwise we do.  As soon as
+			   ranges are projected into cov, the flag
+			   is set to false again.  */
+};
+
 
 /* Functions for checking of structural integrity.  */
 
 static struct cu * check_info_structural (struct section_data *data,
 					  struct abbrev_table *abbrev_chain,
-					  Elf_Data *strings);
+					  Elf_Data *strings,
+					  struct cu_coverage *cu_coverage);
 
 static bool check_aranges_structural (struct section_data *data,
-				      struct cu *cu_chain);
+				      struct cu *cu_chain,
+				      struct coverage *coverage);
 
 static bool check_pub_structural (struct section_data *data,
 				  struct cu *cu_chain);
@@ -888,7 +898,8 @@ static bool check_location_expression (struct read_ctx *ctx,
 				       bool addr_64);
 
 static bool check_loc_or_range_structural (struct section_data *data,
-					   struct cu *cu_chain);
+					   struct cu *cu_chain,
+					   struct cu_coverage *cu_coverage);
 
 static bool read_rel (struct section_data *secdata,
 		      Elf_Data *reldata,
@@ -1307,12 +1318,14 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
     /* Hard error, not a message.  We can't debug without this.  */
     wr_error (NULL, ".debug_abbrev data not found.\n");
 
+  struct cu_coverage *cu_coverage = NULL;
   if (abbrev_chain != NULL)
     {
       if (info_data.data != NULL)
 	{
+	  cu_coverage = calloc (1, sizeof (struct cu_coverage));
 	  cu_chain = check_info_structural (&info_data, abbrev_chain,
-					    str_data.data);
+					    str_data.data, cu_coverage);
 	  if (cu_chain != NULL && do_high_level)
 	    check_expected_trees (hlctx);
 	}
@@ -1323,17 +1336,24 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 
   bool ranges_sound;
   if (ranges_data.data != NULL && cu_chain != NULL)
-    ranges_sound = check_loc_or_range_structural (&ranges_data, cu_chain);
+    ranges_sound
+      = check_loc_or_range_structural (&ranges_data, cu_chain, cu_coverage);
   else
     ranges_sound = false;
 
   if (loc_data.data != NULL && cu_chain != NULL)
-    check_loc_or_range_structural (&loc_data, cu_chain);
+    check_loc_or_range_structural (&loc_data, cu_chain, NULL);
 
   if (aranges_data.data != NULL)
     {
       read_ctx_init (&ctx, dwarf, aranges_data.data);
-      if (check_aranges_structural (&aranges_data, cu_chain)
+
+      /* If ranges were needed and not loaded, don't pass them down
+	 for CU/aranges coverage analysis. */
+      struct coverage *cov
+	= cu_coverage->need_ranges ? NULL : &cu_coverage->cov;
+
+      if (check_aranges_structural (&aranges_data, cu_chain, cov)
 	  && ranges_sound && do_high_level)
 	check_matching_ranges (hlctx);
     }
@@ -2938,7 +2958,8 @@ read_die_chain (struct read_ctx *ctx,
 		struct ref_record *local_die_refs,
 		struct coverage *strings_coverage,
 		struct relocation_data *reloc,
-		struct elf_file *file)
+		struct elf_file *file,
+		struct cu_coverage *cu_coverage)
 {
   bool got_die = false;
   uint64_t sibling_addr = 0;
@@ -3101,6 +3122,7 @@ read_die_chain (struct read_ctx *ctx,
 	      {
 	      case check_rangeptr:
 		ref = &cu->range_refs;
+		cu_coverage->need_ranges = true;
 	        break;
 	      case check_lineptr:
 		ref = &cu->line_refs;
@@ -3275,6 +3297,9 @@ read_die_chain (struct read_ctx *ctx,
 		  {
 		    if (it->name == DW_AT_low_pc)
 		      cu->low_pc = addr;
+
+		    if (low_pc != (uint64_t)-1 && high_pc != (uint64_t)-1)
+		      coverage_add (&cu_coverage->cov, low_pc, high_pc - low_pc);
 		  }
 
 		break;
@@ -3472,7 +3497,8 @@ read_die_chain (struct read_ctx *ctx,
 	  int st = read_die_chain (ctx, cu, abbrevs, strings,
 				   dwarf_64, addr_64,
 				   local_die_refs,
-				   strings_coverage, reloc, file);
+				   strings_coverage, reloc, file,
+				   cu_coverage);
 	  if (st == -1)
 	    return -1;
 	  else if (st == 0)
@@ -3498,7 +3524,8 @@ check_cu_structural (struct read_ctx *ctx,
 		     bool dwarf_64,
 		     struct coverage *strings_coverage,
 		     struct relocation_data *reloc,
-		     struct elf_file *file)
+		     struct elf_file *file,
+		     struct cu_coverage *cu_coverage)
 {
   uint8_t address_size;
   bool retval = true;
@@ -3572,7 +3599,7 @@ check_cu_structural (struct read_ctx *ctx,
 		      dwarf_64, address_size == 8,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      file) >= 0)
+		      file, cu_coverage) >= 0)
     {
       for (size_t i = 0; i < abbrevs->size; ++i)
 	if (!abbrevs->abbr[i].used)
@@ -3593,7 +3620,8 @@ check_cu_structural (struct read_ctx *ctx,
 static struct cu *
 check_info_structural (struct section_data *data,
 		       struct abbrev_table *abbrev_chain,
-		       Elf_Data *strings)
+		       Elf_Data *strings,
+		       struct cu_coverage *cu_coverage)
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, data->file->dwarf, data->data);
@@ -3690,7 +3718,8 @@ check_info_structural (struct section_data *data,
 
 	  if (!check_cu_structural (&cu_ctx, cur, abbrev_chain,
 				    strings, dwarf_64,
-				    strings_coverage, reloc, data->file))
+				    strings_coverage, reloc, data->file,
+				    cu_coverage))
 	    {
 	      success = false;
 	      break;
@@ -3800,27 +3829,40 @@ coverage_map_free_XA (struct coverage_map *coverage_map)
     }
 }
 
+/* COVERAGE is portion of address space covered by CUs (either via
+   low_pc/high_pc pairs, or via DW_AT_ranges references).  If
+   non-NULL, analysis of arange coverage is done against that set. */
 static bool
-check_aranges_structural (struct section_data *data, struct cu *cu_chain)
+check_aranges_structural (struct section_data *data, struct cu *cu_chain,
+			  struct coverage *coverage)
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, data->file->dwarf, data->data);
 
   bool retval = true;
 
-  struct coverage_map *coverage_map;
-  if ((coverage_map = coverage_map_alloc_XA (data->file, false)) == NULL)
-    {
-      wr_error (&WHERE (sec_aranges, NULL),
-		": couldn't read ELF, skipping coverage analysis.\n");
-      retval = false;
-    }
+  struct coverage *aranges_coverage
+    = coverage != NULL ? calloc (1, sizeof (struct coverage)) : NULL;
 
   while (!read_ctx_eof (&ctx))
     {
       struct where where = WHERE (sec_aranges, NULL);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
       const unsigned char *atab_begin = ctx.ptr;
+
+      inline void aranges_coverage_add (uint64_t begin, uint64_t length)
+      {
+	if (coverage_is_overlap (aranges_coverage, begin, length))
+	  {
+	    char buf[128];
+	    /* Not a show stopper, this shouldn't derail high-level.  */
+	    wr_message (mc_aranges | mc_impact_2 | mc_error, &where,
+			": the range %s overlaps with another one.\n",
+			range_fmt (buf, sizeof buf, begin, begin + length));
+	  }
+
+    	coverage_add (aranges_coverage, begin, length);
+      }
 
       /* Size.  */
       uint32_t size32;
@@ -4017,10 +4059,9 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	       is a pair consisting of the beginning address [...],
 	       followed by the _non-zero_ length of that range.  */
 	    wr_error (&where, ": zero-length address range.\n");
-	  else if (retval)
-	    /* Skip coverage analysis if we have errors.  */
-	    coverage_map_add (coverage_map, address, length, &where,
-			      mc_aranges);
+	  /* Skip coverage analysis if we have errors.  */
+	  else if (retval && aranges_coverage)
+	    aranges_coverage_add (address, length);
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
@@ -4040,13 +4081,51 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	goto not_enough;
     }
 
-  if (retval && coverage_map != NULL)
-    coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
-			     &(struct coverage_map_hole_info)
-			       {{sec_aranges, mc_aranges, 0, NULL},
-				 coverage_map->elf});
+  if (aranges_coverage != NULL)
+    {
+      struct coverage *cov = coverage_clone (coverage);
+      coverage_remove_all (cov, aranges_coverage);
+      bool isle (uint64_t start, uint64_t length, void *user)
+      {
+	/* We need to check alignment vs. the covered section.  Find
+	   where the hole lies.  */
+	struct elf_file *elf = user;
+	struct sec *sec = NULL;
+	for (size_t i = 1; i < elf->size; ++i)
+	  {
+	    struct sec *it = elf->sec + i;
+	    GElf_Shdr *shdr = &it->shdr;
+	    Elf64_Addr s_end = shdr->sh_addr + shdr->sh_size;
+	    if (start >= shdr->sh_addr && start + length < s_end)
+	      {
+		sec = it;
+		/* Simply assume the first section that the hole
+		   intersects. */
+		break;
+	      }
+	  }
 
-  coverage_map_free_XA (coverage_map);
+	if (sec == NULL
+	    || !necessary_alignment (start, length, sec->shdr.sh_addralign))
+	  {
+	    char buf[128];
+	    printf ("aranges aranges %s %ld\n", sec->name, sec->shdr.sh_addralign);
+	    wr_message (mc_aranges | mc_impact_3, &WHERE (sec_aranges, NULL),
+			": addresses %s are covered with CUs, but not with aranges.\n",
+			range_fmt (buf, sizeof buf, start, start + length));
+	  }
+
+	if (sec == NULL)
+	  wr_error (NULL, "Couldn't find the section containing the above hole.\n");
+
+	return true;
+      }
+
+      coverage_find_ranges (cov, &isle, data->file);
+      coverage_free (cov);
+    }
+
+  coverage_free (aranges_coverage);
 
   return retval;
 }
@@ -4377,7 +4456,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 			uint64_t addr,
 			bool addr_64,
 			struct where *wh,
-			enum message_category cat)
+			enum message_category cat,
+			struct cu_coverage *cu_coverage)
 {
   char buf[128]; // messages
   struct read_ctx ctx;
@@ -4509,11 +4589,15 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 			": entry covers no range.\n");
 	  /* Skip coverage analysis if we have errors or have no base
 	     (or just don't do coverage analysis at all).  */
-	  else if (base < (uint64_t)-2 && retval && coverage_map != NULL)
+	  else if (base < (uint64_t)-2 && retval
+		   && (coverage_map != NULL || cu_coverage != NULL))
 	    {
 	      uint64_t address = begin_addr + base;
 	      uint64_t length = end_addr - begin_addr;
-	      coverage_map_add (coverage_map, address, length, &where, cat);
+	      if (coverage_map != NULL)
+		coverage_map_add (coverage_map, address, length, &where, cat);
+	      if (cu_coverage != NULL)
+		coverage_add (&cu_coverage->cov, address, length);
 	    }
 
 	  if (contains_locations)
@@ -4571,7 +4655,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 
 static bool
 check_loc_or_range_structural (struct section_data *data,
-			       struct cu *cu_chain)
+			       struct cu *cu_chain,
+			       struct cu_coverage *cu_coverage)
 {
   enum section_id sec = data_get_sec (data)->id;
   assert (sec == sec_loc || sec == sec_ranges);
@@ -4583,15 +4668,13 @@ check_loc_or_range_structural (struct section_data *data,
   bool retval = true;
 
   struct coverage_map *coverage_map = NULL;
-#ifdef FIND_SECTION_HOLES
-  if ((coverage_map = coverage_map_alloc_XA (ctx.dbg->elf,
-					     data->sec == sec_loc)) == NULL)
+
+  if ((coverage_map = coverage_map_alloc_XA (data->file, sec == sec_loc)) == NULL)
     {
-      wr_error (&WHERE (data->sec, NULL),
+      wr_error (&WHERE (sec, NULL),
 		": couldn't read ELF, skipping coverage analysis.\n");
       retval = false;
     }
-#endif
 
   struct coverage coverage;
   WIPE (coverage);
@@ -4648,10 +4731,14 @@ check_loc_or_range_structural (struct section_data *data,
 	  relocation_skip (&data->rel, off,
 			   &WHERE (sec, NULL), skip_unref);
 	}
+
+      /* XXX We pass cu_coverage down for all ranges, not only those
+	 referenced by the CU DIE.  */
       if (!check_loc_or_range_ref (&ctx, refs[i].cu, data,
 				   &coverage, coverage_map,
 				   off, refs[i].cu->address_size == 8,
-				   &refs[i].ref.who, cat))
+				   &refs[i].ref.who, cat,
+				   cu_coverage))
 	retval = false;
       last_off = off;
     }
@@ -4678,6 +4765,11 @@ check_loc_or_range_structural (struct section_data *data,
 
   coverage_free (&coverage);
   coverage_map_free_XA (coverage_map);
+
+  if (retval && cu_coverage != NULL)
+    /* Only drop the flag if we were successful, so that the coverage
+       analysis isn't later done against incomplete data.  */
+    cu_coverage->need_ranges = false;
 
   return retval;
 }
