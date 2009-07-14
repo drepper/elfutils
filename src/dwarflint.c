@@ -851,7 +851,7 @@ struct cu
   uint64_t cudie_offset;
   uint64_t length;
   int address_size;             // Address size in bytes on the target machine.
-  uint64_t base;                // DW_AT_low_pc value of CU DIE, 0 if not present.
+  uint64_t low_pc;              // DW_AT_low_pc value of CU DIE, -1 if not present.
   struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
   struct ref_record die_refs;   // DIE references into other CUs from this CU.
   struct ref_record loc_refs;   // references into .debug_loc from this CU.
@@ -3266,10 +3266,12 @@ read_die_chain (struct read_ctx *ctx,
 		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
 
-		if (it->name == DW_AT_low_pc
-		    && (abbrev->tag == DW_TAG_compile_unit
-			|| abbrev->tag == DW_TAG_partial_unit))
-		  cu->base = addr;
+		if (abbrev->tag == DW_TAG_compile_unit
+		    || abbrev->tag == DW_TAG_partial_unit)
+		  {
+		    if (it->name == DW_AT_low_pc)
+		      cu->low_pc = addr;
+		  }
 
 		break;
 	      }
@@ -3617,7 +3619,7 @@ check_info_structural (struct section_data *data,
       cur->offset = where.addr1;
       cur->next = cu_chain;
       cur->where = where;
-      cur->base = (uint64_t)-1;
+      cur->low_pc = (uint64_t)-1;
       cu_chain = cur;
 
       uint32_t size32;
@@ -4405,7 +4407,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
   uint64_t escape = addr_64 ? (uint64_t)-1 : (uint64_t)(uint32_t)-1;
 
   bool overlap = false;
-  uint64_t base = cu->base;
+  uint64_t base = cu->low_pc;
   while (!read_ctx_eof (&ctx))
     {
       struct where where = WHERE (sec, wh);
