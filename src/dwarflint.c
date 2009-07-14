@@ -2115,15 +2115,6 @@ ref_record_free (struct ref_record *rr)
 }
 
 bool
-coverage_pristine (struct coverage *cov, uint64_t begin, uint64_t length)
-{
-  for (uint64_t i = 0; i < length; ++i)
-    if (coverage_is_covered (cov, begin + i))
-      return false;
-  return true;
-}
-
-bool
 found_hole (uint64_t start, uint64_t length, void *data)
 {
   struct hole_info *info = (struct hole_info *)data;
@@ -2317,7 +2308,7 @@ coverage_map_add (struct coverage_map *coverage_map,
       uint64_t r_cov_end = cov_end + r_delta;
 
       if (!overlap && !coverage_map->allow_overlap
-	  && !coverage_pristine (cov, cov_begin, cov_end - cov_begin))
+	  && coverage_is_overlap (cov, cov_begin, cov_end - cov_begin))
 	{
 	  /* Not a show stopper, this shouldn't derail high-level.  */
 	  wr_message (cat | mc_impact_2 | mc_error, where,
@@ -4410,7 +4401,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
   bool retval = true;
   bool contains_locations = sec == sec_loc;
 
-  if (coverage_is_covered (coverage, addr))
+  if (coverage_is_covered (coverage, addr, 1))
     {
       wr_error (wh, ": reference to %#" PRIx64
 		" points into location or range list.\n", addr);
@@ -4439,7 +4430,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
       GElf_Sym begin_symbol_mem, *begin_symbol = &begin_symbol_mem;
       bool begin_relocated = false;
       if (!overlap
-	  && !coverage_pristine (coverage, begin_off, addr_64 ? 8 : 4))
+	  && coverage_is_overlap (coverage, begin_off, addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
 
       if (!read_ctx_read_offset (&ctx, addr_64, &begin_addr))
@@ -4463,7 +4454,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
       GElf_Sym end_symbol_mem, *end_symbol = &end_symbol_mem;
       bool end_relocated = false;
       if (!overlap
-	  && !coverage_pristine (coverage, end_off, addr_64 ? 8 : 4))
+	  && coverage_is_overlap (coverage, end_off, addr_64 ? 8 : 4))
 	HAVE_OVERLAP;
 
       if (!read_ctx_read_offset (&ctx, addr_64, &end_addr))
@@ -4530,8 +4521,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 	      /* location expression length */
 	      uint16_t len;
 	      if (!overlap
-		  && !coverage_pristine (coverage,
-					 read_ctx_get_offset (&ctx), 2))
+		  && coverage_is_overlap (coverage,
+					  read_ctx_get_offset (&ctx), 2))
 		HAVE_OVERLAP;
 
 	      if (!read_ctx_read_2ubyte (&ctx, &len))
@@ -4547,8 +4538,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 		return false;
 	      uint64_t expr_end = read_ctx_get_offset (&ctx);
 	      if (!overlap
-		  && !coverage_pristine (coverage,
-					 expr_start, expr_end - expr_start))
+		  && coverage_is_overlap (coverage,
+					  expr_start, expr_end - expr_start))
 		HAVE_OVERLAP;
 
 	      if (!read_ctx_skip (&ctx, len))
