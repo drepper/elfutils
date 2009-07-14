@@ -2195,7 +2195,7 @@ coverage_map_found_hole (uint64_t begin, uint64_t end,
 	    zeroes = false;
 	    break;
 	  }
-      if (!zeroes)
+      if (zeroes)
 	return true;
     }
   else if (address_aligned (base + end, align) && end - begin < align)
@@ -3259,8 +3259,6 @@ read_die_chain (struct read_ctx *ctx,
 				  reloc_target (form, it), symbolp);
 		    if (relocatedp != NULL)
 		      *relocatedp = true;
-		    if (addrp != NULL)
-		      *addrp = addr;
 		  }
 		else if (type_is_rel && addr != 0)
 		  /* In non-rel files, neither addr, nor ref_addr
@@ -3269,6 +3267,8 @@ read_die_chain (struct read_ctx *ctx,
 		     the reference below.  */
 		  wr_message (mc_impact_2 | mc_die_rel | mc_reloc, &where,
 			      PRI_LACK_RELOCATION, dwarf_form_string (form));
+		if (addrp != NULL)
+		  *addrp = addr;
 
 		if (form == DW_FORM_ref_addr)
 		  record_ref (addr, &where, false);
@@ -4027,10 +4027,10 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain)
 	}
 
       if (sub_ctx.ptr != sub_ctx.end
-	  && !check_zero_padding (&sub_ctx, mc_pubtables,
+	  && !check_zero_padding (&sub_ctx, mc_aranges,
 				  &WHERE (where.section, NULL)))
 	{
-	  wr_message_padding_n0 (mc_pubtables | mc_error,
+	  wr_message_padding_n0 (mc_aranges | mc_error,
 				 &WHERE (where.section, NULL),
 				 read_ctx_get_offset (&sub_ctx),
 				 read_ctx_get_offset (&sub_ctx) + size);
@@ -4407,7 +4407,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
   if (coverage_is_covered (coverage, addr))
     {
       wr_error (wh, ": reference to %#" PRIx64
-		" points at the middle of location or range list.\n", addr);
+		" points into location or range list.\n", addr);
       retval = false;
     }
 
@@ -4672,13 +4672,10 @@ check_loc_or_range_structural (struct section_data *data,
 			      ctx.data->d_buf}));
 
       if (coverage_map)
-	{
-      puts ("2");
 	coverage_map_find_holes (coverage_map, &coverage_map_found_hole,
 				 &(struct coverage_map_hole_info)
 				 {{sec, cat, 0, NULL},
 				   coverage_map->elf});
-	}
     }
 
 
