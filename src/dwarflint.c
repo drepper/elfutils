@@ -1838,7 +1838,9 @@ abbrev_table_load (struct read_ctx *ctx)
 
       bool null_attrib;
       uint64_t sibling_attr = 0;
-      bool low_pc = false, high_pc = false;
+      bool low_pc = false;
+      bool high_pc = false;
+      bool ranges = false;
       do
 	{
 	  uint64_t attr_off = read_ctx_get_offset (ctx);
@@ -1938,6 +1940,8 @@ abbrev_table_load (struct read_ctx *ctx)
 			  ": %s with invalid form \"%s\".\n",
 			  dwarf_attr_string (attrib_name),
 			  dwarf_form_string (attrib_form));
+	      if (attrib_name == DW_AT_ranges)
+		ranges = true;
 	    }
 	  /* Similar for DW_AT_{low,high}_pc, plus also make sure we
 	     don't see high_pc without low_pc.  */
@@ -1967,6 +1971,9 @@ abbrev_table_load (struct read_ctx *ctx)
       if (high_pc && !low_pc)
 	wr_error (&where,
 		  ": the abbrev has DW_AT_high_pc without also having DW_AT_low_pc.\n");
+      else if (high_pc && ranges)
+	wr_error (&where,
+		  ": the abbrev has DW_AT_high_pc & DW_AT_low_pc, but also has DW_AT_ranges.\n");
     }
 
   for (section = section_chain; section != NULL; section = section->next)
