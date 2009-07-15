@@ -4465,16 +4465,13 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
 			struct section_data *data,
 			struct coverage *coverage,
 			struct coverage_map *coverage_map,
+			struct cu_coverage *cu_coverage,
 			uint64_t addr,
 			bool addr_64,
 			struct where *wh,
-			enum message_category cat,
-			struct cu_coverage *cu_coverage)
+			enum message_category cat)
 {
   char buf[128]; // messages
-  struct read_ctx ctx;
-  read_ctx_init (&ctx, parent_ctx->dbg, parent_ctx->data);
-
   enum section_id sec = data_get_sec (data)->id;
 
   assert (sec == sec_loc || sec == sec_ranges);
@@ -4482,6 +4479,8 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
   assert ((sec == sec_loc) == (cat == mc_loc));
   assert (coverage != NULL);
 
+  struct read_ctx ctx;
+  read_ctx_init (&ctx, parent_ctx->dbg, parent_ctx->data);
   if (!read_ctx_skip (&ctx, addr))
     {
       wr_error (wh, ": invalid reference outside the section "
@@ -4496,7 +4495,7 @@ check_loc_or_range_ref (const struct read_ctx *parent_ctx,
   if (coverage_is_covered (coverage, addr, 1))
     {
       wr_error (wh, ": reference to %#" PRIx64
-		" points into location or range list.\n", addr);
+		" points into another location or range list.\n", addr);
       retval = false;
     }
 
@@ -4696,7 +4695,7 @@ check_loc_or_range_structural (struct section_data *data,
   /* Relocation checking in the followings assumes that all the
      references are organized in monotonously increasing order.  That
      doesn't have to be the case.  So merge all the references into
-     them into one sorted array.  */
+     one sorted array.  */
   size_t size = 0;
   for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
     {
@@ -4744,13 +4743,14 @@ check_loc_or_range_structural (struct section_data *data,
 			   &WHERE (sec, NULL), skip_unref);
 	}
 
-      /* XXX We pass cu_coverage down for all ranges, not only those
-	 referenced by the CU DIE.  */
+      /* XXX We pass cu_coverage down for all ranges.  That means all
+	 ranges get recorded, not only those belonging to CUs.
+	 Perhaps that's undesirable.  */
       if (!check_loc_or_range_ref (&ctx, refs[i].cu, data,
 				   &coverage, coverage_map,
+				   sec == sec_ranges ? cu_coverage : NULL,
 				   off, refs[i].cu->address_size == 8,
-				   &refs[i].ref.who, cat,
-				   cu_coverage))
+				   &refs[i].ref.who, cat))
 	retval = false;
       last_off = off;
     }
@@ -4773,7 +4773,6 @@ check_loc_or_range_structural (struct section_data *data,
 				 {{sec, cat, 0, NULL},
 				   coverage_map->elf});
     }
-
 
   coverage_free (&coverage);
   coverage_map_free_XA (coverage_map);
