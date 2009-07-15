@@ -278,7 +278,7 @@ expected_at_map::expected_at_map ()
     ;
 
   m_map [DW_TAG_imported_unit]
-    .optional (DW_AT_import)
+    .required (DW_AT_import)
     ;
 
   m_map [DW_TAG_inheritance]
