@@ -3279,13 +3279,18 @@ read_die_chain (struct read_ctx *ctx,
 		    if (relocatedp != NULL)
 		      *relocatedp = true;
 		  }
-		else if (type_is_rel && addr != 0)
-		  /* In non-rel files, neither addr, nor ref_addr
-		     /need/ a relocation.  We at least check that
-		     ref_addr points to sensible datum by recording
-		     the reference below.  */
-		  wr_message (mc_impact_2 | mc_die_rel | mc_reloc, &where,
-			      PRI_LACK_RELOCATION, dwarf_form_string (form));
+		else
+		  {
+		    if (symbolp != NULL)
+		      WIPE (*symbolp);
+		    if (type_is_rel && addr != 0)
+		      /* In non-rel files, neither addr, nor ref_addr
+			 /need/ a relocation.  We at least check that
+			 ref_addr points to sensible datum by recording
+			 the reference below.  */
+		      wr_message (mc_impact_2 | mc_die_rel | mc_reloc, &where,
+				  PRI_LACK_RELOCATION, dwarf_form_string (form));
+		  }
 		if (addrp != NULL)
 		  *addrp = addr;
 
