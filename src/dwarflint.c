@@ -401,6 +401,10 @@ static bool be_tolerant = false; /* --tolerant */
 static bool show_refs = false; /* --ref */
 static bool do_high_level = true; /* ! --nohl */
 
+/* True if coverage analysis of .debug_ranges vs. ELF sections should
+   be done.  */
+static const bool do_range_coverage = false;
+
 static int
 layout_rel_file (Elf *elf)
 {
@@ -1354,7 +1358,7 @@ process_file (Dwarf *dwarf, const char *fname, bool only_one)
 	= cu_coverage->need_ranges ? NULL : &cu_coverage->cov;
 
       if (check_aranges_structural (&aranges_data, cu_chain, cov)
-	  && ranges_sound && do_high_level)
+	  && ranges_sound && do_high_level && !be_tolerant && !be_gnu)
 	check_matching_ranges (hlctx);
     }
 
@@ -3904,7 +3908,8 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain,
 
       inline void aranges_coverage_add (uint64_t begin, uint64_t length)
       {
-	if (coverage_is_overlap (aranges_coverage, begin, length))
+	if (coverage_is_overlap (aranges_coverage, begin, length)
+	    && !be_gnu && !be_tolerant)
 	  {
 	    char buf[128];
 	    /* Not a show stopper, this shouldn't derail high-level.  */
@@ -4678,15 +4683,18 @@ check_loc_or_range_structural (struct section_data *data,
 
   bool retval = true;
 
+  /* For .debug_ranges, we optionally do ranges vs. ELF sections
+     coverage analysis.  */
   struct coverage_map *coverage_map = NULL;
-
-  if ((coverage_map = coverage_map_alloc_XA (data->file, sec == sec_loc)) == NULL)
+  if (do_range_coverage && sec == sec_ranges
+      && (coverage_map = coverage_map_alloc_XA (data->file, sec == sec_loc)) == NULL)
     {
       wr_error (&WHERE (sec, NULL),
 		": couldn't read ELF, skipping coverage analysis.\n");
       retval = false;
     }
 
+  /* Overlap discovery.  */
   struct coverage coverage;
   WIPE (coverage);
 
