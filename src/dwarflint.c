@@ -3834,6 +3834,53 @@ coverage_map_free_XA (struct coverage_map *coverage_map)
     }
 }
 
+static void
+compare_coverage (struct elf_file *file,
+		  struct coverage *coverage, struct coverage *other,
+		  enum section_id id, char const *what)
+{
+  struct coverage *cov = coverage_clone (coverage);
+  coverage_remove_all (cov, other);
+
+  bool hole (uint64_t start, uint64_t length, void *user)
+  {
+    /* We need to check alignment vs. the covered section.  Find
+       where the hole lies.  */
+    struct elf_file *elf = user;
+    struct sec *sec = NULL;
+    for (size_t i = 1; i < elf->size; ++i)
+      {
+	struct sec *it = elf->sec + i;
+	GElf_Shdr *shdr = &it->shdr;
+	Elf64_Addr s_end = shdr->sh_addr + shdr->sh_size;
+	if (start >= shdr->sh_addr && start + length < s_end)
+	  {
+	    sec = it;
+	    /* Simply assume the first section that the hole
+	       intersects. */
+	    break;
+	  }
+      }
+
+    if (sec == NULL
+	|| !necessary_alignment (start, length, sec->shdr.sh_addralign))
+      {
+	char buf[128];
+	wr_message (mc_aranges | mc_impact_3, &WHERE (id, NULL),
+		    ": addresses %s are covered with CUs, but not with %s.\n",
+		    range_fmt (buf, sizeof buf, start, start + length), what);
+      }
+
+    if (sec == NULL)
+      wr_error (NULL, "Couldn't find the section containing the above hole.\n");
+
+    return true;
+  }
+
+  coverage_find_ranges (cov, &hole, file);
+  coverage_free (cov);
+}
+
 /* COVERAGE is portion of address space covered by CUs (either via
    low_pc/high_pc pairs, or via DW_AT_ranges references).  If
    non-NULL, analysis of arange coverage is done against that set. */
@@ -4087,48 +4134,8 @@ check_aranges_structural (struct section_data *data, struct cu *cu_chain,
     }
 
   if (aranges_coverage != NULL)
-    {
-      struct coverage *cov = coverage_clone (coverage);
-      coverage_remove_all (cov, aranges_coverage);
-      bool isle (uint64_t start, uint64_t length, void *user)
-      {
-	/* We need to check alignment vs. the covered section.  Find
-	   where the hole lies.  */
-	struct elf_file *elf = user;
-	struct sec *sec = NULL;
-	for (size_t i = 1; i < elf->size; ++i)
-	  {
-	    struct sec *it = elf->sec + i;
-	    GElf_Shdr *shdr = &it->shdr;
-	    Elf64_Addr s_end = shdr->sh_addr + shdr->sh_size;
-	    if (start >= shdr->sh_addr && start + length < s_end)
-	      {
-		sec = it;
-		/* Simply assume the first section that the hole
-		   intersects. */
-		break;
-	      }
-	  }
-
-	if (sec == NULL
-	    || !necessary_alignment (start, length, sec->shdr.sh_addralign))
-	  {
-	    char buf[128];
-	    printf ("aranges aranges %s %ld\n", sec->name, sec->shdr.sh_addralign);
-	    wr_message (mc_aranges | mc_impact_3, &WHERE (sec_aranges, NULL),
-			": addresses %s are covered with CUs, but not with aranges.\n",
-			range_fmt (buf, sizeof buf, start, start + length));
-	  }
-
-	if (sec == NULL)
-	  wr_error (NULL, "Couldn't find the section containing the above hole.\n");
-
-	return true;
-      }
-
-      coverage_find_ranges (cov, &isle, data->file);
-      coverage_free (cov);
-    }
+    compare_coverage (data->file, coverage, aranges_coverage,
+		      sec_aranges, "aranges");
 
   coverage_free (aranges_coverage);
 
