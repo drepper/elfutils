@@ -16,7 +16,7 @@ extern "C"
   struct hl_ctx;
 
   /* Check that .debug_aranges and .debug_ranges match.  */
-  extern struct hl_ctx *hl_ctx_new (Dwarf *dwarf);
+  extern struct hl_ctx *hl_ctx_new (Elf *elf);
   extern void hl_ctx_delete (struct hl_ctx *hlctx);
   extern bool check_matching_ranges (struct hl_ctx *hlctx);
   extern bool check_expected_trees (struct hl_ctx *hlctx);
@@ -24,31 +24,40 @@ extern "C"
 
   /* Functions and data structures describing location in Dwarf.  */
 
-  enum section_id
+#define DEBUGINFO_SECTIONS \
+  SEC (info)		   \
+  SEC (abbrev)		   \
+  SEC (aranges)		   \
+  SEC (pubnames)	   \
+  SEC (pubtypes)	   \
+  SEC (str)		   \
+  SEC (line)		   \
+  SEC (loc)		   \
+  SEC (mac)		   \
+  SEC (ranges)
+
+    enum section_id
   {
     sec_invalid = 0,
+
+    /* Debuginfo sections:  */
+#define SEC(n) sec_##n,
+    DEBUGINFO_SECTIONS
+    count_debuginfo_sections,
+#undef SEC
+
+    /* Non-debuginfo sections:  */
+    sec_rel = count_debuginfo_sections,
+    sec_rela,
+
+    /* Non-sections:  */
+    sec_locexpr,	/* Not a section, but a portion of file that
+			   contains a location expression.  */
     rel_value,		/* For relocations, this denotes that the
 			   relocation is applied to taget value, not a
 			   section offset.  */
     rel_address,	/* Same as above, but for addresses.  */
     rel_exec,		/* Some as above, but we expect EXEC bit.  */
-
-    /* Debuginfo sections:  */
-    sec_info,
-    sec_abbrev,
-    sec_aranges,
-    sec_pubnames,
-    sec_pubtypes,
-    sec_str,
-    sec_line,
-    sec_loc,
-    sec_mac,
-    sec_ranges,
-    sec_locexpr,	/* Not a section, but a portion of file that
-			   contains a location expression.  */
-    /* Non-debuginfo sections:  */
-    sec_rel,
-    sec_rela,
   };
 
   enum where_formatting
@@ -156,24 +165,59 @@ extern "C"
 
   extern char *range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end);
 
+  struct relocation
+  {
+    uint64_t offset;
+    uint64_t addend;
+    int symndx;
+    int type;
+    bool invalid;		/* Whether this one relocation should be
+				   ignored.  Necessary so that we don't
+				   double-report invalid & missing
+				   relocation.  */
+  };
+
+  struct relocation_data
+  {
+    Elf_Data *symdata;		/* Symbol table associated with this
+				   relocation section.  */
+    size_t type;		/* SHT_REL or SHT_RELA.  */
+
+    struct relocation *rel;	/* Array of relocations.  May be NULL
+				   if there are no associated
+				   relocation data.  */
+    size_t size;
+    size_t alloc;
+    size_t index;		/* Current index. */
+  };
+
   struct sec
   {
     Elf_Scn *scn;
     GElf_Shdr shdr;
     enum section_id id;
     const char *name;
+
+    Elf_Data *data;	/* May be NULL if data in this section are
+			   missing or not substantial.  */
+    struct relocation_data rel;
   };
 
   struct elf_file
   {
-    Dwarf *dwarf;
+    Elf *elf;
     Ebl *ebl;
-    GElf_Ehdr ehdr;	/* Header of dwarf->elf.  */
-    bool addr_64;
+    GElf_Ehdr ehdr;	/* Header of underlying Elf.  */
+    bool addr_64;	/* True if it's 64-bit Elf.  */
+    bool other_byte_order; /* True if the file has a byte order
+			      different from the host.  */
 
     struct sec *sec;	/* Array of sections.  */
     size_t size;
     size_t alloc;
+
+    /* Pointers into SEC above.  Maps section_id to section.  */
+    struct sec *debugsec[count_debuginfo_sections];
   };
 
   struct section_coverage
