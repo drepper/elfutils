@@ -232,7 +232,7 @@ namespace elfutils
       template<typename die>
       bool operator!= (const die &other) const
       {
-	return !(*this == other);;
+	return !(*this == other);
       }
 
       inline ::Dwarf_Off identity () const
