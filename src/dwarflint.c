@@ -1030,6 +1030,13 @@ elf_file_init (struct elf_file *file, Elf *elf)
 
   file->addr_64 = file->ehdr.e_ident[EI_CLASS] == ELFCLASS64;
 
+  /* Taken from dwarf_begin_elf.c.  */
+  if ((BYTE_ORDER == LITTLE_ENDIAN
+       && file->ehdr.e_ident[EI_DATA] == ELFDATA2MSB)
+      || (BYTE_ORDER == BIG_ENDIAN
+	  && file->ehdr.e_ident[EI_DATA] == ELFDATA2LSB))
+    file->other_byte_order = true;
+
   struct secinfo
   {
     const char *name;
