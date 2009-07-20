@@ -173,7 +173,7 @@ namespace elfutils
     : public std::binary_function<dwarf1, dwarf2, bool>
   {
   private:
-    tracker _m_tracker;
+    tracker &_m_tracker;
 
     template<typename item1, typename item2>
     struct matcher : public std::binary_function<item1, item2, bool>
@@ -491,11 +491,12 @@ namespace elfutils
 	 new one, in case of any reference attributes in their subtrees.
 	 The new tracker jump-starts its walk to the referenced DIE from
 	 the root of the CU.  */
-      bool result = !has_children || (dwarf_comparator (tracker (_m_tracker,
-								 matched,
-								 lhs, ref1,
-								 rhs, ref2))
-				      .match (a.children (), b.children ()));
+      bool result = !has_children;
+      if (has_children)
+	{
+	  tracker t (_m_tracker, matched, lhs, ref1, rhs, ref2);
+	  result = dwarf_comparator (t).match (a.children (), b.children ());
+	}
 
       // Let the tracker cache a result for its reference_matched.
       matched.notice_match (ref2, result);
@@ -503,12 +504,9 @@ namespace elfutils
       return result;
     }
 
-    inline explicit dwarf_comparator (const tracker &t)
-      : _m_tracker (t)
-    {}
-
   public:
-    inline dwarf_comparator ()
+    inline explicit dwarf_comparator (tracker &t)
+      : _m_tracker (t)
     {}
 
     inline bool operator () (const dwarf1 &a, const dwarf2 &b)

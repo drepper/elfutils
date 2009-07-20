@@ -451,6 +451,8 @@ namespace elfutils
 
       class const_pointer;
 
+      inline std::string to_string () const;
+
       inline int tag () const
       {
 	int t = ::dwarf_tag (thisdie ());
@@ -2467,6 +2469,13 @@ namespace elfutils
   }
 
   // Explicit specializations.
+  template<>
+  std::string
+  to_string<dwarf::debug_info_entry> (const dwarf::debug_info_entry &);
+  inline std::string dwarf::debug_info_entry::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
   template<>
   std::string to_string<dwarf::attribute> (const dwarf::attribute &);
   inline std::string dwarf::attribute::to_string () const

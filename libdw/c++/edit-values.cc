@@ -59,11 +59,17 @@ template<>
 std::string
 to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &attr)
 {
-  std::string result = dwarf::attributes::name (attr.first);
-  result += "=";
-  result += attr.second.to_string ();
-  return result;
+  return attribute_string (attr);
 }
+
+namespace elfutils
+{
+  template<>
+  std::string to_string (const dwarf_edit::debug_info_entry &die)
+  {
+    return die_string (die);
+  }
+};
 
 std::string
 dwarf_data::source_file::to_string () const

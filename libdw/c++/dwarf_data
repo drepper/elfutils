@@ -78,11 +78,13 @@ namespace elfutils
       typedef std::list<typename impl::compile_unit> _base;
 
       // Constructor copying CUs from input container.
-      template<typename input, typename tracker>
-      inline compile_units (const input &other, tracker &t)
-      {
-	subr::create_container (this, other, t);
-      }
+      template<typename input, typename arg_type>
+      inline compile_units (const input &other, arg_type &arg)
+	: _base (subr::argify<input, compile_units, arg_type &>
+		 (other.begin (), arg),
+		 subr::argify<input, compile_units, arg_type &>
+		 (other.end (), arg))
+      {}
 
     public:
       // Default constructor: an empty container, no CUs.
@@ -103,19 +105,31 @@ namespace elfutils
     template<class impl>
     class compile_unit : public impl::debug_info_entry
     {
-      friend class subr::create_container;
-      friend class impl::compile_units;
     private:
-
-      template<typename die_type, typename arg_type>
-      inline void set (const die_type &die, arg_type &arg)
+      template<typename input>
+      inline const input &require_cu (const input &cu)
       {
-	if (die.tag () != ::DW_TAG_compile_unit)
-	  throw std::invalid_argument ("not a compile_unit entry");
-	impl::debug_info_entry::set (die, arg);
+	if (cu.tag () != ::DW_TAG_compile_unit)
+	  throw std::runtime_error
+	    ("top-level debug_info_entry must be DW_TAG_compile_unit");
+	return cu;
       }
 
     public:
+      explicit inline compile_unit ()
+	: impl::debug_info_entry ()
+      {
+	this->_m_tag = ::DW_TAG_compile_unit;
+      }
+
+      inline compile_unit (const compile_unit &other)
+	: impl::debug_info_entry (require_cu (other))
+      {}
+
+      template<typename input, typename arg_type>
+      inline compile_unit (const input &cu, arg_type &arg)
+	: impl::debug_info_entry (require_cu (cu), arg)
+      {}
 
       // Fetch the CU's DW_AT_stmt_list.
       inline const typename impl::line_info_table &line_info () const
@@ -1450,10 +1464,9 @@ namespace elfutils
       : public std::map<int, typename impl::attr_value>
     {
       friend class impl::debug_info_entry;
-    private:
+    protected:
       typedef std::map<int, typename impl::attr_value> base_type;
 
-    protected:
       inline attributes_type () {}
 
       template<typename input, typename arg_type>

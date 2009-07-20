@@ -194,6 +194,8 @@ namespace elfutils
 	  _m_children (die.children (), t)
       {}
 
+      inline std::string to_string () const;
+
       inline int tag () const
       {
 	return _m_tag;
@@ -254,7 +256,21 @@ namespace elfutils
 
     typedef debug_info_entry::attributes_type::value_type attribute;
 
-    typedef dwarf_data::compile_unit<dwarf_edit> compile_unit;
+    class compile_unit
+      : public dwarf_data::compile_unit<dwarf_edit>
+    {
+      friend class subr::create_container;
+      friend class compile_units;
+    private:
+
+      template<typename die_type, typename arg_type>
+      inline void set (const die_type &die, arg_type &arg)
+      {
+	if (die.tag () != ::DW_TAG_compile_unit)
+	  throw std::invalid_argument ("not a compile_unit entry");
+	debug_info_entry::set (die, arg);
+      }
+    };
 
     // Main container anchoring all the output.
     class compile_units
@@ -263,17 +279,18 @@ namespace elfutils
       friend class dwarf_edit;
 
     private:
-      // Constructor copying CUs from input container.
-      template<typename input, typename tracker>
-      inline compile_units (const input &other, tracker &t)
-	: dwarf_data::compile_units<dwarf_edit> (other, t)
-      {}
-
       inline compile_units (const compile_units &)
 	: dwarf_data::compile_units<dwarf_edit> ()
       {
 	throw std::logic_error
 	  ("must copy-construct top-level dwarf_edit object instead");
+      }
+
+      // Constructor copying CUs from input container.
+      template<typename input, typename tracker>
+      inline compile_units (const input &other, tracker &t)
+      {
+	subr::create_container (this, other, t);
       }
 
     public:
@@ -355,6 +372,13 @@ namespace elfutils
   };
 
   // Explicit specializations.
+  template<>
+  std::string to_string<dwarf_edit::debug_info_entry>
+  (const dwarf_edit::debug_info_entry &);
+  inline std::string dwarf_edit::debug_info_entry::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
   template<>
   std::string to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &);
   template<>

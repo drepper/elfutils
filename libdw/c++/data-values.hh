@@ -53,7 +53,6 @@
 
 namespace elfutils
 {
-
   template<class impl, typename v>
   dwarf::value_space
   dwarf_data::attr_value<impl, v>::what_space () const
@@ -91,5 +90,33 @@ namespace elfutils
     throw std::runtime_error ("XXX impossible");
   }
 
+  template<typename attr_pair>
+  static inline std::string
+  attribute_string (const attr_pair &attr)
+  {
+    std::string result = dwarf::attributes::name (attr.first);
+    result += "=";
+    result += attr.second.to_string ();
+    return result;
+  }
+
+  template<typename die_type>
+  std::string
+  die_string (const die_type &die)
+  {
+    std::string result ("<");
+    result += dwarf::tags::name (die.tag ());
+
+    typename die_type::attributes_type::const_iterator name_attr
+      = die.attributes ().find (::DW_AT_name);
+    if (name_attr != die.attributes ().end ())
+      {
+	result += " ";
+	result += to_string (*name_attr);
+      }
+
+    result += die.has_children () ? ">" : "/>";
+    return result;
+  }
 
 };

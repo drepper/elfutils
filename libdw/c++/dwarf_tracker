@@ -94,13 +94,23 @@ namespace elfutils
 
     die_path _m_path;
 
+    explicit dwarf_path_finder (const dwarf_path_finder &)
+    {
+      throw std::logic_error ("not copy-constructible");
+    }
+
   public:
     // Default constructor: an original tracker.
     inline dwarf_path_finder ()
       : _m_seen (new die_map), _m_delete_seen (true)
     {}
 
-    // Construct a derived tracker: does its own walk, but sharing caches.
+    // Construct a derived tracker: does its own whole walk, but sharing caches.
+    inline dwarf_path_finder (const dwarf_path_finder &proto, bool)
+      : _m_seen (proto._m_seen), _m_delete_seen (false)
+    {}
+
+    // Construct a derived tracker that jump-starts a walk.
     inline dwarf_path_finder (const dwarf_path_finder &proto,
 			      const die_path &context, const die &there)
       : _m_seen (proto._m_seen), _m_delete_seen (false),
@@ -324,6 +334,12 @@ namespace elfutils
   private:
     typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
 
+    explicit dwarf_ref_tracker (const dwarf_ref_tracker &)
+       : _base ()
+    {
+      throw std::logic_error ("not copy-constructible");
+    }
+
   public:
     typedef typename _base::cu1 cu1;
     typedef typename _base::cu2 cu2;
@@ -331,7 +347,7 @@ namespace elfutils
     typedef typename _base::die2 die2;
     typedef typename _base::dwarf1_ref dwarf1_ref;
 
-  private:
+  protected:
     typedef dwarf_path_finder<dwarf1> tracker1;
     typedef dwarf_path_finder<dwarf2> tracker2;
 
@@ -353,15 +369,22 @@ namespace elfutils
     {
       inline bool operator () (const die1 &a, const die2 &b)
       {
-	return (a->tag () == b->tag ()
-		&& (dwarf_comparator<dwarf1, dwarf2, true> ()
-		    .equals (a->attributes (), b->attributes ())));
+	if (a->tag () != b->tag ())
+	  return false;
+	dwarf_tracker_base<dwarf1, dwarf2> t;
+	return (dwarf_comparator<dwarf1, dwarf2, true> (t)
+		.equals (a->attributes (), b->attributes ()));
       }
     };
 
   public:
     inline dwarf_ref_tracker ()
       : _m_equiv (new equiv_map), _m_delete_equiv (true)
+    {}
+
+    inline dwarf_ref_tracker (const tracker1 &proto)
+      : _m_left (proto, true),
+	_m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
 
     inline void reset ()
@@ -484,8 +507,8 @@ namespace elfutils
     inline dwarf_ref_tracker (const dwarf_ref_tracker &proto, reference_match &,
 			      const left_context_type &lhs, const die1 &a,
 			      const right_context_type &rhs, const die2 &b)
-      : _m_left (tracker1 (proto._m_left, lhs, a)),
-	_m_right (tracker2 (proto._m_right, rhs, b)),
+      : _m_left (proto._m_left, lhs, a),
+	_m_right (proto._m_right, rhs, b),
 	_m_equiv (proto._m_equiv), _m_delete_equiv (false)
     {
       // We are starting a recursive consideration of a vs b.

@@ -212,16 +212,26 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   }
 };
 
+template<class dwarf1, class dwarf2, class tracker>
+struct cmp
+  : public dwarf_comparator<dwarf1, dwarf2, false, tracker>
+{
+  tracker _m_tracker;
+  inline cmp ()
+    : dwarf_comparator<dwarf1, dwarf2, false, tracker> (_m_tracker)
+  {}
+};
+
 // For a silent comparison we just use the standard ref tracker.
 template<class dwarf1, class dwarf2>
-struct quiet_cmp : public dwarf_comparator<dwarf1, dwarf2, false,
-					   dwarf_ref_tracker<dwarf1, dwarf2> >
+struct quiet_cmp
+  : public cmp<dwarf1, dwarf2, dwarf_ref_tracker<dwarf1, dwarf2> >
 {};
 
 // To be noisy, the talker wraps the standard tracker with verbosity hooks.
 template<class dwarf1, class dwarf2>
-struct noisy_cmp : public dwarf_comparator<dwarf1, dwarf2, false,
-					   talker<dwarf1, dwarf2> >
+struct noisy_cmp
+  : public cmp<dwarf1, dwarf2, talker<dwarf1, dwarf2> >
 {};
 
 
