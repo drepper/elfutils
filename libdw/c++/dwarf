@@ -330,7 +330,6 @@ namespace elfutils
 	}
 
       public:
-
 	inline const_iterator ()
 	  : _m_raw (), _m_end (raw::end ())
 	{
@@ -360,6 +359,14 @@ namespace elfutils
 	{
 	  return !(*this == other);
 	}
+
+	struct hasher : public std::unary_function<const_iterator, size_t>
+	{
+	  size_t operator () (const const_iterator &i) const
+	  {
+	    return subr::hash_this (i._m_raw);
+	  }
+	};
 
 	inline const_iterator &operator++ () // prefix
 	{
@@ -584,6 +591,14 @@ namespace elfutils
 	{
 	  return !(*this == other);
 	}
+
+	struct hasher : public std::unary_function<const_iterator, size_t>
+	{
+	  size_t operator () (const const_iterator &i) const
+	  {
+	    return subr::hash_this ((uintptr_t) i._m_die._m_die.addr);
+	  }
+	};
 
 	inline const_iterator &operator++ () // prefix
 	{

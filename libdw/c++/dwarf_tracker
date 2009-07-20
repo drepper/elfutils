@@ -354,12 +354,33 @@ namespace elfutils
     tracker1 _m_left;
     tracker2 _m_right;
 
-    typedef std::tr1::unordered_map<
-      ::Dwarf_Off, std::pair<const die2 *,
-			     std::tr1::unordered_set< ::Dwarf_Off> >
-      > equiv_map;
+    struct ref_hasher : public std::unary_function<die2, size_t>
+    {
+      inline size_t operator () (const die2 &i) const
+      {
+	return i->identity ();
+      }
+    };
+
+    struct same_ref : public std::equal_to<die2>
+    {
+      inline bool operator () (const die2 &a, const die2 &b) const
+      {
+	return a->identity () == b->identity ();
+      }
+    };
+
+    typedef std::pair<const die2 *,
+		      std::tr1::unordered_set<die2, ref_hasher, same_ref>
+		      > equiv_list;
+    typedef std::tr1::unordered_map< ::Dwarf_Off, equiv_list> equiv_map;
     equiv_map *_m_equiv;
     bool _m_delete_equiv;
+
+    inline equiv_list *equiv_to (const die1 &a)
+    {
+      return &(*_m_equiv)[a->identity ()];
+    }
 
     /* Predicate for DIEs "equal enough" to match as context for a subtree.
        The definition we use is that the DIE has the same tag and all its
@@ -382,8 +403,8 @@ namespace elfutils
       : _m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
 
-    inline dwarf_ref_tracker (const tracker1 &proto)
-      : _m_left (proto, true),
+    inline dwarf_ref_tracker (const tracker2 &proto)
+      : _m_right (proto, true),
 	_m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
 
@@ -445,7 +466,7 @@ namespace elfutils
     {
       friend class dwarf_ref_tracker;
     private:
-      typename equiv_map::mapped_type *_m_elt;
+      equiv_list *_m_elt;
 
     public:
 
@@ -467,14 +488,14 @@ namespace elfutils
       inline void notice_match (const die2 &b, bool matches) const
       {
 	if (matches && _m_elt != NULL)
-	  _m_elt->second.insert (b->identity ());
+	  _m_elt->second.insert (b);
       }
     };
 
     inline bool
     reference_matched (reference_match &matched, const die1 &a, const die2 &b)
     {
-      typename equiv_map::mapped_type *elt = &(*_m_equiv)[a->identity ()];
+      equiv_list *elt = equiv_to (a);
       if (elt->first == NULL)
 	{
 	  /* Record that we have a walk in progress crossing A.
@@ -484,7 +505,7 @@ namespace elfutils
 	  matched._m_elt = elt;
 
 	  // Short-circuit if we have already matched B to A.
-	  return elt->second.find (b->identity ()) != elt->second.end ();
+	  return elt->second.find (b) != elt->second.end ();
 	}
 
       /* We have a circularity.  We can tell because ELT->first remains

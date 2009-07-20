@@ -237,6 +237,7 @@ namespace elfutils
 
     class debug_info_entry
     {
+      friend class dwarf_output;
       friend class dwarf_output_collector;
 
     public:
@@ -329,10 +330,12 @@ namespace elfutils
 	    {
 	      const typename input::const_iterator here = in++;
 	      has_sibling = in != other.end ();
-	      const debug_info_entry *child = c.add_entry (*here, has_sibling);
+	      push_back (NULL);
+	      iterator out = end ();
+	      --out;
+	      const debug_info_entry *child = c.add_entry (out, here,
+							   has_sibling);
 	      subr::hash_combine (_m_hash, (uintptr_t) child);
-	      push_back (child);
-	      c.copied (--end (), here, has_sibling);
 	    }
 	}
 
@@ -363,6 +366,7 @@ namespace elfutils
       typedef children_type::const_iterator const_pointer;
 
     protected:
+      value::value_reference _m_ref;
       const children_type *_m_children;
       const attributes_type *_m_attributes;
       void *_m_shape;
@@ -379,9 +383,12 @@ namespace elfutils
 	  _m_tag (-1)
       {}
 
-      template<typename die_type, typename input_dw>
-      inline debug_info_entry (const die_type &die, copier<input_dw> &c)
-	: _m_children (c.add_children (die.children ())),
+      template<typename input_die, typename copier_type>
+      inline debug_info_entry (const pointer &at,
+			       const input_die &die,
+			       copier_type &c)
+	: _m_ref (at, subr::nothing ()),
+	  _m_children (c.add_children (die.children ())),
 	  _m_attributes (c.add_attributes (die.attributes ())),
 	  _m_shape (NULL),	// XXX
 	  _m_hash (die.tag ()),
@@ -501,7 +508,15 @@ namespace elfutils
 
     typedef debug_info_entry::attributes_type::value_type attribute;
 
-    typedef dwarf_data::compile_unit<dwarf_output> compile_unit;
+    class compile_unit
+      : public dwarf_data::compile_unit<dwarf_output>
+    {
+    public:
+      template<typename input, typename copier_type>
+      inline compile_unit (const input &cu, copier_type &c)
+	: dwarf_data::compile_unit<dwarf_output> (cu, c)
+      {}
+    };
 
     /* Main container anchoring all the output.
 
@@ -674,18 +689,25 @@ namespace elfutils
     die_map _m_unique;
 
     template<typename input, typename copier_type>
-    inline const die_type *add_entry (const input &other, copier_type &c,
+    inline const die_type *add_entry (const children_type::iterator &at,
+				      const input &other, copier_type &c,
 				      bool has_sibling)
     {
-      typename die_map::value_type &x
-	= *_m_unique.insert (std::make_pair (die_type (other, c),
-					     die_info ())).first;
+      std::pair <typename die_map::iterator, bool>
+	ins = _m_unique.insert (std::make_pair (die_type (at, other, c),
+						die_info ()));
+      typename die_map::value_type &x = *ins.first;
+      if (ins.second)
+	{
+	  assert (x.second.uses == 0);
+	  if (has_sibling)
+	    x.second.with_sibling = true;
+	  else
+	    x.second.without_sibling = true;
+	  // XXX add_shape (x.first, !has_sibling);
+	}
       x.second.uses++;
       ++_m_total;
-      if (has_sibling)
-	x.second.with_sibling = true;
-      else
-	x.second.without_sibling = true;
       return &x.first;
     }
 
@@ -745,19 +767,86 @@ namespace elfutils
 
   template<typename dw>
   class dwarf_output::copier
-    : public dwarf_ref_maker<dwarf_output, dw> // XXX temporary
   {
     friend class dwarf_output;
   private:
 
     struct tracker
-      : public dwarf_ref_tracker<dwarf_output, dw>
+      : public dwarf_tracker_base<dw, dwarf_output>
     {
-      typedef dwarf_ref_tracker<dwarf_output, dw> _base;
+      typedef dw dwarf1;
+      typedef dwarf_output dwarf2;
 
+      typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
+
+      explicit tracker (const tracker &)
+	: _base ()
+      {
+	throw std::logic_error ("not copy-constructible");
+      }
+
+      typedef typename _base::cu1 cu1;
+      typedef typename _base::cu2 cu2;
+      typedef typename _base::die1 die1;
+      typedef typename _base::die2 die2;
+      typedef typename _base::dwarf1_ref dwarf1_ref;
+
+      typedef dwarf_path_finder<dwarf1> tracker1;
+      typedef dwarf_path_finder<dwarf2> tracker2;
+
+      tracker1 _m_left;
+      tracker2 _m_right;
+
+      struct ref_hasher : public std::unary_function<die2, size_t>
+      {
+	inline size_t operator () (const die2 &i) const
+	{
+	  return i->identity ();
+	}
+      };
+
+      struct same_ref : public std::equal_to<die2>
+      {
+	inline bool operator () (const die2 &a, const die2 &b) const
+	{
+	  return a->identity () == b->identity ();
+	}
+      };
+
+      typedef std::pair<const die2 *,
+			std::tr1::unordered_set<die2, ref_hasher, same_ref>
+			> equiv_list;
+      typedef std::tr1::unordered_map< ::Dwarf_Off, equiv_list> equiv_map;
+      equiv_map *_m_equiv;
+      bool _m_delete_equiv;
+
+      inline equiv_list *equiv_to (const die1 &a)
+      {
+	return &(*_m_equiv)[a->identity ()];
+      }
+
+      /* Predicate for DIEs "equal enough" to match as context for a subtree.
+	 The definition we use is that the DIE has the same tag and all its
+	 attributes are equal, excepting that references in attribute values
+	 are not compared.  */
+      struct equal_enough : public std::binary_function<die1, die2, bool>
+      {
+	inline bool operator () (const die1 &a, const die2 &b)
+	{
+	  if (a->tag () != b->tag ())
+	    return false;
+	  dwarf_tracker_base<dwarf1, dwarf2> t;
+	  return (dwarf_comparator<dwarf1, dwarf2, true> (t)
+		  .equals (a->attributes (), b->attributes ()));
+	}
+      };
+
+    public:
       inline tracker (const dwarf_output_collector &c)
-	: _base (c._m_tracker)
+	: _m_right (c._m_tracker, true),
+	  _m_equiv (new equiv_map), _m_delete_equiv (true)
       {}
+
 
       inline tracker (const tracker &proto,
 		      typename _base::reference_match &matched,
@@ -767,6 +856,165 @@ namespace elfutils
 		      const typename _base::die2 &b)
 	: _base (proto, matched, lhs, a, b)
       {}
+
+
+      struct walk
+      {
+	typename tracker1::walk _m_left;
+	typename tracker2::walk _m_right;
+
+	inline walk (tracker *w, const cu1 &a, const cu2 &b)
+	  : _m_left (&w->_m_left, a), _m_right (&w->_m_right, b)
+	{}
+      };
+
+      struct step
+      {
+	typename tracker1::step _m_left;
+	typename tracker2::step _m_right;
+
+	inline step (tracker *w, const die1 &a, const die2 &b)
+	  : _m_left (&w->_m_left, a), _m_right (&w->_m_right, b)
+	{}
+      };
+
+      typedef typename tracker1::die_path left_context_type;
+      inline const left_context_type &left_context (const die1 &die)
+      {
+	return _m_left.path_to (die);
+      }
+
+      typedef typename tracker2::die_path right_context_type;
+      inline const right_context_type &right_context (const die2 &die)
+      {
+	return _m_right.path_to (die);
+      }
+
+      // Very cheap check for an obvious mismatch of contexts.
+      inline bool context_quick_mismatch (const left_context_type &a,
+					  const right_context_type &b)
+
+      {
+	return a.size () != b.size ();
+      }
+
+      // Full match when context_quick_mismatch has returned false.
+      inline bool context_match (const left_context_type &a,
+				 const right_context_type &b)
+      {
+	return std::equal (a.begin (), a.end (), b.begin (), equal_enough ());
+      }
+
+      class reference_match
+      {
+	friend class tracker;
+      private:
+	equiv_list *_m_elt;
+
+      public:
+
+	inline reference_match ()
+	  : _m_elt (NULL)
+	{}
+
+	inline ~reference_match ()
+	{
+	  if (_m_elt != NULL)
+	    _m_elt->first = NULL;
+	}
+
+	inline bool cannot_match () const
+	{
+	  return _m_elt == NULL;
+	}
+
+	inline void notice_match (const die2 &b, bool matches) const
+	{
+	  if (matches && _m_elt != NULL)
+	    _m_elt->second.insert (b);
+	}
+      };
+
+      inline bool
+      reference_matched (reference_match &matched, const die1 &a, const die2 &b)
+      {
+	equiv_list *elt = equiv_to (a);
+	if (elt->first == NULL)
+	  {
+	    /* Record that we have a walk in progress crossing A.
+	       When MATCHED goes out of scope in our caller, its
+	       destructor will reset ELT->first to clear this record.  */
+	    elt->first = &b;
+	    matched._m_elt = elt;
+
+	    // Short-circuit if we have already matched B to A.
+	    return elt->second.find (b) != elt->second.end ();
+	  }
+
+	/* We have a circularity.  We can tell because ELT->first remains
+	   set from an outer recursion still in progress.
+
+	   The circular chain of references rooted at A matches B if B is
+	   also the root of its own circularity and everything along those
+	   parallel chains matches.  If the chains hadn't matched so far,
+	   we would not have kept following them to get here.
+
+	   We recorded the B that arrived at the first comparison with A.
+	   We actually record the pointer on the caller's stack rather
+	   than a copy of B, just because the iterator might be larger.  */
+
+	return *elt->first == b;
+      }
+
+      // Share the _m_seen maps with the prototype tracker,
+      // but start a fresh walk from the given starting point.
+      inline tracker (const tracker &proto, reference_match &,
+		      const left_context_type &lhs, const die1 &a,
+		      const right_context_type &rhs, const die2 &b)
+	: _m_left (proto._m_left, lhs, a),
+	  _m_right (proto._m_right, rhs, b),
+	  _m_equiv (proto._m_equiv), _m_delete_equiv (false)
+      {
+	// We are starting a recursive consideration of a vs b.
+      }
+
+      struct maker
+      {
+	equiv_list *_m_elt;
+
+	inline maker ()
+	  : _m_elt (NULL)
+	{}
+
+	inline const debug_info_entry *entry () const
+	{
+	  return &**_m_elt->second.begin ();
+	}
+
+	inline ~maker ()
+	{
+	  if (_m_elt != NULL)
+	    _m_elt->first = NULL;
+	}
+      };
+
+      inline bool already_made (maker &m, const typename _base::die1 &in,
+				const debug_info_entry::pointer &at)
+      {
+	equiv_list *equiv = equiv_to (in);
+	if (equiv->first == NULL)
+	  {
+	    /* Record that we have a walk in progress crossing A.
+	       When M goes out of scope in our caller, its
+	       destructor will reset ELT->first to clear this record.  */
+	    equiv->first = &at;
+	    m._m_elt = equiv;
+
+	    return equiv->second.begin () != equiv->second.end ();
+	  }
+
+	throw std::logic_error("XXX circularity");
+      }
 
     };
 
@@ -806,13 +1054,6 @@ namespace elfutils
     inline const value::value_string *add_identifier (const input &x)
     {
       return _m_collector->_m_identifiers.add (x);
-    }
-
-    template<typename input>
-    inline const value::value_reference *add_reference (const input &x)
-    {
-      // XXX temporary kludge (leak!)
-      return new value::value_reference (x, *this);
     }
 
     template<typename input>
@@ -900,17 +1141,30 @@ namespace elfutils
 
     template<typename input>
     inline const debug_info_entry *
-    add_entry (const input &x, bool has_sibling)
+    add_entry (const debug_info_entry::children_type::iterator &at,
+	       const input &in, bool has_sibling)
     {
-      return _m_collector->add_entry (x, *this, has_sibling);
+      typename tracker::maker m;
+      if (_m_tracker->already_made (m, in, at))
+	return m.entry ();
+
+      typename tracker::step into (_m_tracker, in, at);
+
+      const debug_info_entry *die
+	= _m_collector->add_entry (at, *in, *this, has_sibling);
+      m._m_elt->second.insert (die->_m_ref.ref);
+      return die;
     }
 
-    template<typename input_iter>
-    inline void copied (const debug_info_entry::children_type::iterator &out,
-			const input_iter &in, bool /*has_sibling*/)
+    template<typename input>
+    inline const value::value_reference *add_reference (const input &to)
     {
-      equivalence (out, in);
-      // XXX _m_collector->add_shape (*out, !has_sibling);
+      typename tracker::maker m;
+      debug_info_entry::pointer at; // XXX
+      if (_m_tracker->already_made (m, to, at))
+	return &m.entry ()->_m_ref;
+
+      throw std::logic_error ("XXX forward reference");
     }
   };
 };

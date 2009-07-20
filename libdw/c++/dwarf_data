@@ -128,7 +128,8 @@ namespace elfutils
 
       template<typename input, typename arg_type>
       inline compile_unit (const input &cu, arg_type &arg)
-	: impl::debug_info_entry (require_cu (cu), arg)
+	: impl::debug_info_entry (typename impl::debug_info_entry::pointer (),
+				  require_cu (cu), arg)
       {}
 
       // Fetch the CU's DW_AT_stmt_list.
