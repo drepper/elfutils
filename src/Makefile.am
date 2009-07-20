@@ -84,7 +84,8 @@ dwarfcmp_SOURCES = dwarfcmp.cc
 
 dwarflint_SOURCES = dwarflint.c dwarflint.h dwarflint-hl.cc \
 		    dwarflint-expected-at.cc dwarflint-expected.hh \
-		    dwarfstrings.c dwarflint-coverage.c dwarflint-coverage.h
+		    dwarfstrings.c dwarflint-coverage.c dwarflint-coverage.h \
+		    dwarflint-readctx.c dwarflint-readctx.h
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 

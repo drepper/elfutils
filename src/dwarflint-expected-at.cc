@@ -278,7 +278,7 @@ expected_at_map::expected_at_map ()
     ;
 
   m_map [DW_TAG_imported_unit]
-    .optional (DW_AT_import)
+    .required (DW_AT_import)
     ;
 
   m_map [DW_TAG_inheritance]
@@ -351,6 +351,10 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_sibling)
     .optional (DW_AT_type)
     .optional (DW_AT_visibility)
+    .optional (DW_AT_MIPS_linkage_name) // xxx
+    .optional (DW_AT_external) // xxx
+    .optional (DW_AT_const_value) // xxx
+    .optional (DW_AT_artificial) // xxx
     ;
 
   m_map [DW_TAG_module]

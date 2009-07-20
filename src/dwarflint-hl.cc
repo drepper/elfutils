@@ -55,18 +55,25 @@ namespace
 
 struct hl_ctx
 {
+  Dwarf *dwarf;
   elfutils::dwarf dw;
 
-  hl_ctx (Dwarf *dwarf)
-    : dw (dwarf)
+  hl_ctx (Elf *elf)
+    : dwarf (dwarf_begin_elf (elf, DWARF_C_READ, NULL))
+    , dw (dwarf)
   {
+  }
+
+  ~hl_ctx ()
+  {
+    dwarf_end (dwarf);
   }
 };
 
 hl_ctx *
-hl_ctx_new (Dwarf *dwarf)
+hl_ctx_new (Elf *elf)
 {
-  return new hl_ctx (dwarf);
+  return new hl_ctx (elf);
 }
 
 void

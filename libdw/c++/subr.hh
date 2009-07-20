@@ -855,7 +855,7 @@ namespace elfutils
 	    }
 	}
     };
-  };
-};
+  }
+}
 
 #endif	// <elfutils/subr.hh>
