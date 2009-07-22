@@ -284,7 +284,11 @@ namespace elfutils
 
       template<typename table>
       directory_table (const table &other)
-	: _base (other.begin (), other.end ()) {}
+      {
+	for (typename table::const_iterator it = other.begin ();
+	     it != other.end (); ++it)
+	  this->push_back (*it ?: "");
+      }
 
       std::string to_string () const;
 

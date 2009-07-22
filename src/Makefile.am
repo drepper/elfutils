@@ -55,7 +55,7 @@ base_cpu = @base_cpu@
 
 bin_PROGRAMS = readelf nm size strip ld elflint findtextrel addr2line \
 	       elfcmp objdump ranlib strings ar unstrip \
-	       dwarflint dwarfcmp
+	       dwarflint dwarfcmp writer
 
 ld_dsos = libld_elf_i386_pic.a
 if NATIVE_LD
@@ -81,6 +81,7 @@ ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 libar_a_SOURCES = arlib.c arlib2.c
 
 dwarfcmp_SOURCES = dwarfcmp.cc
+writer_SOURCES = writer.cc
 
 dwarflint_SOURCES = dwarflint.c dwarflint.h dwarflint-hl.cc \
 		    dwarflint-expected-at.cc dwarflint-expected.hh \
@@ -148,6 +149,7 @@ strings_LDADD = $(libelf) $(libeu) $(libmudflap)
 ar_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
 dwarfcmp_LDADD = $(libdwpp) $(libmudflap) -ldl
+writer_LDADD = $(libebl) $(libelf) $(libeu) $(libmudflap) $(libdwpp) -ldl
 dwarflint_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 
 ldlex.o: ldscript.c
