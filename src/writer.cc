@@ -42,6 +42,8 @@
 #include <unistd.h>
 
 #include <vector>
+#include <iostream>
+#include <set>
 
 #include <elf-knowledge.h>
 
@@ -156,7 +158,6 @@ struct shdr_info_t
   Elf_Scn *scn;
   GElf_Shdr shdr;
   Elf_Data *data;
-  Elf_Data *debug_data;
   const char *name;
   Elf32_Word idx;		/* Index in new file.  */
   Elf32_Word old_sh_link;	/* Original value of shdr.sh_link.  */
@@ -167,20 +168,20 @@ struct shdr_info_t
   Elf_Scn *newscn;
   struct Ebl_Strent *se;
   Elf32_Word *newsymidx;
+
+  shdr_info_t () {
+    memset (this, 0, sizeof (*this));
+  }
+
+  shdr_info_t (shdr_info_t const &copy) {
+    memcpy (this, &copy, sizeof (*this));
+  }
 };
 
-inline bool no_symtab_updates (std::vector<shdr_info_t> shdr_info,
-			       size_t symtabidx, size_t cnt)
+inline bool no_symtab_updates (shdr_info_t const &s)
 {
   /* If the symbol table hasn't changed, do not do anything.  */
-  if (shdr_info[symtabidx].newsymidx == NULL)
-    return true;
-
-  /* If the symbol table is not discarded, but additionally
-     duplicated in the separate debug file and this section
-     is discarded, don't adjust anything.  */
-  return (shdr_info[cnt].idx == 0
-	  && shdr_info[symtabidx].debug_data != NULL);
+  return s.newsymidx == NULL;
 }
 
 static int
@@ -190,17 +191,13 @@ handle_elf (int fd, Elf *elf, const char *fname,
   Elf *debugelf = NULL;
   char *tmp_debug_fname = NULL;
   int result = 0;
-  size_t shdridx = 0;
   size_t shstrndx;
   std::vector <shdr_info_t> shdr_info;
-  Elf_Scn *scn;
-  size_t idx;
   bool changes;
   GElf_Ehdr newehdr_mem;
   GElf_Ehdr *newehdr;
   struct Ebl_Strtab *shst = NULL;
   bool any_symtab_changes = false;
-  Elf_Data *shstrtab_data = NULL;
   Elf *newelf;
 
   /* If we are not replacing the input file open a new file here.  */
@@ -230,73 +227,69 @@ handle_elf (int fd, Elf *elf, const char *fname,
 	}
     }
 
-  goto next;
 
- fail_close:
-  /* For some sections we might have created an table to map symbol
-     table indices.  */
-  if (any_symtab_changes)
-    for (std::vector<shdr_info_t>::iterator it = shdr_info.begin ();
-	 it != shdr_info.end (); ++it)
-      {
-	free (it->newsymidx);
-	if (it->debug_data != NULL)
-	  free (it->debug_data->d_buf);
-      }
-
-  /* Free other resources.  */
-  if (shstrtab_data != NULL)
-    free (shstrtab_data->d_buf);
-  if (shst != NULL)
-    ebl_strtabfree (shst);
-
-  /* That was it.  Close the descriptors.  */
-  if (elf_end (newelf) != 0)
+  /* Exit handlers.  Need to be at the beginning so that the compiler
+     doesn't complain that jumps skip initializations.  */
+  if (false)
     {
-      error (0, 0, gettext ("error while finishing '%s': %s"), fname,
-	     elf_errmsg (-1));
-      result = 1;
-    }
+    fail_close:
+      /* For some sections we might have created an table to map symbol
+	 table indices.  */
+      if (any_symtab_changes)
+	for (std::vector<shdr_info_t>::iterator it = shdr_info.begin ();
+	     it != shdr_info.end (); ++it)
+	  free (it->newsymidx);
 
-  if (debugelf != NULL && elf_end (debugelf) != 0)
-    {
-      error (0, 0, gettext ("error while finishing '%s': %s"), "ble",
-	     elf_errmsg (-1));
-      result = 1;
-    }
+      /* Free other resources.  */
+      if (shst != NULL)
+	ebl_strtabfree (shst);
 
- fail:
-  /* Close the EBL backend.  */
-  if (ebl != NULL)
-    ebl_closebackend (ebl);
-
-  /* Close debug file descriptor, if opened */
-  if (debug_fd >= 0)
-    {
-      if (tmp_debug_fname != NULL)
-	unlink (tmp_debug_fname);
-      close (debug_fd);
-    }
-
-  /* If requested, preserve the timestamp.  */
-  if (tvp != NULL)
-    {
-      if (futimes (fd, tvp) != 0)
+      /* That was it.  Close the descriptors.  */
+      if (elf_end (newelf) != 0)
 	{
-	  error (0, errno, gettext ("\
-cannot set access and modification date of '%s'"),
-		 output_fname ?: fname);
+	  error (0, 0, gettext ("error while finishing '%s': %s"), fname,
+		 elf_errmsg (-1));
 	  result = 1;
 	}
+
+      if (debugelf != NULL && elf_end (debugelf) != 0)
+	{
+	  error (0, 0, gettext ("error while finishing '%s': %s"), "ble",
+		 elf_errmsg (-1));
+	  result = 1;
+	}
+
+    fail:
+      /* Close the EBL backend.  */
+      if (ebl != NULL)
+	ebl_closebackend (ebl);
+
+      /* Close debug file descriptor, if opened */
+      if (debug_fd >= 0)
+	{
+	  if (tmp_debug_fname != NULL)
+	    unlink (tmp_debug_fname);
+	  close (debug_fd);
+	}
+
+      /* If requested, preserve the timestamp.  */
+      if (tvp != NULL)
+	{
+	  if (futimes (fd, tvp) != 0)
+	    {
+	      error (0, errno, gettext ("\
+cannot set access and modification date of '%s'"),
+		     output_fname ?: fname);
+	      result = 1;
+	    }
+	}
+
+      /* Close the file descriptor if we created a new file.  */
+      if (output_fname != NULL)
+	close (fd);
+
+      return result;
     }
-
-  /* Close the file descriptor if we created a new file.  */
-  if (output_fname != NULL)
-    close (fd);
-
-  return result;
-
- next:
 
   /* Get the information from the old file.  */
   GElf_Ehdr ehdr_mem;
@@ -350,18 +343,18 @@ cannot set access and modification date of '%s'"),
      entries since we unconditionally create a section header string
      table.  Maybe some weird tool created an ELF file without one.
      The other one is used for the debug link section.  */
-  shdr_info.resize (shnum + 2);
+  shdr_info.push_back (shdr_info_t ());
 
   /* Prepare section information data structure.  */
-  scn = NULL;
-  size_t cnt = 1;
-  while ((scn = elf_nextscn (elf, scn)) != NULL)
+  for (Elf_Scn *scn = NULL; (scn = elf_nextscn (elf, scn)); )
     {
+      size_t cnt = shdr_info.size ();
+
       /* This should always be true (i.e., there should not be any
 	 holes in the numbering).  */
       assert (elf_ndxscn (scn) == cnt);
 
-      shdr_info_t &cur = shdr_info[cnt];
+      shdr_info_t cur;
       cur.scn = scn;
 
       /* Get the header.  */
@@ -440,19 +433,20 @@ cannot set access and modification date of '%s'"),
 	    }
 	}
 
-      /* Increment the counter.  */
-      ++cnt;
+      shdr_info.push_back (cur);
     }
+  //shdr_info.push_back (*new shdr_info_t); // xxx leak
 
   /* We drop all .debug_* sections.
-     XXX .eh_frame??  */
-  for (cnt = 1; cnt < shnum; ++cnt)
+     XXX .eh_frame??
+     XXX .rel{,a}.debug_*?? */
+  for (size_t cnt = 1; cnt < shnum; ++cnt)
     if (strncmp (shdr_info[cnt].name, ".debug_", 7) == 0)
       {
 	/* For now assume this section will be removed.  */
 	shdr_info[cnt].idx = 0;
 
-	idx = shdr_info[cnt].group_idx;
+	size_t idx = shdr_info[cnt].group_idx;
 	while (idx != 0)
 	  {
 	    /* The section group data is already loaded.  */
@@ -488,7 +482,7 @@ cannot set access and modification date of '%s'"),
     {
       changes = false;
 
-      for (cnt = 1; cnt < shnum; ++cnt)
+      for (size_t cnt = 1; cnt < shnum; ++cnt)
 	{
 	  if (shdr_info[cnt].idx == 0)
 	    {
@@ -550,7 +544,8 @@ cannot set access and modification date of '%s'"),
 
   /* Assign new section numbers.  */
   shdr_info[0].idx = 0;
-  for (cnt = idx = 1; cnt < shnum; ++cnt)
+  size_t idx;
+  for (size_t cnt = idx = 1; cnt < shnum; ++cnt)
     if (shdr_info[cnt].idx > 0)
       {
 	shdr_info[cnt].idx = idx++;
@@ -567,65 +562,113 @@ cannot set access and modification date of '%s'"),
 	shdr_info[cnt].se = ebl_strtabadd (shst, shdr_info[cnt].name, 0);
       }
 
-  /* Since we should handle debuginfo-fitted Elf, there have to be
-     sections scheduled for removal.  */
-  assert (cnt != idx);
+  {
+    shdr_info_t debug_info;
 
-  /* Index of the section header table in the shdr_info array.  */
-  shdridx = cnt;
+    /* Add the section header string table section name.  */
+    char *name = strdup (".debug_info"); // ebl_strtabadd doesn't
+					 // intern the string
+    debug_info.se = ebl_strtabadd (shst, name, strlen (name) + 1);
+    debug_info.idx = idx;
 
-  /* Add the section header string table section name.  */
-  shdr_info[cnt].se = ebl_strtabadd (shst, ".shstrtab", 10);
-  shdr_info[cnt].idx = idx;
+    /* Create the section header.  */
+    debug_info.shdr.sh_type = SHT_PROGBITS;
+    debug_info.shdr.sh_flags = 0;
+    debug_info.shdr.sh_addr = 0;
+    debug_info.shdr.sh_link = SHN_UNDEF;
+    debug_info.shdr.sh_info = SHN_UNDEF;
+    debug_info.shdr.sh_entsize = 0;
+    debug_info.shdr.sh_offset = 0;
+    debug_info.shdr.sh_addralign = 1;
 
-  /* Create the section header.  */
-  shdr_info[cnt].shdr.sh_type = SHT_STRTAB;
-  shdr_info[cnt].shdr.sh_flags = 0;
-  shdr_info[cnt].shdr.sh_addr = 0;
-  shdr_info[cnt].shdr.sh_link = SHN_UNDEF;
-  shdr_info[cnt].shdr.sh_info = SHN_UNDEF;
-  shdr_info[cnt].shdr.sh_entsize = 0;
-  /* We set the offset to zero here.  Before we write the ELF file the
-     field must have the correct value.  This is done in the final
-     loop over all section.  Then we have all the information needed.  */
-  shdr_info[cnt].shdr.sh_offset = 0;
-  shdr_info[cnt].shdr.sh_addralign = 1;
+    /* Create the section.  */
+    debug_info.newscn = elf_newscn (newelf);
+    if (debug_info.newscn == NULL)
+      error (EXIT_FAILURE, 0,
+	     gettext ("while create section header section: %s"),
+	     elf_errmsg (-1));
+    assert (elf_ndxscn (debug_info.newscn) == idx);
 
-  /* Create the section.  */
-  shdr_info[cnt].newscn = elf_newscn (newelf);
-  if (shdr_info[cnt].newscn == NULL)
-    error (EXIT_FAILURE, 0,
-	   gettext ("while create section header section: %s"),
-	   elf_errmsg (-1));
-  assert (elf_ndxscn (shdr_info[cnt].newscn) == idx);
+    /* Finalize the string table and fill in the correct indices in the
+       section headers.  */
+    Elf_Data *debug_info_data = elf_newdata (debug_info.newscn);
+    // xxx free on failure
+    if (debug_info_data == NULL)
+      error (EXIT_FAILURE, 0,
+	     gettext ("while create section header string table: %s"),
+	     elf_errmsg (-1));
 
-  /* Finalize the string table and fill in the correct indices in the
-     section headers.  */
-  shstrtab_data = elf_newdata (shdr_info[cnt].newscn);
-  if (shstrtab_data == NULL)
-    error (EXIT_FAILURE, 0,
-	   gettext ("while create section header string table: %s"),
-	   elf_errmsg (-1));
-  ebl_strtabfinalize (shst, shstrtab_data);
+    debug_info_data->d_buf = (void*)"huhly";
+    debug_info_data->d_type = ELF_T_BYTE;
+    debug_info_data->d_size = strlen ((const char *)debug_info_data->d_buf) + 1;
+    debug_info_data->d_align = 1;
 
-  /* We have to set the section size.  */
-  shdr_info[cnt].shdr.sh_size = shstrtab_data->d_size;
+    /* We have to set the section size.  */
+    debug_info.shdr.sh_size = debug_info_data->d_size;
+
+    shdr_info.push_back (debug_info);
+    ++idx;
+  }
+
+  {
+    shdr_info_t shstrtab;
+
+    /* Add the section header string table section name.  */
+    shstrtab.se = ebl_strtabadd (shst, ".shstrtab", 10);
+    shstrtab.idx = idx;
+
+    /* Create the section header.  */
+    shstrtab.shdr.sh_type = SHT_STRTAB;
+    shstrtab.shdr.sh_flags = 0;
+    shstrtab.shdr.sh_addr = 0;
+    shstrtab.shdr.sh_link = SHN_UNDEF;
+    shstrtab.shdr.sh_info = SHN_UNDEF;
+    shstrtab.shdr.sh_entsize = 0;
+    /* We set the offset to zero here.  Before we write the ELF file the
+       field must have the correct value.  This is done in the final
+       loop over all section.  Then we have all the information needed.  */
+    shstrtab.shdr.sh_offset = 0;
+    shstrtab.shdr.sh_addralign = 1;
+
+    /* Create the section.  */
+    shstrtab.newscn = elf_newscn (newelf);
+    if (shstrtab.newscn == NULL)
+      error (EXIT_FAILURE, 0,
+	     gettext ("while create section header section: %s"),
+	     elf_errmsg (-1));
+    assert (elf_ndxscn (shstrtab.newscn) == idx);
+
+    /* Finalize the string table and fill in the correct indices in the
+       section headers.  */
+    Elf_Data *shstrtab_data = elf_newdata (shstrtab.newscn);
+    // xxx free on failure
+    if (shstrtab_data == NULL)
+      error (EXIT_FAILURE, 0,
+	     gettext ("while create section header string table: %s"),
+	     elf_errmsg (-1));
+    ebl_strtabfinalize (shst, shstrtab_data);
+
+    /* We have to set the section size.  */
+    shstrtab.shdr.sh_size = shstrtab_data->d_size;
+
+    shdr_info.push_back (shstrtab);
+  }
 
   /* Update the section information.  */
   GElf_Off lastoffset = 0;
-  for (cnt = 1; cnt <= shdridx; ++cnt)
+  for (size_t cnt = 1; cnt < shdr_info.size (); ++cnt)
     if (shdr_info[cnt].idx > 0)
       {
 	Elf_Data *newdata;
 
-	scn = elf_getscn (newelf, shdr_info[cnt].idx);
+	Elf_Scn *scn = elf_getscn (newelf, shdr_info[cnt].idx);
 	assert (scn != NULL);
 
 	/* Update the name.  */
 	shdr_info[cnt].shdr.sh_name = ebl_strtaboffset (shdr_info[cnt].se);
 
 	/* Update the section header from the input file.  Some fields
-	   might be section indeces which now have to be adjusted.  */
+	   might be section indices which now have to be adjusted.  */
 	if (shdr_info[cnt].shdr.sh_link != 0)
 	  shdr_info[cnt].shdr.sh_link =
 	    shdr_info[shdr_info[cnt].shdr.sh_link].idx;
@@ -839,7 +882,7 @@ cannot set access and modification date of '%s'"),
   /* Adjust symbol references if symbol tables changed.  */
   if (any_symtab_changes)
     /* Find all relocation sections which use this symbol table.  */
-    for (cnt = 1; cnt <= shdridx; ++cnt)
+    for (size_t cnt = 1; cnt < shdr_info.size (); ++cnt)
       {
 	if (shdr_info[cnt].idx == 0)
 	  /* Ignore sections which are discarded.  When we are saving a
@@ -854,7 +897,7 @@ cannot set access and modification date of '%s'"),
 	  case SHT_REL:
 	  case SHT_RELA:
 	    {
-	    if (no_symtab_updates (shdr_info, symtabidx, cnt))
+	    if (no_symtab_updates (shdr_info[symtabidx]))
 		break;
 
 	    Elf_Data *d = elf_getdata (shdr_info[cnt].idx == 0
@@ -907,7 +950,7 @@ cannot set access and modification date of '%s'"),
 
 	  case SHT_HASH:
 	    {
-	    if (no_symtab_updates (shdr_info, symtabidx, cnt))
+	    if (no_symtab_updates (shdr_info[symtabidx]))
 	      break;
 
 	    /* We have to recompute the hash table.  */
@@ -915,7 +958,7 @@ cannot set access and modification date of '%s'"),
 	    assert (shdr_info[cnt].idx > 0);
 
 	    /* The hash section in the new file.  */
-	    scn = elf_getscn (newelf, shdr_info[cnt].idx);
+	    Elf_Scn *scn = elf_getscn (newelf, shdr_info[cnt].idx);
 
 	    /* The symbol table data.  */
 	    Elf_Data *symd = elf_getdata (elf_getscn (newelf,
@@ -1038,13 +1081,13 @@ cannot set access and modification date of '%s'"),
 	  case SHT_GNU_versym:
 	    {
 	    /* If the symbol table changed we have to adjust the entries.  */
-	    if (no_symtab_updates (shdr_info, symtabidx, cnt))
+	    if (no_symtab_updates (shdr_info[symtabidx]))
 	      break;
 
 	    assert (shdr_info[cnt].idx > 0);
 
 	    /* The symbol version section in the new file.  */
-	    scn = elf_getscn (newelf, shdr_info[cnt].idx);
+	    Elf_Scn *scn = elf_getscn (newelf, shdr_info[cnt].idx);
 
 	    /* The symbol table data.  */
 	    Elf_Data *symd = elf_getdata (elf_getscn (newelf, shdr_info[symtabidx].idx),
@@ -1080,12 +1123,12 @@ cannot set access and modification date of '%s'"),
 
 	  case SHT_GROUP:
 	    {
-	    if (no_symtab_updates (shdr_info, symtabidx, cnt))
+	    if (no_symtab_updates (shdr_info[symtabidx]))
 	      break;
 
 	    /* Yes, the symbol table changed.
 	       Update the section header of the section group.  */
-	    scn = elf_getscn (newelf, shdr_info[cnt].idx);
+	    Elf_Scn *scn = elf_getscn (newelf, shdr_info[cnt].idx);
 	    GElf_Shdr shdr_mem;
 	    GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
 	    assert (shdr != NULL);
@@ -1113,8 +1156,8 @@ cannot set access and modification date of '%s'"),
   newehdr->e_phoff = ehdr->e_phoff;
   /* We need to position the section header table.  */
   const size_t offsize = gelf_fsize (elf, ELF_T_OFF, 1, EV_CURRENT);
-  newehdr->e_shoff = ((shdr_info[shdridx].shdr.sh_offset
-		       + shdr_info[shdridx].shdr.sh_size + offsize - 1)
+  newehdr->e_shoff = ((shdr_info.back ().shdr.sh_offset
+		       + shdr_info.back ().shdr.sh_size + offsize - 1)
 		      & ~((GElf_Off) (offsize - 1)));
   newehdr->e_shentsize = gelf_fsize (elf, ELF_T_SHDR, 1, EV_CURRENT);
 
@@ -1167,7 +1210,6 @@ cannot set access and modification date of '%s'"),
   goto fail_close;
 }
 
-
 int
 main (int argc, char *argv[])
 {
@@ -1193,12 +1235,13 @@ main (int argc, char *argv[])
       argp_help (&argp, stderr, ARGP_HELP_SEE, program_invocation_short_name);
       exit (1);
     }
+
   const char *const fname = argv[remaining];
-  int fd = open (fname, output_fname == NULL ? O_RDWR : O_RDONLY);
+
+  int fd = open (fname, O_RDONLY);
   struct stat64 st;
   fstat64 (fd, &st);
-  Elf *elf = elf_begin (fd, output_fname == NULL ? ELF_C_RDWR : ELF_C_READ,
-			NULL);
+  Elf *elf = elf_begin (fd, ELF_C_READ,	NULL);
   handle_elf (fd, elf, fname, st.st_mode & ACCESSPERMS, NULL);
 }
 
