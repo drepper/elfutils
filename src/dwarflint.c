@@ -1282,19 +1282,19 @@ process_file (Elf *elf, const char *fname, bool only_one)
 
   if (SEC(pubnames) != NULL)
     check_pub_structural (&file, SEC(pubnames), cu_chain);
-  else
+  else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 		&WHERE (sec_pubnames, NULL), ": data not found.\n");
 
   if (SEC(pubtypes) != NULL)
     check_pub_structural (&file, SEC(pubtypes), cu_chain);
-  else
+  else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
 		&WHERE (sec_pubtypes, NULL), ": data not found.\n");
 
   if (SEC(line) != NULL)
     check_line_structural (&file, SEC(line), cu_chain);
-  else
+  else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_loc,
 		&WHERE (sec_line, NULL), ": data not found.\n");
 
