@@ -100,6 +100,8 @@ static const struct argp_option options[] =
     0 },
 
   { NULL, 0, NULL, 0, N_("Output control:"), 0 },
+  { "numeric-addresses", 'N', NULL, 0,
+    N_("Do not find symbol names for addresses in DWARF data"), 0 },
 
   { NULL, 0, NULL, 0, NULL, 0 }
 };
@@ -165,6 +167,9 @@ static bool print_archive_index;
 /* True if any of the control options except print_archive_index is set.  */
 static bool any_control_option;
 
+/* True if we should print addresses from DWARF in symbolic form.  */
+static bool print_address_names = true;
+
 /* Select printing of debugging sections.  */
 static enum section_e
 {
@@ -211,9 +216,11 @@ static void print_shdr (Ebl *ebl, GElf_Ehdr *ehdr);
 static void print_phdr (Ebl *ebl, GElf_Ehdr *ehdr);
 static void print_scngrp (Ebl *ebl);
 static void print_dynamic (Ebl *ebl, GElf_Ehdr *ehdr);
-static void print_relocs (Ebl *ebl);
-static void handle_relocs_rel (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr);
-static void handle_relocs_rela (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr);
+static void print_relocs (Ebl *ebl, GElf_Ehdr *ehdr);
+static void handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn,
+			       GElf_Shdr *shdr);
+static void handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn,
+				GElf_Shdr *shdr);
 static void print_symtab (Ebl *ebl, int type);
 static void handle_symtab (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr);
 static void print_verinfo (Ebl *ebl);
@@ -403,6 +410,9 @@ parse_opt (int key, char *arg,
     case 'x':
       add_dump_section (arg);
       any_control_option = true;
+      break;
+    case 'N':
+      print_address_names = false;
       break;
     case ARGP_KEY_NO_ARGS:
       fputs (gettext ("Missing file name.\n"), stderr);
@@ -606,7 +616,7 @@ process_elf_file (Dwfl_Module *dwflmod, int fd)
     }
 
   /* Determine the number of sections.  */
-  if (unlikely (elf_getshnum (ebl->elf, &shnum) < 0))
+  if (unlikely (elf_getshdrnum (ebl->elf, &shnum) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot determine number of sections: %s"),
 	   elf_errmsg (-1));
@@ -652,7 +662,7 @@ process_elf_file (Dwfl_Module *dwflmod, int fd)
   if (print_dynamic_table)
     print_dynamic (ebl, ehdr);
   if (print_relocations)
-    print_relocs (pure_ebl);
+    print_relocs (pure_ebl, ehdr);
   if (print_histogram)
     handle_hash (ebl);
   if (print_symbol_table)
@@ -845,7 +855,7 @@ There are %d section headers, starting at offset %#" PRIx64 ":\n\
 	    ehdr->e_shnum, ehdr->e_shoff);
 
   /* Get the section header string table index.  */
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -988,7 +998,7 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1129,7 +1139,7 @@ handle_scngrp (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1314,7 +1324,7 @@ handle_dynamic (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
     return;
 
   /* Get the section header string table index.  */
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1455,7 +1465,7 @@ print_dynamic (Ebl *ebl, GElf_Ehdr *ehdr)
 
 /* Print relocations.  */
 static void
-print_relocs (Ebl *ebl)
+print_relocs (Ebl *ebl, GElf_Ehdr *ehdr)
 {
   /* Find all relocation sections and handle them.  */
   Elf_Scn *scn = NULL;
@@ -1469,9 +1479,9 @@ print_relocs (Ebl *ebl)
       if (likely (shdr != NULL))
 	{
 	  if (shdr->sh_type == SHT_REL)
-	    handle_relocs_rel (ebl, scn, shdr);
+	    handle_relocs_rel (ebl, ehdr, scn, shdr);
 	  else if (shdr->sh_type == SHT_RELA)
-	    handle_relocs_rela (ebl, scn, shdr);
+	    handle_relocs_rela (ebl, ehdr, scn, shdr);
 	}
     }
 }
@@ -1479,7 +1489,7 @@ print_relocs (Ebl *ebl)
 
 /* Handle a relocation section.  */
 static void
-handle_relocs_rel (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
+handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 {
   int class = gelf_getclass (ebl->elf);
   int nentries = shdr->sh_size / shdr->sh_entsize;
@@ -1515,7 +1525,7 @@ handle_relocs_rel (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1551,6 +1561,7 @@ handle_relocs_rel (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
   Offset              Type                 Value               Name\n"),
 	 stdout);
 
+  int is_statically_linked = 0;
   for (int cnt = 0; cnt < nentries; ++cnt)
     {
       GElf_Rel relmem;
@@ -1564,16 +1575,56 @@ handle_relocs_rel (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 					    GELF_R_SYM (rel->r_info),
 					    &symmem, &xndx);
 	  if (unlikely (sym == NULL))
-	    printf ("  %#0*" PRIx64 "  %-20s <%s %ld>\n",
-		    class == ELFCLASS32 ? 10 : 18, rel->r_offset,
-		    ebl_reloc_type_check (ebl, GELF_R_TYPE (rel->r_info))
-		    /* Avoid the leading R_ which isn't carrying any
-		       information.  */
-		    ? ebl_reloc_type_name (ebl, GELF_R_TYPE (rel->r_info),
-					   buf, sizeof (buf)) + 2
-		    : gettext ("<INVALID RELOC>"),
-		    gettext ("INVALID SYMBOL"),
-		    (long int) GELF_R_SYM (rel->r_info));
+	    {
+	      /* As a special case we have to handle relocations in static
+		 executables.  This only happens for IRELATIVE relocations
+		 (so far).  There is no symbol table.  */
+	      if (is_statically_linked == 0)
+		{
+		  /* Find the program header and look for a PT_INTERP entry. */
+		  is_statically_linked = -1;
+		  if (ehdr->e_type == ET_EXEC)
+		    {
+		      is_statically_linked = 1;
+
+		      for (size_t inner = 0; inner < ehdr->e_phnum; ++inner)
+			{
+			  GElf_Phdr phdr_mem;
+			  GElf_Phdr *phdr = gelf_getphdr (ebl->elf, inner,
+							  &phdr_mem);
+			  if (phdr != NULL && phdr->p_type == PT_INTERP)
+			    {
+			      is_statically_linked = -1;
+			      break;
+			    }
+			}
+		    }
+		}
+
+	      if (is_statically_linked > 0 && shdr->sh_link == 0)
+		printf ("\
+  %#0*" PRIx64 "  %-20s %*s  %s\n",
+			class == ELFCLASS32 ? 10 : 18, rel->r_offset,
+			ebl_reloc_type_check (ebl, GELF_R_TYPE (rel->r_info))
+			/* Avoid the leading R_ which isn't carrying any
+			   information.  */
+			? ebl_reloc_type_name (ebl, GELF_R_TYPE (rel->r_info),
+					       buf, sizeof (buf)) + 2
+			: gettext ("<INVALID RELOC>"),
+			class == ELFCLASS32 ? 10 : 18, "",
+			elf_strptr (ebl->elf, shstrndx, destshdr->sh_name));
+	      else
+		printf ("  %#0*" PRIx64 "  %-20s <%s %ld>\n",
+			class == ELFCLASS32 ? 10 : 18, rel->r_offset,
+			ebl_reloc_type_check (ebl, GELF_R_TYPE (rel->r_info))
+			/* Avoid the leading R_ which isn't carrying any
+			   information.  */
+			? ebl_reloc_type_name (ebl, GELF_R_TYPE (rel->r_info),
+					       buf, sizeof (buf)) + 2
+			: gettext ("<INVALID RELOC>"),
+			gettext ("INVALID SYMBOL"),
+			(long int) GELF_R_SYM (rel->r_info));
+	    }
 	  else if (GELF_ST_TYPE (sym->st_info) != STT_SECTION)
 	    printf ("  %#0*" PRIx64 "  %-20s %#0*" PRIx64 "  %s\n",
 		    class == ELFCLASS32 ? 10 : 18, rel->r_offset,
@@ -1624,7 +1675,7 @@ handle_relocs_rel (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
 /* Handle a relocation section.  */
 static void
-handle_relocs_rela (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
+handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 {
   int class = gelf_getclass (ebl->elf);
   int nentries = shdr->sh_size / shdr->sh_entsize;
@@ -1660,7 +1711,7 @@ handle_relocs_rela (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -1682,6 +1733,7 @@ handle_relocs_rela (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
   Offset              Type            Value               Addend Name\n"),
 		  stdout);
 
+  int is_statically_linked = 0;
   for (int cnt = 0; cnt < nentries; ++cnt)
     {
       GElf_Rela relmem;
@@ -1696,16 +1748,57 @@ handle_relocs_rela (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 					    &symmem, &xndx);
 
 	  if (unlikely (sym == NULL))
-	    printf ("  %#0*" PRIx64 "  %-15s <%s %ld>\n",
-		    class == ELFCLASS32 ? 10 : 18, rel->r_offset,
-		    ebl_reloc_type_check (ebl, GELF_R_TYPE (rel->r_info))
-		    /* Avoid the leading R_ which isn't carrying any
-		       information.  */
-		    ? ebl_reloc_type_name (ebl, GELF_R_TYPE (rel->r_info),
-					   buf, sizeof (buf)) + 2
-		    : gettext ("<INVALID RELOC>"),
-		    gettext ("INVALID SYMBOL"),
-		    (long int) GELF_R_SYM (rel->r_info));
+	    {
+	      /* As a special case we have to handle relocations in static
+		 executables.  This only happens for IRELATIVE relocations
+		 (so far).  There is no symbol table.  */
+	      if (is_statically_linked == 0)
+		{
+		  /* Find the program header and look for a PT_INTERP entry. */
+		  is_statically_linked = -1;
+		  if (ehdr->e_type == ET_EXEC)
+		    {
+		      is_statically_linked = 1;
+
+		      for (size_t inner = 0; inner < ehdr->e_phnum; ++inner)
+			{
+			  GElf_Phdr phdr_mem;
+			  GElf_Phdr *phdr = gelf_getphdr (ebl->elf, inner,
+							  &phdr_mem);
+			  if (phdr != NULL && phdr->p_type == PT_INTERP)
+			    {
+			      is_statically_linked = -1;
+			      break;
+			    }
+			}
+		    }
+		}
+
+	      if (is_statically_linked > 0 && shdr->sh_link == 0)
+		printf ("\
+  %#0*" PRIx64 "  %-15s %*s  %#6" PRIx64 " %s\n",
+			class == ELFCLASS32 ? 10 : 18, rel->r_offset,
+			ebl_reloc_type_check (ebl, GELF_R_TYPE (rel->r_info))
+			/* Avoid the leading R_ which isn't carrying any
+			   information.  */
+			? ebl_reloc_type_name (ebl, GELF_R_TYPE (rel->r_info),
+					       buf, sizeof (buf)) + 2
+			: gettext ("<INVALID RELOC>"),
+			class == ELFCLASS32 ? 10 : 18, "",
+			rel->r_addend,
+			elf_strptr (ebl->elf, shstrndx, destshdr->sh_name));
+	      else
+		printf ("  %#0*" PRIx64 "  %-15s <%s %ld>\n",
+			class == ELFCLASS32 ? 10 : 18, rel->r_offset,
+			ebl_reloc_type_check (ebl, GELF_R_TYPE (rel->r_info))
+			/* Avoid the leading R_ which isn't carrying any
+			   information.  */
+			? ebl_reloc_type_name (ebl, GELF_R_TYPE (rel->r_info),
+					       buf, sizeof (buf)) + 2
+			: gettext ("<INVALID RELOC>"),
+			gettext ("INVALID SYMBOL"),
+			(long int) GELF_R_SYM (rel->r_info));
+	    }
 	  else if (GELF_ST_TYPE (sym->st_info) != STT_SECTION)
 	    printf ("\
   %#0*" PRIx64 "  %-15s %#0*" PRIx64 "  %+6" PRId64 " %s\n",
@@ -1828,7 +1921,7 @@ handle_symtab (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2086,7 +2179,7 @@ handle_verneed (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2156,7 +2249,7 @@ handle_verdef (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2238,7 +2331,7 @@ handle_versym (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2747,7 +2840,7 @@ handle_hash (Ebl *ebl)
 {
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2783,7 +2876,7 @@ print_liblist (Ebl *ebl)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -2845,7 +2938,7 @@ print_attributes (Ebl *ebl, const GElf_Ehdr *ehdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -3006,7 +3099,8 @@ format_dwarf_addr (Dwfl_Module *dwflmod,
 {
   /* See if there is a name we can give for this address.  */
   GElf_Sym sym;
-  const char *name = dwfl_module_addrsym (dwflmod, address, &sym, NULL);
+  const char *name = print_address_names
+    ? dwfl_module_addrsym (dwflmod, address, &sym, NULL) : NULL;
   if (name != NULL)
     sym.st_value = address - sym.st_value;
 
@@ -4261,6 +4355,35 @@ print_debug_ranges_section (Dwfl_Module *dwflmod,
     }
 }
 
+#define REGNAMESZ 16
+static const char *
+register_info (Ebl *ebl, unsigned int regno, const Ebl_Register_Location *loc,
+	       char name[REGNAMESZ], int *bits, int *type)
+{
+  const char *set;
+  const char *pfx;
+  int ignore;
+  ssize_t n = ebl_register_info (ebl, regno, name, REGNAMESZ, &pfx, &set,
+				 bits ?: &ignore, type ?: &ignore);
+  if (n <= 0)
+    {
+      snprintf (name, sizeof name, "reg%u", loc->regno);
+      if (bits != NULL)
+	*bits = loc->bits;
+      if (type != NULL)
+	*type = DW_ATE_unsigned;
+      set = "??? unrecognized";
+    }
+  else
+    {
+      if (bits != NULL && *bits <= 0)
+	*bits = loc->bits;
+      if (type != NULL && *type == DW_ATE_void)
+	*type = DW_ATE_unsigned;
+
+    }
+  return set;
+}
 
 static void
 print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
@@ -4268,14 +4391,11 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 		   int data_align, unsigned int ptr_size, Dwfl_Module *dwflmod,
 		   Ebl *ebl, Dwarf *dbg)
 {
-  char regnamebuf[16];
+  char regnamebuf[REGNAMESZ];
   const char *regname (unsigned int regno)
   {
-    const char *str;
-    int i;
-    return (ebl_register_info (ebl, regno, regnamebuf, sizeof (regnamebuf),
-			       &str, &str, &i, &i) < 0
-	    ? "???" : regnamebuf);
+    register_info (ebl, regno, NULL, regnamebuf, NULL, NULL);
+    return regnamebuf;
   }
 
   puts ("\n   Program:");
@@ -4642,7 +4762,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 {
   size_t shstrndx;
   /* We know this call will succeed since it did in the caller.  */
-  (void) elf_getshstrndx (ebl->elf, &shstrndx);
+  (void) elf_getshdrstrndx (ebl->elf, &shstrndx);
   const char *scnname = elf_strptr (ebl->elf, shstrndx, shdr->sh_name);
 
   Elf_Data *data = elf_rawdata (scn, NULL);
@@ -5055,9 +5175,20 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
       const char *valuestr = NULL;
       switch (attr)
 	{
+	/* This case can take either a constant or a loclistptr. */
+	case DW_AT_data_member_location:
+	  if (form != DW_FORM_data4 && form != DW_FORM_data8)
+	    {
+	      printf ("           %*s%-20s %" PRIxMAX "\n",
+		      (int) (level * 2), "", dwarf_attr_string (attr),
+		      (uintmax_t) num);
+	      return DWARF_CB_OK;
+	    }
+	  /* else fallthrough */
+
+	/* These cases always take a loclistptr and no constant. */
 	case DW_AT_location:
 	case DW_AT_data_location:
-	case DW_AT_data_member_location:
 	case DW_AT_vtable_elem_location:
 	case DW_AT_string_length:
 	case DW_AT_use_location:
@@ -6347,7 +6478,7 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -6813,17 +6944,10 @@ handle_core_register (Ebl *ebl, Elf *core, int maxregname,
 
   for (int reg = regloc->regno; reg < regloc->regno + regloc->count; ++reg)
     {
-      const char *pfx;
-      const char *set;
-      char name[16];
+      char name[REGNAMESZ];
       int bits;
       int type;
-      ssize_t n = ebl_register_info (ebl, reg, name, sizeof name,
-				     &pfx, &set, &bits, &type);
-      if (n <= 0)
-	error (EXIT_FAILURE, 0,
-	       gettext ("unable to handle register number %d"),
-	       regloc->regno);
+      register_info (ebl, reg, regloc, name, &bits, &type);
 
 #define TYPES								      \
       BITS (8, BYTE, "%4" PRId8, "0x%.2" PRIx8, 4);			      \
@@ -6911,10 +7035,10 @@ struct register_info
 {
   const Ebl_Register_Location *regloc;
   const char *set;
-  char name[16];
-  Dwarf_Half regno;
-  uint8_t bits;
-  uint8_t type;
+  char name[REGNAMESZ];
+  int regno;
+  int bits;
+  int type;
 };
 
 static int
@@ -6968,8 +7092,12 @@ handle_core_registers (Ebl *ebl, Elf *core, const void *desc,
 
   ssize_t maxnreg = ebl_register_info (ebl, 0, NULL, 0, NULL, NULL, NULL, NULL);
   if (maxnreg <= 0)
-    error (EXIT_FAILURE, 0,
-	   gettext ("cannot get register info: %s"), elf_errmsg (-1));
+    {
+      for (size_t i = 0; i < nregloc; ++i)
+	if (maxnreg < reglocs[i].regno + reglocs[i].count)
+	  maxnreg = reglocs[i].regno + reglocs[i].count;
+      assert (maxnreg > 0);
+    }
 
   struct register_info regs[maxnreg];
   memset (regs, 0, sizeof regs);
@@ -6985,20 +7113,10 @@ handle_core_registers (Ebl *ebl, Elf *core, const void *desc,
 	if (reg > maxreg)
 	  maxreg = reg;
 	struct register_info *info = &regs[reg];
-
-	const char *pfx;
-	int bits;
-	int type;
-	ssize_t n = ebl_register_info (ebl, reg, info->name, sizeof info->name,
-				       &pfx, &info->set, &bits, &type);
-	if (n <= 0)
-	  error (EXIT_FAILURE, 0,
-		 gettext ("cannot register info: %s"), elf_errmsg (-1));
-
 	info->regloc = &reglocs[i];
 	info->regno = reg;
-	info->bits = bits;
-	info->type = type;
+	info->set = register_info (ebl, reg, &reglocs[i],
+				   info->name, &info->bits, &info->type);
       }
   qsort (regs, maxreg + 1, sizeof regs[0], &compare_registers);
 
@@ -7213,7 +7331,7 @@ handle_notes (Ebl *ebl, GElf_Ehdr *ehdr)
     {
       /* Get the section header string table index.  */
       size_t shstrndx;
-      if (elf_getshstrndx (ebl->elf, &shstrndx) < 0)
+      if (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0)
 	error (EXIT_FAILURE, 0,
 	       gettext ("cannot get section header string table index"));
 
@@ -7358,7 +7476,7 @@ for_each_section_argument (Elf *elf, const struct section_argument *list,
 {
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (elf_getshstrndx (elf, &shstrndx) < 0)
+  if (elf_getshdrstrndx (elf, &shstrndx) < 0)
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -7427,7 +7545,7 @@ print_strings (Ebl *ebl)
 {
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (ebl->elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 

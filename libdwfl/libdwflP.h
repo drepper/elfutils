@@ -151,10 +151,6 @@ struct Dwfl_Module
   char *name;			/* Iterator name for this module.  */
   GElf_Addr low_addr, high_addr;
 
-  void *build_id_bits;		/* malloc'd copy of build ID bits.  */
-  GElf_Addr build_id_vaddr;	/* Address where they reside, 0 if unknown.  */
-  int build_id_len;		/* -1 for prior failure, 0 if unset.  */
-
   struct dwfl_file main, debug;
   Ebl *ebl;
   GElf_Half e_type;		/* GElf_Ehdr.e_type cache.  */
@@ -167,20 +163,29 @@ struct Dwfl_Module
   size_t syments;		/* sh_size / sh_entsize of that section.  */
   Elf_Data *symstrdata;		/* Data for its string table.  */
   Elf_Data *symxndxdata;	/* Data in the extended section index table. */
-  Dwfl_Error symerr;		/* Previous failure to load symbols.  */
 
   Dwarf *dw;			/* libdw handle for its debugging info.  */
-  Dwfl_Error dwerr;		/* Previous failure to load info.  */
+
+  Dwfl_Error symerr;		/* Previous failure to load symbols.  */
+  Dwfl_Error dwerr;		/* Previous failure to load DWARF.  */
 
   /* Known CU's in this module.  */
   struct dwfl_cu *first_cu, **cu;
-  unsigned int ncu;
 
   void *lazy_cu_root;		/* Table indexed by Dwarf_Off of CU.  */
-  unsigned int lazycu;		/* Possible users, deleted when none left.  */
 
   struct dwfl_arange *aranges;	/* Mapping of addresses in module to CUs.  */
+
+  void *build_id_bits;		/* malloc'd copy of build ID bits.  */
+  GElf_Addr build_id_vaddr;	/* Address where they reside, 0 if unknown.  */
+  int build_id_len;		/* -1 for prior failure, 0 if unset.  */
+
+  unsigned int ncu;
+  unsigned int lazycu;		/* Possible users, deleted when none left.  */
   unsigned int naranges;
+
+  Dwarf_CFI *dwarf_cfi;		/* Cached DWARF CFI for this module.  */
+  Dwarf_CFI *eh_cfi;		/* Cached EH CFI for this module.  */
 
   int segment;			/* Index of first segment table entry.  */
   bool gc;			/* Mark/sweep flag.  */
@@ -273,6 +278,11 @@ extern Dwfl_Error __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf,
 
 /* Ensure that MOD->ebl is set up.  */
 extern Dwfl_Error __libdwfl_module_getebl (Dwfl_Module *mod) internal_function;
+
+/* Install a new Dwarf_CFI in *SLOT (MOD->eh_cfi or MOD->dwarf_cfi).  */
+extern Dwarf_CFI *__libdwfl_set_cfi (Dwfl_Module *mod, Dwarf_CFI **slot,
+				     Dwarf_CFI *cfi)
+  internal_function;
 
 /* Iterate through all the CU's in the module.  Start by passing a null
    LASTCU, and then pass the last *CU returned.  Success return with null
@@ -425,6 +435,8 @@ INTDECL (dwfl_linux_kernel_report_modules)
 INTDECL (dwfl_linux_kernel_report_offline)
 INTDECL (dwfl_offline_section_address)
 INTDECL (dwfl_module_relocate_address)
+INTDECL (dwfl_module_dwarf_cfi)
+INTDECL (dwfl_module_eh_cfi)
 
 /* Leading arguments standard to callbacks passed a Dwfl_Module.  */
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr
