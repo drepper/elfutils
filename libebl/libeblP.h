@@ -1,5 +1,5 @@
 /* Internal definitions for interface for libebl.
-   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2006 Red Hat, Inc.
+   Copyright (C) 2000-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -93,5 +93,11 @@ typedef const char *(*ebl_bhinit_t) (Elf *, GElf_Half, Ebl *, size_t);
 /* gettext helper macros.  */
 #undef _
 #define _(Str) dgettext ("elfutils", Str)
+
+
+/* LEB128 constant helper macros.  */
+#define ULEB128_7(x)	(BUILD_BUG_ON_ZERO ((x) >= (1U << 7)) + (x))
+
+#define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
 
 #endif	/* libeblP.h */

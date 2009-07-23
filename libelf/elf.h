@@ -444,6 +444,7 @@ typedef struct
 #define STB_WEAK	2		/* Weak symbol */
 #define	STB_NUM		3		/* Number of defined types.  */
 #define STB_LOOS	10		/* Start of OS-specific */
+#define STB_GNU_UNIQUE	10		/* Unique symbol.  */
 #define STB_HIOS	12		/* End of OS-specific */
 #define STB_LOPROC	13		/* Start of processor-specific */
 #define STB_HIPROC	15		/* End of processor-specific */
@@ -1177,8 +1178,9 @@ typedef struct
 					   pointer to code and to
 					   argument, returning the TLS
 					   offset for the symbol.  */
+#define R_386_IRELATIVE	   42		/* Adjust indirectly by program base */
 /* Keep this the last entry.  */
-#define R_386_NUM	   42
+#define R_386_NUM	   43
 
 /* SUN SPARC specific definitions.  */
 
@@ -2625,8 +2627,9 @@ typedef Elf32_Addr Elf32_Conflict;
 #define R_X86_64_TLSDESC_CALL   35	/* Marker for call through TLS
 					   descriptor.  */
 #define R_X86_64_TLSDESC        36	/* TLS descriptor.  */
+#define R_X86_64_IRELATIVE	37	/* Adjust indirectly by program base */
 
-#define R_X86_64_NUM		37
+#define R_X86_64_NUM		38
 
 
 /* AM33 relocations.  */

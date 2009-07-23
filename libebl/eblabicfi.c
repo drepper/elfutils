@@ -1,7 +1,6 @@
-/* Return number of sections in the ELF file.
-   Copyright (C) 2002 Red Hat, Inc.
+/* Return ABI-specific DWARF CFI details.
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,58 +51,13 @@
 # include <config.h>
 #endif
 
-#include <assert.h>
-#include <gelf.h>
-#include <stddef.h>
-
-#include "libelfP.h"
+#include <libeblP.h>
 
 
 int
-__elf_getshnum_rdlock (elf, dst)
-     Elf *elf;
-     size_t *dst;
+ebl_abi_cfi (ebl, abi_info)
+     Ebl *ebl;
+     Dwarf_CIE *abi_info;
 {
-  int result = 0;
-  int idx;
-
-  if (elf == NULL)
-    return -1;
-
-  if (unlikely (elf->kind != ELF_K_ELF))
-    {
-      __libelf_seterrno (ELF_E_INVALID_HANDLE);
-      return -1;
-    }
-
-  idx = elf->state.elf.scns_last->cnt;
-  if (idx != 0
-      || (elf->state.elf.scns_last
-	  != (elf->class == ELFCLASS32
-	      || (offsetof (Elf, state.elf32.scns)
-		  == offsetof (Elf, state.elf64.scns))
-	      ? &elf->state.elf32.scns : &elf->state.elf64.scns)))
-    /* There is at least one section.  */
-    *dst = 1 + elf->state.elf.scns_last->data[idx - 1].index;
-  else
-    *dst = 0;
-
-  return result;
-}
-
-int
-elf_getshnum (elf, dst)
-     Elf *elf;
-     size_t *dst;
-{
-  int result;
-
-  if (elf == NULL)
-    return -1;
-
-  rwlock_rdlock (elf->lock);
-  result = __elf_getshnum_rdlock (elf, dst);
-  rwlock_unlock (elf->lock);
-
-  return result;
+  return ebl == NULL ? -1 : ebl->abi_cfi (ebl, abi_info);
 }
