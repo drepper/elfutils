@@ -1534,9 +1534,24 @@ abbrev_table_load (struct read_ctx *ctx)
 	  where_reset_1 (&where, abbr_off);
 	  where_reset_2 (&where, abbr_off);
 	}
-      REALLOC (section, abbr);
 
-      struct abbrev *cur = section->abbr + section->size++;
+      struct abbrev *original = abbrev_table_find_abbrev (section, abbr_code);
+      if (unlikely (original != NULL))
+	{
+	  char *site1 = strdup (where_fmt (&original->where, NULL));
+	  wr_error (&where, ": duplicate abbrev code %" PRId64
+		    "; already defined at %s.\n", abbr_code, site1);
+	  free (site1);
+	}
+
+      REALLOC (section, abbr);
+      struct abbrev fake;
+      struct abbrev *cur;
+      /* Don't actually save this abbrev if it's duplicate.  */
+      if (likely (original == NULL))
+	cur = section->abbr + section->size++;
+      else
+	cur = &fake;
       WIPE (*cur);
 
       cur->code = abbr_code;
