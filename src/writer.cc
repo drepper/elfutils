@@ -104,54 +104,20 @@ static bool missing_ok;
 /* Nonzero to test writer classes.  */
 static int test_writer;
 
-
-/*
-static Dwarf *
-open_file (const char *fname, int *fdp, Elf **elfp)
-{
-  int fd = open (fname, O_RDWR);
-  if (unlikely (fd == -1))
-    error (2, errno, gettext ("cannot open '%s'"), fname);
-  *fdp = fd;
-
-  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP, NULL);
-  if (elf == NULL)
-    error (2, errno, gettext ("cannot create Elf handle: %s"), elf_errmsg (-1));
-  *elfp = elf;
-
-  Dwarf *dw = dwarf_begin_elf (elf, DWARF_C_READ, NULL);
-  if (dw == NULL)
-    error (2, errno, gettext ("cannot create Dwarf handle: %s"), dwarf_errmsg (-1));
-
-  return dw;
-}
-*/
-
 #define INTERNAL_ERROR(fname) \
   error (EXIT_FAILURE, 0, gettext ("%s: INTERNAL ERROR %d (%s-%s): %s"),      \
 	 fname, __LINE__, PACKAGE_VERSION, __DATE__, elf_errmsg (-1))
 
-#define MAX_STACK_ALLOC	(400 * 1024)
-
 bool permissive = true;
 
-/* Update section headers when the data size has changed.
-   We also update the SHT_NOBITS section in the debug
-   file so that the section headers match in sh_size.  */
+/* Update section headers when the data size has changed.  */
 inline void update_section_size (const Elf_Data *newdata,
-				 Elf_Scn *&scn, Elf *&debugelf, size_t &cnt)
+				 Elf_Scn *&scn)
 {
   GElf_Shdr shdr_mem;
   GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
   shdr->sh_size = newdata->d_size;
   (void) gelf_update_shdr (scn, shdr);
-  if (debugelf != NULL)
-    {
-      /* libelf will use d_size to set sh_size.  */
-      Elf_Data *debugdata = elf_getdata (elf_getscn (debugelf,
-						     cnt), NULL);
-      debugdata->d_size = newdata->d_size;
-    }
 }
 
 struct shdr_info_t
@@ -179,23 +145,12 @@ struct shdr_info_t
   }
 };
 
-inline bool no_symtab_updates (shdr_info_t const &s)
-{
-  /* If the symbol table hasn't changed, do not do anything.  */
-  return s.newsymidx == NULL;
-}
-
 static int
 handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused)),
 	    const char *fname, mode_t mode, const char *output_fname)
 {
-  Elf *debugelf = NULL;
   int result = 0;
-  size_t shstrndx;
   std::vector <shdr_info_t> shdr_info;
-  bool changes;
-  GElf_Ehdr newehdr_mem;
-  GElf_Ehdr *newehdr;
   struct Ebl_Strtab *shst = NULL;
   bool any_symtab_changes = false;
   Elf *newelf;
@@ -232,13 +187,6 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
 	  result = 1;
 	}
 
-      if (debugelf != NULL && elf_end (debugelf) != 0)
-	{
-	  error (0, 0, gettext ("error while finishing '%s': %s"), "ble",
-		 elf_errmsg (-1));
-	  result = 1;
-	}
-
     fail:
       close (fd);
       return result;
@@ -251,6 +199,7 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
     INTERNAL_ERROR (fname);
 
   /* Get the section header string table index.  */
+  size_t shstrndx;
   if (unlikely (elf_getshdrstrndx (elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
@@ -428,6 +377,7 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
   /* Handle exceptions: section groups and cross-references.  We might
      have to repeat this a few times since the resetting of the flag
      might propagate.  */
+  bool changes;
   do
     {
       changes = false;
@@ -845,6 +795,8 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
   /* Adjust symbol references if symbol tables changed.  */
   if (any_symtab_changes)
     /* Find all relocation sections which use this symbol table.  */
+
+#define no_symtab_updates(S) ((S).newsymidx == NULL)
     for (size_t cnt = 1; cnt < shdr_info.size (); ++cnt)
       {
 	if (shdr_info[cnt].idx == 0)
@@ -863,10 +815,8 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
 	    if (no_symtab_updates (shdr_info[symtabidx]))
 		break;
 
-	    Elf_Data *d = elf_getdata (shdr_info[cnt].idx == 0
-				       ? elf_getscn (debugelf, cnt)
-				       : elf_getscn (newelf,
-						     shdr_info[cnt].idx),
+	    Elf_Data *d = elf_getdata (elf_getscn (newelf,
+						   shdr_info[cnt].idx),
 				       NULL);
 	    assert (d != NULL);
 	    size_t nrels = (shdr_info[cnt].shdr.sh_size
@@ -952,7 +902,7 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
 		/* New size of the section.  */
 		hashd->d_size = ((2 + symd->d_size / elsize + nbucket)
 				 * sizeof (Elf32_Word));
-		update_section_size (hashd, scn, debugelf, cnt);
+		update_section_size (hashd, scn);
 
 		/* Clear the arrays.  */
 		memset (bucket, '\0',
@@ -1006,7 +956,7 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
 		/* New size of the section.  */
 		hashd->d_size = ((2 + symd->d_size / elsize + nbucket)
 				 * sizeof (Elf64_Xword));
-		update_section_size (hashd, scn, debugelf, cnt);
+		update_section_size (hashd, scn);
 
 		/* Clear the arrays.  */
 		memset (bucket, '\0',
@@ -1080,7 +1030,7 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
 				       / gelf_fsize (elf, symd->d_type, 1,
 						     ehdr->e_version),
 				       ehdr->e_version);
-	    update_section_size (verd, scn, debugelf, cnt);
+	    update_section_size (verd, scn);
 	    }
 	    break;
 
@@ -1103,10 +1053,11 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
 	    break;
 	  }
       }
+#undef no_symtab_updates
 
   /* Finally finish the ELF header.  Fill in the fields not handled by
      libelf from the old file.  */
-  newehdr = gelf_getehdr (newelf, &newehdr_mem);
+  GElf_Ehdr newehdr_mem, *newehdr = gelf_getehdr (newelf, &newehdr_mem);
   if (newehdr == NULL)
     INTERNAL_ERROR (fname);
 
