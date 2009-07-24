@@ -36,7 +36,7 @@ extern "C"
   SEC (mac)		   \
   SEC (ranges)
 
-    enum section_id
+  enum section_id
   {
     sec_invalid = 0,
 
