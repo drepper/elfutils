@@ -46,6 +46,9 @@
 #include <set>
 
 #include <elf-knowledge.h>
+#include "../libdw/c++/dwarf_output"
+
+#include "dwarflint.h" // for DEBUGINFO_SECTIONS
 
 #include "../libebl/libebl.h"
 extern "C" {
@@ -130,9 +133,7 @@ open_file (const char *fname, int *fdp, Elf **elfp)
 
 #define MAX_STACK_ALLOC	(400 * 1024)
 
-bool remove_debug = true;
 bool permissive = true;
-char const *output_fname = "out";
 
 /* Update section headers when the data size has changed.
    We also update the SHT_NOBITS section in the debug
@@ -185,11 +186,10 @@ inline bool no_symtab_updates (shdr_info_t const &s)
 }
 
 static int
-handle_elf (int fd, Elf *elf, const char *fname,
-	    mode_t mode, struct timeval tvp[2])
+handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused)),
+	    const char *fname, mode_t mode, const char *output_fname)
 {
   Elf *debugelf = NULL;
-  char *tmp_debug_fname = NULL;
   int result = 0;
   size_t shstrndx;
   std::vector <shdr_info_t> shdr_info;
@@ -201,32 +201,12 @@ handle_elf (int fd, Elf *elf, const char *fname,
   Elf *newelf;
 
   /* If we are not replacing the input file open a new file here.  */
-  if (output_fname != NULL)
+  int fd = open (output_fname, O_RDWR | O_CREAT, mode);
+  if (unlikely (fd == -1))
     {
-      fd = open (output_fname, O_RDWR | O_CREAT, mode);
-      if (unlikely (fd == -1))
-	{
-	  error (0, errno, gettext ("cannot open '%s'"), output_fname);
-	  return 1;
-	}
+      error (0, errno, gettext ("cannot open '%s'"), output_fname);
+      return 1;
     }
-
-  int debug_fd = -1;
-
-  /* Get the EBL handling.  The -g option is currently the only reason
-     we need EBL so don't open the backend unless necessary.  */
-  Ebl *ebl = NULL;
-  if (remove_debug)
-    {
-      ebl = ebl_openbackend (elf);
-      if (ebl == NULL)
-	{
-	  error (0, errno, gettext ("cannot open EBL backend"));
-	  result = 1;
-	  goto fail;
-	}
-    }
-
 
   /* Exit handlers.  Need to be at the beginning so that the compiler
      doesn't complain that jumps skip initializations.  */
@@ -247,8 +227,8 @@ handle_elf (int fd, Elf *elf, const char *fname,
       /* That was it.  Close the descriptors.  */
       if (elf_end (newelf) != 0)
 	{
-	  error (0, 0, gettext ("error while finishing '%s': %s"), fname,
-		 elf_errmsg (-1));
+	  error (0, 0, gettext ("error while finishing '%s': %s"),
+		 fname, elf_errmsg (-1));
 	  result = 1;
 	}
 
@@ -260,34 +240,7 @@ handle_elf (int fd, Elf *elf, const char *fname,
 	}
 
     fail:
-      /* Close the EBL backend.  */
-      if (ebl != NULL)
-	ebl_closebackend (ebl);
-
-      /* Close debug file descriptor, if opened */
-      if (debug_fd >= 0)
-	{
-	  if (tmp_debug_fname != NULL)
-	    unlink (tmp_debug_fname);
-	  close (debug_fd);
-	}
-
-      /* If requested, preserve the timestamp.  */
-      if (tvp != NULL)
-	{
-	  if (futimes (fd, tvp) != 0)
-	    {
-	      error (0, errno, gettext ("\
-cannot set access and modification date of '%s'"),
-		     output_fname ?: fname);
-	      result = 1;
-	    }
-	}
-
-      /* Close the file descriptor if we created a new file.  */
-      if (output_fname != NULL)
-	close (fd);
-
+      close (fd);
       return result;
     }
 
@@ -305,10 +258,7 @@ cannot set access and modification date of '%s'"),
   /* We now create a new ELF descriptor for the same file.  We
      construct it almost exactly in the same way with some information
      dropped.  */
-  if (output_fname != NULL)
-    newelf = elf_begin (fd, ELF_C_WRITE_MMAP, NULL);
-  else
-    newelf = elf_clone (elf, ELF_C_EMPTY);
+  newelf = elf_begin (fd, ELF_C_WRITE_MMAP, NULL);
 
   if (unlikely (gelf_newehdr (newelf, gelf_getclass (elf)) == 0)
       || (ehdr->e_type != ET_REL
@@ -562,53 +512,66 @@ cannot set access and modification date of '%s'"),
 	shdr_info[cnt].se = ebl_strtabadd (shst, shdr_info[cnt].name, 0);
       }
 
+  struct section_data_t
   {
-    shdr_info_t debug_info;
+    std::string name;
+    std::vector <uint8_t> data;
+    section_data_t (char const *a_name) : name (a_name) {}
+  };
+  section_data_t section_data[] = {
+#define SEC(N) section_data_t (".debug_" #N),
+    DEBUGINFO_SECTIONS
+#undef SEC
+  };
 
-    /* Add the section header string table section name.  */
-    char *name = strdup (".debug_info"); // ebl_strtabadd doesn't
-					 // intern the string
-    debug_info.se = ebl_strtabadd (shst, name, strlen (name) + 1);
-    debug_info.idx = idx;
+  for (size_t i = 0; i < sizeof (section_data) / sizeof (*section_data); ++i)
+    {
+      std::vector <uint8_t> &data = section_data[i].data;
+      shdr_info_t data_info;
 
-    /* Create the section header.  */
-    debug_info.shdr.sh_type = SHT_PROGBITS;
-    debug_info.shdr.sh_flags = 0;
-    debug_info.shdr.sh_addr = 0;
-    debug_info.shdr.sh_link = SHN_UNDEF;
-    debug_info.shdr.sh_info = SHN_UNDEF;
-    debug_info.shdr.sh_entsize = 0;
-    debug_info.shdr.sh_offset = 0;
-    debug_info.shdr.sh_addralign = 1;
+      /* Add the section header string table section name.  */
+      std::string const &name = section_data[i].name;
+      data_info.se = ebl_strtabadd (shst, name.c_str (), name.length () + 1);
+      data_info.idx = idx;
 
-    /* Create the section.  */
-    debug_info.newscn = elf_newscn (newelf);
-    if (debug_info.newscn == NULL)
-      error (EXIT_FAILURE, 0,
-	     gettext ("while create section header section: %s"),
-	     elf_errmsg (-1));
-    assert (elf_ndxscn (debug_info.newscn) == idx);
+      /* Create the section header.  */
+      data_info.shdr.sh_type = SHT_PROGBITS;
+      data_info.shdr.sh_flags = 0;
+      data_info.shdr.sh_addr = 0;
+      data_info.shdr.sh_link = SHN_UNDEF;
+      data_info.shdr.sh_info = SHN_UNDEF;
+      data_info.shdr.sh_entsize = 0;
+      data_info.shdr.sh_offset = 0;
+      data_info.shdr.sh_addralign = 1;
 
-    /* Finalize the string table and fill in the correct indices in the
-       section headers.  */
-    Elf_Data *debug_info_data = elf_newdata (debug_info.newscn);
-    // xxx free on failure
-    if (debug_info_data == NULL)
-      error (EXIT_FAILURE, 0,
-	     gettext ("while create section header string table: %s"),
-	     elf_errmsg (-1));
+      /* Create the section.  */
+      data_info.newscn = elf_newscn (newelf);
+      if (data_info.newscn == NULL)
+	error (EXIT_FAILURE, 0,
+	       gettext ("while creating section header section: %s"),
+	       elf_errmsg (-1));
+      assert (elf_ndxscn (data_info.newscn) == idx);
 
-    debug_info_data->d_buf = (void*)"huhly";
-    debug_info_data->d_type = ELF_T_BYTE;
-    debug_info_data->d_size = strlen ((const char *)debug_info_data->d_buf) + 1;
-    debug_info_data->d_align = 1;
+      /* Finalize the string table and fill in the correct indices in the
+	 section headers.  */
+      Elf_Data *data_info_data = elf_newdata (data_info.newscn);
+      // xxx free on failure
+      if (data_info_data == NULL)
+	error (EXIT_FAILURE, 0,
+	       gettext ("while creating section header string table: %s"),
+	       elf_errmsg (-1));
 
-    /* We have to set the section size.  */
-    debug_info.shdr.sh_size = debug_info_data->d_size;
+      data_info_data->d_buf = (void*)&data[0];
+      data_info_data->d_type = ELF_T_BYTE;
+      data_info_data->d_size = data.size ();
+      data_info_data->d_align = 1;
 
-    shdr_info.push_back (debug_info);
-    ++idx;
-  }
+      /* We have to set the section size.  */
+      data_info.shdr.sh_size = data_info_data->d_size;
+
+      shdr_info.push_back (data_info);
+      ++idx;
+    }
 
   {
     shdr_info_t shstrtab;
@@ -1236,13 +1199,19 @@ main (int argc, char *argv[])
       exit (1);
     }
 
-  const char *const fname = argv[remaining];
+  std::string fname = argv[remaining];
+  std::string outname = fname + ".out";
 
-  int fd = open (fname, O_RDONLY);
+  int fd = open (fname.c_str (), O_RDONLY);
   struct stat64 st;
   fstat64 (fd, &st);
   Elf *elf = elf_begin (fd, ELF_C_READ,	NULL);
-  handle_elf (fd, elf, fname, st.st_mode & ACCESSPERMS, NULL);
+  Dwarf *dwarf = dwarf_begin_elf (elf, DWARF_C_READ, NULL);
+  elfutils::dwarf dw (dwarf);
+  elfutils::dwarf_output_collector c;
+  elfutils::dwarf_output dwout (dw, c);
+  handle_elf (elf, dwout, fname.c_str (),
+	      st.st_mode & ACCESSPERMS, outname.c_str ());
 }
 
 
