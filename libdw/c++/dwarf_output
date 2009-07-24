@@ -612,6 +612,8 @@ namespace elfutils
   private:
     dwarf_path_finder<dwarf_output> _m_tracker;
     unsigned int _m_total;
+    bool _m_output_built;
+    size_t _m_last_abbrev_code;
 
     typedef dwarf_output::debug_info_entry die_type;
     typedef die_type::attributes_type attrs_type;
@@ -664,14 +666,80 @@ namespace elfutils
       bool with_sibling;
       bool without_sibling;
 
+      size_t abbrev_code; // Or 0 if unassigned.
+
       inline die_info ()
 	: uses (0), with_sibling (false), without_sibling (false)
+	, abbrev_code (0)
       {}
     };
 
     // Set of unique DIEs.
     typedef subr::identity_map<die_type, die_info> die_map;
     die_map _m_unique;
+
+    struct abbrev_attrib
+    {
+      unsigned name;
+      unsigned form;
+    };
+
+    struct abbrev
+    {
+      size_t code;
+      unsigned tag;
+      bool has_children;
+      std::vector <abbrev_attrib> attribs;
+      std::vector <uint8_t> data;
+
+      abbrev (dwarf_output_collector &c,
+	      die_map::value_type const &emt)
+	: code (++c._m_last_abbrev_code) // xxx nonsense
+	, tag (emt.first.tag ())
+	, has_children (emt.first.has_children ())
+      {
+      }
+
+      bool operator < (abbrev const &other) const
+      {
+	return code < other.code;
+      }
+
+      std::vector <uint8_t> const &get_data ()
+      {
+	if (data.size () == 0)
+	  {
+	    data.push_back (1); // ULEB128 abbreviation code
+	    data.push_back (1); // ULEB128 tag
+	    data.push_back (has_children ? DW_CHILDREN_yes : DW_CHILDREN_no);
+
+	    for (std::vector<abbrev_attrib>::const_iterator it
+		   = attribs.begin (); it != attribs.end (); ++it)
+	      {
+		data.push_back (1); // ULEB128 name
+		data.push_back (1); // ULEB128 form
+	      }
+
+	    data.push_back (0);
+	    data.push_back (0);
+	  }
+
+	return data;
+      }
+    };
+
+    // Abbreviations necessary to cover unique DIEs.
+    typedef std::set <abbrev> abbrev_set;
+    abbrev_set _m_abbrevs;
+
+    struct cmp_abbrev_it
+    {
+      bool operator () (abbrev_set::const_iterator it1,
+			abbrev_set::const_iterator it2)
+      {
+	return *it1 < *it2;
+      }
+    };
 
     template<typename input, typename copier_type>
     inline const die_type *add_entry (const input &other, copier_type &c,
@@ -722,9 +790,18 @@ namespace elfutils
 
     void add_shape (die_type &die, bool last_sibling);
 
+    void build_output ()
+    {
+      for (die_map::const_iterator it = _m_unique.begin ();
+	   it != _m_unique.end (); ++it)
+	_m_abbrevs.insert (abbrev (*this, *it));
+    }
+
   public:
     inline dwarf_output_collector ()
       : _m_total (0)
+      , _m_output_built (false)
+      , _m_last_abbrev_code (0)
     {}
 
     static void die_stats (const die_map::value_type &elt)
@@ -740,6 +817,38 @@ namespace elfutils
       std::cout << "collected " << std::dec << _m_unique.size ()
 		<< " unique of " << _m_total << " total DIEs\n";
       std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
+    }
+
+    void output_debug_abbrev (std::vector <uint8_t> &data)
+    {
+      if (!_m_output_built)
+	build_output ();
+
+      typedef std::vector <abbrev_set::const_iterator> abbr_it_vec;
+      abbr_it_vec abbrevs;
+      for (abbrev_set::const_iterator it = _m_abbrevs.begin ();
+	   it != _m_abbrevs.end (); ++it)
+	abbrevs.push_back (it);
+      std::sort (abbrevs.begin (), abbrevs.end (), cmp_abbrev_it ());
+
+      for (abbr_it_vec::const_iterator it = abbrevs.begin ();
+	   it != abbrevs.end (); ++it)
+	{
+	  abbrev ab = **it;
+	  std::vector <uint8_t> const &abbr_data = ab.get_data ();
+	  data.insert (data.end (), abbr_data.begin (), abbr_data.end ());
+	}
+    }
+
+    void output_debug_info (std::vector <uint8_t> &data __attribute__ ((unused)))
+    {
+      for (die_map::const_iterator it = _m_unique.begin ();
+	   it != _m_unique.end (); ++it)
+	die_stats (*it);
+      std::string s = "blah";
+      for (std::string::const_iterator it = s.begin ();
+	   it != s.end (); ++it)
+	data.push_back (*it);
     }
   };
 

@@ -146,7 +146,9 @@ struct shdr_info_t
 };
 
 static int
-handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused)),
+handle_elf (Elf *elf,
+	    elfutils::dwarf_output &dwout __attribute__ ((unused)),
+	    elfutils::dwarf_output_collector &collector,
 	    const char *fname, mode_t mode, const char *output_fname)
 {
   int result = 0;
@@ -468,11 +470,21 @@ handle_elf (Elf *elf, const elfutils::dwarf_output &dwout __attribute__ ((unused
     std::vector <uint8_t> data;
     section_data_t (char const *a_name) : name (a_name) {}
   };
+
   section_data_t section_data[] = {
 #define SEC(N) section_data_t (".debug_" #N),
     DEBUGINFO_SECTIONS
 #undef SEC
   };
+
+  enum section_idx {
+#define SEC(N) si_##N,
+    DEBUGINFO_SECTIONS
+#undef SEC
+  };
+
+  collector.output_debug_abbrev (section_data[si_abbrev].data);
+  //collector.output_debug_info (section_data[si_info].data);
 
   for (size_t i = 0; i < sizeof (section_data) / sizeof (*section_data); ++i)
     {
@@ -1161,7 +1173,7 @@ main (int argc, char *argv[])
   elfutils::dwarf dw (dwarf);
   elfutils::dwarf_output_collector c;
   elfutils::dwarf_output dwout (dw, c);
-  handle_elf (elf, dwout, fname.c_str (),
+  handle_elf (elf, dwout, c, fname.c_str (),
 	      st.st_mode & ACCESSPERMS, outname.c_str ());
 }
 
