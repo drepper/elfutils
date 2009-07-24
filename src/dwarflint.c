@@ -1113,10 +1113,9 @@ elf_file_init (struct elf_file *file, Elf *elf)
 	      /* Haven't seen a section of that name yet.  */
 	      cursec->data = elf_getdata (scn, NULL);
 	      if (cursec->data == NULL || cursec->data->d_buf == NULL)
-		{
-		  wr_error (NULL, "Data-less section %s.\n", scnname);
-		  cursec->data = NULL;
-		}
+		/* Don't print out a warning, we'll get to that in
+		   process_file.  */
+		cursec->data = NULL;
 	      secentry->secndx = curndx;
 	    }
 	}
@@ -1229,8 +1228,9 @@ process_file (Elf *elf, const char *fname, bool only_one)
   struct hl_ctx *hlctx = hl_ctx_new (elf);
 
 #define SEC(sec) (file.debugsec[sec_##sec])
+#define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
 
-  if (likely (SEC(abbrev) != NULL))
+  if (likely (HAS_SEC(abbrev)))
     {
       read_ctx_init (&ctx, &file, SEC(abbrev)->data);
       abbrev_chain = abbrev_table_load (&ctx);
@@ -1242,7 +1242,7 @@ process_file (Elf *elf, const char *fname, bool only_one)
   struct cu_coverage *cu_coverage = NULL;
   if (abbrev_chain != NULL)
     {
-      if (SEC(info) != NULL)
+      if (likely (HAS_SEC(info)))
 	{
 	  cu_coverage = calloc (1, sizeof (struct cu_coverage));
 	  cu_chain = check_info_structural (&file, SEC(info), abbrev_chain,
@@ -1256,16 +1256,16 @@ process_file (Elf *elf, const char *fname, bool only_one)
     }
 
   bool ranges_sound;
-  if (SEC(ranges) != NULL && cu_chain != NULL)
+  if (HAS_SEC(ranges) && cu_chain != NULL)
     ranges_sound = check_loc_or_range_structural (&file, SEC(ranges),
 						  cu_chain, cu_coverage);
   else
     ranges_sound = false;
 
-  if (SEC(loc) != NULL && cu_chain != NULL)
+  if (HAS_SEC(loc) && cu_chain != NULL)
     check_loc_or_range_structural (&file, SEC(loc), cu_chain, NULL);
 
-  if (SEC(aranges) != NULL)
+  if (HAS_SEC(aranges))
     {
       read_ctx_init (&ctx, &file, SEC(aranges)->data);
 
@@ -1280,19 +1280,19 @@ process_file (Elf *elf, const char *fname, bool only_one)
 	check_matching_ranges (hlctx);
     }
 
-  if (SEC(pubnames) != NULL)
+  if (HAS_SEC(pubnames))
     check_pub_structural (&file, SEC(pubnames), cu_chain);
   else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 		&WHERE (sec_pubnames, NULL), ": data not found.\n");
 
-  if (SEC(pubtypes) != NULL)
+  if (HAS_SEC(pubtypes))
     check_pub_structural (&file, SEC(pubtypes), cu_chain);
   else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
 		&WHERE (sec_pubtypes, NULL), ": data not found.\n");
 
-  if (SEC(line) != NULL)
+  if (HAS_SEC(line))
     check_line_structural (&file, SEC(line), cu_chain);
   else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_loc,
@@ -1306,6 +1306,7 @@ process_file (Elf *elf, const char *fname, bool only_one)
   hl_ctx_delete (hlctx);
 
 #undef SEC
+#undef HAS_SEC
 }
 
 static bool
