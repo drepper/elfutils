@@ -1534,12 +1534,14 @@ abbrev_table_load (struct read_ctx *ctx)
 	  free (site1);
 	}
 
-      REALLOC (section, abbr);
       struct abbrev fake;
       struct abbrev *cur;
       /* Don't actually save this abbrev if it's duplicate.  */
       if (likely (original == NULL))
-	cur = section->abbr + section->size++;
+	{
+	  REALLOC (section, abbr);
+	  cur = section->abbr + section->size++;
+	}
       else
 	cur = &fake;
       WIPE (*cur);
