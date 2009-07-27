@@ -613,7 +613,6 @@ namespace elfutils
     dwarf_path_finder<dwarf_output> _m_tracker;
     unsigned int _m_total;
     bool _m_output_built;
-    size_t _m_last_abbrev_code;
 
     typedef dwarf_output::debug_info_entry die_type;
     typedef die_type::attributes_type attrs_type;
@@ -682,64 +681,27 @@ namespace elfutils
     {
       unsigned name;
       unsigned form;
+
+      bool operator< (abbrev_attrib const &other) const
+      {
+	return name < other.name
+	  && form < other.form;
+      }
     };
 
-    struct abbrev
+    static void
+    write_uleb128 (std::vector <uint8_t> &buf, uint64_t value)
     {
-      size_t code;
-      unsigned tag;
-      bool has_children;
-      std::vector <abbrev_attrib> attribs;
-      std::vector <uint8_t> data;
-
-      abbrev (dwarf_output_collector &c,
-	      die_map::value_type const &emt)
-	: code (++c._m_last_abbrev_code) // xxx nonsense
-	, tag (emt.first.tag ())
-	, has_children (emt.first.has_children ())
-      {
-      }
-
-      bool operator < (abbrev const &other) const
-      {
-	return code < other.code;
-      }
-
-      std::vector <uint8_t> const &get_data ()
-      {
-	if (data.size () == 0)
-	  {
-	    data.push_back (1); // ULEB128 abbreviation code
-	    data.push_back (1); // ULEB128 tag
-	    data.push_back (has_children ? DW_CHILDREN_yes : DW_CHILDREN_no);
-
-	    for (std::vector<abbrev_attrib>::const_iterator it
-		   = attribs.begin (); it != attribs.end (); ++it)
-	      {
-		data.push_back (1); // ULEB128 name
-		data.push_back (1); // ULEB128 form
-	      }
-
-	    data.push_back (0);
-	    data.push_back (0);
-	  }
-
-	return data;
-      }
-    };
-
-    // Abbreviations necessary to cover unique DIEs.
-    typedef std::set <abbrev> abbrev_set;
-    abbrev_set _m_abbrevs;
-
-    struct cmp_abbrev_it
-    {
-      bool operator () (abbrev_set::const_iterator it1,
-			abbrev_set::const_iterator it2)
-      {
-	return *it1 < *it2;
-      }
-    };
+      do
+	{
+	  uint8_t byte = value & 0x7fULL;
+	  value >>= 7;
+	  if (value != 0)
+	    byte |= 0x80;
+	  buf.push_back (byte);
+	}
+      while (value != 0);
+    }
 
     template<typename input, typename copier_type>
     inline const die_type *add_entry (const input &other, copier_type &c,
@@ -757,9 +719,15 @@ namespace elfutils
       return &x.first;
     }
 
+    typedef std::vector<die_type const *> die_ref_vect;
+
     struct shape_type
     {
-      typedef std::vector<std::pair<int, int> > attrs_type;
+      // name/form pairs.  Form is in fact a canonical form for given
+      // form class, not actual form under which the data will be
+      // emitted.
+      typedef std::map<int, int> attrs_type;
+      unsigned _m_tag;
       attrs_type _m_attrs;
       bool _m_has_children;
       size_t _m_hash;
@@ -768,11 +736,12 @@ namespace elfutils
       typedef subr::hashed_hasher<shape_type> hasher;
 
       inline void hashnadd (int name, int form);
-      inline shape_type (const die_type &die, bool last_sibling);
+      inline shape_type (die_map::value_type const &emt);
 
       inline bool operator== (const shape_type &other) const
       {
 	return (_m_hash == other._m_hash
+		&& _m_tag == other._m_tag
 		&& _m_has_children == other._m_has_children
 		&& _m_attrs == other._m_attrs);
       }
@@ -782,7 +751,42 @@ namespace elfutils
       }
     };
 
-    typedef subr::nothing shape_info;
+    struct shape_info
+    {
+      // We keep list of users of this shape.  That will make it
+      // simpler to evaluate the space trade-offs when we generate
+      // actual abbrevs from this shape.
+      die_ref_vect _m_users;
+
+      // Instances.  Instance is a sequence of concrete forms in the
+      // order matching that of shape_type::_m_attrs.  Each shape can
+      // produce several instances to ideally cover its users.  The
+      // second element of the pair is unique code assigned to that
+      // instance, or 0 if no code was assigned yet.
+      typedef std::pair<std::vector<int>, size_t> instance_type;
+      typedef std::vector<instance_type> instances_type;
+      instances_type _m_instances;
+
+      // Maps users to their instances.
+      typedef std::map<die_type const*, instances_type::const_iterator>
+	  instance_map;
+      instance_map _m_instance_map;
+
+      shape_info (die_map::value_type const &emt)
+      {
+	add_user (&emt.first);
+      }
+
+      void add_user (die_type const *die)
+      {
+	_m_users.push_back (die);
+      }
+
+      void instantiate (shape_type const &shape);
+      void build_data (shape_type const &shape,
+		       instance_type const &inst,
+		       std::vector<uint8_t> &data);
+    };
 
     typedef std::tr1::unordered_map<shape_type, shape_info,
 				    shape_type::hasher> shape_map;
@@ -790,18 +794,12 @@ namespace elfutils
 
     void add_shape (die_type &die, bool last_sibling);
 
-    void build_output ()
-    {
-      for (die_map::const_iterator it = _m_unique.begin ();
-	   it != _m_unique.end (); ++it)
-	_m_abbrevs.insert (abbrev (*this, *it));
-    }
+    void build_output ();
 
   public:
     inline dwarf_output_collector ()
       : _m_total (0)
       , _m_output_built (false)
-      , _m_last_abbrev_code (0)
     {}
 
     static void die_stats (const die_map::value_type &elt)
@@ -819,37 +817,7 @@ namespace elfutils
       std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
     }
 
-    void output_debug_abbrev (std::vector <uint8_t> &data)
-    {
-      if (!_m_output_built)
-	build_output ();
-
-      typedef std::vector <abbrev_set::const_iterator> abbr_it_vec;
-      abbr_it_vec abbrevs;
-      for (abbrev_set::const_iterator it = _m_abbrevs.begin ();
-	   it != _m_abbrevs.end (); ++it)
-	abbrevs.push_back (it);
-      std::sort (abbrevs.begin (), abbrevs.end (), cmp_abbrev_it ());
-
-      for (abbr_it_vec::const_iterator it = abbrevs.begin ();
-	   it != abbrevs.end (); ++it)
-	{
-	  abbrev ab = **it;
-	  std::vector <uint8_t> const &abbr_data = ab.get_data ();
-	  data.insert (data.end (), abbr_data.begin (), abbr_data.end ());
-	}
-    }
-
-    void output_debug_info (std::vector <uint8_t> &data __attribute__ ((unused)))
-    {
-      for (die_map::const_iterator it = _m_unique.begin ();
-	   it != _m_unique.end (); ++it)
-	die_stats (*it);
-      std::string s = "blah";
-      for (std::string::const_iterator it = s.begin ();
-	   it != s.end (); ++it)
-	data.push_back (*it);
-    }
+    void output_debug_abbrev (std::vector <uint8_t> &data);
   };
 
   template<typename dw>

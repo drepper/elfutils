@@ -49,6 +49,7 @@
 
 #include <config.h>
 #include "dwarf_output"
+#include "../../src/dwarfstrings.h"
 
 using namespace elfutils;
 
@@ -125,34 +126,143 @@ attr_form (int tag, const dwarf_output::attribute &attr)
 inline void
 dwarf_output_collector::shape_type::hashnadd (int name, int form)
 {
-  subr::hash_combine (_m_hash, name);
-  subr::hash_combine (_m_hash, form);
-  _m_attrs.push_back (std::make_pair (name, form));
+  _m_attrs.insert (std::make_pair (name, form));
 }
 
 inline
-dwarf_output_collector::shape_type::shape_type (const die_type &die,
-						bool last_sibling)
-  : _m_has_children (die.has_children ()), _m_hash (8675309 << _m_has_children)
+dwarf_output_collector::shape_type::shape_type (die_map::value_type const &emt)
+  : _m_tag (emt.first.tag ())
+  , _m_has_children (emt.first.has_children ())
+  , _m_hash (8675309 << _m_has_children)
 {
-  if (!last_sibling)
+  if (emt.second.with_sibling && emt.first.has_children ())
     hashnadd (DW_AT_sibling, DW_FORM_ref_udata);
 
-  for (die_type::attributes_type::const_iterator it = die.attributes ().begin ();
-       it != die.attributes ().end ();
-       ++it)
-    hashnadd (it->first, attr_form (die.tag (), *it));
+  for (die_type::attributes_type::const_iterator it
+	 = emt.first.attributes ().begin ();
+       it != emt.first.attributes ().end (); ++it)
+    hashnadd (it->first, attr_form (_m_tag, *it));
+
+  // Make sure the hash is computed based on canonical order of
+  // (unique) attributes, not based on order in which the attributes
+  // are in DIE.
+  for (attrs_type::const_iterator it = _m_attrs.begin ();
+       it != _m_attrs.end (); ++it)
+    {
+      subr::hash_combine (_m_hash, it->first);
+      subr::hash_combine (_m_hash, it->second);
+    }
 }
 
 void
-dwarf_output_collector::add_shape (die_type &die, bool last_sibling)
+dwarf_output_collector::shape_info::instantiate
+    (dwarf_output_collector::shape_type const &shape)
 {
-  assert (die._m_shape == NULL);
+  // For now create single instance with the canonical forms.
+  _m_instances.push_back (instance_type ());
+  instance_type &inst = _m_instances[0];
+  for (shape_type::attrs_type::const_iterator it = shape._m_attrs.begin ();
+       it != shape._m_attrs.end (); ++it)
+    inst.first.push_back (it->second);
 
-  shape_map::value_type &x
-    = *_m_shapes.insert (std::make_pair (shape_type (die, last_sibling),
-					 shape_info ())).first;
-  // x.second.nusers++, etc.
+  for (die_ref_vect::iterator it = _m_users.begin ();
+       it != _m_users.end (); ++it)
+    _m_instance_map[*it] = _m_instances.begin ();
+}
 
-  die._m_shape = &x;
+void
+dwarf_output_collector::shape_info::build_data
+    (dwarf_output_collector::shape_type const &shape,
+     dwarf_output_collector::shape_info::instance_type const &inst,
+     std::vector<uint8_t> &data)
+{
+  write_uleb128 (data, inst.second);
+  write_uleb128 (data, shape._m_tag);
+  data.push_back (shape._m_has_children ? DW_CHILDREN_yes : DW_CHILDREN_no);
+
+  // We iterate shape attribute map in parallel with instance
+  // attribute forms.  They are stored in the same order.  We get
+  // attribute name from attribute map, and concrete form from
+  // instance.
+  assert (shape._m_attrs.size () == inst.first.size ());
+  dwarf_output_collector::shape_type::attrs_type::const_iterator at
+    = shape._m_attrs.begin ();
+  for (instance_type::first_type::const_iterator it = inst.first.begin ();
+       it != inst.first.end (); ++it)
+    {
+      // ULEB128 name & form
+      write_uleb128 (data, at++->first);
+      write_uleb128 (data, *it);
+    }
+
+  data.push_back (0);
+  data.push_back (0);
+}
+
+void
+dwarf_output_collector::build_output ()
+{
+  for (die_map::const_iterator it = _m_unique.begin ();
+       it != _m_unique.end (); ++it)
+    {
+      shape_type shape (*it);
+      shape_map::iterator st = _m_shapes.find (shape);
+      if (st != _m_shapes.end ())
+	st->second.add_user (&it->first);
+      else
+	_m_shapes.insert (std::make_pair (shape_type (*it), shape_info (*it)));
+    }
+
+  for (shape_map::iterator it = _m_shapes.begin ();
+       it != _m_shapes.end (); ++it)
+    it->second.instantiate (it->first);
+
+  std::cout << "shapes" << std::endl;
+  size_t code = 0;
+  for (shape_map::iterator it = _m_shapes.begin ();
+       it != _m_shapes.end (); ++it)
+    {
+      std::cout << "  " << it->first._m_tag;
+      for (shape_type::attrs_type::const_iterator jt
+	     = it->first._m_attrs.begin ();
+	   jt != it->first._m_attrs.end (); ++jt)
+	std::cout << " " << dwarf_attr_string (jt->first)
+		  << ":" << dwarf_form_string (jt->second);
+      std::cout << std::endl;
+
+      for (shape_info::instances_type::iterator jt
+	     = it->second._m_instances.begin ();
+	   jt != it->second._m_instances.end (); ++jt)
+	{
+	  jt->second = ++code;
+	  std::cout << "    i" << jt->second;
+	  for (shape_info::instance_type::first_type::const_iterator kt
+		 = jt->first.begin ();  kt != jt->first.end (); ++kt)
+	    std::cout << " " << dwarf_form_string (*kt);
+	  std::cout << std::endl;
+	}
+
+      for (die_ref_vect::const_iterator jt = it->second._m_users.begin ();
+	   jt != it->second._m_users.end (); ++jt)
+	std::cout << "    " << to_string (**jt)
+		  << "; i" << (it->second._m_instance_map[*jt]->second)
+		  << std::endl;
+    }
+
+  _m_output_built = true;
+}
+
+void
+dwarf_output_collector::output_debug_abbrev (std::vector <uint8_t> &data
+					     __attribute__ ((unused)))
+{
+  if (!_m_output_built)
+    build_output ();
+
+  for (shape_map::iterator it = _m_shapes.begin ();
+       it != _m_shapes.end (); ++it)
+    for (shape_info::instances_type::const_iterator jt
+	   = it->second._m_instances.begin ();
+	 jt != it->second._m_instances.end (); ++jt)
+      it->second.build_data (it->first, *jt, data);
 }
