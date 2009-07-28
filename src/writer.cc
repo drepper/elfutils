@@ -147,7 +147,7 @@ struct shdr_info_t
 
 static int
 handle_elf (Elf *elf,
-	    elfutils::dwarf_output &dwout __attribute__ ((unused)),
+	    elfutils::dwarf_output &dwout,
 	    elfutils::dwarf_output_collector &collector,
 	    const char *fname, mode_t mode, const char *output_fname)
 {
@@ -483,8 +483,8 @@ handle_elf (Elf *elf,
 #undef SEC
   };
 
-  collector.output_debug_abbrev (section_data[si_abbrev].data);
-  //collector.output_debug_info (section_data[si_info].data);
+  dwout.output_debug_abbrev (section_data[si_abbrev].data, collector);
+  dwout.output_debug_info (section_data[si_info].data, collector);
 
   for (size_t i = 0; i < sizeof (section_data) / sizeof (*section_data); ++i)
     {

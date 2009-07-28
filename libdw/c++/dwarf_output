@@ -583,6 +583,12 @@ namespace elfutils
     {
       return !(*this == other);
     }
+
+    void output_debug_abbrev (std::vector <uint8_t> &data,
+			      dwarf_output_collector &dw);
+
+    void output_debug_info (std::vector <uint8_t> &data,
+			    dwarf_output_collector &dw);
   };
 
   // Explicit specializations.
@@ -815,8 +821,6 @@ namespace elfutils
 		<< " unique of " << _m_total << " total DIEs\n";
       std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
     }
-
-    void output_debug_abbrev (std::vector <uint8_t> &data);
   };
 
   template<typename dw>

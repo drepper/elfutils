@@ -238,26 +238,59 @@ dwarf_output_collector::build_output ()
 
       for (die_ref_vect::const_iterator jt = it->second._m_users.begin ();
 	   jt != it->second._m_users.end (); ++jt)
-	std::cout << "    " << to_string (**jt)
-		  << "; i" << (it->second._m_instance_map[*jt]->second)
-		  << std::endl;
+	{
+	  std::cout << "    " << to_string (**jt)
+		    << "; i" << (it->second._m_instance_map[*jt]->second)
+		    << std::endl;
+	  die_type::attributes_type const &ats = (**jt).attributes ();
+	  for (die_type::attributes_type::const_iterator kt = ats.begin ();
+	       kt != ats.end (); ++kt)
+	    std::cout << "      " << dwarf_attr_string (kt->first) << std::endl;
+	}
     }
 
   _m_output_built = true;
 }
 
 void
-dwarf_output_collector::output_debug_abbrev (std::vector <uint8_t> &data)
+dwarf_output::output_debug_abbrev (std::vector <uint8_t> &data,
+				   dwarf_output_collector &c)
 {
-  if (!_m_output_built)
-    build_output ();
+  if (!c._m_output_built)
+    c.build_output ();
 
-  for (shape_map::iterator it = _m_shapes.begin ();
-       it != _m_shapes.end (); ++it)
-    for (shape_info::instances_type::const_iterator jt
+  for (dwarf_output_collector::shape_map::iterator it = c._m_shapes.begin ();
+       it != c._m_shapes.end (); ++it)
+    for (dwarf_output_collector::shape_info::instances_type::const_iterator jt
 	   = it->second._m_instances.begin ();
 	 jt != it->second._m_instances.end (); ++jt)
       it->second.build_data (it->first, *jt, data);
 
   data.push_back (0); // terminate table
+}
+
+void
+dwarf_output::output_debug_info (std::vector <uint8_t> &data,
+				 dwarf_output_collector &c)
+{
+  if (!c._m_output_built)
+    c.build_output ();
+
+  for (compile_units::const_iterator it = _m_units.begin ();
+       it != _m_units.end (); ++it)
+    {
+      std::cout << "UNIT" << std::endl;
+      for (compile_unit::children_type::const_iterator jt
+	     = it->children ().begin (); jt != it->children ().end (); ++jt)
+	{
+	  debug_info_entry const &die = *jt;
+	  std::cout << "CHILD " << dwarf_tag_string (die.tag ()) << std::endl;
+	}
+    }
+
+  std::string ble ("\x08\x00\x00\x00"
+		   "\x02\x00\x00\x00"
+		   "\x00\x00\x04\x00"
+		   , 12);
+  data.insert (data.end (), ble.begin (), ble.end ());
 }
