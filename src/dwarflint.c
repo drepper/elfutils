@@ -1474,8 +1474,25 @@ abbrev_table_load (struct read_ctx *ctx)
   struct where where = WHERE (sec_abbrev, NULL);
   where.addr1 = 0;
 
-  while (!read_ctx_eof (ctx))
+  while (true)
     {
+      inline bool check_no_abbreviations ()
+      {
+	bool ret = section_chain == NULL;
+	if (ret)
+	  wr_error (&WHERE (sec_abbrev, NULL), ": no abbreviations.\n");
+	return ret;
+      }
+
+      /* If we get EOF at this point, either the CU was improperly
+	 terminated, or there were no data to begin with.  */
+      if (read_ctx_eof (ctx))
+	{
+	  if (!check_no_abbreviations ())
+	    wr_error (&where, ": missing zero to mark end-of-table.\n");
+	  break;
+	}
+
       uint64_t abbr_off;
       uint64_t abbr_code;
       {
@@ -1492,8 +1509,14 @@ abbrev_table_load (struct read_ctx *ctx)
 	    if (!checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
 	      goto free_and_out;
 
-	    if (abbr_code == 0 && prev_abbr_code == 0
-		&& zero_seq_off == (uint64_t)-1)
+	    /* Note: we generally can't tell the difference between
+    	       empty table and (excessive) padding.  But NUL byte(s)
+    	       at the very beginning of section are almost certainly
+    	       the first case.  */
+	    if (zero_seq_off == (uint64_t)-1
+		&& abbr_code == 0
+		&& (prev_abbr_code == 0
+		    || section_chain == NULL))
 	      zero_seq_off = abbr_off;
 
 	    if (abbr_code != 0)
@@ -1504,20 +1527,27 @@ abbrev_table_load (struct read_ctx *ctx)
 	    prev_abbr_code = abbr_code;
 	    prev_abbr_off = abbr_off;
 	  }
-	while (!read_ctx_eof (ctx));
+	while (!read_ctx_eof (ctx)
+	       /* On EOF, shift the offset so that beyond-EOF
+		  end-position is printed for padding warning.
+		  Necessary as our end position is exclusive.  */
+	       || ((abbr_off += 1), false));
 
 	if (zero_seq_off != (uint64_t)-1)
-	  {
-	    /* Don't report abbrev address, this is section-wide padding.  */
-	    struct where wh = WHERE (where.section, NULL);
-	    wr_message_padding_0 (mc_abbrevs | mc_header, &wh,
-				  zero_seq_off, abbr_off);
-	  }
+	  wr_message_padding_0 (mc_abbrevs | mc_header,
+				&WHERE (where.section, NULL),
+				zero_seq_off, abbr_off);
       }
 
       if (read_ctx_eof (ctx))
-	break;
+	{
+	  /* It still may have been empty.  */
+	  check_no_abbreviations ();
+	  break;
+	}
 
+      /* OK, we got some genuine abbreviation.  See if we need to
+	 allocate a new section.  */
       if (section == NULL)
 	{
 	  section = xcalloc (1, sizeof (*section));
