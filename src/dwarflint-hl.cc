@@ -100,52 +100,63 @@ static const expected_at_map expected_at;
 bool
 check_matching_ranges (hl_ctx *hlctx)
 {
-  struct where where_ref = WHERE (sec_info, NULL);
-  struct where where_ar = WHERE (sec_aranges, NULL);
-  where_ar.ref = &where_ref;
-  struct where where_r = WHERE (sec_ranges, NULL);
-  where_r.ref = &where_ref;
-  char buf[128];
-
-  const elfutils::dwarf::aranges_map &aranges = hlctx->dw.aranges ();
-  for (elfutils::dwarf::aranges_map::const_iterator i = aranges.begin ();
-       i != aranges.end (); ++i)
+  try
     {
-      const elfutils::dwarf::compile_unit &cu = i->first;
-      where_reset_1 (&where_ref, 0);
-      where_reset_2 (&where_ref, cu.offset ());
+      struct where where_ref = WHERE (sec_info, NULL);
+      struct where where_ar = WHERE (sec_aranges, NULL);
+      where_ar.ref = &where_ref;
+      struct where where_r = WHERE (sec_ranges, NULL);
+      where_r.ref = &where_ref;
+      char buf[128];
 
-      std::set<elfutils::dwarf::ranges::key_type>
-	cu_aranges = i->second,
-	cu_ranges = cu.ranges ();
+      const elfutils::dwarf::aranges_map &aranges = hlctx->dw.aranges ();
+      for (elfutils::dwarf::aranges_map::const_iterator i = aranges.begin ();
+	   i != aranges.end (); ++i)
+	{
+	  const elfutils::dwarf::compile_unit &cu = i->first;
+	  where_reset_1 (&where_ref, 0);
+	  where_reset_2 (&where_ref, cu.offset ());
 
-      typedef std::vector <elfutils::dwarf::arange_list::value_type> range_vec;
-      range_vec missing;
-      std::back_insert_iterator <range_vec> i_missing (missing);
+	  std::set<elfutils::dwarf::ranges::key_type>
+	    cu_aranges = i->second,
+	    cu_ranges = cu.ranges ();
 
-      std::set_difference (cu_aranges.begin (), cu_aranges.end (),
-			   cu_ranges.begin (), cu_ranges.end (),
-			   i_missing);
+	  typedef std::vector <elfutils::dwarf::arange_list::value_type>
+	    range_vec;
+	  range_vec missing;
+	  std::back_insert_iterator <range_vec> i_missing (missing);
 
-      for (range_vec::iterator it = missing.begin ();
-	   it != missing.end (); ++it)
-	wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_r,
-		    ": missing range %s, present in .debug_aranges.\n",
-		    range_fmt (buf, sizeof buf, it->first, it->second));
+	  std::set_difference (cu_aranges.begin (), cu_aranges.end (),
+			       cu_ranges.begin (), cu_ranges.end (),
+			       i_missing);
 
-      missing.clear ();
-      std::set_difference (cu_ranges.begin (), cu_ranges.end (),
-			   cu_aranges.begin (), cu_aranges.end (),
-			   i_missing);
+	  for (range_vec::iterator it = missing.begin ();
+	       it != missing.end (); ++it)
+	    wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_r,
+			": missing range %s, present in .debug_aranges.\n",
+			range_fmt (buf, sizeof buf, it->first, it->second));
 
-      for (range_vec::iterator it = missing.begin ();
-	   it != missing.end (); ++it)
-	wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_ar,
-		    ": missing range %s, present in .debug_ranges.\n",
-		    range_fmt (buf, sizeof buf, it->first, it->second));
+	  missing.clear ();
+	  std::set_difference (cu_ranges.begin (), cu_ranges.end (),
+			       cu_aranges.begin (), cu_aranges.end (),
+			       i_missing);
+
+	  for (range_vec::iterator it = missing.begin ();
+	       it != missing.end (); ++it)
+	    wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_ar,
+			": missing range %s, present in .debug_ranges.\n",
+			range_fmt (buf, sizeof buf, it->first, it->second));
+	}
+
+      return true;
     }
-
-  return true;
+  // XXX more specific class when <dwarf> has it
+  catch (std::runtime_error &exc)
+    {
+      wr_error (NULL, "Error while checking matching ranges: %s.\n",
+		exc.what ());
+      return false;
+    }
 }
 
 struct name_extractor {
@@ -250,6 +261,7 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
 			dwarf_attr_string (name),
 			vs);
 	}
+      // XXX more specific class when <dwarf> has it
       catch (...)
 	{
 	  wr_message (cat (mc_impact_4, mc_info, mc_error), &where,
@@ -270,9 +282,19 @@ recursively_validate (elfutils::dwarf::compile_unit const &cu,
 bool
 check_expected_trees (hl_ctx *hlctx)
 {
-  class elfutils::dwarf::compile_units const &cus = hlctx->dw.compile_units ();
-  for (elfutils::dwarf::compile_units::const_iterator it = cus.begin ();
-       it != cus.end (); ++it)
-    recursively_validate (*it, *it);
-  return true;
+  try
+    {
+      class elfutils::dwarf::compile_units const &cus = hlctx->dw.compile_units ();
+      for (elfutils::dwarf::compile_units::const_iterator it = cus.begin ();
+	   it != cus.end (); ++it)
+	recursively_validate (*it, *it);
+      return true;
+    }
+  // XXX more specific class when <dwarf> has it
+  catch (std::runtime_error &exc)
+    {
+      wr_error (NULL, "Error while checking expected trees: %s.\n",
+		exc.what ());
+      return false;
+    }
 }
