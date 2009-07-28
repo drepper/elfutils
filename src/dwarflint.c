@@ -1225,7 +1225,11 @@ process_file (Elf *elf, const char *fname, bool only_one)
   struct abbrev_table *abbrev_chain = NULL;
   struct cu *cu_chain = NULL;
   struct read_ctx ctx;
-  struct hl_ctx *hlctx = hl_ctx_new (elf);
+
+  /* Don't attempt to do high-level checks if we couldn't initialize
+     high-level context.  The wrapper takes care of printing out error
+     messages if any.  */
+  struct hl_ctx *hlctx = do_high_level ? hl_ctx_new (elf) : NULL;
 
 #define SEC(sec) (file.debugsec[sec_##sec])
 #define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
@@ -1247,7 +1251,7 @@ process_file (Elf *elf, const char *fname, bool only_one)
 	  cu_coverage = calloc (1, sizeof (struct cu_coverage));
 	  cu_chain = check_info_structural (&file, SEC(info), abbrev_chain,
 					    SEC(str)->data, cu_coverage);
-	  if (cu_chain != NULL && do_high_level)
+	  if (cu_chain != NULL && hlctx != NULL)
 	    check_expected_trees (hlctx);
 	}
       else if (!tolerate_nodebug)
@@ -1276,7 +1280,7 @@ process_file (Elf *elf, const char *fname, bool only_one)
 	   && cu_coverage->need_ranges) ? NULL : &cu_coverage->cov;
 
       if (check_aranges_structural (&file, SEC(aranges), cu_chain, cov)
-	  && ranges_sound && do_high_level && !be_tolerant && !be_gnu)
+	  && ranges_sound && hlctx != NULL && !be_tolerant && !be_gnu)
 	check_matching_ranges (hlctx);
     }
 

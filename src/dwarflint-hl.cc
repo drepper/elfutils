@@ -62,6 +62,9 @@ struct hl_ctx
     : dwarf (dwarf_begin_elf (elf, DWARF_C_READ, NULL))
     , dw (dwarf)
   {
+    // See if we can iterate compile units.  If not, this throws an
+    // exception that gets caught in the C wrapper below.
+    dw.compile_units ().begin ();
   }
 
   ~hl_ctx ()
@@ -73,7 +76,16 @@ struct hl_ctx
 hl_ctx *
 hl_ctx_new (Elf *elf)
 {
-  return new hl_ctx (elf);
+  try
+    {
+      return new hl_ctx (elf);
+    }
+  catch (std::runtime_error &exc)
+    {
+      wr_error (NULL, "Cannot initialize high-level checking: %s.\n",
+		exc.what ());
+      return NULL;
+    }
 }
 
 void
@@ -262,6 +274,5 @@ check_expected_trees (hl_ctx *hlctx)
   for (elfutils::dwarf::compile_units::const_iterator it = cus.begin ();
        it != cus.end (); ++it)
     recursively_validate (*it, *it);
-
   return true;
 }
