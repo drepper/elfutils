@@ -705,6 +705,10 @@ struct abbrev
 struct abbrev_table
 {
   uint64_t offset;
+  bool used;		/* There are CUs using this table.  */
+  bool skip_check;	/* There were errors during loading one of the
+			   CUs that use this table.  Check for unused
+			   abbrevs should be skipped.  */
   struct abbrev *abbr;
   size_t size;
   size_t alloc;
@@ -3329,6 +3333,7 @@ check_cu_structural (struct elf_file *file,
     }
   cu->address_size = address_size;
 
+  /* Look up Abbrev table for this CU.  */
   struct abbrev_table *abbrevs = abbrev_chain;
   for (; abbrevs != NULL; abbrevs = abbrevs->next)
     if (abbrevs->offset == abbrev_offset)
@@ -3342,6 +3347,9 @@ check_cu_structural (struct elf_file *file,
       return false;
     }
 
+  abbrevs->used = true;
+
+  /* Read DIEs.  */
   struct ref_record local_die_refs;
   WIPE (local_die_refs);
 
@@ -3350,18 +3358,12 @@ check_cu_structural (struct elf_file *file,
 		      dwarf_64, address_size == 8,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      cu_coverage) >= 0)
+		      cu_coverage) < 0)
     {
-      for (size_t i = 0; i < abbrevs->size; ++i)
-	if (!abbrevs->abbr[i].used)
-	  wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs, &cu->where,
-		      ": abbreviation with code %" PRIu64 " is never used.\n",
-		      abbrevs->abbr[i].code);
-
-      if (!check_die_references (cu, &local_die_refs))
-	retval = false;
+      abbrevs->skip_check = true;
+      retval = false;
     }
-  else
+  else if (!check_die_references (cu, &local_die_refs))
     retval = false;
 
   ref_record_free (&local_die_refs);
@@ -3497,6 +3499,26 @@ check_info_structural (struct elf_file *file,
       else
 	/* Did we consume all the relocations?  */
 	relocation_skip_rest (sec);
+
+      /* If we managed to read up everything, now do abbrev usage
+	 analysis.  */
+      for (struct abbrev_table *abbrevs = abbrev_chain;
+	   abbrevs != NULL; abbrevs = abbrevs->next)
+	{
+	  if (!abbrevs->used)
+	    {
+	      struct where wh = WHERE (sec_abbrev, NULL);
+	      where_reset_1 (&wh, abbrevs->offset);
+	      wr_message (mc_impact_4 | mc_acc_bloat | mc_abbrevs, &wh,
+			  ": abbreviation table is never used.\n");
+	    }
+	  else if (!abbrevs->skip_check)
+	    for (size_t i = 0; i < abbrevs->size; ++i)
+	      if (!abbrevs->abbr[i].used)
+		wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
+			    &abbrevs->abbr[i].where,
+			    ": abbreviation is never used.\n");
+	}
     }
 
 
