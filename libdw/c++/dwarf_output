@@ -735,7 +735,6 @@ namespace elfutils
       friend class subr::hashed_hasher<shape_type>;
       typedef subr::hashed_hasher<shape_type> hasher;
 
-      inline void hashnadd (int name, int form);
       inline shape_type (die_map::value_type const &emt);
 
       inline bool operator== (const shape_type &other) const

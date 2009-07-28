@@ -123,12 +123,6 @@ attr_form (int tag, const dwarf_output::attribute &attr)
   throw std::logic_error ("strange value_space");
 }
 
-inline void
-dwarf_output_collector::shape_type::hashnadd (int name, int form)
-{
-  _m_attrs.insert (std::make_pair (name, form));
-}
-
 inline
 dwarf_output_collector::shape_type::shape_type (die_map::value_type const &emt)
   : _m_tag (emt.first.tag ())
@@ -136,12 +130,12 @@ dwarf_output_collector::shape_type::shape_type (die_map::value_type const &emt)
   , _m_hash (8675309 << _m_has_children)
 {
   if (emt.second.with_sibling && emt.first.has_children ())
-    hashnadd (DW_AT_sibling, DW_FORM_ref_udata);
+    _m_attrs[DW_AT_sibling] = DW_FORM_ref_udata;
 
   for (die_type::attributes_type::const_iterator it
 	 = emt.first.attributes ().begin ();
        it != emt.first.attributes ().end (); ++it)
-    hashnadd (it->first, attr_form (_m_tag, *it));
+    _m_attrs[it->first] = attr_form (_m_tag, *it);
 
   // Make sure the hash is computed based on canonical order of
   // (unique) attributes, not based on order in which the attributes
@@ -253,8 +247,7 @@ dwarf_output_collector::build_output ()
 }
 
 void
-dwarf_output_collector::output_debug_abbrev (std::vector <uint8_t> &data
-					     __attribute__ ((unused)))
+dwarf_output_collector::output_debug_abbrev (std::vector <uint8_t> &data)
 {
   if (!_m_output_built)
     build_output ();
@@ -265,4 +258,6 @@ dwarf_output_collector::output_debug_abbrev (std::vector <uint8_t> &data
 	   = it->second._m_instances.begin ();
 	 jt != it->second._m_instances.end (); ++jt)
       it->second.build_data (it->first, *jt, data);
+
+  data.push_back (0); // terminate table
 }
