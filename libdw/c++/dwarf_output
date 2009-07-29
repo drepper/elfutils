@@ -237,6 +237,7 @@ namespace elfutils
 
     class debug_info_entry
     {
+      friend class dwarf_output;
       friend class dwarf_output_collector;
 
     public:
@@ -365,7 +366,6 @@ namespace elfutils
     protected:
       const children_type *_m_children;
       const attributes_type *_m_attributes;
-      void *_m_shape;
       size_t _m_hash;
       int _m_tag;
 
@@ -374,7 +374,6 @@ namespace elfutils
       inline debug_info_entry ()
 	: _m_children (NULL),
 	  _m_attributes (NULL),
-	  _m_shape (NULL),
 	  _m_hash (0),
 	  _m_tag (-1)
       {}
@@ -383,7 +382,6 @@ namespace elfutils
       inline debug_info_entry (const die_type &die, copier<input_dw> &c)
 	: _m_children (c.add_children (die.children ())),
 	  _m_attributes (c.add_attributes (die.attributes ())),
-	  _m_shape (NULL),	// XXX
 	  _m_hash (die.tag ()),
 	  _m_tag (die.tag ())
       {
@@ -501,7 +499,30 @@ namespace elfutils
 
     typedef debug_info_entry::attributes_type::value_type attribute;
 
-    typedef dwarf_data::compile_unit<dwarf_output> compile_unit;
+    class compile_unit
+      : public dwarf_data::compile_unit<dwarf_output>
+    {
+      typedef dwarf_data::compile_unit<dwarf_output> _base;
+    public:
+      debug_info_entry const *const _m_cu_die;
+
+      compile_unit ()
+	: _m_cu_die (NULL)
+      {}
+
+      compile_unit (compile_unit const &copy)
+	: _base (copy)
+	, _m_cu_die (copy._m_cu_die) // XXX?
+      {}
+
+      template<typename input, typename arg_type>
+      inline compile_unit (const input &cu, arg_type &arg)
+	: _base (cu, arg)
+	, _m_cu_die (arg.add_entry_2 (*this, false))
+      {
+	std::cout << "CU ctor " << to_string () << std::endl;
+      }
+    };
 
     /* Main container anchoring all the output.
 
@@ -695,36 +716,6 @@ namespace elfutils
       }
     };
 
-    static void
-    write_uleb128 (std::vector <uint8_t> &buf, uint64_t value)
-    {
-      do
-	{
-	  uint8_t byte = value & 0x7fULL;
-	  value >>= 7;
-	  if (value != 0)
-	    byte |= 0x80;
-	  buf.push_back (byte);
-	}
-      while (value != 0);
-    }
-
-    template<typename input, typename copier_type>
-    inline const die_type *add_entry (const input &other, copier_type &c,
-				      bool has_sibling)
-    {
-      typename die_map::value_type &x
-	= *_m_unique.insert (std::make_pair (die_type (other, c),
-					     die_info ())).first;
-      x.second.uses++;
-      ++_m_total;
-      if (has_sibling)
-	x.second.with_sibling = true;
-      else
-	x.second.without_sibling = true;
-      return &x.first;
-    }
-
     typedef std::vector<die_type const *> die_ref_vect;
 
     struct shape_type
@@ -741,7 +732,7 @@ namespace elfutils
       friend class subr::hashed_hasher<shape_type>;
       typedef subr::hashed_hasher<shape_type> hasher;
 
-      inline shape_type (die_map::value_type const &emt);
+      shape_type (die_map::value_type const &emt);
 
       inline bool operator== (const shape_type &other) const
       {
@@ -756,6 +747,37 @@ namespace elfutils
       }
     };
 
+    inline const die_type *add_entry (die_type &die, bool has_sibling)
+    {
+      //std::cerr << "add_entry " << to_string (die) << " " << std::endl;
+      die_map::value_type &x
+	= *_m_unique.insert (std::make_pair (die, die_info ())).first;
+
+      shape_type shape (x);
+      shape_map::iterator st = _m_shapes.find (shape);
+      if (st != _m_shapes.end ())
+	st->second.add_user (&x.first);
+      else
+	_m_shapes.insert (std::make_pair (shape, shape_info (x)));
+
+      x.second.uses++;
+      ++_m_total;
+      if (has_sibling)
+	x.second.with_sibling = true;
+      else
+	x.second.without_sibling = true;
+
+      return &x.first;
+    }
+
+    template<typename input, typename copier_type>
+    inline const die_type *add_entry (const input &other, copier_type &c,
+				      bool has_sibling)
+    {
+      die_type die (other, c);
+      return add_entry (die, has_sibling);
+    }
+
     struct shape_info
     {
       // We keep list of users of this shape.  That will make it
@@ -768,6 +790,7 @@ namespace elfutils
       // produce several instances to ideally cover its users.  The
       // second element of the pair is unique code assigned to that
       // instance, or 0 if no code was assigned yet.
+      // XXX is size_t enough?  Use uintptr_t?
       typedef std::pair<std::vector<int>, size_t> instance_type;
       typedef std::vector<instance_type> instances_type;
       instances_type _m_instances;
@@ -983,6 +1006,11 @@ namespace elfutils
     add_entry (const input &x, bool has_sibling)
     {
       return _m_collector->add_entry (x, *this, has_sibling);
+    }
+
+    const debug_info_entry *add_entry_2 (debug_info_entry &x, bool has_sibling)
+    {
+      return _m_collector->add_entry (x, has_sibling);
     }
 
     template<typename input_iter>

@@ -80,7 +80,7 @@ ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 
 libar_a_SOURCES = arlib.c arlib2.c
 
-dwarfcmp_SOURCES = dwarfcmp.cc
+dwarfcmp_SOURCES = dwarfcmp.cc dwarfstrings.c
 writer_SOURCES = writer.cc dwarfstrings.c
 
 dwarflint_SOURCES = dwarflint.c dwarflint.h dwarflint-hl.cc \

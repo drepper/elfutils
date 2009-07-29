@@ -123,7 +123,6 @@ attr_form (int tag, const dwarf_output::attribute &attr)
   throw std::logic_error ("strange value_space");
 }
 
-inline
 dwarf_output_collector::shape_type::shape_type (die_map::value_type const &emt)
   : _m_tag (emt.first.tag ())
   , _m_has_children (emt.first.has_children ())
@@ -164,14 +163,31 @@ dwarf_output_collector::shape_info::instantiate
     _m_instance_map[*it] = _m_instances.begin ();
 }
 
+namespace
+{
+  void
+  write_uleb128 (std::vector <uint8_t> &buf, uint64_t value)
+  {
+    do
+      {
+	uint8_t byte = value & 0x7fULL;
+	value >>= 7;
+	if (value != 0)
+	  byte |= 0x80;
+	buf.push_back (byte);
+      }
+    while (value != 0);
+  }
+}
+
 void
 dwarf_output_collector::shape_info::build_data
     (dwarf_output_collector::shape_type const &shape,
      dwarf_output_collector::shape_info::instance_type const &inst,
      std::vector<uint8_t> &data)
 {
-  write_uleb128 (data, inst.second);
-  write_uleb128 (data, shape._m_tag);
+  ::write_uleb128 (data, inst.second);
+  ::write_uleb128 (data, shape._m_tag);
   data.push_back (shape._m_has_children ? DW_CHILDREN_yes : DW_CHILDREN_no);
 
   // We iterate shape attribute map in parallel with instance
@@ -185,8 +201,8 @@ dwarf_output_collector::shape_info::build_data
        it != inst.first.end (); ++it)
     {
       // ULEB128 name & form
-      write_uleb128 (data, at++->first);
-      write_uleb128 (data, *it);
+      ::write_uleb128 (data, at++->first);
+      ::write_uleb128 (data, *it);
     }
 
   data.push_back (0);
@@ -196,6 +212,7 @@ dwarf_output_collector::shape_info::build_data
 void
 dwarf_output_collector::build_output ()
 {
+  /*
   for (die_map::const_iterator it = _m_unique.begin ();
        it != _m_unique.end (); ++it)
     {
@@ -206,13 +223,21 @@ dwarf_output_collector::build_output ()
       else
 	_m_shapes.insert (std::make_pair (shape_type (*it), shape_info (*it)));
     }
+  */
 
+  size_t code = 0;
   for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
-    it->second.instantiate (it->first);
+    {
+      it->second.instantiate (it->first);
+      for (shape_info::instances_type::iterator jt
+	     = it->second._m_instances.begin ();
+	   jt != it->second._m_instances.end (); ++jt)
+	jt->second = ++code;
+    }
 
+  /*
   std::cout << "shapes" << std::endl;
-  size_t code = 0;
   for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
     {
@@ -228,7 +253,6 @@ dwarf_output_collector::build_output ()
 	     = it->second._m_instances.begin ();
 	   jt != it->second._m_instances.end (); ++jt)
 	{
-	  jt->second = ++code;
 	  std::cout << "    i" << jt->second;
 	  for (shape_info::instance_type::first_type::const_iterator kt
 		 = jt->first.begin ();  kt != jt->first.end (); ++kt)
@@ -248,6 +272,7 @@ dwarf_output_collector::build_output ()
 	    std::cout << "      " << dwarf_attr_string (kt->first) << std::endl;
 	}
     }
+  */
 
   _m_output_built = true;
 }
@@ -279,18 +304,103 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
   for (compile_units::const_iterator it = _m_units.begin ();
        it != _m_units.end (); ++it)
     {
-      std::cout << "UNIT" << std::endl;
-      for (compile_unit::children_type::const_iterator jt
-	     = it->children ().begin (); jt != it->children ().end (); ++jt)
-	{
-	  debug_info_entry const &die = *jt;
-	  std::cout << "CHILD " << dwarf_tag_string (die.tag ()) << std::endl;
-	}
-    }
+      // Remember where the unit started for back-patching of size.
+      size_t cu_start = data.size ();
 
-  std::string ble ("\x08\x00\x00\x00"
-		   "\x02\x00\x00\x00"
-		   "\x00\x00\x04\x00"
-		   , 12);
-  data.insert (data.end (), ble.begin (), ble.end ());
+      // Unit length.
+      for (size_t i = 0; i < 4; i++)
+	data.push_back (0);
+
+      // Version.
+      data.push_back ('\x03');
+      data.push_back (0);
+
+      // Debug abbrev offset.  Use the single abbrev table that we
+      // emit at offset 0.
+      for (size_t i = 0; i < 4; i++)
+	data.push_back (0);
+
+      // XXX size in bytes of an address on the target architecture.
+      data.push_back (8);
+
+      struct recursively_dump
+      {
+	std::vector <uint8_t> &data;
+	dwarf_output_collector &c;
+
+	recursively_dump (std::vector <uint8_t> &a_data,
+			  dwarf_output_collector &a_c,
+			  debug_info_entry const &die,
+			  unsigned level)
+	  : data (a_data), c (a_c)
+	{
+	  static char const spaces[] =
+	    "                                                            "
+	    "                                                            "
+	    "                                                            ";
+	  static char const *tail = spaces + strlen (spaces);
+	  char const *pad = tail - level * 2;
+	  std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ()) << " " << &die << std::endl;
+
+	  /* Find shape instance.  XXX We currently have to iterate
+	     through all the shapes.  Fix later.  */
+	  dwarf_output_collector::shape_type const *shape = NULL;
+	  dwarf_output_collector::shape_info const *info = NULL;
+	  size_t instance_id = (size_t)-1;
+
+	  for (dwarf_output_collector::shape_map::iterator st = c._m_shapes.begin ();
+	       st != c._m_shapes.end (); ++st)
+	    {
+	      dwarf_output_collector::shape_info::instance_map::const_iterator
+		instance_it = st->second._m_instance_map.find (&die);
+	      if (instance_it != st->second._m_instance_map.end ())
+		{
+		  assert (shape == NULL && info == NULL);
+
+		  shape = &st->first;
+		  info = &st->second;
+		  instance_id
+		    = instance_it->second - st->second._m_instances.begin ();
+		}
+	    }
+	  assert (shape != NULL && info != NULL);
+
+	  /* Our instance.  */
+	  dwarf_output_collector::shape_info::instance_type const &instance
+	    = info->_m_instances[instance_id];
+	  size_t code = instance.second;
+	  ::write_uleb128 (data, code);
+
+	  /* Dump attribute values.  */
+	  debug_info_entry::attributes_type const &attribs = die.attributes ();
+	  std::vector<int>::const_iterator form_it = instance.first.begin ();
+	  for (dwarf_output_collector::shape_type::attrs_type::const_iterator
+		 at = shape->_m_attrs.begin ();
+	       at != shape->_m_attrs.end (); ++at)
+	    {
+	      int name = at->first;
+	      //int form = *form_it++;
+	      debug_info_entry::attributes_type::const_iterator
+		vt = attribs.find (name);
+	      assert (vt != attribs.end ());
+	    }
+
+	  for (compile_unit::children_type::const_iterator jt
+		 = die.children ().begin (); jt != die.children ().end (); ++jt)
+	    recursively_dump (data, c, *jt, level + 1);
+	}
+      };
+
+      std::cout << "UNIT " << it->_m_cu_die << std::endl;
+      recursively_dump (data, c, *it->_m_cu_die, 0);
+      size_t length = data.size () - cu_start - 4; // -4 for length info. XXX 64-bit
+      assert (length < (uint32_t)-1);
+
+      // XXX fix this.  Remember endians.
+      std::vector<uint8_t>::iterator dt = data.begin () + cu_start;
+      *dt++ = (uint8_t)length & 0xffUL;
+      *dt++ = (uint8_t)((length & 0xff00UL) >> 8);
+      *dt++ = (uint8_t)((length & 0xff0000UL) >> 16);
+      *dt++ = (uint8_t)((length & 0xff000000UL) >> 24);
+    }
 }

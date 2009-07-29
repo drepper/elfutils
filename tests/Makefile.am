@@ -196,10 +196,10 @@ endif !STANDALONE
 # XXX later the C++ stuff will be in libdw.so directly
 libdwpp = ../libdw/libdwpp.a $(libdw)
 
-dwarf_print_SOURCES = dwarf-print.cc
+dwarf_print_SOURCES = dwarf-print.cc ../src/dwarfstrings.c
 dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
 
-dwarf_edit_SOURCES = dwarf_edit.cc
+dwarf_edit_SOURCES = dwarf_edit.cc ../src/dwarfstrings.c
 dwarf_edit_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
