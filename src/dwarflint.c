@@ -2999,8 +2999,9 @@ read_die_chain (struct elf_file *file,
 	    case DW_FORM_addr:
 	    case DW_FORM_ref_addr:
 	      {
+		bool ref_64 = form == DW_FORM_addr ? addr_64 : dwarf_64;
 		uint64_t addr;
-		if (!read_ctx_read_offset (ctx, addr_64, &addr))
+		if (!read_ctx_read_offset (ctx, ref_64, &addr))
 		  goto cant_read;
 
 		uint64_t *addrp = NULL;
@@ -3024,7 +3025,7 @@ read_die_chain (struct elf_file *file,
 		if ((rel = relocation_next (reloc, ctx_offset,
 					    &where, skip_mismatched)))
 		  {
-		    relocate_one (file, reloc, rel, addr_64 ? 8 : 4, &addr,
+		    relocate_one (file, reloc, rel, ref_64 ? 8 : 4, &addr,
 				  &where, reloc_target (form, it), symbolp);
 		    if (relocatedp != NULL)
 		      *relocatedp = true;
