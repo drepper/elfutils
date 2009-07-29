@@ -4018,6 +4018,7 @@ section [%2d] '%s': unknown core file note type %" PRIu32
 	  case NT_GNU_ABI_TAG:
 	  case NT_GNU_HWCAP:
 	  case NT_GNU_BUILD_ID:
+	  case NT_GNU_GOLD_VERSION:
 	    break;
 
 	  case 0:
