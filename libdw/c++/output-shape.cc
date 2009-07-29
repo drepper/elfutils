@@ -241,7 +241,7 @@ dwarf_output_collector::build_output ()
   for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
     {
-      std::cout << "  " << it->first._m_tag;
+      std::cout << "  " << dwarf_tag_string (it->first._m_tag);
       for (shape_type::attrs_type::const_iterator jt
 	     = it->first._m_attrs.begin ();
 	   jt != it->first._m_attrs.end (); ++jt)
@@ -339,8 +339,8 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	    "                                                            "
 	    "                                                            ";
 	  static char const *tail = spaces + strlen (spaces);
-	  char const *pad = tail - level * 2;
-	  std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
+	  __attribute__ ((unused)) char const *pad = tail - level * 2;
+	  //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
 
 	  /* Find shape instance.  XXX We currently have to iterate
 	     through all the shapes.  Fix later.  */
@@ -371,7 +371,7 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	  size_t code = instance.second;
 	  ::write_uleb128 (data, code);
 
-	  std::cout << " " << code << std::endl;
+	  //std::cout << " " << code << std::endl;
 
 	  /* Dump attribute values.  */
 	  debug_info_entry::attributes_type const &attribs = die.attributes ();
@@ -385,6 +385,16 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	      debug_info_entry::attributes_type::const_iterator
 		vt = attribs.find (name);
 	      assert (vt != attribs.end ());
+
+	      attr_value const &value = vt->second;
+	      /*
+	      std::cout << pad
+			<< "    " << dwarf_attr_string (name)
+			<< ":" << dwarf_form_string (form)
+			<< ":" << dwarf_form_string (at->second)
+			<< ":" << value.to_string () << std::endl;
+	      */
+	      dwarf::value_space vs = value.what_space ();
 
 	      switch (form)
 		{
@@ -414,21 +424,57 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 		  break;
 
 		case DW_FORM_string:
-		  data.push_back ('y');
-		  data.push_back ('a');
-		  data.push_back ('y');
-		  data.push_back ('!');
-		  data.push_back (0);
 		  break;
 
 		case DW_FORM_udata:
-		  write_uleb128 (data, 0);
+		  data.push_back (0);
+		  break;
+
+		default:
+		  abort ();
+		};
+
+	      switch (vs)
+		{
+		case dwarf::VS_flag:
+		case dwarf::VS_rangelistptr:
+		case dwarf::VS_lineptr:
+		case dwarf::VS_macptr:	// XXX punt for now, treat as constant
+		case dwarf::VS_constant:
+		case dwarf::VS_dwarf_constant:
+		case dwarf::VS_source_line:
+		case dwarf::VS_source_column:
+		  break;
+
+		case dwarf::VS_string:
+		case dwarf::VS_identifier:
+		case dwarf::VS_source_file:
+		  if (vs != dwarf::VS_source_file
+		      || form == DW_FORM_string
+		      || form == DW_FORM_strp)
+		    {
+		      assert (form == DW_FORM_string); // XXX temporary
+		      std::string const &str =
+			vs == dwarf::VS_string ? value.string () :
+			(vs == dwarf::VS_source_file ? value.source_file ().name ()
+			 : value.identifier ());
+
+		      data.insert (data.end (), str.begin (), str.end ());
+		      data.push_back (0);
+		    }
+		  break;
+
+		case dwarf::VS_address:
+		case dwarf::VS_reference:
+		case dwarf::VS_location:
+		case dwarf::VS_discr_list:
 		  break;
 
 		default:
 		  abort ();
 		};
 	    }
+	  assert (form_it == instance.first.end ());
 
 	  if (!die.children ().empty ())
 	    {
@@ -440,7 +486,7 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	}
       };
 
-      std::cout << "UNIT " << it->_m_cu_die << std::endl;
+      //std::cout << "UNIT " << it->_m_cu_die << std::endl;
       recursively_dump (data, c, *it->_m_cu_die, 0);
       size_t length = data.size () - cu_start - 4; // -4 for length info. XXX dwarf64
       assert (length < (uint32_t)-1);
