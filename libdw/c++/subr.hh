@@ -672,6 +672,13 @@ namespace elfutils
       {
 	return wrapped_input_iterator (_base::operator-- (magic));
       }
+
+      template<typename arg_type, typename container = input>
+      static inline container copy (const input &in, const arg_type &arg)
+      {
+	return container (wrapped_input_iterator (in.begin (), arg),
+			  wrapped_input_iterator (in.end (), arg));
+      }
     };
 
     /* An iterator adapter for use in iterator-based constructors.
@@ -863,8 +870,18 @@ namespace elfutils
     // Class instead of function so it can be a friend.
     struct create_container
     {
+      struct setter
+      {
+	template<typename in_iter, typename out_iter, typename arg_type>
+	inline void operator () (const out_iter &out, const in_iter &in,
+				 bool, arg_type arg) const
+	{
+	  out->set (*in, arg);
+	}
+      };
+
       template<typename container, typename input, typename arg_type,
-	       typename hook_type = const nothing>
+	       typename hook_type = const setter>
       inline create_container (container *me, const input &other,
 			       arg_type &arg, hook_type &hook = hook_type ())
       	{
@@ -876,7 +893,6 @@ namespace elfutils
 		 copies it again into the list and destroys the first copy.  */
 	      me->push_back (typename container::value_type ());
 	      typename container::iterator out = --me->end ();
-	      out->set (*in, arg);
 	      const typename input::const_iterator here = in++;
 	      last = in == other.end ();
 	      hook (out, here, last, arg);
@@ -894,6 +910,15 @@ namespace elfutils
     };
 
     template<typename T>
+    struct is<T *> : public std::equal_to<T *>
+    {
+      bool operator () (const T *a, const T *b) const
+      {
+	return a == b || a->is (*b);
+      }
+    };
+
+    template<typename T>
     struct identity_set
       : public std::tr1::unordered_set<T, typename T::hasher, is<T> >
     {};
@@ -903,6 +928,28 @@ namespace elfutils
       : public std::tr1::unordered_map<key_type, mapped_type,
 				       typename key_type::hasher,
 				       is<key_type> >
+    {};
+
+    template<typename T>
+    struct ptr_hasher
+      : public std::unary_function<T *, typename T::hasher::result_type>
+    {
+      typename T::hasher _m_hasher;
+      typename T::hasher::result_type operator () (const T *p) const
+      {
+	return _m_hasher (*p);
+      }
+    };
+
+    template<typename T>
+    struct identity_ptr_set
+      : public std::tr1::unordered_set<T *, ptr_hasher<T>, is<T *> >
+    {};
+
+    template<typename key_type, typename mapped_type>
+    struct identity_ptr_map
+      : public std::tr1::unordered_map<key_type *, mapped_type,
+				       ptr_hasher<key_type>, is<key_type *> >
     {};
 
   };

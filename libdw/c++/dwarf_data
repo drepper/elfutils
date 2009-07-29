@@ -77,6 +77,7 @@ namespace elfutils
     protected:
       typedef std::list<typename impl::compile_unit> _base;
 
+#if 0
       // Constructor copying CUs from input container.
       template<typename input, typename arg_type>
       inline compile_units (const input &other, arg_type &arg)
@@ -85,6 +86,7 @@ namespace elfutils
 		 subr::argify<input, compile_units, arg_type &>
 		 (other.end (), arg))
       {}
+#endif
 
     public:
       // Default constructor: an empty container, no CUs.
@@ -105,7 +107,10 @@ namespace elfutils
     template<class impl>
     class compile_unit : public impl::debug_info_entry
     {
-    private:
+      friend class subr::create_container;
+      friend class impl::compile_units;
+
+    protected:
       template<typename input>
       inline const input &require_cu (const input &cu)
       {
@@ -113,6 +118,12 @@ namespace elfutils
 	  throw std::runtime_error
 	    ("top-level debug_info_entry must be DW_TAG_compile_unit");
 	return cu;
+      }
+
+      template<typename die_type, typename arg_type>
+      inline void set (const die_type &die, arg_type &arg)
+      {
+	impl::debug_info_entry::set (require_cu (die), arg);
       }
 
     public:
@@ -1469,6 +1480,11 @@ namespace elfutils
       typedef std::map<int, typename impl::attr_value> base_type;
 
       inline attributes_type () {}
+
+      template<typename iter>
+      inline attributes_type (const iter &from, const iter &to)
+	: base_type (from, to)
+      {}
 
       template<typename input, typename arg_type>
       inline void set (const input &other, arg_type &c)
