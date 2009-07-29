@@ -340,7 +340,7 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	    "                                                            ";
 	  static char const *tail = spaces + strlen (spaces);
 	  char const *pad = tail - level * 2;
-	  std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ()) << " " << &die << std::endl;
+	  std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
 
 	  /* Find shape instance.  XXX We currently have to iterate
 	     through all the shapes.  Fix later.  */
@@ -371,6 +371,8 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	  size_t code = instance.second;
 	  ::write_uleb128 (data, code);
 
+	  std::cout << " " << code << std::endl;
+
 	  /* Dump attribute values.  */
 	  debug_info_entry::attributes_type const &attribs = die.attributes ();
 	  std::vector<int>::const_iterator form_it = instance.first.begin ();
@@ -379,21 +381,68 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	       at != shape->_m_attrs.end (); ++at)
 	    {
 	      int name = at->first;
-	      //int form = *form_it++;
+	      int form = *form_it++;
 	      debug_info_entry::attributes_type::const_iterator
 		vt = attribs.find (name);
 	      assert (vt != attribs.end ());
+
+	      switch (form)
+		{
+		case DW_FORM_addr:
+		  // XXX addr64
+		  for (int i = 0; i <8; ++i)
+		    data.push_back (0);
+		  break;
+
+		case DW_FORM_block:
+		  write_uleb128 (data, 0);
+		  break;
+
+		case DW_FORM_data4:
+		  for (int i = 0; i <4; ++i)
+		    data.push_back (0);
+		  break;
+
+		case DW_FORM_flag:
+		  data.push_back (0);
+		  break;
+
+		case DW_FORM_ref_addr:
+		  // XXX dwarf64
+		  for (int i = 0; i <4; ++i)
+		    data.push_back (0);
+		  break;
+
+		case DW_FORM_string:
+		  data.push_back ('y');
+		  data.push_back ('a');
+		  data.push_back ('y');
+		  data.push_back ('!');
+		  data.push_back (0);
+		  break;
+
+		case DW_FORM_udata:
+		  write_uleb128 (data, 0);
+		  break;
+
+		default:
+		  abort ();
+		};
 	    }
 
-	  for (compile_unit::children_type::const_iterator jt
-		 = die.children ().begin (); jt != die.children ().end (); ++jt)
-	    recursively_dump (data, c, *jt, level + 1);
+	  if (!die.children ().empty ())
+	    {
+	      for (compile_unit::children_type::const_iterator jt
+		     = die.children ().begin (); jt != die.children ().end (); ++jt)
+		recursively_dump (data, c, *jt, level + 1);
+	      data.push_back (0); // Chain terminator.
+	    }
 	}
       };
 
       std::cout << "UNIT " << it->_m_cu_die << std::endl;
       recursively_dump (data, c, *it->_m_cu_die, 0);
-      size_t length = data.size () - cu_start - 4; // -4 for length info. XXX 64-bit
+      size_t length = data.size () - cu_start - 4; // -4 for length info. XXX dwarf64
       assert (length < (uint32_t)-1);
 
       // XXX fix this.  Remember endians.
