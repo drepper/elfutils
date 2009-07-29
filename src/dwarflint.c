@@ -3438,7 +3438,7 @@ check_info_structural (struct elf_file *file,
 	{
 	  wr_error (&where,
 		    ": section doesn't have enough data"
-		    " to read CU of size %" PRIx64 ".\n", size);
+		    " to read CU of size %" PRId64 ".\n", size);
 	  ctx.ptr = ctx.end;
 	  success = false;
 	  break;
