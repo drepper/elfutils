@@ -178,6 +178,30 @@ namespace
       }
     while (value != 0);
   }
+
+  // XXX convert to iterator use, use push_back iterators for append
+  void
+  write_8ubyte (std::vector <uint8_t> &buf, uint64_t value)
+  {
+    // XXX endians
+    for (int i = 0; i < 8; ++i)
+      {
+	buf.push_back ((uint8_t)value & 0xffUL);
+	value >>= 8;
+      }
+  }
+
+  // XXX convert to iterator use, use push_back iterators for append
+  void
+  write_4ubyte (std::vector <uint8_t> &buf, uint32_t value)
+  {
+    // XXX endians
+    for (int i = 0; i < 4; ++i)
+      {
+	buf.push_back ((uint8_t)value & 0xffUL);
+	value >>= 8;
+      }
+  }
 }
 
 void
@@ -396,54 +420,40 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	      */
 	      dwarf::value_space vs = value.what_space ();
 
-	      switch (form)
-		{
-		case DW_FORM_addr:
-		  // XXX addr64
-		  for (int i = 0; i <8; ++i)
-		    data.push_back (0);
-		  break;
-
-		case DW_FORM_block:
-		  write_uleb128 (data, 0);
-		  break;
-
-		case DW_FORM_data4:
-		  for (int i = 0; i <4; ++i)
-		    data.push_back (0);
-		  break;
-
-		case DW_FORM_flag:
-		  data.push_back (0);
-		  break;
-
-		case DW_FORM_ref_addr:
-		  // XXX dwarf64
-		  for (int i = 0; i <4; ++i)
-		    data.push_back (0);
-		  break;
-
-		case DW_FORM_string:
-		  break;
-
-		case DW_FORM_udata:
-		  data.push_back (0);
-		  break;
-
-		default:
-		  abort ();
-		};
-
 	      switch (vs)
 		{
 		case dwarf::VS_flag:
+		  assert (form == DW_FORM_flag);
+		  data.push_back (!!value.flag ());
+		  break;
+
+		/* XXX Ignore lookup table pointers for now.  */
 		case dwarf::VS_rangelistptr:
 		case dwarf::VS_lineptr:
-		case dwarf::VS_macptr:	// XXX punt for now, treat as constant
+		case dwarf::VS_macptr:
+		  assert (form == DW_FORM_data4);
+		  for (int i = 0; i < 4; ++i)
+		    data.push_back (0);
+		  break;
+
 		case dwarf::VS_constant:
+		  assert (form == DW_FORM_udata);
+		  write_uleb128 (data, value.constant ());
+		  break;
+
 		case dwarf::VS_dwarf_constant:
+		  assert (form == DW_FORM_udata);
+		  write_uleb128 (data, value.dwarf_constant ());
+		  break;
+
 		case dwarf::VS_source_line:
+		  assert (form == DW_FORM_udata);
+		  write_uleb128 (data, value.source_line ());
+		  break;
+
 		case dwarf::VS_source_column:
+		  assert (form == DW_FORM_udata);
+		  write_uleb128 (data, value.source_column ());
 		  break;
 
 		case dwarf::VS_string:
@@ -462,12 +472,38 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 		      data.insert (data.end (), str.begin (), str.end ());
 		      data.push_back (0);
 		    }
+		  else if (vs == dwarf::VS_source_file
+			   && form == DW_FORM_udata)
+		    // XXX leave out for now
+		    write_uleb128 (data, 0);
 		  break;
 
 		case dwarf::VS_address:
+		  assert (form == DW_FORM_addr);
+		  // XXX addr64
+		  write_8ubyte (data, value.address ());
+		  break;
+
 		case dwarf::VS_reference:
+		  assert (form == DW_FORM_ref_addr);
+		  // XXX dwarf64
+		  write_4ubyte (data, value.reference ()->offset ());
+		  break;
+
 		case dwarf::VS_location:
+		  // XXX leave out for now
+		  if (form == DW_FORM_block)
+		    write_uleb128 (data, 0);
+		  else
+		    {
+		      assert (form == DW_FORM_data4);
+		      write_4ubyte (data, 0);
+		    }
+		  break;
+
 		case dwarf::VS_discr_list:
+		  std::cout << dwarf_form_string (form)
+			    << " " << dwarf_attr_string (name) << std::endl;
 		  break;
 
 		default:
