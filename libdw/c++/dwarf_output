@@ -609,7 +609,8 @@ namespace elfutils
 			      dwarf_output_collector &dw);
 
     void output_debug_info (std::vector <uint8_t> &data,
-			    dwarf_output_collector &dw);
+			    dwarf_output_collector &dw,
+			    bool addr_64);
   };
 
   // Explicit specializations.

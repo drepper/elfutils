@@ -483,8 +483,9 @@ handle_elf (Elf *elf,
 #undef SEC
   };
 
+  bool addr_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
   dwout.output_debug_abbrev (section_data[si_abbrev].data, collector);
-  dwout.output_debug_info (section_data[si_info].data, collector);
+  dwout.output_debug_info (section_data[si_info].data, collector, addr_64);
 
   for (size_t i = 0; i < sizeof (section_data) / sizeof (*section_data); ++i)
     {
