@@ -165,8 +165,9 @@ dwarf_output_collector::shape_info::instantiate
 
 namespace
 {
+  template <class Iterator>
   void
-  write_uleb128 (std::vector <uint8_t> &buf, uint64_t value)
+  write_uleb128 (Iterator it, uint64_t value)
   {
     do
       {
@@ -174,31 +175,31 @@ namespace
 	value >>= 7;
 	if (value != 0)
 	  byte |= 0x80;
-	buf.push_back (byte);
+	*it++ = byte;
       }
     while (value != 0);
   }
 
-  // XXX convert to iterator use, use push_back iterators for append
+  template <class Iterator>
   void
-  write_8ubyte (std::vector <uint8_t> &buf, uint64_t value)
+  write_8ubyte (Iterator it, uint64_t value)
   {
     // XXX endians
     for (int i = 0; i < 8; ++i)
       {
-	buf.push_back ((uint8_t)value & 0xffUL);
+	*it++ = (uint8_t)value & 0xffUL;
 	value >>= 8;
       }
   }
 
-  // XXX convert to iterator use, use push_back iterators for append
+  template <class Iterator>
   void
-  write_4ubyte (std::vector <uint8_t> &buf, uint32_t value)
+  write_4ubyte (Iterator it, uint32_t value)
   {
     // XXX endians
     for (int i = 0; i < 4; ++i)
       {
-	buf.push_back ((uint8_t)value & 0xffUL);
+	*it++ = (uint8_t)value & 0xffUL;
 	value >>= 8;
       }
   }
@@ -210,8 +211,8 @@ dwarf_output_collector::shape_info::build_data
      dwarf_output_collector::shape_info::instance_type const &inst,
      std::vector<uint8_t> &data)
 {
-  ::write_uleb128 (data, inst.second);
-  ::write_uleb128 (data, shape._m_tag);
+  ::write_uleb128 (std::back_inserter (data), inst.second);
+  ::write_uleb128 (std::back_inserter (data), shape._m_tag);
   data.push_back (shape._m_has_children ? DW_CHILDREN_yes : DW_CHILDREN_no);
 
   // We iterate shape attribute map in parallel with instance
@@ -225,8 +226,8 @@ dwarf_output_collector::shape_info::build_data
        it != inst.first.end (); ++it)
     {
       // ULEB128 name & form
-      ::write_uleb128 (data, at++->first);
-      ::write_uleb128 (data, *it);
+      ::write_uleb128 (std::back_inserter (data), at++->first);
+      ::write_uleb128 (std::back_inserter (data), *it);
     }
 
   data.push_back (0);
@@ -393,7 +394,7 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 	  dwarf_output_collector::shape_info::instance_type const &instance
 	    = info->_m_instances[instance_id];
 	  size_t code = instance.second;
-	  ::write_uleb128 (data, code);
+	  ::write_uleb128 (std::back_inserter (data), code);
 
 	  //std::cout << " " << code << std::endl;
 
@@ -438,22 +439,22 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 
 		case dwarf::VS_constant:
 		  assert (form == DW_FORM_udata);
-		  write_uleb128 (data, value.constant ());
+		  write_uleb128 (std::back_inserter (data), value.constant ());
 		  break;
 
 		case dwarf::VS_dwarf_constant:
 		  assert (form == DW_FORM_udata);
-		  write_uleb128 (data, value.dwarf_constant ());
+		  write_uleb128 (std::back_inserter (data), value.dwarf_constant ());
 		  break;
 
 		case dwarf::VS_source_line:
 		  assert (form == DW_FORM_udata);
-		  write_uleb128 (data, value.source_line ());
+		  write_uleb128 (std::back_inserter (data), value.source_line ());
 		  break;
 
 		case dwarf::VS_source_column:
 		  assert (form == DW_FORM_udata);
-		  write_uleb128 (data, value.source_column ());
+		  write_uleb128 (std::back_inserter (data), value.source_column ());
 		  break;
 
 		case dwarf::VS_string:
@@ -475,29 +476,29 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
 		  else if (vs == dwarf::VS_source_file
 			   && form == DW_FORM_udata)
 		    // XXX leave out for now
-		    write_uleb128 (data, 0);
+		    write_uleb128 (std::back_inserter (data), 0);
 		  break;
 
 		case dwarf::VS_address:
 		  assert (form == DW_FORM_addr);
 		  // XXX addr64
-		  write_8ubyte (data, value.address ());
+		  write_8ubyte (std::back_inserter (data), value.address ());
 		  break;
 
 		case dwarf::VS_reference:
 		  assert (form == DW_FORM_ref_addr);
 		  // XXX dwarf64
-		  write_4ubyte (data, value.reference ()->offset ());
+		  write_4ubyte (std::back_inserter (data), value.reference ()->offset ());
 		  break;
 
 		case dwarf::VS_location:
 		  // XXX leave out for now
 		  if (form == DW_FORM_block)
-		    write_uleb128 (data, 0);
+		    write_uleb128 (std::back_inserter (data), 0);
 		  else
 		    {
 		      assert (form == DW_FORM_data4);
-		      write_4ubyte (data, 0);
+		      write_4ubyte (std::back_inserter (data), 0);
 		    }
 		  break;
 
@@ -525,13 +526,7 @@ dwarf_output::output_debug_info (std::vector <uint8_t> &data,
       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
       recursively_dump (data, c, *it->_m_cu_die, 0);
       size_t length = data.size () - cu_start - 4; // -4 for length info. XXX dwarf64
-      assert (length < (uint32_t)-1);
-
-      // XXX fix this.  Remember endians.
-      std::vector<uint8_t>::iterator dt = data.begin () + cu_start;
-      *dt++ = (uint8_t)length & 0xffUL;
-      *dt++ = (uint8_t)((length & 0xff00UL) >> 8);
-      *dt++ = (uint8_t)((length & 0xff0000UL) >> 16);
-      *dt++ = (uint8_t)((length & 0xff000000UL) >> 24);
+      assert (length < (uint32_t)-1); // XXX temporary XXX dwarf64
+      write_4ubyte (data.begin () + cu_start, length);
     }
 }
