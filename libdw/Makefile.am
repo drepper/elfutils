@@ -55,6 +55,10 @@ pkginclude_HEADERS = libdw.h \
 		     c++/dwarf_tracker c++/dwarf_ref_maker \
 		     c++/dwarf_comparator
 
+noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
+		 cfi.h encoded-value.h \
+		 known-dwarf.h c++/dwarf-knowledge.cc c++/data-values.hh
+
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \
 		  dwarf_error.c dwarf_nextcu.c dwarf_diename.c dwarf_offdie.c \
@@ -104,8 +108,6 @@ libdwpp_a_SOURCES = c++/values.cc \
 		    c++/line_info.cc \
 		    c++/edit-values.cc \
 		    c++/output-values.cc c++/output-shape.cc
-noinst_HEADERS    = c++/dwarf-knowledge.cc \
-		    c++/data-values.hh
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
@@ -155,10 +157,6 @@ uninstall: uninstall-am
 endif
 
 libdw_a_LIBADD = $(addprefix ../libdwfl/,$(shell $(AR) t ../libdwfl/libdwfl.a))
-
-noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
-		 cfi.h encoded-value.h \
-		 known-dwarf.h
 
 EXTRA_DIST = libdw.map
 
