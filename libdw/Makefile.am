@@ -89,7 +89,12 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_func_inline.c dwarf_getsrc_file.c \
 		  libdw_findcu.c libdw_form.c libdw_alloc.c memory-access.c \
 		  libdw_visit_scopes.c \
-		  dwarf_entry_breakpoints.c
+		  dwarf_entry_breakpoints.c \
+		  dwarf_next_cfi.c \
+		  cie.c fde.c cfi.c frame-cache.c \
+		  dwarf_frame_info.c dwarf_frame_cfa.c dwarf_frame_register.c \
+		  dwarf_cfi_addrframe.c \
+		  dwarf_getcfi.c dwarf_getcfi_elf.c dwarf_cfi_end.c
 
 # XXX need to figure out C++ dso crapola
 lib_LIBRARIES += libdwpp.a
@@ -151,7 +156,9 @@ endif
 
 libdw_a_LIBADD = $(addprefix ../libdwfl/,$(shell $(AR) t ../libdwfl/libdwfl.a))
 
-noinst_HEADERS += libdwP.h memory-access.h dwarf_abbrev_hash.h known-dwarf.h
+noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
+		 cfi.h encoded-value.h \
+		 known-dwarf.h
 
 EXTRA_DIST = libdw.map
 

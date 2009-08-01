@@ -163,26 +163,35 @@ check_constant_offset (Dwarf_Attribute *attr,
   return 0;
 }
 
-static int
-getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
-	     Dwarf_Op **llbuf, size_t *listlen, int sec_index)
+int
+internal_function
+__libdw_intern_expression (Dwarf *dbg,
+			   bool other_byte_order, unsigned int address_size,
+			   void **cache, const Dwarf_Block *block, bool valuep,
+			   Dwarf_Op **llbuf, size_t *listlen, int sec_index)
 {
-  Dwarf *dbg = cu->dbg;
-
   /* Check whether we already looked at this list.  */
   struct loc_s fake = { .addr = block->data };
-  struct loc_s **found = tfind (&fake, &cu->locs, loc_compare);
+  struct loc_s **found = tfind (&fake, cache, loc_compare);
   if (found != NULL)
     {
       /* We already saw it.  */
       *llbuf = (*found)->loc;
       *listlen = (*found)->nloc;
 
+      if (valuep)
+	{
+	  assert (*listlen > 1);
+	  assert ((*llbuf)[*listlen - 1].atom == DW_OP_stack_value);
+	}
+
       return 0;
     }
 
   const unsigned char *data = block->data;
   const unsigned char *const end_data = data + block->length;
+
+  const struct { bool other_byte_order; } bo = { other_byte_order };
 
   struct loclist *loclist = NULL;
   unsigned int n = 0;
@@ -204,7 +213,7 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	case DW_OP_addr:
 	  /* Address, depends on address size of CU.  */
 	  if (__libdw_read_address_inc (dbg, sec_index, &data,
-					cu->address_size, &newloc->number))
+					address_size, &newloc->number))
 	    return -1;
 	  break;
 
@@ -240,6 +249,10 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	case DW_OP_nop:
 	case DW_OP_push_object_address:
 	case DW_OP_call_ref:
+	case DW_OP_call_frame_cfa:
+	case DW_OP_form_tls_address:
+	case DW_OP_GNU_push_tls_address:
+	case DW_OP_stack_value:
 	  /* No operand.  */
 	  break;
 
@@ -269,7 +282,7 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	  if (unlikely (data + 2 > end_data))
 	    goto invalid;
 
-	  newloc->number = read_2ubyte_unaligned_inc (dbg, data);
+	  newloc->number = read_2ubyte_unaligned_inc (&bo, data);
 	  break;
 
 	case DW_OP_const2s:
@@ -279,14 +292,14 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	  if (unlikely (data + 2 > end_data))
 	    goto invalid;
 
-	  newloc->number = read_2sbyte_unaligned_inc (dbg, data);
+	  newloc->number = read_2sbyte_unaligned_inc (&bo, data);
 	  break;
 
 	case DW_OP_const4u:
 	  if (unlikely (data + 4 > end_data))
 	    goto invalid;
 
-	  newloc->number = read_4ubyte_unaligned_inc (dbg, data);
+	  newloc->number = read_4ubyte_unaligned_inc (&bo, data);
 	  break;
 
 	case DW_OP_const4s:
@@ -294,21 +307,21 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	  if (unlikely (data + 4 > end_data))
 	    goto invalid;
 
-	  newloc->number = read_4sbyte_unaligned_inc (dbg, data);
+	  newloc->number = read_4sbyte_unaligned_inc (&bo, data);
 	  break;
 
 	case DW_OP_const8u:
 	  if (unlikely (data + 8 > end_data))
 	    goto invalid;
 
-	  newloc->number = read_8ubyte_unaligned_inc (dbg, data);
+	  newloc->number = read_8ubyte_unaligned_inc (&bo, data);
 	  break;
 
 	case DW_OP_const8s:
 	  if (unlikely (data + 8 > end_data))
 	    goto invalid;
 
-	  newloc->number = read_8sbyte_unaligned_inc (dbg, data);
+	  newloc->number = read_8sbyte_unaligned_inc (&bo, data);
 	  break;
 
 	case DW_OP_constu:
@@ -332,6 +345,12 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	  get_sleb128 (newloc->number2, data);
 	  break;
 
+	case DW_OP_bit_piece:
+	  /* XXX Check size.  */
+	  get_uleb128 (newloc->number, data);
+	  get_uleb128 (newloc->number2, data);
+	  break;
+
 	default:
 	  goto invalid;
 	}
@@ -345,8 +364,33 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
       goto invalid;
     }
 
+  if (valuep)
+    {
+      struct loclist *newloc;
+      newloc = (struct loclist *) alloca (sizeof (struct loclist));
+      newloc->atom = DW_OP_stack_value;
+      newloc->number = 0;
+      newloc->number2 = 0;
+      newloc->offset = data - block->data;
+      newloc->next = loclist;
+      loclist = newloc;
+      ++n;
+    }
+
   /* Allocate the array.  */
-  Dwarf_Op *result = libdw_alloc (dbg, Dwarf_Op, sizeof (Dwarf_Op), n);
+  Dwarf_Op *result;
+  if (dbg != NULL)
+    result = libdw_alloc (dbg, Dwarf_Op, sizeof (Dwarf_Op), n);
+  else
+    {
+      result = malloc (sizeof *result * n);
+      if (result == NULL)
+	{
+	nomem:
+	  __libdw_seterrno (DWARF_E_NOMEM);
+	  return -1;
+	}
+    }
 
   /* Store the result.  */
   *llbuf = result;
@@ -368,15 +412,35 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 
   /* Insert a record in the search tree so that we can find it again
      later.  */
-  struct loc_s *newp = libdw_alloc (dbg, struct loc_s, sizeof (struct loc_s),
-				    1);
+  struct loc_s *newp;
+  if (dbg != NULL)
+    newp = libdw_alloc (dbg, struct loc_s, sizeof (struct loc_s), 1);
+  else
+    {
+      newp = malloc (sizeof *newp);
+      if (newp == NULL)
+	{
+	  free (result);
+	  goto nomem;
+	}
+    }
+
   newp->addr = block->data;
   newp->loc = result;
   newp->nloc = *listlen;
-  (void) tsearch (newp, &cu->locs, loc_compare);
+  (void) tsearch (newp, cache, loc_compare);
 
   /* We did it.  */
   return 0;
+}
+
+static int
+getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
+	     Dwarf_Op **llbuf, size_t *listlen, int sec_index)
+{
+  return __libdw_intern_expression (cu->dbg, cu->dbg->other_byte_order,
+				    cu->address_size, &cu->locs, block, false,
+				    llbuf, listlen, sec_index);
 }
 
 int
