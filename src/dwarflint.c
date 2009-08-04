@@ -1239,6 +1239,16 @@ process_file (Elf *elf, const char *fname, bool only_one)
     /* Hard error, not a message.  We can't debug without this.  */
     wr_error (NULL, ".debug_abbrev data not found.\n");
 
+  Elf_Data *str_data = NULL;
+  if (SEC(str) != NULL)
+    {
+      str_data = SEC(str)->data;
+      if (str_data == NULL)
+	wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+		    &WHERE (sec_str, NULL),
+		    ": the section is present but empty.\n");
+    }
+
   struct cu_coverage *cu_coverage = NULL;
   if (abbrev_chain != NULL)
     {
@@ -1246,7 +1256,7 @@ process_file (Elf *elf, const char *fname, bool only_one)
 	{
 	  cu_coverage = calloc (1, sizeof (struct cu_coverage));
 	  cu_chain = check_info_structural (&file, SEC(info), abbrev_chain,
-					    SEC(str)->data, cu_coverage);
+					    str_data, cu_coverage);
 	  if (cu_chain != NULL && do_high_level)
 	    check_expected_trees (hlctx);
 	}
