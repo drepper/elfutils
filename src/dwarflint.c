@@ -2647,7 +2647,8 @@ read_die_chain (struct elf_file *file,
   bool got_die = false;
   uint64_t sibling_addr = 0;
   uint64_t die_off, prev_die_off = 0;
-  struct abbrev *abbrev, *prev_abbrev = NULL;
+  struct abbrev *abbrev = NULL;
+  struct abbrev *prev_abbrev = NULL;
   struct where where = WHERE (sec_info, NULL);
 
   while (!read_ctx_eof (ctx))
@@ -2696,6 +2697,7 @@ read_die_chain (struct elf_file *file,
       got_die = true;
 
       /* Find the abbrev matching the code.  */
+      prev_abbrev = abbrev;
       abbrev = abbrev_table_find_abbrev (abbrevs, abbr_code);
       if (abbrev == NULL)
 	{
