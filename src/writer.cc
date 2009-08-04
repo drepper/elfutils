@@ -47,6 +47,7 @@
 
 #include <elf-knowledge.h>
 #include "../libdw/c++/dwarf_output"
+#include "../libdw/libdwP.h" // XXX for mem_default_size
 
 #include "dwarflint.h" // for DEBUGINFO_SECTIONS
 
@@ -146,7 +147,7 @@ struct shdr_info_t
 };
 
 static int
-handle_elf (Elf *elf,
+handle_elf (Elf *elf, size_t alloc_unit,
 	    elfutils::dwarf_output &dwout,
 	    elfutils::dwarf_output_collector &collector,
 	    const char *fname, mode_t mode, const char *output_fname)
@@ -464,17 +465,11 @@ handle_elf (Elf *elf,
 	shdr_info[cnt].se = ebl_strtabadd (shst, shdr_info[cnt].name, 0);
       }
 
-  struct section_data_t
-  {
-    std::string name;
-    std::vector <uint8_t> data;
-    section_data_t (char const *a_name) : name (a_name) {}
-  };
-
-  section_data_t section_data[] = {
-#define SEC(N) section_data_t (".debug_" #N),
+  char const *debug_sections[] = {
+#define SEC(N) ".debug_" #N,
     DEBUGINFO_SECTIONS
 #undef SEC
+    NULL
   };
 
   enum section_idx {
@@ -484,17 +479,14 @@ handle_elf (Elf *elf,
   };
 
   bool addr_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
-  dwout.output_debug_abbrev (section_data[si_abbrev].data, collector);
-  dwout.output_debug_info (section_data[si_info].data, collector, addr_64);
 
-  for (size_t i = 0; i < sizeof (section_data) / sizeof (*section_data); ++i)
+  for (size_t i = 0; debug_sections[i] != NULL; ++i)
     {
-      std::vector <uint8_t> &data = section_data[i].data;
       shdr_info_t data_info;
 
       /* Add the section header string table section name.  */
-      std::string const &name = section_data[i].name;
-      data_info.se = ebl_strtabadd (shst, name.c_str (), name.length () + 1);
+      data_info.se = ebl_strtabadd (shst, debug_sections[i],
+				    strlen (debug_sections[i]) + 1);
       data_info.idx = idx;
 
       /* Create the section header.  */
@@ -515,22 +507,16 @@ handle_elf (Elf *elf,
 	       elf_errmsg (-1));
       assert (elf_ndxscn (data_info.newscn) == idx);
 
-      /* Finalize the string table and fill in the correct indices in the
-	 section headers.  */
-      Elf_Data *data_info_data = elf_newdata (data_info.newscn);
-      // xxx free on failure
-      if (data_info_data == NULL)
-	error (EXIT_FAILURE, 0,
-	       gettext ("while creating section header string table: %s"),
-	       elf_errmsg (-1));
-
-      data_info_data->d_buf = (void*)&data[0];
-      data_info_data->d_type = ELF_T_BYTE;
-      data_info_data->d_size = data.size ();
-      data_info_data->d_align = 1;
+      /* Build the data.  */
+      elfutils::section_appender appender (data_info.newscn, alloc_unit);
+      if (i == si_abbrev)
+	dwout.output_debug_abbrev (appender, collector, addr_64);
+      else if (i == si_info)
+	dwout.output_debug_info (appender, collector, addr_64);
+      // xxx
 
       /* We have to set the section size.  */
-      data_info.shdr.sh_size = data_info_data->d_size;
+      data_info.shdr.sh_size = appender.size ();
 
       shdr_info.push_back (data_info);
       ++idx;
@@ -1174,7 +1160,7 @@ main (int argc, char *argv[])
   elfutils::dwarf dw (dwarf);
   elfutils::dwarf_output_collector c;
   elfutils::dwarf_output dwout (dw, c);
-  handle_elf (elf, dwout, c, fname.c_str (),
+  handle_elf (elf, dwarf->mem_default_size, dwout, c, fname.c_str (),
 	      st.st_mode & ACCESSPERMS, outname.c_str ());
 }
 
