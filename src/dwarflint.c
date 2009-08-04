@@ -1247,6 +1247,16 @@ process_file (Elf *elf, const char *fname, bool only_one)
     /* Hard error, not a message.  We can't debug without this.  */
     wr_error (NULL, ".debug_abbrev data not found.\n");
 
+  Elf_Data *str_data = NULL;
+  if (SEC(str) != NULL)
+    {
+      str_data = SEC(str)->data;
+      if (str_data == NULL)
+	wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+		    &WHERE (sec_str, NULL),
+		    ": the section is present but empty.\n");
+    }
+
   struct cu_coverage *cu_coverage = NULL;
   if (abbrev_chain != NULL)
     {
@@ -1254,7 +1264,7 @@ process_file (Elf *elf, const char *fname, bool only_one)
 	{
 	  cu_coverage = calloc (1, sizeof (struct cu_coverage));
 	  cu_chain = check_info_structural (&file, SEC(info), abbrev_chain,
-					    SEC(str)->data, cu_coverage);
+					    str_data, cu_coverage);
 	  if (cu_chain != NULL && hlctx != NULL)
 	    check_expected_trees (hlctx);
 	}
@@ -2703,7 +2713,8 @@ read_die_chain (struct elf_file *file,
   bool got_die = false;
   uint64_t sibling_addr = 0;
   uint64_t die_off, prev_die_off = 0;
-  struct abbrev *abbrev, *prev_abbrev = NULL;
+  struct abbrev *abbrev = NULL;
+  struct abbrev *prev_abbrev = NULL;
   struct where where = WHERE (sec_info, NULL);
 
   while (!read_ctx_eof (ctx))
@@ -2752,6 +2763,7 @@ read_die_chain (struct elf_file *file,
       got_die = true;
 
       /* Find the abbrev matching the code.  */
+      prev_abbrev = abbrev;
       abbrev = abbrev_table_find_abbrev (abbrevs, abbr_code);
       if (abbrev == NULL)
 	{
