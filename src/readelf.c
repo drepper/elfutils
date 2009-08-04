@@ -3140,6 +3140,22 @@ format_dwarf_addr (Dwfl_Module *dwflmod,
 
 
 static void
+print_block (size_t n, const void *block)
+{
+  if (n == 0)
+    puts (_("empty block"));
+  else
+    {
+      printf (_("%zu byte block:"), n);
+      const unsigned char *data = block;
+      do
+	printf (" %02x", *data++);
+      while (--n > 0);
+      putchar ('\n');
+    }
+}
+
+static void
 print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	   unsigned int addrsize, Dwarf_Word len, const unsigned char *data)
 {
@@ -3297,6 +3313,8 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
       [DW_OP_form_tls_address] = "form_tls_address",
       [DW_OP_call_frame_cfa] = "call_frame_cfa",
       [DW_OP_bit_piece] = "bit_piece",
+      [DW_OP_implicit_value] = "implicit_value",
+      [DW_OP_stack_value] = "stack_value",
     };
 
   if (len == 0)
@@ -3507,6 +3525,18 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	  len -= 2;
 	  data += 2;
 	  offset += 3;
+	  break;
+
+	case DW_OP_implicit_value:
+	  start = data;
+	  get_uleb128 (uleb, data); /* XXX check overrun */
+	  printf ("%*s[%4" PRIuMAX "] %s: ",
+		  indent, "", (uintmax_t) offset, known[op]);
+	  NEED (uleb);
+	  print_block (uleb, data);
+	  data += uleb;
+	  len -= data - start;
+	  offset += 1 + (data - start);
 	  break;
 
 	default:
@@ -4646,9 +4676,9 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
       if (unlikely (dwarf_formblock (attrp, &block) != 0))
 	goto attrval_out;
 
-      printf ("           %*s%-20s %" PRIxMAX " byte block\n",
-	      (int) (level * 2), "", dwarf_attr_string (attr),
-	      (uintmax_t) block.length);
+      printf ("           %*s%-20s ",
+	      (int) (level * 2), "", dwarf_attr_string (attr));
+      print_block (block.length, block.data);
 
       switch (attr)
 	{
