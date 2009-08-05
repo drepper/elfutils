@@ -339,6 +339,191 @@ dwarf_output::output_debug_abbrev (section_appender &appender,
 }
 
 void
+dwarf_output::recursively_dump (section_appender &appender,
+				dwarf_output_collector &c,
+				debug_info_entry const &die,
+				unsigned level,
+				bool  addr_64,
+				dwarf_output::die_off_map &die_off,
+				dwarf_output::backpatch_vec &backpatch)
+{
+  static char const spaces[] =
+    "                                                            "
+    "                                                            "
+    "                                                            ";
+  static char const *tail = spaces + strlen (spaces);
+  __attribute__ ((unused)) char const *pad = tail - level * 2;
+  //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
+
+  std::back_insert_iterator <section_appender> inserter
+    = std::back_inserter (appender);
+
+  /* Find shape instance.  XXX We currently have to iterate
+     through all the shapes.  Fix later.  */
+  dwarf_output_collector::shape_type const *shape = NULL;
+  dwarf_output_collector::shape_info const *info = NULL;
+  size_t instance_id = (size_t)-1;
+
+  for (dwarf_output_collector::shape_map::iterator st = c._m_shapes.begin ();
+       st != c._m_shapes.end (); ++st)
+    {
+      dwarf_output_collector::shape_info::instance_map::const_iterator
+	instance_it = st->second._m_instance_map.find (&die);
+      if (instance_it != st->second._m_instance_map.end ())
+	{
+	  assert (shape == NULL && info == NULL);
+
+	  shape = &st->first;
+	  info = &st->second;
+	  instance_id
+	    = instance_it->second - st->second._m_instances.begin ();
+	}
+    }
+  assert (shape != NULL && info != NULL);
+
+  /* Record where the DIE begins.  */
+  die_off [die.offset ()] = appender.size ();
+  // xxx handle non-CU-local
+
+  /* Our instance.  */
+  dwarf_output_collector::shape_info::instance_type const &instance
+    = info->_m_instances[instance_id];
+  size_t code = instance.second;
+  ::dw_write_uleb128 (inserter, code);
+
+  //std::cout << " " << code << std::endl;
+
+  /* Dump attribute values.  */
+  debug_info_entry::attributes_type const &attribs = die.attributes ();
+  std::vector<int>::const_iterator form_it = instance.first.begin ();
+  for (dwarf_output_collector::shape_type::attrs_type::const_iterator
+	 at = shape->_m_attrs.begin ();
+       at != shape->_m_attrs.end (); ++at)
+    {
+      int name = at->first;
+      int form = *form_it++;
+      debug_info_entry::attributes_type::const_iterator
+	vt = attribs.find (name);
+      assert (vt != attribs.end ());
+
+      attr_value const &value = vt->second;
+      /*
+	std::cout << pad
+	<< "    " << dwarf_attr_string (name)
+	<< ":" << dwarf_form_string (form)
+	<< ":" << dwarf_form_string (at->second)
+	<< ":" << value.to_string () << std::endl;
+      */
+      dwarf::value_space vs = value.what_space ();
+
+      switch (vs)
+	{
+	case dwarf::VS_flag:
+	  assert (form == DW_FORM_flag);
+	  ::dw_write<1> (appender.alloc (1), !!value.flag ());
+	  break;
+
+	case dwarf::VS_rangelistptr:
+	case dwarf::VS_lineptr:
+	case dwarf::VS_macptr:
+	  assert (form == DW_FORM_data4); // XXX temporary
+	  // XXX leave out for now
+	  ::dw_write<4> (appender.alloc (4), 0);
+	  break;
+
+	case dwarf::VS_constant:
+	  assert (form == DW_FORM_udata);
+	  ::dw_write_uleb128 (inserter, value.constant ());
+	  break;
+
+	case dwarf::VS_dwarf_constant:
+	  assert (form == DW_FORM_udata);
+	  ::dw_write_uleb128 (inserter, value.dwarf_constant ());
+	  break;
+
+	case dwarf::VS_source_line:
+	  assert (form == DW_FORM_udata);
+	  ::dw_write_uleb128 (inserter, value.source_line ());
+	  break;
+
+	case dwarf::VS_source_column:
+	  assert (form == DW_FORM_udata);
+	  ::dw_write_uleb128 (inserter, value.source_column ());
+	  break;
+
+	case dwarf::VS_string:
+	case dwarf::VS_identifier:
+	case dwarf::VS_source_file:
+	  if (vs != dwarf::VS_source_file
+	      || form == DW_FORM_string
+	      || form == DW_FORM_strp)
+	    {
+	      assert (form == DW_FORM_string); // XXX temporary
+	      std::string const &str =
+		vs == dwarf::VS_string
+		? value.string ()
+		: (vs == dwarf::VS_source_file
+		   ? value.source_file ().name ()
+		   : value.identifier ());
+
+	      std::copy (str.begin (), str.end (), inserter);
+	      *inserter++ = 0;
+	    }
+	  else if (vs == dwarf::VS_source_file
+		   && form == DW_FORM_udata)
+	    // XXX leave out for now
+	    ::dw_write_uleb128 (inserter, 0);
+	  break;
+
+	case dwarf::VS_address:
+	  {
+	    assert (form == DW_FORM_addr);
+	    size_t w = addr_64 ? 8 : 4;
+	    ::dw_write_var (appender.alloc (w), w, value.address ());
+	  }
+	  break;
+
+	case dwarf::VS_reference:
+	  {
+	    assert (form == DW_FORM_ref_addr);
+	    // Emit zero, patch later.
+	    // XXX dwarf64
+	    unsigned char *ptr = appender.alloc (4);
+	    ::dw_write<4> (ptr, 0);
+	    backpatch.push_back
+	      (std::make_pair (std::make_pair (ptr, 4),
+			       value.reference ()->offset ()));
+	  }
+	  break;
+
+	case dwarf::VS_location:
+	  // XXX leave out for now
+	  if (form == DW_FORM_block)
+	    ::dw_write_uleb128 (inserter, 0);
+	  else
+	    {
+	      assert (form == DW_FORM_data4); // XXX temporary
+	      ::dw_write<4> (appender.alloc (4), 0);
+	    }
+	  break;
+
+	case dwarf::VS_discr_list:
+	  throw std::runtime_error ("Can't handle VS_discr_list.");
+	};
+    }
+  assert (form_it == instance.first.end ());
+
+  if (!die.children ().empty ())
+    {
+      for (compile_unit::children_type::const_iterator jt
+	     = die.children ().begin (); jt != die.children ().end (); ++jt)
+	recursively_dump (appender, c, *jt, level + 1, addr_64,
+			  die_off, backpatch);
+      *inserter++ = 0;
+    }
+}
+
+void
 dwarf_output::output_debug_info (section_appender &appender,
 				 dwarf_output_collector &c,
 				 bool addr_64)
@@ -377,190 +562,25 @@ dwarf_output::output_debug_info (section_appender &appender,
       // XXX size in bytes of an address on the target architecture.
       *inserter++ = addr_64 ? 8 : 4;
 
-      struct recursively_dump
-      {
-	section_appender &appender;
-	dwarf_output_collector &c;
-	bool addr_64;
-	std::back_insert_iterator <section_appender> inserter;
-
-	recursively_dump (section_appender &an_appender,
-			  dwarf_output_collector &a_c,
-			  debug_info_entry const &die,
-			  unsigned level,
-			  bool a_addr_64)
-	  : appender (an_appender), c (a_c), addr_64 (a_addr_64)
-	  , inserter (std::back_inserter (appender))
-	{
-	  static char const spaces[] =
-	    "                                                            "
-	    "                                                            "
-	    "                                                            ";
-	  static char const *tail = spaces + strlen (spaces);
-	  __attribute__ ((unused)) char const *pad = tail - level * 2;
-	  //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
-
-	  /* Find shape instance.  XXX We currently have to iterate
-	     through all the shapes.  Fix later.  */
-	  dwarf_output_collector::shape_type const *shape = NULL;
-	  dwarf_output_collector::shape_info const *info = NULL;
-	  size_t instance_id = (size_t)-1;
-
-	  for (dwarf_output_collector::shape_map::iterator st = c._m_shapes.begin ();
-	       st != c._m_shapes.end (); ++st)
-	    {
-	      dwarf_output_collector::shape_info::instance_map::const_iterator
-		instance_it = st->second._m_instance_map.find (&die);
-	      if (instance_it != st->second._m_instance_map.end ())
-		{
-		  assert (shape == NULL && info == NULL);
-
-		  shape = &st->first;
-		  info = &st->second;
-		  instance_id
-		    = instance_it->second - st->second._m_instances.begin ();
-		}
-	    }
-	  assert (shape != NULL && info != NULL);
-
-	  /* Our instance.  */
-	  dwarf_output_collector::shape_info::instance_type const &instance
-	    = info->_m_instances[instance_id];
-	  size_t code = instance.second;
-	  ::dw_write_uleb128 (inserter, code);
-
-	  //std::cout << " " << code << std::endl;
-
-	  /* Dump attribute values.  */
-	  debug_info_entry::attributes_type const &attribs = die.attributes ();
-	  std::vector<int>::const_iterator form_it = instance.first.begin ();
-	  for (dwarf_output_collector::shape_type::attrs_type::const_iterator
-		 at = shape->_m_attrs.begin ();
-	       at != shape->_m_attrs.end (); ++at)
-	    {
-	      int name = at->first;
-	      int form = *form_it++;
-	      debug_info_entry::attributes_type::const_iterator
-		vt = attribs.find (name);
-	      assert (vt != attribs.end ());
-
-	      attr_value const &value = vt->second;
-	      /*
-	      std::cout << pad
-			<< "    " << dwarf_attr_string (name)
-			<< ":" << dwarf_form_string (form)
-			<< ":" << dwarf_form_string (at->second)
-			<< ":" << value.to_string () << std::endl;
-	      */
-	      dwarf::value_space vs = value.what_space ();
-
-	      switch (vs)
-		{
-		case dwarf::VS_flag:
-		  assert (form == DW_FORM_flag);
-		  ::dw_write<1> (appender.alloc (1), !!value.flag ());
-		  break;
-
-		case dwarf::VS_rangelistptr:
-		case dwarf::VS_lineptr:
-		case dwarf::VS_macptr:
-		  assert (form == DW_FORM_data4); // XXX temporary
-		  // XXX leave out for now
-		  ::dw_write<4> (appender.alloc (4), 0);
-		  break;
-
-		case dwarf::VS_constant:
-		  assert (form == DW_FORM_udata);
-		  ::dw_write_uleb128 (inserter, value.constant ());
-		  break;
-
-		case dwarf::VS_dwarf_constant:
-		  assert (form == DW_FORM_udata);
-		  ::dw_write_uleb128 (inserter, value.dwarf_constant ());
-		  break;
-
-		case dwarf::VS_source_line:
-		  assert (form == DW_FORM_udata);
-		  ::dw_write_uleb128 (inserter, value.source_line ());
-		  break;
-
-		case dwarf::VS_source_column:
-		  assert (form == DW_FORM_udata);
-		  ::dw_write_uleb128 (inserter, value.source_column ());
-		  break;
-
-		case dwarf::VS_string:
-		case dwarf::VS_identifier:
-		case dwarf::VS_source_file:
-		  if (vs != dwarf::VS_source_file
-		      || form == DW_FORM_string
-		      || form == DW_FORM_strp)
-		    {
-		      assert (form == DW_FORM_string); // XXX temporary
-		      std::string const &str =
-			vs == dwarf::VS_string
-			? value.string ()
-			: (vs == dwarf::VS_source_file
-			   ? value.source_file ().name ()
-			   : value.identifier ());
-
-		      std::copy (str.begin (), str.end (), inserter);
-		      *inserter++ = 0;
-		    }
-		  else if (vs == dwarf::VS_source_file
-			   && form == DW_FORM_udata)
-		    // XXX leave out for now
-		    ::dw_write_uleb128 (inserter, 0);
-		  break;
-
-		case dwarf::VS_address:
-		  {
-		    assert (form == DW_FORM_addr);
-		    size_t w = addr_64 ? 8 : 4;
-		    ::dw_write_var (appender.alloc (w), w, value.address ());
-		  }
-		  break;
-
-		case dwarf::VS_reference:
-		  assert (form == DW_FORM_ref_addr);
-		  // XXX dwarf64
-		  ::dw_write<4> (appender.alloc (4),
-				 value.reference ()->offset ());
-		  break;
-
-		case dwarf::VS_location:
-		  // XXX leave out for now
-		  if (form == DW_FORM_block)
-		    ::dw_write_uleb128 (inserter, 0);
-		  else
-		    {
-		      assert (form == DW_FORM_data4); // XXX temporary
-		      ::dw_write<4> (appender.alloc (4), 0);
-		    }
-		  break;
-
-		case dwarf::VS_discr_list:
-		  std::cout << dwarf_form_string (form)
-			    << " " << dwarf_attr_string (name) << std::endl;
-		  break;
-		};
-	    }
-	  assert (form_it == instance.first.end ());
-
-	  if (!die.children ().empty ())
-	    {
-	      for (compile_unit::children_type::const_iterator jt
-		     = die.children ().begin (); jt != die.children ().end (); ++jt)
-		recursively_dump (appender, c, *jt, level + 1, addr_64);
-	      *inserter++ = 0;
-	    }
-	}
-      };
+      die_off_map die_off;
+      backpatch_vec backpatch;
 
       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
-      recursively_dump (appender, c, *it->_m_cu_die, 0, addr_64);
+      recursively_dump (appender, c, *it->_m_cu_die, 0, addr_64,
+			die_off, backpatch);
+
+      /* Do the back-patching.  */
+      for (backpatch_vec::const_iterator bt = backpatch.begin ();
+	   bt != backpatch.end (); ++bt)
+	{
+	  die_off_map::const_iterator ot = die_off.find (bt->second);
+	  assert (ot != die_off.end ());
+	  ::dw_write_var (bt->first.first, bt->first.second, ot->second);
+	}
+
+      /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
       assert (length < (uint32_t)-1); // XXX temporary XXX dwarf64
-      ::dw_write<4> (length_data, length);
+      ::dw_write<4> (length_data, length); // XXX dwarf64
     }
 }

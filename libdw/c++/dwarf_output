@@ -652,6 +652,20 @@ namespace elfutils
       throw std::logic_error ("copying dwarf_output requires a collector");
     }
 
+    // die offset -> file address
+    typedef std::map< ::Dwarf_Off, ::Dwarf_Off> die_off_map;
+
+    // [((pointer, length), die offset)]
+    typedef std::vector<std::pair<std::pair<unsigned char *, size_t>,
+				  ::Dwarf_Off> > backpatch_vec;
+    static void recursively_dump (section_appender &appender,
+				  dwarf_output_collector &c,
+				  debug_info_entry const &die,
+				  unsigned level,
+				  bool a_addr_64,
+				  die_off_map &die_off,
+				  backpatch_vec &backpatch);
+
   public:
     // Constructor for an empty file, can add to its compile_units ().
     inline dwarf_output () {}
