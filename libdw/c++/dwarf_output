@@ -128,7 +128,7 @@ namespace elfutils
       *alloc (1) = byte;
     }
 
-    size_t size () const
+    ::Dwarf_Off size () const
     {
       return _m_totsize;
     }
