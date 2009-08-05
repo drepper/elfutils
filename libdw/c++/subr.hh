@@ -138,6 +138,10 @@ namespace elfutils
       {
 	return v._m_hash;
       }
+      size_t operator () (const T *v) const
+      {
+	return v->_m_hash;
+      }
     };
 
     template<typename string>

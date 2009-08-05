@@ -384,6 +384,17 @@ namespace elfutils
 	inline children_type (const input &other, copier &c)
 	  : _base (), _m_hash (0)
 	{
+	  /* XXX hack.  We use vector iterators as die references.
+	     push_back potentially invalidates these iterators.  Work
+	     around that by reserving vector big enough to hold all
+	     the children, so that realloc & invalidation of these
+	     iterators doesn't occur.  */
+	  size_t count = 0;
+	  for (typename input::const_iterator in = other.begin ();
+	       in != other.end (); ++in)
+	    ++count;
+	  reserve (count);
+
 	  typename input::const_iterator in = other.begin ();
 	  bool has_sibling = in != other.end ();
 	  while (has_sibling)
@@ -740,12 +751,28 @@ namespace elfutils
     }
 
     // Set of children lists.
-    subr::identity_set<children_type> _m_broods;
+    //subr::identity_set<children_type> _m_broods;
+    template<typename T>
+    struct is2 : public std::equal_to<T *>
+    {
+      bool operator () (const T *a, const T *b) const
+      {
+	return a->is (*b);
+      }
+    };
+    std::tr1::unordered_set<children_type *, children_type::hasher, is2<children_type> >
+	_m_broods;
 
     template<typename input, typename copier_type>
     inline const children_type *add_children (const input &x, copier_type &c)
     {
-      return &*_m_broods.insert (children_type (x, c)).first;
+      /* XXX another problem: We probably construct our references
+	 from iterators pointing to the temporary vector.  When that
+	 gets copied over to _m_broods, the original vector is
+	 destroyed and iterators are left hanging there.  Work around
+	 that by allocating on heap and bending a bunch of stuff to
+	 work with pointers too.  Ugly & leaks, but works for now.  */
+      return *_m_broods.insert (new children_type (x, c)).first;
     }
 
     struct die_info
