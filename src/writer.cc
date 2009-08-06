@@ -51,7 +51,6 @@
 
 #include "dwarflint.h" // for DEBUGINFO_SECTIONS
 
-#include "../libebl/libebl.h"
 extern "C" {
 #include "../lib/system.h"
 }
@@ -154,7 +153,6 @@ handle_elf (Elf *elf, size_t alloc_unit,
 {
   int result = 0;
   std::vector <shdr_info_t> shdr_info;
-  struct Ebl_Strtab *shst = NULL;
   bool any_symtab_changes = false;
   Elf *newelf;
 
@@ -177,10 +175,6 @@ handle_elf (Elf *elf, size_t alloc_unit,
 	for (std::vector<shdr_info_t>::iterator it = shdr_info.begin ();
 	     it != shdr_info.end (); ++it)
 	  free (it->newsymidx);
-
-      /* Free other resources.  */
-      if (shst != NULL)
-	ebl_strtabfree (shst);
 
       /* That was it.  Close the descriptors.  */
       if (elf_end (newelf) != 0)
@@ -440,18 +434,15 @@ handle_elf (Elf *elf, size_t alloc_unit,
   shdr_info[shstrndx].idx = 0;
 
   /* We need a string table for the section headers.  */
-  shst = ebl_strtabinit (true);
-  if (shst == NULL)
-    error (EXIT_FAILURE, errno, gettext ("while preparing output for '%s'"),
-	   output_fname ?: fname);
+  elfutils::strtab shst (true);
 
   /* Assign new section numbers.  */
   shdr_info[0].idx = 0;
-  size_t idx;
-  for (size_t cnt = idx = 1; cnt < shnum; ++cnt)
+  size_t idx = 0;
+  for (size_t cnt = 1; cnt < shnum; ++cnt)
     if (shdr_info[cnt].idx > 0)
       {
-	shdr_info[cnt].idx = idx++;
+	shdr_info[cnt].idx = ++idx;
 
 	/* Create a new section.  */
 	shdr_info[cnt].newscn = elf_newscn (newelf);
@@ -462,8 +453,38 @@ handle_elf (Elf *elf, size_t alloc_unit,
 	assert (elf_ndxscn (shdr_info[cnt].newscn) == shdr_info[cnt].idx);
 
 	/* Add this name to the section header string table.  */
-	shdr_info[cnt].se = ebl_strtabadd (shst, shdr_info[cnt].name, 0);
+	shdr_info[cnt].se = shst.add (shdr_info[cnt].name);
       }
+
+  struct
+  {
+    void operator () (shdr_info_t &data_info,
+		      char const *name, elfutils::strtab &strtab,
+		      GElf_Word sh_type, size_t index,
+		      Elf *new_elf)
+    {
+      /* Add the section header string table section name.  */
+      data_info.se = strtab.add (name);
+      data_info.idx = index;
+
+      /* Create the section header.  */
+      data_info.shdr.sh_type = sh_type;
+      data_info.shdr.sh_flags = 0;
+      data_info.shdr.sh_addr = 0;
+      data_info.shdr.sh_link = SHN_UNDEF;
+      data_info.shdr.sh_info = SHN_UNDEF;
+      data_info.shdr.sh_entsize = 0;
+      data_info.shdr.sh_offset = 0;
+      data_info.shdr.sh_addralign = 1;
+
+      /* Create the section.  */
+      data_info.newscn = elf_newscn (new_elf);
+      if (data_info.newscn == NULL)
+	error (EXIT_FAILURE, 0,
+	       gettext ("while creating section header section: %s"),
+	       elf_errmsg (-1));
+    }
+  } cr_sec;
 
   char const *debug_sections[] = {
 #define SEC(N) ".debug_" #N,
@@ -479,32 +500,16 @@ handle_elf (Elf *elf, size_t alloc_unit,
   };
 
   bool addr_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
+  elfutils::strtab debug_strtab (false);
 
   for (size_t i = 0; debug_sections[i] != NULL; ++i)
     {
+      // .debug_str is done after all other sections
+      if (i == si_str)
+	continue;
+
       shdr_info_t data_info;
-
-      /* Add the section header string table section name.  */
-      data_info.se = ebl_strtabadd (shst, debug_sections[i],
-				    strlen (debug_sections[i]) + 1);
-      data_info.idx = idx;
-
-      /* Create the section header.  */
-      data_info.shdr.sh_type = SHT_PROGBITS;
-      data_info.shdr.sh_flags = 0;
-      data_info.shdr.sh_addr = 0;
-      data_info.shdr.sh_link = SHN_UNDEF;
-      data_info.shdr.sh_info = SHN_UNDEF;
-      data_info.shdr.sh_entsize = 0;
-      data_info.shdr.sh_offset = 0;
-      data_info.shdr.sh_addralign = 1;
-
-      /* Create the section.  */
-      data_info.newscn = elf_newscn (newelf);
-      if (data_info.newscn == NULL)
-	error (EXIT_FAILURE, 0,
-	       gettext ("while creating section header section: %s"),
-	       elf_errmsg (-1));
+      cr_sec (data_info, debug_sections[i], shst, SHT_PROGBITS, ++idx, newelf);
       assert (elf_ndxscn (data_info.newscn) == idx);
 
       /* Build the data.  */
@@ -519,51 +524,26 @@ handle_elf (Elf *elf, size_t alloc_unit,
       data_info.shdr.sh_size = appender.size ();
 
       shdr_info.push_back (data_info);
-      ++idx;
     }
 
+  // .debug_str
   {
-    shdr_info_t shstrtab;
+    shdr_info_t data_info;
+    cr_sec (data_info, ".debug_str", shst, SHT_STRTAB, ++idx, newelf);
+    assert (elf_ndxscn (data_info.newscn) == idx);
+    data_info.shdr.sh_size = debug_strtab.finalize (data_info.newscn)->d_size;
 
-    /* Add the section header string table section name.  */
-    shstrtab.se = ebl_strtabadd (shst, ".shstrtab", 10);
-    shstrtab.idx = idx;
+    shdr_info.push_back (data_info);
+  }
 
-    /* Create the section header.  */
-    shstrtab.shdr.sh_type = SHT_STRTAB;
-    shstrtab.shdr.sh_flags = 0;
-    shstrtab.shdr.sh_addr = 0;
-    shstrtab.shdr.sh_link = SHN_UNDEF;
-    shstrtab.shdr.sh_info = SHN_UNDEF;
-    shstrtab.shdr.sh_entsize = 0;
-    /* We set the offset to zero here.  Before we write the ELF file the
-       field must have the correct value.  This is done in the final
-       loop over all section.  Then we have all the information needed.  */
-    shstrtab.shdr.sh_offset = 0;
-    shstrtab.shdr.sh_addralign = 1;
+  // .shstrtab
+  {
+    shdr_info_t data_info;
+    cr_sec (data_info, ".shstrtab", shst, SHT_STRTAB, ++idx, newelf);
+    assert (elf_ndxscn (data_info.newscn) == idx);
+    data_info.shdr.sh_size = shst.finalize (data_info.newscn)->d_size;
 
-    /* Create the section.  */
-    shstrtab.newscn = elf_newscn (newelf);
-    if (shstrtab.newscn == NULL)
-      error (EXIT_FAILURE, 0,
-	     gettext ("while create section header section: %s"),
-	     elf_errmsg (-1));
-    assert (elf_ndxscn (shstrtab.newscn) == idx);
-
-    /* Finalize the string table and fill in the correct indices in the
-       section headers.  */
-    Elf_Data *shstrtab_data = elf_newdata (shstrtab.newscn);
-    // xxx free on failure
-    if (shstrtab_data == NULL)
-      error (EXIT_FAILURE, 0,
-	     gettext ("while create section header string table: %s"),
-	     elf_errmsg (-1));
-    ebl_strtabfinalize (shst, shstrtab_data);
-
-    /* We have to set the section size.  */
-    shstrtab.shdr.sh_size = shstrtab_data->d_size;
-
-    shdr_info.push_back (shstrtab);
+    shdr_info.push_back (data_info);
   }
 
   /* Update the section information.  */

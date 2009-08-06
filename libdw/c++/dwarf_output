@@ -59,6 +59,10 @@
 #include <vector>
 #include <tr1/unordered_set>
 
+extern "C" {
+#include "../libebl/libebl.h" // XXX
+}
+
 /* Read the comments for elfutils::dwarf first.
 
    The elfutils::dwarf_output class is template-compatible with the logical
@@ -132,6 +136,39 @@ namespace elfutils
     {
       return _m_totsize;
     }
+  };
+
+  struct strtab
+  {
+    explicit strtab (bool nullstr)
+      : _m_strtab (ebl_strtabinit (nullstr))
+    {
+      if (_m_strtab == NULL)
+	throw std::runtime_error ("Couldn't initialize strtab.");
+    }
+
+    ~strtab ()
+    {
+      ebl_strtabfree (_m_strtab);
+    }
+
+    Elf_Data *finalize (Elf_Scn *scn)
+    {
+      Elf_Data *data = elf_newdata (scn);
+      // xxx free on failure
+      if (data == NULL)
+	throw std::runtime_error ("Couldn't create data for strtab.");
+      ebl_strtabfinalize (_m_strtab, data);
+      return data;
+    }
+
+    Ebl_Strent *add (char const *str)
+    {
+      return ebl_strtabadd (_m_strtab, str, 0);
+    }
+
+  private:
+    Ebl_Strtab *_m_strtab;
   };
 
   class dwarf_output
