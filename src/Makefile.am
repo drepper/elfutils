@@ -148,7 +148,7 @@ ranlib_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 strings_LDADD = $(libelf) $(libeu) $(libmudflap)
 ar_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
-dwarfcmp_LDADD = $(libdwpp) $(libmudflap) -ldl
+dwarfcmp_LDADD = $(libdwpp) $(libmudflap) $(libebl) -ldl
 writer_LDADD = $(libebl) $(libelf) $(libeu) $(libmudflap) $(libdwpp) -ldl
 dwarflint_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 

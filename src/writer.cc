@@ -501,6 +501,7 @@ handle_elf (Elf *elf, size_t alloc_unit,
 
   bool addr_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
   elfutils::strtab debug_strtab (false);
+  elfutils::dwarf_output::str_backpatch_vec str_backpatch;
 
   for (size_t i = 0; debug_sections[i] != NULL; ++i)
     {
@@ -517,7 +518,9 @@ handle_elf (Elf *elf, size_t alloc_unit,
       if (i == si_abbrev)
 	dwout.output_debug_abbrev (appender, collector, addr_64);
       else if (i == si_info)
-	dwout.output_debug_info (appender, collector, addr_64);
+	dwout.output_debug_info (appender, collector,
+				 debug_strtab, str_backpatch,
+				 addr_64);
       // xxx
 
       /* We have to set the section size.  */
@@ -534,6 +537,9 @@ handle_elf (Elf *elf, size_t alloc_unit,
     data_info.shdr.sh_size = debug_strtab.finalize (data_info.newscn)->d_size;
 
     shdr_info.push_back (data_info);
+
+    std::for_each (str_backpatch.begin (), str_backpatch.end (),
+		   elfutils::dwarf_output::backpatch_strp ());
   }
 
   // .shstrtab

@@ -167,6 +167,11 @@ namespace elfutils
       return ebl_strtabadd (_m_strtab, str, 0);
     }
 
+    Ebl_Strent *add (std::string const &str)
+    {
+      return ebl_strtabadd (_m_strtab, str.c_str (), str.length () + 1);
+    }
+
   private:
     Ebl_Strtab *_m_strtab;
   };
@@ -689,19 +694,85 @@ namespace elfutils
       throw std::logic_error ("copying dwarf_output requires a collector");
     }
 
+  public:
+
+    class gap
+    {
+      unsigned char *_m_ptr;
+      size_t _m_len;
+
+    public:
+      gap (section_appender &appender, size_t len)
+	: _m_ptr (appender.alloc (len)), _m_len (len)
+      {}
+      gap (unsigned char *ptr, size_t len)
+	: _m_ptr (ptr), _m_len (len)
+      {}
+      void patch (uint64_t value) const;
+    };
+
+    // [(gap, string entry)]
+    typedef std::vector<std::pair<gap, ::Ebl_Strent *> > str_backpatch_vec;
+
+    struct backpatch_strp
+    {
+      void operator () (std::pair<gap, ::Ebl_Strent *> const &v)
+      {
+	v.first.patch (ebl_strtaboffset (v.second));
+      }
+    };
+
+  private:
     // die offset -> file address
     typedef std::map< ::Dwarf_Off, ::Dwarf_Off> die_off_map;
 
-    // [((pointer, length), die offset)]
-    typedef std::vector<std::pair<std::pair<unsigned char *, size_t>,
-				  ::Dwarf_Off> > backpatch_vec;
-    static void recursively_dump (section_appender &appender,
-				  dwarf_output_collector &c,
-				  debug_info_entry const &die,
-				  unsigned level,
-				  bool a_addr_64,
-				  die_off_map &die_off,
-				  backpatch_vec &backpatch);
+    // [(gap, die offset)]
+    typedef std::vector<std::pair<gap, ::Dwarf_Off> > die_backpatch_vec;
+
+    class backpatch_die_ref
+    {
+      die_off_map const &die_off;
+    public:
+      backpatch_die_ref (die_off_map const &m) : die_off (m) {}
+      void operator () (std::pair<gap, ::Dwarf_Off> const &v)
+      {
+	die_off_map::const_iterator ot = die_off.find (v.second);
+	assert (ot != die_off.end ());
+	v.first.patch (ot->second);
+      }
+    };
+
+    class recursive_dumper
+    {
+      dwarf_output_collector &c;
+      section_appender &appender;
+      strtab &debug_str;
+      bool addr_64;
+      die_off_map &die_off;
+      die_backpatch_vec &die_backpatch;
+      str_backpatch_vec &str_backpatch;
+
+      recursive_dumper (recursive_dumper const &copy); // nocopy
+
+    public:
+      recursive_dumper (dwarf_output_collector &a_c,
+			section_appender &a_appender,
+			strtab &a_debug_str,
+			bool a_addr_64,
+			die_off_map &a_die_off,
+			die_backpatch_vec &a_die_backpatch,
+			str_backpatch_vec &a_str_backpatch)
+	: c (a_c),
+	  appender (a_appender),
+	  debug_str (a_debug_str),
+	  addr_64 (a_addr_64),
+	  die_off (a_die_off),
+	  die_backpatch (a_die_backpatch),
+	  str_backpatch (a_str_backpatch)
+      {}
+
+      void dump (debug_info_entry const &die, unsigned level);
+    };
 
   public:
     // Constructor for an empty file, can add to its compile_units ().
@@ -733,6 +804,8 @@ namespace elfutils
 
     void output_debug_info (section_appender &appender,
 			    dwarf_output_collector &dw,
+			    strtab &debug_str,
+			    str_backpatch_vec &str_backpatch,
 			    bool addr_64);
   };
 

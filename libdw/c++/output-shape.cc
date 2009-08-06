@@ -69,7 +69,7 @@ attr_form (int tag, const dwarf_output::attribute &attr)
 
     case dwarf::VS_string:
     case dwarf::VS_identifier:
-      return DW_FORM_string;
+      return DW_FORM_strp;
 
     case dwarf::VS_constant:
       if (! attr.second.constant_is_integer ())
@@ -102,14 +102,14 @@ attr_form (int tag, const dwarf_output::attribute &attr)
 	  return DW_FORM_udata;
 
 	case DW_AT_comp_dir:
-	  return DW_FORM_string;
+	  return DW_FORM_strp;
 
 	case DW_AT_name:
 	  switch (tag)
 	    {
 	    case DW_TAG_compile_unit:
 	    case DW_TAG_partial_unit:
-	      return DW_FORM_string;
+	      return DW_FORM_strp;
 	    }
 	  break;
 	}
@@ -339,13 +339,13 @@ dwarf_output::output_debug_abbrev (section_appender &appender,
 }
 
 void
-dwarf_output::recursively_dump (section_appender &appender,
-				dwarf_output_collector &c,
-				debug_info_entry const &die,
-				unsigned level,
-				bool  addr_64,
-				dwarf_output::die_off_map &die_off,
-				dwarf_output::backpatch_vec &backpatch)
+dwarf_output::gap::patch (uint64_t value) const
+{
+  ::dw_write_var (_m_ptr, _m_len, value);
+}
+
+void
+dwarf_output::recursive_dumper::dump (debug_info_entry const &die, unsigned level)
 {
   static char const spaces[] =
     "                                                            "
@@ -458,7 +458,6 @@ dwarf_output::recursively_dump (section_appender &appender,
 	      || form == DW_FORM_string
 	      || form == DW_FORM_strp)
 	    {
-	      assert (form == DW_FORM_string); // XXX temporary
 	      std::string const &str =
 		vs == dwarf::VS_string
 		? value.string ()
@@ -466,8 +465,20 @@ dwarf_output::recursively_dump (section_appender &appender,
 		   ? value.source_file ().name ()
 		   : value.identifier ());
 
-	      std::copy (str.begin (), str.end (), inserter);
-	      *inserter++ = 0;
+	      if (form == DW_FORM_string)
+		{
+		  std::copy (str.begin (), str.end (), inserter);
+		  *inserter++ = 0;
+		}
+	      else
+		{
+		  assert (form == DW_FORM_strp);
+
+		  // xxx dwarf_64
+		  str_backpatch.push_back
+		    (std::make_pair (gap (appender, 4),
+				     debug_str.add (str)));
+		}
 	    }
 	  else if (vs == dwarf::VS_source_file
 		   && form == DW_FORM_udata)
@@ -486,12 +497,9 @@ dwarf_output::recursively_dump (section_appender &appender,
 	case dwarf::VS_reference:
 	  {
 	    assert (form == DW_FORM_ref_addr);
-	    // Emit zero, patch later.
 	    // XXX dwarf64
-	    unsigned char *ptr = appender.alloc (4);
-	    ::dw_write<4> (ptr, 0);
-	    backpatch.push_back
-	      (std::make_pair (std::make_pair (ptr, 4),
+	    die_backpatch.push_back
+	      (std::make_pair (gap (appender, 4),
 			       value.reference ()->offset ()));
 	  }
 	  break;
@@ -517,8 +525,7 @@ dwarf_output::recursively_dump (section_appender &appender,
     {
       for (compile_unit::children_type::const_iterator jt
 	     = die.children ().begin (); jt != die.children ().end (); ++jt)
-	recursively_dump (appender, c, *jt, level + 1, addr_64,
-			  die_off, backpatch);
+	dump (*jt, level + 1);
       *inserter++ = 0;
     }
 }
@@ -526,6 +533,8 @@ dwarf_output::recursively_dump (section_appender &appender,
 void
 dwarf_output::output_debug_info (section_appender &appender,
 				 dwarf_output_collector &c,
+				 strtab &debug_str,
+				 str_backpatch_vec &str_backpatch,
 				 bool addr_64)
 {
   /* We request appender directly, because we depend on .alloc method
@@ -563,20 +572,15 @@ dwarf_output::output_debug_info (section_appender &appender,
       *inserter++ = addr_64 ? 8 : 4;
 
       die_off_map die_off;
-      backpatch_vec backpatch;
+      die_backpatch_vec die_backpatch;
 
       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
-      recursively_dump (appender, c, *it->_m_cu_die, 0, addr_64,
-			die_off, backpatch);
+      recursive_dumper (c, appender, debug_str, addr_64,
+			die_off, die_backpatch, str_backpatch)
+	.dump (*it->_m_cu_die, 0);
 
-      /* Do the back-patching.  */
-      for (backpatch_vec::const_iterator bt = backpatch.begin ();
-	   bt != backpatch.end (); ++bt)
-	{
-	  die_off_map::const_iterator ot = die_off.find (bt->second);
-	  assert (ot != die_off.end ());
-	  ::dw_write_var (bt->first.first, bt->first.second, ot->second);
-	}
+      std::for_each (die_backpatch.begin (), die_backpatch.end (),
+		     backpatch_die_ref (die_off));
 
       /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64

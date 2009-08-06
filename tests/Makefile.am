@@ -196,10 +196,10 @@ endif !STANDALONE
 libdwpp = ../libdw/libdwpp.a $(libdw)
 
 dwarf_print_SOURCES = dwarf-print.cc ../src/dwarfstrings.c
-dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
+dwarf_print_LDADD = $(libdwpp) $(libmudflap) $(libebl) -ldl
 
 dwarf_edit_SOURCES = dwarf_edit.cc ../src/dwarfstrings.c
-dwarf_edit_LDADD = $(libdwpp) $(libmudflap) -ldl
+dwarf_edit_LDADD = $(libdwpp) $(libmudflap) $(libebl) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
 arsymtest_LDADD = $(libelf) $(libmudflap)
