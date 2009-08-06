@@ -2703,7 +2703,7 @@ read_die_chain (struct elf_file *file,
 		struct cu *cu,
 		struct abbrev_table *abbrevs,
 		Elf_Data *strings,
-		bool dwarf_64, bool addr_64,
+		bool dwarf_64, bool addr_64, bool ref_64,
 		struct ref_record *local_die_refs,
 		struct coverage *strings_coverage,
 		struct relocation_data *reloc,
@@ -3006,9 +3006,9 @@ read_die_chain (struct elf_file *file,
 	    case DW_FORM_addr:
 	    case DW_FORM_ref_addr:
 	      {
-		bool ref_64 = form == DW_FORM_addr ? addr_64 : dwarf_64;
+		bool is_64 = form == DW_FORM_addr ? addr_64 : ref_64;
 		uint64_t addr;
-		if (!read_ctx_read_offset (ctx, ref_64, &addr))
+		if (!read_ctx_read_offset (ctx, is_64, &addr))
 		  goto cant_read;
 
 		uint64_t *addrp = NULL;
@@ -3032,7 +3032,7 @@ read_die_chain (struct elf_file *file,
 		if ((rel = relocation_next (reloc, ctx_offset,
 					    &where, skip_mismatched)))
 		  {
-		    relocate_one (file, reloc, rel, ref_64 ? 8 : 4, &addr,
+		    relocate_one (file, reloc, rel, is_64 ? 8 : 4, &addr,
 				  &where, reloc_target (form, it), symbolp);
 		    if (relocatedp != NULL)
 		      *relocatedp = true;
@@ -3258,7 +3258,7 @@ read_die_chain (struct elf_file *file,
       if (abbrev->has_children)
 	{
 	  int st = read_die_chain (file, ctx, cu, abbrevs, strings,
-				   dwarf_64, addr_64,
+				   dwarf_64, addr_64, ref_64,
 				   local_die_refs,
 				   strings_coverage, reloc,
 				   cu_coverage);
@@ -3362,8 +3362,10 @@ check_cu_structural (struct elf_file *file,
   WIPE (local_die_refs);
 
   cu->cudie_offset = read_ctx_get_offset (ctx) + cu->offset;
+  bool addr_64 = address_size == 8;
+  bool ref_64 = version == 2 ? addr_64 : (assert (version == 3), dwarf_64);
   if (read_die_chain (file, ctx, cu, abbrevs, strings,
-		      dwarf_64, address_size == 8,
+		      dwarf_64, addr_64, ref_64,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
 		      cu_coverage) < 0)
