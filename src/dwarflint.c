@@ -2726,7 +2726,6 @@ read_die_chain (struct elf_file *file,
 
       uint64_t abbr_code;
 
-      prev_die_off = die_off;
       if (!checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
 	return -1;
 
@@ -2742,12 +2741,20 @@ read_die_chain (struct elf_file *file,
 		      sibling_addr, die_off);
 	  sibling_addr = 0;
 	}
-      else if (prev_abbrev != NULL && prev_abbrev->has_children)
-	/* Even if it has children, the DIE can't have a sibling
-	   attribute if it's the last DIE in chain.  That's the reason
-	   we can't simply check this when loading abbrevs.  */
-	wr_message (mc_die_rel | mc_acc_suboptimal | mc_impact_4, &where,
-		    ": This DIE had children, but no DW_AT_sibling attribute.\n");
+      else if (abbr_code != 0
+	       && abbrev != NULL && abbrev->has_children)
+	{
+	  /* Even if it has children, the DIE can't have a sibling
+	     attribute if it's the last DIE in chain.  That's the
+	     reason we can't simply check this when loading
+	     abbrevs.  */
+	  struct where prev_where = where;
+	  where_reset_2 (&prev_where, prev_die_off + cu->offset);
+	  wr_message (mc_die_rel | mc_acc_suboptimal | mc_impact_4, &prev_where,
+		      ": This DIE had children, but no DW_AT_sibling attribute.\n");
+	}
+
+      prev_die_off = die_off;
 
       /* The section ended.  */
       if (abbr_code == 0)
