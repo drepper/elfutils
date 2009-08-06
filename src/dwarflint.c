@@ -2972,7 +2972,7 @@ read_die_chain (struct elf_file *file,
 
 		if (strings == NULL)
 		  wr_error (&where,
-			    ": strp attribute, but no .debug_str section.\n");
+			    ": strp attribute, but no .debug_str data.\n");
 		else if (addr >= strings->d_size)
 		  wr_error (&where,
 			    ": Invalid offset outside .debug_str: 0x%" PRIx64 ".\n",
