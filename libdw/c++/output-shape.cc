@@ -129,7 +129,7 @@ dwarf_output_collector::shape_type::shape_type (die_map::value_type const &emt)
   , _m_hash (8675309 << _m_has_children)
 {
   if (emt.second.with_sibling && emt.first.has_children ())
-    _m_attrs[DW_AT_sibling] = DW_FORM_ref_udata;
+    _m_attrs[DW_AT_sibling] = DW_FORM_ref4;
 
   for (die_type::attributes_type::const_iterator it
 	 = emt.first.attributes ().begin ();
@@ -345,7 +345,9 @@ dwarf_output::gap::patch (uint64_t value) const
 }
 
 void
-dwarf_output::recursive_dumper::dump (debug_info_entry const &die, unsigned level)
+dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
+				      gap &sibling_gap,
+				      unsigned level)
 {
   static char const spaces[] =
     "                                                            "
@@ -402,6 +404,15 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die, unsigned leve
     {
       int name = at->first;
       int form = *form_it++;
+      if (name == DW_AT_sibling)
+	{
+	  // XXX we emit DW_FORM_ref4.  That's CU-local.  But we do
+	  // all back-patching in a section-wide addressing, so this
+	  // will break for DWARF with more than one CU.
+	  sibling_gap = gap (appender, 4);
+	  continue;
+	}
+
       debug_info_entry::attributes_type::const_iterator
 	vt = attribs.find (name);
       assert (vt != attribs.end ());
@@ -523,9 +534,18 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die, unsigned leve
 
   if (!die.children ().empty ())
     {
+      gap my_sibling_gap;
       for (compile_unit::children_type::const_iterator jt
 	     = die.children ().begin (); jt != die.children ().end (); ++jt)
-	dump (*jt, level + 1);
+	{
+	  if (my_sibling_gap.valid ())
+	    {
+	      die_backpatch.push_back (std::make_pair (my_sibling_gap,
+						       jt->offset ()));
+	      my_sibling_gap = gap ();
+	    }
+	  dump (*jt, my_sibling_gap, level + 1);
+	}
       *inserter++ = 0;
     }
 }
@@ -575,9 +595,11 @@ dwarf_output::output_debug_info (section_appender &appender,
       die_backpatch_vec die_backpatch;
 
       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
+      gap fake_gap;
       recursive_dumper (c, appender, debug_str, addr_64,
 			die_off, die_backpatch, str_backpatch)
-	.dump (*it->_m_cu_die, 0);
+	.dump (*it->_m_cu_die, fake_gap, 0);
+      assert (!fake_gap.valid ());
 
       std::for_each (die_backpatch.begin (), die_backpatch.end (),
 		     backpatch_die_ref (die_off));

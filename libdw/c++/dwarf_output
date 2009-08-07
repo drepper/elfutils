@@ -702,13 +702,23 @@ namespace elfutils
       size_t _m_len;
 
     public:
+      gap ()
+	: _m_ptr (NULL), _m_len (0)
+      {}
       gap (section_appender &appender, size_t len)
 	: _m_ptr (appender.alloc (len)), _m_len (len)
       {}
       gap (unsigned char *ptr, size_t len)
 	: _m_ptr (ptr), _m_len (len)
       {}
+      gap &operator= (gap const &other)
+      {
+	_m_ptr = other._m_ptr;
+	_m_len = other._m_len;
+	return *this;
+      }
       void patch (uint64_t value) const;
+      bool valid () const { return _m_ptr != NULL; }
     };
 
     // [(gap, string entry)]
@@ -771,7 +781,10 @@ namespace elfutils
 	  str_backpatch (a_str_backpatch)
       {}
 
-      void dump (debug_info_entry const &die, unsigned level);
+      // Returns gap for DW_AT_sibling.
+      void dump (debug_info_entry const &die,
+		 gap &sibling_gap,
+		 unsigned level);
     };
 
   public:
@@ -962,16 +975,8 @@ namespace elfutils
 
     inline const die_type *add_entry (die_type &die, bool has_sibling)
     {
-      //std::cerr << "add_entry " << to_string (die) << " " << std::endl;
       die_map::value_type &x
 	= *_m_unique.insert (std::make_pair (die, die_info ())).first;
-
-      shape_type shape (x);
-      shape_map::iterator st = _m_shapes.find (shape);
-      if (st != _m_shapes.end ())
-	st->second.add_user (&x.first);
-      else
-	_m_shapes.insert (std::make_pair (shape, shape_info (x)));
 
       x.second.uses++;
       ++_m_total;
@@ -979,6 +984,13 @@ namespace elfutils
 	x.second.with_sibling = true;
       else
 	x.second.without_sibling = true;
+
+      shape_type shape (x);
+      shape_map::iterator st = _m_shapes.find (shape);
+      if (st != _m_shapes.end ())
+	st->second.add_user (&x.first);
+      else
+	_m_shapes.insert (std::make_pair (shape, shape_info (x)));
 
       return &x.first;
     }
