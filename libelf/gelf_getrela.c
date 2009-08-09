@@ -1,5 +1,5 @@
 /* Get RELA relocation information at given index.
-   Copyright (C) 2000, 2001, 2002 Red Hat, Inc.
+   Copyright (C) 2000-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -87,8 +87,7 @@ gelf_getrela (data, ndx, dst)
   if (scn->elf->class == ELFCLASS32)
     {
       /* We have to convert the data.  */
-      if (INVALID_NDX (ndx, Elf32_Rela)
-	  || unlikely ((ndx + 1) * sizeof (Elf32_Rela) > data_scn->d.d_size))
+      if (INVALID_NDX (ndx, Elf32_Rela, &data_scn->d))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  result = NULL;
@@ -109,8 +108,7 @@ gelf_getrela (data, ndx, dst)
     {
       /* Simply copy the data after we made sure we are actually getting
 	 correct data.  */
-      if (INVALID_NDX (ndx, Elf64_Rela)
-	  || unlikely ((ndx + 1) * sizeof (Elf64_Rela) > data_scn->d.d_size))
+      if (INVALID_NDX (ndx, Elf64_Rela, &data_scn->d))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  result = NULL;

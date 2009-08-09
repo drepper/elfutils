@@ -606,13 +606,8 @@ extern uint32_t __libelf_crc32 (uint32_t crc, unsigned char *buf, size_t len)
 /* Align offset to 4 bytes as needed for note name and descriptor data.  */
 #define NOTE_ALIGN(n)	(((n) + 3) & -4U)
 
-/* Convenience macro.  Assumes int NDX and TYPE with size at least
-   2 bytes.  */
-#if SIZE_MAX > 4294967295U
-# define INVALID_NDX(ndx, type) unlikely (ndx < 0)
-#else
-# define INVALID_NDX(ndx, type) \
-  unlikely ((unsigned int) (ndx) >= SIZE_MAX / sizeof (type))
-#endif
+/* Convenience macro.  */
+#define INVALID_NDX(ndx, type, data) \
+  unlikely ((data)->d_size / sizeof (type) <= (unsigned int) (ndx))
 
 #endif  /* libelfP.h */

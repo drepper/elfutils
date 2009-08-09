@@ -1,5 +1,5 @@
 /* Get symbol version information at the given index.
-   Copyright (C) 1999, 2000, 2001, 2002 Red Hat, Inc.
+   Copyright (C) 1999-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 
@@ -92,8 +92,7 @@ gelf_getversym (data, ndx, dst)
 
   /* The data is already in the correct form.  Just make sure the
      index is OK.  */
-  if (INVALID_NDX (ndx, GElf_Versym)
-      || unlikely ((ndx + 1) * sizeof (GElf_Versym) > data->d_size))
+  if (INVALID_NDX (ndx, GElf_Versym, data))
     {
       __libelf_seterrno (ELF_E_INVALID_INDEX);
       result = NULL;

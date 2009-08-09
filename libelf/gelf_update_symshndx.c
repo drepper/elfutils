@@ -1,6 +1,6 @@
 /* Update symbol information and section index in symbol table at the
    given index.
-   Copyright (C) 2000, 2001, 2002 Red Hat, Inc.
+   Copyright (C) 2000-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -122,8 +122,7 @@ gelf_update_symshndx (symdata, shndxdata, ndx, src, srcshndx)
 	}
 
       /* Check whether we have to resize the data buffer.  */
-      if (INVALID_NDX (ndx, Elf32_Sym)
-	  || unlikely ((ndx + 1) * sizeof (Elf32_Sym) > symdata_scn->d.d_size))
+      if (INVALID_NDX (ndx, Elf32_Sym, &symdata_scn->d))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;
@@ -146,8 +145,7 @@ gelf_update_symshndx (symdata, shndxdata, ndx, src, srcshndx)
   else
     {
       /* Check whether we have to resize the data buffer.  */
-      if (INVALID_NDX (ndx, Elf64_Sym)
-	  || unlikely ((ndx + 1) * sizeof (Elf64_Sym) > symdata_scn->d.d_size))
+      if (INVALID_NDX (ndx, Elf64_Sym, &symdata_scn->d))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;
