@@ -102,7 +102,7 @@ load_shdr_wrlock (Elf_Scn *scn)
       /* First see whether the information in the ELF header is
 	 valid and it does not ask for too much.  */
       if (unlikely (ehdr->e_shoff >= elf->maximum_size)
-	  || unlikely (ehdr->e_shoff + size > elf->maximum_size))
+	  || unlikely (elf->maximum_size - ehdr->e_shoff < size))
 	{
 	  /* Something is wrong.  */
 	  __libelf_seterrno (ELF_E_INVALID_SECTION_HEADER);

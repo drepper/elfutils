@@ -131,8 +131,8 @@ elf_getshdrstrndx (elf, dst)
 		{
 		  /* First see whether the information in the ELF header is
 		     valid and it does not ask for too much.  */
-		  if (unlikely (offset + sizeof (Elf32_Shdr)
-				> elf->maximum_size))
+		  if (unlikely (elf->maximum_size - offset
+				< sizeof (Elf32_Shdr)))
 		    {
 		      /* Something is wrong.  */
 		      __libelf_seterrno (ELF_E_INVALID_SECTION_HEADER);
@@ -140,7 +140,7 @@ elf_getshdrstrndx (elf, dst)
 		      goto out;
 		    }
 
-		/* We can directly access the memory.  */
+		  /* We can directly access the memory.  */
 		  num = ((Elf32_Shdr *) (elf->map_address + elf->start_offset
 					 + offset))->sh_link;
 		}
@@ -184,8 +184,8 @@ elf_getshdrstrndx (elf, dst)
 		{
 		  /* First see whether the information in the ELF header is
 		     valid and it does not ask for too much.  */
-		  if (unlikely (offset + sizeof (Elf64_Shdr)
-				> elf->maximum_size))
+		  if (unlikely (elf->maximum_size - offset
+				< sizeof (Elf64_Shdr)))
 		    {
 		      /* Something is wrong.  */
 		      __libelf_seterrno (ELF_E_INVALID_SECTION_HEADER);
@@ -193,9 +193,9 @@ elf_getshdrstrndx (elf, dst)
 		      goto out;
 		    }
 
-		/* We can directly access the memory.  */
-		  num = ((Elf64_Shdr *) (elf->map_address
-			 + elf->start_offset + offset))->sh_link;
+		  /* We can directly access the memory.  */
+		  num = ((Elf64_Shdr *) (elf->map_address + elf->start_offset
+					 + offset))->sh_link;
 		}
 	      else
 		{

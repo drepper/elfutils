@@ -1,5 +1,5 @@
 /* Create descriptor for processing file.
-   Copyright (C) 1998-2005, 2006, 2007, 2008 Red Hat, Inc.
+   Copyright (C) 1998-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -166,7 +166,7 @@ get_shnum (void *map_address, unsigned char *e_ident, int fildes, off_t offset,
       if (unlikely (result == 0) && ehdr.e32->e_shoff != 0)
 	{
 	  if (unlikely (ehdr.e32->e_shoff >= maxsize)
-	      || unlikely (ehdr.e32->e_shoff + sizeof (Elf32_Shdr) > maxsize))
+	      || unlikely (maxsize - ehdr.e32->e_shoff < sizeof (Elf32_Shdr)))
 	    /* Cannot read the first section header.  */
 	    return 0;
 
@@ -331,8 +331,8 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	  elf->state.elf32.ehdr = ehdr;
 
 	  if (unlikely (ehdr->e_shoff >= maxsize)
-	      || unlikely (ehdr->e_shoff
-			   + scncnt * sizeof (Elf32_Shdr) > maxsize))
+	      || unlikely (maxsize - ehdr->e_shoff
+			   < scncnt * sizeof (Elf32_Shdr)))
 	    {
 	    free_and_out:
 	      free (elf);
@@ -347,9 +347,8 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	    /* Assign a value only if there really is a program
 	       header.  Otherwise the value remains NULL.  */
 	      if (unlikely (ehdr->e_phoff >= maxsize)
-		  || unlikely (ehdr->e_phoff
-			       + ehdr->e_phnum
-			       * sizeof (Elf32_Phdr) > maxsize))
+		  || unlikely (maxsize - ehdr->e_phoff
+			       < ehdr->e_phnum * sizeof (Elf32_Phdr)))
 		goto free_and_out;
 	    elf->state.elf32.phdr
 	      = (Elf32_Phdr *) ((char *) ehdr + ehdr->e_phoff);
