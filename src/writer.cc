@@ -143,6 +143,32 @@ struct shdr_info_t
   shdr_info_t (shdr_info_t const &copy) {
     memcpy (this, &copy, sizeof (*this));
   }
+
+  shdr_info_t (char const *a_name,
+	       elfutils::strtab &strtab,
+	       GElf_Word sh_type,
+	       size_t index,
+	       Elf *elf)
+  {
+    memset (this, 0, sizeof (*this));
+
+    /* Add the section header string table section name.  */
+    se = strtab.add (a_name);
+    idx = index;
+
+    /* Create the section header.  */
+    shdr.sh_type = sh_type;
+    shdr.sh_link = SHN_UNDEF;
+    shdr.sh_info = SHN_UNDEF;
+    shdr.sh_addralign = 1;
+
+    /* Create the section.  */
+    newscn = elf_newscn (elf);
+    if (newscn == NULL)
+      throw std::runtime_error
+	(std::string (gettext ("while creating section header section: %s"))
+	 + elf_errmsg (-1));
+  }
 };
 
 static int
@@ -331,7 +357,6 @@ handle_elf (Elf *elf, size_t alloc_unit,
 
       shdr_info.push_back (cur);
     }
-  //shdr_info.push_back (*new shdr_info_t); // xxx leak
 
   /* We drop all .debug_* sections.
      XXX .eh_frame??
@@ -456,102 +481,46 @@ handle_elf (Elf *elf, size_t alloc_unit,
 	shdr_info[cnt].se = shst.add (shdr_info[cnt].name);
       }
 
-  struct
-  {
-    void operator () (shdr_info_t &data_info,
-		      char const *name, elfutils::strtab &strtab,
-		      GElf_Word sh_type, size_t index,
-		      Elf *new_elf)
-    {
-      /* Add the section header string table section name.  */
-      data_info.se = strtab.add (name);
-      data_info.idx = index;
-
-      /* Create the section header.  */
-      data_info.shdr.sh_type = sh_type;
-      data_info.shdr.sh_flags = 0;
-      data_info.shdr.sh_addr = 0;
-      data_info.shdr.sh_link = SHN_UNDEF;
-      data_info.shdr.sh_info = SHN_UNDEF;
-      data_info.shdr.sh_entsize = 0;
-      data_info.shdr.sh_offset = 0;
-      data_info.shdr.sh_addralign = 1;
-
-      /* Create the section.  */
-      data_info.newscn = elf_newscn (new_elf);
-      if (data_info.newscn == NULL)
-	error (EXIT_FAILURE, 0,
-	       gettext ("while creating section header section: %s"),
-	       elf_errmsg (-1));
-    }
-  } cr_sec;
-
-  char const *debug_sections[] = {
-#define SEC(N) ".debug_" #N,
-    DEBUGINFO_SECTIONS
-#undef SEC
-    NULL
-  };
-
-  enum section_idx {
-#define SEC(N) si_##N,
-    DEBUGINFO_SECTIONS
-#undef SEC
-  };
-
   bool addr_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
   bool big_endian = ehdr->e_ident[EI_DATA] == ELFDATA2MSB;
   elfutils::strtab debug_strtab (false);
   elfutils::dwarf_output::str_backpatch_vec str_backpatch;
 
-  for (size_t i = 0; debug_sections[i] != NULL; ++i)
-    {
-      // .debug_str is done after all other sections
-      if (i == si_str)
-	continue;
-
-      shdr_info_t data_info;
-      cr_sec (data_info, debug_sections[i], shst, SHT_PROGBITS, ++idx, newelf);
-      assert (elf_ndxscn (data_info.newscn) == idx);
-
-      /* Build the data.  */
-      elfutils::section_appender appender (data_info.newscn, alloc_unit);
-      if (i == si_abbrev)
-	dwout.output_debug_abbrev (appender, collector, addr_64);
-      else if (i == si_info)
-	dwout.output_debug_info (appender, collector,
-				 debug_strtab, str_backpatch,
-				 addr_64, big_endian);
-      // xxx
-
-      /* We have to set the section size.  */
-      data_info.shdr.sh_size = appender.size ();
-
-      shdr_info.push_back (data_info);
-    }
-
-  // .debug_str
-  {
-    shdr_info_t data_info;
-    cr_sec (data_info, ".debug_str", shst, SHT_STRTAB, ++idx, newelf);
-    assert (elf_ndxscn (data_info.newscn) == idx);
-    data_info.shdr.sh_size = debug_strtab.finalize (data_info.newscn)->d_size;
-
-    shdr_info.push_back (data_info);
-
-    std::for_each (str_backpatch.begin (), str_backpatch.end (),
-		   elfutils::dwarf_output::backpatch_strp ());
+#define ADD_SECTION(NAME, TYPE, COMMAND)				\
+  {									\
+    shdr_info_t data_info (NAME, shst, TYPE, ++idx, newelf);		\
+    assert (elf_ndxscn (data_info.newscn) == idx);			\
+									\
+    elfutils::section_appender appender (data_info.newscn, alloc_unit); \
+									\
+    data_info.shdr.sh_size = COMMAND;					\
+    shdr_info.push_back (data_info);					\
   }
 
-  // .shstrtab
-  {
-    shdr_info_t data_info;
-    cr_sec (data_info, ".shstrtab", shst, SHT_STRTAB, ++idx, newelf);
-    assert (elf_ndxscn (data_info.newscn) == idx);
-    data_info.shdr.sh_size = shst.finalize (data_info.newscn)->d_size;
+  ADD_SECTION (".debug_abbrev", SHT_PROGBITS,
+	       (dwout.output_debug_abbrev (appender, collector, addr_64),
+		appender.size ()));
 
-    shdr_info.push_back (data_info);
-  }
+  ADD_SECTION (".debug_info", SHT_PROGBITS,
+	       (dwout.output_debug_info (appender, collector,
+					 debug_strtab, str_backpatch,
+					 addr_64, big_endian),
+		appender.size ()));
+
+  ADD_SECTION (".debug_str", SHT_STRTAB,
+	       ({
+		 GElf_Word __size
+		   = debug_strtab.finalize (data_info.newscn)->d_size;
+		 std::for_each
+		   (str_backpatch.begin (), str_backpatch.end (),
+		    elfutils::dwarf_output::backpatch_strp ());
+		 __size;
+	       }));
+
+  ADD_SECTION (".shstrtab", SHT_STRTAB,
+	       ({ shst.finalize (data_info.newscn)->d_size; }));
+
+#undef ADD_SECTION
 
   /* Update the section information.  */
   GElf_Off lastoffset = 0;
