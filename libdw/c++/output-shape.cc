@@ -48,6 +48,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include <config.h>
+#include <byteswap.h>
 #include "dwarf_output"
 #include "../../src/dwarfstrings.h"
 
@@ -181,15 +182,39 @@ namespace
   }
 
   template <int width> struct width_to_int;
-  template <> struct width_to_int <1> { typedef uint8_t unsigned_t; };
-  template <> struct width_to_int <2> { typedef uint16_t unsigned_t; };
-  template <> struct width_to_int <4> { typedef uint32_t unsigned_t; };
-  template <> struct width_to_int <8> { typedef uint64_t unsigned_t; };
+
+  template <> struct width_to_int <1>
+  {
+    typedef uint8_t unsigned_t;
+    static uint8_t bswap (uint8_t value) { return value; }
+  };
+
+  template <> struct width_to_int <2>
+  {
+    typedef uint16_t unsigned_t;
+    static uint16_t bswap (uint16_t value) { return bswap_16 (value); }
+  };
+
+  template <> struct width_to_int <4>
+  {
+    typedef uint32_t unsigned_t;
+    static uint32_t bswap (uint32_t value) { return bswap_32 (value); }
+  };
+
+  template <> struct width_to_int <8>
+  {
+    typedef uint64_t unsigned_t;
+    static uint64_t bswap (uint64_t value) { return bswap_64 (value); }
+  };
 
   template <int width, class Iterator>
-  void dw_write (Iterator it, typename width_to_int<width>::unsigned_t value)
+  void dw_write (Iterator it,
+		 typename width_to_int<width>::unsigned_t value,
+		 bool big_endian)
   {
-    // XXX endians
+    if (big_endian)
+      value = width_to_int<width>::bswap (value);
+
     for (int i = 0; i < width; ++i)
       {
 	*it++ = (uint8_t)value & 0xffUL;
@@ -198,21 +223,22 @@ namespace
   }
 
   template <class Iterator>
-  void dw_write_var (Iterator it, unsigned width, uint64_t value)
+  void dw_write_var (Iterator it, unsigned width,
+		     uint64_t value, bool big_endian)
   {
     switch (width)
       {
       case 8:
-	::dw_write<8> (it, value);
+	::dw_write<8> (it, value, big_endian);
 	break;
       case 4:
-	::dw_write<4> (it, value);
+	::dw_write<4> (it, value, big_endian);
 	break;
       case 2:
-	::dw_write<2> (it, value);
+	::dw_write<2> (it, value, big_endian);
 	break;
       case 1:
-	::dw_write<1> (it, value);
+	::dw_write<1> (it, value, big_endian);
 	break;
       default:
 	throw std::runtime_error ("Width has to be 1, 2, 4 or 8.");
@@ -341,7 +367,7 @@ dwarf_output::output_debug_abbrev (section_appender &appender,
 void
 dwarf_output::gap::patch (uint64_t value) const
 {
-  ::dw_write_var (_m_ptr, _m_len, value);
+  ::dw_write_var (_m_ptr, _m_len, value, _m_big_endian);
 }
 
 void
@@ -409,7 +435,7 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 	  // XXX we emit DW_FORM_ref4.  That's CU-local.  But we do
 	  // all back-patching in a section-wide addressing, so this
 	  // will break for DWARF with more than one CU.
-	  sibling_gap = gap (appender, 4);
+	  sibling_gap = gap (appender, 4, big_endian);
 	  continue;
 	}
 
@@ -431,7 +457,7 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 	{
 	case dwarf::VS_flag:
 	  assert (form == DW_FORM_flag);
-	  ::dw_write<1> (appender.alloc (1), !!value.flag ());
+	  *appender.alloc (1) = !!value.flag ();
 	  break;
 
 	case dwarf::VS_rangelistptr:
@@ -439,7 +465,7 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 	case dwarf::VS_macptr:
 	  assert (form == DW_FORM_data4); // XXX temporary
 	  // XXX leave out for now
-	  ::dw_write<4> (appender.alloc (4), 0);
+	  ::dw_write<4> (appender.alloc (4), 0, big_endian);
 	  break;
 
 	case dwarf::VS_constant:
@@ -487,7 +513,7 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 
 		  // xxx dwarf_64
 		  str_backpatch.push_back
-		    (std::make_pair (gap (appender, 4),
+		    (std::make_pair (gap (appender, 4, big_endian),
 				     debug_str.add (str)));
 		}
 	    }
@@ -501,7 +527,8 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 	  {
 	    assert (form == DW_FORM_addr);
 	    size_t w = addr_64 ? 8 : 4;
-	    ::dw_write_var (appender.alloc (w), w, value.address ());
+	    ::dw_write_var (appender.alloc (w), w,
+			    value.address (), big_endian);
 	  }
 	  break;
 
@@ -510,7 +537,7 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 	    assert (form == DW_FORM_ref_addr);
 	    // XXX dwarf64
 	    die_backpatch.push_back
-	      (std::make_pair (gap (appender, 4),
+	      (std::make_pair (gap (appender, 4, big_endian),
 			       value.reference ()->offset ()));
 	  }
 	  break;
@@ -522,7 +549,7 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 	  else
 	    {
 	      assert (form == DW_FORM_data4); // XXX temporary
-	      ::dw_write<4> (appender.alloc (4), 0);
+	      ::dw_write<4> (appender.alloc (4), 0, big_endian);
 	    }
 	  break;
 
@@ -555,7 +582,7 @@ dwarf_output::output_debug_info (section_appender &appender,
 				 dwarf_output_collector &c,
 				 strtab &debug_str,
 				 str_backpatch_vec &str_backpatch,
-				 bool addr_64)
+				 bool addr_64, bool big_endian)
 {
   /* We request appender directly, because we depend on .alloc method
      being implemented, which is not the case for std containers.
@@ -579,14 +606,14 @@ dwarf_output::output_debug_info (section_appender &appender,
 
       // Unit length.  Put zeroes for now, patch later.
       unsigned char *length_data = appender.alloc (4);
-      ::dw_write<4> (length_data, 0);
+      ::dw_write<4> (length_data, 0, big_endian);
 
       // Version.
-      ::dw_write<2> (appender.alloc (2), 3);
+      ::dw_write<2> (appender.alloc (2), 3, big_endian);
 
       // Debug abbrev offset.  Use the single abbrev table that we
       // emit at offset 0.
-      ::dw_write<4> (appender.alloc (4), 0);
+      ::dw_write<4> (appender.alloc (4), 0, big_endian);
 
       // XXX size in bytes of an address on the target architecture.
       *inserter++ = addr_64 ? 8 : 4;
@@ -597,7 +624,8 @@ dwarf_output::output_debug_info (section_appender &appender,
       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
       gap fake_gap;
       recursive_dumper (c, appender, debug_str, addr_64,
-			die_off, die_backpatch, str_backpatch)
+			die_off, die_backpatch, str_backpatch,
+			big_endian)
 	.dump (*it->_m_cu_die, fake_gap, 0);
       assert (!fake_gap.valid ());
 
@@ -607,6 +635,6 @@ dwarf_output::output_debug_info (section_appender &appender,
       /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
       assert (length < (uint32_t)-1); // XXX temporary XXX dwarf64
-      ::dw_write<4> (length_data, length); // XXX dwarf64
+      ::dw_write<4> (length_data, length, big_endian); // XXX dwarf64
     }
 }

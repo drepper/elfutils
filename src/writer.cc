@@ -500,6 +500,7 @@ handle_elf (Elf *elf, size_t alloc_unit,
   };
 
   bool addr_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
+  bool big_endian = ehdr->e_ident[EI_DATA] == ELFDATA2MSB;
   elfutils::strtab debug_strtab (false);
   elfutils::dwarf_output::str_backpatch_vec str_backpatch;
 
@@ -520,7 +521,7 @@ handle_elf (Elf *elf, size_t alloc_unit,
       else if (i == si_info)
 	dwout.output_debug_info (appender, collector,
 				 debug_strtab, str_backpatch,
-				 addr_64);
+				 addr_64, big_endian);
       // xxx
 
       /* We have to set the section size.  */

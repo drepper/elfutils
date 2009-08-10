@@ -700,21 +700,25 @@ namespace elfutils
     {
       unsigned char *_m_ptr;
       size_t _m_len;
+      bool _m_big_endian;
 
     public:
       gap ()
-	: _m_ptr (NULL), _m_len (0)
+	: _m_ptr (NULL)
       {}
-      gap (section_appender &appender, size_t len)
-	: _m_ptr (appender.alloc (len)), _m_len (len)
+      gap (section_appender &appender, size_t len, bool big_endian)
+	: _m_ptr (appender.alloc (len)), _m_len (len),
+	  _m_big_endian (big_endian)
       {}
-      gap (unsigned char *ptr, size_t len)
-	: _m_ptr (ptr), _m_len (len)
+      gap (unsigned char *ptr, size_t len, bool big_endian)
+	: _m_ptr (ptr), _m_len (len),
+	  _m_big_endian (big_endian)
       {}
       gap &operator= (gap const &other)
       {
 	_m_ptr = other._m_ptr;
 	_m_len = other._m_len;
+	_m_big_endian = other._m_big_endian;
 	return *this;
       }
       void patch (uint64_t value) const;
@@ -761,6 +765,7 @@ namespace elfutils
       die_off_map &die_off;
       die_backpatch_vec &die_backpatch;
       str_backpatch_vec &str_backpatch;
+      bool big_endian;
 
       recursive_dumper (recursive_dumper const &copy); // nocopy
 
@@ -771,14 +776,16 @@ namespace elfutils
 			bool a_addr_64,
 			die_off_map &a_die_off,
 			die_backpatch_vec &a_die_backpatch,
-			str_backpatch_vec &a_str_backpatch)
+			str_backpatch_vec &a_str_backpatch,
+			bool a_big_endian)
 	: c (a_c),
 	  appender (a_appender),
 	  debug_str (a_debug_str),
 	  addr_64 (a_addr_64),
 	  die_off (a_die_off),
 	  die_backpatch (a_die_backpatch),
-	  str_backpatch (a_str_backpatch)
+	  str_backpatch (a_str_backpatch),
+	  big_endian (a_big_endian)
       {}
 
       // Returns gap for DW_AT_sibling.
@@ -819,7 +826,7 @@ namespace elfutils
 			    dwarf_output_collector &dw,
 			    strtab &debug_str,
 			    str_backpatch_vec &str_backpatch,
-			    bool addr_64);
+			    bool addr_64, bool big_endian);
   };
 
   // Explicit specializations.
