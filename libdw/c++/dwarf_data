@@ -77,7 +77,6 @@ namespace elfutils
     protected:
       typedef std::list<typename impl::compile_unit> _base;
 
-#if 0
       // Constructor copying CUs from input container.
       template<typename input, typename arg_type>
       inline compile_units (const input &other, arg_type &arg)
@@ -86,7 +85,6 @@ namespace elfutils
 		 subr::argify<input, compile_units, arg_type &>
 		 (other.end (), arg))
       {}
-#endif
 
     public:
       // Default constructor: an empty container, no CUs.
@@ -112,7 +110,7 @@ namespace elfutils
 
     protected:
       template<typename input>
-      inline const input &require_cu (const input &cu)
+      static inline const input &require_cu (const input &cu)
       {
 	if (cu.tag () != ::DW_TAG_compile_unit)
 	  throw std::runtime_error
@@ -821,11 +819,12 @@ namespace elfutils
       }
 
       template<typename flavor, typename input, typename arg_type>
-      static inline value_dispatch *
-      make (flavor *&result, int /*whatattr*/, const input &x, arg_type &arg)
+      static inline void
+      make (value_dispatch *&v, flavor *&result,
+	    int /*whatattr*/, const input &x, arg_type &arg)
       {
 	assert (alloc_values);
-	return result = new flavor (x, arg);
+	v = result = new flavor (x, arg);
       }
 
       struct value_string : public value_dispatch, public std::string
@@ -1129,7 +1128,7 @@ namespace elfutils
 	      case dwarf::VS_##flavor:					      \
 		{							      \
 		  typename vw::value_##flavor *p;			      \
-		  av->_m_value = vw::make (p, whatattr, other.fetch (), arg); \
+		  vw::make (av->_m_value, p, whatattr, other.fetch (), arg); \
 		}							      \
 	      break
 
@@ -1150,13 +1149,14 @@ namespace elfutils
 	      if (other.constant_is_integer ())
 		{
 		  typename vw::value_constant *p;
-		  av->_m_value = vw::make (p, whatattr, other.constant (), arg);
+		  vw::make (av->_m_value, p, whatattr,
+			    other.constant (), arg);
 		}
 	      else
 		{
 		  typename vw::value_constant_block *p;
-		  av->_m_value = vw::make (p, whatattr,
-					   other.constant_block (), arg);
+		  vw::make (av->_m_value, p, whatattr,
+			    other.constant_block (), arg);
 		}
 	      break;
 
@@ -1475,7 +1475,7 @@ namespace elfutils
     class attributes_type
       : public std::map<int, typename impl::attr_value>
     {
-      friend class impl::debug_info_entry;
+      friend class impl::me;
     protected:
       typedef std::map<int, typename impl::attr_value> base_type;
 

@@ -76,7 +76,10 @@ namespace elfutils
 
   class dwarf_output
   {
+  private:
     friend class dwarf_output_collector;
+    friend class dwarf_data;
+    typedef dwarf_output me;
 
   public:
     typedef dwarf_data::source_file source_file;
@@ -101,7 +104,6 @@ namespace elfutils
     }
 
     template<typename input> class copier; // Below.
-    template<typename input> class copier_step; // Below.
 
 #if 0
     /* An iterator adapter for use in iterator-based constructors.
@@ -126,117 +128,128 @@ namespace elfutils
 
       typedef dwarf_data::value<dwarf_output> data;
 
+#if 0
       template<typename flavor, typename input>
-      static inline value_dispatch *
-      make (flavor *&, int, const input &, const subr::nothing &)
+      static inline void
+      make (const value_dispatch *&, flavor *&,
+	    int, const input &, const subr::nothing &)
       {
 	throw std::logic_error ("dwarf_output cannot be default-constructed");
       }
+#endif
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_string *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_string *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_string (x);
+	v = c ().add_string (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_identifier *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_identifier *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_identifier (x);
+	v = c ().add_identifier (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_reference *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_reference *&,
+	    int, const input &x, copier_type &c)
       {
-	return c.add_reference (x);
+	v = c.add_reference (x, &v);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_flag *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_flag *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_flag (x);
+	v = c ().add_flag (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_address *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_address *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_address (x);
+	v = c ().add_address (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_rangelistptr *&, int, const input &x,
-	    copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_rangelistptr *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_ranges (x);
+	v = c ().add_ranges (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_lineptr *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_lineptr *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_line_info (x);
+	v = c ().add_line_info (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_constant *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_constant *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_constant (x);
+	v = c ().add_constant (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_constant_block *&, int, const input &x,
-	    copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_constant_block *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_constant_block (x);
+	v = c ().add_constant_block (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_dwarf_constant *&, int, const input &x,
-	    copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_dwarf_constant *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_dwarf_constant (x);
+	v = c ().add_dwarf_constant (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_source_file *&, int attr, const input &x,
-	    copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_source_file *&,
+	    int attr, const input &x, copier_type &c)
       {
-	return c ().add_source_file (attr, x);
+	v = c ().add_source_file (attr, x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_source_line *&, int, const input &x,
-	    copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_source_line *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_source_line (x);
+	v = c ().add_source_line (x);
       }
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_source_column *&, int, const input &x,
-	    copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_source_column *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_source_column (x);
+	v = c ().add_source_column (x);
       }
 
       // XXX macptr
 
-      template<typename input, typename input_dw>
-      static inline const value_dispatch *
-      make (value_location *&, int, const input &x, copier_step<input_dw> &c)
+      template<typename input, typename copier_type>
+      static inline void
+      make (const value_dispatch *&v, value_location *&,
+	    int, const input &x, copier_type &c)
       {
-	return c ().add_location (x);
+	v = c ().add_location (x);
       }
     };
 
@@ -251,7 +264,7 @@ namespace elfutils
       class attributes_type
 	: public dwarf_data::attributes_type<dwarf_output, value>
       {
-	friend class debug_info_entry;
+	friend class dwarf_output;
 
       private:
 	typedef dwarf_data::attributes_type<dwarf_output, value> _base;
@@ -315,7 +328,21 @@ namespace elfutils
 
 	size_t _m_hash;
 
+	inline void set_hash ()
+	{
+	  _m_hash = 0;
+	  for (_base::iterator i = _base::begin (); i != _base::end (); ++i)
+	    subr::hash_combine (_m_hash, (uintptr_t) *i);
+	}
+
         inline children_type () {}
+
+	template<typename iter>
+	inline children_type (const iter &first, const iter &last)
+	  : _base (first, last)
+	{
+	  set_hash ();
+	}
 
 	struct deref
 	  : public std::unary_function<const debug_info_entry *,
@@ -330,18 +357,6 @@ namespace elfutils
 	  }
 	};
 
-	inline void set_hash ()
-	{
-	  _m_hash = 0;
-	  for (_base::iterator i = _base::begin (); i != _base::end (); ++i)
-	    subr::hash_combine (_m_hash, (uintptr_t) *i);
-	}
-
-	inline void finish (size_t i, const debug_info_entry *entry)
-	{
-	  _base::operator[] (i) = entry;
-	}
-
       public:
 	friend class subr::hashed_hasher<children_type>;
 	typedef subr::hashed_hasher<children_type> hasher;
@@ -352,6 +367,7 @@ namespace elfutils
 	typedef debug_info_entry *pointer;
 	typedef debug_info_entry *const_pointer;
 
+#if 0
 	template<typename input, typename copier>
 	inline void add_child (const input &in, bool has_sibling, copier *c)
 	{
@@ -362,7 +378,6 @@ namespace elfutils
 	     has_sibling, c);
 	}
 
-#if 0
 	template<typename input, typename copier>
 	inline children_type (const input &other, copier &c)
 	  : _base (), _m_hash (0)
@@ -447,6 +462,7 @@ namespace elfutils
 	subr::hash_combine (_m_hash, *_m_children);
       }
 
+#if 0 // XXX
       template<typename input_die, typename copier_type,
 	       typename attrs_dangle_type, typename children_dangle_type>
       inline debug_info_entry (const pointer &at,
@@ -483,7 +499,6 @@ namespace elfutils
 	  };
       }
 
-#if 0				// XXX
       template<typename input_die, typename copier_type>
       inline debug_info_entry (const pointer &at,
 			       const input_die &die,
@@ -645,9 +660,7 @@ namespace elfutils
 		bool,	// last-sibling
 		copier_type &c)
       {
-	typename copier_type::tracker::walk into (c._m_tracker, in, out);
-	out->set (*in, c);
-	// t.equivalence (out, in);
+	c.make_unit (in, out);
       }
 
       // Constructor copying CUs from input container.
@@ -765,7 +778,7 @@ namespace elfutils
     // Set of attribute maps.
     subr::identity_set<attrs_type> _m_attr_sets;
 
-    inline const attrs_type *add (attrs_type &candidate)
+    inline const attrs_type *add_attributes (const attrs_type &candidate)
     {
       return &*_m_attr_sets.insert (candidate).first;
     }
@@ -773,7 +786,7 @@ namespace elfutils
     // Set of children lists.
     subr::identity_set<children_type> _m_broods;
 
-    inline const children_type *add (children_type &candidate)
+    inline const children_type *add_children (const children_type &candidate)
     {
       return &*_m_broods.insert (candidate).first;
     }
@@ -794,19 +807,17 @@ namespace elfutils
     typedef die_map::value_type die_info_pair;
     die_map _m_unique;
 
-    inline const die_type *add_entry (const die_type &candidate,
-				      bool has_sibling)
+    inline const die_type *add_entry (int tag,
+				      const children_type *children,
+				      const attrs_type *attrs)
     {
       std::pair <die_map::iterator, bool>
-	ins = _m_unique.insert (std::make_pair (candidate, die_info ()));
+	ins = _m_unique.insert (std::make_pair (die_type (tag, children, attrs),
+						die_info ()));
       die_map::value_type &x = *ins.first;
       if (ins.second)
 	{
 	  assert (x.second.uses == 0);
-	  if (has_sibling)
-	    x.second.with_sibling = true;
-	  else
-	    x.second.without_sibling = true;
 	  // XXX add_shape (x.first, !has_sibling);
 	}
       x.second.uses++;
@@ -868,46 +879,13 @@ namespace elfutils
     }
   };
 
-  /* A copier_step object lives momentarily while building a
-     constituent type.  It keeps track of whether the object
-     built includes any dangling references.  */
-  template<typename dw>
-  class dwarf_output::copier_step
-  {
-    friend class dwarf_output;
-
-  protected:
-    typedef typename dw::debug_info_entry::children_type::const_iterator
-    input_die_ptr;
-
-    copier<dw> *_m_copier;
-    bool _m_dangling;
-
-    inline copier_step (copier<dw> *c)
-      : _m_copier (c), _m_dangling (false)
-    {}
-
-  public:
-    inline copier<dw> &operator () () const
-    {
-      return *_m_copier;
-    }
-
-    inline const value::value_dispatch *add_reference (const input_die_ptr &to)
-    {
-      return _m_copier->add_reference (to, _m_dangling);
-    }
-  };
-
   template<typename dw>
   class dwarf_output::copier
   {
     friend class dwarf_output;
   private:
-    typedef typename dw::debug_info_entry::children_type::const_iterator
-    input_die_ptr;
-
-    struct children_copier;
+    typedef typename dw::debug_info_entry input_die;
+    typedef typename input_die::children_type::const_iterator input_die_ptr;
 
     struct tracker
       : public dwarf_tracker_base<dw, dwarf_output>
@@ -1031,77 +1009,297 @@ namespace elfutils
     dwarf_output_collector *_m_collector;
     tracker *_m_tracker;
 
-    template<typename container_type> struct pending_container_info;
-    struct seen;
+    /* An attribute is "dangling" if it's a reference to a DIE not yet
+       reached in the copying walk.  An attribute is "pending" if it's a
+       reference to a DIE that has a pending_entry but no final entry.
 
-    struct pending_entry_info
+       A pending_entry itself is "dangling" if it contains any dangling
+       attributes or dangling child entries.  Each dangling attribute and
+       each dangling child contributes one to _m_dangling_count.
+
+    */
+
+    struct seen;		// Below.
+    struct pending_entry
     {
-      /* These point to the fully-baked containers in the collector.
-	 When both are set, then this entry is ready to be removed
-	 from _m_pending_entries and baked in the collector.  */
-      const debug_info_entry::attributes_type *_m_attributes;
-      const debug_info_entry::children_type *_m_children;
+      dwarf_data::attributes_type<dwarf_output, value> _m_attributes;
+      std::vector<seen *> _m_children;
+      const int _m_tag;
 
-      // Backpointers to _m_pending_children vectors that point to us.
-      typedef std::pair<
-	std::pair<debug_info_entry::children_type *const,
-		  pending_container_info<debug_info_entry::children_type>
-		  > *,
-	size_t> backptr;
-      std::stack<backptr> _m_patch;
+      unsigned int _m_dangling_count;
+      unsigned int _m_pending_count;
 
-      std::deque<size_t> _m_pending_patch;
+      // Backpointers to other _m_children vectors that point to us.
+      std::deque<seen *> _m_parents;
 
-      // Backpointers to _m_seen entries that point to us.
-      std::tr1::unordered_set<seen *> _m_refs;
+      inline pending_entry (int tag)
+	: _m_attributes (), _m_children (), _m_tag (tag),
+	  _m_dangling_count (0), _m_pending_count (0),
+	  _m_parents ()
+      {}
+
+      // Count one pending or dangling attribute or child.
+      inline void count_pending (bool dangle)
+      {
+	++_m_pending_count;
+	if (dangle)
+	  ++_m_dangling_count;
+      }
+
+      inline bool dangling () const
+      {
+	return _m_dangling_count > 0;
+      }
+
+      inline bool complete () const
+      {
+	return _m_pending_count == 0;
+      }
+
+      inline void add_parent (seen *parent)
+      {
+	_m_parents.push_back (parent);
+      }
+
+      /* One of our pending attributes or children is no longer dangling.
+	 Either it's still pending or it's actually final now.  */
+      inline bool resolve_dangling (bool ready)
+      {
+	assert (_m_dangling_count > 0);
+	assert (_m_pending_count >= _m_dangling_count);
+	if (ready)
+	  --_m_pending_count;
+	return --_m_dangling_count == 0;
+      }
+
+      // One of our pending attributes or children is final now.
+      inline bool resolve_pending ()
+      {
+	assert (_m_pending_count > _m_dangling_count);
+	assert (_m_pending_count > 0);
+	return --_m_pending_count == 0;
+      }
+
+      struct propagate_resolve_dangling
+	: public std::unary_function<seen *, void>
+      {
+	copier *_m_copier;
+	inline propagate_resolve_dangling (copier *c) : _m_copier (c) {}
+	inline void operator () (seen *parent) const
+	{
+	  parent->resolve_dangling (_m_copier, false);
+	}
+      };
+
+      // We are no longer dangling!  Propagate the bookkeeping to each parent.
+      inline void parents_resolve_dangling (copier *c)
+      {
+	assert (_m_dangling_count == 0);
+	assert (_m_pending_count > 0);
+	std::for_each (_m_parents.begin (), _m_parents.end (),
+		       propagate_resolve_dangling (c));
+      }
+
+      struct get_final_child
+	: public std::unary_function<seen *, const debug_info_entry *>
+      {
+	inline get_final_child (...) {}
+	inline const debug_info_entry *operator () (seen *child) const
+	{
+	  assert (child->_m_final != NULL);
+	  return child->_m_final;
+	}
+      };
+      typedef subr::wrapped_input_iterator<
+	std::vector<seen *>, get_final_child> final_child_iterator;
+      static inline final_child_iterator
+      get_final_children (const typename std::vector<seen *>::const_iterator &i)
+      {
+	return final_child_iterator (i, subr::nothing ());
+      }
+
+      inline const debug_info_entry *final (dwarf_output_collector *c)
+      {
+	assert (complete ());
+
+	const debug_info_entry::attributes_type *attrs
+	  = c->add_attributes (debug_info_entry::attributes_type
+			       (_m_attributes.begin (), _m_attributes.end ()));
+
+	const debug_info_entry::children_type *children
+	  = c->add_children (debug_info_entry::children_type
+			     (get_final_children (_m_children.begin ()),
+			      get_final_children (_m_children.end ())));
+
+	return c->add_entry (_m_tag, children, attrs);
+      }
+
+      inline void resolve_parents (copier *c)
+      {
+	while (!_m_parents.empty ())
+	  {
+	    _m_parents.front ()->resolve_pending (c);
+	    _m_parents.pop_front ();
+	  }
+      }
+    };
+
+    /* This is what we record about each input DIE we have considered.
+       An attr_value that is a dangling reference to a DIE not yet
+       built in the output has one of these in place of a value_reference.
+       These all live in the _m_seen map, one per input-side DIE.  */
+    struct entry_copier;	// Below.
+    struct seen
+      : public value::value_dispatch
+    {
+      ::Dwarf_Off _m_offset; // XXX debugging only
+
+      // Set if we are building this in the copying walk right now.
+      entry_copier *_m_building;
+
+      // Completed DIE in the collector, or NULL.
+      const debug_info_entry *_m_final;
+
+      // Pending entry made with new, or NULL.
+      pending_entry *_m_pending;
+
+      /* Here we record back-pointers to the attributes_type objects that
+	 point to us.  Each time we record one, we increment its count in
+	 the pending_entry record.  */
+      std::deque<std::pair<seen *, const value_dispatch **> > _m_patch;
+
+      inline seen ()
+	: _m_building (NULL), _m_final (NULL), _m_pending (NULL), _m_patch ()
+      {}
+
+      /* Called by entry_copier::add_reference, below.
+	 We're adding a reference attribute pointing to this input entry.  */
+
+      inline const value::value_dispatch *
+      refer (seen *referrer, const value::value_dispatch **backptr)
+      {
+	if (_m_final != NULL)
+	  // It's finished, resolve the final reference.
+	  return &_m_final->_m_ref;
+
+	/* This entry is still dangling or pending.  Record the
+	   back-pointer to us so we can fix it up later, and
+	   count the referrer's pending reference.  */
+	_m_patch.push_back (std::make_pair (referrer, backptr));
+	referrer->_m_pending->count_pending (_m_pending == NULL);
+
+	return this;
+      }
+
+      /* One dangling attribute or child is no longer dangling.
+	 See if that completes us.  */
+      inline void resolve_dangling (copier *c, bool final)
+      {
+	if (_m_pending->resolve_dangling (final)
+	    // We no longer have any dangling references!
+	    && !made (c))
+	  {
+	    // We are still pending ourselves.
+	    _m_pending->parents_resolve_dangling (c);
+	  }
+      }
+
+      inline void resolve_pending (copier *c)
+      {
+	if (_m_pending->resolve_pending ())
+	  // We no longer have any pending references or children!
+	  finish_pending (c);
+      }
+
+      struct resolve_ref
+	: public std::unary_function<std::pair<seen *,
+					       const value_dispatch **> &,
+				     void>
+      {
+	copier *_m_copier;
+	inline resolve_ref (copier *c) : _m_copier (c) {}
+	inline void
+	operator () (std::pair<seen *, const value_dispatch **> &p) const
+	{
+	  p.first->resolve_dangling (_m_copier, false);
+	}
+      };
+
+      // add_entry has just created the output DIE we'll refer to.
+      inline bool made (copier *c)
+      {
+	if (_m_pending->complete ())
+	  {
+	    // It's all done.  Finish up all our references.
+	    finish_pending (c);
+	    return true;
+	  }
+
+	// It's still pending, but no longer dangling.  Adjust bookkeeping.
+	std::for_each (_m_patch.begin (), _m_patch.end (), resolve_ref (c));
+	return false;
+      }
+
+      // Our pending_entry is complete.  Resolve all pointers to us.
+      inline void finish_pending (copier *c)
+      {
+	// Create it in the collector.
+	_m_final = _m_pending->final (c->_m_collector);
+
+	/* Tell each parent pending_entry whose children vector points
+	   to us.  When we're the last unfinished child, this will
+	   recursively finish the pending parent too.  */
+	_m_pending->resolve_parents (c);
+
+	// No more pending_entry required!
+	delete _m_pending;
+	_m_pending = NULL;
+
+	/* Fix up each reference attribute pointing to us.  When we're
+	   the last dangling reference, this will recursively finish
+	   the referrer pending_entry too.  */
+	while (!_m_patch.empty ())
+	  {
+	    seen *&referrer = _m_patch.front ().first;
+	    const value_dispatch **&backptr = _m_patch.front ().second;
+	    // Sanity check that this really points to a struct seen.
+	    dynamic_cast<const seen &> (**backptr);
+	    *backptr = &_m_final->_m_ref;
+	    referrer->resolve_dangling (c, true);
+	    _m_patch.pop_front ();
+	  }
+      }
 
       void dump (copier *) const
       {
-	std::cout << _m_patch.size () << " backptrs, "
-		  << _m_refs.size () << " refs:" << std::hex;
-	for (typename std::tr1::unordered_set<seen *>::const_iterator
-	       i = _m_refs.begin (); i != _m_refs.end (); ++i)
-	  std::cout << " " << (*i)->_m_offset;
-	std::cout << std::dec << "\n";
+	std::cout << _m_pending->_m_patch.size () << " backptrs\n";
       }
 
-      inline
-      pending_entry_info (const debug_info_entry::attributes_type *a = NULL,
-			  const debug_info_entry::children_type *c = NULL)
-	: _m_attributes (a), _m_children (c), _m_patch ()
-      {}
-
+#if 0
       // This entry is being baked, so update all pointers to us.
-      inline void resolve (children_copier *c, const debug_info_entry *final)
+      inline void resolve (children_copier *c, const debug_info_entry *die)
       {
 	std::cout << "XXX " << c->_m_depth << ": resolving "
-		  << dwarf::tags::identifier (final->_m_tag)
+		  << dwarf::tags::identifier (die->_m_tag)
 		  << " ";
 	dump (c->_m_copier);
 
-	/* Update the correlation with the input DIE for future
-	   reference, and resolve any dangling reference attributes.  */
-	for (typename std::tr1::unordered_set<seen *>::iterator i
-	       = _m_refs.begin (); i != _m_refs.end (); i = _m_refs.erase (i))
-	  {
-	    seen *const ref = *i;
-	    assert (&ref->_m_pending->second == this);
-	    ref->_m_pending = NULL;
-	    ref->final (final, c);
-	  }
+	pending_entry *p = _m_pending;
+	_m_pending = NULL;
+	final (die, c);
 
-	if (_m_patch.empty ())
+	if (p->_m_patch.empty ())
 	  {
 	    /* This is a pending entry in the children_copier, not yet
 	       reified.  This means what resolved us was the definition
 	       of a sibling to which we contained a forward reference.
 	       We patch the children_type still being created, and
 	       remove the record of it having had this pending child.  */
-	    c->resolve_pending (this, final);
+	    c->resolve_pending (this, p, die);
 	    return;
 	  }
 
-	assert (_m_pending_patch.empty ());
+	assert (p->_m_pending_patch.empty ());
 
 	/* Replace all _m_pending_children vectors' elements pointing to us
 	   with the final entry pointer.  First we update that vector's
@@ -1111,160 +1309,194 @@ namespace elfutils
 	do
 	  {
 	    std::cout << "\tleaves "
-		      << _m_patch.top ().first->second._m_dangling
+		      << p->_m_patch.top ().first->second._m_dangling
 		      << " dangling children in "
-		      << (void *) &_m_patch.top ().first->second
+		      << (void *) &p->_m_patch.top ().first->second
 		      << "\n";
-	    _m_patch.top ().first->first->finish
-	      (_m_patch.top ().second, final);
-	    _m_patch.top ().first->second.resolve
-	      (c, _m_patch.top ().first->first);
-	    _m_patch.pop ();
+	    p->_m_patch.top ().first->first->finish
+	      (p->_m_patch.top ().second, die);
+	    p->_m_patch.top ().first->second.resolve
+	      (c, p->_m_patch.top ().first->first);
+	    p->_m_patch.pop ();
 	  }
-	while (!_m_patch.empty ());
+	while (!p->_m_patch.empty ());
+
+	delete p;
       }
+#endif
     };
 
-    typedef subr::identity_map<debug_info_entry,
-			       pending_entry_info> pending_entry_map;
-    pending_entry_map _m_pending_entries;
-
-    template<typename container_type>
-    struct pending_container_info
+    // This object lives while we are copying one particular input DIE.
+    struct entry_copier
     {
-      typedef typename pending_entry_map::value_type *backptr;
-      std::stack<backptr> _m_patch;
-      unsigned int _m_dangling;
+      copier *_m_copier;
+      seen *_m_in;
+      pending_entry *_m_out;
+      unsigned int _m_depth;
 
-      inline pending_container_info ()
-	: _m_patch (), _m_dangling (0)
-      {}
-
-      bool resolve (children_copier *c, container_type *old)
+      /* On creation we set _m_building in DIE's record.
+	 It should never be set already.  */
+      inline entry_copier (copier *c, unsigned int depth,
+			   seen *die, const input_die &in)
+	: _m_copier (c),
+	  _m_in (die),
+	  _m_out (new pending_entry (in.tag ())),
+	  _m_depth (depth)
       {
-	assert (_m_dangling > 0);
+	if (unlikely (_m_in->_m_building != NULL))
+	  throw std::runtime_error ("detected cycle in logical DWARF tree");
+	_m_in->_m_building = this;
+      }
 
-	if (--_m_dangling > 0)
-	  // We still have other dangling refs.
-	  return false;
+      // On destruction, we clear _m_building.
+      inline ~entry_copier ()
+      {
+	assert (_m_in->_m_building == this);
+	_m_in->_m_building = NULL;
 
-	/* All these dangling refs have been filled.  Now we can
-	   create a final container_type object in the collector.  */
+	if (_m_in->_m_pending == NULL)
+	  delete _m_out;
+	else
+	  assert (_m_in->_m_pending == _m_out);
+      }
 
-	const container_type *final = c->_m_copier->_m_collector->add (*old);
+      /* Populate _m_out from the corresponding input DIE.
+	 This invokes all the main work of copying.
+	 The interesting parts happen in add_reference and add_child, below.  */
+      inline void populate (const input_die &in)
+      {
+	assert (_m_in->_m_pending == NULL);
+	_m_in->_m_pending = _m_out;
 
-	do
+	try
 	  {
-	    c->resolve_entry (_m_patch.top (), final);
-	    _m_patch.pop ();
+	    // This calls add_reference for each pending reference.
+	    _m_out->_m_attributes.set (in.attributes (), *this);
+
+	    for (input_die_ptr i = in.children ().begin ();
+		 i != in.children ().end ();
+		 ++i)
+	      add_child (i);
 	  }
-	while (!_m_patch.empty ());
-
-	return true;
-      }
-    };
-
-    template<typename container_type>
-    struct pending_containers_map
-      : public subr::identity_ptr_map<container_type,
-				      pending_container_info<container_type> >
-    {
-    };
-
-    typedef pending_containers_map<debug_info_entry::attributes_type
-				   > pending_attrs_map;
-    typedef typename pending_attrs_map::mapped_type pending_attrs_info;
-    pending_attrs_map _m_pending_attr_sets;
-
-    typedef pending_containers_map<debug_info_entry::children_type
-				   > pending_children_map;
-    typedef typename pending_children_map::mapped_type pending_children_info;
-    pending_children_map _m_pending_children;
-
-    /* This is what we record about each input DIE we have considered.
-       An attr_value that is a dangling reference to a DIE not yet
-       built in the output has one of these in place of a value_reference.
-       These all live in the _m_seen map, one per input-side DIE.  */
-    struct seen
-      : public value::value_dispatch
-    {
-      ::Dwarf_Off _m_offset; // XXX debugging only
-
-      // Set if we are building this in the copying walk right now.
-      children_copier *_m_building;
-
-      // Completed DIE in the collector, or NULL.
-      const debug_info_entry *_m_final;
-
-      // Pending entry in _m_pending_entries, or NULL.
-      typename pending_entry_map::value_type *_m_pending;
-
-      /* Here we record back-pointers to the attributes_type objects (living
-	 in _m_pending_attr_sets) that point to us.  Each time we record one,
-	 we increment its count in the _m_pending_attr_sets map.  */
-      std::stack<std::pair<typename pending_attrs_map::value_type *,
-			   attr_value *>
-		 > _m_patch;
-
-      // Called by add_reference.
-      inline const value::value_dispatch *refer (bool &dangling)
-      {
-	if (_m_final != NULL)
-	  return &_m_final->_m_ref;
-	dangling = true;
-	if (_m_building != NULL)
-	  throw std::logic_error ("XXX implement me: circular refs");
-	return this;
-      }
-
-      // Called after add_reference when a new attributes_type is being saved.
-      inline void used_at (typename pending_attrs_map::value_type *p,
-			   attr_value *v)
-      {
-	_m_patch.push (std::make_pair (p, v));
-	++p->second._m_dangling;
-      }
-
-      /* We have completed the final entry in the collector.
-	 Install it for future references, and resolve any dangling refs.  */
-      inline const debug_info_entry *final (const debug_info_entry *entry,
-					    children_copier *c)
-      {
-	assert (_m_final == NULL);
-	assert (_m_pending == NULL);
-	_m_final = entry;
-
-	while (!_m_patch.empty ())
+	catch (...)
 	  {
-	    _m_patch.top ().second->_m_value = &_m_final->_m_ref;
-	    c->resolve_pending_attrs (_m_patch.top ().first);
-	    _m_patch.pop ();
+	    _m_in->_m_pending = NULL;
+	    throw;
 	  }
 
-	return _m_final;
       }
 
-      inline seen ()
-	: _m_building (NULL), _m_final (NULL), _m_pending (NULL), _m_patch ()
-      {}
+      /* Complain if we still have dangling references.
+	 If not, it should be impossible to have pending entries left.  */
+      inline void demand_complete () const
+      {
+	if (_m_out->dangling ())
+	  throw std::runtime_error
+	    ("compile_unit contains dangling reference attributes");
+	assert (_m_out->complete ());
+      }
+
+      // We're adding a reference attribute inside populate, above.
+      inline const value::value_dispatch *
+      add_reference (const input_die_ptr &to,
+		     const value::value_dispatch **backptr)
+      {
+	return _m_copier->enter_seen (*to)->refer (_m_in, backptr);
+      }
+
+      // We're adding a child entry inside populate, above.
+      inline void add_child (const input_die_ptr &in)
+      {
+	seen *child = _m_copier->enter_seen (*in);
+	_m_out->_m_children.push_back (child);
+
+	/* If the input used DW_TAG_imported_unit, then the logical walk
+	   can hit the same DIE twice.  If so, we short-circuit right here.  */
+	if (child->_m_final == NULL)
+	  {
+	    if (child->_m_pending == NULL)
+	      make_child (child, in);
+
+	    /* Record a back-pointer to this parent entry,
+	       and count its new child as pending.  */
+	    child->_m_pending->add_parent (_m_in);
+	    _m_out->count_pending (child->_m_pending->dangling ());
+	  }
+      }
+
+      /* We're adding a new child entry not seen before.
+	 Recurse on a new entry_copier object to create it.  */
+      inline void make_child (seen *child, const input_die_ptr &in)
+      {
+	{
+	  //  typename tracker::die2 at (); // XXX
+	  // typename tracker::step step (_m_copier->_m_tracker, in, at);
+
+	  entry_copier maker (_m_copier, _m_depth + 1, child, *in);
+	  maker.populate (*in);
+	}
+
+	// Fix up dangling references to this entry now that we have it.
+	child->made (_m_copier);
+      }
+
+      // Use "c ()" as a shorthand to get the copier out of the entry_copier.
+      inline copier &operator () () const
+      {
+	return *_m_copier;
+      }
     };
+
+    /* Create a whole CU in the output.
+     */
+    inline void
+    make_unit (const typename dw::compile_units::const_iterator &in,
+	       const compile_units::iterator &out)
+    {
+      typename tracker::walk into (_m_tracker, in, out);
+
+      entry_copier maker (this, 0, enter_seen (*in), *in);
+      maker.populate (*in);
+
+      maker.demand_complete ();
+    }
+
+#if 0 //XXX
+    inline const debug_info_entry *
+    add_entry (size_t i, const debug_info_entry::children_type::iterator &at,
+	       const input_die_ptr &in, bool has_sibling,
+	       children_copier *step)
+    {
+      /* If the input used DW_TAG_imported_unit, then the logical walk
+	 can hit the same DIE twice.  If so, we short-circuit right here.  */
+
+      seen *die = enter_seen (in);
+      if (die->_m_final != NULL)
+	return die->_m_final;
+
+      if (die->_m_pending == NULL)
+	make_child (die, in, depth);
+
+      step->record_pending_child (i, die);
+      return NULL; // XXX &die->_m_pending->first;
+    }
+#endif
+
 
     typedef std::tr1::unordered_map< ::Dwarf_Off, seen> seen_map;
     seen_map _m_seen;
+    unsigned int _m_defined;	// _m_seen entries not entirely dangling
 
-    inline seen *enter_seen (const input_die_ptr &in)
+    inline seen *enter_seen (const input_die &in)
     {
-      seen *die = &_m_seen[in->identity ()];
-      die->_m_offset = in->offset (); // XXX debugging only
+      seen *die = &_m_seen[in.identity ()];
+      die->_m_offset = in.offset (); // XXX debugging only
       return die;
     }
 
     inline copier ()
       : _m_collector (NULL), _m_tracker (NULL),
-	_m_pending_entries (),
-	_m_pending_attr_sets (),
-	_m_pending_children (),
-	_m_seen ()
+	_m_seen (), _m_defined (0)
     {}
 
     inline ~copier ()
@@ -1367,94 +1599,21 @@ namespace elfutils
       return _m_collector->_m_locations.add (x);
     }
 
-    struct attrs_copier : public copier_step<dw>
-    {
-      debug_info_entry::attributes_type *_m_candidate;
-
-      template<typename input>
-      explicit inline attrs_copier (const input &x, copier *c)
-	: copier_step<dw> (c)
-      {
-	_m_candidate = new debug_info_entry::attributes_type (x, *this);
-      }
-
-      inline ~attrs_copier ()
-      {
-	if (_m_candidate != NULL)
-	  delete _m_candidate;
-      }
-    };
-
-    template<typename input>
-    inline const debug_info_entry::attributes_type *
-    add_attributes (const input &x, pending_attrs_info **dangling)
-    {
-      // Construct a candidate attributes_type map.
-      attrs_copier c (x, this);
-
-      if (!c._m_dangling)
-	// No dangling references.  Put it into the collector right here.
-	return _m_collector->add (*c._m_candidate);
-
-      if (unlikely (dangling == NULL))
-	throw std::logic_error ("compile_unit has dangling references");
-
-      /* We have some dangling references, so this has to
-	 go into the copier's pending set instead.  */
-      std::pair<typename pending_attrs_map::iterator, bool> p
-	= _m_pending_attr_sets.insert (std::make_pair (c._m_candidate,
-						       pending_attrs_info ()));
-      if (p.second)
-	{
-	  /* This is a new entry in the pending set.
-	     All its dangling references need their backpointers set up.  */
-	  assert (p.first->first == c._m_candidate);
-	  c._m_candidate = NULL;
-	  std::for_each (p.first->first->begin (), p.first->first->end (),
-			 record_dangling_reference (p.first));
-	}
-      else
-	assert (p.first->second._m_dangling > 0);
-      *dangling = &p.first->second;
-      return p.first->first;
-    }
-
-    inline const value::value_dispatch *
-    add_reference (const input_die_ptr &to, bool &dangling)
-    {
-      return enter_seen (to)->refer (dangling);
-    }
-
-    /* This gets called after add_reference if the containing
-       attributes_type is being freshly recorded in _m_pending_attr_sets.  */
-    struct record_dangling_reference
-      : public std::unary_function<const attribute &, void>
-    {
-      const typename pending_attrs_map::iterator &_m_i;
-      inline record_dangling_reference
-      (const typename pending_attrs_map::iterator &i)
-	: _m_i (i)
-      {}
-
-      inline void operator () (attribute &attr) const
-      {
-	const seen *ref = dynamic_cast<const seen *> (attr.second._m_value);
-	if (ref != NULL)
-	  const_cast<seen *> (ref)->used_at (&*_m_i, &attr.second);
-      }
-    };
-
+#if 0 // XXX
     struct children_copier : public copier_step<dw>
     {
-      std::map<size_t, pending_entry_info *> _m_pending;
+      std::map<size_t, seen *> _m_pending;
       debug_info_entry::children_type *_m_candidate;
       unsigned int _m_depth;
 
       void dump_pending ()
       {
-	std::cout << "XXX " << _m_depth << ": " << _m_pending.size ()
+	std::cout << "XXX " << _m_depth << ": "
+		  << this->_m_copier->_m_seen.size () << " seen, "
+		  << this->_m_copier->_m_defined << " defined, "
+		  << _m_pending.size ()
 		  << " pending:\n";
-	for (typename std::map<size_t, pending_entry_info *>::iterator
+	for (typename std::map<size_t, seen *>::iterator
 	       i = _m_pending.begin (); i != _m_pending.end (); ++i)
 	  {
 	    std::cout << "\t[" << i->first << "] ";
@@ -1497,31 +1656,16 @@ namespace elfutils
 	collect_stale_pending ();
       }
 
-      inline const debug_info_entry::children_type *
-      add_children (const typename dw::debug_info_entry::children_type &x,
-		    pending_children_info **dangling)
-      {
-	return this->_m_copier->add_children (x, dangling, _m_depth + 1);
-      }
-
-      inline const debug_info_entry::attributes_type *
-      add_attributes (const typename dw::debug_info_entry::attributes_type &x,
-		      pending_attrs_info **dangling)
-      {
-	return this->_m_copier->add_attributes (x, dangling);
-      }
-
       /* When add_entry is returning a pending_entry pointer,
 	 it calls this first.  We record the mapping of this
 	 index to the pending entry in _m_pending so we can
 	 give it a back-pointer if we get reified.  We also
-	 record momentarily in the pending_entry_info record
+	 record momentarily in the pending_entry record
 	 that this index points back there, see below.  */
       inline void record_pending_child (size_t i, seen *entry)
       {
-	pending_entry_info *info = &entry->_m_pending->second;
-	info->_m_pending_patch.push_back (i);
-	_m_pending[i] = info;
+	entry->_m_pending->_m_pending_patch.push_back (i);
+	_m_pending[i] = entry;
       }
 
       /* If a pending entry is resolved before its parent's children_type
@@ -1529,7 +1673,7 @@ namespace elfutils
 	 being resolved by the creation of a sibling to which it had a
 	 forward reference.  We patch it in place here, and remove its
 	 record from _m_pending.  */
-      inline void resolve_pending (pending_entry_info *info,
+      inline void resolve_pending (seen *ref, pending_entry *info,
 				   const debug_info_entry *final)
       {
 	assert (!info->_m_pending_patch.empty ());
@@ -1537,7 +1681,7 @@ namespace elfutils
 	  {
 	    const size_t i = info->_m_pending_patch.front ();
 	    _m_candidate->finish (i, final);
-	    assert (_m_pending[i] == info);
+	    assert (_m_pending[i] == ref);
 	    _m_pending.erase (i);
 	    info->_m_pending_patch.pop_front ();
 	  }
@@ -1546,7 +1690,7 @@ namespace elfutils
 
       /* If this children_type contains pending entries and was new in
 	 _m_pending_children, then we get here.  Now we can give each
-	 pending_entry_info its back-pointer to us.  */
+	 pending_entry its back-pointer to us.  */
       inline void reify (typename pending_children_map::value_type &v)
       {
 	assert (v.first == _m_candidate);
@@ -1554,9 +1698,9 @@ namespace elfutils
 	do
 	  {
 	    const size_t i = _m_pending.begin ()->first;
-	    pending_entry_info *const info = _m_pending.begin ()->second;
-	    info->_m_pending_patch.clear ();
-	    info->_m_patch.push (std::make_pair (&v, i));
+	    seen *const ref = _m_pending.begin ()->second;
+	    ref->_m_pending->_m_pending_patch.clear ();
+	    ref->_m_pending->_m_patch.push (std::make_pair (&v, i));
 	    ++v.second._m_dangling;
 	    _m_pending.erase (_m_pending.begin ());
 	  }
@@ -1569,7 +1713,7 @@ namespace elfutils
       {
 	while (!_m_pending.empty ())
 	  {
-	    _m_pending.begin ()->second->_m_pending_patch.clear ();
+	    _m_pending.begin ()->second->_m_pending->_m_pending_patch.clear ();
 	    _m_pending.erase (_m_pending.begin ());
 	  }
       }
@@ -1583,46 +1727,28 @@ namespace elfutils
 	  this->_m_copier->_m_pending_attr_sets.erase (p->first);
       }
 
-      // Partially resolve a pending entry with final attributes.
-      inline void
-      resolve_entry (typename pending_entry_map::value_type *p,
-		     const debug_info_entry::attributes_type *attrs)
-      {
-	p->second._m_attributes = attrs;
-	if (p->second._m_children != NULL)
-	  resolve_entry (p);
-      }
-
       // Partially resolve a pending entry with final children.
       inline void
-      resolve_entry (typename pending_entry_map::value_type *p,
-		     const debug_info_entry::children_type *children)
+      resolve_entry (seen *ref, const debug_info_entry::children_type *children)
       {
-	p->second._m_children = children;
-	if (p->second._m_attributes != NULL)
-	  resolve_entry (p);
+	pending_entry *entry = ref->_m_pending;
+	entry->_m_children = children;
+	if (entry->_m_attributes != NULL)
+	  resolve_entry (ref);
       }
 
       /* When a pending entry's attributes and children are both resolved,
 	 we can move it into the collector.  */
       inline void
-      resolve_entry (typename pending_entry_map::value_type *p)
+      resolve_entry (seen *ref)
       {
 	// This back-patches all the pointers to the old pending entry.
-	p->second.resolve (this,
-			   this->_m_copier->_m_collector->add_entry
-			   (debug_info_entry (p->first._m_tag,
-					      p->second._m_children,
-					      p->second._m_attributes),
-			    false)); //XXX has_sibling
-
-	/* XXX if it is safe to keep an unordered_map::iterator across other
-	   additions/removals to the map, then we could store that in
-	   pending_container_info instead, but I'm not sure that it is,
-	   though apparently keeping the value_type (pair) pointer is safe.
-	   So we are searching the map again passing the key_type pointer
-	   stored in the map itself, just to erase it.  */
-	this->_m_copier->_m_pending_entries.erase (p->first);
+	ref->resolve (this,
+		      this->_m_copier->_m_collector->add_entry
+		      (debug_info_entry (ref->_m_pending->_m_tag,
+					 ref->_m_pending->_m_children,
+					 ref->_m_pending->_m_attributes),
+		       false)); //XXX has_sibling
       }
     };
 
@@ -1656,89 +1782,7 @@ namespace elfutils
       *dangling = &p.first->second;
       return p.first->first;
     }
-
-    struct entry_copier
-    {
-      typename tracker::step _m_tracker_step;
-      seen *_m_die;
-
-      inline entry_copier (tracker *tracker, children_copier *c, seen *die,
-			   const input_die_ptr &in,
-			   const debug_info_entry::children_type::iterator &at)
-	: _m_tracker_step (tracker, in, at),
-	  _m_die (die)
-      {
-	if (unlikely (_m_die->_m_building != NULL))
-	  throw std::runtime_error ("detected cycle in logical DWARF tree");
-	_m_die->_m_building = c;
-      }
-
-      inline ~entry_copier ()
-      {
-	_m_die->_m_building = NULL;
-      }
-    };
-
-    inline const debug_info_entry *
-    add_entry (size_t i, const debug_info_entry::children_type::iterator &at,
-	       const input_die_ptr &in, bool has_sibling,
-	       children_copier *step)
-    {
-      /* If the input used DW_TAG_imported_unit, then the logical walk
-	 can hit the same DIE twice.  If so, we short-circuit right here.  */
-
-      seen *die = enter_seen (in);
-      if (die->_m_final != NULL)
-	return die->_m_final;
-
-      if (die->_m_pending == NULL)
-	{
-	  entry_copier maker (_m_tracker, step, die, in, at);
-
-	  pending_attrs_info *attr_dangle = NULL;
-	  pending_children_info *child_dangle = NULL;
-
-	  debug_info_entry candidate (at, *in, *step,
-				      attr_dangle, child_dangle);
-
-	  if (attr_dangle == NULL && child_dangle == NULL)
-	    // No dangling refs, create it in the collector.
-	    return die->final (_m_collector->add_entry (candidate, has_sibling),
-			       step);
-
-	  /* We have some dangling references in our attributes or children.
-	     This goes into the pending set until those are resolved.  */
-
-	  std::pair<typename pending_entry_map::iterator, bool> p
-	    = (_m_pending_entries.insert
-	       (std::make_pair (candidate, pending_entry_info ())));
-	  typename pending_entry_map::value_type &v = *p.first;
-	  if (p.second)
-	    {
-	      // This is a new entry.  It needs backpointers set up.
-
-	      if (attr_dangle == NULL)
-		// Our attributes are already final.
-		v.second._m_attributes = v.first._m_attributes;
-	      else
-		// Give our pending attributes a backpointer to update us.
-		attr_dangle->_m_patch.push (&v);
-
-	      if (child_dangle == NULL)
-		// Our children are already final.
-		v.second._m_children = v.first._m_children;
-	      else
-		// Give our pending children vector a backpointer to update us.
-		child_dangle->_m_patch.push (&v);
-	    }
-
-	  die->_m_pending = &v;
-	  v.second._m_refs.insert (die);
-	}
-
-      step->record_pending_child (i, die);
-      return &die->_m_pending->first;
-    }
+#endif
   };
 };
 

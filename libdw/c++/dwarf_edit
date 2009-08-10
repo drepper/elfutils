@@ -89,6 +89,10 @@ namespace elfutils
 
   class dwarf_edit
   {
+  private:
+    friend class dwarf_data;
+    typedef dwarf_edit me;
+
   public:
     typedef dwarf_data::source_file source_file;
     typedef dwarf_data::directory_table directory_table;
