@@ -1201,12 +1201,14 @@ namespace elfutils
       }
 
     public:
+#if 0 // XXX
       attr_value (const attr_value &other)
 	: _m_value (NULL)
       {
 	if (other._m_value != NULL)
 	  init<attr_value> me (this, 0, other);
       }
+#endif
 
       inline attr_value ()
 	: _m_value (NULL)
@@ -1218,6 +1220,7 @@ namespace elfutils
 	  delete _m_value;
       }
 
+#if 0 // XXX
       inline attr_value &operator= (const attr_value &other)
       {
 	if (_m_value != NULL)
@@ -1239,6 +1242,7 @@ namespace elfutils
 	init<value> me (this, 0, other);
 	return *this;
       }
+#endif
 
       dwarf::value_space what_space () const;
       inline std::string to_string () const;

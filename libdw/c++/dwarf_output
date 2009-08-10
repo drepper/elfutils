@@ -1017,6 +1017,11 @@ namespace elfutils
        attributes or dangling child entries.  Each dangling attribute and
        each dangling child contributes one to _m_dangling_count.
 
+       A new pending_entry still being made in entry_copier::populate
+       starts with a dangling/pending count of one to represent that which
+       will be added.  This prevents one sibling that completes another
+       from trying to complete its parent before we've finished building it.
+
     */
 
     struct seen;		// Below.
@@ -1034,9 +1039,21 @@ namespace elfutils
 
       inline pending_entry (int tag)
 	: _m_attributes (), _m_children (), _m_tag (tag),
-	  _m_dangling_count (0), _m_pending_count (0),
+	  _m_dangling_count (1), _m_pending_count (1),
 	  _m_parents ()
       {}
+
+      inline void dump (const seen *me) const
+      {
+	me->dump (true) << " pending " << dwarf::tags::identifier (_m_tag)
+			<< " " << _m_dangling_count
+			<< "/" << _m_pending_count << "\n";
+	for (typename std::deque<seen *>::const_iterator
+	       i = _m_parents.begin (); i != _m_parents.end (); ++i)
+	  (*i)->dump () << " parent waits\n";
+	me->dump_refs ();
+	me->dump (false, true) << " ends\n";
+      }
 
       // Count one pending or dangling attribute or child.
       inline void count_pending (bool dangle)
@@ -1073,10 +1090,14 @@ namespace elfutils
       }
 
       // One of our pending attributes or children is final now.
-      inline bool resolve_pending ()
+      inline bool resolve_pending (bool was_dangling)
       {
-	assert (_m_pending_count > _m_dangling_count);
 	assert (_m_pending_count > 0);
+	assert (_m_pending_count >= _m_dangling_count);
+	if (was_dangling)
+	  --_m_dangling_count;
+	else
+	  assert (_m_pending_count > _m_dangling_count);
 	return --_m_pending_count == 0;
       }
 
@@ -1134,11 +1155,11 @@ namespace elfutils
 	return c->add_entry (_m_tag, children, attrs);
       }
 
-      inline void resolve_parents (copier *c)
+      inline void resolve_parents (copier *c, bool was_dangling)
       {
 	while (!_m_parents.empty ())
 	  {
-	    _m_parents.front ()->resolve_pending (c);
+	    _m_parents.front ()->resolve_pending (c, was_dangling);
 	    _m_parents.pop_front ();
 	  }
       }
@@ -1172,9 +1193,16 @@ namespace elfutils
 	: _m_building (NULL), _m_final (NULL), _m_pending (NULL), _m_patch ()
       {}
 
+      inline ~seen ()
+      {
+	assert (_m_building == NULL);
+	// This should only hit in an exception case abandoning the copier.
+	if (unlikely (_m_pending != NULL))
+	  delete _m_pending;
+      }
+
       /* Called by entry_copier::add_reference, below.
 	 We're adding a reference attribute pointing to this input entry.  */
-
       inline const value::value_dispatch *
       refer (seen *referrer, const value::value_dispatch **backptr)
       {
@@ -1191,69 +1219,148 @@ namespace elfutils
 	return this;
       }
 
+      std::ostream &dump (bool in = false, bool out = false) const
+      {
+	static int depth;
+	depth -= out;
+	std::cout << std::string (depth, ' ')
+		  << "XXX " << std::hex << _m_offset << std::dec;
+	depth += in;
+	return std::cout;
+      }
+
+      inline void dump_pending () const
+      {
+	if (_m_final == NULL)
+	  _m_pending->dump (this);
+      }
+
       /* One dangling attribute or child is no longer dangling.
 	 See if that completes us.  */
       inline void resolve_dangling (copier *c, bool final)
       {
-	if (_m_pending->resolve_dangling (final)
-	    // We no longer have any dangling references!
-	    && !made (c))
+	if (!_m_pending->dangling ())
 	  {
-	    // We are still pending ourselves.
-	    _m_pending->parents_resolve_dangling (c);
+	    assert (!final);
+
+	    /* We're being called from resolve_ref, below.  But our pending
+	       entry is in fact not dangling.  This means we're the root of
+	       a circularity in the reference graph.  A referrer is telling
+	       us that it's no longer dangling, but we ourselves triggered
+	       its conversion when we stopped dangling.  */
+	    dump () << " circularity!\n";
+	    return;
+	  }
+
+	if (_m_pending->resolve_dangling (final))
+	  {
+	    // We no longer have any dangling references!
+	    dump () << " resolved with "
+		    << _m_pending->_m_pending_count << " pending\n";
+
+	    promote_pending (c, _m_pending->complete (), true);
+	  }
+	else
+	  dump () << " unresolved with "
+		  << _m_pending->_m_dangling_count << "/"
+		  << _m_pending->_m_pending_count << "\n";
+      }
+
+      /* The pending_entry is no longer dangling.
+	 Promote it to pending or final.  */
+      inline void promote_pending (copier *c, bool final, bool was_dangling)
+      {
+	dump () << " no longer dangling ("
+		<< c->_m_defined + 1 << " of " << c->_m_seen.size () << "), "
+		<< _m_pending->_m_pending_count << " pending\n";
+
+	if (final)
+	  // It's all done.  Finish up all our references.
+	  finish_pending (c, was_dangling);
+	else
+	  {
+	    /* It's still pending, but no longer dangling.
+	       Adjust bookkeeping.  We are still pending ourselves.  */
+	    ++c->_m_defined;
+	    assert (was_dangling);
+	    prepare_circularity (c);
+	    finish_circularity (c);
 	  }
       }
 
-      inline void resolve_pending (copier *c)
+      /* Update everything using us to indicate we are no longer dangling.
+	 Hereafter, all entries along the reference chain from us should
+	 be accounted as pending but not dangling.  */
+      inline void prepare_circularity (copier *c)
       {
-	if (_m_pending->resolve_pending ())
+	dump (true) << " resolve refs...\n";
+	std::for_each (_m_patch.begin (), _m_patch.end (), resolve_ref (c));
+	dump (true, true) << " resolve parents...\n";
+	_m_pending->parents_resolve_dangling (c);
+	dump (false, true) << " done with "
+			   << _m_pending->_m_pending_count
+			   << " pending\n";
+      }
+
+      /* We are now pending but not dangling.  This can only mean we are
+	 the root of a circular chain of references.
+      */
+      inline void finish_circularity (copier *)
+      {
+	dump () << " circularity FIXME\n";
+      }
+
+      inline void resolve_pending (copier *c, bool was_dangling)
+      {
+	if (_m_pending->resolve_pending (was_dangling))
 	  // We no longer have any pending references or children!
-	  finish_pending (c);
+	  finish_pending (c, was_dangling);
+	else if (was_dangling && !_m_pending->dangling ())
+	  // We've moved up from dangling to pending.
+	  promote_pending (c, false, was_dangling);
+	else
+	  dump () << " still pending "
+		  << (was_dangling ? "(was dangling) " : "")
+		  << _m_pending->_m_dangling_count << "/"
+		  << _m_pending->_m_pending_count << "\n";
       }
 
       struct resolve_ref
 	: public std::unary_function<std::pair<seen *,
-					       const value_dispatch **> &,
+					       const value_dispatch **>,
 				     void>
       {
 	copier *_m_copier;
 	inline resolve_ref (copier *c) : _m_copier (c) {}
 	inline void
-	operator () (std::pair<seen *, const value_dispatch **> &p) const
+	operator () (const std::pair<seen *, const value_dispatch **> &p) const
 	{
 	  p.first->resolve_dangling (_m_copier, false);
 	}
       };
 
-      // add_entry has just created the output DIE we'll refer to.
-      inline bool made (copier *c)
-      {
-	if (_m_pending->complete ())
-	  {
-	    // It's all done.  Finish up all our references.
-	    finish_pending (c);
-	    return true;
-	  }
-
-	// It's still pending, but no longer dangling.  Adjust bookkeeping.
-	std::for_each (_m_patch.begin (), _m_patch.end (), resolve_ref (c));
-	return false;
-      }
-
       // Our pending_entry is complete.  Resolve all pointers to us.
-      inline void finish_pending (copier *c)
+      inline void finish_pending (copier *c, bool was_dangling)
       {
+	if (was_dangling)
+	  ++c->_m_defined;
+
 	// Create it in the collector.
 	_m_final = _m_pending->final (c->_m_collector);
+
+	dump (true) << " final " << _m_final->to_string ()
+		    << " resolving parents...\n";
 
 	/* Tell each parent pending_entry whose children vector points
 	   to us.  When we're the last unfinished child, this will
 	   recursively finish the pending parent too.  */
-	_m_pending->resolve_parents (c);
+	_m_pending->resolve_parents (c, was_dangling);
 
 	// No more pending_entry required!
 	delete _m_pending;
 	_m_pending = NULL;
+
+	dump (true, true) << " final resolving refs...\n";
 
 	/* Fix up each reference attribute pointing to us.  When we're
 	   the last dangling reference, this will recursively finish
@@ -1268,14 +1375,31 @@ namespace elfutils
 	    referrer->resolve_dangling (c, true);
 	    _m_patch.pop_front ();
 	  }
+
+	dump (false, true) << " final done\n";
       }
 
+      static inline void
+      dump_ref (const std::pair<seen *, const value_dispatch **> &p)
+      {
+	std::cout << " " << std::hex << p.first->_m_offset << std::dec;
+      }
+
+      inline void dump_refs () const
+      {
+	if (_m_patch.empty ())
+	  return;
+	dump () << " refs:";
+	std::for_each (_m_patch.begin (), _m_patch.end (), dump_ref);
+	std::cout << "\n";
+      }
+
+#if 0
       void dump (copier *) const
       {
 	std::cout << _m_pending->_m_patch.size () << " backptrs\n";
       }
 
-#if 0
       // This entry is being baked, so update all pointers to us.
       inline void resolve (children_copier *c, const debug_info_entry *die)
       {
@@ -1353,11 +1477,8 @@ namespace elfutils
       {
 	assert (_m_in->_m_building == this);
 	_m_in->_m_building = NULL;
-
-	if (_m_in->_m_pending == NULL)
+	if (unlikely (_m_out != NULL)) // Exception unwind case only.
 	  delete _m_out;
-	else
-	  assert (_m_in->_m_pending == _m_out);
       }
 
       /* Populate _m_out from the corresponding input DIE.
@@ -1384,16 +1505,25 @@ namespace elfutils
 	    throw;
 	  }
 
+	_m_out = NULL;
+
+	/* Resolve the phantom that stands for references yet to be added.
+	   We've added everything now, so we can complete this entry if it
+	   doesn't own any dangling references.  */
+	_m_in->resolve_dangling (_m_copier, true);
       }
 
       /* Complain if we still have dangling references.
 	 If not, it should be impossible to have pending entries left.  */
       inline void demand_complete () const
       {
-	if (_m_out->dangling ())
+	assert (_m_out == NULL);
+	assert (_m_in->_m_pending != NULL);
+	if (_m_in->_m_pending->dangling ())
 	  throw std::runtime_error
 	    ("compile_unit contains dangling reference attributes");
-	assert (_m_out->complete ());
+	assert (_m_copier->_m_defined == _m_copier->_m_seen.size ());
+	assert (_m_in->_m_pending->complete ());
       }
 
       // We're adding a reference attribute inside populate, above.
@@ -1412,11 +1542,11 @@ namespace elfutils
 
 	/* If the input used DW_TAG_imported_unit, then the logical walk
 	   can hit the same DIE twice.  If so, we short-circuit right here.  */
+	if (child->_m_final == NULL && child->_m_pending == NULL)
+	  make_child (child, in);
+
 	if (child->_m_final == NULL)
 	  {
-	    if (child->_m_pending == NULL)
-	      make_child (child, in);
-
 	    /* Record a back-pointer to this parent entry,
 	       and count its new child as pending.  */
 	    child->_m_pending->add_parent (_m_in);
@@ -1428,16 +1558,11 @@ namespace elfutils
 	 Recurse on a new entry_copier object to create it.  */
       inline void make_child (seen *child, const input_die_ptr &in)
       {
-	{
-	  //  typename tracker::die2 at (); // XXX
-	  // typename tracker::step step (_m_copier->_m_tracker, in, at);
+	//  typename tracker::die2 at (); // XXX
+	// typename tracker::step step (_m_copier->_m_tracker, in, at);
 
-	  entry_copier maker (_m_copier, _m_depth + 1, child, *in);
-	  maker.populate (*in);
-	}
-
-	// Fix up dangling references to this entry now that we have it.
-	child->made (_m_copier);
+	entry_copier maker (_m_copier, _m_depth + 1, child, *in);
+	maker.populate (*in);
       }
 
       // Use "c ()" as a shorthand to get the copier out of the entry_copier.
@@ -1458,6 +1583,7 @@ namespace elfutils
       entry_copier maker (this, 0, enter_seen (*in), *in);
       maker.populate (*in);
 
+      dump_seen ();
       maker.demand_complete ();
     }
 
@@ -1492,6 +1618,16 @@ namespace elfutils
       seen *die = &_m_seen[in.identity ()];
       die->_m_offset = in.offset (); // XXX debugging only
       return die;
+    }
+
+    static inline void dump_one_seen (const typename seen_map::value_type &v)
+    {
+      v.second.dump_pending ();
+    }
+
+    inline void dump_seen () const
+    {
+      std::for_each (_m_seen.begin (), _m_seen.end (), dump_one_seen);
     }
 
     inline copier ()
