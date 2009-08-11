@@ -469,8 +469,21 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
 	  break;
 
 	case dwarf::VS_constant:
-	  assert (form == DW_FORM_udata);
-	  ::dw_write_uleb128 (inserter, value.constant ());
+	  switch (form)
+	    {
+	    case DW_FORM_udata:
+	      ::dw_write_uleb128 (inserter, value.constant ());
+	      break;
+	    case DW_FORM_block:
+	      {
+		const std::vector<uint8_t> &block = value.constant_block ();
+		::dw_write_uleb128 (inserter, block.size ());
+		std::copy (block.begin (), block.end (), inserter);
+	      }
+	      break;
+	    default:
+	      abort (); // xxx
+	    }
 	  break;
 
 	case dwarf::VS_dwarf_constant:
