@@ -367,13 +367,62 @@ dwarf_output::output_debug_abbrev (section_appender &appender,
 void
 dwarf_output::gap::patch (uint64_t value) const
 {
+  if (_m_recomputer != NULL)
+    value = _m_recomputer->recompute (value);
   ::dw_write_var (_m_ptr, _m_len, value, _m_big_endian);
 }
 
-void
-dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
-				      gap &sibling_gap,
-				      unsigned level)
+struct local_ref_recomputer
+  : public dwarf_output::gap::recomputer
+{
+  uint64_t _m_base_addr;
+  local_ref_recomputer (uint64_t base_addr)
+    : _m_base_addr (base_addr)
+  {}
+  virtual uint64_t recompute (uint64_t value)
+  {
+    return value - _m_base_addr;
+  }
+};
+
+class dwarf_output::recursive_dumper
+{
+  dwarf_output_collector &c;
+  section_appender &appender;
+  strtab &debug_str;
+  bool addr_64;
+  die_off_map &die_off;
+  die_backpatch_vec &die_backpatch;
+  str_backpatch_vec &str_backpatch;
+  bool big_endian;
+  gap::recomputer::ptr cu_local_recomputer;
+
+  recursive_dumper (recursive_dumper const &copy); // nocopy
+
+public:
+  recursive_dumper (dwarf_output_collector &a_c,
+		    section_appender &a_appender,
+		    strtab &a_debug_str,
+		    bool a_addr_64,
+		    die_off_map &a_die_off,
+		    die_backpatch_vec &a_die_backpatch,
+		    str_backpatch_vec &a_str_backpatch,
+		    bool a_big_endian,
+		    uint64_t cu_start)
+    : c (a_c),
+      appender (a_appender),
+      debug_str (a_debug_str),
+      addr_64 (a_addr_64),
+      die_off (a_die_off),
+      die_backpatch (a_die_backpatch),
+      str_backpatch (a_str_backpatch),
+      big_endian (a_big_endian),
+      cu_local_recomputer (new local_ref_recomputer (cu_start))
+  {}
+
+  void dump (debug_info_entry const &die,
+	     gap &sibling_gap,
+	     unsigned level)
 {
   static char const spaces[] =
     "                                                            "
@@ -432,10 +481,10 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
       int form = *form_it++;
       if (name == DW_AT_sibling)
 	{
-	  // XXX we emit DW_FORM_ref4.  That's CU-local.  But we do
-	  // all back-patching in a section-wide addressing, so this
-	  // will break for DWARF with more than one CU.
-	  sibling_gap = gap (appender, 4, big_endian);
+	  // XXX in fact we want to handle this case just like any
+	  // other CU-local reference.  So also use this below (or
+	  // better reuse single piece of code).
+	  sibling_gap = gap (appender, 4, big_endian, cu_local_recomputer);
 	  continue;
 	}
 
@@ -589,6 +638,7 @@ dwarf_output::recursive_dumper::dump (debug_info_entry const &die,
       *inserter++ = 0;
     }
 }
+};
 
 void
 dwarf_output::output_debug_info (section_appender &appender,
@@ -637,7 +687,7 @@ dwarf_output::output_debug_info (section_appender &appender,
       gap fake_gap;
       recursive_dumper (c, appender, debug_str, addr_64,
 			die_off, die_backpatch, str_backpatch,
-			big_endian)
+			big_endian, cu_start)
 	.dump (*it->_m_cu_die, fake_gap, 0);
       assert (!fake_gap.valid ());
 

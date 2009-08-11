@@ -57,6 +57,7 @@
 #include <functional>
 #include <iterator>
 #include <vector>
+#include <tr1/memory>
 #include <tr1/unordered_set>
 
 extern "C" {
@@ -699,33 +700,47 @@ namespace elfutils
 
   public:
 
-    class gap
+    struct gap
     {
-      unsigned char *_m_ptr;
-      size_t _m_len;
-      bool _m_big_endian;
-
-    public:
+      struct recomputer
+      {
+	virtual uint64_t recompute (uint64_t value) = 0;
+	virtual ~recomputer () {}
+	typedef std::tr1::shared_ptr <recomputer> ptr;
+      };
       gap ()
 	: _m_ptr (NULL)
       {}
-      gap (section_appender &appender, size_t len, bool big_endian)
-	: _m_ptr (appender.alloc (len)), _m_len (len),
-	  _m_big_endian (big_endian)
+      gap (section_appender &appender, size_t len, bool big_endian,
+	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL))
+	: _m_ptr (appender.alloc (len)),
+	  _m_len (len),
+	  _m_big_endian (big_endian),
+	  _m_recomputer (r)
       {}
-      gap (unsigned char *ptr, size_t len, bool big_endian)
-	: _m_ptr (ptr), _m_len (len),
-	  _m_big_endian (big_endian)
+      gap (unsigned char *ptr, size_t len, bool big_endian,
+	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL))
+	: _m_ptr (ptr),
+	  _m_len (len),
+	  _m_big_endian (big_endian),
+	  _m_recomputer (r)
       {}
       gap &operator= (gap const &other)
       {
 	_m_ptr = other._m_ptr;
 	_m_len = other._m_len;
 	_m_big_endian = other._m_big_endian;
+	_m_recomputer = other._m_recomputer;
 	return *this;
       }
       void patch (uint64_t value) const;
       bool valid () const { return _m_ptr != NULL; }
+
+    private:
+      unsigned char *_m_ptr;
+      size_t _m_len;
+      bool _m_big_endian;
+      recomputer::ptr _m_recomputer;
     };
 
     // [(gap, string entry)]
@@ -759,43 +774,7 @@ namespace elfutils
       }
     };
 
-    class recursive_dumper
-    {
-      dwarf_output_collector &c;
-      section_appender &appender;
-      strtab &debug_str;
-      bool addr_64;
-      die_off_map &die_off;
-      die_backpatch_vec &die_backpatch;
-      str_backpatch_vec &str_backpatch;
-      bool big_endian;
-
-      recursive_dumper (recursive_dumper const &copy); // nocopy
-
-    public:
-      recursive_dumper (dwarf_output_collector &a_c,
-			section_appender &a_appender,
-			strtab &a_debug_str,
-			bool a_addr_64,
-			die_off_map &a_die_off,
-			die_backpatch_vec &a_die_backpatch,
-			str_backpatch_vec &a_str_backpatch,
-			bool a_big_endian)
-	: c (a_c),
-	  appender (a_appender),
-	  debug_str (a_debug_str),
-	  addr_64 (a_addr_64),
-	  die_off (a_die_off),
-	  die_backpatch (a_die_backpatch),
-	  str_backpatch (a_str_backpatch),
-	  big_endian (a_big_endian)
-      {}
-
-      // Returns gap for DW_AT_sibling.
-      void dump (debug_info_entry const &die,
-		 gap &sibling_gap,
-		 unsigned level);
-    };
+    class recursive_dumper;
 
   public:
     // Constructor for an empty file, can add to its compile_units ().
