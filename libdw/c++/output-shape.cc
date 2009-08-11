@@ -604,9 +604,8 @@ dwarf_output::output_debug_info (section_appender &appender,
       // Remember where the unit started for back-patching of size.
       size_t cu_start = appender.size ();
 
-      // Unit length.  Put zeroes for now, patch later.
-      unsigned char *length_data = appender.alloc (4);
-      ::dw_write<4> (length_data, 0, big_endian);
+      // Unit length.
+      gap length_gap (appender, 4 /*XXX dwarf64*/, big_endian);
 
       // Version.
       ::dw_write<2> (appender.alloc (2), 3, big_endian);
@@ -615,7 +614,7 @@ dwarf_output::output_debug_info (section_appender &appender,
       // emit at offset 0.
       ::dw_write<4> (appender.alloc (4), 0, big_endian);
 
-      // XXX size in bytes of an address on the target architecture.
+      // Size in bytes of an address on the target architecture.
       *inserter++ = addr_64 ? 8 : 4;
 
       die_off_map die_off;
@@ -635,6 +634,6 @@ dwarf_output::output_debug_info (section_appender &appender,
       /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
       assert (length < (uint32_t)-1); // XXX temporary XXX dwarf64
-      ::dw_write<4> (length_data, length, big_endian); // XXX dwarf64
+      length_gap.patch (length);
     }
 }

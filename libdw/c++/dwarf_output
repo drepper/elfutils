@@ -87,6 +87,7 @@ namespace elfutils
 
     inline void more ()
     {
+      off_t off = _m_data == NULL ? 0 : _m_data->d_off + _m_data->d_size;
       _m_data = elf_newdata (_m_scn);
       if (_m_data == NULL)
 	throw std::runtime_error (std::string ("Error while creating section data: ")
@@ -97,6 +98,7 @@ namespace elfutils
       _m_data->d_type = ELF_T_BYTE;
       _m_data->d_align = 1;
       _m_data->d_size = 0;
+      _m_data->d_off = off;
     }
 
   public:
@@ -104,14 +106,15 @@ namespace elfutils
     typedef value_type const &const_reference;
 
     section_appender (Elf_Scn *scn, size_t alloc_unit)
-      : _m_alloc_unit (alloc_unit)
+      : _m_data (NULL)
+      , _m_alloc_unit (alloc_unit)
       , _m_scn (scn)
       , _m_totsize (0)
     {
       more ();
     }
 
-    unsigned char *alloc(size_t a_size)
+    unsigned char *alloc (size_t a_size)
     {
       size_t ns = _m_data->d_size + a_size;
       if (ns > _m_alloc_unit)
