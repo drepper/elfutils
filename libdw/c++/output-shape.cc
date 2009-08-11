@@ -423,221 +423,221 @@ public:
   void dump (debug_info_entry const &die,
 	     gap &sibling_gap,
 	     unsigned level)
-{
-  static char const spaces[] =
-    "                                                            "
-    "                                                            "
-    "                                                            ";
-  static char const *tail = spaces + strlen (spaces);
-  __attribute__ ((unused)) char const *pad = tail - level * 2;
-  //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
+  {
+    static char const spaces[] =
+      "                                                            "
+      "                                                            "
+      "                                                            ";
+    static char const *tail = spaces + strlen (spaces);
+    __attribute__ ((unused)) char const *pad = tail - level * 2;
+    //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
 
-  std::back_insert_iterator <section_appender> inserter
-    = std::back_inserter (appender);
+    std::back_insert_iterator <section_appender> inserter
+      = std::back_inserter (appender);
 
-  /* Find shape instance.  XXX We currently have to iterate
-     through all the shapes.  Fix later.  */
-  dwarf_output_collector::shape_type const *shape = NULL;
-  dwarf_output_collector::shape_info const *info = NULL;
-  size_t instance_id = (size_t)-1;
+    /* Find shape instance.  XXX We currently have to iterate
+       through all the shapes.  Fix later.  */
+    dwarf_output_collector::shape_type const *shape = NULL;
+    dwarf_output_collector::shape_info const *info = NULL;
+    size_t instance_id = (size_t)-1;
 
-  for (dwarf_output_collector::shape_map::iterator st = c._m_shapes.begin ();
-       st != c._m_shapes.end (); ++st)
-    {
-      dwarf_output_collector::shape_info::instance_map::const_iterator
-	instance_it = st->second._m_instance_map.find (&die);
-      if (instance_it != st->second._m_instance_map.end ())
-	{
-	  assert (shape == NULL && info == NULL);
+    for (dwarf_output_collector::shape_map::iterator st = c._m_shapes.begin ();
+	 st != c._m_shapes.end (); ++st)
+      {
+	dwarf_output_collector::shape_info::instance_map::const_iterator
+	  instance_it = st->second._m_instance_map.find (&die);
+	if (instance_it != st->second._m_instance_map.end ())
+	  {
+	    assert (shape == NULL && info == NULL);
 
-	  shape = &st->first;
-	  info = &st->second;
-	  instance_id
-	    = instance_it->second - st->second._m_instances.begin ();
-	}
-    }
-  assert (shape != NULL && info != NULL);
+	    shape = &st->first;
+	    info = &st->second;
+	    instance_id
+	      = instance_it->second - st->second._m_instances.begin ();
+	  }
+      }
+    assert (shape != NULL && info != NULL);
 
-  /* Record where the DIE begins.  */
-  die_off [die.offset ()] = appender.size ();
-  // xxx handle non-CU-local
+    /* Record where the DIE begins.  */
+    die_off [die.offset ()] = appender.size ();
+    // xxx handle non-CU-local
 
-  /* Our instance.  */
-  dwarf_output_collector::shape_info::instance_type const &instance
-    = info->_m_instances[instance_id];
-  size_t code = instance.second;
-  ::dw_write_uleb128 (inserter, code);
+    /* Our instance.  */
+    dwarf_output_collector::shape_info::instance_type const &instance
+      = info->_m_instances[instance_id];
+    size_t code = instance.second;
+    ::dw_write_uleb128 (inserter, code);
 
-  //std::cout << " " << code << std::endl;
+    //std::cout << " " << code << std::endl;
 
-  /* Dump attribute values.  */
-  debug_info_entry::attributes_type const &attribs = die.attributes ();
-  std::vector<int>::const_iterator form_it = instance.first.begin ();
-  for (dwarf_output_collector::shape_type::attrs_type::const_iterator
-	 at = shape->_m_attrs.begin ();
-       at != shape->_m_attrs.end (); ++at)
-    {
-      int name = at->first;
-      int form = *form_it++;
-      if (name == DW_AT_sibling)
-	{
-	  // XXX in fact we want to handle this case just like any
-	  // other CU-local reference.  So also use this below (or
-	  // better reuse single piece of code).
-	  sibling_gap = gap (appender, 4, big_endian, cu_local_recomputer);
-	  continue;
-	}
+    /* Dump attribute values.  */
+    debug_info_entry::attributes_type const &attribs = die.attributes ();
+    std::vector<int>::const_iterator form_it = instance.first.begin ();
+    for (dwarf_output_collector::shape_type::attrs_type::const_iterator
+	   at = shape->_m_attrs.begin ();
+	 at != shape->_m_attrs.end (); ++at)
+      {
+	int name = at->first;
+	int form = *form_it++;
+	if (name == DW_AT_sibling)
+	  {
+	    // XXX in fact we want to handle this case just like any
+	    // other CU-local reference.  So also use this below (or
+	    // better reuse single piece of code).
+	    sibling_gap = gap (appender, 4, big_endian, cu_local_recomputer);
+	    continue;
+	  }
 
-      debug_info_entry::attributes_type::const_iterator
-	vt = attribs.find (name);
-      assert (vt != attribs.end ());
+	debug_info_entry::attributes_type::const_iterator
+	  vt = attribs.find (name);
+	assert (vt != attribs.end ());
 
-      attr_value const &value = vt->second;
-      /*
-	std::cout << pad
-	<< "    " << dwarf_attr_string (name)
-	<< ":" << dwarf_form_string (form)
-	<< ":" << dwarf_form_string (at->second)
-	<< ":" << value.to_string () << std::endl;
-      */
-      dwarf::value_space vs = value.what_space ();
+	attr_value const &value = vt->second;
+	/*
+	  std::cout << pad
+	  << "    " << dwarf_attr_string (name)
+	  << ":" << dwarf_form_string (form)
+	  << ":" << dwarf_form_string (at->second)
+	  << ":" << value.to_string () << std::endl;
+	*/
+	dwarf::value_space vs = value.what_space ();
 
-      switch (vs)
-	{
-	case dwarf::VS_flag:
-	  assert (form == DW_FORM_flag);
-	  *appender.alloc (1) = !!value.flag ();
-	  break;
+	switch (vs)
+	  {
+	  case dwarf::VS_flag:
+	    assert (form == DW_FORM_flag);
+	    *appender.alloc (1) = !!value.flag ();
+	    break;
 
-	case dwarf::VS_rangelistptr:
-	case dwarf::VS_lineptr:
-	case dwarf::VS_macptr:
-	  assert (form == DW_FORM_data4); // XXX temporary
-	  // XXX leave out for now
-	  ::dw_write<4> (appender.alloc (4), 0, big_endian);
-	  break;
-
-	case dwarf::VS_constant:
-	  switch (form)
-	    {
-	    case DW_FORM_udata:
-	      ::dw_write_uleb128 (inserter, value.constant ());
-	      break;
-	    case DW_FORM_block:
-	      {
-		const std::vector<uint8_t> &block = value.constant_block ();
-		::dw_write_uleb128 (inserter, block.size ());
-		std::copy (block.begin (), block.end (), inserter);
-	      }
-	      break;
-	    default:
-	      abort (); // xxx
-	    }
-	  break;
-
-	case dwarf::VS_dwarf_constant:
-	  assert (form == DW_FORM_udata);
-	  ::dw_write_uleb128 (inserter, value.dwarf_constant ());
-	  break;
-
-	case dwarf::VS_source_line:
-	  assert (form == DW_FORM_udata);
-	  ::dw_write_uleb128 (inserter, value.source_line ());
-	  break;
-
-	case dwarf::VS_source_column:
-	  assert (form == DW_FORM_udata);
-	  ::dw_write_uleb128 (inserter, value.source_column ());
-	  break;
-
-	case dwarf::VS_string:
-	case dwarf::VS_identifier:
-	case dwarf::VS_source_file:
-	  if (vs != dwarf::VS_source_file
-	      || form == DW_FORM_string
-	      || form == DW_FORM_strp)
-	    {
-	      std::string const &str =
-		vs == dwarf::VS_string
-		? value.string ()
-		: (vs == dwarf::VS_source_file
-		   ? value.source_file ().name ()
-		   : value.identifier ());
-
-	      if (form == DW_FORM_string)
-		{
-		  std::copy (str.begin (), str.end (), inserter);
-		  *inserter++ = 0;
-		}
-	      else
-		{
-		  assert (form == DW_FORM_strp);
-
-		  // xxx dwarf_64
-		  str_backpatch.push_back
-		    (std::make_pair (gap (appender, 4, big_endian),
-				     debug_str.add (str)));
-		}
-	    }
-	  else if (vs == dwarf::VS_source_file
-		   && form == DW_FORM_udata)
+	  case dwarf::VS_rangelistptr:
+	  case dwarf::VS_lineptr:
+	  case dwarf::VS_macptr:
+	    assert (form == DW_FORM_data4); // XXX temporary
 	    // XXX leave out for now
-	    ::dw_write_uleb128 (inserter, 0);
-	  break;
+	    ::dw_write<4> (appender.alloc (4), 0, big_endian);
+	    break;
 
-	case dwarf::VS_address:
-	  {
-	    assert (form == DW_FORM_addr);
-	    size_t w = addr_64 ? 8 : 4;
-	    ::dw_write_var (appender.alloc (w), w,
-			    value.address (), big_endian);
-	  }
-	  break;
+	  case dwarf::VS_constant:
+	    switch (form)
+	      {
+	      case DW_FORM_udata:
+		::dw_write_uleb128 (inserter, value.constant ());
+		break;
+	      case DW_FORM_block:
+		{
+		  const std::vector<uint8_t> &block = value.constant_block ();
+		  ::dw_write_uleb128 (inserter, block.size ());
+		  std::copy (block.begin (), block.end (), inserter);
+		}
+		break;
+	      default:
+		abort (); // xxx
+	      }
+	    break;
 
-	case dwarf::VS_reference:
-	  {
-	    assert (form == DW_FORM_ref_addr);
-	    // XXX dwarf64
-	    die_backpatch.push_back
-	      (std::make_pair (gap (appender, 4, big_endian),
-			       value.reference ()->offset ()));
-	  }
-	  break;
+	  case dwarf::VS_dwarf_constant:
+	    assert (form == DW_FORM_udata);
+	    ::dw_write_uleb128 (inserter, value.dwarf_constant ());
+	    break;
 
-	case dwarf::VS_location:
-	  // XXX leave out for now
-	  if (form == DW_FORM_block)
-	    ::dw_write_uleb128 (inserter, 0);
-	  else
+	  case dwarf::VS_source_line:
+	    assert (form == DW_FORM_udata);
+	    ::dw_write_uleb128 (inserter, value.source_line ());
+	    break;
+
+	  case dwarf::VS_source_column:
+	    assert (form == DW_FORM_udata);
+	    ::dw_write_uleb128 (inserter, value.source_column ());
+	    break;
+
+	  case dwarf::VS_string:
+	  case dwarf::VS_identifier:
+	  case dwarf::VS_source_file:
+	    if (vs != dwarf::VS_source_file
+		|| form == DW_FORM_string
+		|| form == DW_FORM_strp)
+	      {
+		std::string const &str =
+		  vs == dwarf::VS_string
+		  ? value.string ()
+		  : (vs == dwarf::VS_source_file
+		     ? value.source_file ().name ()
+		     : value.identifier ());
+
+		if (form == DW_FORM_string)
+		  {
+		    std::copy (str.begin (), str.end (), inserter);
+		    *inserter++ = 0;
+		  }
+		else
+		  {
+		    assert (form == DW_FORM_strp);
+
+		    // xxx dwarf_64
+		    str_backpatch.push_back
+		      (std::make_pair (gap (appender, 4, big_endian),
+				       debug_str.add (str)));
+		  }
+	      }
+	    else if (vs == dwarf::VS_source_file
+		     && form == DW_FORM_udata)
+	      // XXX leave out for now
+	      ::dw_write_uleb128 (inserter, 0);
+	    break;
+
+	  case dwarf::VS_address:
 	    {
-	      assert (form == DW_FORM_data4); // XXX temporary
-	      ::dw_write<4> (appender.alloc (4), 0, big_endian);
+	      assert (form == DW_FORM_addr);
+	      size_t w = addr_64 ? 8 : 4;
+	      ::dw_write_var (appender.alloc (w), w,
+			      value.address (), big_endian);
 	    }
-	  break;
+	    break;
 
-	case dwarf::VS_discr_list:
-	  throw std::runtime_error ("Can't handle VS_discr_list.");
-	};
-    }
-  assert (form_it == instance.first.end ());
-
-  if (!die.children ().empty ())
-    {
-      gap my_sibling_gap;
-      for (compile_unit::children_type::const_iterator jt
-	     = die.children ().begin (); jt != die.children ().end (); ++jt)
-	{
-	  if (my_sibling_gap.valid ())
+	  case dwarf::VS_reference:
 	    {
-	      die_backpatch.push_back (std::make_pair (my_sibling_gap,
-						       jt->offset ()));
-	      my_sibling_gap = gap ();
+	      assert (form == DW_FORM_ref_addr);
+	      // XXX dwarf64
+	      die_backpatch.push_back
+		(std::make_pair (gap (appender, 4, big_endian),
+				 value.reference ()->offset ()));
 	    }
-	  dump (*jt, my_sibling_gap, level + 1);
-	}
-      *inserter++ = 0;
-    }
-}
+	    break;
+
+	  case dwarf::VS_location:
+	    // XXX leave out for now
+	    if (form == DW_FORM_block)
+	      ::dw_write_uleb128 (inserter, 0);
+	    else
+	      {
+		assert (form == DW_FORM_data4); // XXX temporary
+		::dw_write<4> (appender.alloc (4), 0, big_endian);
+	      }
+	    break;
+
+	  case dwarf::VS_discr_list:
+	    throw std::runtime_error ("Can't handle VS_discr_list.");
+	  };
+      }
+    assert (form_it == instance.first.end ());
+
+    if (!die.children ().empty ())
+      {
+	gap my_sibling_gap;
+	for (compile_unit::children_type::const_iterator jt
+	       = die.children ().begin (); jt != die.children ().end (); ++jt)
+	  {
+	    if (my_sibling_gap.valid ())
+	      {
+		die_backpatch.push_back (std::make_pair (my_sibling_gap,
+							 jt->offset ()));
+		my_sibling_gap = gap ();
+	      }
+	    dump (*jt, my_sibling_gap, level + 1);
+	  }
+	*inserter++ = 0;
+      }
+  }
 };
 
 void
