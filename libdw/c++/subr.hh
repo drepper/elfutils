@@ -673,6 +673,16 @@ namespace elfutils
 	return wrapped_input_iterator (_base::operator-- (magic));
       }
 
+      inline const _base &base () const
+      {
+	return *this;
+      }
+
+      inline _base &base ()
+      {
+	return *this;
+      }
+
       template<typename arg_type, typename container = input>
       static inline container copy (const input &in, const arg_type &arg)
       {

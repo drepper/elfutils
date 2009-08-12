@@ -57,6 +57,8 @@
 #include <functional>
 #include <iterator>
 #include <vector>
+#include <deque>
+#include <queue>
 #include <tr1/unordered_set>
 
 /* Read the comments for elfutils::dwarf first.
@@ -251,7 +253,14 @@ namespace elfutils
       {
 	v = c ().add_location (x);
       }
+
+      // See dwarf_output::copier, below.
+      struct circular_reference;
+      static inline bool is_circular_reference (const value_dispatch *v);
     };
+
+    struct die_info;
+    typedef std::pair<const debug_info_entry, die_info> die_info_pair;
 
   public:
 
@@ -319,12 +328,13 @@ namespace elfutils
       };
 
       class children_type
-	: public std::vector<const debug_info_entry *>
+	: public std::vector<die_info_pair *>
       {
 	friend class dwarf_output;
+	friend class dwarf_output_collector;
 
       protected:
-	typedef std::vector<const debug_info_entry *> _base;
+	typedef std::vector<die_info_pair *> _base;
 
 	size_t _m_hash;
 
@@ -345,17 +355,14 @@ namespace elfutils
 	}
 
 	struct deref
-	  : public std::unary_function<const debug_info_entry *,
+	  : public std::unary_function<die_info_pair *,
 				       const debug_info_entry &>
 	{
 	  inline deref (...) {}
-
-	  inline const debug_info_entry &
-	  operator () (const debug_info_entry *x) const
-	  {
-	    return *x;
-	  }
+	  inline const debug_info_entry &operator () (die_info_pair *) const;
 	};
+
+	inline void reify_child_self_refs () const;
 
       public:
 	friend class subr::hashed_hasher<children_type>;
@@ -426,10 +433,8 @@ namespace elfutils
       typedef children_type::const_iterator const_pointer;
 
     protected:
-      value::value_reference _m_ref;
       const children_type *_m_children;
       const attributes_type *_m_attributes;
-      void *_m_shape;
       size_t _m_hash;
       int _m_tag;
 
@@ -438,7 +443,6 @@ namespace elfutils
       inline debug_info_entry ()
 	: _m_children (NULL),
 	  _m_attributes (NULL),
-	  _m_shape (NULL),
 	  _m_hash (0),
 	  _m_tag (-1)
       {}
@@ -446,10 +450,8 @@ namespace elfutils
       inline debug_info_entry (int what,
 			       const children_type *childs,
 			       const attributes_type *attrs)
-	: _m_ref (),		// XXX
-	  _m_children (childs),
+	: _m_children (childs),
 	  _m_attributes (attrs),
-	  _m_shape (NULL),	// XXX
 	  _m_tag (what)
       {
 	set_hash ();
@@ -473,7 +475,6 @@ namespace elfutils
 	: _m_ref (at, subr::nothing ()),
 	  _m_children (c.add_children (die.children (), &children_dangle)),
 	  _m_attributes (c.add_attributes (die.attributes (), &attrs_dangle)),
-	  _m_shape (NULL),	// XXX
 	  _m_tag (die.tag ())
       {
 	set_hash ();
@@ -506,7 +507,6 @@ namespace elfutils
 	: _m_ref (at, subr::nothing ()),
 	  _m_children (c.add_children (die.children ())),
 	  _m_attributes (c.add_attributes (die.attributes ())),
-	  _m_shape (NULL),	// XXX
 	  _m_tag (die.tag ())
       {
 	set_hash ();
@@ -613,12 +613,20 @@ namespace elfutils
       }
 
       /* We can use the _m_value pointer itself as a perfect hash, because
-	 all identical values share the same cell in the collector.  */
+	 all identical values share the same cell in the collector.
+
+	 We have a special case for a reference attribute that is part of a
+	 circular chain.  That value always hashes as zero, so that each
+	 entry in a circular chain of references has the same hash value as
+	 any entry that it otherwise matches and that has any (eventually)
+	 circular reference as the corresponding attribute's value.
+      */
       struct hasher : public std::unary_function<attr_value, size_t>
       {
 	inline size_t operator () (const attr_value &v) const
 	{
-	  return (uintptr_t) v._m_value;
+	  return (value::is_circular_reference (v._m_value) ? 0
+		  : (uintptr_t) v._m_value);
 	}
       };
     };
@@ -740,6 +748,76 @@ namespace elfutils
     return elfutils::to_string (*this); // Use that.
   }
 
+  struct dwarf_output::die_info
+  {
+    std::queue<value::value_reference *> _m_refs;
+
+    unsigned int uses;
+    bool with_sibling;
+    bool without_sibling;
+
+    inline die_info ()
+      : _m_refs (),
+	uses (0), with_sibling (false), without_sibling (false)
+    {}
+
+    inline ~die_info ()
+    {
+      while (!_m_refs.empty ())
+	{
+	  delete _m_refs.front ();
+	  _m_refs.pop ();
+	}
+    }
+
+    inline value::value_reference *self ()
+    {
+      if (_m_refs.empty ())
+	self (new value::value_reference);
+      return _m_refs.front ();
+    }
+
+    inline void self (value::value_reference *ref)
+    {
+      _m_refs.push (ref);
+    }
+
+    inline void placed (const debug_info_entry::pointer &ref)
+    {
+      if (_m_refs.empty ())
+	self (new value::value_reference (ref, subr::nothing ()));
+      else
+	for (size_t n = _m_refs.size (); n > 0; --n)
+	  {
+	    value::value_reference *self_ref = _m_refs.front ();
+	    self_ref->ref = ref;
+	    _m_refs.pop ();
+	    _m_refs.push (self_ref);
+	  }
+    }
+  };
+
+  /* This is the wrapper in the guts of a children_type iterator.
+     It turns the real pointer we store into a debug_info_entry
+     reference for the generic tree-walk API.  */
+  inline const dwarf_output::debug_info_entry &
+  dwarf_output::debug_info_entry::children_type::deref::operator ()
+    (dwarf_output::die_info_pair *p) const
+  {
+    return p->first;
+  }
+
+  /* This is called when a children_type is installed freshly in the collector.
+     Fill in its back pointers.  */
+  inline void
+  dwarf_output::debug_info_entry::children_type::reify_child_self_refs () const
+  {
+    for (_base::const_iterator i = _base::begin ();
+	 i != _base::end ();
+	 ++i)
+      (*i)->second.placed (const_iterator (i, subr::nothing ()));
+  }
+
   class dwarf_output_collector
   {
     friend class dwarf_output;
@@ -748,6 +826,8 @@ namespace elfutils
     dwarf_path_finder<dwarf_output> _m_tracker;
     unsigned int _m_total;
 
+    typedef dwarf_output::die_info die_info;
+    typedef dwarf_output::die_info_pair die_info_pair;
     typedef dwarf_output::debug_info_entry die_type;
     typedef die_type::attributes_type attrs_type;
     typedef die_type::children_type children_type;
@@ -788,41 +868,42 @@ namespace elfutils
 
     inline const children_type *add_children (const children_type &candidate)
     {
-      return &*_m_broods.insert (candidate).first;
+      std::pair<subr::identity_set<children_type>::iterator, bool> p
+	= _m_broods.insert (candidate);
+      const children_type &result = *p.first;
+      if (p.second)
+	/* This candidate actually got inserted into the set.
+	   Now fix up all the backpointers into the _m_broods copy.  */
+	result.reify_child_self_refs ();
+      return &result;
     }
-
-    struct die_info
-    {
-      unsigned int uses;
-      bool with_sibling;
-      bool without_sibling;
-
-      inline die_info ()
-	: uses (0), with_sibling (false), without_sibling (false)
-      {}
-    };
 
     // Set of unique DIEs.
     typedef subr::identity_map<die_type, die_info> die_map;
-    typedef die_map::value_type die_info_pair;
     die_map _m_unique;
 
-    inline const die_type *add_entry (int tag,
-				      const children_type *children,
-				      const attrs_type *attrs)
+    inline die_info_pair *add_entry (int tag,
+				     const children_type *children,
+				     const attrs_type *attrs)
     {
       std::pair <die_map::iterator, bool>
 	ins = _m_unique.insert (std::make_pair (die_type (tag, children, attrs),
 						die_info ()));
-      die_map::value_type &x = *ins.first;
+      die_info_pair &x = *ins.first;
       if (ins.second)
 	{
+	  assert (x.second._m_refs.empty ());
 	  assert (x.second.uses == 0);
 	  // XXX add_shape (x.first, !has_sibling);
 	}
+      else
+	{
+	  assert (x.second.uses > 0);
+	}
+
       x.second.uses++;
       ++_m_total;
-      return &x.first;
+      return &x;
     }
 
     struct shape_type
@@ -878,6 +959,17 @@ namespace elfutils
       std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
     }
   };
+
+  struct dwarf_output::value::circular_reference
+    : public dwarf_output::value::value_reference
+  {
+  };
+
+  inline bool
+  dwarf_output::value::is_circular_reference (const value_dispatch *v)
+  {
+    return dynamic_cast<const circular_reference *> (v) != NULL;
+  }
 
   template<typename dw>
   class dwarf_output::copier
@@ -1027,7 +1119,8 @@ namespace elfutils
     struct seen;		// Below.
     struct pending_entry
     {
-      dwarf_data::attributes_type<dwarf_output, value> _m_attributes;
+      typedef dwarf_data::attributes_type<dwarf_output, value> attr_map;
+      attr_map _m_attributes;
       std::vector<seen *> _m_children;
       const int _m_tag;
 
@@ -1121,38 +1214,63 @@ namespace elfutils
 		       propagate_resolve_dangling (c));
       }
 
-      struct get_final_child
-	: public std::unary_function<seen *, const debug_info_entry *>
+      template<typename final_container, typename container, typename output,
+	       output (pending_entry::*get) (typename container::value_type)>
+      struct get_final
+	: public std::unary_function<typename container::value_type, output>
       {
-	inline get_final_child (...) {}
-	inline const debug_info_entry *operator () (seen *child) const
+	pending_entry *_m_entry;
+	inline get_final (pending_entry *entry) : _m_entry (entry) {}
+
+	inline output
+	operator () (const typename container::value_type &v) const
 	{
-	  assert (child->_m_final != NULL);
-	  return child->_m_final;
+	  return (_m_entry->*get) (v);
+	}
+
+	typedef subr::wrapped_input_iterator<container, get_final> iterator;
+
+	static inline final_container final (pending_entry *entry,
+					     const container &in)
+	{
+	  return final_container (iterator (in.begin (), entry),
+				  iterator (in.end (), entry));
 	}
       };
-      typedef subr::wrapped_input_iterator<
-	std::vector<seen *>, get_final_child> final_child_iterator;
-      static inline final_child_iterator
-      get_final_children (const typename std::vector<seen *>::const_iterator &i)
-      {
-	return final_child_iterator (i, subr::nothing ());
-      }
 
-      inline const debug_info_entry *final (dwarf_output_collector *c)
+      inline die_info_pair *get_final_child (seen *child)
       {
-	assert (complete ());
+	assert (child->_m_final != NULL);
+	return *child->_m_final->ref.base ();
+      }
+      typedef get_final<debug_info_entry::children_type,
+			std::vector<seen *>, die_info_pair *,
+			&pending_entry::get_final_child> get_final_children;
+
+      inline attribute get_final_attr (attribute attr)
+      {
+	const seen *ref = dynamic_cast<const seen *> (attr.second._m_value);
+	if (ref != NULL)
+	  {
+	    assert (ref->_m_final != NULL);
+	    attr.second._m_value = ref->_m_final;
+	  }
+	return attr;
+      }
+      typedef get_final<debug_info_entry::attributes_type, attr_map, attribute,
+			&pending_entry::get_final_attr> get_final_attrs;
+
+      inline const value::value_reference *final (dwarf_output_collector *c)
+      {
+	assert (!dangling ());
 
 	const debug_info_entry::attributes_type *attrs
-	  = c->add_attributes (debug_info_entry::attributes_type
-			       (_m_attributes.begin (), _m_attributes.end ()));
+	  = c->add_attributes (get_final_attrs::final (this, _m_attributes));
 
 	const debug_info_entry::children_type *children
-	  = c->add_children (debug_info_entry::children_type
-			     (get_final_children (_m_children.begin ()),
-			      get_final_children (_m_children.end ())));
+	  = c->add_children (get_final_children::final (this, _m_children));
 
-	return c->add_entry (_m_tag, children, attrs);
+	return c->add_entry (_m_tag, children, attrs)->second.self ();
       }
 
       inline void resolve_parents (copier *c, bool was_dangling)
@@ -1179,7 +1297,7 @@ namespace elfutils
       entry_copier *_m_building;
 
       // Completed DIE in the collector, or NULL.
-      const debug_info_entry *_m_final;
+      const value::value_reference *_m_final;
 
       // Pending entry made with new, or NULL.
       pending_entry *_m_pending;
@@ -1208,7 +1326,7 @@ namespace elfutils
       {
 	if (_m_final != NULL)
 	  // It's finished, resolve the final reference.
-	  return &_m_final->_m_ref;
+	  return _m_final;
 
 	/* This entry is still dangling or pending.  Record the
 	   back-pointer to us so we can fix it up later, and
@@ -1305,9 +1423,10 @@ namespace elfutils
       /* We are now pending but not dangling.  This can only mean we are
 	 the root of a circular chain of references.
       */
-      inline void finish_circularity (copier *)
+      inline void finish_circularity (copier *c)
       {
 	dump () << " circularity FIXME\n";
+	finish_pending (c, false);
       }
 
       inline void resolve_pending (copier *c, bool was_dangling)
@@ -1348,7 +1467,7 @@ namespace elfutils
 	// Create it in the collector.
 	_m_final = _m_pending->final (c->_m_collector);
 
-	dump (true) << " final " << _m_final->to_string ()
+	dump (true) << " final " << _m_final->ref->to_string ()
 		    << " resolving parents...\n";
 
 	/* Tell each parent pending_entry whose children vector points
@@ -1371,7 +1490,7 @@ namespace elfutils
 	    const value_dispatch **&backptr = _m_patch.front ().second;
 	    // Sanity check that this really points to a struct seen.
 	    dynamic_cast<const seen &> (**backptr);
-	    *backptr = &_m_final->_m_ref;
+	    *backptr = _m_final;
 	    referrer->resolve_dangling (c, true);
 	    _m_patch.pop_front ();
 	  }
@@ -1394,60 +1513,6 @@ namespace elfutils
 	std::cout << "\n";
       }
 
-#if 0
-      void dump (copier *) const
-      {
-	std::cout << _m_pending->_m_patch.size () << " backptrs\n";
-      }
-
-      // This entry is being baked, so update all pointers to us.
-      inline void resolve (children_copier *c, const debug_info_entry *die)
-      {
-	std::cout << "XXX " << c->_m_depth << ": resolving "
-		  << dwarf::tags::identifier (die->_m_tag)
-		  << " ";
-	dump (c->_m_copier);
-
-	pending_entry *p = _m_pending;
-	_m_pending = NULL;
-	final (die, c);
-
-	if (p->_m_patch.empty ())
-	  {
-	    /* This is a pending entry in the children_copier, not yet
-	       reified.  This means what resolved us was the definition
-	       of a sibling to which we contained a forward reference.
-	       We patch the children_type still being created, and
-	       remove the record of it having had this pending child.  */
-	    c->resolve_pending (this, p, die);
-	    return;
-	  }
-
-	assert (p->_m_pending_patch.empty ());
-
-	/* Replace all _m_pending_children vectors' elements pointing to us
-	   with the final entry pointer.  First we update that vector's
-	   pointer in place.  Then we call pending_container_info::resolve
-	   to count down until each such children_type vector is ready to
-	   move into the collector.  */
-	do
-	  {
-	    std::cout << "\tleaves "
-		      << p->_m_patch.top ().first->second._m_dangling
-		      << " dangling children in "
-		      << (void *) &p->_m_patch.top ().first->second
-		      << "\n";
-	    p->_m_patch.top ().first->first->finish
-	      (p->_m_patch.top ().second, die);
-	    p->_m_patch.top ().first->second.resolve
-	      (c, p->_m_patch.top ().first->first);
-	    p->_m_patch.pop ();
-	  }
-	while (!p->_m_patch.empty ());
-
-	delete p;
-      }
-#endif
     };
 
     // This object lives while we are copying one particular input DIE.
@@ -1586,28 +1651,6 @@ namespace elfutils
       dump_seen ();
       maker.demand_complete ();
     }
-
-#if 0 //XXX
-    inline const debug_info_entry *
-    add_entry (size_t i, const debug_info_entry::children_type::iterator &at,
-	       const input_die_ptr &in, bool has_sibling,
-	       children_copier *step)
-    {
-      /* If the input used DW_TAG_imported_unit, then the logical walk
-	 can hit the same DIE twice.  If so, we short-circuit right here.  */
-
-      seen *die = enter_seen (in);
-      if (die->_m_final != NULL)
-	return die->_m_final;
-
-      if (die->_m_pending == NULL)
-	make_child (die, in, depth);
-
-      step->record_pending_child (i, die);
-      return NULL; // XXX &die->_m_pending->first;
-    }
-#endif
-
 
     typedef std::tr1::unordered_map< ::Dwarf_Off, seen> seen_map;
     seen_map _m_seen;
