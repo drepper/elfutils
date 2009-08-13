@@ -962,6 +962,14 @@ namespace elfutils
 				       ptr_hasher<key_type>, is<key_type *> >
     {};
 
+    struct nostream
+    {
+      template<typename arg>
+      inline const nostream &operator<< (const arg &) const
+      {
+	return *this;
+      }
+    };
   };
 };
 
