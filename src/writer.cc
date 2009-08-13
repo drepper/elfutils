@@ -518,7 +518,7 @@ handle_elf (Elf *elf, size_t alloc_unit,
 	       }));
 
   ADD_SECTION (".shstrtab", SHT_STRTAB,
-	       ({ shst.finalize (data_info.newscn)->d_size; }));
+	       shst.finalize (data_info.newscn)->d_size);
 
 #undef ADD_SECTION
 
