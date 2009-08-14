@@ -4,6 +4,8 @@
 	on [POSIX_FADV_SEQUENTIAL].
 	From Petr Salinger <Petr.Salinger@seznam.cz>.
 
+	* ar.c (do_oper_extract): Use pathconf instead of statfs.
+
 2009-08-01  Ulrich Drepper  <drepper@redhat.com>
 
 	* debugpred.h: Add two most const.
