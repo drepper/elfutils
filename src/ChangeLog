@@ -1,3 +1,9 @@
+2009-08-14  Roland McGrath  <roland@redhat.com>
+
+	* strings.c (read_block): Conditionalize posix_fadvise use
+	on [POSIX_FADV_SEQUENTIAL].
+	From Petr Salinger <Petr.Salinger@seznam.cz>.
+
 2009-08-01  Ulrich Drepper  <drepper@redhat.com>
 
 	* debugpred.h: Add two most const.

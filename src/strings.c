@@ -595,9 +595,11 @@ read_block (int fd, const char *fname, off64_t fdlen, off64_t from, off64_t to)
       elfmap_off = from & ~(ps - 1);
       elfmap_base = elfmap = map_file (fd, elfmap_off, fdlen, &elfmap_size);
 
+#ifdef POSIX_FADV_SEQUENTIAL
       if (unlikely (elfmap == MAP_FAILED))
 	/* Let the kernel know we are going to read everything in sequence.  */
 	(void) posix_fadvise (fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
     }
 
   if (unlikely (elfmap == MAP_FAILED))
