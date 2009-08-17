@@ -1358,8 +1358,6 @@ namespace elfutils
       // Set if we are in promote_pending on this entry right now.
       bool *_m_resolving;
 
-      bool _m_circular;
-
       // Completed DIE in the collector, or NULL.
       die_info_pair *_m_final;
 
@@ -1374,7 +1372,7 @@ namespace elfutils
       backref_list _m_patch;
 
       inline seen ()
-	: _m_building (NULL), _m_resolving (NULL), _m_circular (false),
+	: _m_building (NULL), _m_resolving (NULL),
 	  _m_final (NULL), _m_pending (NULL), _m_patch ()
       {}
 
@@ -1426,6 +1424,8 @@ namespace elfutils
 	depth -= out;
 	debug () << std::string (depth, ' ')
 		 << "XXX " << std::hex << _m_offset << std::dec;
+	if (_m_resolving != NULL)
+	  debug () << " (promoting " << (void *) _m_resolving << ")";
 	depth += in;
 	return debug ();
       }
@@ -1473,43 +1473,22 @@ namespace elfutils
       inline void resolve_dangling (copier *c, bool final,
 				    const char *caller)
       {
-	if (_m_pending->dangling ())
+	dump_resolve (true, final, caller);
+	if (_m_pending->resolve_dangling (final))
 	  {
-	    dump_resolve (true, final, caller);
-	    if (_m_pending->resolve_dangling (final))
-	      {
-		// We no longer have any dangling references!
-		dump () << " resolved with "
-			<< _m_pending->_m_pending_count << " pending\n";
+	    // We no longer have any dangling references!
+	    dump () << " resolved with "
+		    << _m_pending->_m_pending_count << " pending\n";
 
-		promote_pending (c, _m_pending->complete (), true);
-	      }
-	    else
-	      {
-		dump () << " unresolved with "
-			<< _m_pending->_m_dangling_count << "/"
-			<< _m_pending->_m_pending_count << "\n";
-		dump_refs ();
-		dump_children ();
-	      }
+	    promote_pending (c, _m_pending->complete (), true);
 	  }
 	else
 	  {
-	    assert (!final);
-
-	    /* We're being called from back_patch, below.  But our pending
-	       entry is in fact not dangling.  This means we're the root of
-	       a circularity in the reference graph.  A referrer is telling
-	       us that it's no longer dangling, but we ourselves triggered
-	       its conversion when we stopped dangling.  */
-	    dump () << " circularity"
-		    << (_m_circular ? " (again)" : "")
-		    << "!\n";
-
-	    _m_circular = true;
-
-	    assert (!_m_patch.empty ());
-	    back_patch (c, _m_pending->circular_reference (), false);
+	    dump () << " unresolved with "
+		    << _m_pending->_m_dangling_count << "/"
+		    << _m_pending->_m_pending_count << "\n";
+	    dump_refs ();
+	    dump_children ();
 	  }
       }
 
@@ -1520,7 +1499,16 @@ namespace elfutils
 	 has a reference attribute pointing to us.  */
       inline void resolve_refs (copier *c)
       {
-	std::for_each (_m_patch.begin (), _m_patch.end (), resolve_one_ref (c));
+	bool complete = false;
+	{
+	  entry_promoter promoting (this, &complete, "refs");
+	  std::for_each (_m_patch.begin (), _m_patch.end (),
+			 resolve_one_ref (c));
+	}
+	if (complete)
+	  /* Our pending_entry became complete!
+	     This means we've just closed a circularity.  */
+	  finish_pending (c, false, false);
       }
 
       struct resolve_one_ref
@@ -1559,11 +1547,12 @@ namespace elfutils
       struct entry_promoter
       {
 	seen *_m_die;
-	inline entry_promoter (seen *die, bool *final)
+	inline entry_promoter (seen *die, bool *final, const char *what)
 	  : _m_die (die)
 	{
+	  _m_die->dump (true) << " promoting " << what << " "
+			      << (void *) final << "...\n";
 	  _m_die->_m_resolving = final;
-	  _m_die->dump (true) << " promoting...\n";
 	}
 	inline ~entry_promoter ()
 	{
@@ -1589,7 +1578,7 @@ namespace elfutils
 	    assert (was_dangling);
 	    ++c->_m_defined;
 
-	    entry_promoter promoting (this, &final);
+	    entry_promoter promoting (this, &final, "entry");
 
 	    _m_pending->parents_resolve_dangling (c);
 
@@ -1605,24 +1594,6 @@ namespace elfutils
 
 	dump (false, true) << " promoted "
 			   << final << "/" << (_m_final != NULL) << "\n";
-      }
-
-      /* Update everything using us to indicate we are no longer dangling.
-	 Hereafter, all entries along the reference chain from us should
-	 be accounted as pending but not dangling.  */
-      inline void prepare_circularity (copier *c)
-      {
-	dump (true) << " resolve refs...\n";
-	if (!_m_patch.empty ())
-	  back_patch (c, _m_pending->circular_reference ());
-
-	dump (true, true) << " resolve parents...\n";
-	_m_pending->parents_resolve_dangling (c);
-	dump (false, true) << " done with "
-			   << _m_pending->_m_pending_count
-			   << " pending\n";
-
-	//_m_pending->resolve_pending (false);
       }
 
       inline void resolve_pending (copier *c, bool was_dangling,
@@ -1674,7 +1645,9 @@ namespace elfutils
       }
 
       // Our pending_entry is complete.  Resolve all pointers to us.
-      inline void finish_pending (copier *c, bool was_dangling)
+      inline void finish_pending (copier *c,
+				  bool was_dangling,
+				  bool refs_dangling = true)
       {
 	assert (!_m_pending->dangling ());
 	assert (_m_pending->complete ());
@@ -1729,10 +1702,11 @@ namespace elfutils
 
 	if (!_m_patch.empty ())
 	  back_patch (c, _m_final->second.self (),
-		      _m_building != NULL && _m_building->_m_out != NULL);
+		      _m_building != NULL && refs_dangling);
 
 	dump (false, true) << " final done\n";
       }
+
 
       /* This is called from pending_entry::final when resolving
 	 a reference attribute that points to us.  */
@@ -1860,24 +1834,17 @@ namespace elfutils
 	    throw;
 	  }
 
+	_m_out = NULL;
+
 	/* Resolve the phantom that stands for references yet to be added.
 	   We've added everything now, so we can complete this entry if it
 	   doesn't own any dangling references.  */
 	_m_in->resolve_dangling (_m_copier, true, "populate");
 
-	/* This serves as a marker that we have accounted references to
-	   this entry as no longer dangling.  */
-	_m_out = NULL;
-
 	if (_m_in->_m_final == NULL)
-	  {
-	    /* If we're still pending, there may still be references to us.
-	       Those were dangling before now, but are now just pending.  */
-	    _m_in->dump (true) << " populate resolve_refs...nrefs "
-			       << _m_in->_m_patch.size () << "\n";
-	    _m_in->resolve_refs (_m_copier);
-	    _m_in->dump (false, true) << " resolve_refs done\n";
-	  }
+	  /* If we're still pending, there may still be references to us.
+	     Those were dangling before now, but are now just pending.  */
+	  _m_in->resolve_refs (_m_copier);
       }
 
       /* Complain if we still have dangling references.
