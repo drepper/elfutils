@@ -497,7 +497,8 @@ namespace elfutils
 
       /* This is an identity pointer that only matches the very same
 	 DIE in the very same file (same opened Dwarf instance).  */
-      inline ::Dwarf_Off identity () const
+      typedef uintptr_t identity_type;
+      inline identity_type identity () const
       {
 	return (uintptr_t) _m_die.addr;
       }

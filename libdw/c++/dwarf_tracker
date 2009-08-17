@@ -86,7 +86,8 @@ namespace elfutils
 
     /* We record every DIE we have seen here, mapping its .identity ()
        to the die_path of parent DIEs taken to reach it.  */
-    typedef std::tr1::unordered_map< ::Dwarf_Off, const die_path> die_map;
+    typedef std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+				    const die_path> die_map;
     die_map *_m_seen;
     bool _m_delete_seen;
 
@@ -174,7 +175,7 @@ namespace elfutils
     // Random access to a DIE, find the path of the walk that gets there.
     inline const die_path &path_to (const die &a)
     {
-      ::Dwarf_Off id = a->identity ();
+      const dwarf::debug_info_entry::identity_type id = a->identity ();
       std::pair<typename die_map::iterator, bool> found
 	= _m_seen->insert (std::make_pair (id, bad_die_path ()));
       if (found.second
@@ -355,8 +356,10 @@ namespace elfutils
     tracker2 _m_right;
 
     typedef std::tr1::unordered_map<
-      ::Dwarf_Off, std::pair<const die2 *,
-			     std::tr1::unordered_set< ::Dwarf_Off> >
+      dwarf::debug_info_entry::identity_type,
+      std::pair<const die2 *,
+		std::tr1::unordered_set<dwarf::debug_info_entry::identity_type>
+		>
       > equiv_map;
     equiv_map *_m_equiv;
     bool _m_delete_equiv;
