@@ -363,6 +363,9 @@ main (int argc, char *argv[])
       result = !same;
     }
 
+  dwarf_end (dw1);
+  dwarf_end (dw2);
+
   return result;
 }
 
