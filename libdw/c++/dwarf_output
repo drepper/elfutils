@@ -1205,9 +1205,10 @@ namespace elfutils
 	assert (_m_pending_count > 0);
 	assert (_m_pending_count >= _m_dangling_count);
 	if (was_dangling)
-	  --_m_dangling_count;
-	else
-	  assert (_m_pending_count > _m_dangling_count);
+	  {
+	    assert (_m_dangling_count > 0);
+	    --_m_dangling_count;
+	  }
 	return --_m_pending_count == 0;
       }
 
@@ -1218,7 +1219,7 @@ namespace elfutils
 	inline propagate_resolve_dangling (copier *c) : _m_copier (c) {}
 	inline void operator () (seen *parent) const
 	{
-	  parent->resolve_dangling (_m_copier, false);
+	  parent->resolve_dangling (_m_copier, false, "propagate");
 	}
       };
 
@@ -1329,7 +1330,8 @@ namespace elfutils
       {
 	while (!_m_parents.empty ())
 	  {
-	    _m_parents.front ()->resolve_pending (c, was_dangling);
+	    _m_parents.front ()->resolve_pending (c, was_dangling,
+						  "resolve_parents");
 	    _m_parents.pop_front ();
 	  }
       }
@@ -1348,6 +1350,11 @@ namespace elfutils
       // Set if we are building this in the copying walk right now.
       entry_copier *_m_building;
 
+      // Set if we are in promote_pending on this entry right now.
+      bool *_m_resolving;
+
+      bool _m_circular;
+
       // Completed DIE in the collector, or NULL.
       die_info_pair *_m_final;
 
@@ -1357,10 +1364,13 @@ namespace elfutils
       /* Here we record back-pointers to the attributes_type objects that
 	 point to us.  Each time we record one, we increment its count in
 	 the pending_entry record.  */
-      std::deque<std::pair<seen *, const value_dispatch **> > _m_patch;
+      typedef std::pair<seen *, const value_dispatch **> backref;
+      typedef std::deque<backref> backref_list;
+      backref_list _m_patch;
 
       inline seen ()
-	: _m_building (NULL), _m_final (NULL), _m_pending (NULL), _m_patch ()
+	: _m_building (NULL), _m_resolving (NULL), _m_circular (false),
+	  _m_final (NULL), _m_pending (NULL), _m_patch ()
       {}
 
       inline ~seen ()
@@ -1391,30 +1401,38 @@ namespace elfutils
 	/* This entry is still dangling or pending.
 	   Count the referrer's pending reference.  */
 
-	const bool dangling = _m_pending == NULL || _m_pending->dangling ();
+	referrer->count_pending (_m_pending == NULL, this, "refer");
+	_m_patch.push_back (std::make_pair (referrer, backptr));
 
-	referrer->_m_pending->count_pending (dangling);
-	if (dangling)
-	  // It's dangling.  Record the back-pointer so we can fix it up later.
-	  _m_patch.push_back (std::make_pair (referrer, backptr));
+	dump () << " nrefs " << _m_patch.size () << "\n";
 
 	return this;
       }
 
 #if 1
+      static inline std::ostream &debug ()
+      {
+	return std::cout;
+      }
+
       std::ostream &dump (bool in = false, bool out = false) const
       {
 	static int depth;
 	depth -= out;
-	std::cout << std::string (depth, ' ')
-		  << "XXX " << std::hex << _m_offset << std::dec;
+	debug () << std::string (depth, ' ')
+		 << "XXX " << std::hex << _m_offset << std::dec;
 	depth += in;
-	return std::cout;
+	return debug ();
       }
 #else
-      subr::nostream dump (bool = false, bool = false) const
+      static inline subr::nostream debug ()
       {
 	return subr::nostream ();
+      }
+
+      inline subr::nostream dump (bool = false, bool = false) const
+      {
+	return debug ();
       }
 #endif
 
@@ -1424,11 +1442,53 @@ namespace elfutils
 	  _m_pending->dump (this);
       }
 
+      inline void count_pending (bool dangling,
+				 const seen *who, const char *why)
+      {
+	_m_pending->count_pending (dangling);
+	dump () << " " << (dangling ? "++" : ".")
+		<< "/++ " << _m_pending->_m_dangling_count
+		<< "/" << _m_pending->_m_pending_count
+		<< " " << std::hex << who->_m_offset << std::dec
+		<< " " << why << "\n";
+      }
+
+      inline void dump_resolve (bool dangling, bool pending,
+				const char *caller) const
+      {
+	dump () << (dangling ? " --" : " .") << "/"
+		<< (pending ? "--" : ".") << " "
+		<< _m_pending->_m_dangling_count-dangling << "/"
+		<< _m_pending->_m_pending_count-pending << " "
+		<< caller << "\n";
+      }
+
       /* One dangling attribute or child is no longer dangling.
 	 See if that completes us.  */
-      inline void resolve_dangling (copier *c, bool final)
+      inline void resolve_dangling (copier *c, bool final,
+				    const char *caller)
       {
-	if (!_m_pending->dangling ())
+	if (_m_pending->dangling ())
+	  {
+	    dump_resolve (true, final, caller);
+	    if (_m_pending->resolve_dangling (final))
+	      {
+		// We no longer have any dangling references!
+		dump () << " resolved with "
+			<< _m_pending->_m_pending_count << " pending\n";
+
+		promote_pending (c, _m_pending->complete (), true);
+	      }
+	    else
+	      {
+		dump () << " unresolved with "
+			<< _m_pending->_m_dangling_count << "/"
+			<< _m_pending->_m_pending_count << "\n";
+		dump_refs ();
+		dump_children ();
+	      }
+	  }
+	else
 	  {
 	    assert (!final);
 
@@ -1437,50 +1497,109 @@ namespace elfutils
 	       a circularity in the reference graph.  A referrer is telling
 	       us that it's no longer dangling, but we ourselves triggered
 	       its conversion when we stopped dangling.  */
-	    dump () << " circularity!\n";
-	    return;
-	  }
+	    dump () << " circularity"
+		    << (_m_circular ? " (again)" : "")
+		    << "!\n";
 
-	if (_m_pending->resolve_dangling (final))
-	  {
-	    // We no longer have any dangling references!
-	    dump () << " resolved with "
-		    << _m_pending->_m_pending_count << " pending\n";
+	    _m_circular = true;
 
-	    promote_pending (c, _m_pending->complete (), true);
-	  }
-	else
-	  {
-	    dump () << " unresolved with "
-		    << _m_pending->_m_dangling_count << "/"
-		    << _m_pending->_m_pending_count << "\n";
-	    dump_refs ();
-	    dump_children ();
+	    assert (!_m_patch.empty ());
+	    back_patch (c, _m_pending->circular_reference (), false);
 	  }
       }
+
+      /* We had no pending_entry before and thus references to us were
+	 dangling references.  This entry itself might still be a dangling
+	 entry, but it's no longer a source of dangling references for
+	 others.  Adjust the bookkeeping for each other pending_entry that
+	 has a reference attribute pointing to us.  */
+      inline void resolve_refs (copier *c)
+      {
+	std::for_each (_m_patch.begin (), _m_patch.end (), resolve_one_ref (c));
+      }
+
+      struct resolve_one_ref
+	: public std::unary_function<backref, void>
+      {
+	copier *_m_copier;
+	inline explicit resolve_one_ref (copier *c) : _m_copier (c) {}
+
+	inline void operator () (const backref &p) const
+	{
+	  p.first->resolve_dangling (_m_copier, false, "resolve_refs");
+	}
+      };
+
+      inline void resolve_circular_refs (copier *c, seen *to)
+      {
+	size_t n = _m_patch.size ();
+	while (n-- > 0)
+	  {
+	    const backref ref = _m_patch.front ();
+	    _m_patch.pop_front ();
+	    if (*ref.second == to)
+	      {
+		// This is a reference to the entry we're looking for.
+		*ref.second = to->_m_pending->circular_reference ();
+		ref.first->resolve_pending (c, false, "resolve_circular_refs");
+	      }
+	    else
+	      {
+		_m_patch.push_back (ref);
+		ref.first->resolve_circular_refs (c, to);
+	      }
+	  }
+      }
+
+      struct entry_promoter
+      {
+	seen *_m_die;
+	inline entry_promoter (seen *die, bool *final)
+	  : _m_die (die)
+	{
+	  _m_die->_m_resolving = final;
+	  _m_die->dump (true) << " promoting...\n";
+	}
+	inline ~entry_promoter ()
+	{
+	  _m_die->_m_resolving = NULL;
+	  _m_die->dump (false, true) << " done promoting\n";
+	}
+      };
 
       /* The pending_entry is no longer dangling.
 	 Promote it to pending or final.  */
       inline void promote_pending (copier *c, bool final, bool was_dangling)
       {
-	dump () << " no longer dangling ("
-		<< c->_m_defined + 1 << " of " << c->_m_seen.size () << "), "
-		<< _m_pending->_m_pending_count << " pending\n";
+	dump (true) << " no longer dangling ("
+		    << c->_m_defined + 1 << " of "
+		    << c->_m_seen.size () << "), "
+		    << _m_pending->_m_pending_count << " pending; "
+		    << final << "/" << (_m_final != NULL)
+		    << " nrefs " << _m_patch.size () << "\n";
 
 	if (!final)
 	  {
-	    /* We are now pending but not dangling.  This can only
-	       mean we are the root of a circular chain of references.
-	       Adjust bookkeeping.  */
+	    // We are now pending but not dangling.  Adjust bookkeeping.
 	    assert (was_dangling);
 	    ++c->_m_defined;
-	    prepare_circularity (c);
-	    dump () << " circularity\n";
+
+	    entry_promoter promoting (this, &final);
+
+	    _m_pending->parents_resolve_dangling (c);
+
+	    if (_m_building == NULL)
+	      resolve_circular_refs (c, this);
+
 	    was_dangling = false;
 	  }
 
-	// It's all done.  Finish up all our references.
-	finish_pending (c, was_dangling);
+	if (final)
+	  // It's all done.  Finish up all our references.
+	  finish_pending (c, was_dangling);
+
+	dump (false, true) << " promoted "
+			   << final << "/" << (_m_final != NULL) << "\n";
       }
 
       /* Update everything using us to indicate we are no longer dangling.
@@ -1498,11 +1617,13 @@ namespace elfutils
 			   << _m_pending->_m_pending_count
 			   << " pending\n";
 
-	_m_pending->resolve_pending (false);
+	//_m_pending->resolve_pending (false);
       }
 
-      inline void resolve_pending (copier *c, bool was_dangling)
+      inline void resolve_pending (copier *c, bool was_dangling,
+				   const char *caller)
       {
+	dump_resolve (was_dangling, true, caller);
 	if (_m_pending->resolve_pending (was_dangling))
 	  // We no longer have any pending references or children!
 	  finish_pending (c, was_dangling);
@@ -1519,19 +1640,32 @@ namespace elfutils
       /* Fix up each reference attribute pointing to us.  When we're
 	 the last dangling reference, this will recursively finish the
 	 referrer pending_entry too.  */
-      inline void back_patch (copier *c, value::value_reference *self)
+      inline void back_patch (copier *c,
+			      value::value_reference *self, bool was_dangling)
       {
+	dump (true) << " back_patch nrefs " << _m_patch.size () << "\n";
+	dump_refs ();
+
+	/* Move the queue of refs out of _m_patch while we process it.
+	   In case of circularity, a resolve_pending call below will
+	   lead back to resolving this->_m_pending to a final entry.
+	   We don't want that to recurse back here.  */
+	backref_list refs;
+	_m_patch.swap (refs);
+
 	do
 	  {
-	    seen *&referrer = _m_patch.front ().first;
-	    const value_dispatch **&backptr = _m_patch.front ().second;
+	    seen *&referrer = refs.front ().first;
+	    const value_dispatch **&backptr = refs.front ().second;
 	    // Sanity check that this really points to a struct seen.
 	    dynamic_cast<const seen &> (**backptr);
 	    *backptr = self;
-	    referrer->resolve_dangling (c, true);
-	    _m_patch.pop_front ();
+	    referrer->resolve_pending (c, was_dangling, "back_patch");
+	    refs.pop_front ();
 	  }
-	while (!_m_patch.empty ());
+	while (!refs.empty ());
+
+	dump (false, true) << " back_patch done\n";
       }
 
       // Our pending_entry is complete.  Resolve all pointers to us.
@@ -1539,6 +1673,15 @@ namespace elfutils
       {
 	assert (!_m_pending->dangling ());
 	assert (_m_pending->complete ());
+
+	if (_m_resolving != NULL)
+	  {
+	    dump () << " caught circularity\n";
+	    assert (!was_dangling);
+	    *_m_resolving = true;
+	    return;
+	  }
+
 	if (was_dangling)
 	  ++c->_m_defined;
 
@@ -1546,12 +1689,14 @@ namespace elfutils
 
 	/* Bump the pending count back up while we do the creation.
 	   This prevents a circular chain from recursing on this entry.  */
-	_m_pending->count_pending (false);
+	count_pending (false, this, "bump");
 
 	// Create it in the collector.
 	_m_final = _m_pending->final (c);
 
 	dump (true, true) << " " << _m_final->first.to_string ()
+			  << (was_dangling ? " was dangling" : "")
+			  << (_m_building != NULL ? " is building" : "")
 			  << " resolving parents...\n";
 
 	/* Tell each parent pending_entry whose children vector points
@@ -1571,17 +1716,15 @@ namespace elfutils
 	       = _m_pending->_m_children.begin ();
 	     i != _m_pending->_m_children.end ();
 	     ++i)
-	  std::cout << "," << (void *) &*i;
-	std::cout << "\n";
+	  debug () << "," << (void *) &*i;
+	debug () << "\n";
 
 	delete _m_pending;
 	_m_pending = NULL;
 
 	if (!_m_patch.empty ())
-	  {
-	    assert (was_dangling);
-	    back_patch (c, _m_final->second.self ());
-	  }
+	  back_patch (c, _m_final->second.self (),
+		      _m_building != NULL && _m_building->_m_out != NULL);
 
 	dump (false, true) << " final done\n";
       }
@@ -1608,14 +1751,16 @@ namespace elfutils
 	  }
 
 	dump (false, pending) << " final child "
-			      << _m_final->first.to_string () << "\n";
+			      << _m_final->first.to_string () << " "
+			      << _m_final->first.children ().size ()
+			      << " children\n";
 	return _m_final;
       }
 
       static inline void
-      dump_ref (const std::pair<seen *, const value_dispatch **> &p)
+      dump_ref (const backref &p)
       {
-	std::cout << " " << std::hex << p.first->_m_offset << std::dec;
+	debug () << " " << std::hex << p.first->_m_offset << std::dec;
       }
 
       inline bool dump_refs () const
@@ -1624,22 +1769,22 @@ namespace elfutils
 	  return true;
 	dump () << " refs:";
 	std::for_each (_m_patch.begin (), _m_patch.end (), dump_ref);
-	std::cout << "\n";
+	debug () << "\n";
 	return false;
       }
 
       static inline void
       dump_child (seen *child)
       {
-	std::cout << " " << std::hex << child->_m_offset << std::dec;
+	debug () << " " << std::hex << child->_m_offset << std::dec;
 	if (child->_m_final)
-	  std::cout << "!";
+	  debug () << "!";
 	else if (child->_m_pending)
-	  std::cout << "(" << child->_m_pending->_m_dangling_count
+	  debug () << "(" << child->_m_pending->_m_dangling_count
 		    << "/" << child->_m_pending->_m_pending_count
 		    << ")";
 	else
-	  std::cout << "?";
+	  debug () << "?";
       }
 
       inline void dump_children () const
@@ -1650,7 +1795,7 @@ namespace elfutils
 	std::for_each (_m_pending->_m_children.begin (),
 		       _m_pending->_m_children.end (),
 		       dump_child);
-	std::cout << "\n";
+	debug () << "\n";
       }
 
     };
@@ -1710,12 +1855,24 @@ namespace elfutils
 	    throw;
 	  }
 
-	_m_out = NULL;
-
 	/* Resolve the phantom that stands for references yet to be added.
 	   We've added everything now, so we can complete this entry if it
 	   doesn't own any dangling references.  */
-	_m_in->resolve_dangling (_m_copier, true);
+	_m_in->resolve_dangling (_m_copier, true, "populate");
+
+	/* This serves as a marker that we have accounted references to
+	   this entry as no longer dangling.  */
+	_m_out = NULL;
+
+	if (_m_in->_m_final == NULL)
+	  {
+	    /* If we're still pending, there may still be references to us.
+	       Those were dangling before now, but are now just pending.  */
+	    _m_in->dump (true) << " populate resolve_refs...nrefs "
+			       << _m_in->_m_patch.size () << "\n";
+	    _m_in->resolve_refs (_m_copier);
+	    _m_in->dump (false, true) << " resolve_refs done\n";
+	  }
       }
 
       /* Complain if we still have dangling references.
@@ -1723,12 +1880,14 @@ namespace elfutils
       inline void demand_complete () const
       {
 	assert (_m_out == NULL);
-	assert (_m_in->_m_pending != NULL);
-	if (_m_in->_m_pending->dangling ())
-	  throw std::runtime_error
-	    ("compile_unit contains dangling reference attributes");
+	if (unlikely (_m_in->_m_final == NULL))
+	  {
+	    assert (_m_in->_m_pending != NULL);
+	    assert (_m_in->_m_pending->dangling ());
+	    throw std::runtime_error
+	      ("compile_unit contains dangling reference attributes");
+	  }
 	assert (_m_copier->_m_defined == _m_copier->_m_seen.size ());
-	assert (_m_in->_m_pending->complete ());
       }
 
       // We're adding a reference attribute inside populate, above.
@@ -1755,7 +1914,8 @@ namespace elfutils
 	    /* Record a back-pointer to this parent entry,
 	       and count its new child as pending.  */
 	    child->_m_pending->add_parent (_m_in);
-	    _m_out->count_pending (child->_m_pending->dangling ());
+	    _m_in->count_pending (child->_m_pending->dangling (),
+				  child, "child");
 	    child->dump () << " pending child of "
 			   << std::hex << _m_in->_m_offset << std::dec
 			   << " ("
