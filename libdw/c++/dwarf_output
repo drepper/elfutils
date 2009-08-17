@@ -1877,7 +1877,7 @@ namespace elfutils
 
       /* Complain if we still have dangling references.
 	 If not, it should be impossible to have pending entries left.  */
-      inline void demand_complete () const
+      inline die_info_pair *final () const
       {
 	assert (_m_out == NULL);
 	if (unlikely (_m_in->_m_final == NULL))
@@ -1888,6 +1888,7 @@ namespace elfutils
 	      ("compile_unit contains dangling reference attributes");
 	  }
 	assert (_m_copier->_m_defined == _m_copier->_m_seen.size ());
+	return _m_in->_m_final;
       }
 
       // We're adding a reference attribute inside populate, above.
@@ -1945,6 +1946,15 @@ namespace elfutils
       }
     };
 
+    struct unit_copier : public entry_copier
+    {
+      inline unit_copier (copier *c, const typename dw::compile_unit &in)
+	: entry_copier (c, 0, c->enter_seen (in), in)
+      {
+	populate (in);
+      }
+    };
+
     /* Create a whole CU in the output.
      */
     inline void
@@ -1953,11 +1963,7 @@ namespace elfutils
     {
       typename tracker::walk into (_m_tracker, in, out);
 
-      entry_copier maker (this, 0, enter_seen (*in), *in);
-      maker.populate (*in);
-
-      dump_seen ();
-      maker.demand_complete ();
+      *out = unit_copier (this, *in).final ()->first;
     }
 
     typedef std::tr1::unordered_map< ::Dwarf_Off, seen> seen_map;

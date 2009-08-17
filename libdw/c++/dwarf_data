@@ -141,6 +141,15 @@ namespace elfutils
 				  require_cu (cu), arg)
       {}
 
+      /* Assignment details are up to the base class.
+	 We just ensure it's really a compile_unit.  */
+      inline compile_unit &
+      operator= (const typename impl::debug_info_entry &other)
+      {
+	impl::debug_info_entry::operator= (require_cu (other));
+	return *this;
+      }
+
       // Fetch the CU's DW_AT_stmt_list.
       inline const typename impl::line_info_table &line_info () const
       {
@@ -1200,15 +1209,25 @@ namespace elfutils
 	return vw::variant (p, _m_value);
       }
 
+      template<typename value>
+      inline attr_value &copy (const value &other)
+      {
+	if (_m_value != NULL)
+	  {
+	    delete _m_value;
+	    _m_value = NULL;
+	  }
+	init<value> me (this, 0, other);
+	return *this;
+      }
+
     public:
-#if 0 // XXX
       attr_value (const attr_value &other)
 	: _m_value (NULL)
       {
 	if (other._m_value != NULL)
 	  init<attr_value> me (this, 0, other);
       }
-#endif
 
       inline attr_value ()
 	: _m_value (NULL)
@@ -1220,29 +1239,19 @@ namespace elfutils
 	  delete _m_value;
       }
 
-#if 0 // XXX
-      inline attr_value &operator= (const attr_value &other)
-      {
-	if (_m_value != NULL)
-	  {
-	    delete _m_value;
-	    _m_value = NULL;
-	  }
-	init<attr_value> me (this, 0, other);
-	return *this;
-      }
       template<typename value>
       inline attr_value &operator= (const value &other)
       {
-	if (_m_value != NULL)
-	  {
-	    delete _m_value;
-	    _m_value = NULL;
-	  }
-	init<value> me (this, 0, other);
-	return *this;
+	return copy (other);
       }
-#endif
+
+      /* This is the same as the generic template one,
+	 but we have to define it explicitly to override
+	 the default assignment operator.  */
+      inline attr_value &operator= (const attr_value &other)
+      {
+	return copy (other);
+      }
 
       dwarf::value_space what_space () const;
       inline std::string to_string () const;
