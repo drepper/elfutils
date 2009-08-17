@@ -390,6 +390,12 @@ namespace elfutils
 	_m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
 
+    inline ~dwarf_ref_tracker ()
+    {
+      if (_m_delete_equiv)
+	delete _m_equiv;
+    }
+
     inline void reset ()
     {
       _m_equiv->clear ();
