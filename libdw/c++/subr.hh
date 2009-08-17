@@ -873,8 +873,6 @@ namespace elfutils
 
     struct nothing
     {
-      template<typename... args>
-      inline void operator () (args&&...) const {}
     };
 
     // Class instead of function so it can be a friend.

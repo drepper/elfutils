@@ -827,13 +827,25 @@ namespace elfutils
 	return *result;
       }
 
-      template<typename flavor, typename input, typename arg_type>
-      static inline void
-      make (value_dispatch *&v, flavor *&result,
-	    int /*whatattr*/, const input &x, arg_type &arg)
+      template<typename arg_type>
+      struct maker
       {
-	assert (alloc_values);
-	v = result = new flavor (x, arg);
+	inline explicit maker (const arg_type &) {}
+
+	template<typename flavor, typename input>
+	static inline void
+	make (value_dispatch *&v, flavor *&result,
+	      int /*whatattr*/, const input &x, arg_type &arg)
+	{
+	  assert (alloc_values);
+	  v = result = new flavor (x, arg);
+	}
+      };
+
+      template<typename arg_type>
+      static inline maker<arg_type> make (arg_type &arg)
+      {
+	return maker<arg_type> (arg);
       }
 
       struct value_string : public value_dispatch, public std::string
@@ -890,7 +902,7 @@ namespace elfutils
 	   object.  This is what plain assignment does.  This just uses
 	   this pointer, rather than translating it from another file
 	   into this one (which requires a tracker).  */
-	inline value_reference (const value_type &i, const subr::nothing &)
+	inline value_reference (const value_type &i, subr::nothing &)
 	  : ref (i)
 	{}
 
@@ -1125,11 +1137,23 @@ namespace elfutils
       typename vw::value_cell_type *_m_value;
       typedef typename impl::debug_info_entry::pointer die_ptr;
 
-      template<typename value, typename arg_type = const subr::nothing>
+      template<typename value, typename arg_type = subr::nothing>
       struct init
       {
 	inline init (attr_value *av, int whatattr,
-		     const value &other, arg_type &arg = arg_type ())
+		     const value &other, arg_type &arg)
+	{
+	  do_init (av, whatattr, other, arg);
+	}
+
+	inline init (attr_value *av, int whatattr, const value &other)
+	{
+	  arg_type dummy;
+	  do_init (av, whatattr, other, dummy);
+	}
+
+	static inline void do_init (attr_value *av, int whatattr,
+				    const value &other, arg_type &arg)
 	{
 	  switch (other.what_space ())
 	    {
@@ -1137,7 +1161,8 @@ namespace elfutils
 	      case dwarf::VS_##flavor:					      \
 		{							      \
 		  typename vw::value_##flavor *p;			      \
-		  vw::make (av->_m_value, p, whatattr, other.fetch (), arg); \
+		  vw::make (arg)	      				      \
+		    .make (av->_m_value, p, whatattr, other.fetch (), arg);   \
 		}							      \
 	      break
 
@@ -1158,14 +1183,14 @@ namespace elfutils
 	      if (other.constant_is_integer ())
 		{
 		  typename vw::value_constant *p;
-		  vw::make (av->_m_value, p, whatattr,
-			    other.constant (), arg);
+		  vw::make (arg).make (av->_m_value, p, whatattr,
+				       other.constant (), arg);
 		}
 	      else
 		{
 		  typename vw::value_constant_block *p;
-		  vw::make (av->_m_value, p, whatattr,
-			    other.constant_block (), arg);
+		  vw::make (arg).make (av->_m_value, p, whatattr,
+				       other.constant_block (), arg);
 		}
 	      break;
 
