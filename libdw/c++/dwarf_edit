@@ -242,7 +242,7 @@ namespace elfutils
 	return !(*this == other);
       }
 
-      inline ::Dwarf_Off identity () const
+      inline dwarf::debug_info_entry::identity_type identity () const
       {
 	return (uintptr_t) this;
       }

@@ -130,7 +130,8 @@ namespace elfutils
       }
     };
 
-    std::tr1::unordered_map< ::Dwarf_Off, seen> _m_map;
+    std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+			    seen> _m_map;
 
   public:
     inline dwarf_ref_maker ()
