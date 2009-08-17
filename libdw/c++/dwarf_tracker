@@ -188,9 +188,9 @@ namespace elfutils
 	     this is a forward reference, we don't have to start a
 	     fresh walk from the root, just momentarily wind forward
 	     from where we are.  */
-	  && !walk_down_to (a, found.first)
-	  && !walk_over_to (a, found.first)
-	  && !walk_up_to (a, found.first))
+	  && !walk_down_to (id, found.first)
+	  && !walk_over_to (id, found.first)
+	  && !walk_up_to (id, found.first))
 	throw std::runtime_error ("DIE not reachable from CU!");
       assert (&found.first->second != NULL);
       assert (!bad_die_path (found.first->second));
@@ -199,7 +199,8 @@ namespace elfutils
 
   private:
     inline bool walk_to (const typename die::value_type &here,
-			 const die &there, typename die_map::iterator &cache)
+			 dwarf::debug_info_entry::identity_type there,
+			 typename die_map::iterator &cache)
     {
       return walk_to (here.children ().begin (),
 		      here.children ().end (),
@@ -207,21 +208,25 @@ namespace elfutils
     }
 
     bool walk_to (die it, const die &end,
-		  const die &there, typename die_map::iterator &cache)
+		  dwarf::debug_info_entry::identity_type there,
+		  typename die_map::iterator &cache)
     {
       for (; it != end; ++it)
 	{
-	  if (it == there)
+	  /* Note that we compare identities here, rather than passing down
+	     a THERE iterator and comparing iterators.  In dwarf_output, we
+	     can have multiple iterators into distinct children_type vectors
+	     that all point to the same entry.  A reference could be one of
+	     these iterators, and all mean the same entry.  */
+	  if (it->identity () == there)
 	    {
 	      /* We can't keep the old CACHE iterator and avoid this
 		 find (hash lookup), because there could have been
 		 other insertions in the map since it was taken.
 		 Those can invalidate old iterators.  */
-	      cache = _m_seen->find (there->identity ());
+	      cache = _m_seen->find (there);
 	      _m_seen->erase (cache);
-	      cache = _m_seen->insert (cache,
-				       std::make_pair (there->identity (),
-						       _m_path));
+	      cache = _m_seen->insert (cache, std::make_pair (there, _m_path));
 	      return true;
 	    }
 	  else
@@ -241,7 +246,7 @@ namespace elfutils
     /* First descend into the current DIE's children.
        _m_path already has the current DIE, so it is ready to go.  */
     // XXX is a reference to an owned DIE really possible??
-    inline bool walk_down_to (const die &there,
+    inline bool walk_down_to (dwarf::debug_info_entry::identity_type there,
 			      typename die_map::iterator &cache)
     {
       const die &start = _m_path.back ();
@@ -250,7 +255,7 @@ namespace elfutils
       /* It's common to have a reference to the next sibling DIE.
 	 So bypass the descent to HERE's children if THERE is
 	 HERE's immediate next sibling.  */
-      if (!here.has_children () || there == ++die (start))
+      if (!here.has_children () || there == (++die (start))->identity ())
 	return false;
 
       return walk_to (here, there, cache);
@@ -276,7 +281,7 @@ namespace elfutils
 
     /* Now wind the walk forward starting from the current DIE's
        immediate sibling.  */
-    inline bool walk_over_to (const die &there,
+    inline bool walk_over_to (dwarf::debug_info_entry::identity_type there,
 			      typename die_map::iterator &cache)
     {
       die next;
@@ -307,7 +312,7 @@ namespace elfutils
 
     /* Now wind the walk forward starting from the current DIE's
        parent's immediate sibling.  */
-    inline bool walk_up_to (const die &there,
+    inline bool walk_up_to (dwarf::debug_info_entry::identity_type there,
 			    typename die_map::iterator &cache)
     {
       if (_m_path.empty ())
@@ -409,6 +414,12 @@ namespace elfutils
       : _m_right (proto, true),
 	_m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
+
+    inline ~dwarf_ref_tracker ()
+    {
+      if (_m_delete_equiv)
+	delete _m_equiv;
+    }
 
     inline void reset ()
     {

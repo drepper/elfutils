@@ -1414,7 +1414,7 @@ namespace elfutils
 	return this;
       }
 
-#if 0
+#if 0  // Toggle this to enable massive debugging spew during construction.
       static inline std::ostream &debug ()
       {
 	return std::cout;
