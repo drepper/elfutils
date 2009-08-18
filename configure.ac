@@ -83,6 +83,21 @@ CFLAGS="$old_CFLAGS"])
 AC_SUBST(WEXTRA)
 AS_IF([test "x$ac_cv_cc_wextra" = xyes], [WEXTRA=-Wextra], [WEXTRA=-W])
 
+AC_CACHE_CHECK([for -fgnu89-inline option to $CC], ac_cv_cc_gnu89_inline, [dnl
+old_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -fgnu89-inline -Werror"
+AC_COMPILE_IFELSE([
+void foo (void)
+{
+  inline void bar (void) {}
+  bar ();
+}
+extern inline void baz (void) {}
+], ac_cv_cc_gnu89_inline=yes, ac_cv_cc_gnu89_inline=no)
+CFLAGS="$old_CFLAGS"])
+AS_IF([test "x$ac_cv_cc_gnu89_inline" = xyes],
+      [WEXTRA="${WEXTRA:+$WEXTRA }-fgnu89-inline"])
+
 AC_CACHE_CHECK([for --as-needed linker option],
 	       ac_cv_as_needed, [dnl
 cat > conftest.c <<EOF

@@ -1,3 +1,7 @@
+2009-08-17  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac: Check for -fgnu89-inline; add it to WEXTRA if it works.
+
 2009-04-19  Roland McGrath  <roland@redhat.com>
 
 	* configure.ac (eu_version): Round down here, not in version.h macros.
