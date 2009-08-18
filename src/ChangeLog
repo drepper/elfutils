@@ -1,3 +1,7 @@
+2009-08-17  Roland McGrath  <roland@redhat.com>
+
+	* ld.h: Disable extern inlines for GCC 4.2.
+
 2009-08-14  Roland McGrath  <roland@redhat.com>
 
 	* strings.c (read_block): Conditionalize posix_fadvise use

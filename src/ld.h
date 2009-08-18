@@ -1122,6 +1122,7 @@ extern bool dynamically_linked_p (void);
 
 /* Checked whether the symbol is undefined and referenced from a DSO.  */
 extern bool linked_from_dso_p (struct scninfo *scninfo, size_t symidx);
+#if defined __OPTIMIZE__ && !(__GNUC__ == 4 && __GNUC_MINOR__ == 2)
 #ifdef __GNUC_STDC_INLINE__
 __attribute__ ((__gnu_inline__))
 #endif
@@ -1139,5 +1140,6 @@ linked_from_dso_p (struct scninfo *scninfo, size_t symidx)
 
   return sym->defined && sym->in_dso;
 }
+#endif	/* Optimizing and not GCC 4.2.  */
 
 #endif	/* ld.h */

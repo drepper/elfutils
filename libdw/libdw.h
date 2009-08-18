@@ -800,7 +800,7 @@ extern Dwarf_OOM dwarf_new_oom_handler (Dwarf *dbg, Dwarf_OOM handler);
 
 
 /* Inline optimizations.  */
-#ifdef __OPTIMIZE__
+#if defined __OPTIMIZE__ && !(__GNUC__ == 4 && __GNUC_MINOR__ == 2)
 /* Return attribute code of given attribute.  */
 __libdw_extern_inline unsigned int
 dwarf_whatattr (Dwarf_Attribute *attr)
