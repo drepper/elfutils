@@ -1413,7 +1413,7 @@ read_ctx_read_form (struct read_ctx *ctx, bool addr_64, uint8_t form,
 static bool
 attrib_form_valid (uint64_t form)
 {
-  return form > 0 && form <= DW_FORM_indirect;
+  return form > 0 && form <= DW_FORM_ref_sig8;
 }
 
 static int
@@ -1450,6 +1450,7 @@ check_abbrev_location_form (uint64_t form)
       /* loclistptr */
     case DW_FORM_data4:
     case DW_FORM_data8:
+    case DW_FORM_sec_offset: // DWARF 4
 
       /* block */
     case DW_FORM_block1:
@@ -1714,7 +1715,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	    {
 	      if (!check_abbrev_location_form (attrib_form))
 		wr_error (&where,
-			  ": %s with invalid form \"%s\".\n",
+			  ": location attribute %s with invalid form \"%s\".\n",
 			  dwarf_attr_string (attrib_name),
 			  dwarf_form_string (attrib_form));
 	    }
@@ -2794,30 +2795,6 @@ read_die_chain (struct elf_file *file,
 	{
 	  where.ref = &it->where;
 
-	  void record_ref (uint64_t addr, struct where *who, bool local)
-	  {
-	    struct ref_record *record = &cu->die_refs;
-	    if (local)
-	      {
-		assert (ctx->end > ctx->begin);
-		if (addr > (uint64_t)(ctx->end - ctx->begin))
-		  {
-		    wr_error (&where,
-			      ": invalid reference outside the CU: 0x%" PRIx64 ".\n",
-			      addr);
-		    return;
-		  }
-
-		/* Address holds a CU-local reference, so add CU
-		   offset to turn it into section offset.  */
-		addr += cu->offset;
-		record = local_die_refs;
-	      }
-
-	    if (record != NULL)
-	      ref_record_add (record, addr, who);
-	  }
-
 	  uint8_t form = it->form;
 	  bool indirect = form == DW_FORM_indirect;
 	  if (indirect)
@@ -2850,51 +2827,117 @@ read_die_chain (struct elf_file *file,
 		  };
 	    }
 
-	  enum check_what_t
+	  void (*value_check_cb) (uint64_t, struct where *) = NULL;
+
+	  /* For checking lineptr, rangeptr, locptr.  */
+	  bool check_someptr = false;
+	  enum message_category extra_mc = mc_none;
+
+	  /* Callback for local DIE references.  */
+	  void check_die_ref_local (uint64_t addr, struct where *who)
 	  {
-	    check_nothing = 0,
-	    check_locptr,
-	    check_lineptr,
-	    check_rangeptr
-	  };
-	  static enum message_category mc_check[] =
-	    {
-	      [check_nothing] = mc_none,
-	      [check_locptr] = mc_loc,
-	      [check_lineptr] = mc_line,
-	      [check_rangeptr] = mc_ranges
-	    };
-
-	  void do_check_ptr (enum check_what_t what, uint64_t value)
-	  {
-	    assert (what != check_nothing);
-
-	    if (what == check_rangeptr && ((value % cu->address_size) != 0))
-	      wr_message (mc_ranges | mc_impact_2, &where,
-			  ": rangeptr value %#" PRIx64
-			  " not aligned to CU address size.\n", value);
-
-	    struct ref_record *ref = NULL;
-	    switch (what)
+	    assert (ctx->end > ctx->begin);
+	    if (addr > (uint64_t)(ctx->end - ctx->begin))
 	      {
-	      case check_rangeptr:
-		ref = &cu->range_refs;
-		cu_coverage->need_ranges = true;
-	        break;
-	      case check_lineptr:
-		ref = &cu->line_refs;
-		break;
-	      case check_locptr:
-		ref = &cu->loc_refs;
-	      case check_nothing:
-		break;
-	      };
+		wr_error (&where,
+			  ": invalid reference outside the CU: 0x%" PRIx64 ".\n",
+			  addr);
+		return;
+	      }
 
-	    ref_record_add (ref, value, &where);
+	    if (local_die_refs != NULL)
+	      /* Address holds a CU-local reference, so add CU offset
+		 to turn it into section offset.  */
+	      ref_record_add (local_die_refs, addr += cu->offset, who);
 	  }
 
-	  enum check_what_t check_ptr = check_nothing;
+	  /* Callback for global DIE references.  */
+	  void check_die_ref_global (uint64_t addr, struct where *who)
+	  {
+	    ref_record_add (&cu->die_refs, addr, who);
+	  }
 
+	  /* Callback for strp values.  */
+	  void check_strp (uint64_t addr, struct where *who)
+	  {
+	    if (strings == NULL)
+	      wr_error (who, ": strp attribute, but no .debug_str data.\n");
+	    else if (addr >= strings->d_size)
+	      wr_error (who,
+			": Invalid offset outside .debug_str: 0x%" PRIx64 ".\n",
+			addr);
+	    else
+	      {
+		/* Record used part of .debug_str.  */
+		const char *startp = (const char *)strings->d_buf + addr;
+		const char *data_end = strings->d_buf + strings->d_size;
+		const char *strp = startp;
+		while (strp < data_end && *strp != 0)
+		  ++strp;
+		if (strp == data_end)
+		  wr_error (who,
+			    ": String at .debug_str: 0x%" PRIx64
+			    " is not zero-terminated.\n", addr);
+
+		if (strings_coverage != NULL)
+		  coverage_add (strings_coverage, addr, strp - startp + 1);
+	      }
+	  }
+
+	  /* Callback for rangeptr values.  */
+	  void check_rangeptr (uint64_t value, struct where *who)
+	  {
+	    if ((value % cu->address_size) != 0)
+	      wr_message (mc_ranges | mc_impact_2, who,
+			  ": rangeptr value %#" PRIx64
+			  " not aligned to CU address size.\n", value);
+	    cu_coverage->need_ranges = true;
+	    ref_record_add (&cu->range_refs, value, who);
+	  }
+
+	  /* Callback for lineptr values.  */
+	  void check_lineptr (uint64_t value, struct where *who)
+	  {
+	    ref_record_add (&cu->line_refs, value, who);
+	  }
+
+	  /* Callback for locptr values.  */
+	  void check_locptr (uint64_t value, struct where *who)
+	  {
+	    ref_record_add (&cu->loc_refs, value, who);
+	  }
+
+	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
+	  bool type_is_rel = file->ehdr.e_type == ET_REL;
+
+	  /* Attribute value.  */
+	  uint64_t value = 0;
+
+	  /* Whether the value should be relocated first.  Note that
+	     relocations are really required only in REL files, so
+	     missing relocations are not warned on even with
+	     rel_require, unless type_is_rel.  */
+	  enum
+	  {
+	    rel_no,		// don't allow a relocation
+	    rel_require,	// require a relocation
+	    rel_nonzero,	// require a relocation if value != 0
+	  } relocate = rel_no;
+	  size_t width = 0;
+
+	  /* Point to variable that you want to copy relocated value
+	     to.  */
+	  uint64_t *valuep = NULL;
+
+	  /* Point to variable that you want set to `true' in case the
+	     value was relocated.  */
+	  bool *relocatedp = NULL;
+
+	  /* Point to variable that you want set to symbol that the
+	     relocation was made against.  */
+	  GElf_Sym **symbolp = NULL;
+
+	  /* Setup locptr checking.  */
 	  if (is_location_attrib (it->name))
 	    {
 	      switch (form)
@@ -2905,9 +2948,14 @@ read_die_chain (struct elf_file *file,
 			      ": location attribute with form \"%s\" in 32-bit CU.\n",
 			      dwarf_form_string (form));
 		  /* fall-through */
+
 		case DW_FORM_data4:
-		  check_ptr = check_locptr;
-		  /* fall-through */
+		case DW_FORM_sec_offset:
+		  value_check_cb = check_locptr;
+		  extra_mc = mc_loc;
+		  check_someptr = true;
+		  break;
+
 		case DW_FORM_block1:
 		case DW_FORM_block2:
 		case DW_FORM_block4:
@@ -2923,6 +2971,7 @@ read_die_chain (struct elf_file *file,
 			      dwarf_form_string (form));
 		};
 	    }
+	  /* Setup rangeptr or lineptr checking.  */
 	  else if (it->name == DW_AT_ranges
 		   || it->name == DW_AT_stmt_list)
 	    switch (form)
@@ -2933,13 +2982,20 @@ read_die_chain (struct elf_file *file,
 			    ": %s with form DW_FORM_data8 in 32-bit CU.\n",
 			    dwarf_attr_string (it->name));
 		/* fall-through */
+
 	      case DW_FORM_data4:
+	      case DW_FORM_sec_offset:
+		check_someptr = true;
 		if (it->name == DW_AT_ranges)
-		  check_ptr = check_rangeptr;
+		  {
+		    value_check_cb = check_rangeptr;
+		    extra_mc = mc_ranges;
+		  }
 		else
 		  {
 		    assert (it->name == DW_AT_stmt_list);
-		    check_ptr = check_lineptr;
+		    value_check_cb = check_lineptr;
+		    extra_mc = mc_line;
 		  }
 		break;
 
@@ -2951,257 +3007,133 @@ read_die_chain (struct elf_file *file,
 			    ": %s with invalid (indirect) form \"%s\".\n",
 			    dwarf_attr_string (it->name),
 			    dwarf_form_string (form));
-	      };
+	      }
+	  /* Setup low_pc and high_pc checking.  */
+	  else if (it->name == DW_AT_low_pc)
+	    {
+	      relocatedp = &low_pc_relocated;
+	      symbolp = &low_pc_symbol;
+	      valuep = &low_pc;
+	    }
+	  else if (it->name == DW_AT_high_pc)
+	    {
+	      relocatedp = &high_pc_relocated;
+	      symbolp = &high_pc_symbol;
+	      valuep = &high_pc;
+	    }
 
-	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
-	  struct relocation *rel;
-	  bool type_is_rel = file->ehdr.e_type == ET_REL;
-
+	  /* Load attribute value and setup per-form checking.  */
 	  switch (form)
 	    {
 	    case DW_FORM_strp:
-	      {
-		uint64_t addr;
-		if (!read_ctx_read_offset (ctx, dwarf_64, &addr))
-		  {
-		  cant_read:
-		    wr_error (&where, ": can't read attribute value.\n");
-		    return -1;
-		  }
+	      if (!read_ctx_read_offset (ctx, dwarf_64, &value))
+		{
+		cant_read:
+		  wr_error (&where, ": can't read attribute value.\n");
+		  return -1;
+		}
 
-		if ((rel = relocation_next (reloc, ctx_offset,
-					    &where, skip_mismatched)))
-		  relocate_one (file, reloc, rel, dwarf_64 ? 8 : 4,
-				&addr, &where, sec_str, NULL);
-		else if (type_is_rel)
-		  wr_message (mc_impact_2 | mc_die_other | mc_reloc | mc_strings,
-			      &where, PRI_LACK_RELOCATION, "DW_FORM_strp");
-
-		if (strings == NULL)
-		  wr_error (&where,
-			    ": strp attribute, but no .debug_str data.\n");
-		else if (addr >= strings->d_size)
-		  wr_error (&where,
-			    ": Invalid offset outside .debug_str: 0x%" PRIx64 ".\n",
-			    addr);
-		else
-		  {
-		    /* Record used part of .debug_str.  */
-		    const char *strp = (const char *)strings->d_buf + addr;
-
-		    if (strings_coverage != NULL)
-		      coverage_add (strings_coverage, addr, strlen (strp) + 1);
-		  }
-
-		break;
-	      }
+	      relocate = rel_require;
+	      width = dwarf_64 ? 8 : 4;
+	      value_check_cb = check_strp;
+	      break;
 
 	    case DW_FORM_string:
-	      {
-		if (!read_ctx_read_str (ctx))
-		  goto cant_read;
-		break;
-	      }
+	      if (!read_ctx_read_str (ctx))
+		goto cant_read;
+	      break;
 
-	    case DW_FORM_addr:
 	    case DW_FORM_ref_addr:
-	      {
-		bool is_64 = form == DW_FORM_addr ? addr_64 : ref_64;
-		uint64_t addr;
-		if (!read_ctx_read_offset (ctx, is_64, &addr))
-		  goto cant_read;
+	      value_check_cb = check_die_ref_global;
+	    case DW_FORM_sec_offset:
+	      width = dwarf_64 ? 8 : 4;
+	      if (false)
+	    case DW_FORM_addr:
+		width = addr_64 ? 8 : 4;
+	      if (!read_ctx_read_offset (ctx, width == 8, &value))
+		goto cant_read;
 
-		uint64_t *addrp = NULL;
-		bool *relocatedp = NULL;
-		GElf_Sym **symbolp = NULL;
+	      /* In non-rel files, neither addr, nor ref_addr /need/ a
+		 relocation.  We at least check that ref_addr points
+		 to sensible datum by recording the reference below.  */
+	      relocate = rel_nonzero;
+	      break;
 
-		switch (it->name)
-		  {
-		  case DW_AT_low_pc:
-		    relocatedp = &low_pc_relocated;
-		    symbolp = &low_pc_symbol;
-		    addrp = &low_pc;
-		    break;
-
-		  case DW_AT_high_pc:
-		    relocatedp = &high_pc_relocated;
-		    symbolp = &high_pc_symbol;
-		    addrp = &high_pc;
-		  };
-
-		if ((rel = relocation_next (reloc, ctx_offset,
-					    &where, skip_mismatched)))
-		  {
-		    relocate_one (file, reloc, rel, is_64 ? 8 : 4, &addr,
-				  &where, reloc_target (form, it), symbolp);
-		    if (relocatedp != NULL)
-		      *relocatedp = true;
-		  }
-		else
-		  {
-		    if (symbolp != NULL)
-		      WIPE (*symbolp);
-		    if (type_is_rel && addr != 0)
-		      /* In non-rel files, neither addr, nor ref_addr
-			 /need/ a relocation.  We at least check that
-			 ref_addr points to sensible datum by recording
-			 the reference below.  */
-		      wr_message (mc_impact_2 | mc_die_rel | mc_reloc, &where,
-				  PRI_LACK_RELOCATION, dwarf_form_string (form));
-		  }
-		if (addrp != NULL)
-		  *addrp = addr;
-
-		if (form == DW_FORM_ref_addr)
-		  record_ref (addr, &where, false);
-
-		if (abbrev->tag == DW_TAG_compile_unit
-		    || abbrev->tag == DW_TAG_partial_unit)
-		  {
-		    if (it->name == DW_AT_low_pc)
-		      cu->low_pc = addr;
-
-		    if (low_pc != (uint64_t)-1 && high_pc != (uint64_t)-1)
-		      coverage_add (&cu_coverage->cov, low_pc, high_pc - low_pc);
-		  }
-
-		break;
-	      }
-
-	    case DW_FORM_udata:
 	    case DW_FORM_ref_udata:
-	      {
-		uint64_t value;
-		if (!checked_read_uleb128 (ctx, &value, &where,
-					   "attribute value"))
-		  return -1;
+	      value_check_cb = check_die_ref_local;
+	    case DW_FORM_udata:
+	      if (!checked_read_uleb128 (ctx, &value, &where,
+					 "attribute value"))
+		return -1;
+	      break;
 
-		if (it->name == DW_AT_sibling)
-		  sibling_addr = value;
-		else if (form == DW_FORM_ref_udata)
-		  record_ref (value, &where, true);
-		break;
-	      }
-
+	    case DW_FORM_ref1:
+	      value_check_cb = check_die_ref_local;
 	    case DW_FORM_flag:
 	    case DW_FORM_data1:
-	    case DW_FORM_ref1:
-	      {
-		/* Neither of these should be relocated.  */
-		uint8_t value;
-		if (!read_ctx_read_ubyte (ctx, &value))
-		  goto cant_read;
+	      if (!read_ctx_read_var (ctx, 1, &value))
+		goto cant_read;
+	      break;
 
-		if (it->name == DW_AT_sibling)
-		  sibling_addr = value;
-		else if (form == DW_FORM_ref1)
-		  record_ref (value, &where, true);
-		break;
-	      }
-
-	    case DW_FORM_data2:
 	    case DW_FORM_ref2:
-	      {
-		/* Neither of these should be relocated.  */
-		uint16_t value;
-		if (!read_ctx_read_2ubyte (ctx, &value))
-		  goto cant_read;
-
-		if (it->name == DW_AT_sibling)
-		  sibling_addr = value;
-		else if (form == DW_FORM_ref2)
-		  record_ref (value, &where, true);
-		break;
-	      }
+	      value_check_cb = check_die_ref_local;
+	    case DW_FORM_data2:
+	      if (!read_ctx_read_var (ctx, 2, &value))
+		goto cant_read;
+	      break;
 
 	    case DW_FORM_data4:
+	      if (check_someptr)
+		{
+		  relocate = rel_require;
+		  width = 4;
+		}
+	      if (false)
 	    case DW_FORM_ref4:
-	      {
-		uint32_t raw_value;
-		if (!read_ctx_read_4ubyte (ctx, &raw_value))
-		  goto cant_read;
-
-		/* DW_FORM_ref4 shouldn't be relocated.  */
-		uint64_t value = raw_value;
-		if (form == DW_FORM_data4)
-		  {
-		    if ((rel = relocation_next (reloc, ctx_offset,
-						&where, skip_mismatched)))
-		      relocate_one (file, reloc, rel, 4, &value, &where,
-				    reloc_target (form, it), NULL);
-		    else if (type_is_rel && check_ptr != check_nothing)
-		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
-				  | mc_check[check_ptr],
-				  &where, PRI_LACK_RELOCATION,
-				  dwarf_form_string (form));
-		  }
-
-		if (it->name == DW_AT_sibling)
-		  sibling_addr = value;
-		else if (check_ptr != check_nothing)
-		  do_check_ptr (check_ptr, value);
-		else if (form == DW_FORM_ref4)
-		  record_ref (value, &where, true);
-		break;
-	      }
+		value_check_cb = check_die_ref_local;
+	      if (!read_ctx_read_var (ctx, 4, &value))
+		goto cant_read;
+	      break;
 
 	    case DW_FORM_data8:
+	      if (check_someptr)
+		{
+		  relocate = rel_require;
+		  width = 8;
+		}
+	      if (false)
 	    case DW_FORM_ref8:
-	      {
-		uint64_t value;
-		if (!read_ctx_read_8ubyte (ctx, &value))
-		  goto cant_read;
-
-		/* DW_FORM_ref8 shouldn't be relocated.  */
-		if (form == DW_FORM_data8)
-		  {
-		    if ((rel = relocation_next (reloc, ctx_offset,
-						&where, skip_mismatched)))
-		      relocate_one (file, reloc, rel, 8, &value, &where,
-				    reloc_target (form, it), NULL);
-		    else if (type_is_rel && check_ptr != check_nothing)
-		      wr_message (mc_impact_2 | mc_die_other | mc_reloc
-				  | mc_check[check_ptr],
-				  &where, PRI_LACK_RELOCATION,
-				  dwarf_form_string (form));
-		  }
-
-		if (it->name == DW_AT_sibling)
-		  sibling_addr = value;
-		else if (check_ptr != check_nothing)
-		  do_check_ptr (check_ptr, value);
-		else if (form == DW_FORM_ref8)
-		  record_ref (value, &where, true);
-		break;
-	      }
+		value_check_cb = check_die_ref_local;
+	      if (!read_ctx_read_8ubyte (ctx, &value))
+		goto cant_read;
+	      break;
 
 	    case DW_FORM_sdata:
 	      {
-		int64_t value;
-		if (!checked_read_sleb128 (ctx, &value, &where,
+		int64_t value64;
+		if (!checked_read_sleb128 (ctx, &value64, &where,
 					   "attribute value"))
 		  return -1;
+		value = (uint64_t) value64;
 		break;
 	      }
 
 	    case DW_FORM_block:
 	      {
-		int width = 0;
 		uint64_t length;
-		goto process_DW_FORM_block;
 
+		if (false)
 	    case DW_FORM_block1:
-		width = 1;
-		goto process_DW_FORM_block;
+		  width = 1;
 
+		if (false)
 	    case DW_FORM_block2:
-		width = 2;
-		goto process_DW_FORM_block;
+		  width = 2;
 
+		if (false)
 	    case DW_FORM_block4:
-		width = 4;
+		  width = 4;
 
-	      process_DW_FORM_block:
 		if (width == 0)
 		  {
 		    if (!checked_read_uleb128 (ctx, &length, &where,
@@ -3220,13 +3152,14 @@ read_die_chain (struct elf_file *file,
 		      return -1;
 		  }
 		else
+		  /* xxx really skip_mismatched?  We just don't know
+		     how to process these...  */
 		  relocation_skip (reloc,
 				   read_ctx_get_offset (ctx) + length,
 				   &where, skip_mismatched);
 
 		if (!read_ctx_skip (ctx, length))
 		  goto cant_read;
-
 		break;
 	      }
 
@@ -3237,6 +3170,64 @@ read_die_chain (struct elf_file *file,
 	    default:
 	      wr_error (&where,
 			": internal error: unhandled form 0x%x.\n", form);
+	    }
+
+	  /* Relocate the value if appropriate.  */
+	  struct relocation *rel;
+	  if ((rel = relocation_next (reloc, ctx_offset,
+				      &where, skip_mismatched)))
+	    {
+	      if (relocate == rel_no)
+		wr_message (mc_impact_4 | mc_die_other | mc_reloc | extra_mc,
+			    &where, ": unexpected relocation of %s.\n",
+			    dwarf_form_string (form));
+
+	      relocate_one (file, reloc, rel, width, &value, &where,
+			    reloc_target (form, it), symbolp);
+
+	      if (relocatedp != NULL)
+		*relocatedp = true;
+	    }
+	  else
+	    {
+	      if (symbolp != NULL)
+		WIPE (*symbolp);
+	      if (type_is_rel
+		  && (relocate == rel_require
+		      || (relocate == rel_nonzero
+			  && value != 0)))
+		wr_message (mc_impact_2 | mc_die_other | mc_reloc | extra_mc,
+			    &where, PRI_LACK_RELOCATION,
+			    dwarf_form_string (form));
+	    }
+
+	  /* Dispatch value checking.  */
+	  if (it->name == DW_AT_sibling)
+	    {
+	      /* Full-blown DIE reference checking is too heavy-weight
+		 and not practical (error messages wise) for checking
+		 siblings.  */
+	      assert (value_check_cb == check_die_ref_local
+		      || value_check_cb == check_die_ref_global);
+	      valuep = &sibling_addr;
+	    }
+	  else if (value_check_cb != NULL)
+	    value_check_cb (value, &where);
+
+	  /* Store the relocated value.  Note valuep may point to
+	     low_pc or high_pc.  */
+	  if (valuep != NULL)
+	    *valuep = value;
+
+	  /* Check PC coverage.  */
+	  if (abbrev->tag == DW_TAG_compile_unit
+	      || abbrev->tag == DW_TAG_partial_unit)
+	    {
+	      if (it->name == DW_AT_low_pc)
+		cu->low_pc = value;
+
+	      if (low_pc != (uint64_t)-1 && high_pc != (uint64_t)-1)
+		coverage_add (&cu_coverage->cov, low_pc, high_pc - low_pc);
 	    }
 	}
       where.ref = NULL;

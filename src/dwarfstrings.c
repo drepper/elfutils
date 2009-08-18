@@ -353,7 +353,11 @@ dwarf_form_string (unsigned int form)
       [DW_FORM_ref4] = "ref4",
       [DW_FORM_ref8] = "ref8",
       [DW_FORM_ref_udata] = "ref_udata",
-      [DW_FORM_indirect] = "indirect"
+      [DW_FORM_indirect] = "indirect",
+      [DW_FORM_sec_offset] = "sec_offset",
+      [DW_FORM_exprloc] = "exprloc",
+      [DW_FORM_flag_present] = "flag_present",
+      [DW_FORM_ref_sig8] = "ref_sig8",
     };
   const unsigned int nknown_forms = (sizeof (known_forms)
 				     / sizeof (known_forms[0]));
@@ -365,7 +369,7 @@ dwarf_form_string (unsigned int form)
 
   if (unlikely (result == NULL))
     {
-      snprintf (buf, sizeof buf, gettext ("unknown form %" PRIx64),
+      snprintf (buf, sizeof buf, gettext ("unknown form %#" PRIx64),
 		(uint64_t) form);
       result = buf;
     }
