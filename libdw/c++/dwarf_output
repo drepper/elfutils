@@ -636,9 +636,7 @@ namespace elfutils
       inline compile_unit (const input &cu, arg_type &arg)
 	: _base (cu, arg)
 	, _m_cu_die (arg.add_entry_2 (*this, false))
-      {
-	std::cout << "CU ctor " << to_string () << std::endl;
-      }
+      {}
     };
 
     /* Main container anchoring all the output.
@@ -931,16 +929,68 @@ namespace elfutils
       }
     };
 
+  public: // xxx
     typedef std::vector<die_type const *> die_ref_vect;
 
     struct shape_type
     {
-      // name/form pairs.  Form is in fact a canonical form for given
-      // form class, not actual form under which the data will be
-      // emitted.
-      typedef std::map<int, int> attrs_type;
+      struct form_constraint_t
+      {
+	virtual ~form_constraint_t () {}
+	// xxx will also need an attribute or whatever
+	virtual bool satisfied (dwarf_output::debug_info_entry const &die,
+				dwarf_output::attr_value const &value) const = 0;
+	virtual bool equal (form_constraint_t const *other) const = 0;
+      };
+
+      class candidate_form
+      {
+	friend class subr::hashed_hasher<candidate_form>;
+	size_t _m_hash;
+
+      public:
+	typedef subr::hashed_hasher<candidate_form> hasher;
+	int form;
+
+    	// NB: always non-null.  Would be a reference if we didn't
+    	// store these things in vector by-value (and it doesn't seem
+    	// to make sense any other way).
+	form_constraint_t const *constraint;
+
+	candidate_form (int a_form,
+			form_constraint_t const *a_constraint = NULL);
+
+	bool operator== (candidate_form const &other) const
+	{
+	  return _m_hash == other._m_hash
+	    && form == other.form
+	    && constraint->equal (other.constraint);
+	}
+      };
+
+      class candidate_form_vec
+	: public std::vector<candidate_form>
+      {
+	friend class subr::hashed_hasher<candidate_form_vec>;
+	size_t _m_hash;
+
+      public:
+	typedef subr::hashed_hasher<candidate_form_vec> hasher;
+	candidate_form_vec ()
+	  : _m_hash (0)
+	{}
+
+	candidate_form_vec &add (candidate_form cf)
+	{
+	  push_back (cf);
+	  subr::hash_combine (_m_hash, cf);
+	  return *this;
+	}
+      };
+
+      typedef std::vector<int> attrs_vec;
       unsigned _m_tag;
-      attrs_type _m_attrs;
+      attrs_vec _m_attrs;
       bool _m_has_children;
       size_t _m_hash;
 
@@ -1009,8 +1059,8 @@ namespace elfutils
       typedef std::vector<instance_type> instances_type;
       instances_type _m_instances;
 
-      // Maps users to their instances.
-      typedef std::map<die_type const*, instances_type::const_iterator>
+      // Maps users to the index of instance in _m_instances.
+      typedef std::map<die_type const*, size_t>
 	  instance_map;
       instance_map _m_instance_map;
 
@@ -1019,12 +1069,9 @@ namespace elfutils
 	add_user (&emt.first);
       }
 
-      void add_user (die_type const *die)
-      {
-	_m_users.push_back (die);
-      }
-
-      void instantiate (shape_type const &shape);
+      void add_user (die_type const *die);
+      void instantiate (shape_type const &shape,
+			bool addr_64, bool dwarf_64);
       void build_data (shape_type const &shape,
 		       instance_type const &inst,
 		       section_appender &appender);
@@ -1036,7 +1083,7 @@ namespace elfutils
 
     void add_shape (die_type &die, bool last_sibling);
 
-    void build_output ();
+    void build_output (bool addr_64, bool dwarf_64);
 
   public:
     inline dwarf_output_collector ()

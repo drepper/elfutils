@@ -48,120 +48,383 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include <config.h>
+#include <cstdarg>
 #include <byteswap.h>
 #include "dwarf_output"
 #include "../../src/dwarfstrings.h"
 
 using namespace elfutils;
 
-static inline int
-attr_form (int tag, const dwarf_output::attribute &attr)
+#define __unused __attribute__ ((unused))
+
+namespace
 {
-  switch (attr.second.what_space ())
+  struct null_constraint_t
+    : public dwarf_output_collector::shape_type::form_constraint_t
+  {
+    virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
+			    __unused dwarf_output::attr_value const &value) const
     {
-    case dwarf::VS_address:
-      return DW_FORM_addr;
-
-    case dwarf::VS_flag:
-      return DW_FORM_flag;
-
-    case dwarf::VS_reference:
-      return DW_FORM_ref_addr;
-
-    case dwarf::VS_string:
-    case dwarf::VS_identifier:
-      return DW_FORM_strp;
-
-    case dwarf::VS_constant:
-      if (! attr.second.constant_is_integer ())
-	return DW_FORM_block;
-      /* Fall through.  */
-
-    case dwarf::VS_dwarf_constant:
-    case dwarf::VS_source_line:
-    case dwarf::VS_source_column:
-      return DW_FORM_udata;
-
-    case dwarf::VS_location:
-      if (!attr.second.location ().is_list ())
-	return DW_FORM_block;
-      /* Fall through.  */
-
-    case dwarf::VS_lineptr:
-    case dwarf::VS_macptr:
-    case dwarf::VS_rangelistptr:
-      /* For class *ptr (including loclistptr), the one of data[48] that
-	 matches offset_size is the only form encoding to use.  Other data*
-	 forms can mean the attribute is class constant instead.  */
-      return DW_FORM_data4;
-
-    case dwarf::VS_source_file:
-      switch (attr.first)
-	{
-	case DW_AT_decl_file:
-	case DW_AT_call_file:
-	  return DW_FORM_udata;
-
-	case DW_AT_comp_dir:
-	  return DW_FORM_strp;
-
-	case DW_AT_name:
-	  switch (tag)
-	    {
-	    case DW_TAG_compile_unit:
-	    case DW_TAG_partial_unit:
-	      return DW_FORM_strp;
-	    }
-	  break;
-	}
-      throw std::runtime_error ("source_file value unexpected in "
-				+ to_string (attr));
-
-    case dwarf::VS_discr_list:
-      return DW_FORM_block;
+      return true;
     }
 
-  throw std::logic_error ("strange value_space");
+    virtual bool equal (form_constraint_t const *other) const;
+  } null_constraint;
+
+  bool
+  null_constraint_t::equal (form_constraint_t const *other) const
+  {
+    return other == &null_constraint;
+  }
+
+
+  struct cu_local_constraint_t
+    : public dwarf_output_collector::shape_type::form_constraint_t
+  {
+    virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
+			    __unused dwarf_output::attr_value const &value) const
+    {
+      return true; // xxx
+    }
+
+    virtual bool equal (form_constraint_t const *other) const;
+  } cu_local_constraint;
+
+  bool
+  cu_local_constraint_t::equal (form_constraint_t const *other) const
+  {
+    return other == &cu_local_constraint;
+  }
+
+
+  struct noreloc_constraint_t
+    : public dwarf_output_collector::shape_type::form_constraint_t
+  {
+    virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
+			    __unused dwarf_output::attr_value const &value) const
+    {
+      return true; // xxx
+    }
+
+    virtual bool equal (form_constraint_t const *other) const;
+  } noreloc_constraint;
+
+  bool
+  noreloc_constraint_t::equal (form_constraint_t const *other) const
+  {
+    return other == &noreloc_constraint;
+  }
+
+
+  struct constraint_and
+    : public dwarf_output_collector::shape_type::form_constraint_t
+  {
+    form_constraint_t const *a;
+    form_constraint_t const *b;
+
+    constraint_and (form_constraint_t const *aa,
+		    form_constraint_t const *bb)
+      : a (aa), b (bb)
+    {}
+
+    virtual bool satisfied (dwarf_output::debug_info_entry const &die,
+			    dwarf_output::attr_value const &value) const
+    {
+      return a->satisfied (die, value)
+	&& b->satisfied (die, value);
+    }
+
+    virtual bool equal (form_constraint_t const *other) const
+    {
+      if (constraint_and const *o
+	    = dynamic_cast <constraint_and const *> (other))
+	return (a->equal (o->a) && b->equal(o->b))
+	  || (b->equal (o->a) && a->equal(o->b));
+      else
+	return false;
+    }
+  };
 }
 
-dwarf_output_collector::shape_type::shape_type (die_map::value_type const &emt)
+dwarf_output_collector::shape_type::candidate_form::candidate_form
+    (int a_form, form_constraint_t const *a_constraint)
+  : _m_hash (0) // xxx
+  , form (a_form)
+  , constraint (a_constraint ?: &null_constraint)
+{}
+
+namespace
+{
+  struct ref_forms_t
+    : public dwarf_output_collector::shape_type::candidate_form_vec
+  {
+    ref_forms_t ()
+    {
+      typedef dwarf_output_collector::shape_type::candidate_form
+	candidate_form;
+      static constraint_and local_noreloc_constaint (&cu_local_constraint,
+						     &noreloc_constraint);
+      add (DW_FORM_ref_addr);
+      add (candidate_form (DW_FORM_ref8, &cu_local_constraint));
+      add (candidate_form (DW_FORM_ref4, &cu_local_constraint));
+      add (candidate_form (DW_FORM_ref2, &local_noreloc_constaint));
+      add (candidate_form (DW_FORM_ref1, &local_noreloc_constaint));
+      add (candidate_form (DW_FORM_ref_udata, &local_noreloc_constaint));
+    }
+  } ref_forms;
+
+  inline dwarf_output_collector::shape_type::candidate_form_vec const &
+  candidate_forms (int tag, int at_name, const dwarf_output::attr_value &value)
+  {
+    // import some types into the namespace
+    typedef dwarf_output_collector::shape_type::candidate_form
+      candidate_form;
+    typedef dwarf_output_collector::shape_type::candidate_form_vec
+      candidate_form_vec;
+    typedef dwarf_output_collector::shape_type::form_constraint_t
+      form_constraint_t;
+
+    /* Having the most spacious form first means that simple sweep
+       that picks the first suitable form picks that biggest one,
+       meaning the form will be able to hold whatever data
+       necessary.
+       Having variable length the last means that in case of tie,
+       fixed length forms that are easy to read win.  */
+    static candidate_form_vec block_forms = candidate_form_vec ()
+      .add (DW_FORM_block4)
+      .add (DW_FORM_block2)
+      .add (DW_FORM_block1)
+      .add (DW_FORM_block);
+
+    static candidate_form_vec const_forms = candidate_form_vec ()
+      .add (DW_FORM_data8)
+      .add (DW_FORM_data4)
+      .add (DW_FORM_data2) // xxx noreloc
+      .add (DW_FORM_data1) // xxx noreloc
+      .add (DW_FORM_udata) // xxx noreloc, nopatch
+      .add (DW_FORM_sdata);// xxx noreloc, nopatch
+
+    static candidate_form_vec string_forms = candidate_form_vec ()
+      .add (DW_FORM_strp)
+      .add (DW_FORM_string);
+
+    switch (value.what_space ())
+      {
+      case dwarf::VS_address:
+	{
+	  static candidate_form_vec forms = candidate_form_vec ()
+	    .add(DW_FORM_addr);
+	  return forms;
+	}
+
+      case dwarf::VS_flag:
+	{
+	  static candidate_form_vec forms = candidate_form_vec ()
+	    .add (DW_FORM_flag)
+	    .add (DW_FORM_flag_present);
+	  return forms;
+	}
+
+      case dwarf::VS_reference:
+	return ::ref_forms;
+
+      case dwarf::VS_string:
+      case dwarf::VS_identifier:
+	/* xxx
+	  - string: price is strlen+1 per DIE
+
+	  - strp: constant price of strlen+1, then dwarf64?8:4 bytes per
+          DIE that contains the same string (or some suffix of that
+          string, in case libebl does the string consolidation)
+
+	  - needs to be decided separately.  A string-collecting sweep
+          over the DIE tree, then decide whether make it strp or
+          string based on counts and strlen and price of separate
+          abbrev.
+	*/
+	return string_forms;
+
+      case dwarf::VS_constant:
+	if (!value.constant_is_integer ())
+	  return block_forms;
+	/* Fall through.  */
+
+      case dwarf::VS_dwarf_constant:
+      case dwarf::VS_source_line:
+      case dwarf::VS_source_column:
+	return const_forms;
+
+      case dwarf::VS_location:
+	if (!value.location ().is_list ())
+	  return block_forms;
+	/* Fall through.  */
+
+      case dwarf::VS_lineptr:
+      case dwarf::VS_macptr:
+      case dwarf::VS_rangelistptr:
+	/* This can be either data4 or data8 depending on the size of
+	   the offset to the client data that we are trying to encode.
+	   In DWARF 4, the only available offset is DW_FORM_sec_offset,
+	   which is 4 bytes in 32-bit dwarf and 8 bytes in 64-bit.  */
+	{
+	  static candidate_form_vec forms = candidate_form_vec ()
+	    .add (DW_FORM_sec_offset) // xxx if it's not DWARF 4.0,
+				      // encode this either as data8,
+				      // or data4.
+	    ;
+	  return forms;
+	}
+
+      case dwarf::VS_source_file:
+	switch (at_name)
+	  {
+	  case DW_AT_decl_file:
+	  case DW_AT_call_file:
+	    return const_forms;
+
+	  case DW_AT_comp_dir:
+	    return string_forms;
+
+	  case DW_AT_name:
+	    switch (tag)
+	      {
+	      case DW_TAG_compile_unit:
+	      case DW_TAG_partial_unit:
+		return string_forms;
+	      }
+	    break;
+	  }
+	throw std::runtime_error ("source_file value unexpected in "
+				  + to_string (value));
+
+      case dwarf::VS_discr_list:
+	return block_forms;
+      }
+
+    throw std::logic_error ("strange value_space");
+  }
+
+  bool
+  numerical_p (const dwarf_output::attr_value &value)
+  {
+    dwarf::value_space vs = value.what_space ();
+
+    switch (vs)
+      {
+      case dwarf::VS_flag:
+      case dwarf::VS_rangelistptr:
+      case dwarf::VS_lineptr:
+      case dwarf::VS_macptr:
+      case dwarf::VS_location:
+      case dwarf::VS_constant:
+      case dwarf::VS_dwarf_constant:
+      case dwarf::VS_source_line:
+      case dwarf::VS_source_column:
+      case dwarf::VS_address:
+	return true;
+
+      case dwarf::VS_string:
+      case dwarf::VS_identifier:
+      case dwarf::VS_source_file: // xxx or is it?
+      case dwarf::VS_reference:   // xxx this one is numerical in
+				  // principle, but optimizing
+				  // references is fun on its own and
+				  // for much later
+      case dwarf::VS_discr_list:
+	return false;
+      }
+
+    abort ();
+  }
+
+  uint64_t
+  numerical_value_to_optimize (const dwarf_output::attr_value &value)
+  {
+    dwarf::value_space vs = value.what_space ();
+
+    switch (vs)
+      {
+      case dwarf::VS_flag:
+	return !!value.flag ();
+
+      case dwarf::VS_rangelistptr:
+      case dwarf::VS_lineptr:
+      case dwarf::VS_macptr:
+      case dwarf::VS_location:
+	return 0; /* xxx */
+
+      case dwarf::VS_constant:
+	if (value.constant_is_integer ())
+	  return value.constant ();
+	else
+	  return value.constant_block ().size ();
+
+      case dwarf::VS_dwarf_constant:
+	return value.dwarf_constant ();
+
+      case dwarf::VS_source_line:
+	return value.source_line ();
+
+      case dwarf::VS_source_column:
+	return value.source_column ();
+
+      case dwarf::VS_address:
+	return value.address ();
+
+      case dwarf::VS_string:
+      case dwarf::VS_identifier:
+      case dwarf::VS_source_file:
+      case dwarf::VS_reference:
+      case dwarf::VS_discr_list:
+	abort ();
+      }
+
+    abort ();
+  }
+}
+
+dwarf_output_collector::shape_type::shape_type
+    (die_map::value_type const &emt)
   : _m_tag (emt.first.tag ())
   , _m_has_children (emt.first.has_children ())
   , _m_hash (8675309 << _m_has_children)
 {
   if (emt.second.with_sibling && emt.first.has_children ())
-    _m_attrs[DW_AT_sibling] = DW_FORM_ref4;
+    _m_attrs.push_back (DW_AT_sibling);
 
   for (die_type::attributes_type::const_iterator it
 	 = emt.first.attributes ().begin ();
        it != emt.first.attributes ().end (); ++it)
-    _m_attrs[it->first] = attr_form (_m_tag, *it);
+    _m_attrs.push_back (it->first);
+
+  // Sort it, but leave sibling attribute at the beginning.
+  std::sort (_m_attrs.begin () + 1, _m_attrs.end ());
 
   // Make sure the hash is computed based on canonical order of
   // (unique) attributes, not based on order in which the attributes
   // are in DIE.
-  for (attrs_type::const_iterator it = _m_attrs.begin ();
+  for (attrs_vec::const_iterator it = _m_attrs.begin ();
        it != _m_attrs.end (); ++it)
-    {
-      subr::hash_combine (_m_hash, it->first);
-      subr::hash_combine (_m_hash, it->second);
-    }
+    subr::hash_combine (_m_hash, *it);
+}
+
+namespace
+{
+  struct abbreviation
+  {
+    dwarf_output_collector::die_ref_vect _m_users;
+    std::vector <int> _m_forms;
+
+    abbreviation (std::vector <int> forms)
+      : _m_forms (forms)
+    {}
+  };
 }
 
 void
-dwarf_output_collector::shape_info::instantiate
-    (dwarf_output_collector::shape_type const &shape)
+dwarf_output_collector::shape_info::add_user (die_type const *die)
 {
-  // For now create single instance with the canonical forms.
-  _m_instances.push_back (instance_type ());
-  instance_type &inst = _m_instances[0];
-  for (shape_type::attrs_type::const_iterator it = shape._m_attrs.begin ();
-       it != shape._m_attrs.end (); ++it)
-    inst.first.push_back (it->second);
-
-  for (die_ref_vect::iterator it = _m_users.begin ();
-       it != _m_users.end (); ++it)
-    _m_instance_map[*it] = _m_instances.begin ();
+  _m_users.push_back (die);
 }
 
 namespace
@@ -181,13 +444,37 @@ namespace
     while (value != 0);
   }
 
+  template <class Iterator>
+  void
+  dw_write_sleb128 (Iterator it, int64_t value)
+  {
+    bool more = true;
+    do
+      {
+	uint8_t byte = value & 0x7fULL;
+	value >>= 7;
+	if ((value == 0 && !(byte & 0x40))
+	    || (value == -1 && (byte & 0x40)))
+	  more = false;
+	else
+	  byte |= 0x80;
+
+	*it++ = byte;
+      }
+    while (more);
+  }
+
   template <int width> struct width_to_int;
 
-  template <> struct width_to_int <1>
+  template <> struct width_to_int <0>
   {
     typedef uint8_t unsigned_t;
     static uint8_t bswap (uint8_t value) { return value; }
   };
+
+  template <> struct width_to_int <1>
+    : width_to_int <0>
+  {};
 
   template <> struct width_to_int <2>
   {
@@ -239,11 +526,332 @@ namespace
 	break;
       case 1:
 	::dw_write<1> (it, value, big_endian);
+      case 0:
 	break;
       default:
-	throw std::runtime_error ("Width has to be 1, 2, 4 or 8.");
+	throw std::runtime_error ("Width has to be 0, 1, 2, 4 or 8.");
       }
   }
+
+  void dw_write_64 (section_appender &appender, bool is_64,
+		    uint64_t value, bool big_endian)
+  {
+    size_t w = is_64 ? 8 : 4;
+    dw_write_var (appender.alloc (w), w, value, big_endian);
+  }
+
+  void dw_write_form (section_appender &appender, int form,
+		      uint64_t value, bool big_endian,
+		      bool addr_64, bool dwarf_64)
+  {
+    switch (form)
+      {
+      case DW_FORM_flag_present:
+	return;
+
+#define HANDLE_DATA_REF(W)					\
+	case DW_FORM_data##W:					\
+        case DW_FORM_ref##W:					\
+	dw_write<W> (appender.alloc (W), value, big_endian);	\
+	  return
+
+      case DW_FORM_flag:
+	assert (value == 1 || value == 0);
+	/* fall through */
+      HANDLE_DATA_REF (1);
+
+      HANDLE_DATA_REF (2);
+      HANDLE_DATA_REF (4);
+      HANDLE_DATA_REF (8);
+
+#undef HANDLE_DATA_REF
+
+      case DW_FORM_addr:
+	dw_write_64 (appender, addr_64, value, big_endian);
+	return;
+
+      case DW_FORM_ref_addr:
+      case DW_FORM_strp:
+      case DW_FORM_sec_offset:
+	dw_write_64 (appender, dwarf_64, value, big_endian);
+	return;
+
+      case DW_FORM_udata:
+      case DW_FORM_ref_udata:
+      case DW_FORM_exprloc:
+      case DW_FORM_indirect:
+	dw_write_uleb128 (std::back_inserter (appender), value);
+	return;
+
+      case DW_FORM_sdata:
+	dw_write_sleb128 (std::back_inserter (appender), value);
+      }
+
+    throw std::runtime_error (std::string ("Don't know how to write ")
+			      + dwarf_form_string (form));
+  }
+
+  class CountingIterator
+  {
+    size_t &_m_count;
+
+  public:
+    CountingIterator (size_t &count)
+      : _m_count (count)
+    {}
+
+    CountingIterator (CountingIterator const &copy)
+      : _m_count (copy._m_count)
+    {}
+
+    CountingIterator &operator= (CountingIterator const &other)
+    {
+      _m_count = other._m_count;
+      return *this;
+    }
+
+    CountingIterator &operator++ (int)
+    {
+      _m_count++;
+      return *this;
+    }
+
+    struct ref
+    {
+      template <class T>
+      ref &operator= (T t __attribute__ ((unused)))
+      {
+	return *this;
+      }
+    };
+
+    ref operator *()
+    {
+      return ref ();
+    }
+  };
+
+  /* Return width of data stored with given form.  For block forms,
+     return width of length field.  */
+  size_t
+  form_width (int form, bool addr_64, bool dwarf_64)
+  {
+    switch (form)
+      {
+      case DW_FORM_flag_present:
+	return 0;
+
+      case DW_FORM_block1:
+      case DW_FORM_data1:
+      case DW_FORM_flag:
+      case DW_FORM_ref1:
+	return 1;
+
+      case DW_FORM_block2:
+      case DW_FORM_data2:
+      case DW_FORM_ref2:
+	return 2;
+
+      case DW_FORM_block4:
+      case DW_FORM_data4:
+      case DW_FORM_ref4:
+	return 4;
+
+      case DW_FORM_data8:
+      case DW_FORM_ref8:
+      case DW_FORM_ref_sig8:
+	return 8;
+
+      case DW_FORM_addr:
+	return addr_64 ? 8 : 4;
+
+      case DW_FORM_ref_addr:
+      case DW_FORM_strp:
+      case DW_FORM_sec_offset:
+	return dwarf_64 ? 8 : 4;
+
+      case DW_FORM_block:
+      case DW_FORM_sdata:
+      case DW_FORM_udata:
+      case DW_FORM_ref_udata:
+      case DW_FORM_exprloc:
+      case DW_FORM_indirect:
+	throw std::runtime_error
+	  (std::string ("Can't compute width of LEB128 form ")
+	   + dwarf_form_string (form));
+
+      case DW_FORM_string:
+	throw std::runtime_error
+	  ("You shouldn't need the width of DW_FORM_string.");
+      }
+
+    throw std::runtime_error
+      (std::string ("Don't know length of ") + dwarf_form_string (form));
+  }
+
+  size_t
+  numerical_encoded_length (uint64_t value, int form,
+			    bool addr_64, bool dwarf_64)
+  {
+    switch (form)
+      {
+      case DW_FORM_udata:
+      case DW_FORM_ref_udata:
+      case DW_FORM_exprloc:
+      case DW_FORM_indirect:
+      case DW_FORM_block:
+      case DW_FORM_sdata:
+	{
+	  size_t count = 0;
+	  CountingIterator counter (count);
+	  if (form == DW_FORM_sdata)
+	    dw_write_sleb128 (counter, value);
+	  else
+	    dw_write_uleb128 (counter, value);
+	  return count;
+	}
+
+      default:
+	return form_width (form, addr_64, dwarf_64);
+      }
+  }
+
+  bool
+  numerical_value_fits_form (uint64_t value, int form,
+			     bool addr_64, bool dwarf_64)
+  {
+    bool is_64;
+    switch (form)
+      {
+      case DW_FORM_flag_present:
+	return value == 1;
+
+      case DW_FORM_flag:
+      case DW_FORM_data1:
+      case DW_FORM_ref1:
+      case DW_FORM_block1:
+	return value <= (uint8_t)-1;
+
+      case DW_FORM_data2:
+      case DW_FORM_ref2:
+      case DW_FORM_block2:
+	return value <= (uint16_t)-1;
+
+      case DW_FORM_addr:
+	is_64 = addr_64;
+	if (false)
+      case DW_FORM_ref_addr:
+      case DW_FORM_strp:
+      case DW_FORM_sec_offset:
+	  is_64 = dwarf_64;
+	if (is_64)
+	  return true;
+	else
+      case DW_FORM_data4:
+      case DW_FORM_ref4:
+      case DW_FORM_block4:
+	  return value <= (uint32_t)-1;
+
+      case DW_FORM_data8:
+      case DW_FORM_ref8:
+      case DW_FORM_udata:
+      case DW_FORM_ref_udata:
+      case DW_FORM_exprloc:
+      case DW_FORM_indirect:
+      case DW_FORM_block:
+      case DW_FORM_sdata:
+	return true;
+      }
+
+    throw std::runtime_error
+      (std::string ("Don't know whether value fits ")
+       + dwarf_form_string (form));
+  }
+}
+
+void
+dwarf_output_collector::shape_info::instantiate
+  (dwarf_output_collector::shape_type const &shape,
+   bool addr_64, bool dwarf_64)
+{
+  for (die_ref_vect::const_iterator it = _m_users.begin ();
+       it != _m_users.end (); ++it)
+    {
+      instance_type inst;
+      die_type const &die = **it;
+      die_type::attributes_type const &attribs = die.attributes ();
+      for (shape_type::attrs_vec::const_iterator at = shape._m_attrs.begin ();
+	   at != shape._m_attrs.end (); ++at)
+	{
+	  int name = *at;
+
+	  // Optimization of sibling attribute will be done afterward.
+	  // For now just stick the biggest form in there.
+	  int form;
+	  if (name == DW_AT_sibling)
+	    form = DW_FORM_ref8;
+	  else
+	    {
+	      dwarf_output::attr_value const &value
+		= attribs.find (name)->second;
+	      shape_type::candidate_form_vec const &candidates
+		= ::candidate_forms (die.tag (), *at, value);
+
+	      if (!numerical_p (value))
+		{
+		  form = -1;
+
+		  // Just take the first form matching the
+		  // constraints, we will optimize in separate sweep.
+		  // Assume that candidates are stored in order from
+		  // the most capacitous to the least.
+		  for (shape_type::candidate_form_vec::const_iterator ct
+			 = candidates.begin ();
+		       ct != candidates.end (); ++ct)
+		    if (ct->constraint->satisfied (die, value))
+		      {
+			form = ct->form;
+			break;
+		      }
+		  assert (form != -1);
+		}
+	      else
+		{
+		  size_t best_len = 0;
+		  form = -1;
+
+		  uint64_t opt_val = numerical_value_to_optimize (value);
+
+		  for (shape_type::candidate_form_vec::const_iterator ct
+			 = candidates.begin ();
+		       ct != candidates.end (); ++ct)
+		    if (ct->constraint->satisfied (die, value)
+			&& numerical_value_fits_form (opt_val, ct->form,
+						      addr_64, dwarf_64))
+		      {
+			size_t len
+			  = numerical_encoded_length (opt_val, ct->form,
+						      addr_64, dwarf_64);
+			if (form == -1 || len < best_len)
+			  {
+			    best_len = len;
+			    form = ct->form;
+			  }
+		      }
+		  assert (form != -1);
+		}
+	    }
+	  inst.first.push_back (form);
+	}
+      _m_instance_map[*it] = _m_instances.size ();
+      _m_instances.push_back (inst);
+    }
+
+  // xxx: instance merging?  Locate instances A and B (and C and ...?)
+  // such that instance X can be created that covers all users of A
+  // and B, and such that the space saved by removing the
+  // abbreviations A and B tops the overhead of introducing non-ideal
+  // (wrt users of A and B) X and moving all the users over to it.
 }
 
 void
@@ -263,13 +871,13 @@ dwarf_output_collector::shape_info::build_data
   // attribute name from attribute map, and concrete form from
   // instance.
   assert (shape._m_attrs.size () == inst.first.size ());
-  dwarf_output_collector::shape_type::attrs_type::const_iterator at
+  dwarf_output_collector::shape_type::attrs_vec::const_iterator at
     = shape._m_attrs.begin ();
   for (instance_type::first_type::const_iterator it = inst.first.begin ();
        it != inst.first.end (); ++it)
     {
       // ULEB128 name & form
-      ::dw_write_uleb128 (inserter, at++->first);
+      ::dw_write_uleb128 (inserter, *at++);
       ::dw_write_uleb128 (inserter, *it);
     }
 
@@ -279,26 +887,13 @@ dwarf_output_collector::shape_info::build_data
 }
 
 void
-dwarf_output_collector::build_output ()
+dwarf_output_collector::build_output (bool addr_64, bool dwarf_64)
 {
-  /*
-  for (die_map::const_iterator it = _m_unique.begin ();
-       it != _m_unique.end (); ++it)
-    {
-      shape_type shape (*it);
-      shape_map::iterator st = _m_shapes.find (shape);
-      if (st != _m_shapes.end ())
-	st->second.add_user (&it->first);
-      else
-	_m_shapes.insert (std::make_pair (shape_type (*it), shape_info (*it)));
-    }
-  */
-
   size_t code = 0;
   for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
     {
-      it->second.instantiate (it->first);
+      it->second.instantiate (it->first, addr_64, dwarf_64);
       for (shape_info::instances_type::iterator jt
 	     = it->second._m_instances.begin ();
 	   jt != it->second._m_instances.end (); ++jt)
@@ -349,10 +944,14 @@ dwarf_output_collector::build_output ()
 void
 dwarf_output::output_debug_abbrev (section_appender &appender,
 				   dwarf_output_collector &c,
-				   bool addr_64 __attribute__ ((unused)))
+				   bool addr_64)
 {
   if (!c._m_output_built)
-    c.build_output ();
+    /* xxx we need to decide on dwarf_64 as soon as here.  That's not
+       good.  We will probably have to build debug_info and
+       abbreviations in parallel, and dump abbreviations after
+       debug_info is done and we know how big the data were.  */
+    c.build_output (addr_64, false /* xxx dwarf_64 */);
 
   for (dwarf_output_collector::shape_map::iterator it = c._m_shapes.begin ();
        it != c._m_shapes.end (); ++it)
@@ -452,8 +1051,7 @@ public:
 
 	    shape = &st->first;
 	    info = &st->second;
-	    instance_id
-	      = instance_it->second - st->second._m_instances.begin ();
+	    instance_id = instance_it->second;
 	  }
       }
     assert (shape != NULL && info != NULL);
@@ -473,18 +1071,21 @@ public:
     /* Dump attribute values.  */
     debug_info_entry::attributes_type const &attribs = die.attributes ();
     std::vector<int>::const_iterator form_it = instance.first.begin ();
-    for (dwarf_output_collector::shape_type::attrs_type::const_iterator
+    for (dwarf_output_collector::shape_type::attrs_vec::const_iterator
 	   at = shape->_m_attrs.begin ();
 	 at != shape->_m_attrs.end (); ++at)
       {
-	int name = at->first;
+	int name = *at;
 	int form = *form_it++;
 	if (name == DW_AT_sibling)
 	  {
 	    // XXX in fact we want to handle this case just like any
 	    // other CU-local reference.  So also use this below (or
 	    // better reuse single piece of code).
-	    sibling_gap = gap (appender, 4, big_endian, cu_local_recomputer);
+	    size_t gap_size
+	      = ::form_width (form, addr_64, false /* xxx dwarf_64 */);
+	    sibling_gap = gap (appender, gap_size,
+			       big_endian, cu_local_recomputer);
 	    continue;
 	  }
 
@@ -505,16 +1106,17 @@ public:
 	switch (vs)
 	  {
 	  case dwarf::VS_flag:
-	    assert (form == DW_FORM_flag);
-	    *appender.alloc (1) = !!value.flag ();
+	    if (form == DW_FORM_flag)
+	      *appender.alloc (1) = !!value.flag ();
+	    else
+	      assert (form == DW_FORM_flag_present);
 	    break;
 
 	  case dwarf::VS_rangelistptr:
 	  case dwarf::VS_lineptr:
 	  case dwarf::VS_macptr:
-	    assert (form == DW_FORM_data4); // XXX temporary
-	    // XXX leave out for now
-	    ::dw_write<4> (appender.alloc (4), 0, big_endian);
+	    ::dw_write_form (appender, form, 0 /*xxx*/, big_endian,
+			     addr_64, false /* dwarf_64 */);
 	    break;
 
 	  case dwarf::VS_constant:
@@ -536,18 +1138,18 @@ public:
 	    break;
 
 	  case dwarf::VS_dwarf_constant:
-	    assert (form == DW_FORM_udata);
-	    ::dw_write_uleb128 (inserter, value.dwarf_constant ());
+	    ::dw_write_form (appender, form, value.dwarf_constant (),
+			     big_endian, addr_64, false /* dwarf_64 */);
 	    break;
 
 	  case dwarf::VS_source_line:
-	    assert (form == DW_FORM_udata);
-	    ::dw_write_uleb128 (inserter, value.source_line ());
+	    ::dw_write_form (appender, form, value.source_line (),
+			     big_endian, addr_64, false /* dwarf_64 */);
 	    break;
 
 	  case dwarf::VS_source_column:
-	    assert (form == DW_FORM_udata);
-	    ::dw_write_uleb128 (inserter, value.source_column ());
+	    ::dw_write_form (appender, form, value.source_column (),
+			     big_endian, addr_64, false /* dwarf_64 */);
 	    break;
 
 	  case dwarf::VS_string:
@@ -609,10 +1211,8 @@ public:
 	    if (form == DW_FORM_block)
 	      ::dw_write_uleb128 (inserter, 0);
 	    else
-	      {
-		assert (form == DW_FORM_data4); // XXX temporary
-		::dw_write<4> (appender.alloc (4), 0, big_endian);
-	      }
+	      ::dw_write_form (appender, form, 0 /*xxx*/, big_endian,
+			       addr_64, false /* dwarf_64 */);
 	    break;
 
 	  case dwarf::VS_discr_list:
@@ -656,7 +1256,7 @@ dwarf_output::output_debug_info (section_appender &appender,
      the past.  So just ditch it and KISS.  */
 
   if (!c._m_output_built)
-    c.build_output ();
+    c.build_output (addr_64, false /* dwarf_64 */);
 
   std::back_insert_iterator <section_appender> inserter
     = std::back_inserter (appender);
