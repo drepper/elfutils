@@ -2614,6 +2614,7 @@ reloc_target (uint8_t form, struct abbrev_attrib *at)
     case DW_FORM_sdata:
     case DW_FORM_udata:
     case DW_FORM_flag:
+    case DW_FORM_flag_present:
     case DW_FORM_ref_udata:
       assert (!"Can't be relocated!");
 
@@ -3069,6 +3070,10 @@ read_die_chain (struct elf_file *file,
 	      if (!checked_read_uleb128 (ctx, &value, &where,
 					 "attribute value"))
 		return -1;
+	      break;
+
+	    case DW_FORM_flag_present:
+	      value = 1;
 	      break;
 
 	    case DW_FORM_ref1:
