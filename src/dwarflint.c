@@ -1726,6 +1726,7 @@ abbrev_table_load (struct read_ctx *ctx)
 	    {
 	      if (attrib_form != DW_FORM_data4
 		  && attrib_form != DW_FORM_data8
+		  && attrib_form != DW_FORM_sec_offset
 		  && attrib_form != DW_FORM_indirect)
 		wr_error (&where,
 			  ": %s with invalid form \"%s\".\n",
@@ -3030,7 +3031,8 @@ read_die_chain (struct elf_file *file,
 	      if (!read_ctx_read_offset (ctx, dwarf_64, &value))
 		{
 		cant_read:
-		  wr_error (&where, ": can't read attribute value.\n");
+		  wr_error (&where, ": can't read value of attribute %s.\n",
+			    dwarf_attr_string (it->name));
 		  return -1;
 		}
 
