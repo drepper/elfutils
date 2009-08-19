@@ -69,17 +69,19 @@ extern "C"
   struct where
   {
     enum section_id section;
+    enum where_formatting formatting;
     uint64_t addr1; // E.g. a CU offset.
     uint64_t addr2; // E.g. a DIE address.
     uint64_t addr3; // E.g. an attribute.
-    enum where_formatting formatting;
     struct where *ref; // Related reference, e.g. an abbrev related to given DIE.
     struct where *next; // For forming "caused-by" chains.
   };
 
 # define WHERE(SECTION, NEXT)						\
   ((struct where)							\
-    {(SECTION), (uint64_t)-1, (uint64_t)-1, (uint64_t)-1, wf_plain, NULL, NEXT})
+   {(SECTION), wf_plain,						\
+    (uint64_t)-1, (uint64_t)-1, (uint64_t)-1,				\
+    NULL, NEXT})
 
   extern const char *where_fmt (const struct where *wh, char *ptr);
   extern void where_fmt_chain (const struct where *wh, const char *severity);
@@ -193,24 +195,21 @@ extern "C"
 
   struct sec
   {
-    Elf_Scn *scn;
     GElf_Shdr shdr;
-    enum section_id id;
+    struct relocation_data rel;
+    Elf_Scn *scn;
     const char *name;
 
     Elf_Data *data;	/* May be NULL if data in this section are
 			   missing or not substantial.  */
-    struct relocation_data rel;
+    enum section_id id;
   };
 
   struct elf_file
   {
+    GElf_Ehdr ehdr;	/* Header of underlying Elf.  */
     Elf *elf;
     Ebl *ebl;
-    GElf_Ehdr ehdr;	/* Header of underlying Elf.  */
-    bool addr_64;	/* True if it's 64-bit Elf.  */
-    bool other_byte_order; /* True if the file has a byte order
-			      different from the host.  */
 
     struct sec *sec;	/* Array of sections.  */
     size_t size;
@@ -218,6 +217,10 @@ extern "C"
 
     /* Pointers into SEC above.  Maps section_id to section.  */
     struct sec *debugsec[count_debuginfo_sections];
+
+    bool addr_64;	/* True if it's 64-bit Elf.  */
+    bool other_byte_order; /* True if the file has a byte order
+			      different from the host.  */
   };
 
   struct section_coverage
@@ -232,11 +235,10 @@ extern "C"
   struct coverage_map
   {
     struct elf_file *elf;
-    bool allow_overlap;
-
     struct section_coverage *scos;
     size_t size;
     size_t alloc;
+    bool allow_overlap;
   };
 
   void section_coverage_init (struct section_coverage *sco,
@@ -260,8 +262,8 @@ extern "C"
   {
     enum section_id section;
     enum message_category category;
-    unsigned align;
     void *data;
+    unsigned align;
   };
 
   /* DATA has to be a pointer to an instance of struct hole_info.
@@ -270,8 +272,8 @@ extern "C"
 
   struct coverage_map_hole_info
   {
-    struct hole_info info;
     struct elf_file *elf;
+    struct hole_info info;
   };
 
   /* DATA has to be a pointer to an instance of struct hole_info.
