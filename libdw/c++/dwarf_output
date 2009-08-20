@@ -939,6 +939,7 @@ namespace elfutils
 	virtual ~form_constraint_t () {}
 	// xxx will also need an attribute or whatever
 	virtual bool satisfied (dwarf_output::debug_info_entry const &die,
+				int attr,
 				dwarf_output::attr_value const &value) const = 0;
 	virtual bool equal (form_constraint_t const *other) const = 0;
       };

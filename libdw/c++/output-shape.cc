@@ -63,6 +63,7 @@ namespace
     : public dwarf_output_collector::shape_type::form_constraint_t
   {
     virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
+			    __unused int attr,
 			    __unused dwarf_output::attr_value const &value) const
     {
       return true;
@@ -78,22 +79,23 @@ namespace
   }
 
 
-  struct cu_local_constraint_t
+  struct cu_local_ref_constraint_t
     : public dwarf_output_collector::shape_type::form_constraint_t
   {
     virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
+			    __unused int attr,
 			    __unused dwarf_output::attr_value const &value) const
     {
       return true; // xxx
     }
 
     virtual bool equal (form_constraint_t const *other) const;
-  } cu_local_constraint;
+  } cu_local_ref_constraint;
 
   bool
-  cu_local_constraint_t::equal (form_constraint_t const *other) const
+  cu_local_ref_constraint_t::equal (form_constraint_t const *other) const
   {
-    return other == &cu_local_constraint;
+    return other == &cu_local_ref_constraint;
   }
 
 
@@ -101,6 +103,7 @@ namespace
     : public dwarf_output_collector::shape_type::form_constraint_t
   {
     virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
+			    __unused int attr,
 			    __unused dwarf_output::attr_value const &value) const
     {
       return true; // xxx
@@ -128,10 +131,11 @@ namespace
     {}
 
     virtual bool satisfied (dwarf_output::debug_info_entry const &die,
+			    int attr,
 			    dwarf_output::attr_value const &value) const
     {
-      return a->satisfied (die, value)
-	&& b->satisfied (die, value);
+      return a->satisfied (die, attr, value)
+	&& b->satisfied (die, attr, value);
     }
 
     virtual bool equal (form_constraint_t const *other) const
@@ -162,11 +166,11 @@ namespace
     {
       typedef dwarf_output_collector::shape_type::candidate_form
 	candidate_form;
-      static constraint_and local_noreloc_constaint (&cu_local_constraint,
+      static constraint_and local_noreloc_constaint (&cu_local_ref_constraint,
 						     &noreloc_constraint);
       add (DW_FORM_ref_addr);
-      add (candidate_form (DW_FORM_ref8, &cu_local_constraint));
-      add (candidate_form (DW_FORM_ref4, &cu_local_constraint));
+      add (candidate_form (DW_FORM_ref8, &cu_local_ref_constraint));
+      add (candidate_form (DW_FORM_ref4, &cu_local_ref_constraint));
       add (candidate_form (DW_FORM_ref2, &local_noreloc_constaint));
       add (candidate_form (DW_FORM_ref1, &local_noreloc_constaint));
       add (candidate_form (DW_FORM_ref_udata, &local_noreloc_constaint));
@@ -808,7 +812,7 @@ dwarf_output_collector::shape_info::instantiate
 		  for (shape_type::candidate_form_vec::const_iterator ct
 			 = candidates.begin ();
 		       ct != candidates.end (); ++ct)
-		    if (ct->constraint->satisfied (die, value))
+		    if (ct->constraint->satisfied (die, name, value))
 		      {
 			form = ct->form;
 			break;
@@ -825,7 +829,7 @@ dwarf_output_collector::shape_info::instantiate
 		  for (shape_type::candidate_form_vec::const_iterator ct
 			 = candidates.begin ();
 		       ct != candidates.end (); ++ct)
-		    if (ct->constraint->satisfied (die, value)
+		    if (ct->constraint->satisfied (die, name, value)
 			&& numerical_value_fits_form (opt_val, ct->form,
 						      addr_64, dwarf_64))
 		      {
