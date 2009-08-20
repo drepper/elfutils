@@ -555,17 +555,21 @@ namespace
 
 #define HANDLE_DATA_REF(W)					\
 	case DW_FORM_data##W:					\
-        case DW_FORM_ref##W:					\
-	dw_write<W> (appender.alloc (W), value, big_endian);	\
+	case DW_FORM_ref##W:					\
+	  dw_write<W> (appender.alloc (W), value, big_endian);	\
 	  return
 
       case DW_FORM_flag:
 	assert (value == 1 || value == 0);
-	/* fall through */
+      case DW_FORM_block1:
       HANDLE_DATA_REF (1);
 
+      case DW_FORM_block2:
       HANDLE_DATA_REF (2);
+
+      case DW_FORM_block4:
       HANDLE_DATA_REF (4);
+
       HANDLE_DATA_REF (8);
 
 #undef HANDLE_DATA_REF
@@ -904,44 +908,6 @@ dwarf_output_collector::build_output (bool addr_64, bool dwarf_64)
 	jt->second = ++code;
     }
 
-  /*
-  std::cout << "shapes" << std::endl;
-  for (shape_map::iterator it = _m_shapes.begin ();
-       it != _m_shapes.end (); ++it)
-    {
-      std::cout << "  " << dwarf_tag_string (it->first._m_tag);
-      for (shape_type::attrs_type::const_iterator jt
-	     = it->first._m_attrs.begin ();
-	   jt != it->first._m_attrs.end (); ++jt)
-	std::cout << " " << dwarf_attr_string (jt->first)
-		  << ":" << dwarf_form_string (jt->second);
-      std::cout << std::endl;
-
-      for (shape_info::instances_type::iterator jt
-	     = it->second._m_instances.begin ();
-	   jt != it->second._m_instances.end (); ++jt)
-	{
-	  std::cout << "    i" << jt->second;
-	  for (shape_info::instance_type::first_type::const_iterator kt
-		 = jt->first.begin ();  kt != jt->first.end (); ++kt)
-	    std::cout << " " << dwarf_form_string (*kt);
-	  std::cout << std::endl;
-	}
-
-      for (die_ref_vect::const_iterator jt = it->second._m_users.begin ();
-	   jt != it->second._m_users.end (); ++jt)
-	{
-	  std::cout << "    " << to_string (**jt)
-		    << "; i" << (it->second._m_instance_map[*jt]->second)
-		    << std::endl;
-	  die_type::attributes_type const &ats = (**jt).attributes ();
-	  for (die_type::attributes_type::const_iterator kt = ats.begin ();
-	       kt != ats.end (); ++kt)
-	    std::cout << "      " << dwarf_attr_string (kt->first) << std::endl;
-	}
-    }
-  */
-
   _m_output_built = true;
 }
 
@@ -1033,7 +999,7 @@ public:
       "                                                            ";
     static char const *tail = spaces + strlen (spaces);
     __attribute__ ((unused)) char const *pad = tail - level * 2;
-    //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ());
+    //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ()) << " ";
 
     std::back_insert_iterator <section_appender> inserter
       = std::back_inserter (appender);
@@ -1107,6 +1073,10 @@ public:
 	*/
 	dwarf::value_space vs = value.what_space ();
 
+	/*
+	std::cout << pad << "  " << dwarf_attr_string (name)
+		  << ": " << dwarf_form_string (form) << " ";
+	*/
 	switch (vs)
 	  {
 	  case dwarf::VS_flag:
@@ -1124,20 +1094,15 @@ public:
 	    break;
 
 	  case dwarf::VS_constant:
-	    switch (form)
+	    if (value.constant_is_integer ())
+	      ::dw_write_form (appender, form, value.constant (), big_endian,
+			       addr_64, false /* dwarf_64 */);
+	    else
 	      {
-	      case DW_FORM_udata:
-		::dw_write_uleb128 (inserter, value.constant ());
-		break;
-	      case DW_FORM_block:
-		{
-		  const std::vector<uint8_t> &block = value.constant_block ();
-		  ::dw_write_uleb128 (inserter, block.size ());
-		  std::copy (block.begin (), block.end (), inserter);
-		}
-		break;
-	      default:
-		abort (); // xxx
+		const std::vector<uint8_t> &block = value.constant_block ();
+		::dw_write_form (appender, form, block.size (), big_endian,
+				 addr_64, false /* dwarf_64 */);
+		std::copy (block.begin (), block.end (), inserter);
 	      }
 	    break;
 
@@ -1185,10 +1150,11 @@ public:
 				       debug_str.add (str)));
 		  }
 	      }
-	    else if (vs == dwarf::VS_source_file
-		     && form == DW_FORM_udata)
-	      // XXX leave out for now
-	      ::dw_write_uleb128 (inserter, 0);
+	    else if (vs == dwarf::VS_source_file)
+	      ::dw_write_form (appender, form, 0 /*xxx*/, big_endian,
+			       addr_64, false /* dwarf_64 */);
+	    else
+	      throw std::runtime_error ("Unhandled combo of source files, identifiers and strings.");
 	    break;
 
 	  case dwarf::VS_address:
@@ -1222,6 +1188,7 @@ public:
 	  case dwarf::VS_discr_list:
 	    throw std::runtime_error ("Can't handle VS_discr_list.");
 	  };
+	//std::cout << std::endl;
       }
     assert (form_it == instance.first.end ());
 
