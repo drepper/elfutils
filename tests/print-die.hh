@@ -39,6 +39,8 @@
 
 static bool print_offset;
 static bool sort_attrs;
+static bool elide_refs;
+static bool dump_refs;
 
 static enum { copy_none, copy_edit, copy_output } make_copy;
 
@@ -59,6 +61,20 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
   if (argc > 1 && !strcmp (argv[1], "--offsets"))
     {
       print_offset = true;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--norefs"))
+    {
+      elide_refs = true;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--dump-refs"))
+    {
+      dump_refs = true;
       --argc;
       ++argv;
     }
@@ -92,7 +108,8 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
 }
 
 static int next_ref = 1;
-typedef tr1::unordered_map< ::Dwarf_Off, int> refs_map;
+typedef tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+			   int> refs_map;
 
 template<typename attrs_type,
 	 void (*act) (const typename attrs_type::value_type &, refs_map &)
@@ -114,7 +131,7 @@ public:
 
   static inline void walk (const attrs_type &attrs, refs_map &r)
   {
-    if (attrs_type::ordered || !sort_attrs)
+    if (attrs_type::ordered () || !sort_attrs)
       for (iterator i = attrs.begin (); i != attrs.end (); ++i)
 	(*act) (*i, r);
     else
@@ -133,8 +150,13 @@ void
 print_attr (const typename attrs_type::value_type &attr, refs_map &refs)
 {
   if (!print_offset && attr.second.what_space () == dwarf::VS_reference)
-    cout << " " << dwarf::attributes::name (attr.first) << "=\"#ref"
-	 << dec << refs[attr.second.reference ()->identity ()] << "\"";
+    {
+      if (elide_refs)
+	cout << " " << dwarf::attributes::name (attr.first) << "=\"ref\"";
+      else
+	cout << " " << dwarf::attributes::name (attr.first) << "=\"#ref"
+	     << dec << refs[attr.second.reference ()->identity ()] << "\"";
+    }
   else
     cout << " " << to_string (attr);
 }
@@ -174,6 +196,9 @@ prewalk_die (const typename file::debug_info_entry &die, refs_map &refs)
   prewalk_attrs (die.attributes (), refs);
 }
 
+static int nth;
+static std::map<int, int> nth_ref;
+
 template<typename file>
 static void
 print_die (const typename file::debug_info_entry &die,
@@ -182,14 +207,21 @@ print_die (const typename file::debug_info_entry &die,
   string prefix (indent, ' ');
   const string tag = dwarf::tags::name (die.tag ());
 
+  ++nth;
+  if (dump_refs)
+    cout << dec << nth << ": ";
+
   cout << prefix << "<" << tag;
   if (print_offset)
-    cout << " offset=[" << die.offset () << "]";
-  else
+    cout << " offset=[" << hex << die.offset () << "]";
+  else if (!elide_refs)
     {
       refs_map::const_iterator it = refs.find (die.identity ());
       if (it != refs.end ())
-	cout << " ref=\"ref" << dec << it->second << "\"";
+	{
+	  cout << " ref=\"ref" << dec << it->second << "\"";
+	  nth_ref[nth] = it->second;
+	}
     }
 
   print_attrs (die.attributes (), refs);
@@ -214,6 +246,12 @@ print_die (const typename file::debug_info_entry &die,
     cout << "/>\n";
 }
 
+static inline void
+dump_nth (pair<int, int> p)
+{
+  cout << dec << p.first << ": ref" << p.second << "\n";
+}
+
 template<typename file>
 static void
 print_cu (const typename file::compile_unit &cu, const unsigned int limit)
@@ -223,10 +261,13 @@ print_cu (const typename file::compile_unit &cu, const unsigned int limit)
 
   refs_map refs;
 
-  if (!print_offset)
+  if (!print_offset && !elide_refs)
     prewalk_die<file> (die, refs);
 
   print_die<file> (die, 1, limit, refs);
+
+  if (dump_refs)
+    for_each (nth_ref.begin (), nth_ref.end (), dump_nth);
 }
 
 template<typename file>

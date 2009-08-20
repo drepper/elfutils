@@ -1,3 +1,7 @@
+2009-08-19  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (talker): Update constructor for tracker changes.
+
 2009-08-16  Roland McGrath  <roland@redhat.com>
 
 	* dwarfcmp.cc (main): Call dwarf_end before return, for happy valgrind.

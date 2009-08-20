@@ -89,6 +89,10 @@ namespace elfutils
 
   class dwarf_edit
   {
+  private:
+    friend class dwarf_data;
+    typedef dwarf_edit me;
+
   public:
     typedef dwarf_data::source_file source_file;
     typedef dwarf_data::directory_table directory_table;
@@ -121,6 +125,7 @@ namespace elfutils
 		     bool,	// last-sibling
 		     tracker &t)
 	{
+	  out->set (*in, t);
 	  t.equivalence (out, in);
 	}
 
@@ -256,21 +261,7 @@ namespace elfutils
 
     typedef debug_info_entry::attributes_type::value_type attribute;
 
-    class compile_unit
-      : public dwarf_data::compile_unit<dwarf_edit>
-    {
-      friend class subr::create_container;
-      friend class compile_units;
-    private:
-
-      template<typename die_type, typename arg_type>
-      inline void set (const die_type &die, arg_type &arg)
-      {
-	if (die.tag () != ::DW_TAG_compile_unit)
-	  throw std::invalid_argument ("not a compile_unit entry");
-	debug_info_entry::set (die, arg);
-      }
-    };
+    typedef dwarf_data::compile_unit<dwarf_edit> compile_unit;
 
     // Main container anchoring all the output.
     class compile_units

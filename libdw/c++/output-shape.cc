@@ -143,7 +143,7 @@ dwarf_output_collector::shape_type::shape_type (const die_type &die,
        ++it)
     hashnadd (it->first, attr_form (die.tag (), *it));
 }
-
+#if 0
 void
 dwarf_output_collector::add_shape (die_type &die, bool last_sibling)
 {
@@ -156,3 +156,4 @@ dwarf_output_collector::add_shape (die_type &die, bool last_sibling)
 
   die._m_shape = &x;
 }
+#endif

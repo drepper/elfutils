@@ -1,3 +1,27 @@
+2009-08-19  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_tracker: Revamp derived tracker logic.
+	* c++/dwarf_comparator: Update user.
+
+	* c++/subr.hh (wrapped_input_iterator::base): New method.
+	(nothing): Kill operator (), really just nothing here.
+	(create_container): Replace post-set hook with setter hook.
+	(is): New callable template.
+	(nostream): New template, dummy for << debug hacks.
+
+	* c++/dwarf_output: Revamp construction for ref handling.
+	* c++/dwarf_data: Miscellaneous updates for dwarf_output changes.
+	* c++/dwarf_edit: Likewise.
+
+	* c++/dwarf (skipping_wrapper::const_iterator): Add hasher.
+	(debug_info_entry::raw_children_type::const_iterator): Likewise.
+	(debug_info_entry::attributes_type): Make ordered an inline
+	rather than a field.
+	(range_list, arange_list): Likewise.
+
+	* c++/data-values.hh (what_space): Use dynamic_cast rather than
+	typeid, so we accept derived classes.
+
 2009-08-16  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_tracker (dwarf_ref_tracker): Add missing destructor.
