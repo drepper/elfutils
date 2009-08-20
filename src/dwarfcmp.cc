@@ -207,8 +207,32 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
       for (location () << " missing attributes:"; it1 != end1; ++it1)
 	cout << " " << to_string (*it1);
     else
-      location () << to_string (*it1) << " vs " << to_string (*it2);
+      {
+	location () << to_string (*it1) << " vs " << to_string (*it2);
+	if ((*it1).second.what_space () == dwarf::VS_reference
+	    && (*it2).second.what_space () == dwarf::VS_reference)
+	  reference_mismatch ((*it1).second.reference (),
+			      (*it2).second.reference ());
+      }
     cout << endl;
+  }
+
+  inline void reference_mismatch (const die1 &ref1, const die2 &ref2)
+  {
+    dwarf_comparator<dwarf1, dwarf2, false, _tracker> cmp (*(_tracker *) this);
+    if (cmp.equals (*ref1, *ref2))
+      cout << " (identical but contexts mismatch)";
+    else
+      {
+	_base notracker;
+	dwarf_comparator<dwarf1, dwarf2, true> cmp_norefs (notracker);
+	if (cmp_norefs.equals (*ref1, *ref2))
+	  cout << " (" << ref1->to_string () << " with reference mismatches)";
+	else
+	  cout << " (" << ref1->to_string ()
+	       << " != " << ref2->to_string ()
+	       << ")";
+      }
   }
 };
 

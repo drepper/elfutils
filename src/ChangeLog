@@ -1,5 +1,9 @@
 2009-08-19  Roland McGrath  <roland@redhat.com>
 
+	Diagnose reference mismatches with more detail.
+	* dwarfcmp.cc (talker::reference_mismatch): New method.
+	(talker::mismatch): Call it.
+
 	* dwarfcmp.cc (talker): Update constructor for tracker changes.
 
 2009-08-16  Roland McGrath  <roland@redhat.com>
