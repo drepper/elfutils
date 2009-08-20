@@ -1,3 +1,9 @@
+2009-08-20  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (verbose): New variable.
+	(options, parse_opt): Add --verbose/-l to set it.
+	(talker): Keep going after mismatches when verbose.
+
 2009-08-19  Roland McGrath  <roland@redhat.com>
 
 	Diagnose reference mismatches with more detail.

@@ -96,19 +96,22 @@ namespace elfutils
     {
     }
 
-    inline void mismatch (const cu1 &, const cu1 &, // at, end
-			  const cu2 &, const cu2 &)
+    inline bool mismatch (cu1 &, const cu1 &, // at, end
+			  cu2 &, const cu2 &)
     {
+      return false;
     }
 
-    inline void mismatch (const die1 &, const die1 &, // at, end
-			  const die2 &, const die2 &)
+    inline bool mismatch (die1 &, const die1 &, // at, end
+			  die2 &, const die2 &)
     {
+      return false;
     }
 
-    inline void mismatch (const attr1 &, const attr1 &, // at, end
-			  const attr2 &, const attr2 &)
+    inline bool mismatch (attr1 &, const attr1 &, // at, end
+			  attr2 &, const attr2 &)
     {
+      return false;
     }
 
     struct left_context_type {};
@@ -159,6 +162,7 @@ namespace elfutils
     inline dwarf_tracker_base ()
     {}
 
+    typedef dwarf_tracker_base subtracker;
     inline dwarf_tracker_base (const dwarf_tracker_base &, reference_match &,
 			       const left_context_type &,
 			       const right_context_type &)
@@ -174,6 +178,9 @@ namespace elfutils
   {
   private:
     tracker &_m_tracker;
+
+    typedef dwarf_comparator<dwarf1, dwarf2, false,
+			     typename tracker::subtracker> subcomparator;
 
     template<typename item1, typename item2>
     struct matcher : public std::binary_function<item1, item2, bool>
@@ -207,10 +214,13 @@ namespace elfutils
       cu2_it it2 = b.begin ();
       const cu1_it end1 = a.end ();
       const cu2_it end2 = b.end ();
-      if (subr::container_equal
-	  (it1, end1, it2, end2, MATCHER (compile_units)))
-	return true;
-      _m_tracker.mismatch (it1, end1, it2, end2);
+      do
+	{
+	  if (subr::container_equal
+	      (it1, end1, it2, end2, MATCHER (compile_units)))
+	    return true;
+	}
+      while (_m_tracker.mismatch (it1, end1, it2, end2));
       return false;
     }
 
@@ -299,18 +309,21 @@ namespace elfutils
 	  // The set of attributes matches, in order.  Compare the values.
 	  it1 = a.begin ();
 	  it2 = b.begin ();
-	  if (subr::container_equal (it1, end1, it2, end2, match_rhs (*this)))
-	    return true;
-	  _m_tracker.mismatch (it1, end1, it2, end2);
+	  do
+	    {
+	      if (subr::container_equal (it1, end1, it2, end2,
+					 match_rhs (*this)))
+		return true;
+	    }
+	  while (_m_tracker.mismatch (it1, end1, it2, end2));
 	  return false;
 	}
 
       if (it1 != end1 && it2 != end2
 	  && !(attributes1::ordered () && attributes2::ordered ()))
 	{
-	  /* We have the same number of attributes, but the names don't match.
-
-	   */
+	  /* We have the same number of attributes, but the names don't
+	     match.  Populate two sorted maps and compare those.  */
 
 	  ait1_map sorted1;
 	  populate (sorted1, a);
@@ -319,18 +332,18 @@ namespace elfutils
 	  populate (sorted2, b);
 
 	  std::pair<typename ait1_map::iterator,
-	    	    typename ait2_map::iterator> result
+	    typename ait2_map::iterator> result
 	    = std::mismatch (sorted1.begin (), sorted1.end (),
 			     sorted2.begin (), match_sorted (*this));
-	  if (result.first == sorted1.end () && result.second == sorted2.end ())
+	  if (result.first == sorted1.end ()
+	      && result.second == sorted2.end ())
 	    return true;
 
 	  it1 = result.first->second;
 	  it2 = result.second->second;
 	}
 
-      _m_tracker.mismatch (it1, end1, it2, end2);
-      return false;
+      return _m_tracker.mismatch (it1, end1, it2, end2);
     }
 
     typedef typename dwarf1::debug_info_entry::children_type children1;
@@ -368,10 +381,11 @@ namespace elfutils
       cit2 it2 = b.begin ();
       const cit1 end1 = a.end ();
       const cit2 end2 = b.end ();
-      if (subr::container_equal (it1, end1, it2, end2,
-				 MATCHER (debug_info_entry::children_type)))
-	return true;
-      _m_tracker.mismatch (it1, end1, it2, end2);
+      do
+	if (subr::container_equal (it1, end1, it2, end2,
+				   MATCHER (debug_info_entry::children_type)))
+	  return true;
+      while (_m_tracker.mismatch (it1, end1, it2, end2));
       return false;
     }
 
@@ -494,8 +508,8 @@ namespace elfutils
       bool result = !has_children;
       if (has_children)
 	{
-	  tracker t (_m_tracker, matched, lhs, rhs);
-	  result = dwarf_comparator (t).match (a.children (), b.children ());
+	  typename tracker::subtracker t (_m_tracker, matched, lhs, rhs);
+	  result = subcomparator (t).equals (a.children (), b.children ());
 	}
 
       // Let the tracker cache a result for its reference_matched.

@@ -567,6 +567,8 @@ namespace elfutils
       return *elt->first == b;
     }
 
+    typedef dwarf_ref_tracker subtracker;
+
     // Share the _m_seen maps with the prototype tracker,
     // but start a fresh walk from the given starting point.
     inline dwarf_ref_tracker (const dwarf_ref_tracker &proto, reference_match &,
