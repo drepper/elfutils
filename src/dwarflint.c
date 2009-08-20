@@ -705,6 +705,10 @@ struct abbrev
 struct abbrev_table
 {
   uint64_t offset;
+  bool used;		/* There are CUs using this table.  */
+  bool skip_check;	/* There were errors during loading one of the
+			   CUs that use this table.  Check for unused
+			   abbrevs should be skipped.  */
   struct abbrev *abbr;
   size_t size;
   size_t alloc;
@@ -1113,10 +1117,9 @@ elf_file_init (struct elf_file *file, Elf *elf)
 	      /* Haven't seen a section of that name yet.  */
 	      cursec->data = elf_getdata (scn, NULL);
 	      if (cursec->data == NULL || cursec->data->d_buf == NULL)
-		{
-		  wr_error (NULL, "Data-less section %s.\n", scnname);
-		  cursec->data = NULL;
-		}
+		/* Don't print out a warning, we'll get to that in
+		   process_file.  */
+		cursec->data = NULL;
 	      secentry->secndx = curndx;
 	    }
 	}
@@ -1226,11 +1229,15 @@ process_file (Elf *elf, const char *fname, bool only_one)
   struct abbrev_table *abbrev_chain = NULL;
   struct cu *cu_chain = NULL;
   struct read_ctx ctx;
-  struct hl_ctx *hlctx = hl_ctx_new (elf);
+  /* Don't attempt to do high-level checks if we couldn't initialize
+     high-level context.  The wrapper takes care of printing out error
+     messages if any.  */
+  struct hl_ctx *hlctx = do_high_level ? hl_ctx_new (elf) : NULL;
 
 #define SEC(sec) (file.debugsec[sec_##sec])
+#define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
 
-  if (likely (SEC(abbrev) != NULL))
+  if (likely (HAS_SEC(abbrev)))
     {
       read_ctx_init (&ctx, &file, SEC(abbrev)->data);
       abbrev_chain = abbrev_table_load (&ctx);
@@ -1239,15 +1246,25 @@ process_file (Elf *elf, const char *fname, bool only_one)
     /* Hard error, not a message.  We can't debug without this.  */
     wr_error (NULL, ".debug_abbrev data not found.\n");
 
+  Elf_Data *str_data = NULL;
+  if (SEC(str) != NULL)
+    {
+      str_data = SEC(str)->data;
+      if (str_data == NULL)
+	wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
+		    &WHERE (sec_str, NULL),
+		    ": the section is present but empty.\n");
+    }
+
   struct cu_coverage *cu_coverage = NULL;
   if (abbrev_chain != NULL)
     {
-      if (SEC(info) != NULL)
+      if (likely (HAS_SEC(info)))
 	{
 	  cu_coverage = calloc (1, sizeof (struct cu_coverage));
 	  cu_chain = check_info_structural (&file, SEC(info), abbrev_chain,
-					    SEC(str)->data, cu_coverage);
-	  if (cu_chain != NULL && do_high_level)
+					    str_data, cu_coverage);
+	  if (cu_chain != NULL && hlctx != NULL)
 	    check_expected_trees (hlctx);
 	}
       else if (!tolerate_nodebug)
@@ -1256,16 +1273,16 @@ process_file (Elf *elf, const char *fname, bool only_one)
     }
 
   bool ranges_sound;
-  if (SEC(ranges) != NULL && cu_chain != NULL)
+  if (HAS_SEC(ranges) && cu_chain != NULL)
     ranges_sound = check_loc_or_range_structural (&file, SEC(ranges),
 						  cu_chain, cu_coverage);
   else
     ranges_sound = false;
 
-  if (SEC(loc) != NULL && cu_chain != NULL)
+  if (HAS_SEC(loc) && cu_chain != NULL)
     check_loc_or_range_structural (&file, SEC(loc), cu_chain, NULL);
 
-  if (SEC(aranges) != NULL)
+  if (HAS_SEC(aranges))
     {
       read_ctx_init (&ctx, &file, SEC(aranges)->data);
 
@@ -1276,25 +1293,25 @@ process_file (Elf *elf, const char *fname, bool only_one)
 	   && cu_coverage->need_ranges) ? NULL : &cu_coverage->cov;
 
       if (check_aranges_structural (&file, SEC(aranges), cu_chain, cov)
-	  && ranges_sound && do_high_level && !be_tolerant && !be_gnu)
+	  && ranges_sound && hlctx != NULL && !be_tolerant && !be_gnu)
 	check_matching_ranges (hlctx);
     }
 
-  if (SEC(pubnames) != NULL)
+  if (HAS_SEC(pubnames))
     check_pub_structural (&file, SEC(pubnames), cu_chain);
-  else
+  else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
 		&WHERE (sec_pubnames, NULL), ": data not found.\n");
 
-  if (SEC(pubtypes) != NULL)
+  if (HAS_SEC(pubtypes))
     check_pub_structural (&file, SEC(pubtypes), cu_chain);
-  else
+  else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
 		&WHERE (sec_pubtypes, NULL), ": data not found.\n");
 
-  if (SEC(line) != NULL)
+  if (HAS_SEC(line))
     check_line_structural (&file, SEC(line), cu_chain);
-  else
+  else if (!tolerate_nodebug)
     wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_loc,
 		&WHERE (sec_line, NULL), ": data not found.\n");
 
@@ -1306,6 +1323,7 @@ process_file (Elf *elf, const char *fname, bool only_one)
   hl_ctx_delete (hlctx);
 
 #undef SEC
+#undef HAS_SEC
 }
 
 static bool
@@ -1469,8 +1487,25 @@ abbrev_table_load (struct read_ctx *ctx)
   struct where where = WHERE (sec_abbrev, NULL);
   where.addr1 = 0;
 
-  while (!read_ctx_eof (ctx))
+  while (true)
     {
+      inline bool check_no_abbreviations ()
+      {
+	bool ret = section_chain == NULL;
+	if (ret)
+	  wr_error (&WHERE (sec_abbrev, NULL), ": no abbreviations.\n");
+	return ret;
+      }
+
+      /* If we get EOF at this point, either the CU was improperly
+	 terminated, or there were no data to begin with.  */
+      if (read_ctx_eof (ctx))
+	{
+	  if (!check_no_abbreviations ())
+	    wr_error (&where, ": missing zero to mark end-of-table.\n");
+	  break;
+	}
+
       uint64_t abbr_off;
       uint64_t abbr_code;
       {
@@ -1487,8 +1522,14 @@ abbrev_table_load (struct read_ctx *ctx)
 	    if (!checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
 	      goto free_and_out;
 
-	    if (abbr_code == 0 && prev_abbr_code == 0
-		&& zero_seq_off == (uint64_t)-1)
+	    /* Note: we generally can't tell the difference between
+    	       empty table and (excessive) padding.  But NUL byte(s)
+    	       at the very beginning of section are almost certainly
+    	       the first case.  */
+	    if (zero_seq_off == (uint64_t)-1
+		&& abbr_code == 0
+		&& (prev_abbr_code == 0
+		    || section_chain == NULL))
 	      zero_seq_off = abbr_off;
 
 	    if (abbr_code != 0)
@@ -1499,20 +1540,27 @@ abbrev_table_load (struct read_ctx *ctx)
 	    prev_abbr_code = abbr_code;
 	    prev_abbr_off = abbr_off;
 	  }
-	while (!read_ctx_eof (ctx));
+	while (!read_ctx_eof (ctx)
+	       /* On EOF, shift the offset so that beyond-EOF
+		  end-position is printed for padding warning.
+		  Necessary as our end position is exclusive.  */
+	       || ((abbr_off += 1), false));
 
 	if (zero_seq_off != (uint64_t)-1)
-	  {
-	    /* Don't report abbrev address, this is section-wide padding.  */
-	    struct where wh = WHERE (where.section, NULL);
-	    wr_message_padding_0 (mc_abbrevs | mc_header, &wh,
-				  zero_seq_off, abbr_off);
-	  }
+	  wr_message_padding_0 (mc_abbrevs | mc_header,
+				&WHERE (where.section, NULL),
+				zero_seq_off, abbr_off);
       }
 
       if (read_ctx_eof (ctx))
-	break;
+	{
+	  /* It still may have been empty.  */
+	  check_no_abbreviations ();
+	  break;
+	}
 
+      /* OK, we got some genuine abbreviation.  See if we need to
+	 allocate a new section.  */
       if (section == NULL)
 	{
 	  section = xcalloc (1, sizeof (*section));
@@ -1523,9 +1571,26 @@ abbrev_table_load (struct read_ctx *ctx)
 	  where_reset_1 (&where, abbr_off);
 	  where_reset_2 (&where, abbr_off);
 	}
-      REALLOC (section, abbr);
 
-      struct abbrev *cur = section->abbr + section->size++;
+      struct abbrev *original = abbrev_table_find_abbrev (section, abbr_code);
+      if (unlikely (original != NULL))
+	{
+	  char *site1 = strdup (where_fmt (&original->where, NULL));
+	  wr_error (&where, ": duplicate abbrev code %" PRId64
+		    "; already defined at %s.\n", abbr_code, site1);
+	  free (site1);
+	}
+
+      struct abbrev fake;
+      struct abbrev *cur;
+      /* Don't actually save this abbrev if it's duplicate.  */
+      if (likely (original == NULL))
+	{
+	  REALLOC (section, abbr);
+	  cur = section->abbr + section->size++;
+	}
+      else
+	cur = &fake;
       WIPE (*cur);
 
       cur->code = abbr_code;
@@ -2638,7 +2703,7 @@ read_die_chain (struct elf_file *file,
 		struct cu *cu,
 		struct abbrev_table *abbrevs,
 		Elf_Data *strings,
-		bool dwarf_64, bool addr_64,
+		bool dwarf_64, bool addr_64, bool ref_64,
 		struct ref_record *local_die_refs,
 		struct coverage *strings_coverage,
 		struct relocation_data *reloc,
@@ -2647,7 +2712,8 @@ read_die_chain (struct elf_file *file,
   bool got_die = false;
   uint64_t sibling_addr = 0;
   uint64_t die_off, prev_die_off = 0;
-  struct abbrev *abbrev, *prev_abbrev = NULL;
+  struct abbrev *abbrev = NULL;
+  struct abbrev *prev_abbrev = NULL;
   struct where where = WHERE (sec_info, NULL);
 
   while (!read_ctx_eof (ctx))
@@ -2660,7 +2726,6 @@ read_die_chain (struct elf_file *file,
 
       uint64_t abbr_code;
 
-      prev_die_off = die_off;
       if (!checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
 	return -1;
 
@@ -2676,12 +2741,20 @@ read_die_chain (struct elf_file *file,
 		      sibling_addr, die_off);
 	  sibling_addr = 0;
 	}
-      else if (prev_abbrev != NULL && prev_abbrev->has_children)
-	/* Even if it has children, the DIE can't have a sibling
-	   attribute if it's the last DIE in chain.  That's the reason
-	   we can't simply check this when loading abbrevs.  */
-	wr_message (mc_die_rel | mc_acc_suboptimal | mc_impact_4, &where,
-		    ": This DIE had children, but no DW_AT_sibling attribute.\n");
+      else if (abbr_code != 0
+	       && abbrev != NULL && abbrev->has_children)
+	{
+	  /* Even if it has children, the DIE can't have a sibling
+	     attribute if it's the last DIE in chain.  That's the
+	     reason we can't simply check this when loading
+	     abbrevs.  */
+	  struct where prev_where = where;
+	  where_reset_2 (&prev_where, prev_die_off + cu->offset);
+	  wr_message (mc_die_rel | mc_acc_suboptimal | mc_impact_4, &prev_where,
+		      ": This DIE had children, but no DW_AT_sibling attribute.\n");
+	}
+
+      prev_die_off = die_off;
 
       /* The section ended.  */
       if (abbr_code == 0)
@@ -2696,6 +2769,7 @@ read_die_chain (struct elf_file *file,
       got_die = true;
 
       /* Find the abbrev matching the code.  */
+      prev_abbrev = abbrev;
       abbrev = abbrev_table_find_abbrev (abbrevs, abbr_code);
       if (abbrev == NULL)
 	{
@@ -2905,7 +2979,7 @@ read_die_chain (struct elf_file *file,
 
 		if (strings == NULL)
 		  wr_error (&where,
-			    ": strp attribute, but no .debug_str section.\n");
+			    ": strp attribute, but no .debug_str data.\n");
 		else if (addr >= strings->d_size)
 		  wr_error (&where,
 			    ": Invalid offset outside .debug_str: 0x%" PRIx64 ".\n",
@@ -2932,8 +3006,9 @@ read_die_chain (struct elf_file *file,
 	    case DW_FORM_addr:
 	    case DW_FORM_ref_addr:
 	      {
+		bool is_64 = form == DW_FORM_addr ? addr_64 : ref_64;
 		uint64_t addr;
-		if (!read_ctx_read_offset (ctx, addr_64, &addr))
+		if (!read_ctx_read_offset (ctx, is_64, &addr))
 		  goto cant_read;
 
 		uint64_t *addrp = NULL;
@@ -2957,7 +3032,7 @@ read_die_chain (struct elf_file *file,
 		if ((rel = relocation_next (reloc, ctx_offset,
 					    &where, skip_mismatched)))
 		  {
-		    relocate_one (file, reloc, rel, addr_64 ? 8 : 4, &addr,
+		    relocate_one (file, reloc, rel, is_64 ? 8 : 4, &addr,
 				  &where, reloc_target (form, it), symbolp);
 		    if (relocatedp != NULL)
 		      *relocatedp = true;
@@ -3183,7 +3258,7 @@ read_die_chain (struct elf_file *file,
       if (abbrev->has_children)
 	{
 	  int st = read_die_chain (file, ctx, cu, abbrevs, strings,
-				   dwarf_64, addr_64,
+				   dwarf_64, addr_64, ref_64,
 				   local_die_refs,
 				   strings_coverage, reloc,
 				   cu_coverage);
@@ -3266,6 +3341,7 @@ check_cu_structural (struct elf_file *file,
     }
   cu->address_size = address_size;
 
+  /* Look up Abbrev table for this CU.  */
   struct abbrev_table *abbrevs = abbrev_chain;
   for (; abbrevs != NULL; abbrevs = abbrevs->next)
     if (abbrevs->offset == abbrev_offset)
@@ -3279,26 +3355,25 @@ check_cu_structural (struct elf_file *file,
       return false;
     }
 
+  abbrevs->used = true;
+
+  /* Read DIEs.  */
   struct ref_record local_die_refs;
   WIPE (local_die_refs);
 
   cu->cudie_offset = read_ctx_get_offset (ctx) + cu->offset;
+  bool addr_64 = address_size == 8;
+  bool ref_64 = version == 2 ? addr_64 : (assert (version == 3), dwarf_64);
   if (read_die_chain (file, ctx, cu, abbrevs, strings,
-		      dwarf_64, address_size == 8,
+		      dwarf_64, addr_64, ref_64,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      cu_coverage) >= 0)
+		      cu_coverage) < 0)
     {
-      for (size_t i = 0; i < abbrevs->size; ++i)
-	if (!abbrevs->abbr[i].used)
-	  wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs, &cu->where,
-		      ": abbreviation with code %" PRIu64 " is never used.\n",
-		      abbrevs->abbr[i].code);
-
-      if (!check_die_references (cu, &local_die_refs))
-	retval = false;
+      abbrevs->skip_check = true;
+      retval = false;
     }
-  else
+  else if (!check_die_references (cu, &local_die_refs))
     retval = false;
 
   ref_record_free (&local_die_refs);
@@ -3373,7 +3448,7 @@ check_info_structural (struct elf_file *file,
 	{
 	  wr_error (&where,
 		    ": section doesn't have enough data"
-		    " to read CU of size %" PRIx64 ".\n", size);
+		    " to read CU of size %" PRId64 ".\n", size);
 	  ctx.ptr = ctx.end;
 	  success = false;
 	  break;
@@ -3434,6 +3509,26 @@ check_info_structural (struct elf_file *file,
       else
 	/* Did we consume all the relocations?  */
 	relocation_skip_rest (sec);
+
+      /* If we managed to read up everything, now do abbrev usage
+	 analysis.  */
+      for (struct abbrev_table *abbrevs = abbrev_chain;
+	   abbrevs != NULL; abbrevs = abbrevs->next)
+	{
+	  if (!abbrevs->used)
+	    {
+	      struct where wh = WHERE (sec_abbrev, NULL);
+	      where_reset_1 (&wh, abbrevs->offset);
+	      wr_message (mc_impact_4 | mc_acc_bloat | mc_abbrevs, &wh,
+			  ": abbreviation table is never used.\n");
+	    }
+	  else if (!abbrevs->skip_check)
+	    for (size_t i = 0; i < abbrevs->size; ++i)
+	      if (!abbrevs->abbr[i].used)
+		wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
+			    &abbrevs->abbr[i].where,
+			    ": abbreviation is never used.\n");
+	}
     }
 
 
