@@ -54,6 +54,7 @@
 #include "dwarf_comparator"
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
+#include <deque>
 
 namespace elfutils
 {
@@ -66,26 +67,50 @@ namespace elfutils
     typedef typename dw::debug_info_entry::children_type::const_iterator die;
 
     /* We maintain the current path down the logical DIE tree from the CU
-       as a stack of iterators pointing to the DIE at each level.  */
-    typedef std::list<die> die_path;
+       as a stack of iterators pointing to the DIE at each level.
+
+       Note that the path to a DIE includes the iterator to that DIE
+       itself as the last element.  This is necessary to permit sharing
+       our _m_seen cache across CUs.  That sharing is useful when CUs
+       might share children (i.e. they use DW_TAG_imported_unit).
+       But when they do, then the "construct a derived tracker that
+       jump-starts a walk" case for following a reference might be for
+       a reference to another CU than the one the base tracker is
+       walking (_m_root).  When path_to finds the "context" path to the
+       referent, the iterator that jump-starts a new walk must be an
+       iterator pointing to the referent, but must be an iterator
+       somewhere in the _m_root CU's tree, not another CU's.
+
+       NOTE!!! XXX
+       This scenario means we can have a die_path in our _m_seen that
+       is not from our current _m_root CU.  This is only safe as long
+       as we are sure that we have already completely walked the other
+       CU that die_path came from so all its entries are in _m_seen.
+       This ensures that a derived tracker that jump-starts its walk at
+       a path in another CU will never actually have to do any walking.
+       If it ever walked, it could go awry failing to recognize the end
+       of its CU's children list--it's not _m_root->children ().end ().
+       If we want to generalize dwarf_path_finder so it can be used as
+       a generic cache when we might not have walked whole CUs, then we
+       need to change things.  We'd have to store _m_root along with
+       _m_path in _m_seen so that a derived tracker made from path_to
+       "context" can use the right _m_root.
+    */
+    typedef std::deque<die> die_path;
 
   private:
-    // We use a singleton list of a default-constructed iterator as a marker.
+    // We use an empty list as a marker; every path includes at least one DIE.
     static inline const die_path bad_die_path ()
     {
-      return die_path (1);
+      return die_path ();
     }
     static inline bool bad_die_path (const die_path &path)
     {
-      typename die_path::const_iterator it = path.begin ();
-      if (it == path.end ())
-	return false;
-      const die &elt = *it;
-      return ++it == path.end () && elt == die ();
+      return path.empty ();
     }
 
-    /* We record every DIE we have seen here, mapping its .identity ()
-       to the die_path of parent DIEs taken to reach it.  */
+    /* We record every DIE we have seen here, mapping its .identity () to
+       the die_path of parent DIEs taken to reach it, including itself.  */
     typedef std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
 				    const die_path> die_map;
     die_map *_m_seen;
@@ -111,14 +136,13 @@ namespace elfutils
       : _m_seen (proto._m_seen), _m_delete_seen (false)
     {}
 
-    // Construct a derived tracker that jump-starts a walk.
+    /* Construct a derived tracker that jump-starts a walk.
+       CONTEXT is from a path_to call made on PROTO.  */
     inline dwarf_path_finder (const dwarf_path_finder &proto,
-			      const die_path &context, const die &there)
+			      const die_path &context)
       : _m_seen (proto._m_seen), _m_delete_seen (false),
 	_m_root (proto._m_root), _m_path (context)
-    {
-      _m_path.push_back (there);
-    }
+    {}
 
     inline ~dwarf_path_finder ()
     {
@@ -156,15 +180,18 @@ namespace elfutils
     struct step
     {
       dwarf_path_finder *_m_walker;
-      inline step (dwarf_path_finder *w, const die &here)
+      inline step (dwarf_path_finder *w, const die &here,
+		   bool record = true)
 	: _m_walker (w)
       {
-	// Record the path down from the CU to see this DIE.
-	_m_walker->_m_seen->insert (std::make_pair (here->identity (),
-						    _m_walker->_m_path));
-
-	// Append this DIE to the path we'll record for its children.
+	// Append this DIE to the path we'll record for it and its children.
 	_m_walker->_m_path.push_back (here);
+
+	// Record the path down from the CU to see this DIE.
+	assert (!bad_die_path (_m_walker->_m_path));
+	if (record)
+	  _m_walker->_m_seen->insert (std::make_pair (here->identity (),
+						      _m_walker->_m_path));
       }
       inline ~step ()
       {
@@ -226,6 +253,10 @@ namespace elfutils
 		 Those can invalidate old iterators.  */
 	      cache = _m_seen->find (there);
 	      _m_seen->erase (cache);
+
+	      // Include the iterator we've found in the path to itself.
+	      step into (this, it, false);
+
 	      cache = _m_seen->insert (cache, std::make_pair (there, _m_path));
 	      return true;
 	    }
@@ -302,8 +333,7 @@ namespace elfutils
       die_path _m_save;
       inline step_up (dwarf_path_finder *w)
 	: _m_walker (w), _m_save (w->_m_path)
-      {
-      }
+      {}
       inline ~step_up ()
       {
 	_m_walker->_m_path.swap (_m_save);
@@ -472,7 +502,8 @@ namespace elfutils
     inline bool context_match (const left_context_type &a,
 			       const right_context_type &b)
     {
-      return std::equal (a.begin (), a.end (), b.begin (), equal_enough ());
+      // Ignore the last element, which is the target DIE itself.
+      return std::equal (a.begin (), a.end () - 1, b.begin (), equal_enough ());
     }
 
     class reference_match
@@ -539,10 +570,10 @@ namespace elfutils
     // Share the _m_seen maps with the prototype tracker,
     // but start a fresh walk from the given starting point.
     inline dwarf_ref_tracker (const dwarf_ref_tracker &proto, reference_match &,
-			      const left_context_type &lhs, const die1 &a,
-			      const right_context_type &rhs, const die2 &b)
-      : _m_left (proto._m_left, lhs, a),
-	_m_right (proto._m_right, rhs, b),
+			      const left_context_type &lhs,
+			      const right_context_type &rhs)
+      : _m_left (proto._m_left, lhs),
+	_m_right (proto._m_right, rhs),
 	_m_equiv (proto._m_equiv), _m_delete_equiv (false)
     {
       // We are starting a recursive consideration of a vs b.

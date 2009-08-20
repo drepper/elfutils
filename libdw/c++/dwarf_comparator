@@ -160,8 +160,8 @@ namespace elfutils
     {}
 
     inline dwarf_tracker_base (const dwarf_tracker_base &, reference_match &,
-			       const left_context_type &, const die1 &,
-			       const right_context_type &, const die2 &)
+			       const left_context_type &,
+			       const right_context_type &)
     {}
   };
 
@@ -306,7 +306,7 @@ namespace elfutils
 	}
 
       if (it1 != end1 && it2 != end2
-	  && !(attributes1::ordered && attributes2::ordered))
+	  && !(attributes1::ordered () && attributes2::ordered ()))
 	{
 	  /* We have the same number of attributes, but the names don't match.
 
@@ -494,7 +494,7 @@ namespace elfutils
       bool result = !has_children;
       if (has_children)
 	{
-	  tracker t (_m_tracker, matched, lhs, ref1, rhs, ref2);
+	  tracker t (_m_tracker, matched, lhs, rhs);
 	  result = dwarf_comparator (t).match (a.children (), b.children ());
 	}
 

@@ -63,7 +63,6 @@ using namespace elfutils;
 using namespace std;
 
 #include "dwarf-knowledge.cc"
-
 
 // dwarf::attr_value disambiguation and dispatch.
 

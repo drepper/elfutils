@@ -1092,17 +1092,17 @@ namespace elfutils
       inline bool context_match (const left_context_type &a,
 				 const right_context_type &b)
       {
-	return std::equal (a.begin (), a.end (), b.begin (), equal_enough ());
+	return std::equal (a.begin (), a.end () - 1, b.begin (), equal_enough ());
       }
 
 #if 0		   // XXX
       // Share the _m_seen maps with the prototype tracker,
       // but start a fresh walk from the given starting point.
       inline tracker (const tracker &proto, reference_match &,
-		      const left_context_type &lhs, const die1 &a,
-		      const right_context_type &rhs, const die2 &b)
-	: _m_left (proto._m_left, lhs, a),
-	  _m_right (proto._m_right, rhs, b),
+		      const left_context_type &lhs,
+		      const right_context_type &rhs)
+	: _m_left (proto._m_left, lhs),
+	  _m_right (proto._m_right, rhs),
 	  _m_equiv (proto._m_equiv), _m_delete_equiv (false)
       {
 	// We are starting a recursive consideration of a vs b.
@@ -1401,10 +1401,13 @@ namespace elfutils
 	  // It's finished, resolve the final reference.
 	  return _m_final->second.self ();
 
-	/* This entry is still dangling or pending.
-	   Count the referrer's pending reference.  */
+	/* This entry is still dangling or pending.  Count the referrer's
+	   pending reference.  We account this as a dangling reference
+	   either if we have really not been seen yet at all, or if we are
+	   still under construction--i.e. before resolve_refs has run.  */
 
-	referrer->count_pending (_m_pending == NULL, this, "refer");
+	referrer->count_pending (_m_pending == NULL || _m_building != NULL,
+				 this, "refer");
 	_m_patch.push_back (std::make_pair (referrer, backptr));
 
 	dump () << " nrefs " << _m_patch.size () << "\n";
@@ -1854,6 +1857,9 @@ namespace elfutils
 	assert (_m_out == NULL);
 	if (unlikely (_m_in->_m_final == NULL))
 	  {
+	    std::cout.flush ();
+	    _m_copier->dump_seen ();
+	    std::cout.flush ();
 	    assert (_m_in->_m_pending != NULL);
 	    assert (_m_in->_m_pending->dangling ());
 	    throw std::runtime_error

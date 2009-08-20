@@ -1327,12 +1327,16 @@ namespace elfutils
 
       inline const std::string &string () const
       {
+	if (dynamic_cast<const typename vw::value_source_file *> (_m_value))
+	  return source_file ().name ();
 	return static_cast<const std::string &>
 	  (variant<typename vw::value_string> ());
       }
 
       inline std::string &string ()
       {
+	if (dynamic_cast<const typename vw::value_source_file *> (_m_value))
+	  return source_file ().name ();
 	return static_cast<std::string &>
 	  (variant<typename vw::value_string> ());
       }
@@ -1554,7 +1558,10 @@ namespace elfutils
       typedef typename base_type::value_type value_type;
       typedef typename base_type::mapped_type mapped_type;
 
-      static const bool ordered = true;
+      static inline bool ordered ()
+      {
+	return true;
+      }
 
       template<typename attrs>
       inline operator attrs () const
