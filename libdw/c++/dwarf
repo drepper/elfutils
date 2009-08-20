@@ -330,7 +330,6 @@ namespace elfutils
 	}
 
       public:
-
 	inline const_iterator ()
 	  : _m_raw (), _m_end (raw::end ())
 	{
@@ -360,6 +359,14 @@ namespace elfutils
 	{
 	  return !(*this == other);
 	}
+
+	struct hasher : public std::unary_function<const_iterator, size_t>
+	{
+	  size_t operator () (const const_iterator &i) const
+	  {
+	    return subr::hash_this (i._m_raw);
+	  }
+	};
 
 	inline const_iterator &operator++ () // prefix
 	{
@@ -497,7 +504,8 @@ namespace elfutils
 
       /* This is an identity pointer that only matches the very same
 	 DIE in the very same file (same opened Dwarf instance).  */
-      inline ::Dwarf_Off identity () const
+      typedef uintptr_t identity_type;
+      inline identity_type identity () const
       {
 	return (uintptr_t) _m_die.addr;
       }
@@ -584,6 +592,14 @@ namespace elfutils
 	{
 	  return !(*this == other);
 	}
+
+	struct hasher : public std::unary_function<const_iterator, size_t>
+	{
+	  size_t operator () (const const_iterator &i) const
+	  {
+	    return subr::hash_this ((uintptr_t) i._m_die._m_die.addr);
+	  }
+	};
 
 	inline const_iterator &operator++ () // prefix
 	{
@@ -930,7 +946,10 @@ namespace elfutils
       typedef attr_value mapped_type;
       typedef attribute value_type;
 
-      static const bool ordered = false;
+      static inline bool ordered ()
+      {
+	return false;
+      }
 
       inline attributes_type (const attributes_type &a)
 	: attributes_base (a)
@@ -1269,7 +1288,11 @@ namespace elfutils
       typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
       typedef key_type value_type;
 
-      static const bool ordered = false;
+      static inline bool ordered ()
+      {
+	return false;
+      }
+
       inline bool canonical () const
       {
 	return false;
@@ -2304,7 +2327,10 @@ namespace elfutils
       typedef _base::iterator iterator;
       typedef _base::const_iterator const_iterator;
 
-      static const bool ordered = true;
+      static inline bool ordered ()
+      {
+	return true;
+      }
 
       struct hasher : public subr::container_hasher<arange_list> {};
 
@@ -2361,7 +2387,7 @@ namespace elfutils
 	// Since we are not const, coalesce in place.
 	coalesce (*this);
 
-	if (list::ordered && other.canonical ()
+	if (list::ordered () && other.canonical ()
 	    && size () != other.size ())
 	  return false;
 
@@ -2370,13 +2396,13 @@ namespace elfutils
 	  return true;
 
 	// If he was sorted and canonical and we didn't match, it's conclusive.
-	if (list::ordered && other.canonical ())
+	if (list::ordered () && other.canonical ())
 	  return false;
 
 	// Make a sorted and canonicalized copy to compare to.
 	_base his (other);
 	if (size () > his.size ()
-	    || (list::ordered && size () == his.size ()))
+	    || (list::ordered () && size () == his.size ()))
 	  // Coalescing can only make him smaller.
 	  return false;
 	coalesce (his);
@@ -2386,7 +2412,7 @@ namespace elfutils
       template<typename list>
       inline bool operator== (const list &other) const
       {
-	if (list::ordered && other.canonical ()
+	if (list::ordered () && other.canonical ()
 	    && size () < other.size ())
 	  // Coalescing can only make us smaller.
 	  return false;
@@ -2396,7 +2422,7 @@ namespace elfutils
 	  return true;
 
 	// Make a non-const copy that will coalesce in its operator==.
-	if (list::ordered && other.canonical ())
+	if (list::ordered () && other.canonical ())
 	  return size () != other.size () && arange_list (*this) == other;
 
 	return arange_list (other) == *this;

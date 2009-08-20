@@ -105,14 +105,23 @@ namespace elfutils
     template<class impl>
     class compile_unit : public impl::debug_info_entry
     {
-    private:
+      friend class subr::create_container;
+      friend class impl::compile_units;
+
+    protected:
       template<typename input>
-      inline const input &require_cu (const input &cu)
+      static inline const input &require_cu (const input &cu)
       {
 	if (cu.tag () != ::DW_TAG_compile_unit)
 	  throw std::runtime_error
 	    ("top-level debug_info_entry must be DW_TAG_compile_unit");
 	return cu;
+      }
+
+      template<typename die_type, typename arg_type>
+      inline void set (const die_type &die, arg_type &arg)
+      {
+	impl::debug_info_entry::set (require_cu (die), arg);
       }
 
     public:
@@ -128,8 +137,18 @@ namespace elfutils
 
       template<typename input, typename arg_type>
       inline compile_unit (const input &cu, arg_type &arg)
-	: impl::debug_info_entry (require_cu (cu), arg)
+	: impl::debug_info_entry (typename impl::debug_info_entry::pointer (),
+				  require_cu (cu), arg)
       {}
+
+      /* Assignment details are up to the base class.
+	 We just ensure it's really a compile_unit.  */
+      inline compile_unit &
+      operator= (const typename impl::debug_info_entry &other)
+      {
+	impl::debug_info_entry::operator= (require_cu (other));
+	return *this;
+      }
 
       // Fetch the CU's DW_AT_stmt_list.
       inline const typename impl::line_info_table &line_info () const
@@ -812,12 +831,25 @@ namespace elfutils
 	return *result;
       }
 
-      template<typename flavor, typename input, typename arg_type>
-      static inline value_dispatch *
-      make (flavor *&result, int /*whatattr*/, const input &x, arg_type &arg)
+      template<typename arg_type>
+      struct maker
       {
-	assert (alloc_values);
-	return result = new flavor (x, arg);
+	inline explicit maker (const arg_type &) {}
+
+	template<typename flavor, typename input>
+	static inline void
+	make (value_dispatch *&v, flavor *&result,
+	      int /*whatattr*/, const input &x, arg_type &arg)
+	{
+	  assert (alloc_values);
+	  v = result = new flavor (x, arg);
+	}
+      };
+
+      template<typename arg_type>
+      static inline maker<arg_type> make (arg_type &arg)
+      {
+	return maker<arg_type> (arg);
       }
 
       struct value_string : public value_dispatch, public std::string
@@ -874,7 +906,7 @@ namespace elfutils
 	   object.  This is what plain assignment does.  This just uses
 	   this pointer, rather than translating it from another file
 	   into this one (which requires a tracker).  */
-	inline value_reference (const value_type &i, const subr::nothing &)
+	inline value_reference (const value_type &i, subr::nothing &)
 	  : ref (i)
 	{}
 
@@ -1109,11 +1141,23 @@ namespace elfutils
       typename vw::value_cell_type *_m_value;
       typedef typename impl::debug_info_entry::pointer die_ptr;
 
-      template<typename value, typename arg_type = const subr::nothing>
+      template<typename value, typename arg_type = subr::nothing>
       struct init
       {
 	inline init (attr_value *av, int whatattr,
-		     const value &other, arg_type &arg = arg_type ())
+		     const value &other, arg_type &arg)
+	{
+	  do_init (av, whatattr, other, arg);
+	}
+
+	inline init (attr_value *av, int whatattr, const value &other)
+	{
+	  arg_type dummy;
+	  do_init (av, whatattr, other, dummy);
+	}
+
+	static inline void do_init (attr_value *av, int whatattr,
+				    const value &other, arg_type &arg)
 	{
 	  switch (other.what_space ())
 	    {
@@ -1121,7 +1165,8 @@ namespace elfutils
 	      case dwarf::VS_##flavor:					      \
 		{							      \
 		  typename vw::value_##flavor *p;			      \
-		  av->_m_value = vw::make (p, whatattr, other.fetch (), arg); \
+		  vw::make (arg)	      				      \
+		    .make (av->_m_value, p, whatattr, other.fetch (), arg);   \
 		}							      \
 	      break
 
@@ -1142,13 +1187,14 @@ namespace elfutils
 	      if (other.constant_is_integer ())
 		{
 		  typename vw::value_constant *p;
-		  av->_m_value = vw::make (p, whatattr, other.constant (), arg);
+		  vw::make (arg).make (av->_m_value, p, whatattr,
+				       other.constant (), arg);
 		}
 	      else
 		{
 		  typename vw::value_constant_block *p;
-		  av->_m_value = vw::make (p, whatattr,
-					   other.constant_block (), arg);
+		  vw::make (arg).make (av->_m_value, p, whatattr,
+				       other.constant_block (), arg);
 		}
 	      break;
 
@@ -1192,6 +1238,18 @@ namespace elfutils
 	return vw::variant (p, _m_value);
       }
 
+      template<typename value>
+      inline attr_value &copy (const value &other)
+      {
+	if (_m_value != NULL)
+	  {
+	    delete _m_value;
+	    _m_value = NULL;
+	  }
+	init<value> me (this, 0, other);
+	return *this;
+      }
+
     public:
       attr_value (const attr_value &other)
 	: _m_value (NULL)
@@ -1210,26 +1268,18 @@ namespace elfutils
 	  delete _m_value;
       }
 
-      inline attr_value &operator= (const attr_value &other)
-      {
-	if (_m_value != NULL)
-	  {
-	    delete _m_value;
-	    _m_value = NULL;
-	  }
-	init<attr_value> me (this, 0, other);
-	return *this;
-      }
       template<typename value>
       inline attr_value &operator= (const value &other)
       {
-	if (_m_value != NULL)
-	  {
-	    delete _m_value;
-	    _m_value = NULL;
-	  }
-	init<value> me (this, 0, other);
-	return *this;
+	return copy (other);
+      }
+
+      /* This is the same as the generic template one,
+	 but we have to define it explicitly to override
+	 the default assignment operator.  */
+      inline attr_value &operator= (const attr_value &other)
+      {
+	return copy (other);
       }
 
       dwarf::value_space what_space () const;
@@ -1281,12 +1331,16 @@ namespace elfutils
 
       inline const std::string &string () const
       {
+	if (dynamic_cast<const typename vw::value_source_file *> (_m_value))
+	  return source_file ().name ();
 	return static_cast<const std::string &>
 	  (variant<typename vw::value_string> ());
       }
 
       inline std::string &string ()
       {
+	if (dynamic_cast<const typename vw::value_source_file *> (_m_value))
+	  return source_file ().name ();
 	return static_cast<std::string &>
 	  (variant<typename vw::value_string> ());
       }
@@ -1467,11 +1521,16 @@ namespace elfutils
     class attributes_type
       : public std::map<int, typename impl::attr_value>
     {
-      friend class impl::debug_info_entry;
+      friend class impl::me;
     protected:
       typedef std::map<int, typename impl::attr_value> base_type;
 
       inline attributes_type () {}
+
+      template<typename iter>
+      inline attributes_type (const iter &from, const iter &to)
+	: base_type (from, to)
+      {}
 
       template<typename input, typename arg_type>
       inline void set (const input &other, arg_type &c)
@@ -1503,7 +1562,10 @@ namespace elfutils
       typedef typename base_type::value_type value_type;
       typedef typename base_type::mapped_type mapped_type;
 
-      static const bool ordered = true;
+      static inline bool ordered ()
+      {
+	return true;
+      }
 
       template<typename attrs>
       inline operator attrs () const

@@ -49,7 +49,11 @@
 
 #include "dwarf_data"
 
-#include <typeinfo>
+template<typename v, typename subtype>
+static inline bool is_a (const typename v::value_dispatch *value)
+{
+  return dynamic_cast<const subtype *> (value) != NULL;
+}
 
 namespace elfutils
 {
@@ -57,37 +61,37 @@ namespace elfutils
   dwarf::value_space
   dwarf_data::attr_value<impl, v>::what_space () const
   {
-    if (typeid (*_m_value) == typeid (typename v::value_flag))
+    if (is_a<v, typename v::value_flag> (_m_value))
       return dwarf::VS_flag;
-    if (typeid (*_m_value) == typeid (typename v::value_dwarf_constant))
+    if (is_a<v, typename v::value_dwarf_constant> (_m_value))
       return dwarf::VS_dwarf_constant;
-    if (typeid (*_m_value) == typeid (typename v::value_reference))
+    if (is_a<v, typename v::value_reference> (_m_value))
       return dwarf::VS_reference;
-    if (typeid (*_m_value) == typeid (typename v::value_lineptr))
+    if (is_a<v, typename v::value_lineptr> (_m_value))
       return dwarf::VS_lineptr;
-    if (typeid (*_m_value) == typeid (typename v::value_macptr))
+    if (is_a<v, typename v::value_macptr> (_m_value))
       return dwarf::VS_macptr;
-    if (typeid (*_m_value) == typeid (typename v::value_rangelistptr))
+    if (is_a<v, typename v::value_rangelistptr> (_m_value))
       return dwarf::VS_rangelistptr;
-    if (typeid (*_m_value) == typeid (typename v::value_identifier))
+    if (is_a<v, typename v::value_identifier> (_m_value))
       return dwarf::VS_identifier;
-    if (typeid (*_m_value) == typeid (typename v::value_string))
+    if (is_a<v, typename v::value_string> (_m_value))
       return dwarf::VS_string;
-    if (typeid (*_m_value) == typeid (typename v::value_source_file))
+    if (is_a<v, typename v::value_source_file> (_m_value))
       return dwarf::VS_source_file;
-    if (typeid (*_m_value) == typeid (typename v::value_source_line))
+    if (is_a<v, typename v::value_source_line> (_m_value))
       return dwarf::VS_source_line;
-    if (typeid (*_m_value) == typeid (typename v::value_source_column))
+    if (is_a<v, typename v::value_source_column> (_m_value))
       return dwarf::VS_source_column;
-    if (typeid (*_m_value) == typeid (typename v::value_address))
+    if (is_a<v, typename v::value_address> (_m_value))
       return dwarf::VS_address;
-    if (typeid (*_m_value) == typeid (typename v::value_constant)
-	|| typeid (*_m_value) == typeid (typename v::value_constant_block))
+    if (is_a<v, typename v::value_constant> (_m_value)
+	|| is_a<v, typename v::value_constant_block> (_m_value))
       return dwarf::VS_constant;
-    if (typeid (*_m_value) == typeid (typename v::value_location))
+    if (is_a<v, typename v::value_location> (_m_value))
       return dwarf::VS_location;
 
-    throw std::runtime_error ("XXX impossible");
+    throw std::logic_error ("attr_value has no known value_space!");
   }
 
   template<typename attr_pair>

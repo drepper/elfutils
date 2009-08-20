@@ -68,6 +68,7 @@ static const struct argp_option options[] =
 {
   { NULL, 0, NULL, 0, N_("Control options:"), 0 },
   { "quiet", 'q', NULL, 0, N_("Output nothing; yield exit status only"), 0 },
+  { "verbose", 'l', NULL, 0, N_("Output all differences"), 0 },
   { "ignore-missing", 'i', NULL, 0,
     N_("Don't complain if both files have no DWARF at all"), 0 },
 
@@ -98,6 +99,9 @@ static bool quiet;
 
 /* Nonzero if missing DWARF is equal DWARF.  */
 static bool missing_ok;
+
+/* True if we should print all differences.  */
+static bool verbose;
 
 /* Nonzero to test writer classes.  */
 static int test_writer;
@@ -130,7 +134,7 @@ template<class dwarf1, class dwarf2>
 struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 {
   typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
-  typedef dwarf_ref_tracker<dwarf1, dwarf2> _tracker;
+  typedef dwarf_ref_tracker<dwarf1, dwarf2> subtracker;
   typedef typename _base::cu1 cu1;
   typedef typename _base::cu2 cu2;
   typedef typename _base::die1 die1;
@@ -140,17 +144,24 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
+  bool result_;
 
   inline talker ()
-    : a_ (NULL), b_ (NULL)
+    : a_ (NULL), b_ (NULL), result_ (true)
   {}
 
-  inline talker (const talker &proto, typename _tracker::reference_match &m,
-		 const typename _tracker::left_context_type &l, const die1 &a,
-		 const typename _tracker::right_context_type &r, const die2 &b)
-    : _tracker (static_cast<const _tracker &> (proto), m, l, a, r, b),
+  inline talker (const talker &proto, typename subtracker::reference_match &m,
+		 const typename subtracker::left_context_type &l,
+		 const typename subtracker::right_context_type &r)
+    : subtracker (static_cast<const subtracker &> (proto), m, l, r),
       a_ (NULL), b_ (NULL)
   {
+  }
+
+  inline bool keep_going ()
+  {
+    result_ = false;
+    return verbose;
   }
 
   inline ostream &location () const
@@ -169,46 +180,100 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 		  << dwarf::tags::name (b.tag ());
   }
 
-  inline void mismatch (const cu1 &it1, const cu1 &end1,
-			const cu2 &it2, const cu2 &end2)
+  inline bool mismatch (cu1 &it1, const cu1 &end1,
+			cu2 &it2, const cu2 &end2)
   {
     if (it1 == end1)		// a lacks some of b's CUs.
-      cout << "files differ: "
-	   << dec << subr::length (it2, end2)
-	   << " extra compilation units "
-	   << endl;
+      {
+	cout << "files differ: "
+	     << dec << subr::length (it2, end2)
+	     << " extra compilation units "
+	     << endl;
+	it2 = end2;
+      }
     else if (it2 == end2)	// b lacks some of a's CUs.
-      cout << "files differ: "
-	   << dec << subr::length (it1, end1)
-	   << " compilation units missing "
-	   << endl;
-    // Otherwise the differing CU will have announced itself.
+      {
+	cout << "files differ: "
+	     << dec << subr::length (it1, end1)
+	     << " compilation units missing "
+	     << endl;
+	it1 = end1;
+      }
+    else
+      // Otherwise the differing CU will have announced itself.
+      ++it1, ++it2;
+    return keep_going ();
   }
 
-  inline void mismatch (const die1 &it1, const die1 &end1,
-			const die2 &it2, const die2 &end2)
+  inline bool mismatch (die1 &it1, const die1 &end1,
+			die2 &it2, const die2 &end2)
   {
     if (it1 == end1)		// a_ lacks some of b_'s children.
-      location () << dec << subr::length (it2, end2)
-		  << " extra children " << endl;
+      {
+	location () << dec << subr::length (it2, end2)
+		    << " extra children " << endl;
+	it2 = end2;
+      }
     else if (it2 == end2)	// b_ lacks some of a_'s children.
-      location () << dec << subr::length (it1, end1)
-		  << " children missing " << endl;
-    // Otherwise the differing child will have announced itself.
+      {
+	location () << dec << subr::length (it1, end1)
+		    << " children missing " << endl;
+	it1 = end1;
+      }
+    else
+      // Otherwise the differing child will have announced itself.
+      ++it1, ++it2;
+    return keep_going ();
   }
 
-  inline void mismatch (attr1 it1, const attr1 &end1,
-			attr2 it2, const attr2 &end2)
+  inline bool mismatch (attr1 &it1, const attr1 &end1,
+			attr2 &it2, const attr2 &end2)
   {
     if (it1 == end1)		// a_ lacks some of b_'s attrs.
-      for (location () << " extra attributes:"; it2 != end2; ++it2)
-	cout << " " << to_string (*it2);
+      {
+	for (location () << " extra attributes:"; it2 != end2; ++it2)
+	  cout << " " << to_string (*it2);
+	it2 = end2;
+      }
     else if (it2 == end2)	// b_ lacks some of a_'s attrs.
-      for (location () << " missing attributes:"; it1 != end1; ++it1)
-	cout << " " << to_string (*it1);
+      {
+	for (location () << " missing attributes:"; it1 != end1; ++it1)
+	  cout << " " << to_string (*it1);
+	it1 = end1;
+      }
     else
-      location () << to_string (*it1) << " vs " << to_string (*it2);
+      {
+	location () << to_string (*it1) << " vs " << to_string (*it2);
+	if ((*it1).second.what_space () == dwarf::VS_reference
+	    && (*it2).second.what_space () == dwarf::VS_reference)
+	  reference_mismatch ((*it1).second.reference (),
+			      (*it2).second.reference ());
+	++it1;
+	++it2;
+      }
     cout << endl;
+    return keep_going ();
+  }
+
+  inline void reference_mismatch (const die1 &ref1, const die2 &ref2)
+  {
+    dwarf_comparator<
+      dwarf1, dwarf2, false, subtracker> cmp (*(subtracker *) this);
+    if (cmp.equals (ref1, ref2))
+      cout << " (XXX refs now equal again!)";
+    else if (cmp.equals (*ref1, *ref2))
+      cout << " (identical but contexts mismatch)";
+    else
+      {
+	_base notracker;
+	dwarf_comparator<dwarf1, dwarf2, true> cmp_norefs (notracker);
+	if (cmp_norefs.equals (*ref1, *ref2))
+	  cout << " (" << ref1->to_string () << " with reference mismatches)";
+	else
+	  cout << " (" << ref1->to_string ()
+	       << " != " << ref2->to_string ()
+	       << ")";
+      }
   }
 };
 
@@ -232,7 +297,12 @@ struct quiet_cmp
 template<class dwarf1, class dwarf2>
 struct noisy_cmp
   : public cmp<dwarf1, dwarf2, talker<dwarf1, dwarf2> >
-{};
+{
+  inline bool operator () (const dwarf1 &a, const dwarf2 &b)
+  {
+    return equals (a, b) && this->_m_tracker.result_;
+  }
+};
 
 
 // Test that one comparison works as expected.
@@ -363,6 +433,9 @@ main (int argc, char *argv[])
       result = !same;
     }
 
+  dwarf_end (dw1);
+  dwarf_end (dw2);
+
   return result;
 }
 
@@ -388,6 +461,10 @@ parse_opt (int key, char *, struct argp_state *)
     {
     case 'q':
       quiet = true;
+      break;
+
+    case 'l':
+      verbose = true;
       break;
 
     case 'i':

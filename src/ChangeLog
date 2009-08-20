@@ -1,3 +1,21 @@
+2009-08-20  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (verbose): New variable.
+	(options, parse_opt): Add --verbose/-l to set it.
+	(talker): Keep going after mismatches when verbose.
+
+2009-08-19  Roland McGrath  <roland@redhat.com>
+
+	Diagnose reference mismatches with more detail.
+	* dwarfcmp.cc (talker::reference_mismatch): New method.
+	(talker::mismatch): Call it.
+
+	* dwarfcmp.cc (talker): Update constructor for tracker changes.
+
+2009-08-16  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (main): Call dwarf_end before return, for happy valgrind.
+
 2009-07-06  Roland McGrath  <roland@redhat.com>
 
 	* dwarfcmp.cc (test_writer): Make it an int.

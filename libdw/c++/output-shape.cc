@@ -60,7 +60,7 @@ using namespace elfutils;
 namespace
 {
   struct null_constraint_t
-    : public dwarf_output_collector::shape_type::form_constraint_t
+    : public dwarf_output::shape_type::form_constraint_t
   {
     virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
 			    __unused int attr,
@@ -80,7 +80,7 @@ namespace
 
 
   struct cu_local_ref_constraint_t
-    : public dwarf_output_collector::shape_type::form_constraint_t
+    : public dwarf_output::shape_type::form_constraint_t
   {
     virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
 			    __unused int attr,
@@ -100,7 +100,7 @@ namespace
 
 
   struct noreloc_constraint_t
-    : public dwarf_output_collector::shape_type::form_constraint_t
+    : public dwarf_output::shape_type::form_constraint_t
   {
     virtual bool satisfied (__unused dwarf_output::debug_info_entry const &die,
 			    __unused int attr,
@@ -120,7 +120,7 @@ namespace
 
 
   struct constraint_and
-    : public dwarf_output_collector::shape_type::form_constraint_t
+    : public dwarf_output::shape_type::form_constraint_t
   {
     form_constraint_t const *a;
     form_constraint_t const *b;
@@ -150,7 +150,7 @@ namespace
   };
 }
 
-dwarf_output_collector::shape_type::candidate_form::candidate_form
+dwarf_output::shape_type::candidate_form::candidate_form
     (int a_form, form_constraint_t const *a_constraint)
   : _m_hash (0) // xxx
   , form (a_form)
@@ -160,11 +160,11 @@ dwarf_output_collector::shape_type::candidate_form::candidate_form
 namespace
 {
   struct ref_forms_t
-    : public dwarf_output_collector::shape_type::candidate_form_vec
+    : public dwarf_output::shape_type::candidate_form_vec
   {
     ref_forms_t ()
     {
-      typedef dwarf_output_collector::shape_type::candidate_form
+      typedef dwarf_output::shape_type::candidate_form
 	candidate_form;
       static constraint_and local_noreloc_constaint (&cu_local_ref_constraint,
 						     &noreloc_constraint);
@@ -177,15 +177,15 @@ namespace
     }
   } ref_forms;
 
-  inline dwarf_output_collector::shape_type::candidate_form_vec const &
+  inline dwarf_output::shape_type::candidate_form_vec const &
   candidate_forms (int tag, int at_name, const dwarf_output::attr_value &value)
   {
     // import some types into the namespace
-    typedef dwarf_output_collector::shape_type::candidate_form
+    typedef dwarf_output::shape_type::candidate_form
       candidate_form;
-    typedef dwarf_output_collector::shape_type::candidate_form_vec
+    typedef dwarf_output::shape_type::candidate_form_vec
       candidate_form_vec;
-    typedef dwarf_output_collector::shape_type::form_constraint_t
+    typedef dwarf_output::shape_type::form_constraint_t
       form_constraint_t;
 
     /* Having the most spacious form first means that simple sweep
@@ -387,18 +387,19 @@ namespace
   }
 }
 
-dwarf_output_collector::shape_type::shape_type
-    (die_map::value_type const &emt)
-  : _m_tag (emt.first.tag ())
-  , _m_has_children (emt.first.has_children ())
+dwarf_output::shape_type::shape_type
+    (const debug_info_entry::pointer &ref,
+     const dwarf_output::die_info &info)
+  : _m_tag (ref->tag ())
+  , _m_has_children (ref->has_children ())
   , _m_hash (8675309 << _m_has_children)
 {
-  if (emt.second.with_sibling && emt.first.has_children ())
+  if (info._m_with_sibling[true] && ref->has_children ())
     _m_attrs.push_back (DW_AT_sibling);
 
-  for (die_type::attributes_type::const_iterator it
-	 = emt.first.attributes ().begin ();
-       it != emt.first.attributes ().end (); ++it)
+  for (debug_info_entry::attributes_type::const_iterator it
+	 = ref->attributes ().begin ();
+       it != ref->attributes ().end (); ++it)
     _m_attrs.push_back (it->first);
 
   // Sort it, but leave sibling attribute at the beginning.
@@ -416,19 +417,13 @@ namespace
 {
   struct abbreviation
   {
-    dwarf_output_collector::die_ref_vect _m_users;
+    dwarf_output::die_ref_vect _m_users;
     std::vector <int> _m_forms;
 
     abbreviation (std::vector <int> forms)
       : _m_forms (forms)
     {}
   };
-}
-
-void
-dwarf_output_collector::shape_info::add_user (die_type const *die)
-{
-  _m_users.push_back (die);
 }
 
 namespace
@@ -778,16 +773,16 @@ namespace
 }
 
 void
-dwarf_output_collector::shape_info::instantiate
-  (dwarf_output_collector::shape_type const &shape,
+dwarf_output::shape_info::instantiate
+  (dwarf_output::shape_type const &shape,
    bool addr_64, bool dwarf_64)
 {
   for (die_ref_vect::const_iterator it = _m_users.begin ();
        it != _m_users.end (); ++it)
     {
       instance_type inst;
-      die_type const &die = **it;
-      die_type::attributes_type const &attribs = die.attributes ();
+      debug_info_entry const &die = **it;
+      debug_info_entry::attributes_type const &attribs = die.attributes ();
       for (shape_type::attrs_vec::const_iterator at = shape._m_attrs.begin ();
 	   at != shape._m_attrs.end (); ++at)
 	{
@@ -851,7 +846,7 @@ dwarf_output_collector::shape_info::instantiate
 	    }
 	  inst.first.push_back (form);
 	}
-      _m_instance_map[*it] = _m_instances.size ();
+      std::cout << "Need to add to instance map." << std::endl;
       _m_instances.push_back (inst);
     }
 
@@ -863,9 +858,9 @@ dwarf_output_collector::shape_info::instantiate
 }
 
 void
-dwarf_output_collector::shape_info::build_data
-    (dwarf_output_collector::shape_type const &shape,
-     dwarf_output_collector::shape_info::instance_type const &inst,
+dwarf_output::shape_info::build_data
+    (dwarf_output::shape_type const &shape,
+     dwarf_output::shape_info::instance_type const &inst,
      section_appender &appender)
 {
   std::back_insert_iterator<section_appender> inserter
@@ -879,7 +874,7 @@ dwarf_output_collector::shape_info::build_data
   // attribute name from attribute map, and concrete form from
   // instance.
   assert (shape._m_attrs.size () == inst.first.size ());
-  dwarf_output_collector::shape_type::attrs_vec::const_iterator at
+  dwarf_output::shape_type::attrs_vec::const_iterator at
     = shape._m_attrs.begin ();
   for (instance_type::first_type::const_iterator it = inst.first.begin ();
        it != inst.first.end (); ++it)
@@ -895,14 +890,14 @@ dwarf_output_collector::shape_info::build_data
 }
 
 void
-dwarf_output_collector::build_output (bool addr_64, bool dwarf_64)
+dwarf_output::build_output (bool addr_64, bool dwarf_64)
 {
   size_t code = 0;
-  for (shape_map::iterator it = _m_shapes.begin ();
+  for (dwarf_output::shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
     {
       it->second.instantiate (it->first, addr_64, dwarf_64);
-      for (shape_info::instances_type::iterator jt
+      for (dwarf_output::shape_info::instances_type::iterator jt
 	     = it->second._m_instances.begin ();
 	   jt != it->second._m_instances.end (); ++jt)
 	jt->second = ++code;
@@ -913,19 +908,19 @@ dwarf_output_collector::build_output (bool addr_64, bool dwarf_64)
 
 void
 dwarf_output::output_debug_abbrev (section_appender &appender,
-				   dwarf_output_collector &c,
+				   __unused dwarf_output_collector &c,
 				   bool addr_64)
 {
-  if (!c._m_output_built)
+  if (!_m_output_built)
     /* xxx we need to decide on dwarf_64 as soon as here.  That's not
        good.  We will probably have to build debug_info and
        abbreviations in parallel, and dump abbreviations after
        debug_info is done and we know how big the data were.  */
-    c.build_output (addr_64, false /* xxx dwarf_64 */);
+    build_output (addr_64, false /* xxx dwarf_64 */);
 
-  for (dwarf_output_collector::shape_map::iterator it = c._m_shapes.begin ();
-       it != c._m_shapes.end (); ++it)
-    for (dwarf_output_collector::shape_info::instances_type::const_iterator jt
+  for (dwarf_output::shape_map::iterator it = _m_shapes.begin ();
+       it != _m_shapes.end (); ++it)
+    for (dwarf_output::shape_info::instances_type::const_iterator jt
 	   = it->second._m_instances.begin ();
 	 jt != it->second._m_instances.end (); ++jt)
       it->second.build_data (it->first, *jt, appender);
@@ -956,7 +951,7 @@ struct local_ref_recomputer
 
 class dwarf_output::recursive_dumper
 {
-  dwarf_output_collector &c;
+  dwarf_output &c;
   section_appender &appender;
   strtab &debug_str;
   bool addr_64;
@@ -969,7 +964,7 @@ class dwarf_output::recursive_dumper
   recursive_dumper (recursive_dumper const &copy); // nocopy
 
 public:
-  recursive_dumper (dwarf_output_collector &a_c,
+  recursive_dumper (dwarf_output &a_c,
 		    section_appender &a_appender,
 		    strtab &a_debug_str,
 		    bool a_addr_64,
@@ -989,7 +984,7 @@ public:
       cu_local_recomputer (new local_ref_recomputer (cu_start))
   {}
 
-  void dump (debug_info_entry const &die,
+  void dump (dwarf_output::debug_info_entry const &die,
 	     gap &sibling_gap,
 	     unsigned level)
   {
@@ -1006,15 +1001,16 @@ public:
 
     /* Find shape instance.  XXX We currently have to iterate
        through all the shapes.  Fix later.  */
-    dwarf_output_collector::shape_type const *shape = NULL;
-    dwarf_output_collector::shape_info const *info = NULL;
+    dwarf_output::shape_type const *shape = NULL;
+    dwarf_output::shape_info const *info = NULL;
     size_t instance_id = (size_t)-1;
 
-    for (dwarf_output_collector::shape_map::iterator st = c._m_shapes.begin ();
+    /*
+    for (dwarf_output::shape_map::iterator st = c._m_shapes.begin ();
 	 st != c._m_shapes.end (); ++st)
       {
-	dwarf_output_collector::shape_info::instance_map::const_iterator
-	  instance_it = st->second._m_instance_map.find (&die);
+	dwarf_output::shape_info::instance_map::const_iterator
+	  instance_it = st->second._m_instance_map.find (ref);
 	if (instance_it != st->second._m_instance_map.end ())
 	  {
 	    assert (shape == NULL && info == NULL);
@@ -1024,6 +1020,7 @@ public:
 	    instance_id = instance_it->second;
 	  }
       }
+    */
     assert (shape != NULL && info != NULL);
 
     /* Record where the DIE begins.  */
@@ -1031,7 +1028,7 @@ public:
     // xxx handle non-CU-local
 
     /* Our instance.  */
-    dwarf_output_collector::shape_info::instance_type const &instance
+    dwarf_output::shape_info::instance_type const &instance
       = info->_m_instances[instance_id];
     size_t code = instance.second;
     ::dw_write_uleb128 (inserter, code);
@@ -1041,7 +1038,7 @@ public:
     /* Dump attribute values.  */
     debug_info_entry::attributes_type const &attribs = die.attributes ();
     std::vector<int>::const_iterator form_it = instance.first.begin ();
-    for (dwarf_output_collector::shape_type::attrs_vec::const_iterator
+    for (dwarf_output::shape_type::attrs_vec::const_iterator
 	   at = shape->_m_attrs.begin ();
 	 at != shape->_m_attrs.end (); ++at)
       {
@@ -1213,7 +1210,7 @@ public:
 
 void
 dwarf_output::output_debug_info (section_appender &appender,
-				 dwarf_output_collector &c,
+				 __unused dwarf_output_collector &c,
 				 strtab &debug_str,
 				 str_backpatch_vec &str_backpatch,
 				 bool addr_64, bool big_endian)
@@ -1226,8 +1223,8 @@ dwarf_output::output_debug_info (section_appender &appender,
      these otherwise useless Elf_Data pointers that we've allocated in
      the past.  So just ditch it and KISS.  */
 
-  if (!c._m_output_built)
-    c.build_output (addr_64, false /* dwarf_64 */);
+  if (!_m_output_built)
+    build_output (addr_64, false /* dwarf_64 */);
 
   std::back_insert_iterator <section_appender> inserter
     = std::back_inserter (appender);
@@ -1256,10 +1253,10 @@ dwarf_output::output_debug_info (section_appender &appender,
 
       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
       gap fake_gap;
-      recursive_dumper (c, appender, debug_str, addr_64,
+      recursive_dumper (*this, appender, debug_str, addr_64,
 			die_off, die_backpatch, str_backpatch,
 			big_endian, cu_start)
-	.dump (*it->_m_cu_die, fake_gap, 0);
+	.dump (*it, fake_gap, 0);
       assert (!fake_gap.valid ());
 
       std::for_each (die_backpatch.begin (), die_backpatch.end (),
