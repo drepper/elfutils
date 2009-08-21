@@ -169,6 +169,7 @@ AC_HELP_STRING([--enable-gprof],
 [build binaries with gprof support]), [use_gprof=yes], [use_gprof=no])
 if test "$use_gprof" = yes; then
   CFLAGS="$CFLAGS -pg"
+  CXXFLAGS="$CXXFLAGS -pg"
   LDFLAGS="$LDFLAGS -pg"
 fi
 AM_CONDITIONAL(GPROF, test "$use_gprof" = yes)
