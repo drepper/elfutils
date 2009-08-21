@@ -269,7 +269,6 @@ namespace elfutils
 
       private:
 	typedef dwarf_data::attributes_type<dwarf_output, value> _base;
-
 	size_t _m_hash;
 
 	inline attributes_type ()
@@ -327,7 +326,6 @@ namespace elfutils
 
       protected:
 	typedef std::vector<die_info_pair *> _base;
-
 	size_t _m_hash;
 
 	inline void set_hash ()
@@ -346,11 +344,6 @@ namespace elfutils
 	  set_hash ();
 	}
 
-	inline const _base &info () const
-	{
-	  return *this;
-	}
-
 	struct deref
 	  : public std::unary_function<die_info_pair *,
 				       const debug_info_entry &>
@@ -362,6 +355,11 @@ namespace elfutils
 	inline void reify_children () const;
 
       public:
+	inline const _base &info () const
+	{
+	  return *this;
+	}
+
 	friend class subr::hashed_hasher<children_type>;
 	typedef subr::hashed_hasher<children_type> hasher;
 
@@ -628,8 +626,6 @@ namespace elfutils
       };
     };
 
-    typedef std::vector<debug_info_entry::pointer> die_ref_vect;
-
     struct shape_type
     {
       struct form_constraint_t
@@ -695,7 +691,7 @@ namespace elfutils
       friend class subr::hashed_hasher<shape_type>;
       typedef subr::hashed_hasher<shape_type> hasher;
 
-      shape_type (const debug_info_entry::pointer &ref,
+      shape_type (const debug_info_entry &die,
 		  const dwarf_output::die_info &info);
 
       inline bool operator== (const shape_type &other) const
@@ -713,41 +709,45 @@ namespace elfutils
 
     struct shape_info
     {
+      typedef std::vector<std::reference_wrapper<const debug_info_entry>>
+	  die_ref_vect;
+
       // We keep list of users of this shape.  That will make it
       // simpler to evaluate the space trade-offs when we generate
       // actual abbrevs from this shape.
       die_ref_vect _m_users;
 
-      // Instances.  Instance is a sequence of concrete forms in the
-      // order matching that of shape_type::_m_attrs.  Each shape can
-      // produce several instances to ideally cover its users.  The
-      // second element of the pair is unique code assigned to that
-      // instance, or 0 if no code was assigned yet.
-      // XXX is size_t enough?  Use uintptr_t?
-      typedef std::pair<std::vector<int>, size_t> instance_type;
-      typedef std::vector<instance_type> instances_type;
-      instances_type _m_instances;
-
-      shape_info (debug_info_entry::pointer ref)
+      // Instances.  Each shape can produce several instances to
+      // ideally cover its users.  The second element of the pair is
+      // unique code assigned to that instance, or 0 if no code was
+      // assigned yet.  XXX is size_t enough?  Use uintptr_t?
+      struct instance_type
       {
-	add_user (ref);
+	typedef std::map<int, int> forms_type;
+	forms_type forms; // attribute->form
+	size_t code; // or 0 if not assigned yet
+	instance_type () : code (0) {}
+      };
+      typedef std::vector<instance_type> instance_vec;
+      instance_vec _m_instances;
+
+      shape_info (debug_info_entry const &die)
+      {
+	add_user (die);
       }
 
-      void add_user (debug_info_entry::pointer ref)
+      void add_user (debug_info_entry const &die)
       {
-	_m_users.push_back (ref);
+	_m_users.push_back (std::ref (die));
       }
 
       void instantiate (shape_type const &shape,
+			dwarf_output_collector &col,
 			bool addr_64, bool dwarf_64);
       void build_data (shape_type const &shape,
 		       instance_type const &inst,
 		       section_appender &appender);
     };
-
-    typedef std::tr1::unordered_map<shape_type, shape_info,
-				    shape_type::hasher> shape_map;
-    shape_map _m_shapes;
 
     typedef debug_info_entry::attributes_type::value_type attribute;
 
@@ -901,9 +901,7 @@ namespace elfutils
 
   public:
     // Constructor for an empty file, can add to its compile_units ().
-    inline dwarf_output ()
-      : _m_output_built (false)
-    {}
+    inline dwarf_output () {}
 
     // Constructor copying CUs from an input file (can be any of dwarf,
     // dwarf_edit, or dwarf_output).
@@ -912,7 +910,6 @@ namespace elfutils
     inline dwarf_output (const input &dw, dwarf_output_collector &c,
 			 copier<input> maker = copier<input> ())
       : _m_units (dw.compile_units (), maker (c))
-      , _m_output_built (false)
     {}
 
     template<typename file>
@@ -937,9 +934,6 @@ namespace elfutils
 			    bool addr_64, bool big_endian);
 
     void add_shape (debug_info_entry &die, bool last_sibling);
-
-    bool _m_output_built;
-    void build_output (bool addr_64, bool dwarf_64);
   };
 
   // Explicit specializations.
@@ -1085,12 +1079,11 @@ namespace elfutils
     std::queue<value::value_reference *> _m_refs;
     std::bitset<2> _m_with_sibling;
     unsigned int _m_uses;
-    size_t abbrev_code; // Or 0 if unassigned.
-    dwarf_output::shape_info::instance_type *instance;
+
+    dwarf_output::shape_info::instance_vec::iterator abbrev_ptr;
 
     inline die_info ()
       : _m_refs (), _m_with_sibling (), _m_uses (0)
-      , abbrev_code (0)
     {}
 
     inline ~die_info ()
@@ -1122,34 +1115,7 @@ namespace elfutils
     }
 
     inline void placed (const debug_info_entry::pointer &ref,
-			bool have_sibling)
-    {
-      ++_m_uses;
-      _m_with_sibling[have_sibling] = true;
-
-      if (_m_refs.empty ())
-	{
-	  subr::nothing dummy;
-	  self (new value::value_reference (ref, dummy));
-	}
-      else
-	for (size_t n = _m_refs.size (); n > 0; --n)
-	  {
-	    value::value_reference *self_ref = _m_refs.front ();
-	    self_ref->ref = ref;
-	    _m_refs.pop ();
-	    _m_refs.push (self_ref);
-	  }
-
-      /* xxx yyy create shapes afterwards
-      shape_type shape (ref, *this);
-      shape_map::iterator st = _m_shapes.find (shape);
-      if (st != _m_shapes.end ())
-	st->second.add_user (&x.first);
-      else
-	_m_shapes.insert (std::make_pair (shape, shape_info (x)));
-      */
-    }
+			bool have_sibling);
   };
 
   /* This is the wrapper in the guts of a children_type iterator.
@@ -1165,7 +1131,7 @@ namespace elfutils
   /* This is called when a children_type is installed freshly in the collector.
      Fill in its back pointers.  */
   inline void
-  dwarf_output::debug_info_entry::children_type::reify_children () const
+  dwarf_output::debug_info_entry::children_type::reify_children() const
   {
     _base::const_iterator i = _base::begin ();
     bool have_sibling = i != _base::end ();
@@ -1241,6 +1207,13 @@ namespace elfutils
     typedef subr::identity_map<die_type, die_info> die_map;
     die_map _m_unique;
 
+    // Set of shapes.
+    typedef std::tr1::unordered_map<dwarf_output::shape_type,
+				    dwarf_output::shape_info,
+				    dwarf_output::shape_type::hasher>
+	shape_map;
+    shape_map _m_shapes;
+
     inline die_info_pair *add_entry (int tag,
 				     const children_type *children,
 				     const attrs_type *attrs)
@@ -1289,6 +1262,7 @@ namespace elfutils
   public:
     inline dwarf_output_collector ()
       : _m_total (0)
+      , _m_output_built (false)
     {}
 
     static void die_stats (const die_map::value_type &elt)
@@ -1304,7 +1278,32 @@ namespace elfutils
 		<< " unique of " << _m_total << " total DIEs\n";
       std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
     }
+
+    bool _m_output_built;
+    void build_output (bool addr_64, bool dwarf_64);
   };
+
+  inline void
+  dwarf_output::die_info::placed (const debug_info_entry::pointer &ref,
+				  bool have_sibling)
+  {
+    ++_m_uses;
+    _m_with_sibling[have_sibling] = true;
+
+    if (_m_refs.empty ())
+      {
+	subr::nothing dummy;
+	self (new value::value_reference (ref, dummy));
+      }
+    else
+      for (size_t n = _m_refs.size (); n > 0; --n)
+	{
+	  value::value_reference *self_ref = _m_refs.front ();
+	  self_ref->ref = ref;
+	  _m_refs.pop ();
+	  _m_refs.push (self_ref);
+	}
+  }
 
   struct dwarf_output::value::circular_reference
     : public dwarf_output::value::value_reference
@@ -2274,7 +2273,6 @@ namespace elfutils
 	       const compile_units::iterator &out)
     {
       typename tracker::walk into (_m_tracker, in, out);
-
       *out = unit_copier (this, *in).final ()->first;
     }
 

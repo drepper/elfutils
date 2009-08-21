@@ -388,18 +388,18 @@ namespace
 }
 
 dwarf_output::shape_type::shape_type
-    (const debug_info_entry::pointer &ref,
+    (const debug_info_entry &die,
      const dwarf_output::die_info &info)
-  : _m_tag (ref->tag ())
-  , _m_has_children (ref->has_children ())
+  : _m_tag (die.tag ())
+  , _m_has_children (die.has_children ())
   , _m_hash (8675309 << _m_has_children)
 {
-  if (info._m_with_sibling[true] && ref->has_children ())
+  if (info._m_with_sibling[true] && die.has_children ())
     _m_attrs.push_back (DW_AT_sibling);
 
   for (debug_info_entry::attributes_type::const_iterator it
-	 = ref->attributes ().begin ();
-       it != ref->attributes ().end (); ++it)
+	 = die.attributes ().begin ();
+       it != die.attributes ().end (); ++it)
     _m_attrs.push_back (it->first);
 
   // Sort it, but leave sibling attribute at the beginning.
@@ -411,19 +411,6 @@ dwarf_output::shape_type::shape_type
   for (attrs_vec::const_iterator it = _m_attrs.begin ();
        it != _m_attrs.end (); ++it)
     subr::hash_combine (_m_hash, *it);
-}
-
-namespace
-{
-  struct abbreviation
-  {
-    dwarf_output::die_ref_vect _m_users;
-    std::vector <int> _m_forms;
-
-    abbreviation (std::vector <int> forms)
-      : _m_forms (forms)
-    {}
-  };
 }
 
 namespace
@@ -775,13 +762,17 @@ namespace
 void
 dwarf_output::shape_info::instantiate
   (dwarf_output::shape_type const &shape,
+   dwarf_output_collector &col,
    bool addr_64, bool dwarf_64)
 {
+  // Prevent instance pointers from invalidation upon push_back.
+  _m_instances.reserve (_m_users.size ());
+
   for (die_ref_vect::const_iterator it = _m_users.begin ();
        it != _m_users.end (); ++it)
     {
       instance_type inst;
-      debug_info_entry const &die = **it;
+      debug_info_entry const &die = *it;
       debug_info_entry::attributes_type const &attribs = die.attributes ();
       for (shape_type::attrs_vec::const_iterator at = shape._m_attrs.begin ();
 	   at != shape._m_attrs.end (); ++at)
@@ -844,9 +835,11 @@ dwarf_output::shape_info::instantiate
 		  assert (form != -1);
 		}
 	    }
-	  inst.first.push_back (form);
+	  inst.forms.insert (std::make_pair (name, form));
 	}
-      std::cout << "Need to add to instance map." << std::endl;
+
+      die_info &i = col._m_unique.find (die)->second;
+      i.abbrev_ptr = _m_instances.end ();
       _m_instances.push_back (inst);
     }
 
@@ -865,23 +858,17 @@ dwarf_output::shape_info::build_data
 {
   std::back_insert_iterator<section_appender> inserter
     = std::back_inserter (appender);
-  ::dw_write_uleb128 (inserter, inst.second);
+  ::dw_write_uleb128 (inserter, inst.code);
   ::dw_write_uleb128 (inserter, shape._m_tag);
   *inserter++ = shape._m_has_children ? DW_CHILDREN_yes : DW_CHILDREN_no;
 
-  // We iterate shape attribute map in parallel with instance
-  // attribute forms.  They are stored in the same order.  We get
-  // attribute name from attribute map, and concrete form from
-  // instance.
-  assert (shape._m_attrs.size () == inst.first.size ());
-  dwarf_output::shape_type::attrs_vec::const_iterator at
-    = shape._m_attrs.begin ();
-  for (instance_type::first_type::const_iterator it = inst.first.begin ();
-       it != inst.first.end (); ++it)
+  assert (shape._m_attrs.size () == inst.forms.size ());
+  for (instance_type::forms_type::const_iterator it = inst.forms.begin ();
+       it != inst.forms.end (); ++it)
     {
       // ULEB128 name & form
-      ::dw_write_uleb128 (inserter, *at++);
-      ::dw_write_uleb128 (inserter, *it);
+      ::dw_write_uleb128 (inserter, it->first);
+      ::dw_write_uleb128 (inserter, it->second);
     }
 
   // 0 for name & form to terminate the abbreviation
@@ -890,17 +877,32 @@ dwarf_output::shape_info::build_data
 }
 
 void
-dwarf_output::build_output (bool addr_64, bool dwarf_64)
+dwarf_output_collector::build_output (bool addr_64, bool dwarf_64)
 {
   size_t code = 0;
-  for (dwarf_output::shape_map::iterator it = _m_shapes.begin ();
+  for (die_map::const_iterator it = _m_unique.begin ();
+       it != _m_unique.end (); ++it)
+    {
+      dwarf_output::shape_type shape (it->first, it->second);
+      dwarf_output_collector::shape_map::iterator st
+	= _m_shapes.find (shape);
+      if (st != _m_shapes.end ())
+	st->second.add_user (it->first);
+      else
+	{
+	  dwarf_output::shape_info i (it->first);
+	  _m_shapes.insert (std::make_pair (shape, i));
+	}
+    }
+
+  for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
     {
-      it->second.instantiate (it->first, addr_64, dwarf_64);
-      for (dwarf_output::shape_info::instances_type::iterator jt
+      it->second.instantiate (it->first, *this, addr_64, dwarf_64);
+      for (dwarf_output::shape_info::instance_vec::iterator jt
 	     = it->second._m_instances.begin ();
 	   jt != it->second._m_instances.end (); ++jt)
-	jt->second = ++code;
+	jt->code = ++code;
     }
 
   _m_output_built = true;
@@ -908,19 +910,19 @@ dwarf_output::build_output (bool addr_64, bool dwarf_64)
 
 void
 dwarf_output::output_debug_abbrev (section_appender &appender,
-				   __unused dwarf_output_collector &c,
+				   dwarf_output_collector &c,
 				   bool addr_64)
 {
-  if (!_m_output_built)
+  if (!c._m_output_built)
     /* xxx we need to decide on dwarf_64 as soon as here.  That's not
        good.  We will probably have to build debug_info and
        abbreviations in parallel, and dump abbreviations after
        debug_info is done and we know how big the data were.  */
-    build_output (addr_64, false /* xxx dwarf_64 */);
+    c.build_output (addr_64, false /* xxx dwarf_64 */);
 
-  for (dwarf_output::shape_map::iterator it = _m_shapes.begin ();
-       it != _m_shapes.end (); ++it)
-    for (dwarf_output::shape_info::instances_type::const_iterator jt
+  for (dwarf_output_collector::shape_map::iterator it = c._m_shapes.begin ();
+       it != c._m_shapes.end (); ++it)
+    for (dwarf_output::shape_info::instance_vec::const_iterator jt
 	   = it->second._m_instances.begin ();
 	 jt != it->second._m_instances.end (); ++jt)
       it->second.build_data (it->first, *jt, appender);
@@ -984,7 +986,7 @@ public:
       cu_local_recomputer (new local_ref_recomputer (cu_start))
   {}
 
-  void dump (dwarf_output::debug_info_entry const &die,
+  void dump (dwarf_output::die_info_pair const &info_pair,
 	     gap &sibling_gap,
 	     unsigned level)
   {
@@ -994,61 +996,39 @@ public:
       "                                                            ";
     static char const *tail = spaces + strlen (spaces);
     __attribute__ ((unused)) char const *pad = tail - level * 2;
-    //std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ()) << " ";
+
+    dwarf_output::debug_info_entry const &die = info_pair.first;
+    dwarf_output::die_info const &info = info_pair.second;
+    /*
+    std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ())
+	      << " " << std::flush;
+    */
 
     std::back_insert_iterator <section_appender> inserter
       = std::back_inserter (appender);
 
-    /* Find shape instance.  XXX We currently have to iterate
-       through all the shapes.  Fix later.  */
-    dwarf_output::shape_type const *shape = NULL;
-    dwarf_output::shape_info const *info = NULL;
-    size_t instance_id = (size_t)-1;
-
-    /*
-    for (dwarf_output::shape_map::iterator st = c._m_shapes.begin ();
-	 st != c._m_shapes.end (); ++st)
-      {
-	dwarf_output::shape_info::instance_map::const_iterator
-	  instance_it = st->second._m_instance_map.find (ref);
-	if (instance_it != st->second._m_instance_map.end ())
-	  {
-	    assert (shape == NULL && info == NULL);
-
-	    shape = &st->first;
-	    info = &st->second;
-	    instance_id = instance_it->second;
-	  }
-      }
-    */
-    assert (shape != NULL && info != NULL);
-
     /* Record where the DIE begins.  */
     die_off [die.offset ()] = appender.size ();
-    // xxx handle non-CU-local
 
     /* Our instance.  */
-    dwarf_output::shape_info::instance_type const &instance
-      = info->_m_instances[instance_id];
-    size_t code = instance.second;
-    ::dw_write_uleb128 (inserter, code);
+    dwarf_output::shape_info::instance_type const &instance = *info.abbrev_ptr;
+    ::dw_write_uleb128 (inserter, instance.code);
 
     //std::cout << " " << code << std::endl;
 
     /* Dump attribute values.  */
     debug_info_entry::attributes_type const &attribs = die.attributes ();
-    std::vector<int>::const_iterator form_it = instance.first.begin ();
-    for (dwarf_output::shape_type::attrs_vec::const_iterator
-	   at = shape->_m_attrs.begin ();
-	 at != shape->_m_attrs.end (); ++at)
+    for (dwarf_output::shape_info::instance_type::forms_type::const_iterator
+	   at = instance.forms.begin (); at != instance.forms.end (); ++at)
       {
-	int name = *at;
-	int form = *form_it++;
+	int name = at->first;
+	int form = at->second;
 	if (name == DW_AT_sibling)
 	  {
 	    // XXX in fact we want to handle this case just like any
 	    // other CU-local reference.  So also use this below (or
-	    // better reuse single piece of code).
+	    // better reuse single piece of code for reference
+	    // handling).
 	    size_t gap_size
 	      = ::form_width (form, addr_64, false /* xxx dwarf_64 */);
 	    sibling_gap = gap (appender, gap_size,
@@ -1071,8 +1051,8 @@ public:
 	dwarf::value_space vs = value.what_space ();
 
 	/*
-	std::cout << pad << "  " << dwarf_attr_string (name)
-		  << ": " << dwarf_form_string (form) << " ";
+	  std::cout << pad << "  " << dwarf_attr_string (name)
+	  << ": " << dwarf_form_string (form) << " ";
 	*/
 	switch (vs)
 	  {
@@ -1187,76 +1167,77 @@ public:
 	  };
 	//std::cout << std::endl;
       }
-    assert (form_it == instance.first.end ());
 
     if (!die.children ().empty ())
       {
 	gap my_sibling_gap;
-	for (compile_unit::children_type::const_iterator jt
-	       = die.children ().begin (); jt != die.children ().end (); ++jt)
+	for (std::vector<dwarf_output::die_info_pair *>::const_iterator jt
+	       = die.children ().info ().begin ();
+	     jt != die.children ().info ().end (); ++jt)
 	  {
 	    if (my_sibling_gap.valid ())
 	      {
-		die_backpatch.push_back (std::make_pair (my_sibling_gap,
-							 jt->offset ()));
+		die_backpatch.push_back
+		  (std::make_pair (my_sibling_gap,
+				   (*jt)->first.offset ()));
 		my_sibling_gap = gap ();
 	      }
-	    dump (*jt, my_sibling_gap, level + 1);
+	    dump (**jt, my_sibling_gap, level + 1);
 	  }
 	*inserter++ = 0;
       }
   }
 };
 
-void
-dwarf_output::output_debug_info (section_appender &appender,
-				 __unused dwarf_output_collector &c,
-				 strtab &debug_str,
-				 str_backpatch_vec &str_backpatch,
-				 bool addr_64, bool big_endian)
-{
-  /* We request appender directly, because we depend on .alloc method
-     being implemented, which is not the case for std containers.
-     Alternative approach would use purely random access
-     iterator-based solution, which would be considerable amount of
-     work (and bugs) and would involve memory overhead for holding all
-     these otherwise useless Elf_Data pointers that we've allocated in
-     the past.  So just ditch it and KISS.  */
+ void
+ dwarf_output::output_debug_info (section_appender &appender,
+				  dwarf_output_collector &c,
+				  strtab &debug_str,
+				  str_backpatch_vec &str_backpatch,
+				  bool addr_64, bool big_endian)
+ {
+   /* We request appender directly, because we depend on .alloc method
+      being implemented, which is not the case for std containers.
+      Alternative approach would use purely random access
+      iterator-based solution, which would be considerable amount of
+      work (and bugs) and would involve memory overhead for holding all
+      these otherwise useless Elf_Data pointers that we've allocated in
+      the past.  So just ditch it and KISS.  */
 
-  if (!_m_output_built)
-    build_output (addr_64, false /* dwarf_64 */);
+   if (!c._m_output_built)
+     c.build_output (addr_64, false /* dwarf_64 */);
 
-  std::back_insert_iterator <section_appender> inserter
-    = std::back_inserter (appender);
+   std::back_insert_iterator <section_appender> inserter
+     = std::back_inserter (appender);
 
-  for (compile_units::const_iterator it = _m_units.begin ();
-       it != _m_units.end (); ++it)
-    {
-      // Remember where the unit started for back-patching of size.
-      size_t cu_start = appender.size ();
+   for (compile_units::const_iterator it = _m_units.begin ();
+	it != _m_units.end (); ++it)
+     {
+       // Remember where the unit started for back-patching of size.
+       size_t cu_start = appender.size ();
 
-      // Unit length.
-      gap length_gap (appender, 4 /*XXX dwarf64*/, big_endian);
+       // Unit length.
+       gap length_gap (appender, 4 /*XXX dwarf64*/, big_endian);
 
-      // Version.
-      ::dw_write<2> (appender.alloc (2), 3, big_endian);
+       // Version.
+       ::dw_write<2> (appender.alloc (2), 3, big_endian);
 
-      // Debug abbrev offset.  Use the single abbrev table that we
-      // emit at offset 0.
-      ::dw_write<4> (appender.alloc (4), 0, big_endian);
+       // Debug abbrev offset.  Use the single abbrev table that we
+       // emit at offset 0.
+       ::dw_write<4> (appender.alloc (4), 0, big_endian);
 
-      // Size in bytes of an address on the target architecture.
-      *inserter++ = addr_64 ? 8 : 4;
+       // Size in bytes of an address on the target architecture.
+       *inserter++ = addr_64 ? 8 : 4;
 
-      die_off_map die_off;
-      die_backpatch_vec die_backpatch;
+       die_off_map die_off;
+       die_backpatch_vec die_backpatch;
 
-      //std::cout << "UNIT " << it->_m_cu_die << std::endl;
-      gap fake_gap;
-      recursive_dumper (*this, appender, debug_str, addr_64,
-			die_off, die_backpatch, str_backpatch,
-			big_endian, cu_start)
-	.dump (*it, fake_gap, 0);
+       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
+       gap fake_gap;
+       recursive_dumper (*this, appender, debug_str, addr_64,
+			 die_off, die_backpatch, str_backpatch,
+			 big_endian, cu_start)
+	 .dump (*c._m_unique.find (*it), fake_gap, 0);
       assert (!fake_gap.valid ());
 
       std::for_each (die_backpatch.begin (), die_backpatch.end (),
