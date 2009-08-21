@@ -1119,6 +1119,13 @@ namespace elfutils
       {
 	return !(*this == other);
       }
+
+      /* Return a value unique to us while we're in memory.
+	 This is a stable pointer into the Dwarf_Files data.  */
+      inline uintptr_t identity () const
+      {
+	return (uintptr_t) name ();
+      }
     };
 
     // This describes the value of an attribute.

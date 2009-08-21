@@ -197,7 +197,10 @@ value_string (const value_type &value)
 
     case dwarf::VS_macptr:	// XXX punt for now, treat as constant
     case dwarf::VS_constant:
-      return hex_string (value.constant ());
+      if (value.constant_is_integer ())
+	return hex_string (value.constant ());
+      return dec_string (value.constant_block ().size (),
+			 "{block of ", " bytes}");
 
     case dwarf::VS_dwarf_constant:
       return value.dwarf_constant ().to_string ();
