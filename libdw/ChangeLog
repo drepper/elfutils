@@ -1,3 +1,10 @@
+2009-08-21  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf (dwarf::source_file::identity): New method.
+	* c++/dwarf_data (dwarf_data::source_file::identity): Likewise.
+	* c++/dwarf_output (dwarf_output::copier): Cache input string
+	and source file pointers to short-circuit repeated full hashconsing.
+
 2009-08-20  Roland McGrath  <roland@redhat.com>
 
 	* c++/values.cc (value_string): Fix constant-block case.

@@ -288,6 +288,12 @@ namespace elfutils
       {
 	return !(*this == other);
       }
+
+      // Return a value unique to us while we're in memory.
+      inline uintptr_t identity () const
+      {
+	return (uintptr_t) this;
+      }
     };
 
     // This describes a CU's directory table, a simple array of strings.

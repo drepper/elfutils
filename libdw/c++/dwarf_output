@@ -1989,16 +1989,73 @@ namespace elfutils
       return *_m_collector;
     }
 
+    /* We're likely to come across the same strings/identifiers and source
+       files many times in a copying run.  When they are the very same
+       pointers into the input dwarf object data, we can optimize the
+       ordinary string hash lookup in the value_set by caching the mapping
+       of input pointers to output values.  */
+    template<typename value_type>
+    struct string_cache
+    {
+      std::tr1::unordered_map<uintptr_t, const value_type *> _m_cache;
+
+      template<typename input>
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    uintptr_t key, const input &x)
+      {
+	const value_type *&cache = _m_cache[key];
+	if (cache == NULL)
+	  cache = set.add (x);
+	return cache;
+      }
+
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    const char *x)
+      {
+	return add (set, (uintptr_t) x, x);
+      }
+
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    const std::string &x)
+      {
+	return add (set, (uintptr_t) &x, x);
+      }
+
+      template<typename input>
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    const input &x)
+      {
+	return set.add (x);
+      }
+    };
+
+    string_cache<value::value_string> _m_strings;
+    string_cache<value::value_identifier> _m_identifiers;
+
+    std::tr1::unordered_map<
+      uintptr_t, const value::value_source_file *> _m_source_file_cache;
+
+    template<typename input>
+    inline const value::value_source_file *add_source_file (int /*whatattr*/,
+							    const input &x)
+    {
+      const value::value_source_file *&cache
+	= _m_source_file_cache[x.identity ()];
+      if (cache == NULL)
+	cache = _m_collector->_m_source_file.add (x);
+      return cache;
+    }
+
     template<typename input>
     inline const value::value_string *add_string (const input &x)
     {
-      return _m_collector->_m_strings.add (x);
+      return _m_strings.add (_m_collector->_m_strings, x);
     }
 
     template<typename input>
     inline const value::value_string *add_identifier (const input &x)
     {
-      return _m_collector->_m_identifiers.add (x);
+      return _m_identifiers.add (_m_collector->_m_identifiers, x);
     }
 
     template<typename input>
@@ -2043,13 +2100,6 @@ namespace elfutils
     add_dwarf_constant (const input &x)
     {
       return _m_collector->_m_dwarf_const.add (x);
-    }
-
-    template<typename input>
-    inline const value::value_source_file *add_source_file (int /*whatattr*/,
-							    const input &x)
-    {
-      return _m_collector->_m_source_file.add (x);
     }
 
     template<typename input>
