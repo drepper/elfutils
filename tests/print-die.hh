@@ -41,6 +41,7 @@ static bool print_offset;
 static bool sort_attrs;
 static bool elide_refs;
 static bool dump_refs;
+static bool no_print;
 
 static enum { copy_none, copy_edit, copy_output } make_copy;
 
@@ -95,6 +96,13 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
   else if (argc > 1 && !strcmp (argv[1], "--output"))
     {
       make_copy = copy_output;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--silent"))
+    {
+      no_print = true;
       --argc;
       ++argv;
     }
@@ -274,6 +282,9 @@ template<typename file>
 static void
 print_file (const file &dw, const unsigned int limit)
 {
+  if (no_print)
+    return;
+
   for (typename file::compile_units::const_iterator i
 	 = dw.compile_units ().begin (); i != dw.compile_units ().end (); ++i)
     print_cu<file> (*i, limit);

@@ -1,3 +1,7 @@
+2009-08-21  Roland McGrath  <roland@redhat.com>
+
+	* print-die.hh (print_die_main, print_file): Add --silent option.
+
 2009-08-19  Roland McGrath  <roland@redhat.com>
 
 	* print-die.hh: Handle --norefs, --dump-refs.
