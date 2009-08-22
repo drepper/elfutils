@@ -102,7 +102,7 @@ namespace elfutils
       struct hasher
       {
 	size_t _m_hash;
-	inline hasher () : _m_hash (0) {}
+	inline hasher (size_t init = 0) : _m_hash (init) {}
 	inline void operator () (const typename T::value_type &x)
 	{
 	  subr::hash_combine (_m_hash, hash_this (x));
@@ -130,9 +130,10 @@ namespace elfutils
     private:
       struct hasher : public container_hasher<std::string>::hasher
       {
+	inline hasher () : container_hasher<std::string>::hasher (5381) {}
 	inline void operator () (std::string::value_type c)
 	{
-	  _m_hash = 5 * _m_hash + c;
+	  _m_hash = _m_hash * 33 + c;
 	}
       };
     public:
