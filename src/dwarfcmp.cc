@@ -255,10 +255,10 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     return keep_going ();
   }
 
+  typedef dwarf_comparator<dwarf1, dwarf2, false, subtracker> subcomparator;
   inline void reference_mismatch (const die1 &ref1, const die2 &ref2)
   {
-    dwarf_comparator<
-      dwarf1, dwarf2, false, subtracker> cmp (*(subtracker *) this);
+    subcomparator cmp (*(subtracker *) this);
     if (cmp.equals (ref1, ref2))
       cout << " (XXX refs now equal again!)";
     else if (cmp.equals (*ref1, *ref2))
