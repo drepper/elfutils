@@ -927,16 +927,24 @@ dwarf_output::shape_info::build_data
   *inserter++ = 0;
 }
 
-void
-dwarf_output_collector::build_output (bool addr_64, bool dwarf_64)
+dwarf_output::writer::writer (dwarf_output_collector &col,
+			      dwarf_output &dw,
+			      bool big_endian, bool addr_64, bool dwarf_64,
+			      strtab &debug_str)
+  : _m_col (col)
+  , _m_dw (dw)
+  , _m_addr_64 (addr_64)
+  , _m_dwarf_64 (dwarf_64)
+  , _m_big_endian (big_endian)
+  , _m_debug_str (debug_str)
 {
   size_t code = 0;
-  for (die_map::const_iterator it = _m_unique.begin ();
-       it != _m_unique.end (); ++it)
+  for (dwarf_output_collector::die_map::const_iterator it
+	 = col._m_unique.begin ();
+       it != col._m_unique.end (); ++it)
     {
       dwarf_output::shape_type shape (it->first, it->second);
-      dwarf_output_collector::shape_map::iterator st
-	= _m_shapes.find (shape);
+      shape_map::iterator st = _m_shapes.find (shape);
       if (st != _m_shapes.end ())
 	st->second.add_user (it->first);
       else
@@ -949,26 +957,19 @@ dwarf_output_collector::build_output (bool addr_64, bool dwarf_64)
   for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
     {
-      it->second.instantiate (it->first, *this, addr_64, dwarf_64);
+      it->second.instantiate (it->first, col, addr_64, dwarf_64);
       for (dwarf_output::shape_info::instance_vec::iterator jt
 	     = it->second._m_instances.begin ();
 	   jt != it->second._m_instances.end (); ++jt)
 	jt->code = ++code;
     }
-
-  _m_output_built = true;
 }
 
 void
-dwarf_output::output_debug_abbrev (section_appender &appender,
-				   dwarf_output_collector &c,
-				   bool addr_64)
+dwarf_output::writer::output_debug_abbrev (section_appender &appender)
 {
-  if (!c._m_output_built)
-    c.build_output (addr_64, false /* xxx dwarf_64 */);
-
-  for (dwarf_output_collector::shape_map::iterator it = c._m_shapes.begin ();
-       it != c._m_shapes.end (); ++it)
+  for (shape_map::iterator it = _m_shapes.begin ();
+       it != _m_shapes.end (); ++it)
     for (dwarf_output::shape_info::instance_vec::const_iterator jt
 	   = it->second._m_instances.begin ();
 	 jt != it->second._m_instances.end (); ++jt)
@@ -998,38 +999,26 @@ struct local_ref_recomputer
   }
 };
 
-class dwarf_output::recursive_dumper
+class dwarf_output::writer::recursive_dumper
 {
-  dwarf_output &c;
+  dwarf_output::writer &_m_parent;
   section_appender &appender;
-  strtab &debug_str;
-  bool addr_64;
   die_off_map &die_off;
   die_backpatch_vec &die_backpatch;
-  str_backpatch_vec &str_backpatch;
-  bool big_endian;
   gap::recomputer::ptr cu_local_recomputer;
 
   recursive_dumper (recursive_dumper const &copy); // nocopy
 
 public:
-  recursive_dumper (dwarf_output &a_c,
+  recursive_dumper (dwarf_output::writer &writer,
 		    section_appender &a_appender,
-		    strtab &a_debug_str,
-		    bool a_addr_64,
 		    die_off_map &a_die_off,
 		    die_backpatch_vec &a_die_backpatch,
-		    str_backpatch_vec &a_str_backpatch,
-		    bool a_big_endian,
 		    uint64_t cu_start)
-    : c (a_c),
+    : _m_parent (writer),
       appender (a_appender),
-      debug_str (a_debug_str),
-      addr_64 (a_addr_64),
       die_off (a_die_off),
       die_backpatch (a_die_backpatch),
-      str_backpatch (a_str_backpatch),
-      big_endian (a_big_endian),
       cu_local_recomputer (new local_ref_recomputer (cu_start))
   {}
 
@@ -1077,10 +1066,11 @@ public:
 	    // other CU-local reference.  So also use this below (or
 	    // better reuse single piece of code for reference
 	    // handling).
-	    size_t gap_size
-	      = ::form_width (form, addr_64, false /* xxx dwarf_64 */);
+	    size_t gap_size = ::form_width (form,
+					    _m_parent._m_addr_64,
+					    _m_parent._m_dwarf_64);
 	    sibling_gap = gap (appender, gap_size,
-			       big_endian, cu_local_recomputer);
+			       _m_parent._m_big_endian, cu_local_recomputer);
 	    continue;
 	  }
 
@@ -1114,46 +1104,62 @@ public:
 	  case dwarf::VS_rangelistptr:
 	  case dwarf::VS_lineptr:
 	  case dwarf::VS_macptr:
-	    ::dw_write_form (appender, form, 0 /*xxx*/, big_endian,
-			     addr_64, false /* dwarf_64 */);
+	    ::dw_write_form (appender, form, 0 /*xxx*/,
+			     _m_parent._m_big_endian,
+			     _m_parent._m_addr_64,
+			     _m_parent._m_dwarf_64);
 	    break;
 
 	  case dwarf::VS_constant:
 	    if (value.constant_is_integer ())
-	      ::dw_write_form (appender, form, value.constant (), big_endian,
-			       addr_64, false /* dwarf_64 */);
+	      ::dw_write_form (appender, form, value.constant (),
+			       _m_parent._m_big_endian,
+			       _m_parent._m_addr_64,
+			       _m_parent._m_dwarf_64);
 	    else
 	      {
 		const std::vector<uint8_t> &block = value.constant_block ();
-		::dw_write_form (appender, form, block.size (), big_endian,
-				 addr_64, false /* dwarf_64 */);
+		::dw_write_form (appender, form, block.size (),
+				 _m_parent._m_big_endian,
+				 _m_parent._m_addr_64,
+				 _m_parent._m_dwarf_64);
 		std::copy (block.begin (), block.end (), inserter);
 	      }
 	    break;
 
 	  case dwarf::VS_dwarf_constant:
 	    ::dw_write_form (appender, form, value.dwarf_constant (),
-			     big_endian, addr_64, false /* dwarf_64 */);
+			     _m_parent._m_big_endian,
+			     _m_parent._m_addr_64,
+			     _m_parent._m_dwarf_64);
 	    break;
 
 	  case dwarf::VS_source_line:
 	    ::dw_write_form (appender, form, value.source_line (),
-			     big_endian, addr_64, false /* dwarf_64 */);
+			     _m_parent._m_big_endian,
+			     _m_parent._m_addr_64,
+			     _m_parent._m_dwarf_64);
 	    break;
 
 	  case dwarf::VS_source_column:
 	    ::dw_write_form (appender, form, value.source_column (),
-			     big_endian, addr_64, false /* dwarf_64 */);
+			     _m_parent._m_big_endian,
+			     _m_parent._m_addr_64,
+			     _m_parent._m_dwarf_64);
 	    break;
 
 	  case dwarf::VS_string:
 	    ::dw_write_string (value.string (), form, appender,
-			       debug_str, str_backpatch, big_endian);
+			       _m_parent._m_debug_str,
+			       _m_parent._m_str_backpatch,
+			       _m_parent._m_big_endian);
 	    break;
 
 	  case dwarf::VS_identifier:
 	    ::dw_write_string (value.identifier (), form, appender,
-			       debug_str, str_backpatch, big_endian);
+			       _m_parent._m_debug_str,
+			       _m_parent._m_str_backpatch,
+			       _m_parent._m_big_endian);
 	    break;
 
 	  case dwarf::VS_source_file:
@@ -1161,20 +1167,25 @@ public:
 	      {
 		::dw_write_string (value.source_file ().name (),
 				   form, appender,
-				   debug_str, str_backpatch, big_endian);
+				   _m_parent._m_debug_str,
+				   _m_parent._m_str_backpatch,
+				   _m_parent._m_big_endian);
 		break;
 	      }
 	    else
-	      ::dw_write_form (appender, form, 0 /*xxx*/, big_endian,
-			       addr_64, false /* dwarf_64 */);
+	      ::dw_write_form (appender, form, 0 /*xxx*/,
+			       _m_parent._m_big_endian,
+			       _m_parent._m_addr_64,
+			       _m_parent._m_dwarf_64);
 	    break;
 
 	  case dwarf::VS_address:
 	    {
 	      assert (form == DW_FORM_addr);
-	      size_t w = addr_64 ? 8 : 4;
+	      size_t w = _m_parent._m_addr_64 ? 8 : 4;
 	      ::dw_write_var (appender.alloc (w), w,
-			      value.address (), big_endian);
+			      value.address (),
+			      _m_parent._m_big_endian);
 	    }
 	    break;
 
@@ -1183,7 +1194,7 @@ public:
 	      assert (form == DW_FORM_ref_addr);
 	      // XXX dwarf64
 	      die_backpatch.push_back
-		(std::make_pair (gap (appender, 4, big_endian),
+		(std::make_pair (gap (appender, 4, _m_parent._m_big_endian),
 				 value.reference ()->offset ()));
 	    }
 	    break;
@@ -1193,8 +1204,10 @@ public:
 	    if (form == DW_FORM_block)
 	      ::dw_write_uleb128 (inserter, 0);
 	    else
-	      ::dw_write_form (appender, form, 0 /*xxx*/, big_endian,
-			       addr_64, false /* dwarf_64 */);
+	      ::dw_write_form (appender, form, 0 /*xxx*/,
+			       _m_parent._m_big_endian,
+			       _m_parent._m_addr_64,
+			       _m_parent._m_dwarf_64);
 	    break;
 
 	  case dwarf::VS_discr_list:
@@ -1224,52 +1237,39 @@ public:
   }
 };
 
- void
- dwarf_output::output_debug_info (section_appender &appender,
-				  dwarf_output_collector &c,
-				  strtab &debug_str,
-				  str_backpatch_vec &str_backpatch,
-				  bool addr_64, bool big_endian)
- {
-   /* We request appender directly, because we depend on .alloc method
-      being implemented: we need continuous chunks of memory for
-      back-patching.  While it would be possible to implement this
-      purely on iterators, it's not really useful.  */
+void
+dwarf_output::writer::output_debug_info (section_appender &appender)
+{
+  std::back_insert_iterator <section_appender> inserter
+    = std::back_inserter (appender);
 
-   if (!c._m_output_built)
-     c.build_output (addr_64, false /* dwarf_64 */);
+  for (compile_units::const_iterator it = _m_dw._m_units.begin ();
+       it != _m_dw._m_units.end (); ++it)
+    {
+      // Remember where the unit started for back-patching of size.
+      size_t cu_start = appender.size ();
 
-   std::back_insert_iterator <section_appender> inserter
-     = std::back_inserter (appender);
+      // Unit length.
+      dwarf_output::gap length_gap (appender,
+				    _m_dwarf_64 ? 8 : 4,
+				    _m_big_endian);
 
-   for (compile_units::const_iterator it = _m_units.begin ();
-	it != _m_units.end (); ++it)
-     {
-       // Remember where the unit started for back-patching of size.
-       size_t cu_start = appender.size ();
+      // Version.
+      ::dw_write<2> (appender.alloc (2), 3, _m_big_endian);
 
-       // Unit length.
-       gap length_gap (appender, 4 /*XXX dwarf64*/, big_endian);
+      // Debug abbrev offset.  Use the single abbrev table that we
+      // emit at offset 0.
+      ::dw_write<4> (appender.alloc (4), 0, _m_big_endian);
 
-       // Version.
-       ::dw_write<2> (appender.alloc (2), 3, big_endian);
+      // Size in bytes of an address on the target architecture.
+      *inserter++ = _m_addr_64 ? 8 : 4;
 
-       // Debug abbrev offset.  Use the single abbrev table that we
-       // emit at offset 0.
-       ::dw_write<4> (appender.alloc (4), 0, big_endian);
+      die_off_map die_off;
+      die_backpatch_vec die_backpatch;
 
-       // Size in bytes of an address on the target architecture.
-       *inserter++ = addr_64 ? 8 : 4;
-
-       die_off_map die_off;
-       die_backpatch_vec die_backpatch;
-
-       //std::cout << "UNIT " << it->_m_cu_die << std::endl;
-       gap fake_gap;
-       recursive_dumper (*this, appender, debug_str, addr_64,
-			 die_off, die_backpatch, str_backpatch,
-			 big_endian, cu_start)
-	 .dump (*c._m_unique.find (*it), fake_gap, 0);
+      gap fake_gap;
+      recursive_dumper (*this, appender, die_off, die_backpatch, cu_start)
+	.dump (*_m_col._m_unique.find (*it), fake_gap, 0);
       assert (!fake_gap.valid ());
 
       std::for_each (die_backpatch.begin (), die_backpatch.end (),
@@ -1280,4 +1280,13 @@ public:
       assert (length < (uint32_t)-1); // XXX temporary XXX dwarf64
       length_gap.patch (length);
     }
+}
+
+void
+dwarf_output::writer::apply_patches ()
+{
+  for (dwarf_output::str_backpatch_vec::const_iterator it
+	 = _m_str_backpatch.begin ();
+       it != _m_str_backpatch.end (); ++it)
+    it->first.patch (ebl_strtaboffset (it->second));
 }

@@ -485,6 +485,9 @@ handle_elf (Elf *elf, size_t alloc_unit,
   bool big_endian = ehdr->e_ident[EI_DATA] == ELFDATA2MSB;
   elfutils::strtab debug_strtab (false);
   elfutils::dwarf_output::str_backpatch_vec str_backpatch;
+  elfutils::dwarf_output::writer writer (collector, dwout,
+					 big_endian, addr_64, false,
+					 debug_strtab);
 
 #define ADD_SECTION(NAME, TYPE, COMMAND)				\
   {									\
@@ -498,29 +501,24 @@ handle_elf (Elf *elf, size_t alloc_unit,
   }
 
   ADD_SECTION (".debug_abbrev", SHT_PROGBITS,
-	       (dwout.output_debug_abbrev (appender, collector, addr_64),
+	       (writer.output_debug_abbrev (appender),
 		appender.size ()));
 
   ADD_SECTION (".debug_info", SHT_PROGBITS,
-	       (dwout.output_debug_info (appender, collector,
-					 debug_strtab, str_backpatch,
-					 addr_64, big_endian),
+	       (writer.output_debug_info (appender),
 		appender.size ()));
 
   ADD_SECTION (".debug_str", SHT_STRTAB,
-	       ({
-		 GElf_Word __size
-		   = debug_strtab.finalize (data_info.newscn)->d_size;
-		 std::for_each
-		   (str_backpatch.begin (), str_backpatch.end (),
-		    elfutils::dwarf_output::backpatch_strp ());
-		 __size;
-	       }));
+	       (debug_strtab.finalize (data_info.newscn)->d_size));
 
   ADD_SECTION (".shstrtab", SHT_STRTAB,
 	       shst.finalize (data_info.newscn)->d_size);
 
 #undef ADD_SECTION
+
+  // XXX This assumes that the data created by appenders of each
+  // section survive the death of appender itself.
+  writer.apply_patches ();
 
   /* Update the section information.  */
   GElf_Off lastoffset = 0;

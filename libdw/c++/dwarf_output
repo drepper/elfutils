@@ -869,14 +869,6 @@ namespace elfutils
     // [(gap, string entry)]
     typedef std::vector<std::pair<gap, ::Ebl_Strent *> > str_backpatch_vec;
 
-    struct backpatch_strp
-    {
-      void operator () (std::pair<gap, ::Ebl_Strent *> const &v)
-      {
-	v.first.patch (ebl_strtaboffset (v.second));
-      }
-    };
-
   private:
     // die offset -> file address
     typedef std::map< ::Dwarf_Off, ::Dwarf_Off> die_off_map;
@@ -896,8 +888,6 @@ namespace elfutils
 	v.first.patch (ot->second);
       }
     };
-
-    class recursive_dumper;
 
   public:
     // Constructor for an empty file, can add to its compile_units ().
@@ -923,18 +913,40 @@ namespace elfutils
       return !(*this == other);
     }
 
-    void output_debug_abbrev (section_appender &appender,
-			      dwarf_output_collector &dw,
-			      bool addr_64);
+    class writer
+    {
+      dwarf_output_collector &_m_col;
+      dwarf_output &_m_dw;
 
-    void output_debug_info (section_appender &appender,
-			    dwarf_output_collector &dw,
-			    strtab &debug_str,
-			    str_backpatch_vec &str_backpatch,
-			    bool addr_64, bool big_endian);
+      bool _m_addr_64;
+      bool _m_dwarf_64;
+      bool _m_big_endian;
 
-    void add_shape (debug_info_entry &die, bool last_sibling);
+      strtab &_m_debug_str;
+      str_backpatch_vec _m_str_backpatch;
+
+      // Set of shapes.
+      typedef std::tr1::unordered_map<dwarf_output::shape_type,
+				      dwarf_output::shape_info,
+				      dwarf_output::shape_type::hasher>
+	shape_map;
+      shape_map _m_shapes;
+
+      void add_shape (debug_info_entry &die, bool last_sibling);
+      class recursive_dumper;
+
+    public:
+      writer (dwarf_output_collector &col,
+	      dwarf_output &dw,
+	      bool big_endian, bool addr_64, bool dwarf_64,
+	      strtab &debug_str);
+
+      void output_debug_abbrev (section_appender &appender);
+      void output_debug_info (section_appender &appender);
+      void apply_patches ();
+    };
   };
+
 
   // Explicit specializations.
   template<>
@@ -1146,6 +1158,7 @@ namespace elfutils
   class dwarf_output_collector
   {
     friend class dwarf_output;
+    friend class dwarf_output::writer;
 
   private:
     dwarf_path_finder<dwarf_output> _m_tracker;
@@ -1207,13 +1220,6 @@ namespace elfutils
     typedef subr::identity_map<die_type, die_info> die_map;
     die_map _m_unique;
 
-    // Set of shapes.
-    typedef std::tr1::unordered_map<dwarf_output::shape_type,
-				    dwarf_output::shape_info,
-				    dwarf_output::shape_type::hasher>
-	shape_map;
-    shape_map _m_shapes;
-
     inline die_info_pair *add_entry (int tag,
 				     const children_type *children,
 				     const attrs_type *attrs)
@@ -1262,7 +1268,6 @@ namespace elfutils
   public:
     inline dwarf_output_collector ()
       : _m_total (0)
-      , _m_output_built (false)
     {}
 
     static void die_stats (const die_map::value_type &elt)
@@ -1279,7 +1284,6 @@ namespace elfutils
       std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
     }
 
-    bool _m_output_built;
     void build_output (bool addr_64, bool dwarf_64);
   };
 
