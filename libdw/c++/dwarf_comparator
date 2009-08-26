@@ -142,21 +142,32 @@ namespace elfutils
       return false;
     }
 
-    struct reference_match
-    {
-      inline bool cannot_match () const
-      {
-	return false;
-      }
-      inline void notice_match (const die2 &, bool) const
-      {
-      }
-    };
+    struct reference_match {};
 
+    // This call is used purely in hopes of a cache hit.
+    inline bool prematch (reference_match &, const die1 &, const die2 &)
+    {
+      return false;
+    }
+
+    // This call is used only as part of a real reference lookup.
     inline bool reference_matched (reference_match &,
 				   const die1 &, const die2 &)
     {
       return false;
+    }
+
+    // Check for a negative cache hit after prematch or reference_match.
+    inline bool cannot_match (reference_match &, const die1 &, const die2 &)
+    {
+      return false;
+    }
+
+    // This can cache a result.
+    inline bool notice_match (reference_match &, const die1 &, const die2 &,
+			      bool result)
+    {
+      return result;
     }
 
     inline dwarf_tracker_base ()
@@ -235,9 +246,13 @@ namespace elfutils
     inline bool match (const die1 &a, const die2 &b)
     {
       _m_tracker.visit (a, b);
-      return (a.tag () == b.tag ()
-	      && match (a.attributes (), b.attributes ())
-	      && match (a.children (), b.children ()));
+      if (a.tag () != b.tag ())
+	return nomatch (a, b, "DIE tag");
+      if (!match (a.attributes (), b.attributes ()))
+	return nomatch (a, b, "DIE attrs");
+      if (! match (a.children (), b.children ()))
+	return nomatch (a, b, "DIE children");
+      return true;
     }
 
     template<typename in, typename out>
@@ -285,8 +300,7 @@ namespace elfutils
 				    bool>
     {
       dwarf_comparator &_m_cmp;
-      match_sorted (dwarf_comparator<dwarf1, dwarf2,
-		    ignore_refs, tracker> &cmp)
+      match_sorted (dwarf_comparator<dwarf1, dwarf2, ignore_refs, tracker> &cmp)
 	: _m_cmp (cmp)
       {}
 
@@ -332,7 +346,7 @@ namespace elfutils
 	  populate (sorted2, b);
 
 	  std::pair<typename ait1_map::iterator,
-	    typename ait2_map::iterator> result
+	    	    typename ait2_map::iterator> result
 	    = std::mismatch (sorted1.begin (), sorted1.end (),
 			     sorted2.begin (), match_sorted (*this));
 	  if (result.first == sorted1.end ()
@@ -361,18 +375,16 @@ namespace elfutils
     {
       // Maybe the tracker has already cached a correspondence of DIEs.
       typename tracker::reference_match matched;
-      if (_m_tracker.reference_matched (matched, a, b))
+      if (_m_tracker.prematch (matched, a, b))
 	return true;
 
-      if (matched.cannot_match ())
-	return false;
+      if (_m_tracker.cannot_match (matched, a, b))
+	return nomatch (*a, *b, "children cached");
 
       bool result = match_child (a, b);
 
       // Let the tracker cache a result for its reference_matched.
-      matched.notice_match (b, result);
-
-      return result;
+      return _m_tracker.notice_match (matched, a, b, result);
     }
 
     inline bool match (const children1 &a, const children2 &b)
@@ -458,6 +470,12 @@ namespace elfutils
       return false;
     }
 
+    // This is a convenient place to hack for debugging output and such.
+    inline bool nomatch (const die1 &, const die2 &, const char *)
+    {
+      return false;
+    }
+
     /* We call references equal if they are literally the same DIE,
        or if they are identical subtrees sitting in matching contexts.
        The tracker's context_match method decides what that means.  */
@@ -474,19 +492,19 @@ namespace elfutils
 
       // Simplest mismatches with the cheapest checks first.
       if (a.tag () != b.tag ())
-	return false;
+	return nomatch (a, b, "tag");
 
       const bool has_children = a.has_children ();
       if (has_children != b.has_children ())
-	return false;
+	return nomatch (a, b, "has_children");
 
       // Maybe the tracker has already cached a correspondence of references.
       typename tracker::reference_match matched;
       if (_m_tracker.reference_matched (matched, ref1, ref2))
 	return true;
 
-      if (matched.cannot_match ())
-	return false;
+      if (_m_tracker.cannot_match (matched, ref1, ref2))
+	return nomatch (a, b, "cached");
 
       // Now we really have to get the tracker involved.
       const typename tracker::left_context_type &lhs
@@ -496,10 +514,12 @@ namespace elfutils
 
       /* First do the cheap mismatch check on the contexts, then check the
 	 contents and contexts in ascending order of costliness of a check.  */
-      if (_m_tracker.context_quick_mismatch (lhs, rhs)
-	  || !match (a.attributes (), b.attributes ())
-	  || !_m_tracker.context_match (lhs, rhs))
-	return false;
+      if (_m_tracker.context_quick_mismatch (lhs, rhs))
+	return nomatch (a, b, "quick context");
+      if (!match (a.attributes (), b.attributes ()))
+	return nomatch (a, b, "attribute");
+      if (!_m_tracker.context_match (lhs, rhs))
+	return nomatch (a, b, "context");
 
       /* To compare the children, we have to clone the tracker and use a
 	 new one, in case of any reference attributes in their subtrees.
@@ -510,12 +530,12 @@ namespace elfutils
 	{
 	  typename tracker::subtracker t (_m_tracker, matched, lhs, rhs);
 	  result = subcomparator (t).equals (a.children (), b.children ());
+	  if (!result)
+	    result = nomatch (a, b, "children");
 	}
 
       // Let the tracker cache a result for its reference_matched.
-      matched.notice_match (ref2, result);
-
-      return result;
+      return _m_tracker.notice_match (matched, ref1, ref2, result);
     }
 
   public:

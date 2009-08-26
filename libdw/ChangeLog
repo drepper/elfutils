@@ -1,3 +1,9 @@
+2009-08-25  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_tracker: Soup up circular reference handling to handle
+	mismatched duplication vs sharing in semantically matching trees.
+	* c++/dwarf_comparator: Update user.
+
 2009-08-21  Roland McGrath  <roland@redhat.com>
 
 	* c++/subr.hh (hash<std::string>): Use elf_gnu_hash algorithm.
