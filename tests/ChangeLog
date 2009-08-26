@@ -1,3 +1,9 @@
+2009-08-25  Roland McGrath  <roland@redhat.com>
+
+	* print-die.hh: New file with extern decls.  Contents moved to ...
+	* print-die.cc: ... here, new file.
+	* Makefile.am (dwarf_print_SOURCES, dwarf_edit_SOURCES): Build it.
+
 2009-08-21  Roland McGrath  <roland@redhat.com>
 
 	* print-die.hh (print_die_main, print_file): Add --silent option.

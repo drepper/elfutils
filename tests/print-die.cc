@@ -23,6 +23,10 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -37,6 +41,9 @@
 #include "c++/dwarf_edit"
 #include "c++/dwarf_output"
 
+using namespace elfutils;
+using namespace std;
+
 static bool print_offset;
 static bool sort_attrs;
 static bool elide_refs;
@@ -45,7 +52,7 @@ static bool no_print;
 
 static enum { copy_none, copy_edit, copy_output } make_copy;
 
-static void
+void
 print_die_main (int &argc, char **&argv, unsigned int &depth)
 {
   /* Set locale.  */
@@ -291,7 +298,7 @@ print_file (const file &dw, const unsigned int limit)
 }
 
 template<typename file>
-static void
+void
 print_file (const char *name, const file &dw, const unsigned int limit)
 {
   cout << name << ":\n";
@@ -314,3 +321,9 @@ print_file (const char *name, const file &dw, const unsigned int limit)
       abort ();
     }
 }
+
+// Explicit instantiations.
+template void print_file (const char *, const dwarf &,
+			  const unsigned int);
+template void print_file (const char *, const dwarf_edit &,
+			  const unsigned int);

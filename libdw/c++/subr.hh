@@ -674,18 +674,22 @@ namespace elfutils
 	_base::operator++ ();
 	return *this;
       }
-      inline wrapped_input_iterator operator++ (int magic) // postfix
+      inline wrapped_input_iterator operator++ (int) // postfix
       {
-	return wrapped_input_iterator (_base::operator++ (magic));
+	wrapped_input_iterator pre = *this;
+	++*this;
+	return pre;
       }
       inline wrapped_input_iterator &operator-- () // prefix
       {
 	_base::operator-- ();
 	return *this;
       }
-      inline wrapped_input_iterator operator-- (int magic) // postfix
+      inline wrapped_input_iterator operator-- (int) // postfix
       {
-	return wrapped_input_iterator (_base::operator-- (magic));
+	wrapped_input_iterator pre = *this;
+	--*this;
+	return pre;
       }
 
       inline const _base &base () const

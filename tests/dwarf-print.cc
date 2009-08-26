@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <error.h>
 #include <fcntl.h>
+#include <libintl.h>
 
 #include "c++/dwarf"
 
