@@ -177,8 +177,32 @@ namespace
     }
   } ref_forms;
 
+  bool
+  source_file_is_string (int tag, int attr)
+  {
+    switch (attr)
+      {
+      case DW_AT_decl_file:
+      case DW_AT_call_file:
+	return false;
+
+      case DW_AT_comp_dir:
+	return true;
+
+      case DW_AT_name:
+	switch (tag)
+	  {
+	  case DW_TAG_compile_unit:
+	  case DW_TAG_partial_unit:
+	    return true;
+	  }
+      }
+
+    throw std::runtime_error ("can't decide whether source_file_is_string");
+  }
+
   inline dwarf_output::shape_type::candidate_form_vec const &
-  candidate_forms (int tag, int at_name, const dwarf_output::attr_value &value)
+  candidate_forms (int tag, int attr, const dwarf_output::attr_value &value)
   {
     // import some types into the namespace
     typedef dwarf_output::shape_type::candidate_form
@@ -203,14 +227,15 @@ namespace
     static candidate_form_vec const_forms = candidate_form_vec ()
       .add (DW_FORM_data8)
       .add (DW_FORM_data4)
-      .add (DW_FORM_data2) // xxx noreloc
-      .add (DW_FORM_data1) // xxx noreloc
-      .add (DW_FORM_udata) // xxx noreloc, nopatch
-      .add (DW_FORM_sdata);// xxx noreloc, nopatch
+      .add (candidate_form (DW_FORM_data2, &noreloc_constraint))
+      .add (candidate_form (DW_FORM_data1, &noreloc_constraint))
+      .add (candidate_form (DW_FORM_udata, &noreloc_constraint)) // xxx & nopatch constaint
+      .add (candidate_form (DW_FORM_sdata, &noreloc_constraint));// xxx & nopatch constaint
 
     static candidate_form_vec string_forms = candidate_form_vec ()
+      .add (DW_FORM_string)
       .add (DW_FORM_strp)
-      .add (DW_FORM_string);
+      ;
 
     switch (value.what_space ())
       {
@@ -225,7 +250,8 @@ namespace
 	{
 	  static candidate_form_vec forms = candidate_form_vec ()
 	    .add (DW_FORM_flag)
-	    .add (DW_FORM_flag_present);
+	    //.add (DW_FORM_flag_present) // xxx DWARF4
+	    ;
 	  return forms;
 	}
 
@@ -234,18 +260,6 @@ namespace
 
       case dwarf::VS_string:
       case dwarf::VS_identifier:
-	/* xxx
-	  - string: price is strlen+1 per DIE
-
-	  - strp: constant price of strlen+1, then dwarf64?8:4 bytes per
-          DIE that contains the same string (or some suffix of that
-          string, in case libebl does the string consolidation)
-
-	  - needs to be decided separately.  A string-collecting sweep
-          over the DIE tree, then decide whether make it strp or
-          string based on counts and strlen and price of separate
-          abbrev.
-	*/
 	return string_forms;
 
       case dwarf::VS_constant:
@@ -272,34 +286,18 @@ namespace
 	   which is 4 bytes in 32-bit dwarf and 8 bytes in 64-bit.  */
 	{
 	  static candidate_form_vec forms = candidate_form_vec ()
-	    .add (DW_FORM_sec_offset) // xxx if it's not DWARF 4.0,
-				      // encode this either as data8,
-				      // or data4.
+	    //.add (DW_FORM_sec_offset) // xxx DWARF4
+	    .add (DW_FORM_data8)
+	    .add (DW_FORM_data4)
 	    ;
 	  return forms;
 	}
 
       case dwarf::VS_source_file:
-	switch (at_name)
-	  {
-	  case DW_AT_decl_file:
-	  case DW_AT_call_file:
-	    return const_forms;
-
-	  case DW_AT_comp_dir:
-	    return string_forms;
-
-	  case DW_AT_name:
-	    switch (tag)
-	      {
-	      case DW_TAG_compile_unit:
-	      case DW_TAG_partial_unit:
-		return string_forms;
-	      }
-	    break;
-	  }
-	throw std::runtime_error ("source_file value unexpected in "
-				  + to_string (value));
+	if (source_file_is_string (tag, attr))
+	  return string_forms;
+	else
+	  return const_forms;
 
       case dwarf::VS_discr_list:
 	return block_forms;
@@ -325,11 +323,14 @@ namespace
       case dwarf::VS_source_line:
       case dwarf::VS_source_column:
       case dwarf::VS_address:
-	return true;
 
+      // We can optimize strings here, too, we just take the length of
+      // the string as the value to encode, and treat it specially.
       case dwarf::VS_string:
       case dwarf::VS_identifier:
-      case dwarf::VS_source_file: // xxx or is it?
+      case dwarf::VS_source_file:
+	return true;
+
       case dwarf::VS_reference:   // xxx this one is numerical in
 				  // principle, but optimizing
 				  // references is fun on its own and
@@ -342,7 +343,8 @@ namespace
   }
 
   uint64_t
-  numerical_value_to_optimize (const dwarf_output::attr_value &value)
+  numerical_value_to_optimize (int tag, int attr,
+			       const dwarf_output::attr_value &value)
   {
     dwarf::value_space vs = value.what_space ();
 
@@ -375,9 +377,15 @@ namespace
       case dwarf::VS_address:
 	return value.address ();
 
+      case dwarf::VS_source_file:
+	if (!source_file_is_string (tag, attr))
+	  return 0; /* xxx */
+	/* fall-through */
+
       case dwarf::VS_string:
       case dwarf::VS_identifier:
-      case dwarf::VS_source_file:
+	return value.string ().size ();
+
       case dwarf::VS_reference:
       case dwarf::VS_discr_list:
 	abort ();
@@ -701,6 +709,10 @@ namespace
 	  return count;
 	}
 
+      case DW_FORM_string:
+	return value + 1; /* For strings, we yield string length plus
+			     terminating zero.  */
+
       default:
 	return form_width (form, addr_64, dwarf_64);
       }
@@ -710,7 +722,6 @@ namespace
   numerical_value_fits_form (uint64_t value, int form,
 			     bool addr_64, bool dwarf_64)
   {
-    bool is_64;
     switch (form)
       {
       case DW_FORM_flag_present:
@@ -728,20 +739,26 @@ namespace
 	return value <= (uint16_t)-1;
 
       case DW_FORM_addr:
-	is_64 = addr_64;
-	if (false)
-      case DW_FORM_ref_addr:
-      case DW_FORM_strp:
-      case DW_FORM_sec_offset:
-	  is_64 = dwarf_64;
-	if (is_64)
+	if (addr_64)
 	  return true;
-	else
+	/* fall-through */
+      case DW_FORM_ref_addr:
+      case DW_FORM_sec_offset:
+	if (dwarf_64)
+	  return true;
+	/* fall-through */
       case DW_FORM_data4:
       case DW_FORM_ref4:
       case DW_FORM_block4:
-	  return value <= (uint32_t)-1;
+	return value <= (uint64_t)(uint32_t)-1;
 
+      /* String forms.  We simply assume that these always fit.
+	 xxx What if we need to store more than 32bit of strings?  */
+      case DW_FORM_strp:
+      case DW_FORM_string:
+	return true;
+
+      /* 64-bit forms.  Everything fits there.  */
       case DW_FORM_data8:
       case DW_FORM_ref8:
       case DW_FORM_udata:
@@ -757,6 +774,32 @@ namespace
       (std::string ("Don't know whether value fits ")
        + dwarf_form_string (form));
   }
+
+  void
+  dw_write_string (std::string const &str,
+		   int form,
+		   section_appender &appender,
+		   strtab &debug_str,
+		   dwarf_output::str_backpatch_vec &str_backpatch,
+		   bool big_endian)
+  {
+    if (form == DW_FORM_string)
+      {
+	std::copy (str.begin (), str.end (),
+		   std::back_inserter (appender));
+	appender.push_back (0);
+      }
+    else
+      {
+	assert (form == DW_FORM_strp);
+
+	// xxx dwarf_64
+	str_backpatch.push_back
+	  (std::make_pair (dwarf_output::gap (appender, 4, big_endian),
+			   debug_str.add (str)));
+      }
+  }
+
 }
 
 void
@@ -777,19 +820,20 @@ dwarf_output::shape_info::instantiate
       for (shape_type::attrs_vec::const_iterator at = shape._m_attrs.begin ();
 	   at != shape._m_attrs.end (); ++at)
 	{
-	  int name = *at;
+	  int attr = *at;
 
 	  // Optimization of sibling attribute will be done afterward.
 	  // For now just stick the biggest form in there.
 	  int form;
-	  if (name == DW_AT_sibling)
+	  if (attr == DW_AT_sibling)
 	    form = DW_FORM_ref8;
 	  else
 	    {
+	      int tag = die.tag ();
 	      dwarf_output::attr_value const &value
-		= attribs.find (name)->second;
+		= attribs.find (attr)->second;
 	      shape_type::candidate_form_vec const &candidates
-		= ::candidate_forms (die.tag (), *at, value);
+		= ::candidate_forms (tag, *at, value);
 
 	      if (!numerical_p (value))
 		{
@@ -802,7 +846,7 @@ dwarf_output::shape_info::instantiate
 		  for (shape_type::candidate_form_vec::const_iterator ct
 			 = candidates.begin ();
 		       ct != candidates.end (); ++ct)
-		    if (ct->constraint->satisfied (die, name, value))
+		    if (ct->constraint->satisfied (die, attr, value))
 		      {
 			form = ct->form;
 			break;
@@ -814,12 +858,13 @@ dwarf_output::shape_info::instantiate
 		  size_t best_len = 0;
 		  form = -1;
 
-		  uint64_t opt_val = numerical_value_to_optimize (value);
+		  uint64_t opt_val
+		    = numerical_value_to_optimize (tag, attr, value);
 
 		  for (shape_type::candidate_form_vec::const_iterator ct
 			 = candidates.begin ();
 		       ct != candidates.end (); ++ct)
-		    if (ct->constraint->satisfied (die, name, value)
+		    if (ct->constraint->satisfied (die, attr, value)
 			&& numerical_value_fits_form (opt_val, ct->form,
 						      addr_64, dwarf_64))
 		      {
@@ -828,14 +873,16 @@ dwarf_output::shape_info::instantiate
 						      addr_64, dwarf_64);
 			if (form == -1 || len < best_len)
 			  {
-			    best_len = len;
 			    form = ct->form;
+			    if (len == 1) // you can't top that
+			      break;
+			    best_len = len;
 			  }
 		      }
 		  assert (form != -1);
 		}
 	    }
-	  inst.forms.insert (std::make_pair (name, form));
+	  inst.forms.insert (std::make_pair (attr, form));
 	}
 
       die_info &i = col._m_unique.find (die)->second;
@@ -848,6 +895,10 @@ dwarf_output::shape_info::instantiate
   // and B, and such that the space saved by removing the
   // abbreviations A and B tops the overhead of introducing non-ideal
   // (wrt users of A and B) X and moving all the users over to it.
+
+  // Hmm, except that the is-advantageous math involves number of
+  // users of the abbrev, and we don't know number of users before we
+  // do the dissection of the tree to imported partial units.
 }
 
 void
@@ -914,10 +965,6 @@ dwarf_output::output_debug_abbrev (section_appender &appender,
 				   bool addr_64)
 {
   if (!c._m_output_built)
-    /* xxx we need to decide on dwarf_64 as soon as here.  That's not
-       good.  We will probably have to build debug_info and
-       abbreviations in parallel, and dump abbreviations after
-       debug_info is done and we know how big the data were.  */
     c.build_output (addr_64, false /* xxx dwarf_64 */);
 
   for (dwarf_output_collector::shape_map::iterator it = c._m_shapes.begin ();
@@ -999,6 +1046,7 @@ public:
 
     dwarf_output::debug_info_entry const &die = info_pair.first;
     dwarf_output::die_info const &info = info_pair.second;
+    int tag = die.tag ();
     /*
     std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ())
 	      << " " << std::flush;
@@ -1021,9 +1069,9 @@ public:
     for (dwarf_output::shape_info::instance_type::forms_type::const_iterator
 	   at = instance.forms.begin (); at != instance.forms.end (); ++at)
       {
-	int name = at->first;
+	int attr = at->first;
 	int form = at->second;
-	if (name == DW_AT_sibling)
+	if (attr == DW_AT_sibling)
 	  {
 	    // XXX in fact we want to handle this case just like any
 	    // other CU-local reference.  So also use this below (or
@@ -1037,13 +1085,13 @@ public:
 	  }
 
 	debug_info_entry::attributes_type::const_iterator
-	  vt = attribs.find (name);
+	  vt = attribs.find (attr);
 	assert (vt != attribs.end ());
 
 	attr_value const &value = vt->second;
 	/*
 	  std::cout << pad
-	  << "    " << dwarf_attr_string (name)
+	  << "    " << dwarf_attr_string (attr)
 	  << ":" << dwarf_form_string (form)
 	  << ":" << dwarf_form_string (at->second)
 	  << ":" << value.to_string () << std::endl;
@@ -1051,7 +1099,7 @@ public:
 	dwarf::value_space vs = value.what_space ();
 
 	/*
-	  std::cout << pad << "  " << dwarf_attr_string (name)
+	  std::cout << pad << "  " << dwarf_attr_string (attr)
 	  << ": " << dwarf_form_string (form) << " ";
 	*/
 	switch (vs)
@@ -1099,39 +1147,26 @@ public:
 	    break;
 
 	  case dwarf::VS_string:
+	    ::dw_write_string (value.string (), form, appender,
+			       debug_str, str_backpatch, big_endian);
+	    break;
+
 	  case dwarf::VS_identifier:
+	    ::dw_write_string (value.identifier (), form, appender,
+			       debug_str, str_backpatch, big_endian);
+	    break;
+
 	  case dwarf::VS_source_file:
-	    if (vs != dwarf::VS_source_file
-		|| form == DW_FORM_string
-		|| form == DW_FORM_strp)
+	    if (source_file_is_string (tag, attr))
 	      {
-		std::string const &str =
-		  vs == dwarf::VS_string
-		  ? value.string ()
-		  : (vs == dwarf::VS_source_file
-		     ? value.source_file ().name ()
-		     : value.identifier ());
-
-		if (form == DW_FORM_string)
-		  {
-		    std::copy (str.begin (), str.end (), inserter);
-		    *inserter++ = 0;
-		  }
-		else
-		  {
-		    assert (form == DW_FORM_strp);
-
-		    // xxx dwarf_64
-		    str_backpatch.push_back
-		      (std::make_pair (gap (appender, 4, big_endian),
-				       debug_str.add (str)));
-		  }
+		::dw_write_string (value.source_file ().name (),
+				   form, appender,
+				   debug_str, str_backpatch, big_endian);
+		break;
 	      }
-	    else if (vs == dwarf::VS_source_file)
+	    else
 	      ::dw_write_form (appender, form, 0 /*xxx*/, big_endian,
 			       addr_64, false /* dwarf_64 */);
-	    else
-	      throw std::runtime_error ("Unhandled combo of source files, identifiers and strings.");
 	    break;
 
 	  case dwarf::VS_address:
@@ -1197,12 +1232,9 @@ public:
 				  bool addr_64, bool big_endian)
  {
    /* We request appender directly, because we depend on .alloc method
-      being implemented, which is not the case for std containers.
-      Alternative approach would use purely random access
-      iterator-based solution, which would be considerable amount of
-      work (and bugs) and would involve memory overhead for holding all
-      these otherwise useless Elf_Data pointers that we've allocated in
-      the past.  So just ditch it and KISS.  */
+      being implemented: we need continuous chunks of memory for
+      back-patching.  While it would be possible to implement this
+      purely on iterators, it's not really useful.  */
 
    if (!c._m_output_built)
      c.build_output (addr_64, false /* dwarf_64 */);
