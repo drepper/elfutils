@@ -1041,12 +1041,9 @@ namespace elfutils
       inline tracker (const tracker &proto,
 		      typename _base::reference_match &matched,
 		      const typename _base::left_context_type &lhs,
-		      const typename _base::die1 &a,
-		      const typename _base::right_context_type &rhs,
-		      const typename _base::die2 &b)
-	: _base (proto, matched, lhs, a, b)
+		      const typename _base::right_context_type &rhs)
+	: _base (proto, matched, lhs, rhs)
       {}
-
 
       struct walk
       {
@@ -2120,6 +2117,18 @@ namespace elfutils
       return _m_collector->_m_locations.add (x);
     }
   };
+
+  // Explicit instantiations.
+  extern template class dwarf_data::value<dwarf_output, false>;
+  extern template class dwarf_data::attr_value<dwarf_output,
+					       dwarf_output::value>;
+  extern template class dwarf_data::attributes_type<dwarf_output,
+						    dwarf_output::value>;
+  extern template class dwarf_data::compile_unit<dwarf_output>;
+  extern template class dwarf_data::compile_units<dwarf_output>;
+
+  extern template class dwarf_output::copier<dwarf>;
+  extern template class dwarf_output::copier<dwarf_edit>;
 };
 
 #endif	// <elfutils/dwarf_output>

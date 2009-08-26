@@ -153,21 +153,11 @@ namespace elfutils
       // Fetch the CU's DW_AT_stmt_list.
       inline const typename impl::line_info_table &line_info () const
       {
-	return this->attributes ()[::DW_AT_stmt_list].line_info ();
-      }
-
-      inline typename impl::line_info_table &line_info ()
-      {
-	return this->attributes ()[::DW_AT_stmt_list].line_info ();
+	return this->attributes ().at (::DW_AT_stmt_list).line_info ();
       }
 
       // Convenience methods for line_info_table sub-containers.
       inline const typename impl::directory_table &include_directories () const
-      {
-	return line_info ().include_directories ();
-      }
-
-      inline typename impl::directory_table &include_directories ()
       {
 	return line_info ().include_directories ();
       }
@@ -177,10 +167,22 @@ namespace elfutils
 	return line_info ().lines ();
       }
 
+#if 0 // XXX const issues
+      inline typename impl::line_info_table &line_info ()
+      {
+	return this->attributes ()[::DW_AT_stmt_list].line_info ();
+      }
+
+      inline typename impl::directory_table &include_directories ()
+      {
+	return line_info ().include_directories ();
+      }
+
       inline typename impl::line_table &lines ()
       {
 	return line_info ().lines ();
       }
+#endif
     };
 
     class source_file
@@ -603,6 +605,7 @@ namespace elfutils
     private:
       typedef std::pair< ::Dwarf_Word, unsigned int> _base;
 
+    protected:
       inline dwarf_enum ()
 	: _base (0, 0)
       {}

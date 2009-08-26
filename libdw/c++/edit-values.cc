@@ -53,7 +53,13 @@
 
 using namespace elfutils;
 
-template dwarf::value_space dwarf_edit::attr_value::what_space () const;
+// Explicit instantiations.
+template class dwarf_data::line_entry<dwarf_edit::source_file>;
+template class dwarf_data::line_table<dwarf_edit::line_entry>;
+template class dwarf_data::line_info_table<dwarf_edit::directory_table,
+					   dwarf_edit::line_table>;
+template class dwarf_data::attr_value<dwarf_edit>;
+template class dwarf_data::value<dwarf_edit>;
 
 template<>
 std::string
