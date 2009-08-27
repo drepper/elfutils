@@ -483,10 +483,17 @@ handle_elf (Elf *elf, size_t alloc_unit,
 
   bool addr_64 = ehdr->e_ident[EI_CLASS] == ELFCLASS64;
   bool big_endian = ehdr->e_ident[EI_DATA] == ELFDATA2MSB;
+
+  // XXX Note about dwarf_64 support.  Many of writer.output_*
+  // methods, maybe including the constructor, can raise
+  // writer::dwarf_32_not_enough exception.  If that happens, the data
+  // the we've already emitted have to be scratched (sections removed
+  // etc.) and the whole process repeated with dwarf_64==true.
+  bool dwarf_64 = false;
+
   elfutils::strtab debug_strtab (false);
-  elfutils::dwarf_output::str_backpatch_vec str_backpatch;
   elfutils::dwarf_output::writer writer (collector, dwout,
-					 big_endian, addr_64, false,
+					 big_endian, addr_64, dwarf_64,
 					 debug_strtab);
 
 #define ADD_SECTION(NAME, TYPE, COMMAND)				\

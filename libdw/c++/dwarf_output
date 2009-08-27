@@ -821,73 +821,9 @@ namespace elfutils
       throw std::logic_error ("copying dwarf_output requires a collector");
     }
 
-  public:
-
-    struct gap
-    {
-      struct recomputer
-      {
-	virtual uint64_t recompute (uint64_t value) = 0;
-	virtual ~recomputer () {}
-	typedef std::tr1::shared_ptr <recomputer> ptr;
-      };
-      gap ()
-	: _m_ptr (NULL)
-      {}
-      gap (section_appender &appender, size_t len, bool big_endian,
-	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL))
-	: _m_ptr (appender.alloc (len)),
-	  _m_len (len),
-	  _m_big_endian (big_endian),
-	  _m_recomputer (r)
-      {}
-      gap (unsigned char *ptr, size_t len, bool big_endian,
-	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL))
-	: _m_ptr (ptr),
-	  _m_len (len),
-	  _m_big_endian (big_endian),
-	  _m_recomputer (r)
-      {}
-      gap &operator= (gap const &other)
-      {
-	_m_ptr = other._m_ptr;
-	_m_len = other._m_len;
-	_m_big_endian = other._m_big_endian;
-	_m_recomputer = other._m_recomputer;
-	return *this;
-      }
-      void patch (uint64_t value) const;
-      bool valid () const { return _m_ptr != NULL; }
-
-    private:
-      unsigned char *_m_ptr;
-      size_t _m_len;
-      bool _m_big_endian;
-      recomputer::ptr _m_recomputer;
-    };
-
-    // [(gap, string entry)]
-    typedef std::vector<std::pair<gap, ::Ebl_Strent *> > str_backpatch_vec;
-
   private:
     // die offset -> file address
     typedef std::map< ::Dwarf_Off, ::Dwarf_Off> die_off_map;
-
-    // [(gap, die offset)]
-    typedef std::vector<std::pair<gap, ::Dwarf_Off> > die_backpatch_vec;
-
-    class backpatch_die_ref
-    {
-      die_off_map const &die_off;
-    public:
-      backpatch_die_ref (die_off_map const &m) : die_off (m) {}
-      void operator () (std::pair<gap, ::Dwarf_Off> const &v)
-      {
-	die_off_map::const_iterator ot = die_off.find (v.second);
-	assert (ot != die_off.end ());
-	v.first.patch (ot->second);
-      }
-    };
 
   public:
     // Constructor for an empty file, can add to its compile_units ().
@@ -913,40 +849,87 @@ namespace elfutils
       return !(*this == other);
     }
 
-    class writer
-    {
-      dwarf_output_collector &_m_col;
-      dwarf_output &_m_dw;
-
-      bool _m_addr_64;
-      bool _m_dwarf_64;
-      bool _m_big_endian;
-
-      strtab &_m_debug_str;
-      str_backpatch_vec _m_str_backpatch;
-
-      // Set of shapes.
-      typedef std::tr1::unordered_map<dwarf_output::shape_type,
-				      dwarf_output::shape_info,
-				      dwarf_output::shape_type::hasher>
-	shape_map;
-      shape_map _m_shapes;
-
-      void add_shape (debug_info_entry &die, bool last_sibling);
-      class recursive_dumper;
-
-    public:
-      writer (dwarf_output_collector &col,
-	      dwarf_output &dw,
-	      bool big_endian, bool addr_64, bool dwarf_64,
-	      strtab &debug_str);
-
-      void output_debug_abbrev (section_appender &appender);
-      void output_debug_info (section_appender &appender);
-      void apply_patches ();
-    };
+    struct writer;
   };
 
+  struct dwarf_output::writer
+  {
+    struct gap
+    {
+      struct recomputer
+      {
+	virtual uint64_t recompute (uint64_t value) = 0;
+	virtual ~recomputer () {}
+	typedef std::tr1::shared_ptr <recomputer> ptr;
+      };
+
+      gap ();
+      gap (section_appender &appender, size_t len, bool big_endian,
+	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL));
+      gap (unsigned char *ptr, size_t len, bool big_endian,
+	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL));
+      gap &operator= (gap const &other);
+
+      void patch (uint64_t value) const;
+      bool valid () const { return _m_ptr != NULL; }
+
+    private:
+      unsigned char *_m_ptr;
+      size_t _m_len;
+      bool _m_big_endian;
+      recomputer::ptr _m_recomputer;
+    };
+
+    // [(gap, die offset)]
+    typedef std::vector<std::pair<gap, ::Dwarf_Off> > die_backpatch_vec;
+
+    typedef std::vector<std::pair<gap, ::Ebl_Strent *> > str_backpatch_vec;
+
+  private:
+    dwarf_output_collector &_m_col;
+    dwarf_output &_m_dw;
+
+    bool _m_addr_64;
+    bool _m_dwarf_64;
+    bool _m_big_endian;
+
+    strtab &_m_debug_str;
+    str_backpatch_vec _m_str_backpatch;
+
+    // Set of shapes.
+    typedef std::tr1::unordered_map<dwarf_output::shape_type,
+      dwarf_output::shape_info,
+      dwarf_output::shape_type::hasher>
+      shape_map;
+    shape_map _m_shapes;
+
+    void add_shape (debug_info_entry &die, bool last_sibling);
+    class recursive_dumper;
+
+    void write_string (std::string const &str,
+		       int form,
+		       section_appender &appender);
+
+  public:
+    struct dwarf_32_not_enough
+      : public std::runtime_error
+    {
+      dwarf_32_not_enough ()
+	: std::runtime_error
+	  ("32-bit DWARF can't contain all data in this unit.")
+      {}
+    };
+
+    /// @throws dwarf_32_not_enough
+    writer (dwarf_output_collector &col,
+	    dwarf_output &dw,
+	    bool big_endian, bool addr_64, bool dwarf_64,
+	    strtab &debug_str);
+
+    void output_debug_abbrev (section_appender &appender);
+    void output_debug_info (section_appender &appender);
+    void apply_patches ();
+  };
 
   // Explicit specializations.
   template<>

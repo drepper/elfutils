@@ -571,6 +571,10 @@ namespace
       case DW_FORM_ref_addr:
       case DW_FORM_strp:
       case DW_FORM_sec_offset:
+	// In these cases, we have to check that the value fits the
+	// form.  If it doesn't switch to dwarf_64.
+	if (!dwarf_64 && value > (uint64_t)(uint32_t)-1)
+	  throw dwarf_output::writer::dwarf_32_not_enough ();
 	dw_write_64 (appender, dwarf_64, value, big_endian);
 	return;
 
@@ -719,8 +723,7 @@ namespace
   }
 
   bool
-  numerical_value_fits_form (uint64_t value, int form,
-			     bool addr_64, bool dwarf_64)
+  numerical_value_fits_form (uint64_t value, int form, bool addr_64)
   {
     switch (form)
       {
@@ -738,25 +741,26 @@ namespace
       case DW_FORM_block2:
 	return value <= (uint16_t)-1;
 
+      case DW_FORM_ref_addr:
+      case DW_FORM_strp:
+      case DW_FORM_sec_offset:
+	// We simply assume that these dwarf_64-dependent forms can
+	// contain any value.  If dwarf_64==false && value > 32bit, we
+	// throw an exception when we try to write that value.
+	return true;
+
+      case DW_FORM_string:
+	// This can hold anything.
+	return true;
+
       case DW_FORM_addr:
 	if (addr_64)
-	  return true;
-	/* fall-through */
-      case DW_FORM_ref_addr:
-      case DW_FORM_sec_offset:
-	if (dwarf_64)
 	  return true;
 	/* fall-through */
       case DW_FORM_data4:
       case DW_FORM_ref4:
       case DW_FORM_block4:
 	return value <= (uint64_t)(uint32_t)-1;
-
-      /* String forms.  We simply assume that these always fit.
-	 xxx What if we need to store more than 32bit of strings?  */
-      case DW_FORM_strp:
-      case DW_FORM_string:
-	return true;
 
       /* 64-bit forms.  Everything fits there.  */
       case DW_FORM_data8:
@@ -774,32 +778,28 @@ namespace
       (std::string ("Don't know whether value fits ")
        + dwarf_form_string (form));
   }
+}
 
-  void
-  dw_write_string (std::string const &str,
-		   int form,
-		   section_appender &appender,
-		   strtab &debug_str,
-		   dwarf_output::str_backpatch_vec &str_backpatch,
-		   bool big_endian)
-  {
-    if (form == DW_FORM_string)
-      {
-	std::copy (str.begin (), str.end (),
-		   std::back_inserter (appender));
-	appender.push_back (0);
-      }
-    else
-      {
-	assert (form == DW_FORM_strp);
+void
+dwarf_output::writer::write_string (std::string const &str,
+				    int form,
+				    section_appender &appender)
+{
+  if (form == DW_FORM_string)
+    {
+      std::copy (str.begin (), str.end (),
+		 std::back_inserter (appender));
+      appender.push_back (0);
+    }
+  else
+    {
+      assert (form == DW_FORM_strp);
 
-	// xxx dwarf_64
-	str_backpatch.push_back
-	  (std::make_pair (dwarf_output::gap (appender, 4, big_endian),
-			   debug_str.add (str)));
-      }
-  }
-
+      // xxx dwarf_64
+      _m_str_backpatch.push_back
+	(std::make_pair (gap (appender, 4, _m_big_endian),
+			 _m_debug_str.add (str)));
+    }
 }
 
 void
@@ -866,7 +866,7 @@ dwarf_output::shape_info::instantiate
 		       ct != candidates.end (); ++ct)
 		    if (ct->constraint->satisfied (die, attr, value)
 			&& numerical_value_fits_form (opt_val, ct->form,
-						      addr_64, dwarf_64))
+						      addr_64))
 		      {
 			size_t len
 			  = numerical_encoded_length (opt_val, ct->form,
@@ -927,6 +927,44 @@ dwarf_output::shape_info::build_data
   *inserter++ = 0;
 }
 
+dwarf_output::writer::gap::gap ()
+  : _m_ptr (NULL)
+{}
+
+dwarf_output::writer::gap::gap (section_appender &appender, size_t len,
+				bool big_endian, recomputer::ptr r)
+  : _m_ptr (appender.alloc (len)),
+    _m_len (len),
+    _m_big_endian (big_endian),
+    _m_recomputer (r)
+{}
+
+dwarf_output::writer::gap::gap (unsigned char *ptr, size_t len,
+				bool big_endian, recomputer::ptr r)
+  : _m_ptr (ptr),
+    _m_len (len),
+    _m_big_endian (big_endian),
+    _m_recomputer (r)
+{}
+
+dwarf_output::writer::gap &
+dwarf_output::writer::gap::operator= (gap const &other)
+{
+  _m_ptr = other._m_ptr;
+  _m_len = other._m_len;
+  _m_big_endian = other._m_big_endian;
+  _m_recomputer = other._m_recomputer;
+  return *this;
+}
+
+void
+dwarf_output::writer::gap::patch (uint64_t value) const
+{
+  if (_m_recomputer != NULL)
+    value = _m_recomputer->recompute (value);
+  ::dw_write_var (_m_ptr, _m_len, value, _m_big_endian);
+}
+
 dwarf_output::writer::writer (dwarf_output_collector &col,
 			      dwarf_output &dw,
 			      bool big_endian, bool addr_64, bool dwarf_64,
@@ -965,6 +1003,22 @@ dwarf_output::writer::writer (dwarf_output_collector &col,
     }
 }
 
+namespace
+{
+  struct local_ref_recomputer
+    : public dwarf_output::writer::gap::recomputer
+  {
+    uint64_t _m_base_addr;
+    local_ref_recomputer (uint64_t base_addr)
+      : _m_base_addr (base_addr)
+    {}
+    virtual uint64_t recompute (uint64_t value)
+    {
+      return value - _m_base_addr;
+    }
+  };
+}
+
 void
 dwarf_output::writer::output_debug_abbrev (section_appender &appender)
 {
@@ -977,27 +1031,6 @@ dwarf_output::writer::output_debug_abbrev (section_appender &appender)
 
   appender.push_back (0); // terminate table
 }
-
-void
-dwarf_output::gap::patch (uint64_t value) const
-{
-  if (_m_recomputer != NULL)
-    value = _m_recomputer->recompute (value);
-  ::dw_write_var (_m_ptr, _m_len, value, _m_big_endian);
-}
-
-struct local_ref_recomputer
-  : public dwarf_output::gap::recomputer
-{
-  uint64_t _m_base_addr;
-  local_ref_recomputer (uint64_t base_addr)
-    : _m_base_addr (base_addr)
-  {}
-  virtual uint64_t recompute (uint64_t value)
-  {
-    return value - _m_base_addr;
-  }
-};
 
 class dwarf_output::writer::recursive_dumper
 {
@@ -1149,27 +1182,18 @@ public:
 	    break;
 
 	  case dwarf::VS_string:
-	    ::dw_write_string (value.string (), form, appender,
-			       _m_parent._m_debug_str,
-			       _m_parent._m_str_backpatch,
-			       _m_parent._m_big_endian);
+	    _m_parent.write_string (value.string (), form, appender);
 	    break;
 
 	  case dwarf::VS_identifier:
-	    ::dw_write_string (value.identifier (), form, appender,
-			       _m_parent._m_debug_str,
-			       _m_parent._m_str_backpatch,
-			       _m_parent._m_big_endian);
+	    _m_parent.write_string (value.identifier (), form, appender);
 	    break;
 
 	  case dwarf::VS_source_file:
 	    if (source_file_is_string (tag, attr))
 	      {
-		::dw_write_string (value.source_file ().name (),
-				   form, appender,
-				   _m_parent._m_debug_str,
-				   _m_parent._m_str_backpatch,
-				   _m_parent._m_big_endian);
+		_m_parent.write_string (value.source_file ().name (),
+					form, appender);
 		break;
 	      }
 	    else
@@ -1250,9 +1274,9 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
       size_t cu_start = appender.size ();
 
       // Unit length.
-      dwarf_output::gap length_gap (appender,
-				    _m_dwarf_64 ? 8 : 4,
-				    _m_big_endian);
+      gap length_gap (appender,
+		      _m_dwarf_64 ? 8 : 4,
+		      _m_big_endian);
 
       // Version.
       ::dw_write<2> (appender.alloc (2), 3, _m_big_endian);
@@ -1272,8 +1296,13 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
 	.dump (*_m_col._m_unique.find (*it), fake_gap, 0);
       assert (!fake_gap.valid ());
 
-      std::for_each (die_backpatch.begin (), die_backpatch.end (),
-		     backpatch_die_ref (die_off));
+      for (die_backpatch_vec::const_iterator bt = die_backpatch.begin ();
+	   bt != die_backpatch.end (); ++bt)
+	{
+	  die_off_map::const_iterator ot = die_off.find (bt->second);
+	  assert (ot != die_off.end ());
+	  bt->first.patch (ot->second);
+	}
 
       /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
@@ -1285,8 +1314,7 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
 void
 dwarf_output::writer::apply_patches ()
 {
-  for (dwarf_output::str_backpatch_vec::const_iterator it
-	 = _m_str_backpatch.begin ();
+  for (str_backpatch_vec::const_iterator it = _m_str_backpatch.begin ();
        it != _m_str_backpatch.end (); ++it)
     it->first.patch (ebl_strtaboffset (it->second));
 }
