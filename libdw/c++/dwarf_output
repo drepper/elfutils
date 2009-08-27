@@ -57,7 +57,6 @@
 #include <functional>
 #include <iterator>
 #include <vector>
-#include <tr1/memory>
 #include <deque>
 #include <queue>
 #include <bitset>
@@ -852,22 +851,21 @@ namespace elfutils
     struct writer;
   };
 
-  struct dwarf_output::writer
+  class dwarf_output::writer
   {
     struct gap
     {
       struct recomputer
       {
-	virtual uint64_t recompute (uint64_t value) = 0;
+	virtual uint64_t recompute (uint64_t value) const = 0;
 	virtual ~recomputer () {}
-	typedef std::tr1::shared_ptr <recomputer> ptr;
       };
 
       gap ();
       gap (section_appender &appender, size_t len, bool big_endian,
-	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL));
+	   recomputer const *r = NULL);
       gap (unsigned char *ptr, size_t len, bool big_endian,
-	   recomputer::ptr r = recomputer::ptr ((recomputer *)NULL));
+	   recomputer const *r = NULL);
       gap &operator= (gap const &other);
 
       void patch (uint64_t value) const;
@@ -877,7 +875,7 @@ namespace elfutils
       unsigned char *_m_ptr;
       size_t _m_len;
       bool _m_big_endian;
-      recomputer::ptr _m_recomputer;
+      recomputer const *_m_recomputer;
     };
 
     // [(gap, die offset)]
@@ -885,7 +883,6 @@ namespace elfutils
 
     typedef std::vector<std::pair<gap, ::Ebl_Strent *> > str_backpatch_vec;
 
-  private:
     dwarf_output_collector &_m_col;
     dwarf_output &_m_dw;
 

@@ -932,7 +932,7 @@ dwarf_output::writer::gap::gap ()
 {}
 
 dwarf_output::writer::gap::gap (section_appender &appender, size_t len,
-				bool big_endian, recomputer::ptr r)
+				bool big_endian, recomputer const *r)
   : _m_ptr (appender.alloc (len)),
     _m_len (len),
     _m_big_endian (big_endian),
@@ -940,7 +940,7 @@ dwarf_output::writer::gap::gap (section_appender &appender, size_t len,
 {}
 
 dwarf_output::writer::gap::gap (unsigned char *ptr, size_t len,
-				bool big_endian, recomputer::ptr r)
+				bool big_endian, recomputer const *r)
   : _m_ptr (ptr),
     _m_len (len),
     _m_big_endian (big_endian),
@@ -1003,22 +1003,6 @@ dwarf_output::writer::writer (dwarf_output_collector &col,
     }
 }
 
-namespace
-{
-  struct local_ref_recomputer
-    : public dwarf_output::writer::gap::recomputer
-  {
-    uint64_t _m_base_addr;
-    local_ref_recomputer (uint64_t base_addr)
-      : _m_base_addr (base_addr)
-    {}
-    virtual uint64_t recompute (uint64_t value)
-    {
-      return value - _m_base_addr;
-    }
-  };
-}
-
 void
 dwarf_output::writer::output_debug_abbrev (section_appender &appender)
 {
@@ -1037,27 +1021,26 @@ class dwarf_output::writer::recursive_dumper
   dwarf_output::writer &_m_parent;
   section_appender &appender;
   die_off_map &die_off;
-  die_backpatch_vec &die_backpatch;
-  gap::recomputer::ptr cu_local_recomputer;
+  die_backpatch_vec die_backpatch;
 
   recursive_dumper (recursive_dumper const &copy); // nocopy
 
-public:
-  recursive_dumper (dwarf_output::writer &writer,
-		    section_appender &a_appender,
-		    die_off_map &a_die_off,
-		    die_backpatch_vec &a_die_backpatch,
-		    uint64_t cu_start)
-    : _m_parent (writer),
-      appender (a_appender),
-      die_off (a_die_off),
-      die_backpatch (a_die_backpatch),
-      cu_local_recomputer (new local_ref_recomputer (cu_start))
-  {}
+  struct local_ref_recomputer
+    : public gap::recomputer
+  {
+    uint64_t _m_base_addr;
+    local_ref_recomputer (uint64_t base_addr)
+      : _m_base_addr (base_addr)
+    {}
+    virtual uint64_t recompute (uint64_t value) const
+    {
+      return value - _m_base_addr;
+    }
+  } cu_local_recomputer;
 
-  void dump (dwarf_output::die_info_pair const &info_pair,
-	     gap &sibling_gap,
-	     unsigned level)
+  void recursive_dump (dwarf_output::die_info_pair const &info_pair,
+		       gap &sibling_gap,
+		       unsigned level)
   {
     static char const spaces[] =
       "                                                            "
@@ -1103,7 +1086,7 @@ public:
 					    _m_parent._m_addr_64,
 					    _m_parent._m_dwarf_64);
 	    sibling_gap = gap (appender, gap_size,
-			       _m_parent._m_big_endian, cu_local_recomputer);
+			       _m_parent._m_big_endian, &cu_local_recomputer);
 	    continue;
 	  }
 
@@ -1254,9 +1237,35 @@ public:
 				   (*jt)->first.offset ()));
 		my_sibling_gap = gap ();
 	      }
-	    dump (**jt, my_sibling_gap, level + 1);
+	    recursive_dump (**jt, my_sibling_gap, level + 1);
 	  }
 	*inserter++ = 0;
+      }
+  }
+
+public:
+  recursive_dumper (dwarf_output::writer &writer,
+		    section_appender &a_appender,
+		    die_off_map &a_die_off,
+		    uint64_t cu_start)
+    : _m_parent (writer),
+      appender (a_appender),
+      die_off (a_die_off),
+      cu_local_recomputer (cu_start)
+  {}
+
+  void dump (dwarf_output::die_info_pair const &info_pair,
+	     gap &sibling_gap,
+	     unsigned level)
+  {
+    recursive_dump (info_pair, sibling_gap, level);
+
+    for (die_backpatch_vec::const_iterator bt = die_backpatch.begin ();
+	 bt != die_backpatch.end (); ++bt)
+      {
+	die_off_map::const_iterator ot = die_off.find (bt->second);
+	assert (ot != die_off.end ());
+	bt->first.patch (ot->second);
       }
   }
 };
@@ -1289,20 +1298,11 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
       *inserter++ = _m_addr_64 ? 8 : 4;
 
       die_off_map die_off;
-      die_backpatch_vec die_backpatch;
 
       gap fake_gap;
-      recursive_dumper (*this, appender, die_off, die_backpatch, cu_start)
+      recursive_dumper (*this, appender, die_off, cu_start)
 	.dump (*_m_col._m_unique.find (*it), fake_gap, 0);
       assert (!fake_gap.valid ());
-
-      for (die_backpatch_vec::const_iterator bt = die_backpatch.begin ();
-	   bt != die_backpatch.end (); ++bt)
-	{
-	  die_off_map::const_iterator ot = die_off.find (bt->second);
-	  assert (ot != die_off.end ());
-	  bt->first.patch (ot->second);
-	}
 
       /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
