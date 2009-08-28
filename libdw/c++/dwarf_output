@@ -1552,6 +1552,7 @@ namespace elfutils
 	{
 	  _m_die->dump (true) << " promoting " << what << " "
 			      << (void *) final << "...\n";
+	  assert (_m_die->_m_resolving == NULL);
 	  _m_die->_m_resolving = final;
 	}
 	inline ~entry_promoter ()
@@ -1571,6 +1572,22 @@ namespace elfutils
 		    << _m_pending->_m_pending_count << " pending; "
 		    << final << "/" << (_m_final != NULL)
 		    << " nrefs " << _m_patch.size () << "\n";
+
+	if (_m_resolving != NULL)
+	  {
+	    /* We are inside a resolve_refs call already promoting us.
+	       Prune the circularity.  */
+	    if (final)
+	      *_m_resolving = true;
+	    else
+	      {
+		assert (was_dangling);
+		++c->_m_defined;
+		resolve_circular_refs (c, this);
+	      }
+	    dump (false, true) << " pruned circularity!\n";
+	    return;
+	  }
 
 	if (!final)
 	  {

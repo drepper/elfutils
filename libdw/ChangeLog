@@ -1,3 +1,8 @@
+2009-08-27  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_output (dwarf_output::copier::seen::promote_pending):
+	Notice circularity inside resolve_refs.
+
 2009-08-25  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_tracker: Soup up circular reference handling to handle
