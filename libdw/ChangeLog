@@ -1,5 +1,9 @@
 2009-08-27  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf_output (dwarf_output::dwarf_output): Add a variant with a
+	user-supplied copier, reimplement the collector-only version.
+	(dwarf_output::copier): New constructors and destructor public.
+
 	* c++/dwarf_output (dwarf_output::copier::seen::promote_pending):
 	Notice circularity inside resolve_refs.
 

@@ -597,14 +597,22 @@ namespace elfutils
     // Constructor for an empty file, can add to its compile_units ().
     inline dwarf_output () {}
 
-    // Constructor copying CUs from an input file (can be any of dwarf,
-    // dwarf_edit, or dwarf_output).
-    // Copy construction instantiates a copier derived from the collector.
+    /* Constructor copying CUs from an input file (can be any of dwarf,
+       dwarf_edit, or dwarf_output).  Supply your own copier to reuse a
+       copier across multiple input files.  This is worthwhile only if
+       they share a string table and such in memory.  */
     template<typename input>
-    inline dwarf_output (const input &dw, dwarf_output_collector &c,
-			 copier<input> maker = copier<input> ())
-      : _m_units (dw.compile_units (), maker (c))
+    inline dwarf_output (const input &dw, copier<input> &maker)
+      : _m_units (dw.compile_units (), maker)
     {}
+
+    // Normal construction instantiates a copier derived from the collector.
+    template<typename input>
+    inline dwarf_output (const input &dw, dwarf_output_collector &c)
+    {
+      copier<input> maker (c);
+      _m_units.swap (compile_units::compile_units (dw.compile_units (), maker));
+    }
 
     template<typename file>
     inline bool operator== (const file &other) const
@@ -1979,30 +1987,6 @@ namespace elfutils
       std::for_each (_m_seen.begin (), _m_seen.end (), dump_one_seen);
     }
 
-    inline copier ()
-      : _m_collector (NULL), _m_tracker (NULL),
-	_m_seen (), _m_defined (0)
-    {}
-
-    inline ~copier ()
-    {
-      if (_m_tracker != NULL)
-	delete _m_tracker;
-    }
-
-    copier &operator () (dwarf_output_collector &c)
-    {
-      _m_collector = &c;
-      assert (_m_tracker == NULL);
-      _m_tracker = new tracker (c);
-      return *this;
-    }
-
-    inline operator dwarf_output_collector & ()
-    {
-      return *_m_collector;
-    }
-
     /* We're likely to come across the same strings/identifiers and source
        files many times in a copying run.  When they are the very same
        pointers into the input dwarf object data, we can optimize the
@@ -2132,6 +2116,22 @@ namespace elfutils
     inline const value::value_location *add_location (const input &x)
     {
       return _m_collector->_m_locations.add (x);
+    }
+
+  public:
+    inline explicit copier (dwarf_output_collector &c)
+      : _m_collector (&c), _m_tracker (new tracker (c)),
+	_m_seen (), _m_defined (0)
+    {}
+
+    inline ~copier ()
+    {
+      delete _m_tracker;
+    }
+
+    inline operator dwarf_output_collector & ()
+    {
+      return *_m_collector;
     }
   };
 
