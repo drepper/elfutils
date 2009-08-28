@@ -1,3 +1,9 @@
+2009-08-27  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarfcmp-self.sh: Parameterize.  Take out -T runs.
+	* run-dwarfcmp-test-self.sh: New file.  Do just -T runs here.
+	* Makefile.am (TESTS, EXTRA_DIST): Add it.
+
 2009-08-25  Roland McGrath  <roland@redhat.com>
 
 	* print-die.hh: New file with extern decls.  Contents moved to ...

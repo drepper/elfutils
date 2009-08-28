@@ -25,21 +25,24 @@
 
 . $srcdir/test-subr.sh
 
+dwarfcmp=${dwarfcmp:-../src/dwarfcmp}
+try_switches=${try_switches:- -iq -i -il}
+
 status=0
 run_one()
 {
   file="$1"; shift
-  testrun ../src/dwarfcmp "$@" "$file" "$file" ||
-  { echo "*** failure in dwarfcmp-self $* on $file"; status=1; }
+  testrun "$dwarfcmp" "$@" "$file" "$file" ||
+  { echo "*** failure in $dwarfcmp $* on $file"; status=1; }
 }
 
 runtest()
 {
   for file; do
     if [ -f $file ]; then
-      run_one "$file" -i -q
-      run_one "$file" -i
-      run_one "$file" -i -q -T
+      for try in $try_switches; do
+        run_one "$file" $try
+      done
     fi
   done
 }

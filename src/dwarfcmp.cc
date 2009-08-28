@@ -44,10 +44,8 @@
 #include "../libdw/libdwP.h"	// XXX
 
 #include "c++/dwarf"
-#include "c++/dwarf_edit"
 #include "c++/dwarf_comparator"
 #include "c++/dwarf_tracker"
-#include "c++/dwarf_output"
 
 using namespace elfutils;
 using namespace std;
@@ -72,7 +70,9 @@ static const struct argp_option options[] =
   { "ignore-missing", 'i', NULL, 0,
     N_("Don't complain if both files have no DWARF at all"), 0 },
 
+#ifdef TEST
   { "test-writer", 'T', NULL, 0, N_("Test DWARF output classes"), 0 },
+#endif
 
   { NULL, 0, NULL, 0, N_("Miscellaneous:"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
@@ -103,9 +103,12 @@ static bool missing_ok;
 /* True if we should print all differences.  */
 static bool verbose;
 
+#ifdef TEST
 /* Nonzero to test writer classes.  */
 static int test_writer;
-
+#else
+# define test_writer 0
+#endif
 
 static Dwarf *
 open_file (const char *fname, int *fdp)
@@ -348,6 +351,11 @@ noisy_compare (const dwarf1 &a, const dwarf2 &b, bool print_all)
 }
 
 
+#ifdef TEST
+
+# include "c++/dwarf_edit"
+# include "c++/dwarf_output"
+
 // Test that one comparison works as expected.
 template<class dwarf1, class dwarf2>
 static void
@@ -409,6 +417,28 @@ test_output (const dwarf &file1, const dwarf &file2,
     test_classes (in1, in2, out1, out2, same);
 }
 
+static void
+do_writer_test (dwarf &file1, dwarf &file2, bool same)
+{
+  if (test_writer & 1)
+    test_output (file1, file2, false, file1, file2, same);
+  if (test_writer & 2)
+    {
+      dwarf_edit edit1 (file1);
+      dwarf_edit edit2 (file2);
+      test_classes (file1, file2, edit1, edit2, same);
+      if (test_writer & 1)
+	test_output (file1, file2, true, edit1, edit2, same);
+    }
+}
+
+#else
+
+static inline void do_writer_test (dwarf &, dwarf &, bool) {}
+
+#endif	// TEST
+
+
 int
 main (int argc, char *argv[])
 {
@@ -462,16 +492,7 @@ main (int argc, char *argv[])
 		   ? quiet_compare (file1, file2)
 		   : noisy_compare (file1, file2, verbose));
 
-      if (test_writer & 1)
-	test_output (file1, file2, false, file1, file2, same);
-      if (test_writer & 2)
-	{
-	  dwarf_edit edit1 (file1);
-	  dwarf_edit edit2 (file2);
-	  test_classes (file1, file2, edit1, edit2, same);
-	  if (test_writer & 1)
-	    test_output (file1, file2, true, edit1, edit2, same);
-	}
+      do_writer_test (file1, file2, same);
 
       result = !same;
     }
@@ -514,9 +535,11 @@ parse_opt (int key, char *, struct argp_state *)
       missing_ok = true;
       break;
 
+#ifdef TEST
     case 'T':
       ++test_writer;
       break;
+#endif
 
     default:
       return ARGP_ERR_UNKNOWN;
