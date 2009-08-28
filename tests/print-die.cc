@@ -49,6 +49,7 @@ static bool sort_attrs;
 static bool elide_refs;
 static bool dump_refs;
 static bool no_print;
+static bool output_stats;
 
 static enum { copy_none, copy_edit, copy_output } make_copy;
 
@@ -103,6 +104,13 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
   else if (argc > 1 && !strcmp (argv[1], "--output"))
     {
       make_copy = copy_output;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--stats"))
+    {
+      output_stats = true;
       --argc;
       ++argv;
     }
@@ -315,6 +323,8 @@ print_file (const char *name, const file &dw, const unsigned int limit)
       {
 	dwarf_output_collector c; // We'll just throw it away.
 	print_file (dwarf_output (dw, c), limit);
+	if (output_stats)
+	  c.stats ();
       }
       break;
     default:

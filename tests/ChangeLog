@@ -1,3 +1,9 @@
+2009-08-28  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarfcmp-self.sh: Test dwarfcmp-test binary too.
+
+	* print-die.cc: Grok --stats to dump collector stats.
+
 2009-08-27  Roland McGrath  <roland@redhat.com>
 
 	* run-dwarfcmp-self.sh: Parameterize.  Take out -T runs.

@@ -49,6 +49,7 @@ runtest()
 
 runtest ../src/addr2line
 runtest ../src/dwarfcmp
+runtest ../src/dwarfcmp-test
 runtest ../src/dwarflint
 runtest ../src/elfcmp
 runtest ../src/elflint

@@ -60,6 +60,7 @@
 #include <deque>
 #include <queue>
 #include <bitset>
+#include <map>
 #include <tr1/unordered_set>
 
 /* Read the comments for elfutils::dwarf first.
@@ -252,7 +253,7 @@ namespace elfutils
 	  inline const debug_info_entry &operator () (die_info_pair *) const;
 	};
 
-	inline void reify_children () const;
+	inline void reify_children (unsigned int &total) const;
 
       public:
 	friend class subr::hashed_hasher<children_type>;
@@ -803,8 +804,9 @@ namespace elfutils
     }
 
     inline void placed (const debug_info_entry::pointer &ref,
-			bool have_sibling)
+			bool have_sibling, unsigned int &total)
     {
+      ++total;
       ++_m_uses;
       _m_with_sibling[have_sibling] = true;
 
@@ -837,7 +839,8 @@ namespace elfutils
   /* This is called when a children_type is installed freshly in the collector.
      Fill in its back pointers.  */
   inline void
-  dwarf_output::debug_info_entry::children_type::reify_children () const
+  dwarf_output::debug_info_entry::children_type::
+  reify_children (unsigned int &total) const
   {
     _base::const_iterator i = _base::begin ();
     bool have_sibling = i != _base::end ();
@@ -845,7 +848,7 @@ namespace elfutils
       {
 	const const_iterator here (i, subr::nothing ());
 	have_sibling = ++i != _base::end ();
-	(*here.base ())->second.placed (here, have_sibling);
+	(*here.base ())->second.placed (here, have_sibling, total);
       }
   }
 
@@ -905,7 +908,7 @@ namespace elfutils
       if (p.second)
 	/* This candidate actually got inserted into the set.
 	   Now fix up all the backpointers into the _m_broods copy.  */
-	result.reify_children ();
+	result.reify_children (_m_total);
       return &result;
     }
 
@@ -960,23 +963,44 @@ namespace elfutils
 
     void add_shape (die_type &die, bool last_sibling);
 
+    typedef std::multimap<unsigned int,
+			  const die_map::value_type *> die_stats_map;
+
+    struct die_stats_sorter
+      : public std::unary_function<die_map::value_type, void>
+    {
+      die_stats_map &_m_map;
+      inline die_stats_sorter (die_stats_map &m) : _m_map (m) {}
+
+      inline void operator () (const die_map::value_type &elt)
+      {
+	_m_map.insert (std::make_pair (elt.second._m_uses, &elt));
+      }
+    };
+
+    static void die_stats (const die_stats_map::value_type &v)
+    {
+      const die_map::value_type &elt = *v.second;
+      std::cout << std::dec << elt.second._m_uses
+		<< "\thash=" << std::hex << subr::hash_this (elt.first)
+		<< "\t(" << elt.second._m_with_sibling.to_string () << ")\t"
+		<< to_string (elt.first) << "\n";
+    }
+
   public:
     inline dwarf_output_collector ()
       : _m_total (0)
     {}
 
-    static void die_stats (const die_map::value_type &elt)
-    {
-      std::cout << to_string (elt.first) << " uses="
-		<< std::dec << elt.second._m_uses
-		<< " (" << elt.second._m_with_sibling.to_string () << ")\n";
-    }
-
     void stats () const
     {
       std::cout << "collected " << std::dec << _m_unique.size ()
 		<< " unique of " << _m_total << " total DIEs\n";
-      std::for_each (_m_unique.begin (), _m_unique.end (), die_stats);
+
+      die_stats_map ordered;
+      std::for_each (_m_unique.begin (), _m_unique.end (),
+		     die_stats_sorter (ordered));
+      std::for_each (ordered.rbegin (), ordered.rend (), die_stats);
     }
   };
 
@@ -1955,15 +1979,20 @@ namespace elfutils
       }
     };
 
-    /* Create a whole CU in the output.
-     */
+    // Create a whole CU in the output.
     inline void
     make_unit (const typename dw::compile_units::const_iterator &in,
 	       const compile_units::iterator &out)
     {
       typename tracker::walk into (_m_tracker, in, out);
 
-      *out = unit_copier (this, *in).final ()->first;
+      die_info_pair *cu = unit_copier (this, *in).final ();
+
+      *out = cu->first;
+
+      // This really just increments _m_total for us, but also _m_uses.
+      cu->second.placed (cu->first.children ().end (),
+			 false, _m_collector->_m_total);
     }
 
     typedef std::tr1::unordered_map< ::Dwarf_Off, seen> seen_map;
