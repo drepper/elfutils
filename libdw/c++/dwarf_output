@@ -855,17 +855,11 @@ namespace elfutils
   {
     struct gap
     {
-      struct recomputer
-      {
-	virtual uint64_t recompute (uint64_t value) const = 0;
-	virtual ~recomputer () {}
-      };
-
       gap ();
       gap (section_appender &appender, size_t len, bool big_endian,
-	   recomputer const *r = NULL);
+	   uint64_t base = 0);
       gap (unsigned char *ptr, size_t len, bool big_endian,
-	   recomputer const *r = NULL);
+	   uint64_t base = 0);
       gap &operator= (gap const &other);
 
       void patch (uint64_t value) const;
@@ -875,11 +869,8 @@ namespace elfutils
       unsigned char *_m_ptr;
       size_t _m_len;
       bool _m_big_endian;
-      recomputer const *_m_recomputer;
+      uint64_t _m_base;
     };
-
-    // [(gap, die offset)]
-    typedef std::vector<std::pair<gap, ::Dwarf_Off> > die_backpatch_vec;
 
     typedef std::vector<std::pair<gap, ::Ebl_Strent *> > str_backpatch_vec;
 
@@ -901,7 +892,7 @@ namespace elfutils
     shape_map _m_shapes;
 
     void add_shape (debug_info_entry &die, bool last_sibling);
-    class recursive_dumper;
+    class dump_die_tree;
 
     void write_string (std::string const &str,
 		       int form,

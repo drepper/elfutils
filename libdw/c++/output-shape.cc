@@ -395,14 +395,16 @@ namespace
   }
 }
 
-dwarf_output::shape_type::shape_type
-    (const debug_info_entry &die,
-     const dwarf_output::die_info &info)
+dwarf_output::shape_type::shape_type (const debug_info_entry &die,
+				      const dwarf_output::die_info &info)
   : _m_tag (die.tag ())
   , _m_has_children (die.has_children ())
   , _m_hash (8675309 << _m_has_children)
 {
-  if (info._m_with_sibling[true] && die.has_children ())
+  // xxx Except it's perfectly legal for _m_with_sibling[false] and
+  // _m_with_sibling[true] to be true simultaneously.
+  bool has_sibling_at = info._m_with_sibling[true] && die.has_children ();
+  if (has_sibling_at)
     _m_attrs.push_back (DW_AT_sibling);
 
   for (debug_info_entry::attributes_type::const_iterator it
@@ -411,7 +413,7 @@ dwarf_output::shape_type::shape_type
     _m_attrs.push_back (it->first);
 
   // Sort it, but leave sibling attribute at the beginning.
-  std::sort (_m_attrs.begin () + 1, _m_attrs.end ());
+  std::sort (_m_attrs.begin () + (has_sibling_at ? 1 : 0), _m_attrs.end ());
 
   // Make sure the hash is computed based on canonical order of
   // (unique) attributes, not based on order in which the attributes
@@ -932,19 +934,19 @@ dwarf_output::writer::gap::gap ()
 {}
 
 dwarf_output::writer::gap::gap (section_appender &appender, size_t len,
-				bool big_endian, recomputer const *r)
+				bool big_endian, uint64_t base)
   : _m_ptr (appender.alloc (len)),
     _m_len (len),
     _m_big_endian (big_endian),
-    _m_recomputer (r)
+    _m_base (base)
 {}
 
 dwarf_output::writer::gap::gap (unsigned char *ptr, size_t len,
-				bool big_endian, recomputer const *r)
+				bool big_endian, uint64_t base)
   : _m_ptr (ptr),
     _m_len (len),
     _m_big_endian (big_endian),
-    _m_recomputer (r)
+    _m_base (base)
 {}
 
 dwarf_output::writer::gap &
@@ -953,16 +955,14 @@ dwarf_output::writer::gap::operator= (gap const &other)
   _m_ptr = other._m_ptr;
   _m_len = other._m_len;
   _m_big_endian = other._m_big_endian;
-  _m_recomputer = other._m_recomputer;
+  _m_base = other._m_base;
   return *this;
 }
 
 void
 dwarf_output::writer::gap::patch (uint64_t value) const
 {
-  if (_m_recomputer != NULL)
-    value = _m_recomputer->recompute (value);
-  ::dw_write_var (_m_ptr, _m_len, value, _m_big_endian);
+  ::dw_write_var (_m_ptr, _m_len, value - _m_base, _m_big_endian);
 }
 
 dwarf_output::writer::writer (dwarf_output_collector &col,
@@ -1016,29 +1016,19 @@ dwarf_output::writer::output_debug_abbrev (section_appender &appender)
   appender.push_back (0); // terminate table
 }
 
-class dwarf_output::writer::recursive_dumper
+class dwarf_output::writer::dump_die_tree
 {
-  dwarf_output::writer &_m_parent;
+  // [(gap, die offset)]
+  typedef std::vector<std::pair<gap, ::Dwarf_Off>> die_backpatch_vec;
+
+  writer &_m_parent;
   section_appender &appender;
   die_off_map &die_off;
   die_backpatch_vec die_backpatch;
+  uint64_t _m_cu_start;
+  static const bool debug = false;
 
-  recursive_dumper (recursive_dumper const &copy); // nocopy
-
-  struct local_ref_recomputer
-    : public gap::recomputer
-  {
-    uint64_t _m_base_addr;
-    local_ref_recomputer (uint64_t base_addr)
-      : _m_base_addr (base_addr)
-    {}
-    virtual uint64_t recompute (uint64_t value) const
-    {
-      return value - _m_base_addr;
-    }
-  } cu_local_recomputer;
-
-  void recursive_dump (dwarf_output::die_info_pair const &info_pair,
+  void recursive_dump (die_info_pair const &info_pair,
 		       gap &sibling_gap,
 		       unsigned level)
   {
@@ -1049,29 +1039,29 @@ class dwarf_output::writer::recursive_dumper
     static char const *tail = spaces + strlen (spaces);
     __attribute__ ((unused)) char const *pad = tail - level * 2;
 
-    dwarf_output::debug_info_entry const &die = info_pair.first;
-    dwarf_output::die_info const &info = info_pair.second;
+    debug_info_entry const &die = info_pair.first;
+    die_info const &info = info_pair.second;
     int tag = die.tag ();
-    /*
-    std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ())
-	      << " " << std::flush;
-    */
-
     std::back_insert_iterator <section_appender> inserter
       = std::back_inserter (appender);
 
     /* Record where the DIE begins.  */
     die_off [die.offset ()] = appender.size ();
+    if (debug)
+      std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ())
+		<< " [0x" << std::hex << die_off [die.offset ()] << std::dec << "]"
+		<< " " << std::flush;
 
     /* Our instance.  */
-    dwarf_output::shape_info::instance_type const &instance = *info.abbrev_ptr;
+    shape_info::instance_type const &instance = *info.abbrev_ptr;
     ::dw_write_uleb128 (inserter, instance.code);
 
-    //std::cout << " " << code << std::endl;
+    if (debug)
+      std::cout << " " << instance.code << std::endl;
 
     /* Dump attribute values.  */
     debug_info_entry::attributes_type const &attribs = die.attributes ();
-    for (dwarf_output::shape_info::instance_type::forms_type::const_iterator
+    for (shape_info::instance_type::forms_type::const_iterator
 	   at = instance.forms.begin (); at != instance.forms.end (); ++at)
       {
 	int attr = at->first;
@@ -1082,11 +1072,17 @@ class dwarf_output::writer::recursive_dumper
 	    // other CU-local reference.  So also use this below (or
 	    // better reuse single piece of code for reference
 	    // handling).
+	    if (debug)
+	      std::cout << pad << "    " << dwarf_attr_string (attr)
+			<< ":" << dwarf_form_string (form)
+			<< " sibling=" << info._m_with_sibling[false]
+			<< ":" << info._m_with_sibling[true]
+			<< std::endl;
 	    size_t gap_size = ::form_width (form,
 					    _m_parent._m_addr_64,
 					    _m_parent._m_dwarf_64);
 	    sibling_gap = gap (appender, gap_size,
-			       _m_parent._m_big_endian, &cu_local_recomputer);
+			       _m_parent._m_big_endian, _m_cu_start);
 	    continue;
 	  }
 
@@ -1095,19 +1091,11 @@ class dwarf_output::writer::recursive_dumper
 	assert (vt != attribs.end ());
 
 	attr_value const &value = vt->second;
-	/*
-	  std::cout << pad
-	  << "    " << dwarf_attr_string (attr)
-	  << ":" << dwarf_form_string (form)
-	  << ":" << dwarf_form_string (at->second)
-	  << ":" << value.to_string () << std::endl;
-	*/
+	if (false && debug)
+	  std::cout << ":" << value.to_string () << std::endl;
+
 	dwarf::value_space vs = value.what_space ();
 
-	/*
-	  std::cout << pad << "  " << dwarf_attr_string (attr)
-	  << ": " << dwarf_form_string (form) << " ";
-	*/
 	switch (vs)
 	  {
 	  case dwarf::VS_flag:
@@ -1220,15 +1208,14 @@ class dwarf_output::writer::recursive_dumper
 	  case dwarf::VS_discr_list:
 	    throw std::runtime_error ("Can't handle VS_discr_list.");
 	  };
-	//std::cout << std::endl;
       }
 
     if (!die.children ().empty ())
       {
 	gap my_sibling_gap;
-	for (std::vector<dwarf_output::die_info_pair *>::const_iterator jt
-	       = die.children ().info ().begin ();
-	     jt != die.children ().info ().end (); ++jt)
+	Dwarf_Off die_offset = 0;
+	for (std::vector<die_info_pair *>::const_iterator jt
+	       = die.children ().info ().begin (); ;)
 	  {
 	    if (my_sibling_gap.valid ())
 	      {
@@ -1237,35 +1224,39 @@ class dwarf_output::writer::recursive_dumper
 				   (*jt)->first.offset ()));
 		my_sibling_gap = gap ();
 	      }
+	    die_offset = appender.size ();
 	    recursive_dump (**jt, my_sibling_gap, level + 1);
+	    if (++jt == die.children ().info ().end ())
+	      {
+		assert (!my_sibling_gap.valid ());
+		break;
+	      }
 	  }
 	*inserter++ = 0;
       }
   }
 
 public:
-  recursive_dumper (dwarf_output::writer &writer,
-		    section_appender &a_appender,
-		    die_off_map &a_die_off,
-		    uint64_t cu_start)
+  dump_die_tree (writer &writer,
+		 section_appender &a_appender,
+		 die_off_map &a_die_off,
+		 uint64_t cu_start,
+		 die_info_pair const &info_pair)
     : _m_parent (writer),
       appender (a_appender),
       die_off (a_die_off),
-      cu_local_recomputer (cu_start)
-  {}
-
-  void dump (dwarf_output::die_info_pair const &info_pair,
-	     gap &sibling_gap,
-	     unsigned level)
+      _m_cu_start (cu_start)
   {
-    recursive_dump (info_pair, sibling_gap, level);
+    gap fake_gap;
+    recursive_dump (info_pair, fake_gap, 0);
+    assert (!fake_gap.valid ());
 
-    for (die_backpatch_vec::const_iterator bt = die_backpatch.begin ();
-	 bt != die_backpatch.end (); ++bt)
+    for (die_backpatch_vec::const_iterator it = die_backpatch.begin ();
+	 it != die_backpatch.end (); ++it)
       {
-	die_off_map::const_iterator ot = die_off.find (bt->second);
-	assert (ot != die_off.end ());
-	bt->first.patch (ot->second);
+	die_off_map::const_iterator jt = die_off.find (it->second);
+	assert (jt != die_off.end ());
+	it->first.patch (jt->second);
       }
   }
 };
@@ -1299,10 +1290,8 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
 
       die_off_map die_off;
 
-      gap fake_gap;
-      recursive_dumper (*this, appender, die_off, cu_start)
-	.dump (*_m_col._m_unique.find (*it), fake_gap, 0);
-      assert (!fake_gap.valid ());
+      dump_die_tree (*this, appender, die_off, cu_start,
+		     *_m_col._m_unique.find (*it));
 
       /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
