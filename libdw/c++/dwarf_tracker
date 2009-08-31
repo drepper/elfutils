@@ -382,6 +382,7 @@ namespace elfutils
     typedef typename _base::die1 die1;
     typedef typename _base::die2 die2;
     typedef typename _base::dwarf1_ref dwarf1_ref;
+    class reference_match;
 
   protected:
     typedef dwarf_path_finder<dwarf1> tracker1;
@@ -406,6 +407,10 @@ namespace elfutils
       }
     };
 
+    typedef std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+				    reference_match *> active_map;
+    active_map _m_active;
+
     typedef std::pair<const die2 *,
 		      std::tr1::unordered_set<die2, ref_hasher, same_ref>
 		      > equiv_list;
@@ -419,6 +424,10 @@ namespace elfutils
       return &(*_m_equiv)[a->identity ()];
     }
 
+    typedef dwarf_tracker_base<dwarf1, dwarf2> context_tracker;
+    typedef dwarf_comparator<dwarf1, dwarf2, true,
+			     context_tracker> context_comparator;
+
     /* Predicate for DIEs "equal enough" to match as context for a subtree.
        The definition we use is that the DIE has the same tag and all its
        attributes are equal, excepting that references in attribute values
@@ -429,9 +438,9 @@ namespace elfutils
       {
 	if (a->tag () != b->tag ())
 	  return false;
-	dwarf_tracker_base<dwarf1, dwarf2> t;
-	return (dwarf_comparator<dwarf1, dwarf2, true> (t)
-		.equals (a->attributes (), b->attributes ()));
+	context_tracker t;
+	return context_comparator (t).equals (a->attributes (),
+					      b->attributes ());
       }
     };
 
@@ -509,51 +518,65 @@ namespace elfutils
     class reference_match
     {
       friend class dwarf_ref_tracker;
-    private:
-      equiv_list *_m_elt;
+    protected:
+      equiv_list *_m_lhs;
+      typename active_map::value_type *_m_rhs;
+      active_map *_m_active;
 
     public:
 
       inline reference_match ()
-	: _m_elt (NULL)
+	: _m_lhs (NULL), _m_rhs (NULL), _m_active (NULL)
       {}
 
       inline ~reference_match ()
       {
-	if (_m_elt != NULL)
-	  _m_elt->first = NULL;
-      }
-
-      inline bool cannot_match () const
-      {
-	return _m_elt == NULL;
-      }
-
-      inline void notice_match (const die2 &b, bool matches) const
-      {
-	if (matches && _m_elt != NULL)
-	  _m_elt->second.insert (b);
+	if (_m_lhs != NULL)
+	  _m_lhs->first = NULL;
+	if (_m_rhs != NULL)
+	  _m_active->erase (_m_rhs->first);
       }
     };
 
+    /* A prematch during the main tree walk does the same cache lookup
+       as real reference matching.  But it doesn't record itself as a
+       "walk in progress" for the circularity-catching logic.  Doing so
+       can break that logic for comparison purposes.  Since we key our
+       cache on identity, a lookup can hit a shared DIE as well as one
+       that is truly involved in our current walk.  If we hit a shared
+       DIE on the main walk, and within that recursion (i.e. somewhere
+       in its children or along its own references) we encounter a
+       circularity, we'd take the main-walk's equiv_list record as the
+       root of the circularity on one side, while on the other side the
+       DIEs may not have been shared and so the same circularity is
+       actually rooted at the second instance of an identical DIE.  */
+    inline bool prematch (reference_match &matched,
+			  const die1 &a, const die2 &b)
+    {
+      return reference_matched (matched, a, b, false);
+    }
+
     inline bool
-    reference_matched (reference_match &matched, const die1 &a, const die2 &b)
+    reference_matched (reference_match &matched, const die1 &a, const die2 &b,
+		       bool record = true)
     {
       equiv_list *elt = equiv_to (a);
       if (elt->first == NULL)
 	{
-	  /* Record that we have a walk in progress crossing A.
-	     When MATCHED goes out of scope in our caller, its
-	     destructor will reset ELT->first to clear this record.  */
-	  elt->first = &b;
-	  matched._m_elt = elt;
+	  matched._m_lhs = elt;
+
+	  if (record)
+	    /* Record that we have a walk in progress crossing A.
+	       When MATCHED goes out of scope in our caller, its
+	       destructor will reset ELT->first to clear this record.  */
+	    elt->first = &b;
 
 	  // Short-circuit if we have already matched B to A.
 	  return elt->second.find (b) != elt->second.end ();
 	}
 
-      /* We have a circularity.  We can tell because ELT->first remains
-	 set from an outer recursion still in progress.
+      /* We have a circularity on the left-hand side.  We can tell because
+	 ELT->first remains set from an outer recursion still in progress.
 
 	 The circular chain of references rooted at A matches B if B is
 	 also the root of its own circularity and everything along those
@@ -564,7 +587,70 @@ namespace elfutils
 	 We actually record the pointer on the caller's stack rather
 	 than a copy of B, just because the iterator might be larger.  */
 
-      return *elt->first == b;
+      if ((*elt->first)->identity () == b->identity ())
+	return true;
+
+      /* Our right-hand side is not in lock-step on a matching circularity.
+	 But it's still possible this is a matching reference nonetheless.
+	 A difference in the sharing vs duplication of DIEs between the
+	 left-hand and right-hand sides could mean that one side's chain of
+	 references reaches the same cycle sooner than the other's.
+
+	 Consider:
+
+	 	A1 -> A2 -> ... -> A1' -> A2 ...
+	 	B1 -> B2 -> ... -> B1  -> B2 ...
+
+	 Here A1' is an identical copy of A1, duplicated in the A object.
+	 Otherwise A1 matches B1, A2 matches B2, etc.  The B walk started
+	 at B1 and hits it again at the step comparing B1 to A1'.  But the
+	 A walk has not hit A1 again yet (and perhaps it never will), so
+	 our test above does not match.
+
+	 This is the simplest example.  There might be more steps of the
+	 reference chain that have duplicates on one side but have been
+	 consolidated to a single entry on the other.  There can also be
+	 multiple reference attributes at each node that differ on this
+	 issue, making all manner of tangled graphs that all really match
+	 the same simpler graph (and thus each other).
+
+	 Now we start recording the state of the right-hand side reference
+	 chain walk, and keep going.  When the right-hand side then becomes
+	 circular, we check that it has coincided with the left-hand side.
+
+	 This is guaranteed to terminate, at least.  It should never have
+	 any false positives, since that continuing walk would eventually
+	 find the differences.  We hope it doesn't have any false negatives
+	 either, but to be sure of that would require more graph theory
+	 than your humble writer can bring to bear.  */
+
+      const std::pair<typename active_map::iterator, bool> p
+	= _m_active.insert (std::make_pair (b->identity (), &matched));
+      if (p.second)
+	{
+	  assert (p.first->second == &matched);
+	  matched._m_lhs = elt;
+	  matched._m_active = &_m_active;
+	  matched._m_rhs = &*p.first;
+	  return false;
+	}
+
+      assert (p.first->second != &matched);
+      return p.first->second->_m_lhs == elt;
+    }
+
+    inline bool cannot_match (reference_match &matched,
+			      const die1 &, const die2 &)
+    {
+      return matched._m_lhs == NULL && matched._m_rhs == NULL;
+    }
+
+    inline bool notice_match (reference_match &matched,
+			      const die1 &, const die2 &b, bool matches)
+    {
+      if (matches && matched._m_lhs != NULL)
+	matched._m_lhs->second.insert (b);
+      return matches;
     }
 
     typedef dwarf_ref_tracker subtracker;
@@ -578,7 +664,7 @@ namespace elfutils
 	_m_right (proto._m_right, rhs),
 	_m_equiv (proto._m_equiv), _m_delete_equiv (false)
     {
-      // We are starting a recursive consideration of a vs b.
+      // We are starting a recursive consideration of LHS vs RHS.
     }
   };
 };

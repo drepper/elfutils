@@ -1,3 +1,14 @@
+2009-08-27  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (do_writer_test): New function, broken out of ...
+	(main): ... here.
+	[TEST]: Conditionalize -T and all its code on this.
+
+2009-08-25  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (talker): Track real vs fake-positive match result
+	and cache only real results in the real tracker.
+
 2009-08-20  Roland McGrath  <roland@redhat.com>
 
 	* dwarfcmp.cc (verbose): New variable.

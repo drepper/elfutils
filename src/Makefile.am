@@ -57,13 +57,15 @@ bin_PROGRAMS = readelf nm size strip ld elflint findtextrel addr2line \
 	       elfcmp objdump ranlib strings ar unstrip \
 	       dwarflint dwarfcmp writer
 
+noinst_PROGRAMS = dwarfcmp-test
+
 ld_dsos = libld_elf_i386_pic.a
 if NATIVE_LD
 noinst_LIBRARIES = libld_elf.a libar.a
 native_ld_cflags = -DBASE_ELF_NAME=elf_$(base_cpu)
 else
 noinst_LIBRARIES = libld_elf.a libar.a $(ld_dsos)
-noinst_PROGRAMS = $(ld_dsos:_pic.a=.so)
+noinst_PROGRAMS += $(ld_dsos:_pic.a=.so)
 endif
 if NEVER
 # We never build this library but we need to get the dependency files
@@ -82,6 +84,11 @@ libar_a_SOURCES = arlib.c arlib2.c
 
 dwarfcmp_SOURCES = dwarfcmp.cc dwarfstrings.c
 writer_SOURCES = writer.cc dwarfstrings.c
+
+# dwarfcmp-test is just dwarfcmp built with -DTEST.
+dwarfcmp_test_CPPFLAGS = -DTEST
+dwarfcmp_test_SOURCES = $(dwarfcmp_SOURCES)
+dwarfcmp_test_LDADD = $(dwarfcmp_LDADD)
 
 dwarflint_SOURCES = dwarflint.c dwarflint.h dwarflint-hl.cc \
 		    dwarflint-expected-at.cc dwarflint-expected.hh \

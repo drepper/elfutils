@@ -1,3 +1,25 @@
+2009-08-28  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarfcmp-self.sh: Test dwarfcmp-test binary too.
+
+	* print-die.cc: Grok --stats to dump collector stats.
+
+2009-08-27  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarfcmp-self.sh: Parameterize.  Take out -T runs.
+	* run-dwarfcmp-test-self.sh: New file.  Do just -T runs here.
+	* Makefile.am (TESTS, EXTRA_DIST): Add it.
+
+2009-08-25  Roland McGrath  <roland@redhat.com>
+
+	* print-die.hh: New file with extern decls.  Contents moved to ...
+	* print-die.cc: ... here, new file.
+	* Makefile.am (dwarf_print_SOURCES, dwarf_edit_SOURCES): Build it.
+
+2009-08-21  Roland McGrath  <roland@redhat.com>
+
+	* print-die.hh (print_die_main, print_file): Add --silent option.
+
 2009-08-19  Roland McGrath  <roland@redhat.com>
 
 	* print-die.hh: Handle --norefs, --dump-refs.

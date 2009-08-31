@@ -374,6 +374,20 @@ namespace elfutils
   std::string to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &);
   template<>
   std::string to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value&);
+
+  template<>
+  std::string dwarf_edit::line_table::to_string () const;
+  template<>
+  std::string dwarf_edit::line_info_table::to_string () const;
+
+  // Explicit instantiations.
+  extern template class dwarf_data::line_entry<dwarf_edit::source_file>;
+  extern template class dwarf_data::line_table<dwarf_edit::line_entry>;
+  extern template class dwarf_data::line_info_table<dwarf_edit::directory_table,
+						    dwarf_edit::line_table>;
+  extern template class dwarf_data::attr_value<dwarf_edit>;
+  extern template class dwarf_data::value<dwarf_edit>;
+
 };
 
 #endif	// <elfutils/dwarf_edit>

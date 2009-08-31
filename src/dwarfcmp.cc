@@ -44,10 +44,8 @@
 #include "../libdw/libdwP.h"	// XXX
 
 #include "c++/dwarf"
-#include "c++/dwarf_edit"
 #include "c++/dwarf_comparator"
 #include "c++/dwarf_tracker"
-#include "c++/dwarf_output"
 
 using namespace elfutils;
 using namespace std;
@@ -72,7 +70,9 @@ static const struct argp_option options[] =
   { "ignore-missing", 'i', NULL, 0,
     N_("Don't complain if both files have no DWARF at all"), 0 },
 
+#ifdef TEST
   { "test-writer", 'T', NULL, 0, N_("Test DWARF output classes"), 0 },
+#endif
 
   { NULL, 0, NULL, 0, N_("Miscellaneous:"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
@@ -103,9 +103,12 @@ static bool missing_ok;
 /* True if we should print all differences.  */
 static bool verbose;
 
+#ifdef TEST
 /* Nonzero to test writer classes.  */
 static int test_writer;
-
+#else
+# define test_writer 0
+#endif
 
 static Dwarf *
 open_file (const char *fname, int *fdp)
@@ -130,7 +133,7 @@ open_file (const char *fname, int *fdp)
 
 // XXX make translation-friendly
 
-template<class dwarf1, class dwarf2>
+template<class dwarf1, class dwarf2, bool print_all>
 struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 {
   typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
@@ -145,6 +148,7 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
   bool result_;
+  bool visiting_result_;
 
   inline talker ()
     : a_ (NULL), b_ (NULL), result_ (true)
@@ -158,12 +162,6 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   {
   }
 
-  inline bool keep_going ()
-  {
-    result_ = false;
-    return verbose;
-  }
-
   inline ostream &location () const
   {
     return cout << hex << a_->offset () << " vs " << b_->offset () << ": ";
@@ -174,10 +172,33 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   {
     a_ = &a;
     b_ = &b;
-    if (a.tag () != b.tag ())
+    visiting_result_ = a.tag () == b.tag ();
+    if (!visiting_result_)
       location () << dwarf::tags::name (a.tag ())
 		  << " vs "
 		  << dwarf::tags::name (b.tag ());
+  }
+
+  inline bool keep_going ()
+  {
+    result_ = visiting_result_ = false;
+    return print_all;
+  }
+
+  inline bool notice_match (typename subtracker::reference_match &matched,
+			    const die1 &a, const die2 &b, bool matches)
+  {
+    /* In the main walk, a mismatch would have gone to keep_going.
+       But in reference_match, the comparator uses a subtracker.
+       It won't have set visiting_result_, but it will return a
+       real non-matching result we can catch here.  */
+    if (!matches)
+      visiting_result_ = false;
+
+    // Record the real result in the cache, not a fake match for -l.
+    subtracker::notice_match (matched, a, b, visiting_result_);
+
+    return matches || keep_going ();
   }
 
   inline bool mismatch (cu1 &it1, const cu1 &end1,
@@ -255,12 +276,13 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     return keep_going ();
   }
 
+  typedef dwarf_comparator<dwarf1, dwarf2, false, subtracker> subcomparator;
   inline void reference_mismatch (const die1 &ref1, const die2 &ref2)
   {
-    dwarf_comparator<
-      dwarf1, dwarf2, false, subtracker> cmp (*(subtracker *) this);
-    if (cmp.equals (ref1, ref2))
-      cout << " (XXX refs now equal again!)";
+    subcomparator cmp (*(subtracker *) this);
+    if (cmp.equals (ref1, ref2) && !print_all)
+      cout << " (XXX refs now equal again!)"
+	   << (cmp.equals (*ref1, *ref2) ? "" : " (and not identical!!)");
     else if (cmp.equals (*ref1, *ref2))
       cout << " (identical but contexts mismatch)";
     else
@@ -293,10 +315,17 @@ struct quiet_cmp
   : public cmp<dwarf1, dwarf2, dwarf_ref_tracker<dwarf1, dwarf2> >
 {};
 
-// To be noisy, the talker wraps the standard tracker with verbosity hooks.
 template<class dwarf1, class dwarf2>
+static inline bool
+quiet_compare (const dwarf1 &a, const dwarf2 &b)
+{
+  return quiet_cmp<dwarf1, dwarf2> () (a, b);
+}
+
+// To be noisy, the talker wraps the standard tracker with verbosity hooks.
+template<class dwarf1, class dwarf2, bool print_all>
 struct noisy_cmp
-  : public cmp<dwarf1, dwarf2, talker<dwarf1, dwarf2> >
+  : public cmp<dwarf1, dwarf2, talker<dwarf1, dwarf2, print_all> >
 {
   inline bool operator () (const dwarf1 &a, const dwarf2 &b)
   {
@@ -304,6 +333,28 @@ struct noisy_cmp
   }
 };
 
+
+template<class dwarf1, class dwarf2, bool print_all>
+static inline bool
+noisy_compare (const dwarf1 &a, const dwarf2 &b)
+{
+  return noisy_cmp<dwarf1, dwarf2, print_all> () (a, b);
+}
+
+template<class dwarf1, class dwarf2>
+static inline bool
+noisy_compare (const dwarf1 &a, const dwarf2 &b, bool print_all)
+{
+  return (print_all
+	  ? noisy_cmp<dwarf1, dwarf2, true> () (a, b)
+	  : noisy_cmp<dwarf1, dwarf2, false> () (a, b));
+}
+
+
+#ifdef TEST
+
+# include "c++/dwarf_edit"
+# include "c++/dwarf_output"
 
 // Test that one comparison works as expected.
 template<class dwarf1, class dwarf2>
@@ -313,7 +364,7 @@ test_compare (const dwarf1 &file1, const dwarf2 &file2, bool expect)
   if (quiet_cmp<dwarf1, dwarf2> () (file1, file2) != expect)
     {
       if (expect)
-	noisy_cmp<dwarf1, dwarf2> () (file1, file2);
+	noisy_compare (file1, file2, true);
       throw std::logic_error (__PRETTY_FUNCTION__);
     }
 }
@@ -366,6 +417,28 @@ test_output (const dwarf &file1, const dwarf &file2,
     test_classes (in1, in2, out1, out2, same);
 }
 
+static void
+do_writer_test (dwarf &file1, dwarf &file2, bool same)
+{
+  if (test_writer & 1)
+    test_output (file1, file2, false, file1, file2, same);
+  if (test_writer & 2)
+    {
+      dwarf_edit edit1 (file1);
+      dwarf_edit edit2 (file2);
+      test_classes (file1, file2, edit1, edit2, same);
+      if (test_writer & 1)
+	test_output (file1, file2, true, edit1, edit2, same);
+    }
+}
+
+#else
+
+static inline void do_writer_test (dwarf &, dwarf &, bool) {}
+
+#endif	// TEST
+
+
 int
 main (int argc, char *argv[])
 {
@@ -416,19 +489,10 @@ main (int argc, char *argv[])
       dwarf file2 (dw2);
 
       bool same = (quiet
-		   ? quiet_cmp<dwarf, dwarf> () (file1, file2)
-		   : noisy_cmp<dwarf, dwarf> () (file1, file2));
+		   ? quiet_compare (file1, file2)
+		   : noisy_compare (file1, file2, verbose));
 
-      if (test_writer & 1)
-	test_output (file1, file2, false, file1, file2, same);
-      if (test_writer & 2)
-	{
-	  dwarf_edit edit1 (file1);
-	  dwarf_edit edit2 (file2);
-	  test_classes (file1, file2, edit1, edit2, same);
-	  if (test_writer & 1)
-	    test_output (file1, file2, true, edit1, edit2, same);
-	}
+      do_writer_test (file1, file2, same);
 
       result = !same;
     }
@@ -471,9 +535,11 @@ parse_opt (int key, char *, struct argp_state *)
       missing_ok = true;
       break;
 
+#ifdef TEST
     case 'T':
       ++test_writer;
       break;
+#endif
 
     default:
       return ARGP_ERR_UNKNOWN;

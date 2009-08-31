@@ -92,7 +92,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
 	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh \
-	run-dwarf_edit.sh
+	run-dwarf_edit.sh run-dwarfcmp-test-self.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -126,8 +126,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
 	     run-dwarf-getmacros.sh \
-	     run-dwarfcmp-self.sh run-dwarflint-self.sh \
-	     run-dwarf-attributes.sh run-dwarf_edit.sh \
+	     run-dwarfcmp-self.sh run-dwarfcmp-test-self.sh \
+	     run-dwarflint-self.sh run-dwarf-attributes.sh run-dwarf_edit.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -195,10 +195,10 @@ endif !STANDALONE
 # XXX later the C++ stuff will be in libdw.so directly
 libdwpp = ../libdw/libdwpp.a $(libdw)
 
-dwarf_print_SOURCES = dwarf-print.cc ../src/dwarfstrings.c
+dwarf_print_SOURCES = dwarf-print.cc print-die.cc ../src/dwarfstrings.c
 dwarf_print_LDADD = $(libdwpp) $(libmudflap) $(libebl) -ldl
 
-dwarf_edit_SOURCES = dwarf_edit.cc ../src/dwarfstrings.c
+dwarf_edit_SOURCES = dwarf_edit.cc print-die.cc ../src/dwarfstrings.c
 dwarf_edit_LDADD = $(libdwpp) $(libmudflap) $(libebl) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)

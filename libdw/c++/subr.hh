@@ -51,24 +51,38 @@ namespace elfutils
       }
     };
 
-    template<typename T>
+    template<typename T1, typename T2>
+    struct cast_hasher : public std::unary_function<T1, size_t>
+    {
+      inline size_t operator () (const T1 &x) const
+      {
+	return hash_this (static_cast<T2> (x));
+      }
+    };
+
+    template<typename T, T magic>
     struct integer_hash : public std::unary_function<T, size_t>
     {
       inline size_t operator () (const T &x) const
       {
-	return x;
+	return x * magic;
       }
     };
     template<>
-    struct hash<int> : public integer_hash<int> {};
+    struct hash<unsigned int>
+      : public integer_hash<unsigned int, 0x9e370001U>
+    {};
     template<>
-    struct hash<unsigned int> : public integer_hash<unsigned int> {};
+    struct hash<uint64_t>
+      : public integer_hash<uint64_t, 0x9e37fffffffc0001ULL>
+    {};
+
     template<>
-    struct hash<uint64_t> : public integer_hash<uint64_t> {};
+    struct hash<int> : public cast_hasher<int, unsigned int> {};
     template<>
-    struct hash<uint8_t> : public integer_hash<uint8_t> {};
+    struct hash<uint8_t> : public cast_hasher<uint8_t, unsigned int> {};
     template<>
-    struct hash<bool> : public integer_hash<bool> {};
+    struct hash<bool> : public cast_hasher<bool, unsigned int> {};
 
     template<typename T1, typename T2>
     struct hash<std::pair<T1, T2> >
@@ -88,7 +102,7 @@ namespace elfutils
       struct hasher
       {
 	size_t _m_hash;
-	inline hasher () : _m_hash (0) {}
+	inline hasher (size_t init = 0) : _m_hash (init) {}
 	inline void operator () (const typename T::value_type &x)
 	{
 	  subr::hash_combine (_m_hash, hash_this (x));
@@ -116,9 +130,10 @@ namespace elfutils
     private:
       struct hasher : public container_hasher<std::string>::hasher
       {
+	inline hasher () : container_hasher<std::string>::hasher (5381) {}
 	inline void operator () (std::string::value_type c)
 	{
-	  _m_hash = 5 * _m_hash + c;
+	  _m_hash = _m_hash * 33 + c;
 	}
       };
     public:
@@ -659,18 +674,22 @@ namespace elfutils
 	_base::operator++ ();
 	return *this;
       }
-      inline wrapped_input_iterator operator++ (int magic) // postfix
+      inline wrapped_input_iterator operator++ (int) // postfix
       {
-	return wrapped_input_iterator (_base::operator++ (magic));
+	wrapped_input_iterator pre = *this;
+	++*this;
+	return pre;
       }
       inline wrapped_input_iterator &operator-- () // prefix
       {
 	_base::operator-- ();
 	return *this;
       }
-      inline wrapped_input_iterator operator-- (int magic) // postfix
+      inline wrapped_input_iterator operator-- (int) // postfix
       {
-	return wrapped_input_iterator (_base::operator-- (magic));
+	wrapped_input_iterator pre = *this;
+	--*this;
+	return pre;
       }
 
       inline const _base &base () const

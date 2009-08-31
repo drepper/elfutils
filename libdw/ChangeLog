@@ -1,4 +1,21 @@
+2009-08-27  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_output (dwarf_output::dwarf_output): Add a variant with a
+	user-supplied copier, reimplement the collector-only version.
+	(dwarf_output::copier): New constructors and destructor public.
+
+	* c++/dwarf_output (dwarf_output::copier::seen::promote_pending):
+	Notice circularity inside resolve_refs.
+
+2009-08-25  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_tracker: Soup up circular reference handling to handle
+	mismatched duplication vs sharing in semantically matching trees.
+	* c++/dwarf_comparator: Update user.
+
 2009-08-21  Roland McGrath  <roland@redhat.com>
+
+	* c++/subr.hh (hash<std::string>): Use elf_gnu_hash algorithm.
 
 	* c++/dwarf (dwarf::source_file::identity): New method.
 	* c++/dwarf_data (dwarf_data::source_file::identity): Likewise.
