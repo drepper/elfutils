@@ -1308,28 +1308,6 @@ namespace elfutils
     void build_output (bool addr_64, bool dwarf_64);
   };
 
-  inline void
-  dwarf_output::die_info::placed (const debug_info_entry::pointer &ref,
-				  bool have_sibling)
-  {
-    ++_m_uses;
-    _m_with_sibling[have_sibling] = true;
-
-    if (_m_refs.empty ())
-      {
-	subr::nothing dummy;
-	self (new value::value_reference (ref, dummy));
-      }
-    else
-      for (size_t n = _m_refs.size (); n > 0; --n)
-	{
-	  value::value_reference *self_ref = _m_refs.front ();
-	  self_ref->ref = ref;
-	  _m_refs.pop ();
-	  _m_refs.push (self_ref);
-	}
-  }
-
   struct dwarf_output::value::circular_reference
     : public dwarf_output::value::value_reference
   {
