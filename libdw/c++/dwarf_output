@@ -685,6 +685,7 @@ namespace elfutils
       typedef std::vector<int> attrs_vec;
       unsigned _m_tag;
       attrs_vec _m_attrs;
+      std::bitset<2> const &_m_with_sibling;
       bool _m_has_children;
       size_t _m_hash;
 
@@ -698,6 +699,7 @@ namespace elfutils
       {
 	return (_m_hash == other._m_hash
 		&& _m_tag == other._m_tag
+		&& _m_with_sibling == other._m_with_sibling
 		&& _m_has_children == other._m_has_children
 		&& _m_attrs == other._m_attrs);
       }
@@ -729,7 +731,8 @@ namespace elfutils
 	instance_type () : code (0) {}
       };
       typedef std::vector<instance_type> instance_vec;
-      instance_vec _m_instances;
+      typedef std::map<bool, instance_vec> instance_map;
+      instance_map _m_instances;
 
       shape_info (debug_info_entry const &die)
       {
@@ -1072,7 +1075,9 @@ namespace elfutils
     std::bitset<2> _m_with_sibling;
     unsigned int _m_uses;
 
-    dwarf_output::shape_info::instance_vec::iterator abbrev_ptr;
+    typedef dwarf_output::shape_info::instance_vec::iterator abbrev_ptr_t;
+    typedef std::map<bool, abbrev_ptr_t> abbrev_ptr_map;
+    abbrev_ptr_map abbrev_ptr;
 
     inline die_info ()
       : _m_refs (), _m_with_sibling (), _m_uses (0)

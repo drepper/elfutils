@@ -398,22 +398,15 @@ namespace
 dwarf_output::shape_type::shape_type (const debug_info_entry &die,
 				      const dwarf_output::die_info &info)
   : _m_tag (die.tag ())
+  , _m_with_sibling (info._m_with_sibling)
   , _m_has_children (die.has_children ())
   , _m_hash (8675309 << _m_has_children)
 {
-  // xxx Except it's perfectly legal for _m_with_sibling[false] and
-  // _m_with_sibling[true] to be true simultaneously.
-  bool has_sibling_at = info._m_with_sibling[true] && die.has_children ();
-  if (has_sibling_at)
-    _m_attrs.push_back (DW_AT_sibling);
-
   for (debug_info_entry::attributes_type::const_iterator it
 	 = die.attributes ().begin ();
        it != die.attributes ().end (); ++it)
     _m_attrs.push_back (it->first);
-
-  // Sort it, but leave sibling attribute at the beginning.
-  std::sort (_m_attrs.begin () + (has_sibling_at ? 1 : 0), _m_attrs.end ());
+  std::sort (_m_attrs.begin (), _m_attrs.end ());
 
   // Make sure the hash is computed based on canonical order of
   // (unique) attributes, not based on order in which the attributes
@@ -810,86 +803,107 @@ dwarf_output::shape_info::instantiate
    dwarf_output_collector &col,
    bool addr_64, bool dwarf_64)
 {
+  bool with_sibling = shape._m_with_sibling[true] && shape._m_has_children;
+  bool without_sibling = shape._m_with_sibling[false] || !with_sibling;
+
   // Prevent instance pointers from invalidation upon push_back.
-  _m_instances.reserve (_m_users.size ());
+  if (without_sibling)
+    _m_instances[false].reserve (_m_users.size ());
+  if (with_sibling)
+    _m_instances[true].reserve (_m_users.size ());
+
+  struct
+  {
+    void operator () (instance_type &inst,
+		      debug_info_entry const &die, int attr,
+		      bool my_addr_64, bool my_dwarf_64)
+    {
+      // Optimization of sibling attribute will be done afterward.
+      // For now just stick the biggest form in there.
+      int form;
+      if (attr == DW_AT_sibling)
+	form = DW_FORM_ref8;
+      else
+	{
+	  int tag = die.tag ();
+	  dwarf_output::attr_value const &value
+	    = die.attributes ().find (attr)->second;
+	  shape_type::candidate_form_vec const &candidates
+	    = ::candidate_forms (tag, attr, value);
+
+	  if (!numerical_p (value))
+	    {
+	      form = -1;
+
+	      // Just take the first form matching the
+	      // constraints, we will optimize in separate sweep.
+	      // Assume that candidates are stored in order from
+	      // the most capacitous to the least.
+	      for (shape_type::candidate_form_vec::const_iterator ct
+		     = candidates.begin ();
+		   ct != candidates.end (); ++ct)
+		if (ct->constraint->satisfied (die, attr, value))
+		  {
+		    form = ct->form;
+		    break;
+		  }
+	      assert (form != -1);
+	    }
+	  else
+	    {
+	      size_t best_len = 0;
+	      form = -1;
+
+	      uint64_t opt_val
+		= numerical_value_to_optimize (tag, attr, value);
+
+	      for (shape_type::candidate_form_vec::const_iterator ct
+		     = candidates.begin ();
+		   ct != candidates.end (); ++ct)
+		if (ct->constraint->satisfied (die, attr, value)
+		    && numerical_value_fits_form (opt_val, ct->form,
+						  my_addr_64))
+		  {
+		    size_t len
+		      = numerical_encoded_length (opt_val, ct->form,
+						  my_addr_64, my_dwarf_64);
+		    if (form == -1 || len < best_len)
+		      {
+			form = ct->form;
+			if (len == 1) // you can't top that
+			  break;
+			best_len = len;
+		      }
+		  }
+	      assert (form != -1);
+	    }
+	}
+      inst.forms.insert (std::make_pair (attr, form));
+    }
+  } handle_attrib;
 
   for (die_ref_vect::const_iterator it = _m_users.begin ();
        it != _m_users.end (); ++it)
     {
       instance_type inst;
       debug_info_entry const &die = *it;
-      debug_info_entry::attributes_type const &attribs = die.attributes ();
       for (shape_type::attrs_vec::const_iterator at = shape._m_attrs.begin ();
 	   at != shape._m_attrs.end (); ++at)
-	{
-	  int attr = *at;
-
-	  // Optimization of sibling attribute will be done afterward.
-	  // For now just stick the biggest form in there.
-	  int form;
-	  if (attr == DW_AT_sibling)
-	    form = DW_FORM_ref8;
-	  else
-	    {
-	      int tag = die.tag ();
-	      dwarf_output::attr_value const &value
-		= attribs.find (attr)->second;
-	      shape_type::candidate_form_vec const &candidates
-		= ::candidate_forms (tag, *at, value);
-
-	      if (!numerical_p (value))
-		{
-		  form = -1;
-
-		  // Just take the first form matching the
-		  // constraints, we will optimize in separate sweep.
-		  // Assume that candidates are stored in order from
-		  // the most capacitous to the least.
-		  for (shape_type::candidate_form_vec::const_iterator ct
-			 = candidates.begin ();
-		       ct != candidates.end (); ++ct)
-		    if (ct->constraint->satisfied (die, attr, value))
-		      {
-			form = ct->form;
-			break;
-		      }
-		  assert (form != -1);
-		}
-	      else
-		{
-		  size_t best_len = 0;
-		  form = -1;
-
-		  uint64_t opt_val
-		    = numerical_value_to_optimize (tag, attr, value);
-
-		  for (shape_type::candidate_form_vec::const_iterator ct
-			 = candidates.begin ();
-		       ct != candidates.end (); ++ct)
-		    if (ct->constraint->satisfied (die, attr, value)
-			&& numerical_value_fits_form (opt_val, ct->form,
-						      addr_64))
-		      {
-			size_t len
-			  = numerical_encoded_length (opt_val, ct->form,
-						      addr_64, dwarf_64);
-			if (form == -1 || len < best_len)
-			  {
-			    form = ct->form;
-			    if (len == 1) // you can't top that
-			      break;
-			    best_len = len;
-			  }
-		      }
-		  assert (form != -1);
-		}
-	    }
-	  inst.forms.insert (std::make_pair (attr, form));
-	}
+	handle_attrib (inst, die, *at, addr_64, dwarf_64);
 
       die_info &i = col._m_unique.find (die)->second;
-      i.abbrev_ptr = _m_instances.end ();
-      _m_instances.push_back (inst);
+      if (without_sibling)
+	{
+	  i.abbrev_ptr[false] = _m_instances[false].end ();
+	  _m_instances[false].push_back (inst);
+	}
+
+      if (with_sibling)
+	{
+	  handle_attrib (inst, die, DW_AT_sibling, addr_64, dwarf_64);
+	  i.abbrev_ptr[true] = _m_instances[true].end ();
+	  _m_instances[true].push_back (inst);
+	}
     }
 
   // xxx: instance merging?  Locate instances A and B (and C and ...?)
@@ -915,7 +929,6 @@ dwarf_output::shape_info::build_data
   ::dw_write_uleb128 (inserter, shape._m_tag);
   *inserter++ = shape._m_has_children ? DW_CHILDREN_yes : DW_CHILDREN_no;
 
-  assert (shape._m_attrs.size () == inst.forms.size ());
   for (instance_type::forms_type::const_iterator it = inst.forms.begin ();
        it != inst.forms.end (); ++it)
     {
@@ -987,8 +1000,8 @@ dwarf_output::writer::writer (dwarf_output_collector &col,
 	st->second.add_user (it->first);
       else
 	{
-	  dwarf_output::shape_info i (it->first);
-	  _m_shapes.insert (std::make_pair (shape, i));
+	  dwarf_output::shape_info info (it->first);
+	  _m_shapes.insert (std::make_pair (shape, info));
 	}
     }
 
@@ -996,10 +1009,14 @@ dwarf_output::writer::writer (dwarf_output_collector &col,
        it != _m_shapes.end (); ++it)
     {
       it->second.instantiate (it->first, col, addr_64, dwarf_64);
-      for (dwarf_output::shape_info::instance_vec::iterator jt
-	     = it->second._m_instances.begin ();
-	   jt != it->second._m_instances.end (); ++jt)
-	jt->code = ++code;
+      for (int i = 0; i < 2; ++i)
+	{
+	  bool b = static_cast<bool> (i);
+	  for (dwarf_output::shape_info::instance_vec::iterator jt
+		 = it->second._m_instances[b].begin ();
+	       jt != it->second._m_instances[b].end (); ++jt)
+	    jt->code = ++code;
+	}
     }
 }
 
@@ -1008,10 +1025,14 @@ dwarf_output::writer::output_debug_abbrev (section_appender &appender)
 {
   for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
-    for (dwarf_output::shape_info::instance_vec::const_iterator jt
-	   = it->second._m_instances.begin ();
-	 jt != it->second._m_instances.end (); ++jt)
-      it->second.build_data (it->first, *jt, appender);
+    for (int i = 0; i < 2; ++i)
+      {
+	bool b = static_cast<bool> (i);
+	for (dwarf_output::shape_info::instance_vec::iterator jt
+	       = it->second._m_instances[b].begin ();
+	     jt != it->second._m_instances[b].end (); ++jt)
+	  it->second.build_data (it->first, *jt, appender);
+      }
 
   appender.push_back (0); // terminate table
 }
@@ -1029,7 +1050,7 @@ class dwarf_output::writer::dump_die_tree
   static const bool debug = false;
 
   void recursive_dump (die_info_pair const &info_pair,
-		       gap &sibling_gap,
+		       bool has_sibling, gap &sibling_gap,
 		       unsigned level)
   {
     static char const spaces[] =
@@ -1053,7 +1074,10 @@ class dwarf_output::writer::dump_die_tree
 		<< " " << std::flush;
 
     /* Our instance.  */
-    shape_info::instance_type const &instance = *info.abbrev_ptr;
+    die_info::abbrev_ptr_map::const_iterator xt
+      = info.abbrev_ptr.find (die.has_children () && has_sibling);
+    assert (xt != info.abbrev_ptr.end ());
+    shape_info::instance_type const &instance = *xt->second;
     ::dw_write_uleb128 (inserter, instance.code);
 
     if (debug)
@@ -1225,8 +1249,10 @@ class dwarf_output::writer::dump_die_tree
 		my_sibling_gap = gap ();
 	      }
 	    die_offset = appender.size ();
-	    recursive_dump (**jt, my_sibling_gap, level + 1);
-	    if (++jt == die.children ().info ().end ())
+	    die_info_pair const &dip = **jt++;
+	    bool my_has_sibling = jt != die.children ().info ().end ();
+	    recursive_dump (dip, my_has_sibling, my_sibling_gap, level + 1);
+	    if (!my_has_sibling)
 	      {
 		assert (!my_sibling_gap.valid ());
 		break;
@@ -1248,15 +1274,20 @@ public:
       _m_cu_start (cu_start)
   {
     gap fake_gap;
-    recursive_dump (info_pair, fake_gap, 0);
+    recursive_dump (info_pair, false, fake_gap, 0);
     assert (!fake_gap.valid ());
 
     for (die_backpatch_vec::const_iterator it = die_backpatch.begin ();
 	 it != die_backpatch.end (); ++it)
       {
 	die_off_map::const_iterator jt = die_off.find (it->second);
-	assert (jt != die_off.end ());
-	it->first.patch (jt->second);
+	if (jt == die_off.end ())
+	  std::cout << "can't find offset " << it->second << std::endl;
+	else
+	  {
+	    assert (jt != die_off.end ());
+	    it->first.patch (jt->second);
+	  }
       }
   }
 };
