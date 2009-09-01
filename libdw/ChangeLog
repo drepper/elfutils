@@ -1,3 +1,9 @@
+2009-09-01  Roland McGrath  <roland@redhat.com>
+
+	* c++/subr.hh (subr::sharing_stack): New template class.
+	* c++/dwarf (dwarf::debug_info_entry::children_type::const_iterator):
+	Use it in place fo std::stack.
+
 2009-08-31  Roland McGrath  <roland@redhat.com>
 
 	* c++/subr.hh (subr::dynamic_equality_set): New template class.
