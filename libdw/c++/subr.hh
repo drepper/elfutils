@@ -1209,28 +1209,83 @@ namespace elfutils
 	std::swap (_m_size, other._m_size);
       }
 
-      template<typename pred_type>
-      inline bool equal (const sharing_stack &other,
+      class const_reverse_iterator
+	: public std::iterator<std::input_iterator_tag, value_type>
+      {
+      private:
+	const element *_m_elt;
+
+	friend class sharing_stack;
+	inline const_reverse_iterator (const element *elt)
+	  : _m_elt (elt)
+	{}
+
+      public:
+	inline const value_type &operator* () const
+	{
+	  return *_m_elt;
+	}
+
+	inline bool operator== (const const_reverse_iterator &other) const
+	{
+	  return _m_elt == other._m_elt;
+	}
+	inline bool operator!= (const const_reverse_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const_reverse_iterator &operator++ () // prefix
+	{
+	  _m_elt = _m_elt->next ();
+	  return *this;
+	}
+	inline const_reverse_iterator operator++ (int) // postfix
+	{
+	  const const_reverse_iterator old = *this;
+	  ++*this;
+	  return old;
+	}
+      };
+
+      inline const_reverse_iterator rbegin () const
+      {
+	return const_reverse_iterator (_m_head);
+      }
+
+      inline const_reverse_iterator rend () const
+      {
+	return const_reverse_iterator (NULL);
+      }
+
+      template<typename other_value_type, typename pred_type>
+      inline bool equal (const sharing_stack<other_value_type> &other,
 			 pred_type &pred, size_type skip = 0) const
       {
 	if (other.size () != size ())
 	  return false;
-	for (const element *a = _m_head, *b = other._m_head;
-	     a != NULL; a = a->next (), b = b->next ())
-	  if (skip > 0)
-	    --skip;
-	  else if (!pred (*a, *b))
-	    return false;
-	return true;
+
+	const_reverse_iterator a = rbegin ();
+	typename sharing_stack<other_value_type>::const_reverse_iterator b
+	  = other.rbegin ();
+
+	std::advance (a, skip);
+	std::advance (b, skip);
+
+	return std::equal (a, rend (), b, pred);
       }
 
-      inline bool operator== (const sharing_stack &other) const
+      template<typename other_value_type>
+      inline bool operator== (const sharing_stack<other_value_type> &other)
+	const
       {
-	equal_to<value_type, value_type> equalator;
+	equal_to<value_type, other_value_type> equalator;
 	return equal (other, equalator);
       }
 
-      inline bool operator!= (const sharing_stack &other) const
+      template<typename other_value_type>
+      inline bool operator!= (const sharing_stack<other_value_type> &other)
+	const
       {
 	return !(*this == other);
       }
