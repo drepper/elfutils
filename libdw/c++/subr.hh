@@ -13,6 +13,7 @@
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 #include <vector>
+#include <deque>
 #include <algorithm>
 #include <utility>
 
@@ -47,7 +48,7 @@ namespace elfutils
     {
       size_t operator () (const T &v) const
       {
-	return subr::hash_this<B> (v);
+	return hash_this<B> (v);
       }
     };
 
@@ -91,7 +92,7 @@ namespace elfutils
       inline size_t operator () (const std::pair<T1, T2> &x) const
       {
 	size_t h = 0;
-	subr::hash_combine (h, x);
+	hash_combine (h, x);
 	return h;
       }
     };
@@ -105,7 +106,7 @@ namespace elfutils
 	inline hasher (size_t init = 0) : _m_hash (init) {}
 	inline void operator () (const typename T::value_type &x)
 	{
-	  subr::hash_combine (_m_hash, hash_this (x));
+	  hash_combine (_m_hash, hash_this (x));
 	}
       };
 
@@ -496,7 +497,7 @@ namespace elfutils
 	  hashit (size_t &h) : _m_hash (h) {}
 	  inline void operator () (const elt_type &p)
 	  {
-	    subr::hash_combine (_m_hash, p);
+	    hash_combine (_m_hash, p);
 	  }
 	};
 	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
@@ -567,8 +568,8 @@ namespace elfutils
 
 	  inline void operator () (const typename _base::value_type &p)
 	  {
-	    subr::hash_combine (_m_hash, hash_this (p.first));
-	    subr::hash_combine (_m_hash, p.second.first);
+	    hash_combine (_m_hash, hash_this (p.first));
+	    hash_combine (_m_hash, p.second.first);
 	  }
 	};
 	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
@@ -795,7 +796,7 @@ namespace elfutils
 	: _m_maker (c)
       {}
 
-      typedef subr::wrapped_input_iterator<input, pair_maker> const_iterator;
+      typedef wrapped_input_iterator<input, pair_maker> const_iterator;
 
       inline const_iterator operator () (const inny &i)
       {
@@ -956,6 +957,53 @@ namespace elfutils
 				       typename key_type::hasher,
 				       is<key_type> >
     {};
+
+    /* This is like an unordered_set, but the equality predicate cannot
+       be fixed statically.  Instead, each insertion call must pass in
+       the specific predicate to match against existing elements for
+       that insertion.  */
+    template<typename T, typename hasher_type = hash<T> >
+    class dynamic_equality_set
+    {
+    private:
+      typedef size_t hash_type;
+      typedef std::deque<T> bucket_type;
+      typedef std::tr1::unordered_map<hash_type, bucket_type> map_type;
+
+      map_type _m_map;
+      hasher_type _m_hasher;
+
+    public:
+      typedef T value_type;
+
+      template<typename match_type>
+      inline const value_type *
+      add (const value_type &candidate, match_type &match)
+      {
+	bucket_type &bucket = _m_map[_m_hasher (candidate)];
+
+	for (typename bucket_type::iterator i = bucket.begin ();
+	     i != bucket.end ();
+	     ++i)
+	  {
+	    const value_type &elt = *i;
+	    if (match (elt, candidate))
+	      // We have a winner!
+	      return &elt;
+	  }
+
+	// No matches: new element.
+	bucket.push_back (candidate);
+	return &(bucket.back ());
+      }
+
+      // Unclear why you didn't just use a normal identity_set then!
+      inline const value_type *add (const value_type &candidate)
+      {
+	is<value_type> equalator;
+	return add (candidate, equalator);
+      }
+    };
 
     /* This is a dummy you can template/syntactically use in
        place of std::cout et al for disabled debugging spew.  */

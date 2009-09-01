@@ -1,3 +1,8 @@
+2009-08-31  Roland McGrath  <roland@redhat.com>
+
+	* c++/subr.hh (subr::dynamic_equality_set): New template class.
+	* c++/dwarf_output (dwarf_output_collector): Use it for _m_attr_sets.
+
 2009-08-27  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_output (dwarf_output::dwarf_output): Add a variant with a
