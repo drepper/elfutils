@@ -1068,6 +1068,10 @@ class dwarf_output::writer::dump_die_tree
       = std::back_inserter (appender);
 
     /* Record where the DIE begins.  */
+    // xxx in fact, we can meet "the same" DIE several times in the
+    // tree.  But since they are all equal, it doesn't matter which
+    // one we end up resolving our references to.  Except for
+    // siblings, which we handle differently.
     die_off [die.offset ()] = appender.size ();
     if (debug)
       std::cout << pad << "CHILD " << dwarf_tag_string (die.tag ())
@@ -1238,18 +1242,14 @@ class dwarf_output::writer::dump_die_tree
     if (!die.children ().empty ())
       {
 	gap my_sibling_gap;
-	Dwarf_Off die_offset = 0;
 	for (std::vector<die_info_pair *>::const_iterator jt
 	       = die.children ().info ().begin (); ;)
 	  {
 	    if (my_sibling_gap.valid ())
 	      {
-		die_backpatch.push_back
-		  (std::make_pair (my_sibling_gap,
-				   (*jt)->first.offset ()));
+		my_sibling_gap.patch (appender.size ());
 		my_sibling_gap = gap ();
 	      }
-	    die_offset = appender.size ();
 	    die_info_pair const &dip = **jt++;
 	    bool my_has_sibling = jt != die.children ().info ().end ();
 	    recursive_dump (dip, my_has_sibling, my_sibling_gap, level + 1);
