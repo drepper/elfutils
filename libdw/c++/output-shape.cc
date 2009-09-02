@@ -807,12 +807,6 @@ dwarf_output::shape_info::instantiate
   bool with_sibling = shape._m_with_sibling[true] && shape._m_has_children;
   bool without_sibling = shape._m_with_sibling[false] || !with_sibling;
 
-  // Prevent instance pointers from invalidation upon push_back.
-  if (without_sibling)
-    _m_instances[false].reserve (_m_users.size ());
-  if (with_sibling)
-    _m_instances[true].reserve (_m_users.size ());
-
   struct
   {
     void operator () (instance_type &inst,
@@ -894,16 +888,12 @@ dwarf_output::shape_info::instantiate
 
       die_info &i = col._m_unique.find (die)->second;
       if (without_sibling)
-	{
-	  i.abbrev_ptr[false] = _m_instances[false].end ();
-	  _m_instances[false].push_back (inst);
-	}
+	i.abbrev_ptr[false] = _m_instances.insert (inst).first;
 
       if (with_sibling)
 	{
 	  handle_attrib (inst, die, DW_AT_sibling, addr_64, dwarf_64);
-	  i.abbrev_ptr[true] = _m_instances[true].end ();
-	  _m_instances[true].push_back (inst);
+	  i.abbrev_ptr[true] = _m_instances.insert (inst).first;
 	}
     }
 
@@ -1010,14 +1000,10 @@ dwarf_output::writer::writer (dwarf_output_collector &col,
        it != _m_shapes.end (); ++it)
     {
       it->second.instantiate (it->first, col, addr_64, dwarf_64);
-      for (int i = 0; i < 2; ++i)
-	{
-	  bool b = static_cast<bool> (i);
-	  for (dwarf_output::shape_info::instance_vec::iterator jt
-		 = it->second._m_instances[b].begin ();
-	       jt != it->second._m_instances[b].end (); ++jt)
-	    jt->code = ++code;
-	}
+      for (dwarf_output::shape_info::instance_set::iterator jt
+	     = it->second._m_instances.begin ();
+	   jt != it->second._m_instances.end (); ++jt)
+	jt->code = ++code;
     }
 }
 
@@ -1026,14 +1012,10 @@ dwarf_output::writer::output_debug_abbrev (section_appender &appender)
 {
   for (shape_map::iterator it = _m_shapes.begin ();
        it != _m_shapes.end (); ++it)
-    for (int i = 0; i < 2; ++i)
-      {
-	bool b = static_cast<bool> (i);
-	for (dwarf_output::shape_info::instance_vec::iterator jt
-	       = it->second._m_instances[b].begin ();
-	     jt != it->second._m_instances[b].end (); ++jt)
-	  it->second.build_data (it->first, *jt, appender);
-      }
+    for (dwarf_output::shape_info::instance_set::iterator jt
+	   = it->second._m_instances.begin ();
+	 jt != it->second._m_instances.end (); ++jt)
+      it->second.build_data (it->first, *jt, appender);
 
   appender.push_back (0); // terminate table
 }

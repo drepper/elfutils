@@ -735,12 +735,15 @@ namespace elfutils
       {
 	typedef std::map<int, int> forms_type;
 	forms_type forms; // attribute->form
-	size_t code; // or 0 if not assigned yet
+	mutable size_t code; // or 0 if not assigned yet
 	instance_type () : code (0) {}
+	bool operator < (instance_type const &other) const
+	{
+	  return forms < other.forms;
+	}
       };
-      typedef std::vector<instance_type> instance_vec;
-      typedef std::map<bool, instance_vec> instance_map;
-      instance_map _m_instances;
+      typedef std::set<instance_type> instance_set;
+      instance_set _m_instances;
 
       shape_info (debug_info_entry const &die)
       {
@@ -1083,7 +1086,7 @@ namespace elfutils
     std::bitset<2> _m_with_sibling;
     unsigned int _m_uses;
 
-    typedef dwarf_output::shape_info::instance_vec::iterator abbrev_ptr_t;
+    typedef dwarf_output::shape_info::instance_set::iterator abbrev_ptr_t;
     typedef std::map<bool, abbrev_ptr_t> abbrev_ptr_map;
     abbrev_ptr_map abbrev_ptr;
 
