@@ -497,7 +497,7 @@ handle_elf (Elf *elf, size_t alloc_unit,
 					 debug_strtab);
 
 #define ADD_SECTION(NAME, TYPE, COMMAND)				\
-  {									\
+  do {									\
     shdr_info_t data_info (NAME, shst, TYPE, ++idx, newelf);		\
     assert (elf_ndxscn (data_info.newscn) == idx);			\
 									\
@@ -505,7 +505,7 @@ handle_elf (Elf *elf, size_t alloc_unit,
 									\
     data_info.shdr.sh_size = COMMAND;					\
     shdr_info.push_back (data_info);					\
-  }
+  } while (false)
 
   ADD_SECTION (".debug_abbrev", SHT_PROGBITS,
 	       (writer.output_debug_abbrev (appender),
@@ -515,8 +515,9 @@ handle_elf (Elf *elf, size_t alloc_unit,
 	       (writer.output_debug_info (appender),
 		appender.size ()));
 
-  ADD_SECTION (".debug_str", SHT_STRTAB,
-	       (debug_strtab.finalize (data_info.newscn)->d_size));
+  if (debug_strtab.used ())
+    ADD_SECTION (".debug_str", SHT_STRTAB,
+		 debug_strtab.finalize (data_info.newscn)->d_size);
 
   ADD_SECTION (".shstrtab", SHT_STRTAB,
 	       shst.finalize (data_info.newscn)->d_size);

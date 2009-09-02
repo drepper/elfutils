@@ -159,6 +159,11 @@ namespace elfutils
       ebl_strtabfree (_m_strtab);
     }
 
+    bool used () const
+    {
+      return _m_used;
+    }
+
     Elf_Data *finalize (Elf_Scn *scn)
     {
       Elf_Data *data = elf_newdata (scn);
@@ -171,16 +176,19 @@ namespace elfutils
 
     Ebl_Strent *add (char const *str)
     {
+      _m_used = true;
       return ebl_strtabadd (_m_strtab, str, 0);
     }
 
     Ebl_Strent *add (std::string const &str)
     {
+      _m_used = true;
       return ebl_strtabadd (_m_strtab, str.c_str (), str.length () + 1);
     }
 
   private:
     Ebl_Strtab *_m_strtab;
+    bool _m_used;
   };
 
   class dwarf_output
