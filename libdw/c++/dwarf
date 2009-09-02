@@ -59,7 +59,6 @@
 #include <map>
 #include <set>
 #include <vector>
-#include <stack>
 #include <algorithm>
 #include <functional>
 #include <tr1/unordered_map>
@@ -796,7 +795,7 @@ namespace elfutils
       private:
 
 	typedef raw_children_type::const_iterator raw_iterator;
-	std::stack<raw_iterator> _m_stack;
+	subr::sharing_stack<raw_iterator> _m_stack;
 
 	/* Push and pop until _m_stack.top () == raw_children_type::end ()
 	   or it's looking at a DIE other than DW_TAG_imported_unit.  */
@@ -804,7 +803,7 @@ namespace elfutils
 	{
 	  while (true)
 	    {
-	      raw_iterator &i = _m_stack.top ();
+	      const raw_iterator &i = _m_stack.const_top ();
 
 	      if (i == raw_children_type::end ())
 		{

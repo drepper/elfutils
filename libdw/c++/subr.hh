@@ -8,11 +8,13 @@
 #include <iterator>
 #include <functional>
 #include <cstring>
+#include <cassert>
 #include <iostream>
 #include <sstream>
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
 #include <vector>
+#include <deque>
 #include <algorithm>
 #include <utility>
 
@@ -47,7 +49,7 @@ namespace elfutils
     {
       size_t operator () (const T &v) const
       {
-	return subr::hash_this<B> (v);
+	return hash_this<B> (v);
       }
     };
 
@@ -91,7 +93,7 @@ namespace elfutils
       inline size_t operator () (const std::pair<T1, T2> &x) const
       {
 	size_t h = 0;
-	subr::hash_combine (h, x);
+	hash_combine (h, x);
 	return h;
       }
     };
@@ -105,7 +107,7 @@ namespace elfutils
 	inline hasher (size_t init = 0) : _m_hash (init) {}
 	inline void operator () (const typename T::value_type &x)
 	{
-	  subr::hash_combine (_m_hash, hash_this (x));
+	  hash_combine (_m_hash, hash_this (x));
 	}
       };
 
@@ -209,12 +211,24 @@ namespace elfutils
       }
     };
 
+    // This is like std::equal_to but for comparing two different types.
     template<typename t1, typename t2>
     struct equal_to : public std::binary_function<t1, t2, bool>
     {
       inline bool operator () (const t1 &a, const t2 &b) const
       {
 	return a == b;
+      }
+    };
+
+    /* On a single type, our equal_to is like std::equal_to, but
+       we short-circuit for the case of matching pointers.  */
+    template<typename T>
+    struct equal_to<T, T> : public std::binary_function<T, T, bool>
+    {
+      inline bool operator () (const T &a, const T &b) const
+      {
+	return &a == &b || a == b;
       }
     };
 
@@ -496,7 +510,7 @@ namespace elfutils
 	  hashit (size_t &h) : _m_hash (h) {}
 	  inline void operator () (const elt_type &p)
 	  {
-	    subr::hash_combine (_m_hash, p);
+	    hash_combine (_m_hash, p);
 	  }
 	};
 	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
@@ -524,7 +538,8 @@ namespace elfutils
       {
 	return (other._m_hash == _m_hash &&
 		other.size () == _base::size ()
-		&& std::equal (_base::begin (), _base::end (), other.begin ()));
+		&& std::equal (_base::begin (), _base::end (), other.begin (),
+			       equal_to<elt_type, elt_type> ()));
       }
     };
 
@@ -567,8 +582,8 @@ namespace elfutils
 
 	  inline void operator () (const typename _base::value_type &p)
 	  {
-	    subr::hash_combine (_m_hash, hash_this (p.first));
-	    subr::hash_combine (_m_hash, p.second.first);
+	    hash_combine (_m_hash, hash_this (p.first));
+	    hash_combine (_m_hash, p.second.first);
 	  }
 	};
 	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
@@ -795,7 +810,7 @@ namespace elfutils
 	: _m_maker (c)
       {}
 
-      typedef subr::wrapped_input_iterator<input, pair_maker> const_iterator;
+      typedef wrapped_input_iterator<input, pair_maker> const_iterator;
 
       inline const_iterator operator () (const inny &i)
       {
@@ -956,6 +971,270 @@ namespace elfutils
 				       typename key_type::hasher,
 				       is<key_type> >
     {};
+
+    /* This is like an unordered_set, but the equality predicate cannot
+       be fixed statically.  Instead, each insertion call must pass in
+       the specific predicate to match against existing elements for
+       that insertion.  */
+    template<typename T, typename hasher_type = hash<T> >
+    class dynamic_equality_set
+    {
+    private:
+      typedef size_t hash_type;
+      typedef std::deque<T> bucket_type;
+      typedef std::tr1::unordered_map<hash_type, bucket_type> map_type;
+
+      map_type _m_map;
+      hasher_type _m_hasher;
+
+    public:
+      typedef T value_type;
+
+      template<typename match_type>
+      inline const value_type *
+      add (const value_type &candidate, match_type &match)
+      {
+	bucket_type &bucket = _m_map[_m_hasher (candidate)];
+
+	for (typename bucket_type::iterator i = bucket.begin ();
+	     i != bucket.end ();
+	     ++i)
+	  {
+	    const value_type &elt = *i;
+	    if (match (elt, candidate))
+	      // We have a winner!
+	      return &elt;
+	  }
+
+	// No matches: new element.
+	bucket.push_back (candidate);
+	return &(bucket.back ());
+      }
+
+      // Unclear why you didn't just use a normal identity_set then!
+      inline const value_type *add (const value_type &candidate)
+      {
+	is<value_type> equalator;
+	return add (candidate, equalator);
+      }
+    };
+
+    /* sharing_stack<T> is like std::stack<T>, but copies share list
+       tails to reduce the memory footprint.  Any non-const call to the
+       top method copies the top element so it's no longer shared.
+       So be sure to use const calls for any non-modifying access.
+       The top_const method is a short-hand for a const access to
+       a non-const container.  */
+    template<typename T>
+    class sharing_stack
+    {
+    public:
+      typedef T value_type;
+      typedef size_t size_type;
+      typedef value_type &reference;
+      typedef const value_type &const_reference;
+
+    protected:
+      class element
+      {
+      private:
+	value_type _m_value;
+	element *_m_next;
+	unsigned int _m_count;
+
+      public:
+	inline operator value_type & ()
+	{
+	  return _m_value;
+	}
+
+	inline operator const value_type & () const
+	{
+	  return _m_value;
+	}
+
+	inline element (const value_type &value, element *tail)
+	  : _m_value (value), _m_next (tail), _m_count (1)
+	{
+	  if (_m_next != NULL)
+	    _m_next->acquire ();
+	}
+
+	inline element (const element &other)
+	  : _m_value (other._m_value), _m_next (other._m_next), _m_count (1)
+	{
+	  if (_m_next != NULL)
+	    _m_next->acquire ();
+	}
+
+	inline ~element ()
+	{
+	  if (_m_next != NULL)
+	    _m_next->release ();
+	}
+
+	inline void acquire ()
+	{
+	  assert (_m_count > 0);
+	  ++_m_count;
+	}
+
+	inline void release ()
+	{
+	  assert (_m_count > 0);
+	  if (--_m_count == 0)
+	    delete this;
+	}
+
+	inline element *pop ()
+	{
+	  assert (_m_count > 0);
+	  element *tail = _m_next;
+	  if (--_m_count == 0)
+	    {
+	      _m_next = NULL;
+	      delete this;
+	    }
+	  return tail;
+	}
+
+	inline const element *next () const
+	{
+	  return _m_next;
+	}
+
+	inline bool shared () const
+	{
+	  assert (_m_count > 0);
+	  return _m_count > 1;
+	}
+      };
+
+      element *_m_head;
+      size_type _m_size;
+
+      inline void init (element *head, size_type n)
+      {
+	_m_head = head;
+	_m_size = n;
+	if (_m_head == NULL)
+	  assert (_m_size == 0);
+	else
+	  _m_head->acquire ();
+      }
+
+      inline void fini ()
+      {
+	if (_m_head == NULL)
+	  assert (_m_size == 0);
+	else
+	  _m_head->release ();
+      }
+
+    public:
+      inline bool empty () const
+      {
+	return _m_head == NULL;
+      }
+
+      inline size_type size () const
+      {
+	return _m_size;
+      }
+
+      inline void push (const value_type &value)
+      {
+	_m_head = new element (value, _m_head);
+	++_m_size;
+      }
+
+      inline void pop ()
+      {
+	_m_head = _m_head->pop ();
+	--_m_size;
+      }
+
+      inline const value_type &top () const
+      {
+	assert (_m_head != NULL);
+	return *_m_head;
+      }
+
+      inline const value_type &const_top ()
+      {
+	return const_cast<const sharing_stack *> (this)->top ();
+      }
+
+      inline const value_type &const_top () const
+      {
+	return top ();
+      }
+
+      inline value_type &top ()
+      {
+	element *prev = _m_head;
+	if (prev->shared ())
+	  {
+	    _m_head = new element (*prev);
+	    prev->release ();
+	  }
+	assert (!_m_head->shared ());
+	return *_m_head;
+      }
+
+      inline sharing_stack ()
+	: _m_head (NULL), _m_size (0)
+      {}
+
+      inline sharing_stack (const sharing_stack &other)
+      {
+	init (other._m_head, other._m_size);
+      }
+
+      inline ~sharing_stack ()
+      {
+	fini ();
+      }
+
+      inline sharing_stack &operator= (const sharing_stack &other)
+      {
+	fini ();
+	init (other._m_head, other._m_size);
+	return *this;
+      }
+
+      inline void swap (sharing_stack &other)
+      {
+	std::swap (_m_head, other._m_head);
+	std::swap (_m_size, other._m_size);
+      }
+
+      template<typename pred_type>
+      inline bool equal (const sharing_stack &other,
+			 pred_type &pred, size_type skip = 0) const
+      {
+	if (other.size () != size ())
+	  return false;
+	for (const element *a = _m_head, *b = other._m_head;
+	     a != NULL; a = a->next (), b = b->next ())
+	  if (skip > 0)
+	    --skip;
+	  else if (!pred (*a, *b))
+	    return false;
+	return true;
+      }
+
+      inline bool operator== (const sharing_stack &other) const
+      {
+	equal_to<value_type, value_type> equalator;
+	return equal (other, equalator);
+      }
+
+      inline bool operator!= (const sharing_stack &other) const
+      {
+	return !(*this == other);
+      }
+    };
 
     /* This is a dummy you can template/syntactically use in
        place of std::cout et al for disabled debugging spew.  */

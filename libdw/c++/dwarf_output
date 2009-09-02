@@ -1207,11 +1207,11 @@ namespace elfutils
     }
 
     // Set of attribute maps.
-    subr::identity_set<attrs_type> _m_attr_sets;
+    subr::dynamic_equality_set<attrs_type> _m_attr_sets;
 
     inline const attrs_type *add_attributes (const attrs_type &candidate)
     {
-      return &*_m_attr_sets.insert (candidate).first;
+      return _m_attr_sets.add (candidate); // XXX pass custom predicate
     }
 
     // Set of children lists.
