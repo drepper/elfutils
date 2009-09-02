@@ -60,6 +60,7 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_tolerant	302
 #define ARGP_ref        303
 #define ARGP_nohl       304
+#define ARGP_dump_off   305
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -81,6 +82,8 @@ the DIE referring to the entry in consideration"), 0 },
     N_("Don't run high-level tests"), 0 },
   { "verbose", 'v', NULL, 0,
     N_("Be verbose"), 0 },
+  { "dump-offsets", ARGP_dump_off, NULL, 0,
+    N_("Dump DIE offsets to stderr as the tree is iterated."), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -400,6 +403,7 @@ static bool be_gnu = false; /* --gnu */
 static bool be_tolerant = false; /* --tolerant */
 static bool show_refs = false; /* --ref */
 static bool do_high_level = true; /* ! --nohl */
+static bool dump_die_offsets = false; /* --dump-offsets */
 
 /* True if coverage analysis of .debug_ranges vs. ELF sections should
    be done.  */
@@ -639,6 +643,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case ARGP_nohl:
       do_high_level = false;
+      break;
+
+    case ARGP_dump_off:
+      dump_die_offsets = true;
       break;
 
     case 'i':
@@ -2780,6 +2788,9 @@ read_die_chain (struct elf_file *file,
 
       prev_die_off = die_off;
       got_die = true;
+      if (dump_die_offsets)
+	fprintf (stderr, "%s: abbrev %" PRId64 "\n",
+		 where_fmt (&where, NULL), abbr_code);
 
       /* Find the abbrev matching the code.  */
       prev_abbrev = abbrev;
@@ -3296,6 +3307,8 @@ check_cu_structural (struct elf_file *file,
 		     struct relocation_data *reloc,
 		     struct cu_coverage *cu_coverage)
 {
+  if (dump_die_offsets)
+    fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->where, NULL));
   uint8_t address_size;
   bool retval = true;
 
