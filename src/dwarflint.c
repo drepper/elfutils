@@ -2756,8 +2756,8 @@ read_die_chain (struct elf_file *file,
 	    {
 	      DEF_PREV_WHERE;
 	      wr_error (&prev_where,
-			": This DIE should have had its sibling at 0x%"
-			PRIx64 ", but it's at 0x%" PRIx64 " instead.\n",
+			": This DIE claims that its sibling is 0x%"
+			PRIx64 ", but it's actually 0x%" PRIx64 ".\n",
 			sibling_addr, die_off);
 	    }
 	  sibling_addr = 0;
