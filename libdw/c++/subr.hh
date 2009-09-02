@@ -17,6 +17,7 @@
 #include <deque>
 #include <algorithm>
 #include <utility>
+#include <stdexcept>
 
 namespace elfutils
 {
@@ -1042,7 +1043,22 @@ namespace elfutils
 	element *_m_next;
 	unsigned int _m_count;
 
+	inline element &operator= (const element &)
+	{
+	  throw std::logic_error ("cannot assign");
+	}
+
+	inline element ()
+	{
+	  throw std::logic_error ("cannot default-construct");
+	}
+
       public:
+	inline unsigned int count () const
+	{
+	  return _m_count;
+	}
+
 	inline operator value_type & ()
 	{
 	  return _m_value;
@@ -1115,12 +1131,12 @@ namespace elfutils
 
       inline void init (element *head, size_type n)
       {
+	if (head == NULL)
+	  assert (n == 0);
+	else
+	  head->acquire ();
 	_m_head = head;
 	_m_size = n;
-	if (_m_head == NULL)
-	  assert (_m_size == 0);
-	else
-	  _m_head->acquire ();
       }
 
       inline void fini ()
@@ -1198,8 +1214,11 @@ namespace elfutils
 
       inline sharing_stack &operator= (const sharing_stack &other)
       {
-	fini ();
-	init (other._m_head, other._m_size);
+	if (&other != this)
+	  {
+	    fini ();
+	    init (other._m_head, other._m_size);
+	  }
 	return *this;
       }
 
