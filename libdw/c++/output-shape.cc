@@ -582,6 +582,7 @@ namespace
 
       case DW_FORM_sdata:
 	dw_write_sleb128 (std::back_inserter (appender), value);
+	return;
       }
 
     throw std::runtime_error (std::string ("Don't know how to write ")
