@@ -205,23 +205,26 @@ public:
 
 struct new_debug_section
   : public new_section
+  , public elfutils::section_appender
 {
-  elfutils::section_appender appender;
   new_debug_section (char const *name, elfutils::strtab &sec_strtab,
 		     int type, size_t my_idx, Elf *my_newelf,
 		     size_t my_alloc_unit)
     : new_section (name, sec_strtab, type, my_idx, my_newelf)
-    , appender (info ().newscn, my_alloc_unit)
+    , elfutils::section_appender (info ().newscn, my_alloc_unit)
   {}
   void done (std::vector <shdr_info_t> &my_shdr_info)
   {
-    finalize (my_shdr_info, appender.size ());
+    finalize (my_shdr_info, size ());
   }
 };
 
-struct new_str_section
+class new_str_section
   : public new_section
 {
+  Elf_Data *_m_data;
+
+public:
   new_str_section (char const *name, elfutils::strtab &sec_strtab,
 		   int type, size_t my_idx, Elf *my_newelf,
 		   std::vector <shdr_info_t> &my_shdr_info,
@@ -236,9 +239,6 @@ struct new_str_section
   {
     free (_m_data->d_buf);
   }
-
-private:
-  Elf_Data *_m_data;
 };
 
 static int
@@ -568,12 +568,12 @@ handle_elf (Elf *elf, size_t alloc_unit,
 
   new_debug_section sec_debug_abbrev
     (".debug_abbrev", shst, SHT_PROGBITS, ++idx, newelf, alloc_unit);
-  writer.output_debug_abbrev (sec_debug_abbrev.appender);
+  writer.output_debug_abbrev (sec_debug_abbrev);
   sec_debug_abbrev.done (shdr_info);
 
   new_debug_section sec_debug_info
     (".debug_info", shst, SHT_PROGBITS, ++idx, newelf, alloc_unit);
-  writer.output_debug_info (sec_debug_info.appender);
+  writer.output_debug_info (sec_debug_info);
   sec_debug_info.done (shdr_info);
 
   new_str_section sec_debug_str
