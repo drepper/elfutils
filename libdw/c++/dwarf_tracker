@@ -50,11 +50,11 @@
 #ifndef _ELFUTILS_DWARF_TRACKER
 #define _ELFUTILS_DWARF_TRACKER	1
 
+#include "subr.hh"
 #include "dwarf"
 #include "dwarf_comparator"
 #include <tr1/unordered_map>
 #include <tr1/unordered_set>
-#include <deque>
 
 namespace elfutils
 {
@@ -96,7 +96,7 @@ namespace elfutils
        _m_path in _m_seen so that a derived tracker made from path_to
        "context" can use the right _m_root.
     */
-    typedef std::deque<die> die_path;
+    typedef subr::sharing_stack<die> die_path;
 
   private:
     // We use an empty list as a marker; every path includes at least one DIE.
@@ -185,7 +185,7 @@ namespace elfutils
 	: _m_walker (w)
       {
 	// Append this DIE to the path we'll record for it and its children.
-	_m_walker->_m_path.push_back (here);
+	_m_walker->_m_path.push (here);
 
 	// Record the path down from the CU to see this DIE.
 	assert (!bad_die_path (_m_walker->_m_path));
@@ -195,7 +195,7 @@ namespace elfutils
       }
       inline ~step ()
       {
-	_m_walker->_m_path.pop_back ();
+	_m_walker->_m_path.pop ();
       }
     };
 
@@ -280,7 +280,7 @@ namespace elfutils
     inline bool walk_down_to (dwarf::debug_info_entry::identity_type there,
 			      typename die_map::iterator &cache)
     {
-      const die &start = _m_path.back ();
+      const die &start = _m_path.const_top ();
       const typename die::value_type &here = *start;
 
       /* It's common to have a reference to the next sibling DIE.
@@ -290,39 +290,6 @@ namespace elfutils
 	return false;
 
       return walk_to (here, there, cache);
-    }
-
-    /* A step_back object pops the current DIE off _m_path when
-       constructed, and pushes it back when destroyed.  */
-    struct step_back
-    {
-      dwarf_path_finder *_m_walker;
-      const die _m_here;
-      inline step_back (dwarf_path_finder *w, die &copy)
-	: _m_walker (w), _m_here (w->_m_path.back ())
-      {
-	w->_m_path.pop_back ();
-	copy = _m_here;
-      }
-      inline ~step_back ()
-      {
-	_m_walker->_m_path.push_back (_m_here);
-      }
-    };
-
-    /* Now wind the walk forward starting from the current DIE's
-       immediate sibling.  */
-    inline bool walk_over_to (dwarf::debug_info_entry::identity_type there,
-			      typename die_map::iterator &cache)
-    {
-      die next;
-      step_back from (this, next);
-      ++next;
-
-      return walk_to (next, (_m_path.empty ()
-			     ? (*_m_root).children ().end ()
-			     : _m_path.back ()->children ().end ()),
-		      there, cache);
     }
 
     /* A step_up object saves _m_path when constructed
@@ -340,6 +307,39 @@ namespace elfutils
       }
     };
 
+    /* A step_back object pops the current DIE off _m_path when
+       constructed, and pushes it back when destroyed.  */
+    struct step_back
+    {
+      dwarf_path_finder *_m_walker;
+      const die _m_here;
+      inline step_back (dwarf_path_finder *w, die &copy)
+	: _m_walker (w), _m_here (w->_m_path.const_top ())
+      {
+	w->_m_path.pop ();
+	copy = _m_here;
+      }
+      inline ~step_back ()
+      {
+	_m_walker->_m_path.push (_m_here);
+      }
+    };
+
+    /* Now wind the walk forward starting from the current DIE's
+       immediate sibling.  */
+    inline bool walk_over_to (dwarf::debug_info_entry::identity_type there,
+			      typename die_map::iterator &cache)
+    {
+      die next;
+      step_back from (this, next);
+      ++next;
+
+      return walk_to (next, (_m_path.empty ()
+			     ? (*_m_root).children ().end ()
+			     : _m_path.const_top ()->children ().end ()),
+		      there, cache);
+    }
+
     /* Now wind the walk forward starting from the current DIE's
        parent's immediate sibling.  */
     inline bool walk_up_to (dwarf::debug_info_entry::identity_type there,
@@ -352,7 +352,7 @@ namespace elfutils
 
       do
 	{
-	  _m_path.pop_back ();
+	  _m_path.pop ();
 	  assert (!_m_path.empty ());
 	  if (walk_over_to (there, cache))
 	    return true;
@@ -511,8 +511,9 @@ namespace elfutils
     inline bool context_match (const left_context_type &a,
 			       const right_context_type &b)
     {
-      // Ignore the last element, which is the target DIE itself.
-      return std::equal (a.begin (), a.end () - 1, b.begin (), equal_enough ());
+      equal_enough equalator;
+      // Ignore the top of the stack, which is the target DIE itself.
+      return a.equal (b, equalator, 1);
     }
 
     class reference_match

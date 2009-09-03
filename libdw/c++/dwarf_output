@@ -1441,7 +1441,9 @@ namespace elfutils
       inline bool context_match (const left_context_type &a,
 				 const right_context_type &b)
       {
-	return std::equal (a.begin (), a.end () - 1, b.begin (), equal_enough ());
+	// Ignore the last element, which is the target DIE itself.
+	equal_enough equalator;
+	return a.equal (b, equalator, 1);
       }
 
 #if 0		   // XXX
