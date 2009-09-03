@@ -84,25 +84,29 @@ namespace elfutils
 
   class section_appender
   {
-    Elf_Data *_m_data;
+    typedef std::vector<Elf_Data *> datavec_t;
+    datavec_t _m_data;
     size_t const _m_alloc_unit;
     Elf_Scn *const _m_scn;
     size_t _m_totsize;
 
     inline void more ()
     {
-      off_t off = _m_data == NULL ? 0 : _m_data->d_off + _m_data->d_size;
-      _m_data = elf_newdata (_m_scn);
-      if (_m_data == NULL)
-	throw std::runtime_error (std::string ("Error while creating section data: ")
-				  + elf_errmsg (-1));
+      off_t off = _m_data.empty () ? 0
+	: _m_data.back ()->d_off + _m_data.back ()->d_size;
+      Elf_Data *d = elf_newdata (_m_scn);
+      if (d == NULL)
+	throw std::runtime_error
+	  (std::string ("Error while creating section data: ")
+	   + elf_errmsg (-1));
       // xxx free on failure
 
-      _m_data->d_buf = (void *) new unsigned char[_m_alloc_unit];
-      _m_data->d_type = ELF_T_BYTE;
-      _m_data->d_align = 1;
-      _m_data->d_size = 0;
-      _m_data->d_off = off;
+      d->d_buf = (void *) new unsigned char[_m_alloc_unit];
+      d->d_type = ELF_T_BYTE;
+      d->d_align = 1;
+      d->d_size = 0;
+      d->d_off = off;
+      _m_data.push_back (d);
     }
 
   public:
@@ -110,25 +114,37 @@ namespace elfutils
     typedef value_type const &const_reference;
 
     section_appender (Elf_Scn *scn, size_t alloc_unit)
-      : _m_data (NULL)
-      , _m_alloc_unit (alloc_unit)
+      : _m_alloc_unit (alloc_unit)
       , _m_scn (scn)
       , _m_totsize (0)
     {
       more ();
     }
 
+    ~section_appender ()
+    {
+      for (datavec_t::iterator it = _m_data.begin ();
+	   it != _m_data.end (); ++it)
+	{
+	  void *&data = (*it)->d_buf;
+	  delete[] static_cast<unsigned char *> (data);
+	  data = NULL;
+	}
+      _m_data.swap (datavec_t ());
+    }
+
     unsigned char *alloc (size_t a_size)
     {
-      size_t ns = _m_data->d_size + a_size;
+      size_t ns = _m_data.back ()->d_size + a_size;
       if (ns > _m_alloc_unit)
 	{
 	  more ();
 	  ns = a_size;
 	}
+      Elf_Data *&d = _m_data.back ();
 
-      unsigned char *ptr = (unsigned char *) _m_data->d_buf + _m_data->d_size;
-      _m_data->d_size = ns;
+      unsigned char *ptr = (unsigned char *) d->d_buf + d->d_size;
+      d->d_size = ns;
       _m_totsize += a_size;
 
       return ptr;

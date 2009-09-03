@@ -171,6 +171,76 @@ struct shdr_info_t
   }
 };
 
+class new_section
+{
+  shdr_info_t *_m_info;
+
+protected:
+  new_section (char const *name, elfutils::strtab &sec_strtab,
+	       int type, size_t my_idx, Elf *my_newelf)
+    : _m_info (new shdr_info_t (name, sec_strtab, type, my_idx, my_newelf))
+  {
+  }
+
+  void finalize (std::vector <shdr_info_t> &my_shdr_info, size_t size)
+  {
+    assert (_m_info != NULL);
+    _m_info->shdr.sh_size = size;
+    my_shdr_info.push_back (*_m_info);
+    delete _m_info;
+    _m_info = NULL;
+  }
+
+public:
+  shdr_info_t &info ()
+  {
+    assert (_m_info != NULL);
+    return *_m_info;
+  }
+
+  ~new_section () {
+    assert (_m_info == NULL);
+  }
+};
+
+struct new_debug_section
+  : public new_section
+{
+  elfutils::section_appender appender;
+  new_debug_section (char const *name, elfutils::strtab &sec_strtab,
+		     int type, size_t my_idx, Elf *my_newelf,
+		     size_t my_alloc_unit)
+    : new_section (name, sec_strtab, type, my_idx, my_newelf)
+    , appender (info ().newscn, my_alloc_unit)
+  {}
+  void done (std::vector <shdr_info_t> &my_shdr_info)
+  {
+    finalize (my_shdr_info, appender.size ());
+  }
+};
+
+struct new_str_section
+  : public new_section
+{
+  new_str_section (char const *name, elfutils::strtab &sec_strtab,
+		   int type, size_t my_idx, Elf *my_newelf,
+		   std::vector <shdr_info_t> &my_shdr_info,
+		   elfutils::strtab &strtab)
+    : new_section (name, sec_strtab, type, my_idx, my_newelf)
+    , _m_data (strtab.finalize (info ().newscn))
+  {
+    finalize (my_shdr_info, _m_data->d_size);
+  }
+
+  ~new_str_section ()
+  {
+    free (_m_data->d_buf);
+  }
+
+private:
+  Elf_Data *_m_data;
+};
+
 static int
 handle_elf (Elf *elf, size_t alloc_unit,
 	    elfutils::dwarf_output &dwout,
@@ -496,36 +566,22 @@ handle_elf (Elf *elf, size_t alloc_unit,
 					 big_endian, addr_64, dwarf_64,
 					 debug_strtab);
 
-#define ADD_SECTION(NAME, TYPE, COMMAND)				\
-  do {									\
-    shdr_info_t data_info (NAME, shst, TYPE, ++idx, newelf);		\
-    assert (elf_ndxscn (data_info.newscn) == idx);			\
-									\
-    elfutils::section_appender appender (data_info.newscn, alloc_unit); \
-									\
-    data_info.shdr.sh_size = COMMAND;					\
-    shdr_info.push_back (data_info);					\
-  } while (false)
+  new_debug_section sec_debug_abbrev
+    (".debug_abbrev", shst, SHT_PROGBITS, ++idx, newelf, alloc_unit);
+  writer.output_debug_abbrev (sec_debug_abbrev.appender);
+  sec_debug_abbrev.done (shdr_info);
 
-  ADD_SECTION (".debug_abbrev", SHT_PROGBITS,
-	       (writer.output_debug_abbrev (appender),
-		appender.size ()));
+  new_debug_section sec_debug_info
+    (".debug_info", shst, SHT_PROGBITS, ++idx, newelf, alloc_unit);
+  writer.output_debug_info (sec_debug_info.appender);
+  sec_debug_info.done (shdr_info);
 
-  ADD_SECTION (".debug_info", SHT_PROGBITS,
-	       (writer.output_debug_info (appender),
-		appender.size ()));
+  new_str_section sec_debug_str
+    (".debug_str", shst, SHT_STRTAB, ++idx, newelf, shdr_info, debug_strtab);
 
-  if (debug_strtab.used ())
-    ADD_SECTION (".debug_str", SHT_STRTAB,
-		 debug_strtab.finalize (data_info.newscn)->d_size);
+  new_str_section sec_shstrtab
+    (".shstrtab", shst, SHT_STRTAB, ++idx, newelf, shdr_info, shst);
 
-  ADD_SECTION (".shstrtab", SHT_STRTAB,
-	       shst.finalize (data_info.newscn)->d_size);
-
-#undef ADD_SECTION
-
-  // XXX This assumes that the data created by appenders of each
-  // section survive the death of appender itself.
   writer.apply_patches ();
 
   /* Update the section information.  */
@@ -1124,6 +1180,8 @@ main (int argc, char *argv[])
   elfutils::dwarf_output dwout (dw, c);
   handle_elf (elf, dwarf->mem_default_size, dwout, c, fname.c_str (),
 	      st.st_mode & ACCESSPERMS, outname.c_str ());
+  dwarf_end (dwarf);
+  elf_end (elf);
 }
 
 
