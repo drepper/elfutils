@@ -955,6 +955,7 @@ namespace elfutils
 
     void output_debug_abbrev (section_appender &appender);
     void output_debug_info (section_appender &appender);
+    void output_debug_line (section_appender &appender);
     void apply_patches ();
   };
 

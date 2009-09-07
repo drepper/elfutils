@@ -315,7 +315,6 @@ namespace
       {
       case dwarf::VS_flag:
       case dwarf::VS_rangelistptr:
-      case dwarf::VS_lineptr:
       case dwarf::VS_macptr:
       case dwarf::VS_location:
       case dwarf::VS_constant:
@@ -335,6 +334,7 @@ namespace
 				  // principle, but optimizing
 				  // references is fun on its own and
 				  // for much later
+      case dwarf::VS_lineptr:
       case dwarf::VS_discr_list:
 	return false;
       }
@@ -354,7 +354,6 @@ namespace
 	return !!value.flag ();
 
       case dwarf::VS_rangelistptr:
-      case dwarf::VS_lineptr:
       case dwarf::VS_macptr:
       case dwarf::VS_location:
 	return 0; /* xxx */
@@ -388,6 +387,7 @@ namespace
 
       case dwarf::VS_reference:
       case dwarf::VS_discr_list:
+      case dwarf::VS_lineptr:
 	abort ();
       }
 
@@ -969,55 +969,56 @@ dwarf_output::writer::gap::patch (uint64_t value) const
   ::dw_write_var (_m_ptr, _m_len, value - _m_base, _m_big_endian);
 }
 
-dwarf_output::writer::writer (dwarf_output_collector &col,
-			      dwarf_output &dw,
-			      bool big_endian, bool addr_64, bool dwarf_64,
-			      strtab &debug_str)
-  : _m_col (col)
-  , _m_dw (dw)
-  , _m_addr_64 (addr_64)
-  , _m_dwarf_64 (dwarf_64)
-  , _m_big_endian (big_endian)
-  , _m_debug_str (debug_str)
+namespace
 {
-  size_t code = 0;
-  for (dwarf_output_collector::die_map::const_iterator it
-	 = col._m_unique.begin ();
-       it != col._m_unique.end (); ++it)
+  template <class Visitor, class die_info_pair>
+  void
+  traverse_die_tree (Visitor &visitor,
+		     die_info_pair const &top_info_pair)
+  {
+    class recursive_traversal
     {
-      dwarf_output::shape_type shape (it->first, it->second);
-      shape_map::iterator st = _m_shapes.find (shape);
-      if (st != _m_shapes.end ())
-	st->second.add_user (it->first);
-      else
-	{
-	  dwarf_output::shape_info info (it->first);
-	  _m_shapes.insert (std::make_pair (shape, info));
-	}
-    }
+      Visitor &visitor;
 
-  for (shape_map::iterator it = _m_shapes.begin ();
-       it != _m_shapes.end (); ++it)
-    {
-      it->second.instantiate (it->first, col, addr_64, dwarf_64);
-      for (dwarf_output::shape_info::instance_set::iterator jt
-	     = it->second._m_instances.begin ();
-	   jt != it->second._m_instances.end (); ++jt)
-	jt->code = ++code;
-    }
-}
+    public:
+      recursive_traversal (Visitor &a_visitor)
+	: visitor (a_visitor)
+      {
+      }
 
-void
-dwarf_output::writer::output_debug_abbrev (section_appender &appender)
-{
-  for (shape_map::iterator it = _m_shapes.begin ();
-       it != _m_shapes.end (); ++it)
-    for (dwarf_output::shape_info::instance_set::iterator jt
-	   = it->second._m_instances.begin ();
-	 jt != it->second._m_instances.end (); ++jt)
-      it->second.build_data (it->first, *jt, appender);
+      void traverse (typename Visitor::step_t &step,
+		     die_info_pair const &info_pair,
+		     bool has_sibling)
+      {
+	dwarf_output::debug_info_entry const &die = info_pair.first;
 
-  appender.push_back (0); // terminate table
+	visitor.visit_die (info_pair, step, has_sibling);
+	if (!die.children ().empty ())
+	  {
+	    typename Visitor::step_t my_step (visitor, info_pair);
+	    my_step.before_children ();
+	    for (typename std::vector<die_info_pair *>::const_iterator jt
+		   = die.children ().info ().begin (); ;)
+	      {
+		die_info_pair const &dip = **jt++;
+		bool my_has_sibling = jt != die.children ().info ().end ();
+		my_step.before_recursion ();
+		traverse (my_step, dip, my_has_sibling);
+		my_step.after_recursion ();
+		if (!my_has_sibling)
+		  break;
+	      }
+	    my_step.after_children ();
+	  }
+      }
+    };
+
+    visitor.before_traversal ();
+    typename Visitor::step_t step (visitor, top_info_pair);
+    recursive_traversal (visitor)
+      .traverse (step, top_info_pair, false);
+    visitor.after_traversal ();
+  }
 }
 
 class dwarf_output::writer::dump_die_tree
@@ -1030,22 +1031,76 @@ class dwarf_output::writer::dump_die_tree
   die_off_map &die_off;
   die_backpatch_vec die_backpatch;
   uint64_t _m_cu_start;
+  size_t level;
+
   static const bool debug = false;
 
-  void recursive_dump (die_info_pair const &info_pair,
-		       bool has_sibling, gap &sibling_gap,
-		       unsigned level)
+public:
+  class step_t
+  {
+    dump_die_tree &_m_dumper;
+
+  public:
+    gap sibling_gap;
+
+    step_t (dump_die_tree &dumper,
+	    __unused die_info_pair const &info_pair)
+      : _m_dumper (dumper)
+    {
+      ++_m_dumper.level;
+    }
+
+    ~step_t ()
+    {
+      --_m_dumper.level;
+    }
+
+    void before_children () {}
+    void after_recursion () {}
+
+    void after_children ()
+    {
+      _m_dumper.appender.push_back (0);
+    }
+
+    void before_recursion ()
+    {
+      if (sibling_gap.valid ())
+	{
+	  sibling_gap.patch (_m_dumper.appender.size ());
+	  sibling_gap = gap ();
+	}
+    }
+  };
+  friend class step_t;
+
+  dump_die_tree (writer &writer,
+		 die_off_map &a_die_off,
+		 section_appender &a_appender,
+		 uint64_t cu_start)
+    : _m_parent (writer),
+      _m_cu_start (cu_start),
+      appender (a_appender),
+      die_off (a_die_off),
+      level (0)
+  {
+  }
+
+  virtual void visit_die (dwarf_output::die_info_pair const &info_pair,
+			  step_t &step,
+			  bool has_sibling)
   {
     static char const spaces[] =
       "                                                            "
       "                                                            "
       "                                                            ";
     static char const *tail = spaces + strlen (spaces);
-    __attribute__ ((unused)) char const *pad = tail - level * 2;
+    char const *pad = tail - level * 2;
 
     debug_info_entry const &die = info_pair.first;
     die_info const &info = info_pair.second;
     int tag = die.tag ();
+
     std::back_insert_iterator <section_appender> inserter
       = std::back_inserter (appender);
 
@@ -1092,8 +1147,8 @@ class dwarf_output::writer::dump_die_tree
 	    size_t gap_size = ::form_width (form,
 					    _m_parent._m_addr_64,
 					    _m_parent._m_dwarf_64);
-	    sibling_gap = gap (appender, gap_size,
-			       _m_parent._m_big_endian, _m_cu_start);
+	    step.sibling_gap = gap (appender, gap_size,
+				    _m_parent._m_big_endian, _m_cu_start);
 	    continue;
 	  }
 
@@ -1116,8 +1171,8 @@ class dwarf_output::writer::dump_die_tree
 	      assert (form == DW_FORM_flag_present);
 	    break;
 
-	  case dwarf::VS_rangelistptr:
 	  case dwarf::VS_lineptr:
+	  case dwarf::VS_rangelistptr:
 	  case dwarf::VS_macptr:
 	    ::dw_write_form (appender, form, 0 /*xxx*/,
 			     _m_parent._m_big_endian,
@@ -1220,46 +1275,12 @@ class dwarf_output::writer::dump_die_tree
 	    throw std::runtime_error ("Can't handle VS_discr_list.");
 	  };
       }
-
-    if (!die.children ().empty ())
-      {
-	gap my_sibling_gap;
-	for (std::vector<die_info_pair *>::const_iterator jt
-	       = die.children ().info ().begin (); ;)
-	  {
-	    if (my_sibling_gap.valid ())
-	      {
-		my_sibling_gap.patch (appender.size ());
-		my_sibling_gap = gap ();
-	      }
-	    die_info_pair const &dip = **jt++;
-	    bool my_has_sibling = jt != die.children ().info ().end ();
-	    recursive_dump (dip, my_has_sibling, my_sibling_gap, level + 1);
-	    if (!my_has_sibling)
-	      {
-		assert (!my_sibling_gap.valid ());
-		break;
-	      }
-	  }
-	*inserter++ = 0;
-      }
   }
 
-public:
-  dump_die_tree (writer &writer,
-		 section_appender &a_appender,
-		 die_off_map &a_die_off,
-		 uint64_t cu_start,
-		 die_info_pair const &info_pair)
-    : _m_parent (writer),
-      appender (a_appender),
-      die_off (a_die_off),
-      _m_cu_start (cu_start)
-  {
-    gap fake_gap;
-    recursive_dump (info_pair, false, fake_gap, 0);
-    assert (!fake_gap.valid ());
+  void before_traversal () {}
 
+  void after_traversal ()
+  {
     for (die_backpatch_vec::const_iterator it = die_backpatch.begin ();
 	 it != die_backpatch.end (); ++it)
       {
@@ -1274,6 +1295,57 @@ public:
       }
   }
 };
+
+dwarf_output::writer::writer (dwarf_output_collector &col,
+			      dwarf_output &dw,
+			      bool big_endian, bool addr_64, bool dwarf_64,
+			      strtab &debug_str)
+  : _m_col (col)
+  , _m_dw (dw)
+  , _m_addr_64 (addr_64)
+  , _m_dwarf_64 (dwarf_64)
+  , _m_big_endian (big_endian)
+  , _m_debug_str (debug_str)
+{
+  size_t code = 0;
+  for (dwarf_output_collector::die_map::const_iterator it
+	 = col._m_unique.begin ();
+       it != col._m_unique.end (); ++it)
+    {
+      dwarf_output::shape_type shape (it->first, it->second);
+      shape_map::iterator st = _m_shapes.find (shape);
+      if (st != _m_shapes.end ())
+	st->second.add_user (it->first);
+      else
+	{
+	  dwarf_output::shape_info info (it->first);
+	  _m_shapes.insert (std::make_pair (shape, info));
+	}
+    }
+
+  for (shape_map::iterator it = _m_shapes.begin ();
+       it != _m_shapes.end (); ++it)
+    {
+      it->second.instantiate (it->first, col, addr_64, dwarf_64);
+      for (dwarf_output::shape_info::instance_set::iterator jt
+	     = it->second._m_instances.begin ();
+	   jt != it->second._m_instances.end (); ++jt)
+	jt->code = ++code;
+    }
+}
+
+void
+dwarf_output::writer::output_debug_abbrev (section_appender &appender)
+{
+  for (shape_map::iterator it = _m_shapes.begin ();
+       it != _m_shapes.end (); ++it)
+    for (dwarf_output::shape_info::instance_set::iterator jt
+	   = it->second._m_instances.begin ();
+	 jt != it->second._m_instances.end (); ++jt)
+      it->second.build_data (it->first, *jt, appender);
+
+  appender.push_back (0); // terminate table
+}
 
 void
 dwarf_output::writer::output_debug_info (section_appender &appender)
@@ -1304,14 +1376,20 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
 
       die_off_map die_off;
 
-      dump_die_tree (*this, appender, die_off, cu_start,
-		     *_m_col._m_unique.find (*it));
+      dump_die_tree dumper (*this, die_off, appender, cu_start);
+      ::traverse_die_tree (dumper, *_m_col._m_unique.find (*it));
 
       /* Back-patch length.  */
       size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
       assert (length < (uint32_t)-1); // XXX temporary XXX dwarf64
       length_gap.patch (length);
     }
+}
+
+void
+dwarf_output::writer::output_debug_line (section_appender &appender
+					 __attribute__ ((unused)))
+{
 }
 
 void
