@@ -529,6 +529,15 @@ namespace
     dw_write_var (appender.alloc (w), w, value, big_endian);
   }
 
+  // Check that the value fits into 32-bits if !dwarf_64.  If it
+  // doesn't throw an exception.  The client will then be able to
+  // restart the process with dwarf_64 == true.
+  void assert_fits_32 (bool dwarf_64, uint64_t value)
+  {
+    if (!dwarf_64 && value > (uint64_t)(uint32_t)-1)
+      throw dwarf_output::writer::dwarf_32_not_enough ();
+  }
+
   void dw_write_form (section_appender &appender, int form,
 		      uint64_t value, bool big_endian,
 		      bool addr_64, bool dwarf_64)
@@ -566,10 +575,7 @@ namespace
       case DW_FORM_ref_addr:
       case DW_FORM_strp:
       case DW_FORM_sec_offset:
-	// In these cases, we have to check that the value fits the
-	// form.  If it doesn't switch to dwarf_64.
-	if (!dwarf_64 && value > (uint64_t)(uint32_t)-1)
-	  throw dwarf_output::writer::dwarf_32_not_enough ();
+	assert_fits_32 (dwarf_64, value);
 	dw_write_64 (appender, dwarf_64, value, big_endian);
 	return;
 
@@ -1079,9 +1085,9 @@ public:
 		 section_appender &a_appender,
 		 uint64_t cu_start)
     : _m_parent (writer),
-      _m_cu_start (cu_start),
       appender (a_appender),
       die_off (a_die_off),
+      _m_cu_start (cu_start),
       level (0)
   {
   }
@@ -1253,9 +1259,9 @@ public:
 	  case dwarf::VS_reference:
 	    {
 	      assert (form == DW_FORM_ref_addr);
-	      // XXX dwarf64
+	      size_t w = _m_parent._m_dwarf_64 ? 8 : 4;
 	      die_backpatch.push_back
-		(std::make_pair (gap (appender, 4, _m_parent._m_big_endian),
+		(std::make_pair (gap (appender, w, _m_parent._m_big_endian),
 				 value.reference ()->offset ()));
 	    }
 	    break;
@@ -1360,9 +1366,10 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
       size_t cu_start = appender.size ();
 
       // Unit length.
-      gap length_gap (appender,
-		      _m_dwarf_64 ? 8 : 4,
-		      _m_big_endian);
+      size_t offset_size = _m_dwarf_64 ? 8 : 4;
+      gap length_gap = gap (appender, offset_size, _m_big_endian);
+      if (_m_dwarf_64)
+	::dw_write<4> (appender.alloc (4), -1, _m_big_endian);
 
       // Version.
       ::dw_write<2> (appender.alloc (2), 3, _m_big_endian);
@@ -1380,8 +1387,9 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
       ::traverse_die_tree (dumper, *_m_col._m_unique.find (*it));
 
       /* Back-patch length.  */
-      size_t length = appender.size () - cu_start - 4; // -4 for length info. XXX dwarf64
-      assert (length < (uint32_t)-1); // XXX temporary XXX dwarf64
+      size_t length = appender.size () - cu_start
+	- (_m_dwarf_64 ? 12 : 4); /* for length */
+      assert_fits_32 (_m_dwarf_64, length);
       length_gap.patch (length);
     }
 }
