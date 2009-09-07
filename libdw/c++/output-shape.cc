@@ -1034,7 +1034,7 @@ class dwarf_output::writer::dump_die_tree
 
   writer &_m_parent;
   section_appender &appender;
-  die_off_map &die_off;
+  die_off_map die_off;
   die_backpatch_vec die_backpatch;
   uint64_t _m_cu_start;
   size_t level;
@@ -1081,12 +1081,10 @@ public:
   friend class step_t;
 
   dump_die_tree (writer &writer,
-		 die_off_map &a_die_off,
 		 section_appender &a_appender,
 		 uint64_t cu_start)
     : _m_parent (writer),
       appender (a_appender),
-      die_off (a_die_off),
       _m_cu_start (cu_start),
       level (0)
   {
@@ -1353,6 +1351,39 @@ dwarf_output::writer::output_debug_abbrev (section_appender &appender)
   appender.push_back (0); // terminate table
 }
 
+class dwarf_output::writer::length_field
+{
+  elfutils::section_appender &_m_appender;
+  const size_t _m_length_length;
+  const bool _m_dwarf_64;
+  const size_t _m_cu_start;
+  gap _m_length_gap;
+  bool _m_finished;
+
+public:
+  length_field (elfutils::section_appender &appender,
+		bool dwarf_64, bool big_endian)
+    : _m_appender (appender),
+      _m_length_length (dwarf_64 ? 12 : 4),
+      _m_dwarf_64 (dwarf_64),
+      _m_cu_start (appender.size ()),
+      _m_finished (false)
+  {
+    if (dwarf_64)
+      ::dw_write<4> (appender.alloc (4), -1, big_endian);
+    _m_length_gap = gap (appender, _m_length_length, big_endian);
+  }
+
+  void finish ()
+  {
+    assert (!_m_finished);
+    size_t length = _m_appender.size () - _m_cu_start - _m_length_length;
+    assert_fits_32 (_m_dwarf_64, length);
+    _m_length_gap.patch (length);
+    _m_finished = true;
+  }
+};
+
 void
 dwarf_output::writer::output_debug_info (section_appender &appender)
 {
@@ -1362,14 +1393,11 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
   for (compile_units::const_iterator it = _m_dw._m_units.begin ();
        it != _m_dw._m_units.end (); ++it)
     {
-      // Remember where the unit started for back-patching of size.
+      // Remember where the unit started for DIE offset calculation.
       size_t cu_start = appender.size ();
 
       // Unit length.
-      size_t offset_size = _m_dwarf_64 ? 8 : 4;
-      gap length_gap = gap (appender, offset_size, _m_big_endian);
-      if (_m_dwarf_64)
-	::dw_write<4> (appender.alloc (4), -1, _m_big_endian);
+      length_field lf (appender, _m_dwarf_64, _m_big_endian);
 
       // Version.
       ::dw_write<2> (appender.alloc (2), 3, _m_big_endian);
@@ -1381,16 +1409,10 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
       // Size in bytes of an address on the target architecture.
       *inserter++ = _m_addr_64 ? 8 : 4;
 
-      die_off_map die_off;
-
-      dump_die_tree dumper (*this, die_off, appender, cu_start);
+      dump_die_tree dumper (*this, appender, cu_start);
       ::traverse_die_tree (dumper, *_m_col._m_unique.find (*it));
 
-      /* Back-patch length.  */
-      size_t length = appender.size () - cu_start
-	- (_m_dwarf_64 ? 12 : 4); /* for length */
-      assert_fits_32 (_m_dwarf_64, length);
-      length_gap.patch (length);
+      lf.finish ();
     }
 }
 
