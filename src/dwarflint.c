@@ -3299,6 +3299,38 @@ read_die_chain (struct elf_file *file,
 }
 
 static bool
+read_address_size (struct elf_file *file,
+		   struct read_ctx *ctx,
+		   uint8_t *address_sizep,
+		   struct where *where)
+{
+  uint8_t address_size;
+  if (!read_ctx_read_ubyte (ctx, &address_size))
+    {
+      wr_error (where, ": can't read address size.\n");
+      return false;
+    }
+
+  if (address_size != 4 && address_size != 8)
+    {
+      /* Keep going.  Deduce the address size from ELF header, and try
+	 to parse it anyway.  */
+      wr_error (where,
+		": invalid address size: %d (only 4 or 8 allowed).\n",
+		address_size);
+      address_size = file->addr_64 ? 8 : 4;
+    }
+  else if ((address_size == 8) != file->addr_64)
+    /* Keep going, we may still be able to parse it.  */
+    wr_error (where,
+	      ": CU reports address size of %d in %d-bit ELF.\n",
+	      address_size, file->addr_64 ? 64 : 32);
+
+  *address_sizep = address_size;
+  return true;
+}
+
+static bool
 check_cu_structural (struct elf_file *file,
 		     struct read_ctx *ctx,
 		     struct cu *const cu,
@@ -3310,7 +3342,6 @@ check_cu_structural (struct elf_file *file,
 {
   if (dump_die_offsets)
     fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->where, NULL));
-  uint8_t address_size;
   bool retval = true;
 
   /* Version.  */
@@ -3348,19 +3379,12 @@ check_cu_structural (struct elf_file *file,
 		PRI_LACK_RELOCATION, "abbrev offset");
 
   /* Address size.  */
-  if (!read_ctx_read_ubyte (ctx, &address_size))
-    {
-      wr_error (&cu->where, ": can't read address size.\n");
+  {
+    uint8_t address_size;
+    if (!read_address_size (file, ctx, &address_size, &cu->where))
       return false;
-    }
-  if (address_size != 4 && address_size != 8)
-    {
-      wr_error (&cu->where,
-		": invalid address size: %d (only 4 or 8 allowed).\n",
-		address_size);
-      return false;
-    }
-  cu->address_size = address_size;
+    cu->address_size = address_size;
+  }
 
   /* Look up Abbrev table for this CU.  */
   struct abbrev_table *abbrevs = abbrev_chain;
@@ -3548,27 +3572,9 @@ check_info_structural (struct elf_file *file,
     }
 
 
-  int address_size = 0;
-  if (cu_chain != NULL)
-    {
-      uint64_t offset = 0;
-      for (struct cu *it = cu_chain; it != NULL; it = it->next)
-	if (address_size == 0)
-	  {
-	    address_size = it->address_size;
-	    offset = it->where.addr1;
-	  }
-	else if (address_size != it->address_size)
-	  {
-	    /* XXX would be nice to check consistency of CU address
-	       size declared in various other .debug_* sections.  */
-	    wr_message (mc_info, &it->where,
-			": has different address size than CU 0x%"
-			PRIx64 ".\n", offset);
-	    address_size = 0;
-	    break;
-	  }
-    }
+  /* We used to check that all CUs have the same address size.  Now
+     that we validate address_size of each CU against the ELF header,
+     that's not necessary anymore.  */
 
   bool references_sound = check_global_die_references (cu_chain);
   ref_record_free (&die_refs);
@@ -3790,26 +3796,8 @@ check_aranges_structural (struct elf_file *file,
 
       /* Address size.  */
       uint8_t address_size;
-      if (!read_ctx_read_ubyte (&sub_ctx, &address_size))
+      if (!read_address_size (file, &sub_ctx, &address_size, &where))
 	{
-	  wr_error (&where, ": can't read address size.\n");
-	  retval = false;
-	  goto next;
-	}
-      if (cu != NULL)
-	{
-	  if (address_size != cu->address_size)
-	    {
-	      wr_error (&where,
-			": address size %d doesn't match referred CU.\n",
-			address_size);
-	      retval = false;
-	    }
-	}
-      /* Try to parse it anyway, unless the address size is wacky.  */
-      else if (address_size != 4 && address_size != 8)
-	{
-	  wr_error (&where, ": invalid address size: %d.\n", address_size);
 	  retval = false;
 	  goto next;
 	}
