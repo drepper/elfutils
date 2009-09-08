@@ -190,7 +190,7 @@ namespace elfutils
 	// Record the path down from the CU to see this DIE.
 	assert (!bad_die_path (_m_walker->_m_path));
 	if (record)
-	  _m_walker->_m_seen->insert (std::make_pair (here->identity (),
+	  _m_walker->_m_seen->insert (std::make_pair ((*here).identity (),
 						      _m_walker->_m_path));
       }
       inline ~step ()
@@ -202,7 +202,7 @@ namespace elfutils
     // Random access to a DIE, find the path of the walk that gets there.
     inline const die_path &path_to (const die &a)
     {
-      const dwarf::debug_info_entry::identity_type id = a->identity ();
+      const dwarf::debug_info_entry::identity_type id = (*a).identity ();
       std::pair<typename die_map::iterator, bool> found
 	= _m_seen->insert (std::make_pair (id, bad_die_path ()));
       if (found.second
@@ -245,7 +245,7 @@ namespace elfutils
 	     can have multiple iterators into distinct children_type vectors
 	     that all point to the same entry.  A reference could be one of
 	     these iterators, and all mean the same entry.  */
-	  if (it->identity () == there)
+	  if ((*it).identity () == there)
 	    {
 	      /* We can't keep the old CACHE iterator and avoid this
 		 find (hash lookup), because there could have been
@@ -286,7 +286,7 @@ namespace elfutils
       /* It's common to have a reference to the next sibling DIE.
 	 So bypass the descent to HERE's children if THERE is
 	 HERE's immediate next sibling.  */
-      if (!here.has_children () || there == (++die (start))->identity ())
+      if (!here.has_children () || there == (*++die (start)).identity ())
 	return false;
 
       return walk_to (here, there, cache);
@@ -336,7 +336,7 @@ namespace elfutils
 
       return walk_to (next, (_m_path.empty ()
 			     ? (*_m_root).children ().end ()
-			     : _m_path.const_top ()->children ().end ()),
+			     : (*_m_path.const_top ()).children ().end ()),
 		      there, cache);
     }
 
@@ -395,7 +395,7 @@ namespace elfutils
     {
       inline size_t operator () (const die2 &i) const
       {
-	return i->identity ();
+	return (*i).identity ();
       }
     };
 
@@ -403,7 +403,7 @@ namespace elfutils
     {
       inline bool operator () (const die2 &a, const die2 &b) const
       {
-	return a->identity () == b->identity ();
+	return (*a).identity () == (*b).identity ();
       }
     };
 
@@ -424,23 +424,11 @@ namespace elfutils
       return &(*_m_equiv)[a->identity ()];
     }
 
-    typedef dwarf_tracker_base<dwarf1, dwarf2> context_tracker;
-    typedef dwarf_comparator<dwarf1, dwarf2, true,
-			     context_tracker> context_comparator;
-
-    /* Predicate for DIEs "equal enough" to match as context for a subtree.
-       The definition we use is that the DIE has the same tag and all its
-       attributes are equal, excepting that references in attribute values
-       are not compared.  */
     struct equal_enough : public std::binary_function<die1, die2, bool>
     {
       inline bool operator () (const die1 &a, const die2 &b)
       {
-	if (a->tag () != b->tag ())
-	  return false;
-	context_tracker t;
-	return context_comparator (t).equals (a->attributes (),
-					      b->attributes ());
+	return dwarf_comparator<dwarf1, dwarf2>::equal_enough (*a, *b);
       }
     };
 
@@ -449,8 +437,8 @@ namespace elfutils
       : _m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
 
-    inline dwarf_ref_tracker (const tracker2 &proto)
-      : _m_right (proto, true),
+    inline dwarf_ref_tracker (const tracker1 &proto)
+      : _m_left (proto, true),
 	_m_equiv (new equiv_map), _m_delete_equiv (true)
     {}
 
@@ -588,7 +576,7 @@ namespace elfutils
 	 We actually record the pointer on the caller's stack rather
 	 than a copy of B, just because the iterator might be larger.  */
 
-      if ((*elt->first)->identity () == b->identity ())
+      if ((**elt->first).identity () == (*b).identity ())
 	return true;
 
       /* Our right-hand side is not in lock-step on a matching circularity.
@@ -626,7 +614,7 @@ namespace elfutils
 	 than your humble writer can bring to bear.  */
 
       const std::pair<typename active_map::iterator, bool> p
-	= _m_active.insert (std::make_pair (b->identity (), &matched));
+	= _m_active.insert (std::make_pair ((*b).identity (), &matched));
       if (p.second)
 	{
 	  assert (p.first->second == &matched);

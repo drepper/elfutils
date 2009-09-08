@@ -1,3 +1,16 @@
+2009-09-08  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_output: Match duplicates going into the collector even
+	when they contain circular references.
+
+	* c++/dwarf_comparator (dwarf_comparator::equal_enough):
+	New class method, broken out of ...
+	* c++/dwarf_tracker (dwarf_ref_tracker::equal_enough::operator ()):
+	... here.  Call it.
+	(dwarf_path_finder, dwarf_ref_tracker): Don't assume iterators do ->.
+
+	* c++/subr.hh (subr::wrapped_input_container): New class.
+
 2009-09-01  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_tracker (dwarf_path_finder): Use subr::sharing_stack.

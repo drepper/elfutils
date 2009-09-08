@@ -553,6 +553,18 @@ namespace elfutils
     {
       return match (a, b);
     }
+
+    /* Predicate for DIEs "equal enough" to match as context for a subtree.
+       The definition we use is that the DIE has the same tag and all its
+       attributes are equal, excepting that references in attribute values
+       are not compared.  */
+    static inline bool equal_enough (const die1 &a, const die2 &b)
+    {
+      dwarf_tracker_base<dwarf1, dwarf2> context_tracker;
+      return (a.tag () == b.tag ()
+	      && (dwarf_comparator<dwarf1, dwarf2, true> (context_tracker)
+		  .equals (a.attributes (), b.attributes ())));
+    }
   };
 };
 

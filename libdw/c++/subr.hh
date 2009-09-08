@@ -718,11 +718,52 @@ namespace elfutils
 	return *this;
       }
 
-      template<typename arg_type, typename container = input>
-      static inline container copy (const input &in, const arg_type &arg)
+      template<typename container = input>
+      struct copy
       {
-	return container (wrapped_input_iterator (in.begin (), arg),
-			  wrapped_input_iterator (in.end (), arg));
+	template<typename arg_type>
+	inline container operator () (const input &in,
+				      const arg_type &arg = arg_type ())
+	{
+	  return container (wrapped_input_iterator (in.begin (), arg),
+			    wrapped_input_iterator (in.end (), arg));
+	}
+      };
+    };
+
+    /* A wrapped_input_container provides begin and end methods that
+       wrap the real container's iterators with wrapped_input_iterator.  */
+    template<typename input, class wrapper,
+	     typename element = typename wrapper::result_type>
+    class wrapped_input_container
+    {
+    private:
+      const input &_m_container;
+      wrapper _m_wrapper;
+
+    public:
+      typedef wrapped_input_iterator<input, wrapper, element> const_iterator;
+      typedef const_iterator iterator;
+
+      template<typename arg_type>
+      inline wrapped_input_container (const input &container,
+				      const arg_type &arg)
+	: _m_container (container), _m_wrapper (arg)
+      {}
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (_m_container.begin (), _m_wrapper);
+      }
+
+      inline const_iterator end () const
+      {
+	return const_iterator (_m_container.end (), _m_wrapper);
+      }
+
+      static inline bool ordered ()
+      {
+	return input::ordered ();
       }
     };
 
