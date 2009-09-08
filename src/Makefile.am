@@ -221,6 +221,6 @@ make-debug-archive: $(srcdir)/make-debug-archive.in
 	sed -e "s,@UNSTRIP@,$$UNSTRIP,g" -e "s,@AR@,$$AR,g" \
 	    -e "s%[@]PACKAGE_NAME[@]%$(PACKAGE_NAME)%g" \
 	    -e "s%[@]PACKAGE_VERSION[@]%$(PACKAGE_VERSION)%g" \
- 	    $(srcdir)/make-debug-archive.in > $@.new
+	    $(srcdir)/make-debug-archive.in > $@.new
 	chmod +x $@.new
 	mv -f $@.new $@
