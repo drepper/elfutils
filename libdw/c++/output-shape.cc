@@ -50,8 +50,11 @@
 #include <config.h>
 #include <cstdarg>
 #include <byteswap.h>
+#include <tr1/unordered_set>
+#include <tr1/functional>
 #include "dwarf_output"
 #include "../../src/dwarfstrings.h"
+#include "../../src/dwarf-opcodes.h"
 
 using namespace elfutils;
 
@@ -780,6 +783,14 @@ namespace
       (std::string ("Don't know whether value fits ")
        + dwarf_form_string (form));
   }
+
+  void
+  write_version (section_appender &appender,
+		 bool big_endian,
+		 unsigned version)
+  {
+    ::dw_write<2> (appender.alloc (2), version, big_endian);
+  }
 }
 
 void
@@ -1396,11 +1407,8 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
       // Remember where the unit started for DIE offset calculation.
       size_t cu_start = appender.size ();
 
-      // Unit length.
       length_field lf (appender, _m_dwarf_64, _m_big_endian);
-
-      // Version.
-      ::dw_write<2> (appender.alloc (2), 3, _m_big_endian);
+      ::write_version (appender, _m_big_endian, 3);
 
       // Debug abbrev offset.  Use the single abbrev table that we
       // emit at offset 0.
@@ -1416,10 +1424,114 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
     }
 }
 
-void
-dwarf_output::writer::output_debug_line (section_appender &appender
-					 __attribute__ ((unused)))
+namespace
 {
+  struct emit_extended_opcode
+  {
+    emit_extended_opcode (section_appender &appender, int opcode)
+    {
+      appender.push_back (0); // first byte is zero
+      appender.push_back (1); // uleb128, number of bytes of instruction
+      appender.push_back (opcode); // ubyte opcode
+    }
+  };
+}
+
+void
+dwarf_output::writer::output_debug_line (section_appender &appender)
+{
+  std::back_insert_iterator <section_appender> inserter
+    = std::back_inserter (appender);
+
+  for (subr::value_set<dwarf_output::value::value_lineptr>::const_iterator it
+	 = _m_col._m_line_info.begin ();
+       it != _m_col._m_line_info.end (); ++it)
+    {
+      dwarf_output::line_info_table const &lt = it->second;
+
+      length_field lf (appender, _m_dwarf_64, _m_big_endian);
+      ::write_version (appender, _m_big_endian, 3);
+      length_field header_length (appender, _m_dwarf_64, _m_big_endian);
+
+      // minimum_instruction_length
+      appender.push_back (1);
+
+      // default_is_stmt
+      appender.push_back (1);
+
+      // line_base, line_range
+      appender.push_back (uint8_t (int8_t (0)));
+      appender.push_back (1);
+
+#define DW_LNS_0(OP) 0,
+#define DW_LNS_1(OP, OP1) 1,
+      uint8_t opcode_lengths[] = {
+	DW_LNS_OPERANDS
+      };
+#undef DW_LNS_1
+#undef DW_LNS_0
+
+      // opcode_base
+      appender.push_back (sizeof (opcode_lengths) + 1);
+
+      // standard_opcode_lengths (array of ubyte)
+      std::copy (opcode_lengths, opcode_lengths + sizeof (opcode_lengths),
+		 inserter);
+
+      // include_directories
+      dwarf_output::directory_table const &dirs = lt.include_directories ();
+      for (dwarf_output::directory_table::const_iterator dir_it
+	     = dirs.begin (); dir_it != dirs.end (); ++dir_it)
+	if (*dir_it != "")
+	  write_string (*dir_it, DW_FORM_string, appender);
+      *inserter++ = 0;
+
+      // file_names
+      typedef std::tr1::unordered_set<dwarf_output::source_file,
+	dwarf_output::source_file::hasher>
+	source_file_set;
+      source_file_set source_files;
+      dwarf_output::line_table const &lines = lt.lines ();
+      for (dwarf_output::line_table::const_iterator line_it = lines.begin ();
+	   line_it != lines.end (); ++line_it)
+	{
+	  dwarf_output::line_entry const &line = *line_it;
+	  source_files.insert (line.file ());
+	}
+      for (source_file_set::const_iterator sfit = source_files.begin ();
+	   sfit != source_files.end (); ++sfit)
+	{
+	  dwarf_output::source_file const &sf = *sfit;
+
+	  // Find the best-fitting directory for this filename.
+	  size_t dir_index = 0;
+	  size_t match_len = 0;
+	  for (dwarf_output::directory_table::const_iterator dir_it
+		 = dirs.begin () + 1; dir_it != dirs.end (); ++dir_it)
+	    {
+	      std::string const &dir = *dir_it;
+	      if (dir.length () > match_len
+		  && sf.name ().substr (0, dir.length ()) == dir)
+		{
+		  dir_index = dir_it - dirs.begin ();
+		  match_len = dir.length ();
+		}
+	    }
+
+	  write_string (sf.name ().substr (match_len + 1),
+			DW_FORM_string, appender);
+	  ::dw_write_uleb128 (inserter, dir_index);
+	  ::dw_write_uleb128 (inserter, sf.mtime ());
+	  ::dw_write_uleb128 (inserter, sf.size ());
+	}
+      *inserter++ = 0;
+
+      header_length.finish ();
+
+      emit_extended_opcode (appender, DW_LNE_end_sequence);
+
+      lf.finish ();
+    }
 }
 
 void

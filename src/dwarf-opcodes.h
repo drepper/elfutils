@@ -1,4 +1,4 @@
-/*
+/* Number and type of operands for each opcode.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -202,3 +202,25 @@
   DW_OP_0 (DW_OP_call_frame_cfa)				\
   DW_OP_2 (DW_OP_bit_piece, DW_FORM_udata, DW_FORM_udata)	\
   DW_OP_0 (DW_OP_GNU_uninit)
+
+/* Needs to be kept in the order of increasing opcode number.  */
+#define DW_LNS_OPERANDS					\
+  DW_LNS_0 (DW_LNS_copy)				\
+  DW_LNS_1 (DW_LNS_advance_pc, DW_FORM_sdata)		\
+  DW_LNS_1 (DW_LNS_advance_line, DW_FORM_sdata)		\
+  DW_LNS_1 (DW_LNS_set_file, DW_FORM_udata)		\
+  DW_LNS_1 (DW_LNS_set_column, DW_FORM_udata)		\
+  DW_LNS_0 (DW_LNS_negate_stmt)				\
+  DW_LNS_0 (DW_LNS_set_basic_block)			\
+  DW_LNS_0 (DW_LNS_const_add_pc)			\
+  DW_LNS_1 (DW_LNS_fixed_advance_pc, DW_FORM_data2)	\
+  DW_LNS_0 (DW_LNS_set_prologue_end)			\
+  DW_LNS_0 (DW_LNS_set_epilogue_begin)			\
+  DW_LNS_1 (DW_LNS_set_isa, DW_FORM_udata)
+
+#define DW_LNE_OPERANDS					\
+  DW_LNE_0 (DW_LNE_end_sequence)			\
+  DW_LNE_1 (DW_LNE_set_address, DW_FORM_addr)		\
+  DW_LNE_4 (DW_LNE_define_file,				\
+	    DW_FORM_string, DW_FORM_udata,		\
+	    DW_FORM_udata, DW_FORM_udata)
