@@ -87,7 +87,7 @@ readelf_SOURCES = readelf.c dwarfstrings.c
 
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
 		 ldscript.h xelf.h unaligned.h dwarfstrings.h \
-		 expr_opcodes.h
+		 dwarf-opcodes.h
 
 EXTRA_DIST = elf32-i386.script libld_elf_i386.map $(ld_modules) arlib.h \
 	     debugpred.h
