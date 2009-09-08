@@ -5205,11 +5205,8 @@ check_line_structural (struct elf_file *file,
 	wr_message (mc_line | mc_acc_bloat | mc_impact_3, &where,
 		    ": empty line number program.\n");
       if (!terminated)
-	{
-	  if (seen_opcode)
-	    wr_error (&where,
-		      ": sequence of opcodes not terminated with DW_LNE_end_sequence.\n");
-	}
+	wr_error (&where,
+		  ": sequence of opcodes not terminated with DW_LNE_end_sequence.\n");
       else if (sub_ctx.ptr != sub_ctx.end
 	       && !check_zero_padding (&sub_ctx, mc_line,
 				       &WHERE (sec_line, NULL)))
