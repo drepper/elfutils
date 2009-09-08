@@ -51,6 +51,7 @@
 #include "dwarfstrings.h"
 #include "dwarflint.h"
 #include "dwarflint-readctx.h"
+#include "dwarf-opcodes.h"
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
@@ -4114,10 +4115,18 @@ get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
 {
   switch (opcode)
     {
-#define DEF_DW_OP(OPCODE, OP1, OP2)  \
+#define DW_OP_G(OPCODE, OP1, OP2)  \
       case OPCODE: *op1 = OP1; *op2 = OP2; return true;
-# include "expr_opcodes.h"
-#undef DEF_DW_OP
+#define DW_OP_0(OPCODE) DW_OP_G(OPCODE, 0, 0)
+#define DW_OP_1(OPCODE, OP1) DW_OP_G(OPCODE, OP1, 0)
+#define DW_OP_2(OPCODE, OP1, OP2) DW_OP_G(OPCODE, OP1, OP2)
+
+      DW_OP_OPERANDS
+
+#undef DEF_DW_OP_2
+#undef DEF_DW_OP_1
+#undef DEF_DW_OP_0
+#undef DEF_DW_OP_G
     default:
       return false;
     };
