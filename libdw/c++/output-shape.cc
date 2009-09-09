@@ -502,37 +502,34 @@ namespace
       }
   }
 
-  template <class Iterator>
-  void dw_write_var (Iterator it, unsigned width,
-		     uint64_t value, bool big_endian)
-  {
-    switch (width)
-      {
-      case 8:
-	::dw_write<8> (it, value, big_endian);
-	break;
-      case 4:
-	::dw_write<4> (it, value, big_endian);
-	break;
-      case 2:
-	::dw_write<2> (it, value, big_endian);
-	break;
-      case 1:
-	::dw_write<1> (it, value, big_endian);
-      case 0:
-	break;
-      default:
-	throw std::runtime_error ("Width has to be 0, 1, 2, 4 or 8.");
-      }
-  }
+}
+template <class Iterator>
+void
+dwarf_output::writer::write_var (Iterator it, unsigned width, uint64_t value)
+{
+  switch (width)
+    {
+    case 8:
+      ::dw_write<8> (it, value, _m_config.big_endian);
+      break;
+    case 4:
+      ::dw_write<4> (it, value, _m_config.big_endian);
+      break;
+    case 2:
+      ::dw_write<2> (it, value, _m_config.big_endian);
+      break;
+    case 1:
+      ::dw_write<1> (it, value, _m_config.big_endian);
+    case 0:
+      break;
+    default:
+      throw std::runtime_error ("Width has to be 0, 1, 2, 4 or 8.");
+    }
+}
 
-  template <class Iterator>
-  void dw_write_64 (Iterator it, bool is_64,
-		    uint64_t value, bool big_endian)
-  {
-    dw_write_var (it, is_64 ? 8 : 4, value, big_endian);
-  }
 
+namespace
+{
   // Check that the value fits into 32-bits if !dwarf_64.  If it
   // doesn't throw an exception.  The client will then be able to
   // restart the process with dwarf_64 == true.
@@ -541,65 +538,75 @@ namespace
     if (!dwarf_64 && value > (uint64_t)(uint32_t)-1)
       throw dwarf_output::writer::dwarf_32_not_enough ();
   }
+}
 
-  template <class Iterator>
-  void dw_write_form (Iterator it, int form,
-		      uint64_t value, bool big_endian,
-		      bool addr_64, bool dwarf_64)
-  {
-    switch (form)
-      {
-      case DW_FORM_flag_present:
-	return;
+dwarf_output::writer::configuration::configuration (bool a_big_endian,
+						    bool a_addr_64,
+						    bool a_dwarf_64)
+  : big_endian (a_big_endian),
+    addr_64 (a_addr_64),
+    dwarf_64 (a_dwarf_64)
+{}
 
-#define HANDLE_DATA_REF(W)			\
-	case DW_FORM_data##W:			\
-        case DW_FORM_ref##W:			\
-	  dw_write<W> (it, value, big_endian);	\
-	  return
+template <class Iterator>
+void
+dwarf_output::writer::write_form (Iterator it, int form, uint64_t value)
+{
+  switch (form)
+    {
+    case DW_FORM_flag_present:
+      return;
 
-      case DW_FORM_flag:
-	assert (value == 1 || value == 0);
-      case DW_FORM_block1:
+#define HANDLE_DATA_REF(W)				\
+      case DW_FORM_data##W:				\
+    case DW_FORM_ref##W:				\
+      dw_write<W> (it, value, _m_config.big_endian);	\
+    return
+
+    case DW_FORM_flag:
+      assert (value == 1 || value == 0);
+    case DW_FORM_block1:
       HANDLE_DATA_REF (1);
 
-      case DW_FORM_block2:
+    case DW_FORM_block2:
       HANDLE_DATA_REF (2);
 
-      case DW_FORM_block4:
+    case DW_FORM_block4:
       HANDLE_DATA_REF (4);
 
       HANDLE_DATA_REF (8);
 
 #undef HANDLE_DATA_REF
 
-      case DW_FORM_addr:
-	dw_write_64 (it, addr_64, value, big_endian);
-	return;
+    case DW_FORM_addr:
+      write_64 (it, _m_config.addr_64, value);
+      return;
 
-      case DW_FORM_ref_addr:
-      case DW_FORM_strp:
-      case DW_FORM_sec_offset:
-	assert_fits_32 (dwarf_64, value);
-	dw_write_64 (it, dwarf_64, value, big_endian);
-	return;
+    case DW_FORM_ref_addr:
+    case DW_FORM_strp:
+    case DW_FORM_sec_offset:
+      assert_fits_32 (_m_config.dwarf_64, value);
+      write_64 (it, _m_config.dwarf_64, value);
+      return;
 
-      case DW_FORM_udata:
-      case DW_FORM_ref_udata:
-      case DW_FORM_exprloc:
-      case DW_FORM_indirect:
-	dw_write_uleb128 (it, value);
-	return;
+    case DW_FORM_udata:
+    case DW_FORM_ref_udata:
+    case DW_FORM_exprloc:
+    case DW_FORM_indirect:
+      dw_write_uleb128 (it, value);
+      return;
 
-      case DW_FORM_sdata:
-	dw_write_sleb128 (it, value);
-	return;
-      }
+    case DW_FORM_sdata:
+      dw_write_sleb128 (it, value);
+      return;
+    }
 
-    throw std::runtime_error (std::string ("Don't know how to write ")
-			      + dwarf_form_string (form));
-  }
+  throw std::runtime_error (std::string ("Don't know how to write ")
+			    + dwarf_form_string (form));
+}
 
+namespace
+{
   class CountingIterator
   {
     size_t &_m_count;
@@ -812,7 +819,7 @@ dwarf_output::writer::write_string (std::string const &str,
 
       // xxx dwarf_64
       _m_str_backpatch.push_back
-	(std::make_pair (gap (appender, 4, _m_big_endian),
+	(std::make_pair (gap (*this, appender, 4),
 			 _m_debug_str.add (str)));
     }
 }
@@ -952,32 +959,33 @@ dwarf_output::shape_info::build_data
   *inserter++ = 0;
 }
 
-dwarf_output::writer::gap::gap ()
-  : _m_ptr (NULL)
+dwarf_output::writer::gap::gap (writer &parent)
+  : _m_parent (parent),
+    _m_ptr (NULL)
 {}
 
-dwarf_output::writer::gap::gap (section_appender &appender, size_t len,
-				bool big_endian, uint64_t base)
-  : _m_ptr (appender.alloc (len)),
+dwarf_output::writer::gap::gap (writer &parent, section_appender &appender,
+				size_t len, uint64_t base)
+  : _m_parent (parent),
+    _m_ptr (appender.alloc (len)),
     _m_len (len),
-    _m_big_endian (big_endian),
     _m_base (base)
 {}
 
-dwarf_output::writer::gap::gap (unsigned char *ptr, size_t len,
-				bool big_endian, uint64_t base)
-  : _m_ptr (ptr),
+dwarf_output::writer::gap::gap (writer &parent, unsigned char *ptr,
+				size_t len, uint64_t base)
+  : _m_parent (parent),
+    _m_ptr (ptr),
     _m_len (len),
-    _m_big_endian (big_endian),
     _m_base (base)
 {}
 
 dwarf_output::writer::gap &
 dwarf_output::writer::gap::operator= (gap const &other)
 {
+  assert (&_m_parent == &other._m_parent);
   _m_ptr = other._m_ptr;
   _m_len = other._m_len;
-  _m_big_endian = other._m_big_endian;
   _m_base = other._m_base;
   return *this;
 }
@@ -985,7 +993,7 @@ dwarf_output::writer::gap::operator= (gap const &other)
 void
 dwarf_output::writer::gap::patch (uint64_t value) const
 {
-  ::dw_write_var (_m_ptr, _m_len, value - _m_base, _m_big_endian);
+  _m_parent.write_var (_m_ptr, _m_len, value - _m_base);
 }
 
 namespace
@@ -1064,7 +1072,8 @@ public:
 
     step_t (dump_die_tree &dumper,
 	    __unused die_info_pair const &info_pair)
-      : _m_dumper (dumper)
+      : _m_dumper (dumper),
+	sibling_gap (dumper._m_parent)
     {
       ++_m_dumper.level;
     }
@@ -1087,7 +1096,7 @@ public:
       if (sibling_gap.valid ())
 	{
 	  sibling_gap.patch (_m_dumper.appender.size ());
-	  sibling_gap = gap ();
+	  sibling_gap = gap (_m_dumper._m_parent);
 	}
     }
   };
@@ -1103,9 +1112,9 @@ public:
   {
   }
 
-  virtual void visit_die (dwarf_output::die_info_pair const &info_pair,
-			  step_t &step,
-			  bool has_sibling)
+  void visit_die (dwarf_output::die_info_pair const &info_pair,
+		  step_t &step,
+		  bool has_sibling)
   {
     static char const spaces[] =
       "                                                            "
@@ -1162,10 +1171,10 @@ public:
 			<< ":" << info._m_with_sibling[true]
 			<< std::endl;
 	    size_t gap_size = ::form_width (form,
-					    _m_parent._m_addr_64,
-					    _m_parent._m_dwarf_64);
-	    step.sibling_gap = gap (appender, gap_size,
-				    _m_parent._m_big_endian, _m_cu_start);
+					    _m_parent._m_config.addr_64,
+					    _m_parent._m_config.dwarf_64);
+	    step.sibling_gap = gap (_m_parent, appender, gap_size,
+				    _m_cu_start);
 	    continue;
 	  }
 
@@ -1191,48 +1200,30 @@ public:
 	  case dwarf::VS_lineptr:
 	  case dwarf::VS_rangelistptr:
 	  case dwarf::VS_macptr:
-	    ::dw_write_form (inserter, form, 0 /*xxx*/,
-			     _m_parent._m_big_endian,
-			     _m_parent._m_addr_64,
-			     _m_parent._m_dwarf_64);
+	    _m_parent.write_form (inserter, form, 0 /*xxx*/);
 	    break;
 
 	  case dwarf::VS_constant:
 	    if (value.constant_is_integer ())
-	      ::dw_write_form (inserter, form, value.constant (),
-			       _m_parent._m_big_endian,
-			       _m_parent._m_addr_64,
-			       _m_parent._m_dwarf_64);
+	      _m_parent.write_form (inserter, form, value.constant ());
 	    else
 	      {
 		const std::vector<uint8_t> &block = value.constant_block ();
-		::dw_write_form (inserter, form, block.size (),
-				 _m_parent._m_big_endian,
-				 _m_parent._m_addr_64,
-				 _m_parent._m_dwarf_64);
+		_m_parent.write_form (inserter, form, block.size ());
 		std::copy (block.begin (), block.end (), inserter);
 	      }
 	    break;
 
 	  case dwarf::VS_dwarf_constant:
-	    ::dw_write_form (inserter, form, value.dwarf_constant (),
-			     _m_parent._m_big_endian,
-			     _m_parent._m_addr_64,
-			     _m_parent._m_dwarf_64);
+	    _m_parent.write_form (inserter, form, value.dwarf_constant ());
 	    break;
 
 	  case dwarf::VS_source_line:
-	    ::dw_write_form (inserter, form, value.source_line (),
-			     _m_parent._m_big_endian,
-			     _m_parent._m_addr_64,
-			     _m_parent._m_dwarf_64);
+	    _m_parent.write_form (inserter, form, value.source_line ());
 	    break;
 
 	  case dwarf::VS_source_column:
-	    ::dw_write_form (inserter, form, value.source_column (),
-			     _m_parent._m_big_endian,
-			     _m_parent._m_addr_64,
-			     _m_parent._m_dwarf_64);
+	    _m_parent.write_form (inserter, form, value.source_column ());
 	    break;
 
 	  case dwarf::VS_string:
@@ -1251,28 +1242,24 @@ public:
 		break;
 	      }
 	    else
-	      ::dw_write_form (inserter, form, 0 /*xxx*/,
-			       _m_parent._m_big_endian,
-			       _m_parent._m_addr_64,
-			       _m_parent._m_dwarf_64);
+	      _m_parent.write_form (inserter, form, 0 /*xxx*/);
 	    break;
 
 	  case dwarf::VS_address:
 	    {
 	      assert (form == DW_FORM_addr);
-	      size_t w = _m_parent._m_addr_64 ? 8 : 4;
-	      ::dw_write_var (appender.alloc (w), w,
-			      value.address (),
-			      _m_parent._m_big_endian);
+	      size_t w = _m_parent._m_config.addr_64 ? 8 : 4;
+	      _m_parent.write_var (appender.alloc (w), w,
+				   value.address ());
 	    }
 	    break;
 
 	  case dwarf::VS_reference:
 	    {
 	      assert (form == DW_FORM_ref_addr);
-	      size_t w = _m_parent._m_dwarf_64 ? 8 : 4;
+	      size_t w = _m_parent._m_config.dwarf_64 ? 8 : 4;
 	      die_backpatch.push_back
-		(std::make_pair (gap (appender, w, _m_parent._m_big_endian),
+		(std::make_pair (gap (_m_parent, appender, w),
 				 value.reference ()->offset ()));
 	    }
 	    break;
@@ -1282,10 +1269,7 @@ public:
 	    if (form == DW_FORM_block)
 	      ::dw_write_uleb128 (inserter, 0);
 	    else
-	      ::dw_write_form (inserter, form, 0 /*xxx*/,
-			       _m_parent._m_big_endian,
-			       _m_parent._m_addr_64,
-			       _m_parent._m_dwarf_64);
+	      _m_parent.write_form (inserter, form, 0 /*xxx*/);
 	    break;
 
 	  case dwarf::VS_discr_list:
@@ -1317,12 +1301,10 @@ dwarf_output::writer::writer (dwarf_output_collector &col,
 			      dwarf_output &dw,
 			      bool big_endian, bool addr_64, bool dwarf_64,
 			      strtab &debug_str)
-  : _m_col (col)
-  , _m_dw (dw)
-  , _m_addr_64 (addr_64)
-  , _m_dwarf_64 (dwarf_64)
-  , _m_big_endian (big_endian)
-  , _m_debug_str (debug_str)
+  : _m_config (big_endian, addr_64, dwarf_64),
+    _m_col (col),
+    _m_dw (dw),
+    _m_debug_str (debug_str)
 {
   size_t code = 0;
   for (dwarf_output_collector::die_map::const_iterator it
@@ -1366,32 +1348,33 @@ dwarf_output::writer::output_debug_abbrev (section_appender &appender)
 
 class dwarf_output::writer::length_field
 {
+  writer &_m_parent;
   elfutils::section_appender &_m_appender;
   const size_t _m_length_length;
-  const bool _m_dwarf_64;
   const size_t _m_cu_start;
   gap _m_length_gap;
   bool _m_finished;
 
 public:
-  length_field (elfutils::section_appender &appender,
-		bool dwarf_64, bool big_endian)
-    : _m_appender (appender),
-      _m_length_length (dwarf_64 ? 12 : 4),
-      _m_dwarf_64 (dwarf_64),
+  length_field (writer &parent,
+		elfutils::section_appender &appender)
+    : _m_parent (parent),
+      _m_appender (appender),
+      _m_length_length (parent._m_config.dwarf_64 ? 12 : 4),
       _m_cu_start (appender.size ()),
+      _m_length_gap (parent),
       _m_finished (false)
   {
-    if (dwarf_64)
-      ::dw_write<4> (appender.alloc (4), -1, big_endian);
-    _m_length_gap = gap (appender, _m_length_length, big_endian);
+    if (parent._m_config.dwarf_64)
+      ::dw_write<4> (appender.alloc (4), -1, parent._m_config.big_endian);
+    _m_length_gap = gap (parent, appender, _m_length_length);
   }
 
   void finish ()
   {
     assert (!_m_finished);
     size_t length = _m_appender.size () - _m_cu_start - _m_length_length;
-    assert_fits_32 (_m_dwarf_64, length);
+    assert_fits_32 (_m_parent._m_config.dwarf_64, length);
     _m_length_gap.patch (length);
     _m_finished = true;
   }
@@ -1409,15 +1392,15 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
       // Remember where the unit started for DIE offset calculation.
       size_t cu_start = appender.size ();
 
-      length_field lf (appender, _m_dwarf_64, _m_big_endian);
-      ::write_version (appender, _m_big_endian, 3);
+      length_field lf (*this, appender);
+      ::write_version (appender, _m_config.big_endian, 3);
 
       // Debug abbrev offset.  Use the single abbrev table that we
       // emit at offset 0.
-      ::dw_write<4> (appender.alloc (4), 0, _m_big_endian);
+      ::dw_write<4> (appender.alloc (4), 0, _m_config.big_endian);
 
       // Size in bytes of an address on the target architecture.
-      *inserter++ = _m_addr_64 ? 8 : 4;
+      *inserter++ = _m_config.addr_64 ? 8 : 4;
 
       dump_die_tree dumper (*this, appender, cu_start);
       ::traverse_die_tree (dumper, *_m_col._m_unique.find (*it));
@@ -1426,191 +1409,152 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
     }
 }
 
-namespace
+class dwarf_output::writer::linenum_prog_instruction
 {
-  class linenum_prog_instruction
+  writer &_m_parent;
+  std::vector<int> const &_m_operands;
+  std::vector<int>::const_iterator _m_op_it;
+
+protected:
+  std::vector<uint8_t> _m_buf;
+
+  linenum_prog_instruction (writer &parent,
+			    std::vector<int> const &operands)
+    : _m_parent (parent),
+      _m_operands (operands),
+      _m_op_it (_m_operands.begin ())
+  {}
+
+public:
+  void arg (uint64_t value)
   {
-    std::vector<int> const &_m_operands;
-    std::vector<int>::const_iterator _m_op_it;
+    assert (_m_op_it != _m_operands.end ());
+    _m_parent.write_form (std::back_inserter (_m_buf), *_m_op_it++, value);
+  }
 
-    bool _m_big_endian;
-    bool _m_addr_64;
-    bool _m_dwarf_64;
-
-  protected:
-    std::vector<uint8_t> _m_buf;
-
-    linenum_prog_instruction (std::vector<int> const &operands,
-			      bool big_endian, bool addr_64, bool dwarf_64)
-      : _m_operands (operands),
-	_m_op_it (_m_operands.begin ()),
-	_m_big_endian (big_endian),
-	_m_addr_64 (addr_64),
-	_m_dwarf_64 (dwarf_64)
-    {}
-
-  public:
-    void arg (uint64_t value)
-    {
-      assert (_m_op_it != _m_operands.end ());
-      ::dw_write_form (std::back_inserter (_m_buf), *_m_op_it++, value,
-		       _m_big_endian, _m_addr_64, _m_dwarf_64);
-    }
-
-    void arg (std::string const &value)
-    {
-      assert (_m_op_it != _m_operands.end ());
-      int form = *_m_op_it++;
-      assert (form == DW_FORM_string);
-
-      std::copy (value.begin (), value.end (), std::back_inserter (_m_buf));
-      _m_buf.push_back (0);
-    }
-
-    void write (section_appender &appender)
-    {
-      assert (_m_op_it == _m_operands.end ());
-      std::copy (_m_buf.begin (), _m_buf.end (),
-		 std::back_inserter (appender));
-    }
-  };
-
-  class standard_opcode
-    : public linenum_prog_instruction
+  void arg (std::string const &value)
   {
-    int _m_opcode;
+    assert (_m_op_it != _m_operands.end ());
+    int form = *_m_op_it++;
+    assert (form == DW_FORM_string);
 
-    static std::vector<int> const &build_arglist (int opcode)
+    std::copy (value.begin (), value.end (), std::back_inserter (_m_buf));
+    _m_buf.push_back (0);
+  }
+
+  void write (section_appender &appender)
+  {
+    assert (_m_op_it == _m_operands.end ());
+    std::copy (_m_buf.begin (), _m_buf.end (),
+	       std::back_inserter (appender));
+  }
+};
+
+class dwarf_output::writer::standard_opcode
+  : public dwarf_output::writer::linenum_prog_instruction
+{
+  int _m_opcode;
+
+  static std::vector<int> const &build_arglist (int opcode)
+  {
+    static struct arglist
+      : public std::map<int, std::vector<int> >
     {
-      static struct arglist
-	: public std::map<int, std::vector<int> >
+      arglist ()
       {
-	arglist ()
-	{
 #define DW_LNS_0(OP)				\
-	  (*this)[OP];
+	(*this)[OP];
 #define DW_LNS_1(OP, OP1)			\
-	  (*this)[OP].push_back (OP1);
+	(*this)[OP].push_back (OP1);
 
-	  DW_LNS_OPERANDS;
+	DW_LNS_OPERANDS;
 
 #undef DW_LNS_1
 #undef DW_LNS_0
-	}
-      } const operands;
+      }
+    } const operands;
 
-      arglist::const_iterator it = operands.find (opcode);
-      assert (it != operands.end ());
-      return it->second;
-    }
+    arglist::const_iterator it = operands.find (opcode);
+    assert (it != operands.end ());
+    return it->second;
+  }
 
-  public:
-    standard_opcode (int opcode,
-		     bool big_endian, bool addr_64, bool dwarf_64)
-      : linenum_prog_instruction (build_arglist (opcode),
-				  big_endian, addr_64, dwarf_64),
-	_m_opcode (opcode)
-    {}
+public:
+  standard_opcode (writer &parent, int opcode)
+    : linenum_prog_instruction (parent, build_arglist (opcode)),
+      _m_opcode (opcode)
+  {}
 
-    template <class T>
-    inline standard_opcode &arg (T const &value)
-    {
-      linenum_prog_instruction::arg (value);
-      return *this;
-    }
-
-    void write (section_appender &appender)
-    {
-      appender.push_back (_m_opcode);
-      linenum_prog_instruction::write (appender);
-    }
-  };
-
-  class extended_opcode
-    : public linenum_prog_instruction
+  template <class T>
+  inline standard_opcode &arg (T const &value)
   {
-    int _m_opcode;
+    linenum_prog_instruction::arg (value);
+    return *this;
+  }
 
-    static std::vector<int> const &build_arglist (int opcode)
+  void write (section_appender &appender)
+  {
+    appender.push_back (_m_opcode);
+    linenum_prog_instruction::write (appender);
+  }
+};
+
+class dwarf_output::writer::extended_opcode
+  : public dwarf_output::writer::linenum_prog_instruction
+{
+  int _m_opcode;
+
+  static std::vector<int> const &build_arglist (int opcode)
+  {
+    static struct arglist
+      : public std::map<int, std::vector<int> >
     {
-      static struct arglist
-	: public std::map<int, std::vector<int> >
+      arglist ()
       {
-	arglist ()
-	{
 #define DW_LNE_0(OP)				\
-	  (*this)[OP];
+	(*this)[OP];
 #define DW_LNE_1(OP, OP1)			\
-	  (*this)[OP].push_back (OP1);
+	(*this)[OP].push_back (OP1);
 #define DW_LNE_4(OP, OP1, OP2, OP3, OP4)	\
-	  (*this)[OP].push_back (OP1);		\
-	  (*this)[OP].push_back (OP2);		\
-	  (*this)[OP].push_back (OP3);		\
-	  (*this)[OP].push_back (OP4);
+	(*this)[OP].push_back (OP1);		\
+	(*this)[OP].push_back (OP2);		\
+	(*this)[OP].push_back (OP3);		\
+	(*this)[OP].push_back (OP4);
 
-	  DW_LNE_OPERANDS;
+	DW_LNE_OPERANDS;
 
 #undef DW_LNE_4
 #undef DW_LNE_1
 #undef DW_LNE_0
-	}
-      } const operands;
+      }
+    } const operands;
 
-      arglist::const_iterator it = operands.find (opcode);
-      assert (it != operands.end ());
-      return it->second;
-    }
+    arglist::const_iterator it = operands.find (opcode);
+    assert (it != operands.end ());
+    return it->second;
+  }
 
-  public:
-    extended_opcode (int opcode,
-		     bool big_endian, bool addr_64, bool dwarf_64)
-      : linenum_prog_instruction (build_arglist (opcode),
-				  big_endian, addr_64, dwarf_64),
-	_m_opcode (opcode)
-    {}
+public:
+  extended_opcode (writer &parent, int opcode)
+    : linenum_prog_instruction (parent, build_arglist (opcode)),
+      _m_opcode (opcode)
+  {}
 
-    template <class T>
-    inline extended_opcode &arg (T const &value)
-    {
-      linenum_prog_instruction::arg (value);
-      return *this;
-    }
-
-    void write (section_appender &appender)
-    {
-      appender.push_back (0);
-      ::dw_write_uleb128 (std::back_inserter (appender), _m_buf.size () + 1);
-      appender.push_back (_m_opcode);
-      linenum_prog_instruction::write (appender);
-    }
-  };
-
-  class writer_configuration
+  template <class T>
+  inline extended_opcode &arg (T const &value)
   {
-    bool _m_big_endian;
-    bool _m_addr_64;
-    bool _m_dwarf_64;
+    linenum_prog_instruction::arg (value);
+    return *this;
+  }
 
-  public:
-    writer_configuration (bool big_endian, bool addr_64, bool dwarf_64)
-      : _m_big_endian (big_endian),
-	_m_addr_64 (addr_64),
-	_m_dwarf_64 (dwarf_64)
-    {}
-
-    ::standard_opcode standard_opcode (int opcode)
-    {
-      return ::standard_opcode (opcode,
-				_m_big_endian, _m_addr_64, _m_dwarf_64);
-    }
-
-    ::extended_opcode extended_opcode (int opcode)
-    {
-      return ::extended_opcode (opcode,
-				_m_big_endian, _m_addr_64, _m_dwarf_64);
-    }
-  };
-}
+  void write (section_appender &appender)
+  {
+    appender.push_back (0);
+    ::dw_write_uleb128 (std::back_inserter (appender), _m_buf.size () + 1);
+    appender.push_back (_m_opcode);
+    linenum_prog_instruction::write (appender);
+  }
+};
 
 void
 dwarf_output::writer::output_debug_line (section_appender &appender)
@@ -1624,9 +1568,9 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
     {
       dwarf_output::line_info_table const &lt = it->second;
 
-      length_field lf (appender, _m_dwarf_64, _m_big_endian);
-      ::write_version (appender, _m_big_endian, 3);
-      length_field header_length (appender, _m_dwarf_64, _m_big_endian);
+      length_field lf (*this, appender);
+      ::write_version (appender, _m_config.big_endian, 3);
+      length_field header_length (*this, appender);
 
       // minimum_instruction_length
       appender.push_back (1);
@@ -1707,13 +1651,12 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 
       header_length.finish ();
 
-      writer_configuration conf (_m_big_endian, _m_addr_64, _m_dwarf_64);
-      conf.standard_opcode (DW_LNS_advance_pc)
+      standard_opcode (*this, DW_LNS_advance_pc)
 	.arg (10000)
 	.write (appender);
-      conf.standard_opcode (DW_LNS_copy)
+      standard_opcode (*this, DW_LNS_copy)
 	.write (appender);
-      conf.extended_opcode (DW_LNE_end_sequence)
+      extended_opcode (*this, DW_LNE_end_sequence)
 	.write (appender);
 
       lf.finish ();

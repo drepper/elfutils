@@ -892,12 +892,21 @@ namespace elfutils
 
   class dwarf_output::writer
   {
+    struct configuration
+    {
+      const bool big_endian;
+      const bool addr_64;
+      const bool dwarf_64;
+
+      configuration (bool big_endian, bool addr_64, bool dwarf_64);
+    } _m_config;
+
     struct gap
     {
-      gap ();
-      gap (section_appender &appender, size_t len, bool big_endian,
+      gap (writer &parent);
+      gap (writer &parent, section_appender &appender, size_t len,
 	   uint64_t base = 0);
-      gap (unsigned char *ptr, size_t len, bool big_endian,
+      gap (writer &parent, unsigned char *ptr, size_t len,
 	   uint64_t base = 0);
       gap &operator= (gap const &other);
 
@@ -905,9 +914,9 @@ namespace elfutils
       bool valid () const { return _m_ptr != NULL; }
 
     private:
+      writer &_m_parent;
       unsigned char *_m_ptr;
       size_t _m_len;
-      bool _m_big_endian;
       uint64_t _m_base;
     };
 
@@ -917,10 +926,6 @@ namespace elfutils
 
     dwarf_output_collector &_m_col;
     dwarf_output &_m_dw;
-
-    bool _m_addr_64;
-    bool _m_dwarf_64;
-    bool _m_big_endian;
 
     strtab &_m_debug_str;
     str_backpatch_vec _m_str_backpatch;
@@ -935,11 +940,28 @@ namespace elfutils
     void add_shape (debug_info_entry &die, bool last_sibling);
     class dump_die_tree;
 
+    class linenum_prog_instruction;
+    class standard_opcode;
+    class extended_opcode;
+
     void write_string (std::string const &str,
 		       int form,
 		       section_appender &appender);
 
+    template <class Iterator>
+    void write_var (Iterator it, unsigned width, uint64_t value);
+
+    template <class Iterator>
+    inline void write_64 (Iterator it, bool is_64, uint64_t value)
+    {
+      write_var (it, is_64 ? 8 : 4, value);
+    }
+
+    template <class Iterator>
+    void write_form (Iterator it, int form, uint64_t value);
+
   public:
+
     struct dwarf_32_not_enough
       : public std::runtime_error
     {
