@@ -606,9 +606,10 @@ dwarf_locexpr_opcode_string (unsigned int code)
 {
   static const char *const known[] =
     {
-      /* Normally we can't affort building huge table of 64K entries,
-	 most of them zero, just because there are a couple defined
-	 values at the far end.  In case of opcodes, it's OK.  */
+      /* Normally we can't afford building table of all entries, most
+	 of them zero, just because there are a couple defined values
+	 at the far end.  In case of opcodes, the table is small, so
+	 it's OK.  */
 #define ONE_KNOWN_DW_OP_DESC(NAME, CODE, DESC) ONE_KNOWN_DW_OP(NAME, CODE)
 #define ONE_KNOWN_DW_OP(NAME, CODE) [CODE] = #NAME,
       ALL_KNOWN_DW_OP
@@ -623,8 +624,7 @@ dwarf_locexpr_opcode_string (unsigned int code)
   if (ret == NULL)
     {
       static char buf[40];
-      snprintf (buf, sizeof buf, gettext ("unknown opcode %" PRIx64),
-		(uint64_t) code);
+      snprintf (buf, sizeof buf, gettext ("unknown opcode %x"), code);
       ret = buf;
     }
 
