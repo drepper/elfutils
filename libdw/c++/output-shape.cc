@@ -1426,137 +1426,191 @@ dwarf_output::writer::output_debug_info (section_appender &appender)
     }
 }
 
-class linenum_prog_instruction
+namespace
 {
-  // List of operands, stored in reverse order.
-  std::vector<int> _m_operands;
-
-  bool _m_big_endian;
-  bool _m_addr_64;
-  bool _m_dwarf_64;
-
-protected:
-  std::vector<uint8_t> _m_buf;
-
-  linenum_prog_instruction (std::vector<int> operands,
-			    bool big_endian, bool addr_64, bool dwarf_64)
-    : _m_operands (operands),
-      _m_big_endian (big_endian),
-      _m_addr_64 (addr_64),
-      _m_dwarf_64 (dwarf_64)
+  class linenum_prog_instruction
   {
-    std::reverse (_m_operands.begin (), _m_operands.end ());
-  }
+    std::vector<int> const &_m_operands;
+    std::vector<int>::const_iterator _m_op_it;
 
-public:
-  void arg (uint64_t value)
+    bool _m_big_endian;
+    bool _m_addr_64;
+    bool _m_dwarf_64;
+
+  protected:
+    std::vector<uint8_t> _m_buf;
+
+    linenum_prog_instruction (std::vector<int> const &operands,
+			      bool big_endian, bool addr_64, bool dwarf_64)
+      : _m_operands (operands),
+	_m_op_it (_m_operands.begin ()),
+	_m_big_endian (big_endian),
+	_m_addr_64 (addr_64),
+	_m_dwarf_64 (dwarf_64)
+    {}
+
+  public:
+    void arg (uint64_t value)
+    {
+      assert (_m_op_it != _m_operands.end ());
+      ::dw_write_form (std::back_inserter (_m_buf), *_m_op_it++, value,
+		       _m_big_endian, _m_addr_64, _m_dwarf_64);
+    }
+
+    void arg (std::string const &value)
+    {
+      assert (_m_op_it != _m_operands.end ());
+      int form = *_m_op_it++;
+      assert (form == DW_FORM_string);
+
+      std::copy (value.begin (), value.end (), std::back_inserter (_m_buf));
+      _m_buf.push_back (0);
+    }
+
+    void write (section_appender &appender)
+    {
+      assert (_m_op_it == _m_operands.end ());
+      std::copy (_m_buf.begin (), _m_buf.end (),
+		 std::back_inserter (appender));
+    }
+  };
+
+  class standard_opcode
+    : public linenum_prog_instruction
   {
-    assert (!_m_operands.empty ());
+    int _m_opcode;
 
-    ::dw_write_form (std::back_inserter (_m_buf), _m_operands.back (), value,
-		     _m_big_endian, _m_addr_64, _m_dwarf_64);
-    _m_operands.pop_back ();
-  }
-
-  void arg (std::string const &value)
-  {
-    assert (!_m_operands.empty ());
-    assert (_m_operands.back () == DW_FORM_string);
-    _m_operands.pop_back ();
-
-    std::copy (value.begin (), value.end (), std::back_inserter (_m_buf));
-    _m_buf.push_back (0);
-  }
-
-  void write (section_appender &appender)
-  {
-    assert (_m_operands.empty ());
-    std::copy (_m_buf.begin (), _m_buf.end (),
-	       std::back_inserter (appender));
-  }
-};
-
-#if 0
-struct standard_opcode
-  : public linenum_prog_instruction
-{
-  standard_opcode (int opcode)
-  {
-#define DW_LNS_0(OP) case OP: break;
-#define DW_LNS_1(OP, OP1) case OP: _m_operands.push_back (OP1); break;
-    switch (opcode)
+    static std::vector<int> const &build_arglist (int opcode)
+    {
+      static struct arglist
+	: public std::map<int, std::vector<int> >
       {
-	DW_LNS_OPERANDS
-      default:
+	arglist ()
 	{
-	  std::ostringstream s;
-	  s << "Don't know how to build standard opcode " << opcode << ".";
-	  throw std::runtime_error (s.str ());
-	}
-      };
+#define DW_LNS_0(OP)				\
+	  (*this)[OP];
+#define DW_LNS_1(OP, OP1)			\
+	  (*this)[OP].push_back (OP1);
+
+	  DW_LNS_OPERANDS;
+
 #undef DW_LNS_1
 #undef DW_LNS_0
-  }
-};
-#endif
-
-class extended_opcode
-  : public linenum_prog_instruction
-{
-  int _m_opcode;
-
-  /* xxx we end up building the arglist each time the object is
-     constructed.  That sucks.  */
-  static std::vector<int> build_arglist (int opcode)
-  {
-    std::vector<int> operands;
-
-#define DW_LNE_0(OP) case OP: break;
-#define DW_LNE_1(OP, OP1)		\
-    case OP:				\
-      operands.push_back (OP1);		\
-      break;
-#define DW_LNE_4(OP, OP1, OP2, OP3, OP4)	\
-    case OP:					\
-      operands.push_back (OP1);			\
-      operands.push_back (OP2);			\
-      operands.push_back (OP3);			\
-      operands.push_back (OP4);			\
-      break;
-
-    switch (opcode)
-      {
-	DW_LNE_OPERANDS
-      default:
-	{
-	  std::ostringstream s;
-	  s << "Don't know how to build extended opcode " << opcode << ".";
-	  throw std::runtime_error (s.str ());
 	}
-      };
+      } const operands;
+
+      arglist::const_iterator it = operands.find (opcode);
+      assert (it != operands.end ());
+      return it->second;
+    }
+
+  public:
+    standard_opcode (int opcode,
+		     bool big_endian, bool addr_64, bool dwarf_64)
+      : linenum_prog_instruction (build_arglist (opcode),
+				  big_endian, addr_64, dwarf_64),
+	_m_opcode (opcode)
+    {}
+
+    template <class T>
+    inline standard_opcode &arg (T const &value)
+    {
+      linenum_prog_instruction::arg (value);
+      return *this;
+    }
+
+    void write (section_appender &appender)
+    {
+      appender.push_back (_m_opcode);
+      linenum_prog_instruction::write (appender);
+    }
+  };
+
+  class extended_opcode
+    : public linenum_prog_instruction
+  {
+    int _m_opcode;
+
+    static std::vector<int> const &build_arglist (int opcode)
+    {
+      static struct arglist
+	: public std::map<int, std::vector<int> >
+      {
+	arglist ()
+	{
+#define DW_LNE_0(OP)				\
+	  (*this)[OP];
+#define DW_LNE_1(OP, OP1)			\
+	  (*this)[OP].push_back (OP1);
+#define DW_LNE_4(OP, OP1, OP2, OP3, OP4)	\
+	  (*this)[OP].push_back (OP1);		\
+	  (*this)[OP].push_back (OP2);		\
+	  (*this)[OP].push_back (OP3);		\
+	  (*this)[OP].push_back (OP4);
+
+	  DW_LNE_OPERANDS;
+
 #undef DW_LNE_4
 #undef DW_LNE_1
 #undef DW_LNE_0
+	}
+      } const operands;
 
-    return operands;
-  }
+      arglist::const_iterator it = operands.find (opcode);
+      assert (it != operands.end ());
+      return it->second;
+    }
 
-public:
-  extended_opcode (int opcode,
-		   bool big_endian, bool addr_64, bool dwarf_64)
-    : linenum_prog_instruction (build_arglist (opcode),
-				big_endian, addr_64, dwarf_64),
-      _m_opcode (opcode)
-  {}
+  public:
+    extended_opcode (int opcode,
+		     bool big_endian, bool addr_64, bool dwarf_64)
+      : linenum_prog_instruction (build_arglist (opcode),
+				  big_endian, addr_64, dwarf_64),
+	_m_opcode (opcode)
+    {}
 
-  void write (section_appender &appender)
+    template <class T>
+    inline extended_opcode &arg (T const &value)
+    {
+      linenum_prog_instruction::arg (value);
+      return *this;
+    }
+
+    void write (section_appender &appender)
+    {
+      appender.push_back (0);
+      ::dw_write_uleb128 (std::back_inserter (appender), _m_buf.size () + 1);
+      appender.push_back (_m_opcode);
+      linenum_prog_instruction::write (appender);
+    }
+  };
+
+  class writer_configuration
   {
-    appender.push_back (0);
-    ::dw_write_uleb128 (std::back_inserter (appender), _m_buf.size () + 1);
-    appender.push_back (_m_opcode);
-    linenum_prog_instruction::write (appender);
-  }
-};
+    bool _m_big_endian;
+    bool _m_addr_64;
+    bool _m_dwarf_64;
+
+  public:
+    writer_configuration (bool big_endian, bool addr_64, bool dwarf_64)
+      : _m_big_endian (big_endian),
+	_m_addr_64 (addr_64),
+	_m_dwarf_64 (dwarf_64)
+    {}
+
+    ::standard_opcode standard_opcode (int opcode)
+    {
+      return ::standard_opcode (opcode,
+				_m_big_endian, _m_addr_64, _m_dwarf_64);
+    }
+
+    ::extended_opcode extended_opcode (int opcode)
+    {
+      return ::extended_opcode (opcode,
+				_m_big_endian, _m_addr_64, _m_dwarf_64);
+    }
+  };
+}
 
 void
 dwarf_output::writer::output_debug_line (section_appender &appender)
@@ -1653,9 +1707,14 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 
       header_length.finish ();
 
-      extended_opcode opc (DW_LNE_end_sequence,
-			   _m_big_endian, _m_addr_64, _m_dwarf_64);
-      opc.write (appender);
+      writer_configuration conf (_m_big_endian, _m_addr_64, _m_dwarf_64);
+      conf.standard_opcode (DW_LNS_advance_pc)
+	.arg (10000)
+	.write (appender);
+      conf.standard_opcode (DW_LNS_copy)
+	.write (appender);
+      conf.extended_opcode (DW_LNE_end_sequence)
+	.write (appender);
 
       lf.finish ();
     }
