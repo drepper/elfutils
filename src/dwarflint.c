@@ -5161,7 +5161,7 @@ check_line_structural (struct elf_file *file,
 	      char buf[128];
 	      if (opcode != 0)
 		sprintf (buf, "operand #%d of DW_LNS_%s",
-			 i, dwarf_locexpr_opcode_string (opcode));
+			 i, dwarf_line_standard_opcode_string (opcode));
 	      else
 		sprintf (buf, "operand #%d of extended opcode %d",
 			 i, extended);

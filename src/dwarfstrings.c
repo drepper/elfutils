@@ -630,3 +630,28 @@ dwarf_locexpr_opcode_string (unsigned int code)
 
   return ret;
 }
+
+
+const char *
+dwarf_line_standard_opcode_string (unsigned int code)
+{
+  static const char *const known[] =
+    {
+#define ONE_KNOWN_DW_LNS(NAME, CODE) [CODE] = #NAME,
+      ALL_KNOWN_DW_LNS
+#undef ONE_KNOWN_DW_LNS
+    };
+
+  const char *ret = NULL;
+  if (likely (code < sizeof (known) / sizeof (known[0])))
+    ret = known[code];
+
+  if (ret == NULL)
+    {
+      static char buf[40];
+      snprintf (buf, sizeof buf, gettext ("unknown opcode %x"), code);
+      ret = buf;
+    }
+
+  return ret;
+}
