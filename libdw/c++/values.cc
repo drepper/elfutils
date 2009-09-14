@@ -688,3 +688,16 @@ namespace elfutils
     return dec_string (size (), "{", " line entries}");
   }
 };
+
+::Dwarf_Off
+dwarf::debug_info_entry::cost () const
+{
+  Dwarf_Die next;
+  int result = dwarf_siblingof (thisdie (), &next);
+  xif (result < 0);
+  if (result == 0)
+    return (const char *) next.addr - (const char *) _m_die.addr;
+  if (next.addr != NULL)
+    return (const char *) next.addr - (const char *) _m_die.addr + 1;
+  return _m_die.cu->end - dwarf_dieoffset (thisdie ());
+}

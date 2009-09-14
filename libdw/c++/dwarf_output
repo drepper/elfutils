@@ -385,6 +385,11 @@ namespace elfutils
       {
 	return identity ();
       }
+
+      inline ::Dwarf_Off cost () const
+      {
+	return 0;
+      }
     };
 
     class attr_value
@@ -694,11 +699,13 @@ namespace elfutils
   {
     die_info_pair *_m_parent;
     std::queue<value::value_reference *> _m_refs;
+    ::Dwarf_Off _m_original_cost;
     std::bitset<2> _m_with_sibling;
     unsigned int _m_uses;
 
     inline die_info ()
-      : _m_parent (NULL), _m_refs (), _m_with_sibling (), _m_uses (0)
+      : _m_parent (NULL), _m_refs (),
+	_m_original_cost (0), _m_with_sibling (), _m_uses (0)
     {}
 
     inline ~die_info ()
@@ -932,7 +939,13 @@ namespace elfutils
       std::cout << std::dec << elt.second._m_uses
 		<< "\thash=" << std::hex << subr::hash_this (elt.first)
 		<< "\t(" << elt.second._m_with_sibling.to_string () << ")\t"
-		<< to_string (elt.first) << "\n";
+		<< std::dec << elt.second._m_original_cost;
+      if (elt.second._m_uses > 1)
+	std::cout << " ("
+		  << (double (elt.second._m_original_cost)
+		      / double (elt.second._m_uses - 1))
+		  << ")";
+      std::cout << "\t" << to_string (elt.first) << "\n";
     }
 
   public:
@@ -1289,6 +1302,7 @@ namespace elfutils
       : public value::value_dispatch
     {
       ::Dwarf_Off _m_offset; // XXX debugging only
+      ::Dwarf_Off _m_cost;   // For statistics only.
 
       // Set if we are building this in the copying walk right now.
       entry_copier *_m_building;
@@ -1666,6 +1680,8 @@ namespace elfutils
 		      _m_building != NULL && refs_dangling);
 
 	dump (false, true) << " final done\n";
+
+	_m_final->second._m_original_cost += _m_cost;
       }
 
       /* This is called from pending_entry::final when resolving
@@ -1757,6 +1773,7 @@ namespace elfutils
 	if (unlikely (_m_in->_m_building != NULL))
 	  throw std::runtime_error ("detected cycle in logical DWARF tree");
 	_m_in->_m_building = this;
+	_m_in->_m_cost = in.cost ();
       }
 
       // On destruction, we clear _m_building.

@@ -508,6 +508,8 @@ namespace elfutils
       {
 	return (uintptr_t) _m_die.addr;
       }
+
+      ::Dwarf_Off cost () const;
     };
 
     // Container for raw list of child DIEs, intended to be a compatible with

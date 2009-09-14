@@ -252,6 +252,11 @@ namespace elfutils
 	return identity ();
       }
 
+      inline ::Dwarf_Off cost () const
+      {
+	return 0;
+      }
+
       // Convenience entry point.
       inline pointer add_entry (int child_tag)
       {
