@@ -528,16 +528,14 @@ dwarf_output::writer::write_var (Iterator it, unsigned width, uint64_t value)
 }
 
 
-namespace
+// Check that the value fits into 32-bits if !dwarf_64.  If it
+// doesn't throw an exception.  The client will then be able to
+// restart the process with dwarf_64 == true.
+void
+dwarf_output::writer::assert_fits_32 (uint64_t value) const
 {
-  // Check that the value fits into 32-bits if !dwarf_64.  If it
-  // doesn't throw an exception.  The client will then be able to
-  // restart the process with dwarf_64 == true.
-  void assert_fits_32 (bool dwarf_64, uint64_t value)
-  {
-    if (!dwarf_64 && value > (uint64_t)(uint32_t)-1)
-      throw dwarf_output::writer::dwarf_32_not_enough ();
-  }
+  if (!_m_config.dwarf_64 && value > (uint64_t)(uint32_t)-1)
+    throw dwarf_output::writer::dwarf_32_not_enough ();
 }
 
 dwarf_output::writer::configuration::configuration (bool a_big_endian,
@@ -585,7 +583,7 @@ dwarf_output::writer::write_form (Iterator it, int form, uint64_t value)
     case DW_FORM_ref_addr:
     case DW_FORM_strp:
     case DW_FORM_sec_offset:
-      assert_fits_32 (_m_config.dwarf_64, value);
+      assert_fits_32 (value);
       write_64 (it, _m_config.dwarf_64, value);
       return;
 
@@ -727,6 +725,8 @@ namespace
 	  return count;
 	}
 
+      // xxx string logic should be extracted and treated using
+      // different pass
       case DW_FORM_string:
 	return value + 1; /* For strings, we yield string length plus
 			     terminating zero.  */
@@ -1374,7 +1374,7 @@ public:
   {
     assert (!_m_finished);
     size_t length = _m_appender.size () - _m_cu_start - _m_length_length;
-    assert_fits_32 (_m_parent._m_config.dwarf_64, length);
+    _m_parent.assert_fits_32 (length);
     _m_length_gap.patch (length);
     _m_finished = true;
   }

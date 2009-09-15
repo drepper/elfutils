@@ -960,6 +960,9 @@ namespace elfutils
     template <class Iterator>
     void write_form (Iterator it, int form, uint64_t value);
 
+    /// @throws dwarf_32_not_enough
+    void assert_fits_32 (uint64_t value) const;
+
   public:
 
     struct dwarf_32_not_enough
