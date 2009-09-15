@@ -1568,15 +1568,17 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
     {
       dwarf_output::line_info_table const &lt = it->second;
 
-      length_field lf (*this, appender);
+      length_field table_length (*this, appender);
       ::write_version (appender, _m_config.big_endian, 3);
       length_field header_length (*this, appender);
 
       // minimum_instruction_length
-      appender.push_back (1);
+      unsigned minimum_instruction_length = 1;
+      appender.push_back (minimum_instruction_length);
 
       // default_is_stmt
-      appender.push_back (1);
+      bool default_is_stmt = true;
+      appender.push_back (default_is_stmt ? 1 : 0);
 
       // line_base, line_range
       appender.push_back (uint8_t (int8_t (0)));
@@ -1609,21 +1611,31 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
       *inserter++ = 0;
 
       // file_names
-      typedef std::tr1::unordered_set<dwarf_output::source_file,
+      typedef std::tr1::unordered_map<dwarf_output::source_file, size_t,
 	dwarf_output::source_file::hasher>
-	source_file_set;
-      source_file_set source_files;
+	source_file_map;
+      source_file_map source_files;
       dwarf_output::line_table const &lines = lt.lines ();
       for (dwarf_output::line_table::const_iterator line_it = lines.begin ();
 	   line_it != lines.end (); ++line_it)
 	{
-	  dwarf_output::line_entry const &line = *line_it;
-	  source_files.insert (line.file ());
+	  dwarf_output::line_entry const &entry = *line_it;
+	  dwarf_output::source_file const &file = entry.file ();
+	  source_file_map::const_iterator sfit
+	    = source_files.find (file);
+	  if (sfit == source_files.end ())
+	    source_files.insert (std::make_pair (file, 0));
 	}
-      for (source_file_set::const_iterator sfit = source_files.begin ();
+      {
+	size_t file_idx = 0;
+	for (source_file_map::iterator sfit = source_files.begin ();
+	     sfit != source_files.end (); ++sfit)
+	  sfit->second = ++file_idx;
+      }
+      for (source_file_map::const_iterator sfit = source_files.begin ();
 	   sfit != source_files.end (); ++sfit)
 	{
-	  dwarf_output::source_file const &sf = *sfit;
+	  dwarf_output::source_file const &sf = sfit->first;
 
 	  // Find the best-fitting directory for this filename.
 	  size_t dir_index = 0;
@@ -1651,15 +1663,119 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 
       header_length.finish ();
 
-      standard_opcode (*this, DW_LNS_advance_pc)
-	.arg (10000)
-	.write (appender);
-      standard_opcode (*this, DW_LNS_copy)
-	.write (appender);
-      extended_opcode (*this, DW_LNE_end_sequence)
-	.write (appender);
+      // Now emit the "meat" of the table: the line number program.
+      struct registers
+      {
+	::Dwarf_Addr addr;
+	unsigned file;
+	unsigned line;
+	unsigned column;
+	bool is_stmt;
+	bool default_is_stmt;
 
-      lf.finish ();
+	void init ()
+	{
+	  addr = 0;
+	  file = 1;
+	  line = 1;
+	  column = 0;
+	  is_stmt = default_is_stmt;
+	}
+
+	explicit registers (bool b)
+	  : default_is_stmt (b)
+	{
+	  init ();
+	}
+      } reg (default_is_stmt);
+
+      for (dwarf_output::line_table::const_iterator line_it = lines.begin ();
+	   line_it != lines.end (); ++line_it)
+	{
+	  dwarf_output::line_entry const &entry = *line_it;
+	  ::Dwarf_Addr addr = entry.address ();
+	  unsigned file = source_files.find (entry.file ())->second;
+	  unsigned line = entry.line ();
+	  unsigned column = entry.column ();
+	  bool is_stmt = entry.statement ();
+
+#if 0
+	  std::cout << std::hex << addr << std::dec
+		    << "\t" << file
+		    << "\t" << line
+		    << "\t" << column
+		    << "\t" << is_stmt
+		    << "\t" << entry.end_sequence () << std::endl;
+#endif
+
+#define ADVANCE_OPCODE(WHAT, STEP, OPCODE)		\
+	  {						\
+	    __typeof (WHAT) const &what = WHAT;		\
+	    __typeof (WHAT) const &reg_what = reg.WHAT;	\
+	    unsigned step = STEP;			\
+	    if (what != reg_what)			\
+	      {						\
+		assert (what > reg_what);		\
+		unsigned delta = what - reg_what;	\
+		unsigned advance = delta / step;	\
+		assert (advance * step == delta);	\
+		standard_opcode (*this, OPCODE)		\
+		  .arg (advance)			\
+		  .write (appender);			\
+	      }						\
+	  }
+
+#define SET_OPCODE(WHAT, OPCODE)			\
+	  {						\
+	    __typeof (WHAT) const &what = WHAT;		\
+	    __typeof (WHAT) const &reg_what = reg.WHAT;	\
+	    if (what != reg_what)			\
+	      standard_opcode (*this, OPCODE)		\
+		.arg (what)				\
+		.write (appender);			\
+	  }
+
+#define SIMPLE_OPCODE(WHAT, OPCODE)		\
+	  if (entry.WHAT ())			\
+	    standard_opcode (*this, OPCODE)	\
+	      .write (appender);
+
+	  ADVANCE_OPCODE (addr, minimum_instruction_length, DW_LNS_advance_pc);
+	  SET_OPCODE (file, DW_LNS_set_file);
+	  ADVANCE_OPCODE (line, 1, DW_LNS_advance_line);
+	  SET_OPCODE (column, DW_LNS_set_column);
+	  SIMPLE_OPCODE (basic_block, DW_LNS_set_basic_block);
+	  SIMPLE_OPCODE (prologue_end, DW_LNS_set_prologue_end);
+	  SIMPLE_OPCODE (epilogue_begin, DW_LNS_set_epilogue_begin);
+
+	  if (is_stmt != reg.is_stmt)
+	    standard_opcode (*this, DW_LNS_negate_stmt)
+	      .write (appender);
+
+#undef SIMPLE_OPCODE
+#undef SET_OPCODE
+#undef ADVANCE_OPCODE
+
+	  if (entry.end_sequence ())
+	    {
+	      extended_opcode (*this, DW_LNE_end_sequence)
+		.write (appender);
+	      reg.init ();
+	    }
+	  else
+	    {
+	      standard_opcode (*this, DW_LNS_copy)
+		.write (appender);
+
+	      reg.addr = addr;
+	      reg.file = file;
+	      reg.line = line;
+	      reg.column = column;
+	      reg.is_stmt = is_stmt;
+	    }
+	}
+
+      table_length.finish ();
     }
 }
 
