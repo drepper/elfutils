@@ -50,6 +50,8 @@ static bool elide_refs;
 static bool dump_refs;
 static bool no_print;
 static bool output_stats;
+static bool refs_shared_cu;
+static bool refs_shared_file;
 
 static enum { copy_none, copy_edit, copy_output } make_copy;
 
@@ -84,6 +86,20 @@ print_die_main (int &argc, char **&argv, unsigned int &depth)
   if (argc > 1 && !strcmp (argv[1], "--dump-refs"))
     {
       dump_refs = true;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--refs-shared-cu"))
+    {
+      refs_shared_cu = true;
+      --argc;
+      ++argv;
+    }
+
+  if (argc > 1 && !strcmp (argv[1], "--refs-shared-file"))
+    {
+      refs_shared_file = refs_shared_cu = true;
       --argc;
       ++argv;
     }
@@ -277,20 +293,16 @@ dump_nth (pair<int, int> p)
 
 template<typename file>
 static void
-print_cu (const typename file::compile_unit &cu, const unsigned int limit)
+print_cu (const typename file::compile_unit &cu, const unsigned int limit,
+	  refs_map &refs)
 {
-  const typename file::debug_info_entry &die = cu;
-  // static_cast<const typename file::debug_info_entry &> (cu),
-
-  refs_map refs;
+  const typename file::debug_info_entry &die
+    = static_cast<const typename file::debug_info_entry &> (cu);
 
   if (!print_offset && !elide_refs)
     prewalk_die<file> (die, refs);
 
   print_die<file> (die, 1, limit, refs);
-
-  if (dump_refs)
-    for_each (nth_ref.begin (), nth_ref.end (), dump_nth);
 }
 
 template<typename file>
@@ -300,9 +312,21 @@ print_file (const file &dw, const unsigned int limit)
   if (no_print)
     return;
 
+  static refs_map common_refs;
+  refs_map file_refs;
+
   for (typename file::compile_units::const_iterator i
 	 = dw.compile_units ().begin (); i != dw.compile_units ().end (); ++i)
-    print_cu<file> (*i, limit);
+    if (refs_shared_cu)
+      print_cu<file> (*i, limit, refs_shared_file ? common_refs : file_refs);
+    else
+      {
+	refs_map refs;
+	print_cu<file> (*i, limit, refs);
+      }
+
+  if (dump_refs)
+    for_each (nth_ref.begin (), nth_ref.end (), dump_nth);
 }
 
 template<typename file>
