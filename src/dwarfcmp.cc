@@ -145,6 +145,24 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   typedef typename _base::dwarf1_die::attributes_type::const_iterator attr1;
   typedef typename _base::dwarf2_die::attributes_type::const_iterator attr2;
 
+  template<typename die>
+  struct die_hasher
+    : public std::unary_function<die, dwarf::debug_info_entry::identity_type>
+  {
+    inline dwarf::debug_info_entry::identity_type
+    operator () (const die &ref) const
+    {
+      return (*ref).identity ();
+    }
+  };
+
+  typedef std::tr1::unordered_set<die2, die_hasher<die2> > die2_set;
+  typedef std::tr1::unordered_map<die1, die2_set,
+				  die_hasher<die1> > context_map;
+  context_map bad_context_;
+
+  string prefix_;
+
   const typename dwarf1::debug_info_entry *a_;
   const typename dwarf2::debug_info_entry *b_;
   bool result_;
@@ -164,7 +182,9 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 
   inline ostream &location () const
   {
-    return cout << hex << a_->offset () << " vs " << b_->offset () << ": ";
+    return cout << prefix_
+		<< hex << a_->offset () << " vs " << b_->offset ()
+		<< ": ";
   }
 
   inline void visit (const typename dwarf1::debug_info_entry &a,
@@ -284,7 +304,10 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
       cout << " (XXX refs now equal again!)"
 	   << (cmp.equals (*ref1, *ref2) ? "" : " (and not identical!!)");
     else if (cmp.equals (*ref1, *ref2))
-      cout << " (identical but contexts mismatch)";
+      {
+	cout << " (identical but contexts mismatch)";
+	bad_context_[ref1].insert (ref2);
+      }
     else
       {
 	_base notracker;
@@ -296,6 +319,60 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 	       << " != " << ref2->to_string ()
 	       << ")";
       }
+  }
+
+  inline void print_one_bad_context (const die1 &ref1, const die2 &ref2)
+  {
+    dwarf_comparator<dwarf1, dwarf2, true, talker> cmp (*this);
+
+    {
+      ostringstream pfx;
+      pfx << hex << (*ref1).offset () << " vs " << (*ref2).offset ()
+	  << " context: ";
+      prefix_ = pfx.str ();
+    }
+
+    typename subtracker::left_context_type left = left_context (ref1);
+    typename subtracker::right_context_type right = right_context (ref2);
+
+    left.pop ();
+    right.pop ();
+    while (!left.empty ())
+      {
+	if (right.empty ())
+	  {
+	    cout << prefix_
+		 << (*left.const_top ()).offset () << " vs top-level" << endl;
+	    return;
+	  }
+
+	// This prints the differences if it finds some.
+	visit (*left.const_top (), *right.const_top ());
+	if (!visiting_result_)
+	  {
+	    cout << endl;
+	    return;
+	  }
+	if (!cmp.equals (a_->attributes (), b_->attributes ()))
+	  return;
+
+	left.pop ();
+	right.pop ();
+      }
+    if (!right.empty ())
+      cout << prefix_
+	   << "top-level vs " << (*right.const_top ()).offset () << endl;
+  }
+
+  inline void print_bad_context ()
+  {
+    for (typename context_map::const_iterator i = bad_context_.begin ();
+	 i != bad_context_.end ();
+	 ++i)
+      for (typename die2_set::const_iterator j = i->second.begin ();
+	   j != i->second.end ();
+	   ++j)
+	print_one_bad_context (i->first, *j);
   }
 };
 
@@ -329,17 +406,15 @@ struct noisy_cmp
 {
   inline bool operator () (const dwarf1 &a, const dwarf2 &b)
   {
-    return equals (a, b) && this->_m_tracker.result_;
+    if (equals (a, b) && this->_m_tracker.result_)
+      {
+	assert (this->_m_tracker.bad_context_.empty ());
+	return true;
+      }
+    this->_m_tracker.print_bad_context ();
+    return false;
   }
 };
-
-
-template<class dwarf1, class dwarf2, bool print_all>
-static inline bool
-noisy_compare (const dwarf1 &a, const dwarf2 &b)
-{
-  return noisy_cmp<dwarf1, dwarf2, print_all> () (a, b);
-}
 
 template<class dwarf1, class dwarf2>
 static inline bool

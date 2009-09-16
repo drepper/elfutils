@@ -1,3 +1,8 @@
+2009-09-15  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (talker, noisy_cmp): Describe context mismatch details
+	at the end.
+
 2009-08-27  Roland McGrath  <roland@redhat.com>
 
 	* dwarfcmp.cc (do_writer_test): New function, broken out of ...
