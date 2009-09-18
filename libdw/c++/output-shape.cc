@@ -338,8 +338,9 @@ namespace
 				  // principle, but optimizing
 				  // references is fun on its own and
 				  // for much later
-      case dwarf::VS_lineptr:
       case dwarf::VS_discr_list:
+      case dwarf::VS_lineptr:	// xxx but wait, if we emit lines
+				// first, we can optimize it.
 	return false;
       }
 
@@ -526,7 +527,6 @@ dwarf_output::writer::write_var (Iterator it, unsigned width, uint64_t value)
       throw std::runtime_error ("Width has to be 0, 1, 2, 4 or 8.");
     }
 }
-
 
 // Check that the value fits into 32-bits if !dwarf_64.  If it
 // doesn't throw an exception.  The client will then be able to
@@ -800,6 +800,16 @@ namespace
   {
     ::dw_write<2> (appender.alloc (2), version, big_endian);
   }
+}
+
+dwarf_output::writer::gap
+dwarf_output::writer::gap_for_form (section_appender &appender,
+				    int form, uint64_t base)
+{
+  size_t gap_size = ::form_width (form,
+				  _m_config.addr_64,
+				  _m_config.dwarf_64);
+  return gap (*this, appender, gap_size, base);
 }
 
 void
@@ -1170,11 +1180,8 @@ public:
 			<< " sibling=" << info._m_with_sibling[false]
 			<< ":" << info._m_with_sibling[true]
 			<< std::endl;
-	    size_t gap_size = ::form_width (form,
-					    _m_parent._m_config.addr_64,
-					    _m_parent._m_config.dwarf_64);
-	    step.sibling_gap = gap (_m_parent, appender, gap_size,
-				    _m_cu_start);
+	    step.sibling_gap = _m_parent.gap_for_form (appender, form,
+						       _m_cu_start);
 	    continue;
 	  }
 
@@ -1198,6 +1205,11 @@ public:
 	    break;
 
 	  case dwarf::VS_lineptr:
+	    _m_parent._m_line_backpatch.push_back
+	      (std::make_pair (_m_parent.gap_for_form (appender, form),
+			       &value.line_info ()));
+	    break;
+
 	  case dwarf::VS_rangelistptr:
 	  case dwarf::VS_macptr:
 	    _m_parent.write_form (inserter, form, 0 /*xxx*/);
@@ -1567,6 +1579,9 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
        it != _m_col._m_line_info.end (); ++it)
     {
       dwarf_output::line_info_table const &lt = it->second;
+      if (!_m_line_offsets.insert (std::make_pair (&lt, appender.size ()))
+	  .second)
+	throw std::runtime_error ("duplicate table address");
 
       length_field table_length (*this, appender);
       ::write_version (appender, _m_config.big_endian, 3);
@@ -1785,4 +1800,15 @@ dwarf_output::writer::apply_patches ()
   for (str_backpatch_vec::const_iterator it = _m_str_backpatch.begin ();
        it != _m_str_backpatch.end (); ++it)
     it->first.patch (ebl_strtaboffset (it->second));
+
+  for (line_backpatch_vec::const_iterator it = _m_line_backpatch.begin ();
+       it != _m_line_backpatch.end (); ++it)
+    {
+      line_offsets_map::const_iterator ot = _m_line_offsets.find (it->second);
+      if (ot == _m_line_offsets.end ())
+	// no point mentioning the key, since it's just a memory
+	// address...
+	throw std::runtime_error (".debug_line ref not found");
+      it->first.patch (ot->second);
+    }
 }

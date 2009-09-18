@@ -922,13 +922,19 @@ namespace elfutils
 
     class length_field;
 
-    typedef std::vector<std::pair<gap, ::Ebl_Strent *> > str_backpatch_vec;
+    typedef std::vector<std::pair<gap, ::Ebl_Strent *>> str_backpatch_vec;
+
+    typedef std::vector<std::pair<gap,
+				  line_info_table const *>> line_backpatch_vec;
+    typedef std::map<line_info_table const *, ::Dwarf_Off> line_offsets_map;
 
     dwarf_output_collector &_m_col;
     dwarf_output &_m_dw;
 
     strtab &_m_debug_str;
     str_backpatch_vec _m_str_backpatch;
+    line_backpatch_vec _m_line_backpatch;
+    line_offsets_map _m_line_offsets;
 
     // Set of shapes.
     typedef std::tr1::unordered_map<dwarf_output::shape_type,
@@ -959,6 +965,9 @@ namespace elfutils
 
     template <class Iterator>
     void write_form (Iterator it, int form, uint64_t value);
+
+    gap gap_for_form (section_appender &appender,
+		      int form, uint64_t base = 0);
 
     /// @throws dwarf_32_not_enough
     void assert_fits_32 (uint64_t value) const;
