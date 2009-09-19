@@ -802,16 +802,6 @@ namespace
   }
 }
 
-dwarf_output::writer::gap
-dwarf_output::writer::gap_for_form (section_appender &appender,
-				    int form, uint64_t base)
-{
-  size_t gap_size = ::form_width (form,
-				  _m_config.addr_64,
-				  _m_config.dwarf_64);
-  return gap (*this, appender, gap_size, base);
-}
-
 void
 dwarf_output::writer::write_string (std::string const &str,
 				    int form,
@@ -828,7 +818,7 @@ dwarf_output::writer::write_string (std::string const &str,
       assert (form == DW_FORM_strp);
 
       _m_str_backpatch.push_back
-	(std::make_pair (gap_for_form (appender, form),
+	(std::make_pair (gap (*this, appender, form),
 			 _m_debug_str.add (str)));
     }
 }
@@ -974,18 +964,19 @@ dwarf_output::writer::gap::gap (writer &parent)
 {}
 
 dwarf_output::writer::gap::gap (writer &parent, section_appender &appender,
-				size_t len, uint64_t base)
+				int form, uint64_t base)
   : _m_parent (parent),
-    _m_ptr (appender.alloc (len)),
-    _m_len (len),
+    _m_ptr (appender.alloc (::form_width (form, parent._m_config.addr_64,
+					  parent._m_config.dwarf_64))),
+    _m_form (form),
     _m_base (base)
 {}
 
 dwarf_output::writer::gap::gap (writer &parent, unsigned char *ptr,
-				size_t len, uint64_t base)
+				int form, uint64_t base)
   : _m_parent (parent),
     _m_ptr (ptr),
-    _m_len (len),
+    _m_form (form),
     _m_base (base)
 {}
 
@@ -994,7 +985,7 @@ dwarf_output::writer::gap::operator= (gap const &other)
 {
   assert (&_m_parent == &other._m_parent);
   _m_ptr = other._m_ptr;
-  _m_len = other._m_len;
+  _m_form = other._m_form;
   _m_base = other._m_base;
   return *this;
 }
@@ -1002,7 +993,7 @@ dwarf_output::writer::gap::operator= (gap const &other)
 void
 dwarf_output::writer::gap::patch (uint64_t value) const
 {
-  _m_parent.write_var (_m_ptr, _m_len, value - _m_base);
+  _m_parent.write_form (_m_ptr, _m_form, value - _m_base);
 }
 
 namespace
@@ -1169,18 +1160,13 @@ public:
 	int form = at->second;
 	if (attr == DW_AT_sibling)
 	  {
-	    // XXX in fact we want to handle this case just like any
-	    // other CU-local reference.  So also use this below (or
-	    // better reuse single piece of code for reference
-	    // handling).
 	    if (debug)
 	      std::cout << pad << "    " << dwarf_attr_string (attr)
 			<< ":" << dwarf_form_string (form)
 			<< " sibling=" << info._m_with_sibling[false]
 			<< ":" << info._m_with_sibling[true]
 			<< std::endl;
-	    step.sibling_gap = _m_parent.gap_for_form (appender, form,
-						       _m_cu_start);
+	    step.sibling_gap = gap (_m_parent, appender, form, _m_cu_start);
 	    continue;
 	  }
 
@@ -1205,7 +1191,7 @@ public:
 
 	  case dwarf::VS_lineptr:
 	    _m_parent._m_line_backpatch.push_back
-	      (std::make_pair (_m_parent.gap_for_form (appender, form),
+	      (std::make_pair (gap (_m_parent, appender, form),
 			       &value.line_info ()));
 	    break;
 
@@ -1247,11 +1233,8 @@ public:
 
 	  case dwarf::VS_source_file:
 	    if (source_file_is_string (tag, attr))
-	      {
-		_m_parent.write_string (value.source_file ().name (),
-					form, appender);
-		break;
-	      }
+	      _m_parent.write_string (value.source_file ().name (),
+				      form, appender);
 	    else
 	      _m_parent.write_form (inserter, form, 0 /*xxx*/);
 	    break;
@@ -1269,7 +1252,7 @@ public:
 	    {
 	      assert (form == DW_FORM_ref_addr);
 	      die_backpatch.push_back
-		(std::make_pair (_m_parent.gap_for_form (appender, form),
+		(std::make_pair (gap (_m_parent, appender, form),
 				 value.reference ()->offset ()));
 	    }
 	    break;
@@ -1368,10 +1351,9 @@ class dwarf_output::writer::length_field
   {
     if (_m_parent._m_config.dwarf_64)
       ::dw_write<4> (appender.alloc (4), -1, _m_parent._m_config.big_endian);
-    // It's tempting to form the gap with a base of appender.size()+w,
-    // but we need to assert_fits_32 when we finish, and thus need to
-    // calculate the length ourselves.
-    return _m_parent.gap_for_form (appender, DW_FORM_ref_addr);
+    gap g (_m_parent, appender, DW_FORM_ref_addr);
+    g.set_base (appender.size ());
+    return g;
   }
 
 public:
@@ -1387,9 +1369,7 @@ public:
   void finish ()
   {
     assert (!_m_finished);
-    size_t length = _m_appender.size () - _m_cu_start;
-    _m_parent.assert_fits_32 (length);
-    _m_length_gap.patch (length);
+    _m_length_gap.patch (_m_appender.size ());
     _m_finished = true;
   }
 };

@@ -904,19 +904,20 @@ namespace elfutils
     struct gap
     {
       gap (writer &parent);
-      gap (writer &parent, section_appender &appender, size_t len,
+      gap (writer &parent, section_appender &appender, int form,
 	   uint64_t base = 0);
-      gap (writer &parent, unsigned char *ptr, size_t len,
+      gap (writer &parent, unsigned char *ptr, int form,
 	   uint64_t base = 0);
       gap &operator= (gap const &other);
 
       void patch (uint64_t value) const;
       bool valid () const { return _m_ptr != NULL; }
+      void set_base (uint64_t base) { _m_base = base; }
 
     private:
       writer &_m_parent;
       unsigned char *_m_ptr;
-      size_t _m_len;
+      int _m_form;
       uint64_t _m_base;
     };
 
@@ -965,9 +966,6 @@ namespace elfutils
 
     template <class Iterator>
     void write_form (Iterator it, int form, uint64_t value);
-
-    gap gap_for_form (section_appender &appender,
-		      int form, uint64_t base = 0);
 
     /// @throws dwarf_32_not_enough
     void assert_fits_32 (uint64_t value) const;
