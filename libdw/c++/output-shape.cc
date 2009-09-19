@@ -827,9 +827,8 @@ dwarf_output::writer::write_string (std::string const &str,
     {
       assert (form == DW_FORM_strp);
 
-      // xxx dwarf_64
       _m_str_backpatch.push_back
-	(std::make_pair (gap (*this, appender, 4),
+	(std::make_pair (gap_for_form (appender, form),
 			 _m_debug_str.add (str)));
     }
 }
@@ -1269,9 +1268,8 @@ public:
 	  case dwarf::VS_reference:
 	    {
 	      assert (form == DW_FORM_ref_addr);
-	      size_t w = _m_parent._m_config.dwarf_64 ? 8 : 4;
 	      die_backpatch.push_back
-		(std::make_pair (gap (_m_parent, appender, w),
+		(std::make_pair (_m_parent.gap_for_form (appender, form),
 				 value.reference ()->offset ()));
 	    }
 	    break;
@@ -1362,30 +1360,34 @@ class dwarf_output::writer::length_field
 {
   writer &_m_parent;
   elfutils::section_appender &_m_appender;
-  const size_t _m_length_length;
+  const gap _m_length_gap;
   const size_t _m_cu_start;
-  gap _m_length_gap;
   bool _m_finished;
+
+  gap alloc_gap (elfutils::section_appender &appender) const
+  {
+    if (_m_parent._m_config.dwarf_64)
+      ::dw_write<4> (appender.alloc (4), -1, _m_parent._m_config.big_endian);
+    // It's tempting to form the gap with a base of appender.size()+w,
+    // but we need to assert_fits_32 when we finish, and thus need to
+    // calculate the length ourselves.
+    return _m_parent.gap_for_form (appender, DW_FORM_ref_addr);
+  }
 
 public:
   length_field (writer &parent,
 		elfutils::section_appender &appender)
     : _m_parent (parent),
       _m_appender (appender),
-      _m_length_length (parent._m_config.dwarf_64 ? 12 : 4),
+      _m_length_gap (alloc_gap (appender)),
       _m_cu_start (appender.size ()),
-      _m_length_gap (parent),
       _m_finished (false)
-  {
-    if (parent._m_config.dwarf_64)
-      ::dw_write<4> (appender.alloc (4), -1, parent._m_config.big_endian);
-    _m_length_gap = gap (parent, appender, _m_length_length);
-  }
+  {}
 
   void finish ()
   {
     assert (!_m_finished);
-    size_t length = _m_appender.size () - _m_cu_start - _m_length_length;
+    size_t length = _m_appender.size () - _m_cu_start;
     _m_parent.assert_fits_32 (length);
     _m_length_gap.patch (length);
     _m_finished = true;
