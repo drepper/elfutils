@@ -67,7 +67,6 @@ namespace elfutils
     typedef typename dwarf2_die::children_type::const_iterator die2;
     typedef typename dwarf1_die::attributes_type::const_iterator attr1;
     typedef typename dwarf2_die::attributes_type::const_iterator attr2;
-    typedef typename dwarf1_die::children_type::iterator dwarf1_ref;
 
     // This object is created to start a walk and destroyed to finish one.
     struct walk
@@ -170,6 +169,12 @@ namespace elfutils
       return result;
     }
 
+    template<typename item1, typename item2>
+    inline bool identical (const item1 &, const item2 &)
+    {
+      return false;
+    }
+
     inline dwarf_tracker_base ()
     {}
 
@@ -203,7 +208,7 @@ namespace elfutils
 
       inline bool operator () (const item1 &a, const item2 &b)
       {
-	return _m_cmp.match (a, b);
+	return _m_cmp.equals (a, b);
       }
     };
 #define MATCHER(item) \
@@ -240,7 +245,7 @@ namespace elfutils
     inline bool match (const cu1_it &a, const cu2_it &b)
     {
       typename tracker::walk in (&_m_tracker, a, b);
-      return match (*a, *b);
+      return equals (*a, *b);
     }
 
     inline bool match (const die1 &a, const die2 &b)
@@ -248,9 +253,9 @@ namespace elfutils
       _m_tracker.visit (a, b);
       if (a.tag () != b.tag ())
 	return nomatch (a, b, "DIE tag");
-      if (!match (a.attributes (), b.attributes ()))
+      if (!equals (a.attributes (), b.attributes ()))
 	return nomatch (a, b, "DIE attrs");
-      if (! match (a.children (), b.children ()))
+      if (!equals (a.children (), b.children ()))
 	return nomatch (a, b, "DIE children");
       return true;
     }
@@ -290,7 +295,7 @@ namespace elfutils
 
       inline bool operator () (const ait1 &it1, const ait2 &it2)
       {
-	return _m_cmp.match ((*it1).second, (*it2).second);
+	return _m_cmp.equals ((*it1).second, (*it2).second);
       }
     };
 
@@ -308,7 +313,7 @@ namespace elfutils
 			       const typename ait2_map::value_type &y)
       {
 	return (x.first == y.first
-		&& _m_cmp.match ((*x.second).second, (*y.second).second));
+		&& _m_cmp.equals ((*x.second).second, (*y.second).second));
       }
     };
 
@@ -368,7 +373,7 @@ namespace elfutils
     inline bool match_child (const cit1 &a, const cit2 &b)
     {
       typename tracker::step into (&_m_tracker, a, b);
-      return match (*a, *b);
+      return equals (*a, *b);
     }
 
     inline bool match (const cit1 &a, const cit2 &b)
@@ -405,7 +410,7 @@ namespace elfutils
     typedef typename dwarf2::attribute attribute2;
     inline bool match (const attribute1 &a, const attribute2 &b)
     {
-      return a.first == b.first && match (a.second, b.second);
+      return a.first == b.first && equals (a.second, b.second);
     }
 
     typedef typename dwarf1::attr_value attr_value1;
@@ -551,7 +556,7 @@ namespace elfutils
     template<typename item1, typename item2>
     inline bool equals (const item1 &a, const item2 &b)
     {
-      return match (a, b);
+      return _m_tracker.identical (a, b) || match (a, b);
     }
 
     /* Predicate for DIEs "equal enough" to match as context for a subtree.
