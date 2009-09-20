@@ -23,6 +23,12 @@ namespace elfutils
 {
   namespace subr
   {
+    template<typename container_type, typename op_type>
+    inline void for_each (container_type &container, op_type op)
+    {
+      std::for_each (container.begin (), container.end (), op);
+    }
+
     template<typename T>
     struct hash : public T::hasher {};
 
@@ -115,7 +121,7 @@ namespace elfutils
       inline size_t operator () (const T &x) const
       {
 	hasher h;
-	std::for_each (x.begin (), x.end (), h);
+	for_each (x, h);
 	return h._m_hash;
       }
     };
@@ -143,7 +149,7 @@ namespace elfutils
       inline size_t operator () (const std::string &x) const
       {
 	hasher h;
-	std::for_each (x.begin (), x.end (), h);
+	for_each (x, h);
 	return h._m_hash;
       }
     };
@@ -512,7 +518,7 @@ namespace elfutils
 	    hash_combine (_m_hash, p);
 	  }
 	};
-	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
+	for_each (static_cast<_base &> (*this), hashit (_m_hash));
       }
 
     public:
@@ -585,7 +591,7 @@ namespace elfutils
 	    hash_combine (_m_hash, p.second.first);
 	  }
 	};
-	std::for_each (_base::begin (), _base::end (), hashit (_m_hash));
+	for_each (static_cast<_base &> (*this), hashit (_m_hash));
       }
 
     public:
@@ -1353,6 +1359,11 @@ namespace elfutils
        place of std::cout et al for disabled debugging spew.  */
     struct nostream
     {
+      inline const nostream &operator<< (std::ostream &(*) (std::ostream &))
+      {
+	return *this;
+      }
+
       template<typename arg>
       inline const nostream &operator<< (const arg &) const
       {
