@@ -147,9 +147,7 @@ static string
 hex_string (Dwarf_Word value, const char *before = "", const char *after = "")
 {
   std::ostringstream os;
-  os.setf (std::ios::hex, std::ios::basefield);
-  os.setf (std::ios::showbase);
-  os << before << value << after;
+  os << std::hex << std::showbase << before << value << after;
   return os.str ();
 }
 
@@ -478,10 +476,8 @@ string
 __libdw_ranges_to_string (const container &c)
 {
   std::ostringstream os;
-  os.setf (std::ios::hex, std::ios::basefield);
-  os.setf (std::ios::showbase);
 
-  os << "<";
+  os << "<" << std::hex << std::showbase;
 
   bool first = true;
   for (typename container::const_iterator i = c.begin (); i != c.end (); ++i)

@@ -187,9 +187,7 @@ namespace elfutils
     static inline std::string hex_string (int code)
     {
       std::ostringstream os;
-      os.setf (std::ios::hex, std::ios::basefield);
-      os.setf (std::ios::showbase);
-      os << code;
+      os << std::hex << std::showbase << code;
       return os.str ();
     }
 
