@@ -106,7 +106,7 @@ expected_value_space (int attr, int tag)
       return VS(source_file);
 
     case DW_AT_const_value:
-      return VS(constant) | VS(string);
+      return VS(constant) | VS(string) | VS(address);
 
     case DW_AT_is_optional:
     case DW_AT_prototyped:

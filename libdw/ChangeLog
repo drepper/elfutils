@@ -1,3 +1,8 @@
+2009-09-21  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf-knowledge.cc (expected_value_space): DW_AT_const_value can
+	take an address too.
+
 2009-09-08  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_output: Match duplicates going into the collector even
