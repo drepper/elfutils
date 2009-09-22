@@ -4678,7 +4678,6 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 
       printf ("           %*s%-20s ",
 	      (int) (level * 2), "", dwarf_attr_string (attr));
-      print_block (block.length, block.data);
 
       switch (attr)
 	{
@@ -4704,6 +4703,10 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	  print_ops (cbargs->dwflmod, cbargs->dbg,
 		     12 + level * 2, 12 + level * 2,
 		     cbargs->addrsize, block.length, block.data);
+	  break;
+
+	default:
+	  print_block (block.length, block.data);
 	  break;
 	}
       break;

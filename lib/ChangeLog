@@ -2,6 +2,10 @@
 
 	* eu-config.h (__STDC_LIMIT_MACROS): Define it.
 
+2009-08-09  Roland McGrath  <roland@redhat.com>
+
+	* eu-config.h (OLD_VERSION, NEW_VERSION, COMPAT_VERSION): New macros.
+
 2009-01-23  Roland McGrath  <roland@redhat.com>
 
 	* eu-config.h: Add multiple inclusion protection.

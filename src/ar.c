@@ -45,7 +45,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <sys/statfs.h>
 #include <sys/time.h>
 
 #include <system.h>
@@ -234,7 +233,7 @@ MEMBER parameter required for 'a', 'b', and 'i' modifiers"));
 
   if ((dont_replace_existing || allow_truncate_fname)
       && unlikely (operation != oper_extract))
-    error (1, 0, gettext ("'%' is only meaningful with the 'x' option"),
+    error (1, 0, gettext ("'%c' is only meaningful with the 'x' option"),
 	   dont_replace_existing ? 'C' : 'T');
 
   /* There must at least be one more parameter specifying the archive.   */
@@ -459,8 +458,21 @@ do_oper_extract (int oper, const char *arfname, char **argv, int argc,
   bool found[argc];
   memset (found, '\0', sizeof (found));
 
-  struct statfs f;
-  f.f_namelen = 0;
+  size_t name_max = 0;
+  inline bool should_truncate_fname (void)
+  {
+    if (errno == ENAMETOOLONG && allow_truncate_fname)
+      {
+	if (name_max == 0)
+	  {
+	    long int len = pathconf (".", _PC_NAME_MAX);
+	    if (len > 0)
+	      name_max = len;
+	  }
+	return name_max != 0;
+      }
+    return false;
+  }
 
   off_t index_off = -1;
   size_t index_size = 0;
@@ -611,15 +623,14 @@ do_oper_extract (int oper, const char *arfname, char **argv, int argc,
 		    {
 		      int printlen = INT_MAX;
 
-		      if (errno == ENAMETOOLONG && allow_truncate_fname
-			  && (f.f_namelen != 0 || statfs (".", &f) == 0))
+		      if (should_truncate_fname ())
 			{
 			  /* Try to truncate the name.  First find out by how
 			     much.  */
-			  printlen = f.f_namelen;
-			  char truncfname[f.f_namelen + 1];
+			  printlen = name_max;
+			  char truncfname[name_max + 1];
 			  *((char *) mempcpy (truncfname, arhdr->ar_name,
-					      f.f_namelen)) = '\0';
+					      name_max)) = '\0';
 
 			  xfd = open (truncfname, flags, 0600);
 			}
@@ -701,15 +712,14 @@ do_oper_extract (int oper, const char *arfname, char **argv, int argc,
 		    {
 		      int printlen = INT_MAX;
 
-		      if (errno == ENAMETOOLONG && allow_truncate_fname
-			  && (f.f_namelen != 0 || statfs (".", &f) == 0))
+		      if (should_truncate_fname ())
 			{
 			  /* Try to truncate the name.  First find out by how
 			     much.  */
-			  printlen = f.f_namelen;
-			  char truncfname[f.f_namelen + 1];
+			  printlen = name_max;
+			  char truncfname[name_max + 1];
 			  *((char *) mempcpy (truncfname, arhdr->ar_name,
-					      f.f_namelen)) = '\0';
+					      name_max)) = '\0';
 
 			  if (dont_replace_existing)
 			    {

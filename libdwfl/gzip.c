@@ -48,65 +48,52 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "libdwflP.h"
+#include "system.h"
 
 #include <unistd.h>
 
-#ifdef BZLIB
-# define inflate_groks_header	true
-# define mapped_zImage(...)	false
+#ifdef LZMA
+# define USE_INFLATE	1
+# include <lzma.h>
+# define unzip		__libdw_unlzma
+# define DWFL_E_ZLIB	DWFL_E_LZMA
+# define MAGIC		"\xFD" "7zXZ\0" /* XZ file format.  */
+# define MAGIC2		"\x5d\0"	/* Raw LZMA format.  */
+# define Z(what)	LZMA_##what
+# define LZMA_ERRNO	LZMA_PROG_ERROR
+# define z_stream	lzma_stream
+# define inflateInit(z)	lzma_auto_decoder (z, 1 << 30, 0)
+# define do_inflate(z)	lzma_code (z, LZMA_RUN)
+# define inflateEnd(z)	lzma_end (z)
+#elif defined BZLIB
+# define USE_INFLATE	1
 # include <bzlib.h>
 # define unzip		__libdw_bunzip2
 # define DWFL_E_ZLIB	DWFL_E_BZLIB
 # define MAGIC		"BZh"
 # define Z(what)	BZ_##what
+# define BZ_ERRNO	BZ_IO_ERROR
 # define z_stream	bz_stream
 # define inflateInit(z)	BZ2_bzDecompressInit (z, 0, 0)
-# define inflate(z, f)	BZ2_bzDecompress (z)
+# define do_inflate(z)	BZ2_bzDecompress (z)
 # define inflateEnd(z)	BZ2_bzDecompressEnd (z)
-# define gzFile		BZFILE *
-# define gzdopen	BZ2_bzdopen
-# define gzread		BZ2_bzread
-# define gzclose	BZ2_bzclose
-# define gzerror	BZ2_bzerror
 #else
-# define inflate_groks_header	false
+# define USE_INFLATE	0
+# define crc32		loser_crc32
 # include <zlib.h>
 # define unzip		__libdw_gunzip
 # define MAGIC		"\037\213"
 # define Z(what)	Z_##what
-
-/* We can also handle Linux kernel zImage format in a very hackish way.
-   If it looks like one, we actually just scan the image for the gzip
-   magic bytes to figure out where the gzip image starts.  */
-
-# define LINUX_MAGIC_OFFSET	514
-# define LINUX_MAGIC		"HdrS"
-
-static bool
-mapped_zImage (off64_t *start_offset, void **mapped, size_t *mapped_size)
-{
-  const size_t pos = LINUX_MAGIC_OFFSET + sizeof LINUX_MAGIC;
-  if (*mapped_size > pos
-      && !memcmp (*mapped + LINUX_MAGIC_OFFSET,
-		  LINUX_MAGIC, sizeof LINUX_MAGIC - 1))
-    {
-      void *p = memmem (*mapped + pos, *mapped_size - pos,
-			MAGIC, sizeof MAGIC - 1);
-      if (p != NULL)
-	{
-	  *start_offset += p - *mapped;
-	  *mapped_size = *mapped + *mapped_size - p,
-	  *mapped = p;
-	  return true;
-	}
-    }
-  return false;
-}
 #endif
+
+#define READ_SIZE		(1 << 20)
 
 /* If this is not a compressed image, return DWFL_E_BADELF.
    If we uncompressed it into *WHOLE, *WHOLE_SIZE, return DWFL_E_NOERROR.
-   Otherwise return an error for bad compressed data or I/O failure.  */
+   Otherwise return an error for bad compressed data or I/O failure.
+   If we return an error after reading the first part of the file,
+   leave that portion malloc'd in *WHOLE, *WHOLE_SIZE.  If *WHOLE
+   is not null on entry, we'll use it in lieu of repeating a read.  */
 
 Dwfl_Error internal_function
 unzip (int fd, off64_t start_offset,
@@ -129,44 +116,104 @@ unzip (int fd, off64_t start_offset,
   }
   inline void smaller_buffer (size_t end)
   {
-    buffer = realloc (buffer, end) ?: buffer;
+    buffer = realloc (buffer, end) ?: end == 0 ? NULL : buffer;
     size = end;
+  }
+
+  void *input_buffer = NULL;
+  off_t input_pos = 0;
+
+  inline Dwfl_Error fail (Dwfl_Error failure)
+  {
+    if (input_pos == (off_t) mapped_size)
+      *whole = input_buffer;
+    else
+      {
+	free (input_buffer);
+	*whole = NULL;
+      }
+    free (buffer);
+    return failure;
   }
 
   inline Dwfl_Error zlib_fail (int result)
   {
-    Dwfl_Error failure = DWFL_E_ZLIB;
     switch (result)
       {
       case Z (MEM_ERROR):
-	failure = DWFL_E_NOMEM;
-	break;
+	return fail (DWFL_E_NOMEM);
+      case Z (ERRNO):
+	return fail (DWFL_E_ERRNO);
+      default:
+	return fail (DWFL_E_ZLIB);
       }
-    free (buffer);
-    *whole = NULL;
-    return failure;
   }
 
-  /* If the file is already mapped in, look at the header.  */
-  if (mapped != NULL
-      && (mapped_size <= sizeof MAGIC
-	  || memcmp (mapped, MAGIC, sizeof MAGIC - 1))
-      && !mapped_zImage (&start_offset, &mapped, &mapped_size))
+  if (mapped == NULL)
+    {
+      if (*whole == NULL)
+	{
+	  input_buffer = malloc (READ_SIZE);
+	  if (unlikely (input_buffer == NULL))
+	    return DWFL_E_NOMEM;
+
+	  ssize_t n = pread_retry (fd, input_buffer, READ_SIZE, start_offset);
+	  if (unlikely (n < 0))
+	    return zlib_fail (Z (ERRNO));
+
+	  input_pos = n;
+	  mapped = input_buffer;
+	  mapped_size = n;
+	}
+      else
+	{
+	  input_buffer = *whole;
+	  input_pos = mapped_size = *whole_size;
+	}
+    }
+
+#define NOMAGIC(magic) \
+  (mapped_size <= sizeof magic || memcmp (mapped, magic, sizeof magic - 1))
+
+  /* First, look at the header.  */
+  if (NOMAGIC (MAGIC)
+#ifdef MAGIC2
+      && NOMAGIC (MAGIC2)
+#endif
+      )
     /* Not a compressed file.  */
     return DWFL_E_BADELF;
 
-  if (mapped != NULL && inflate_groks_header)
+#if USE_INFLATE
+
+  /* This style actually only works with bzlib and liblzma.
+     The stupid zlib interface has nothing to grok the
+     gzip file headers except the slow gzFile interface.  */
+
+  z_stream z = { .next_in = mapped, .avail_in = mapped_size };
+  int result = inflateInit (&z);
+  if (result != Z (OK))
     {
-      /* This style actually only works with bzlib.
-	 The stupid zlib interface has nothing to grok the
-	 gzip file headers except the slow gzFile interface.  */
+      inflateEnd (&z);
+      return zlib_fail (result);
+    }
 
-      z_stream z = { .next_in = mapped, .avail_in = mapped_size };
-      int result = inflateInit (&z);
-      if (result != Z (OK))
-	return zlib_fail (result);
-
-      do
+  do
+    {
+      if (z.avail_in == 0 && input_buffer != NULL)
+	{
+	  ssize_t n = pread_retry (fd, input_buffer, READ_SIZE,
+				   start_offset + input_pos);
+	  if (unlikely (n < 0))
+	    {
+	      inflateEnd (&z);
+	      return zlib_fail (Z (ERRNO));
+	    }
+	  z.next_in = input_buffer;
+	  z.avail_in = n;
+	  input_pos += n;
+	}
+      if (z.avail_out == 0)
 	{
 	  ptrdiff_t pos = (void *) z.next_out - buffer;
 	  if (!bigger_buffer (z.avail_in))
@@ -177,120 +224,90 @@ unzip (int fd, off64_t start_offset,
 	  z.next_out = buffer + pos;
 	  z.avail_out = size - pos;
 	}
-      while ((result = inflate (&z, Z_SYNC_FLUSH)) == Z (OK));
+    }
+  while ((result = do_inflate (&z)) == Z (OK));
 
 #ifdef BZLIB
-      uint64_t total_out = (((uint64_t) z.total_out_hi32 << 32)
-			    | z.total_out_lo32);
-      smaller_buffer (total_out);
+  uint64_t total_out = (((uint64_t) z.total_out_hi32 << 32)
+			| z.total_out_lo32);
+  smaller_buffer (total_out);
 #else
-      smaller_buffer (z.total_out);
+  smaller_buffer (z.total_out);
 #endif
 
-      inflateEnd (&z);
+  inflateEnd (&z);
 
-      if (result != Z (STREAM_END))
-	return zlib_fail (result);
-    }
-  else
-    {
-      /* Let the decompression library read the file directly.  */
+  if (result != Z (STREAM_END))
+    return zlib_fail (result);
 
-      gzFile zf;
-      Dwfl_Error open_stream (void)
+#else  /* gzip only.  */
+
+  /* Let the decompression library read the file directly.  */
+
+  gzFile zf;
+  Dwfl_Error open_stream (void)
+  {
+    int d = dup (fd);
+    if (unlikely (d < 0))
+      return DWFL_E_BADELF;
+    if (start_offset != 0)
       {
-	int d = dup (fd);
-	if (unlikely (d < 0))
-	  return DWFL_E_BADELF;
-	if (start_offset != 0)
-	  {
-	    off64_t off = lseek (d, start_offset, SEEK_SET);
-	    if (off != start_offset)
-	      {
-		close (d);
-		return DWFL_E_BADELF;
-	      }
-	  }
-	zf = gzdopen (d, "r");
-	if (unlikely (zf == NULL))
+	off64_t off = lseek (d, start_offset, SEEK_SET);
+	if (off != start_offset)
 	  {
 	    close (d);
-	    return zlib_fail (Z (MEM_ERROR));
+	    return DWFL_E_BADELF;
 	  }
-
-	/* From here on, zlib will close D.  */
-
-	return DWFL_E_NOERROR;
+      }
+    zf = gzdopen (d, "r");
+    if (unlikely (zf == NULL))
+      {
+	close (d);
+	return zlib_fail (Z (MEM_ERROR));
       }
 
-      Dwfl_Error result = open_stream ();
+    /* From here on, zlib will close D.  */
 
-#ifndef BZLIB
-      if (result == DWFL_E_NOERROR && gzdirect (zf))
-	{
-	  bool found = false;
-	  char buf[sizeof LINUX_MAGIC - 1];
-	  gzseek (zf, start_offset + LINUX_MAGIC_OFFSET, SEEK_SET);
-	  int n = gzread (zf, buf, sizeof buf);
-	  if (n == sizeof buf
-	      && !memcmp (buf, LINUX_MAGIC, sizeof LINUX_MAGIC - 1))
-	    while (gzread (zf, buf, sizeof MAGIC - 1) == sizeof MAGIC - 1)
-	      if (!memcmp (buf, MAGIC, sizeof MAGIC - 1))
-		{
-		  start_offset = gztell (zf) - 2;
-		  found = true;
-		  break;
-		}
-	  gzclose (zf);
-	  if (found)
-	    {
-	      result = open_stream ();
-	      if (result == DWFL_E_NOERROR && unlikely (gzdirect (zf)))
-		{
-		  gzclose (zf);
-		  result = DWFL_E_BADELF;
-		}
-	    }
-	  else
-	    result = DWFL_E_BADELF;
-	}
-#endif
+    return DWFL_E_NOERROR;
+  }
 
-      if (result != DWFL_E_NOERROR)
-	return result;
+  Dwfl_Error result = open_stream ();
 
-      ptrdiff_t pos = 0;
-      while (1)
-	{
-	  if (!bigger_buffer (1024))
-	    {
-	      gzclose (zf);
-	      return zlib_fail (Z (MEM_ERROR));
-	    }
-	  int n = gzread (zf, buffer + pos, size - pos);
-	  if (n < 0)
-	    {
-	      int code;
-	      gzerror (zf, &code);
-#ifdef BZLIB
-	      if (code == BZ_DATA_ERROR_MAGIC)
-		{
-		  gzclose (zf);
-		  free (buffer);
-		  return DWFL_E_BADELF;
-		}
-#endif
-	      gzclose (zf);
-	      return zlib_fail (code);
-	    }
-	  if (n == 0)
-	    break;
-	  pos += n;
-	}
-
+  if (result == DWFL_E_NOERROR && gzdirect (zf))
+    {
       gzclose (zf);
-      smaller_buffer (pos);
+      return fail (DWFL_E_BADELF);
     }
+
+  if (result != DWFL_E_NOERROR)
+    return fail (result);
+
+  ptrdiff_t pos = 0;
+  while (1)
+    {
+      if (!bigger_buffer (1024))
+	{
+	  gzclose (zf);
+	  return zlib_fail (Z (MEM_ERROR));
+	}
+      int n = gzread (zf, buffer + pos, size - pos);
+      if (n < 0)
+	{
+	  int code;
+	  gzerror (zf, &code);
+	  gzclose (zf);
+	  return zlib_fail (code);
+	}
+      if (n == 0)
+	break;
+      pos += n;
+    }
+
+  gzclose (zf);
+  smaller_buffer (pos);
+#endif
+
+  free (input_buffer);
 
   *whole = buffer;
   *whole_size = size;

@@ -6,6 +6,14 @@
 
 	* configure.ac: Add AC_PROG_CXX.
 
+2009-09-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* configure.ac: Update for more modern autoconf.
+
+2009-08-26  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (zip_LIBS): Check for liblzma too.
+
 2009-04-19  Roland McGrath  <roland@redhat.com>
 
 	* configure.ac (eu_version): Round down here, not in version.h macros.

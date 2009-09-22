@@ -187,4 +187,21 @@ asm (".section predict_data, \"aw\"; .previous\n"
 # define __STDC_LIMIT_MACROS
 #endif
 
+#ifdef SHARED
+# define OLD_VERSION(name, version) \
+  asm (".globl _compat." #version "." #name "\n" \
+       "_compat." #version "." #name " = " #name "\n" \
+       ".symver _compat." #version "." #name "," #name "@" #version);
+# define NEW_VERSION(name, version) \
+  asm (".symver " #name "," #name "@@@" #version);
+# define COMPAT_VERSION(name, version, prefix) \
+  asm (".symver _compat." #version "." #name "," #name "@" #version); \
+  __typeof (name) _compat_##prefix##_##name asm ("_compat." #version "." #name);
+#else
+# define OLD_VERSION(name, version) /* Nothing for static linking.  */
+# define NEW_VERSION(name, version) /* Nothing for static linking.  */
+# define COMPAT_VERSION(name, version, prefix) error "should use #ifdef SHARED"
+#endif
+
+
 #endif	/* eu-config.h */

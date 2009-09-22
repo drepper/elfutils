@@ -16,14 +16,13 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; if not, write to the Free Software Foundation,
 dnl Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 dnl
-AC_INIT([Red Hat elfutils],[0.142],[http://bugzilla.redhat.com/bugzilla/],
-	[elfutils])
+AC_INIT([Red Hat elfutils],[0.143],[http://bugzilla.redhat.com/bugzilla/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
 
 AC_COPYRIGHT([Copyright (C) 1996-2009 Red Hat, Inc.])
-AC_PREREQ(2.59)			dnl Minimum Autoconf version required.
+AC_PREREQ(2.63)			dnl Minimum Autoconf version required.
 
 dnl We use GNU make extensions; automake 1.10 defaults to -Wportability.
 AM_INIT_AUTOMAKE([gnits 1.8 -Wno-portability dist-bzip2 no-dist-gzip])
@@ -147,7 +146,7 @@ if test "x$enable_mudflap" = xyes; then
   # Check whether the compiler support -fmudflap.
   old_CFLAGS="$CFLAGS"
   CFLAGS="$CFLAGS -fmudflap"
-  AC_TRY_COMPILE([], [], use_mudflap=yes, use_mudflap=fail)
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],[use_mudflap=yes],[use_mudflap=fail])
   CFLAGS="$old_CFLAGS"
 fi])
 if test "$use_mudflap" = fail; then
@@ -158,15 +157,13 @@ AM_CONDITIONAL(MUDFLAP, test "$use_mudflap" = yes)
 dnl enable debugging of branch prediction.
 use_debugpred=0
 AC_ARG_ENABLE([debugpred],
-AC_HELP_STRING([--enable-debugpred],
-[build binaries with support to debug branch prediction]),
+AS_HELP_STRING([--enable-debugpred],[build binaries with support to debug branch prediction]),
 [use_debugpred=1], [use_debugpred=0])
 AC_SUBST([DEBUGPRED], $use_debugpred)
 
 dnl Enable gprof suport.
 AC_ARG_ENABLE([gprof],
-AC_HELP_STRING([--enable-gprof],
-[build binaries with gprof support]), [use_gprof=yes], [use_gprof=no])
+AS_HELP_STRING([--enable-gprof],[build binaries with gprof support]), [use_gprof=yes], [use_gprof=no])
 if test "$use_gprof" = yes; then
   CFLAGS="$CFLAGS -pg"
   CXXFLAGS="$CXXFLAGS -pg"
@@ -176,8 +173,7 @@ AM_CONDITIONAL(GPROF, test "$use_gprof" = yes)
 
 # Enable gcov suport.
 AC_ARG_ENABLE([gcov],
-AC_HELP_STRING([--enable-gcov],
-[build binaries with gcov support]), [use_gcov=yes], [use_gcov=no])
+AS_HELP_STRING([--enable-gcov],[build binaries with gcov support]), [use_gcov=yes], [use_gcov=no])
 if test "$use_gcov" = yes; then
   CFLAGS="$CFLAGS -fprofile-arcs -ftest-coverage"
   LDFLAGS="$LDFLAGS -fprofile-arcs"
@@ -188,7 +184,7 @@ AM_CONDITIONAL(BUILD_STATIC, [dnl
 test "$use_mudflap" = yes -o "$use_gprof" = yes -o "$use_gcov" = yes])
 
 AC_ARG_ENABLE([tests-rpath],
-AC_HELP_STRING([--enable-tests-rpath], [build $ORIGIN-using rpath into tests]),
+AS_HELP_STRING([--enable-tests-rpath],[build $ORIGIN-using rpath into tests]),
  	       [tests_use_rpath=yes], [tests_use_rpath=no])
 AM_CONDITIONAL(TESTS_RPATH, test "$tests_use_rpath" = yes)
 
@@ -205,8 +201,9 @@ dnl Test for zlib and bzlib, gives ZLIB/BZLIB .am
 dnl conditional and config.h USE_ZLIB/USE_BZLIB #define.
 save_LIBS="$LIBS"
 LIBS=
-eu_ZIPLIB(z,Z,z,gzdirect,gzip)
-eu_ZIPLIB(bz,BZ,bz2,BZ2_bzdopen,bzip2)
+eu_ZIPLIB(zlib,ZLIB,z,gzdirect,gzip)
+eu_ZIPLIB(bzlib,BZLIB,bz2,BZ2_bzdopen,bzip2)
+eu_ZIPLIB(lzma,LZMA,lzma,lzma_auto_decoder,[LZMA (xz)])
 zip_LIBS="$LIBS"
 LIBS="$save_LIBS"
 AC_SUBST([zip_LIBS])
