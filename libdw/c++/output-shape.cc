@@ -318,7 +318,6 @@ namespace
     switch (vs)
       {
       case dwarf::VS_flag:
-      case dwarf::VS_rangelistptr:
       case dwarf::VS_macptr:
       case dwarf::VS_location:
       case dwarf::VS_constant:
@@ -341,6 +340,7 @@ namespace
       case dwarf::VS_discr_list:
       case dwarf::VS_lineptr:	// xxx but wait, if we emit lines
 				// first, we can optimize it.
+      case dwarf::VS_rangelistptr: // xxx same here
 	return false;
       }
 
@@ -358,7 +358,6 @@ namespace
       case dwarf::VS_flag:
 	return !!value.flag ();
 
-      case dwarf::VS_rangelistptr:
       case dwarf::VS_macptr:
       case dwarf::VS_location:
 	return 0; /* xxx */
@@ -390,6 +389,7 @@ namespace
       case dwarf::VS_identifier:
 	return value.string ().size ();
 
+      case dwarf::VS_rangelistptr:
       case dwarf::VS_reference:
       case dwarf::VS_discr_list:
       case dwarf::VS_lineptr:
@@ -1196,6 +1196,11 @@ public:
 	    break;
 
 	  case dwarf::VS_rangelistptr:
+	    _m_parent._m_range_backpatch.push_back
+	      (std::make_pair (gap (_m_parent, appender, form),
+			       &value.ranges ()));
+	    break;
+
 	  case dwarf::VS_macptr:
 	    _m_parent.write_form (inserter, form, 0 /*xxx*/);
 	    break;
@@ -1563,7 +1568,7 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
       dwarf_output::line_info_table const &lt = it->second;
       if (!_m_line_offsets.insert (std::make_pair (&lt, appender.size ()))
 	  .second)
-	throw std::runtime_error ("duplicate table address");
+	throw std::runtime_error ("duplicate line table address");
 
       length_field table_length (*this, appender);
       ::write_version (appender, _m_config.big_endian, 3);
@@ -1610,7 +1615,7 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
       // file_names
       typedef std::tr1::unordered_map<dwarf_output::source_file, size_t,
 	dwarf_output::source_file::hasher>
-	source_file_map;
+	source_file_map; // file->file_number
       source_file_map source_files;
       dwarf_output::line_table const &lines = lt.lines ();
       for (dwarf_output::line_table::const_iterator line_it = lines.begin ();
@@ -1777,6 +1782,33 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 }
 
 void
+dwarf_output::writer::output_debug_ranges (section_appender &appender)
+{
+  __unused std::back_insert_iterator <section_appender> inserter
+    = std::back_inserter (appender);
+
+  for (subr::value_set<dwarf_output::value::value_rangelistptr>::const_iterator
+	 it = _m_col._m_ranges.begin (); it != _m_col._m_ranges.end (); ++it)
+    {
+      dwarf_output::range_list const &rl = it->second;
+      if (!_m_range_offsets.insert (std::make_pair (&rl, appender.size ()))
+	  .second)
+	throw std::runtime_error ("duplicate range table address");
+
+      for (dwarf_output::range_list::const_iterator range_it = rl.begin ();
+	   range_it != rl.end (); ++range_it)
+	{
+	  write_form (inserter, DW_FORM_addr, range_it->first);
+	  write_form (inserter, DW_FORM_addr, range_it->second);
+	}
+
+      // end of list entry
+      write_form (inserter, DW_FORM_addr, 0);
+      write_form (inserter, DW_FORM_addr, 0);
+    }
+}
+
+void
 dwarf_output::writer::apply_patches ()
 {
   for (str_backpatch_vec::const_iterator it = _m_str_backpatch.begin ();
@@ -1791,6 +1823,17 @@ dwarf_output::writer::apply_patches ()
 	// no point mentioning the key, since it's just a memory
 	// address...
 	throw std::runtime_error (".debug_line ref not found");
+      it->first.patch (ot->second);
+    }
+
+  for (range_backpatch_vec::const_iterator it = _m_range_backpatch.begin ();
+       it != _m_range_backpatch.end (); ++it)
+    {
+      range_offsets_map::const_iterator ot = _m_range_offsets.find (it->second);
+      if (ot == _m_range_offsets.end ())
+	// no point mentioning the key, since it's just a memory
+	// address...
+	throw std::runtime_error (".debug_ranges ref not found");
       it->first.patch (ot->second);
     }
 }

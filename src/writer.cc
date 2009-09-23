@@ -581,6 +581,11 @@ handle_elf (Elf *elf, size_t alloc_unit,
   writer.output_debug_line (sec_debug_line);
   sec_debug_line.done (shdr_info);
 
+  new_debug_section sec_debug_ranges
+    (".debug_ranges", shst, SHT_PROGBITS, ++idx, newelf, alloc_unit);
+  writer.output_debug_ranges (sec_debug_ranges);
+  sec_debug_ranges.done (shdr_info);
+
   new_str_section sec_debug_str
     (".debug_str", shst, SHT_STRTAB, ++idx, newelf, shdr_info, debug_strtab);
 

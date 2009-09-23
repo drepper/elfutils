@@ -929,13 +929,21 @@ namespace elfutils
 				  line_info_table const *>> line_backpatch_vec;
     typedef std::map<line_info_table const *, ::Dwarf_Off> line_offsets_map;
 
+    typedef std::vector<std::pair<gap,
+				  range_list const *>> range_backpatch_vec;
+    typedef std::map<range_list const *, ::Dwarf_Off> range_offsets_map;
+
     dwarf_output_collector &_m_col;
     dwarf_output &_m_dw;
 
     strtab &_m_debug_str;
     str_backpatch_vec _m_str_backpatch;
+
     line_backpatch_vec _m_line_backpatch;
     line_offsets_map _m_line_offsets;
+
+    range_backpatch_vec _m_range_backpatch;
+    range_offsets_map _m_range_offsets;
 
     // Set of shapes.
     typedef std::tr1::unordered_map<dwarf_output::shape_type,
@@ -990,6 +998,7 @@ namespace elfutils
     void output_debug_abbrev (section_appender &appender);
     void output_debug_info (section_appender &appender);
     void output_debug_line (section_appender &appender);
+    void output_debug_ranges (section_appender &appender);
     void apply_patches ();
   };
 
