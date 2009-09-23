@@ -3175,7 +3175,8 @@ read_die_chain (struct elf_file *file,
 
 		if (is_location_attrib (it->name))
 		  {
-		    uint64_t expr_start = cu->offset + read_ctx_get_offset (ctx);
+		    uint64_t expr_start
+		      = cu->offset + read_ctx_get_offset (ctx);
 		    if (!check_location_expression (file, ctx, cu, expr_start,
 						    reloc, length, &where))
 		      return -1;
