@@ -277,8 +277,12 @@ namespace
 	return const_forms;
 
       case dwarf::VS_location:
+	/* xxx we spit out everything in .debug_loc.  Make similar
+	   heuristic of !is_list location as is done for strings.
+
 	if (!value.location ().is_list ())
 	  return block_forms;
+	*/
 	/* Fall through.  */
 
       case dwarf::VS_lineptr:
@@ -319,7 +323,6 @@ namespace
       {
       case dwarf::VS_flag:
       case dwarf::VS_macptr:
-      case dwarf::VS_location:
       case dwarf::VS_constant:
       case dwarf::VS_dwarf_constant:
       case dwarf::VS_source_line:
@@ -341,6 +344,7 @@ namespace
       case dwarf::VS_lineptr:	// xxx but wait, if we emit lines
 				// first, we can optimize it.
       case dwarf::VS_rangelistptr: // xxx same here
+      case dwarf::VS_location: // xxx and here
 	return false;
       }
 
@@ -359,7 +363,6 @@ namespace
 	return !!value.flag ();
 
       case dwarf::VS_macptr:
-      case dwarf::VS_location:
 	return 0; /* xxx */
 
       case dwarf::VS_constant:
@@ -393,6 +396,7 @@ namespace
       case dwarf::VS_reference:
       case dwarf::VS_discr_list:
       case dwarf::VS_lineptr:
+      case dwarf::VS_location:
 	abort ();
       }
 
@@ -1263,11 +1267,9 @@ public:
 	    break;
 
 	  case dwarf::VS_location:
-	    // XXX leave out for now
-	    if (form == DW_FORM_block)
-	      ::dw_write_uleb128 (inserter, 0);
-	    else
-	      _m_parent.write_form (inserter, form, 0 /*xxx*/);
+	    _m_parent._m_loc_backpatch.push_back
+	      (std::make_pair (gap (_m_parent, appender, form),
+			       &value.location ()));
 	    break;
 
 	  case dwarf::VS_discr_list:
@@ -1784,7 +1786,7 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 void
 dwarf_output::writer::output_debug_ranges (section_appender &appender)
 {
-  __unused std::back_insert_iterator <section_appender> inserter
+  std::back_insert_iterator <section_appender> inserter
     = std::back_inserter (appender);
 
   for (subr::value_set<dwarf_output::value::value_rangelistptr>::const_iterator
@@ -1800,6 +1802,57 @@ dwarf_output::writer::output_debug_ranges (section_appender &appender)
 	{
 	  write_form (inserter, DW_FORM_addr, range_it->first);
 	  write_form (inserter, DW_FORM_addr, range_it->second);
+	}
+
+      // end of list entry
+      write_form (inserter, DW_FORM_addr, 0);
+      write_form (inserter, DW_FORM_addr, 0);
+    }
+}
+
+void
+dwarf_output::writer::output_debug_loc (section_appender &appender)
+{
+  typedef std::set <dwarf_output::location_attr const *> loc_set;
+  loc_set locations;
+
+  for (dwarf_output_collector::die_map::const_iterator it
+	 = _m_col._m_unique.begin ();
+       it != _m_col._m_unique.end (); ++it)
+    {
+      debug_info_entry const &die = it->first;
+      for (debug_info_entry::attributes_type::const_iterator
+	     at = die.attributes ().begin ();
+	   at != die.attributes ().end (); ++at)
+	{
+	  attr_value const &value = at->second;
+	  dwarf::value_space vs = value.what_space ();
+
+	  if (vs == dwarf::VS_location)
+	    {
+	      dwarf_output::location_attr const &loc = value.location ();
+	      locations.insert (&loc);
+	    }
+	}
+    }
+
+  std::back_insert_iterator <section_appender> inserter
+    = std::back_inserter (appender);
+  for (loc_set::const_iterator it = locations.begin ();
+       it != locations.end (); ++it)
+    {
+      dwarf_output::location_attr const &loc = **it;
+      if (!_m_loc_offsets.insert (std::make_pair (&loc, appender.size ()))
+	  .second)
+	throw std::runtime_error ("duplicate loc table address");
+
+      for (dwarf_output::location_attr::const_iterator jt = loc.begin ();
+	   jt != loc.end (); ++jt)
+	{
+	  write_form (inserter, DW_FORM_addr, jt->first.first);
+	  write_form (inserter, DW_FORM_addr, jt->first.second);
+	  write_form (inserter, DW_FORM_data2, jt->second.size ());
+	  std::copy (jt->second.begin (), jt->second.end (), inserter);
 	}
 
       // end of list entry
@@ -1834,6 +1887,17 @@ dwarf_output::writer::apply_patches ()
 	// no point mentioning the key, since it's just a memory
 	// address...
 	throw std::runtime_error (".debug_ranges ref not found");
+      it->first.patch (ot->second);
+    }
+
+  for (loc_backpatch_vec::const_iterator it = _m_loc_backpatch.begin ();
+       it != _m_loc_backpatch.end (); ++it)
+    {
+      loc_offsets_map::const_iterator ot = _m_loc_offsets.find (it->second);
+      if (ot == _m_loc_offsets.end ())
+	// no point mentioning the key, since it's just a memory
+	// address...
+	throw std::runtime_error (".debug_loc ref not found");
       it->first.patch (ot->second);
     }
 }
