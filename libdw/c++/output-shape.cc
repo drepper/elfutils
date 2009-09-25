@@ -1026,7 +1026,7 @@ namespace
 	visitor.visit_die (info_pair, step, has_sibling);
 	if (!die.children ().empty ())
 	  {
-	    typename Visitor::step_t my_step (visitor, info_pair);
+	    typename Visitor::step_t my_step (visitor, info_pair, &step);
 	    my_step.before_children ();
 	    for (typename std::vector<die_info_pair *>::const_iterator jt
 		   = die.children ().info ().begin (); ;)
@@ -1045,7 +1045,7 @@ namespace
     };
 
     visitor.before_traversal ();
-    typename Visitor::step_t step (visitor, top_info_pair);
+    typename Visitor::step_t step (visitor, top_info_pair, NULL);
     recursive_traversal (visitor)
       .traverse (step, top_info_pair, false);
     visitor.after_traversal ();
@@ -1075,7 +1075,8 @@ public:
     gap sibling_gap;
 
     step_t (dump_die_tree &dumper,
-	    __unused die_info_pair const &info_pair)
+	    __unused die_info_pair const &info_pair,
+	    __unused step_t *previous)
       : _m_dumper (dumper),
 	sibling_gap (dumper._m_parent)
     {
