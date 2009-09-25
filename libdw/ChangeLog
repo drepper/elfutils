@@ -1,3 +1,11 @@
+2009-09-25  Roland McGrath  <roland@redhat.com>
+
+	* c++/values.cc (dwarf::range_list::const_iterator::const_iterator):
+	For begin case, actually get the offset from the attribute!
+	(dwarf::location_attr::begin): Likewise.
+	* c++/dwarf (dwarf::range_list, dwarf::location_attr): Fix iterator
+	initializers accordingly.
+
 2009-09-21  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf-knowledge.cc (expected_value_space): DW_AT_const_value can

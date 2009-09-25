@@ -379,6 +379,12 @@ dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr,
 						   ptrdiff_t offset)
   : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (attr->cu), _m_offset (offset)
 {
+  if (_m_offset == 0)
+    {
+      Dwarf_Word ofs;
+      xif (attr, dwarf_formudata (attr, &ofs) < 0); // XXX __libdw_formptr
+      _m_offset = ofs;
+    }
 }
 
 static bool
@@ -574,12 +580,24 @@ dwarf::location_attr::const_iterator::advance ()
 dwarf::location_attr::const_iterator
 dwarf::location_attr::begin () const
 {
-  const_iterator i (_m_attr.thisattr (), 0);
+  const_iterator i (_m_attr.thisattr ());
   if (is_list ())
-    i.advance ();
+    {
+      // XXX __libdw_formptr
+      Dwarf_Word offset;
+      xif (_m_attr.thisattr (),
+	   dwarf_formudata (_m_attr.thisattr (), &offset) < 0);
+      i._m_offset = offset;
+      i.advance ();
+    }
   else
-    xif (_m_attr.thisattr (),
-	 dwarf_formblock (_m_attr.thisattr (), &i._m_block) < 0);
+    {
+      xif (_m_attr.thisattr (),
+	   dwarf_formblock (_m_attr.thisattr (), &i._m_block) < 0);
+      i._m_base = 0;
+      i._m_end = -1;
+      i._m_offset = 0;
+    }
 
   return i;
 }
@@ -591,8 +609,12 @@ dwarf::location_attr::const_iterator::operator++ ()
     throw std::runtime_error ("incrementing end iterator");
 
   if (_m_offset == 0)
-    // Singleton, now at end.
-    _m_offset = 1;
+    {
+      // Singleton, now at end.
+      _m_offset = 1;
+      _m_block.data = NULL;
+      _m_block.length = 0;
+    }
   else
     // Advance to next list entry.
     advance ();
