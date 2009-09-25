@@ -925,9 +925,16 @@ namespace elfutils
 
     typedef std::vector<std::pair<gap, ::Ebl_Strent *>> str_backpatch_vec;
 
-    typedef std::vector<std::pair<gap,
-				  line_info_table const *>> line_backpatch_vec;
-    typedef std::map<line_info_table const *, ::Dwarf_Off> line_offsets_map;
+    struct line_offsets
+    {
+      ::Dwarf_Off table_offset;
+      typedef std::tr1::unordered_map<source_file, size_t, source_file::hasher>
+	source_file_map; // file->file_number
+      source_file_map source_files;
+
+      explicit line_offsets (::Dwarf_Off off) : table_offset (off) {}
+    };
+    typedef std::map<line_info_table const *, line_offsets> line_offsets_map;
 
     typedef std::vector<std::pair<gap,
 				  range_list const *>> range_backpatch_vec;
@@ -943,7 +950,6 @@ namespace elfutils
     strtab &_m_debug_str;
     str_backpatch_vec _m_str_backpatch;
 
-    line_backpatch_vec _m_line_backpatch;
     line_offsets_map _m_line_offsets;
 
     range_backpatch_vec _m_range_backpatch;

@@ -315,7 +315,7 @@ namespace
   }
 
   bool
-  numerical_p (const dwarf_output::attr_value &value)
+  numerical_p (int tag, int attr, const dwarf_output::attr_value &value)
   {
     dwarf::value_space vs = value.what_space ();
 
@@ -333,7 +333,6 @@ namespace
       // the string as the value to encode, and treat it specially.
       case dwarf::VS_string:
       case dwarf::VS_identifier:
-      case dwarf::VS_source_file:
 	return true;
 
       case dwarf::VS_reference:   // xxx this one is numerical in
@@ -341,10 +340,20 @@ namespace
 				  // references is fun on its own and
 				  // for much later
       case dwarf::VS_discr_list:
-      case dwarf::VS_lineptr:	// xxx but wait, if we emit lines
-				// first, we can optimize it.
       case dwarf::VS_rangelistptr: // xxx same here
       case dwarf::VS_location: // xxx and here
+	return false;
+
+      case dwarf::VS_source_file:
+	if (source_file_is_string (tag, attr))
+	  return true;
+	else
+	  return false; // xxx and here, too
+
+      // Require that .debug_line is emitted before .debug_info.
+      case dwarf::VS_lineptr:
+	// xxx but we need to move numerical_value_to_optimize to
+	// writer.
 	return false;
       }
 
@@ -855,7 +864,7 @@ dwarf_output::shape_info::instantiate
 	  shape_type::candidate_form_vec const &candidates
 	    = ::candidate_forms (tag, attr, value);
 
-	  if (!numerical_p (value))
+	  if (!numerical_p (tag, attr, value))
 	    {
 	      form = -1;
 
@@ -1063,6 +1072,7 @@ class dwarf_output::writer::dump_die_tree
   die_backpatch_vec die_backpatch;
   uint64_t _m_cu_start;
   size_t level;
+  line_info_table const *lines;
 
   static const bool debug = false;
 
@@ -1113,7 +1123,8 @@ public:
     : _m_parent (writer),
       appender (a_appender),
       _m_cu_start (cu_start),
-      level (0)
+      level (0),
+      lines (NULL)
   {
   }
 
@@ -1195,9 +1206,19 @@ public:
 	    break;
 
 	  case dwarf::VS_lineptr:
-	    _m_parent._m_line_backpatch.push_back
-	      (std::make_pair (gap (_m_parent, appender, form),
-			       &value.line_info ()));
+	    {
+	      if (lines != NULL)
+		throw std::runtime_error
+		  ("Another DIE with lineptr attribute?!");
+
+	      lines = &value.line_info ();
+	      line_offsets_map::const_iterator it
+		= _m_parent._m_line_offsets.find (lines);
+	      if (it == _m_parent._m_line_offsets.end ())
+		throw std::runtime_error
+		  ("Emit .debug_line before .debug_info");
+	      _m_parent.write_form (inserter, form, it->second.table_offset);
+	    }
 	    break;
 
 	  case dwarf::VS_rangelistptr:
@@ -1246,16 +1267,20 @@ public:
 	      _m_parent.write_string (value.source_file ().name (),
 				      form, appender);
 	    else
-	      _m_parent.write_form (inserter, form, 0 /*xxx*/);
+	      {
+		assert (lines != NULL);
+		writer::line_offsets_map::const_iterator
+		  it = _m_parent._m_line_offsets.find (lines);
+		assert (it != _m_parent._m_line_offsets.end ());
+		writer::line_offsets::source_file_map::const_iterator
+		  jt = it->second.source_files.find (value.source_file ());
+		assert (jt != it->second.source_files.end ());
+		_m_parent.write_form (inserter, form, jt->second);
+	      }
 	    break;
 
 	  case dwarf::VS_address:
-	    {
-	      assert (form == DW_FORM_addr);
-	      size_t w = _m_parent._m_config.addr_64 ? 8 : 4;
-	      _m_parent.write_var (appender.alloc (w), w,
-				   value.address ());
-	    }
+	    _m_parent.write_form (inserter, form, value.address ());
 	    break;
 
 	  case dwarf::VS_reference:
@@ -1569,9 +1594,9 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
        it != _m_col._m_line_info.end (); ++it)
     {
       dwarf_output::line_info_table const &lt = it->second;
-      if (!_m_line_offsets.insert (std::make_pair (&lt, appender.size ()))
-	  .second)
-	throw std::runtime_error ("duplicate line table address");
+
+      line_offsets offset_tab (appender.size ());
+      // the table is inserted in _m_line_offsets at the loop's end
 
       length_field table_length (*this, appender);
       ::write_version (appender, _m_config.big_endian, 3);
@@ -1616,29 +1641,27 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
       *inserter++ = 0;
 
       // file_names
-      typedef std::tr1::unordered_map<dwarf_output::source_file, size_t,
-	dwarf_output::source_file::hasher>
-	source_file_map; // file->file_number
-      source_file_map source_files;
       dwarf_output::line_table const &lines = lt.lines ();
       for (dwarf_output::line_table::const_iterator line_it = lines.begin ();
 	   line_it != lines.end (); ++line_it)
 	{
 	  dwarf_output::line_entry const &entry = *line_it;
 	  dwarf_output::source_file const &file = entry.file ();
-	  source_file_map::const_iterator sfit
-	    = source_files.find (file);
-	  if (sfit == source_files.end ())
-	    source_files.insert (std::make_pair (file, 0));
+	  line_offsets::source_file_map::const_iterator sfit
+	    = offset_tab.source_files.find (file);
+	  if (sfit == offset_tab.source_files.end ())
+	    offset_tab.source_files.insert (std::make_pair (file, 0));
 	}
       {
 	size_t file_idx = 0;
-	for (source_file_map::iterator sfit = source_files.begin ();
-	     sfit != source_files.end (); ++sfit)
+	for (line_offsets::source_file_map::iterator sfit
+	       = offset_tab.source_files.begin ();
+	     sfit != offset_tab.source_files.end (); ++sfit)
 	  sfit->second = ++file_idx;
       }
-      for (source_file_map::const_iterator sfit = source_files.begin ();
-	   sfit != source_files.end (); ++sfit)
+      for (line_offsets::source_file_map::const_iterator sfit
+	     = offset_tab.source_files.begin ();
+	   sfit != offset_tab.source_files.end (); ++sfit)
 	{
 	  dwarf_output::source_file const &sf = sfit->first;
 
@@ -1699,7 +1722,7 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 	{
 	  dwarf_output::line_entry const &entry = *line_it;
 	  ::Dwarf_Addr addr = entry.address ();
-	  unsigned file = source_files.find (entry.file ())->second;
+	  unsigned file = offset_tab.source_files.find (entry.file ())->second;
 	  unsigned line = entry.line ();
 	  unsigned column = entry.column ();
 	  bool is_stmt = entry.statement ();
@@ -1781,6 +1804,9 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 	}
 
       table_length.finish ();
+
+      if (!_m_line_offsets.insert (std::make_pair (&lt, offset_tab)).second)
+	throw std::runtime_error ("duplicate line table address");
     }
 }
 
@@ -1868,17 +1894,6 @@ dwarf_output::writer::apply_patches ()
   for (str_backpatch_vec::const_iterator it = _m_str_backpatch.begin ();
        it != _m_str_backpatch.end (); ++it)
     it->first.patch (ebl_strtaboffset (it->second));
-
-  for (line_backpatch_vec::const_iterator it = _m_line_backpatch.begin ();
-       it != _m_line_backpatch.end (); ++it)
-    {
-      line_offsets_map::const_iterator ot = _m_line_offsets.find (it->second);
-      if (ot == _m_line_offsets.end ())
-	// no point mentioning the key, since it's just a memory
-	// address...
-	throw std::runtime_error (".debug_line ref not found");
-      it->first.patch (ot->second);
-    }
 
   for (range_backpatch_vec::const_iterator it = _m_range_backpatch.begin ();
        it != _m_range_backpatch.end (); ++it)
