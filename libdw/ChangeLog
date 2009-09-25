@@ -1,5 +1,8 @@
 2009-09-25  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf (dwarf::location_attr::operator==): Compare a singleton as
+	a list so it matches a one-element full-range list.
+
 	* c++/values.cc (dwarf::range_list::const_iterator::const_iterator):
 	For begin case, actually get the offset from the attribute!
 	(dwarf::location_attr::begin): Likewise.

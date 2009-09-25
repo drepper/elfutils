@@ -1574,11 +1574,11 @@ namespace elfutils
 		  || std::find_if (other.begin (), other.end (),
 				   nonempty<typename other_attr::value_type> ()
 				   ) == other.end ());
-	if (!is_list ())
-	  return (!other.is_list () && !other.empty ()
-		  && location () == other.location ());
 
-	return other.is_list () && subr::container_equal (*this, other);
+	if (!is_list () && !other.is_list ())
+	  return !other.empty () && location () == other.location ();
+
+	return subr::container_equal (*this, other);
       }
       template<typename other_file>
       inline bool operator!= (const other_file &other) const
