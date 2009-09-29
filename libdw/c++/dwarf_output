@@ -932,7 +932,11 @@ namespace elfutils
 	source_file_map; // file->file_number
       source_file_map source_files;
 
-      explicit line_offsets (::Dwarf_Off off) : table_offset (off) {}
+      line_offsets (writer const &writer,
+		    dwarf_output::line_table const &lines,
+		    ::Dwarf_Off off);
+
+      class add_die_ref_files;
     };
     typedef std::map<line_info_table const *, line_offsets> line_offsets_map;
 

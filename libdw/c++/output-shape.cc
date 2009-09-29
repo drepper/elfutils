@@ -1606,6 +1606,83 @@ public:
   }
 };
 
+class dwarf_output::writer::line_offsets::add_die_ref_files
+{
+  line_offsets::source_file_map &_m_files;
+
+public:
+  struct step_t
+  {
+    step_t (__unused add_die_ref_files &adder,
+	    __unused die_info_pair const &info_pair,
+	    __unused step_t *previous)
+    {}
+
+    void before_children () {}
+    void after_children () {}
+    void before_recursion () {}
+    void after_recursion () {}
+  };
+
+  add_die_ref_files (line_offsets::source_file_map &files) : _m_files (files) {}
+
+  void visit_die (dwarf_output::die_info_pair const &info_pair,
+		  __unused step_t &step,
+		  __unused bool has_sibling)
+  {
+    debug_info_entry const &die = info_pair.first;
+
+    debug_info_entry::attributes_type const &attribs = die.attributes ();
+    for (debug_info_entry::attributes_type::const_iterator at
+	   = attribs.begin (); at != attribs.end (); ++at)
+      {
+	attr_value const &value = at->second;
+	dwarf::value_space vs = value.what_space ();
+
+	if (vs == dwarf::VS_source_file
+	    && !source_file_is_string (die.tag (), at->first))
+	  _m_files.insert (std::make_pair (value.source_file (), 0));
+      }
+  }
+
+  void before_traversal () {}
+  void after_traversal () {}
+};
+
+dwarf_output::writer::
+line_offsets::line_offsets (__unused writer const &wr,
+			    dwarf_output::line_table const &lines,
+			    ::Dwarf_Off off)
+  : table_offset (off)
+{
+  // We need to include all files referenced through DW_AT_*_file and
+  // all files used in line number program.
+  for (dwarf_output::line_table::const_iterator line_it = lines.begin ();
+       line_it != lines.end (); ++line_it)
+    {
+      dwarf_output::line_entry const &entry = *line_it;
+      dwarf_output::source_file const &file = entry.file ();
+      line_offsets::source_file_map::const_iterator sfit
+	= source_files.find (file);
+      if (sfit == source_files.end ())
+	source_files.insert (std::make_pair (file, 0));
+    }
+
+  for (compile_units::const_iterator it = wr._m_dw._m_units.begin ();
+       it != wr._m_dw._m_units.end (); ++it)
+    if (&it->lines () == &lines)
+      {
+	add_die_ref_files adder (source_files);
+	::traverse_die_tree (adder, *wr._m_col._m_unique.find (*it));
+      }
+
+  // Assign numbers to source files.
+  size_t file_idx = 0;
+  for (line_offsets::source_file_map::iterator sfit = source_files.begin ();
+       sfit != source_files.end (); ++sfit)
+    sfit->second = ++file_idx;
+}
+
 void
 dwarf_output::writer::output_debug_line (section_appender &appender)
 {
@@ -1617,8 +1694,9 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
        it != _m_col._m_line_info.end (); ++it)
     {
       dwarf_output::line_info_table const &lt = it->second;
+      dwarf_output::line_table const &lines = lt.lines ();
 
-      line_offsets offset_tab (appender.size ());
+      line_offsets offset_tab (*this, lines, appender.size ());
       // the table is inserted in _m_line_offsets at the loop's end
 
       length_field table_length (*this, appender);
@@ -1664,24 +1742,6 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
       *inserter++ = 0;
 
       // file_names
-      dwarf_output::line_table const &lines = lt.lines ();
-      for (dwarf_output::line_table::const_iterator line_it = lines.begin ();
-	   line_it != lines.end (); ++line_it)
-	{
-	  dwarf_output::line_entry const &entry = *line_it;
-	  dwarf_output::source_file const &file = entry.file ();
-	  line_offsets::source_file_map::const_iterator sfit
-	    = offset_tab.source_files.find (file);
-	  if (sfit == offset_tab.source_files.end ())
-	    offset_tab.source_files.insert (std::make_pair (file, 0));
-	}
-      {
-	size_t file_idx = 0;
-	for (line_offsets::source_file_map::iterator sfit
-	       = offset_tab.source_files.begin ();
-	     sfit != offset_tab.source_files.end (); ++sfit)
-	  sfit->second = ++file_idx;
-      }
       for (line_offsets::source_file_map::const_iterator sfit
 	     = offset_tab.source_files.begin ();
 	   sfit != offset_tab.source_files.end (); ++sfit)
