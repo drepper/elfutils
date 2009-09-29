@@ -988,6 +988,10 @@ namespace elfutils
     template <class Iterator>
     void write_form (Iterator it, int form, uint64_t value);
 
+    template <class IteratorIn, class IteratorOut>
+    void write_block (IteratorOut it, int form,
+		      IteratorIn begin, IteratorIn end);
+
     /// @throws dwarf_32_not_enough
     void assert_fits_32 (uint64_t value) const;
 

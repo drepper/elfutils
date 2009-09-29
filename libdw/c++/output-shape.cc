@@ -277,12 +277,8 @@ namespace
 	return const_forms;
 
       case dwarf::VS_location:
-	/* xxx we spit out everything in .debug_loc.  Make similar
-	   heuristic of !is_list location as is done for strings.
-
 	if (!value.location ().is_list ())
 	  return block_forms;
-	*/
 	/* Fall through.  */
 
       case dwarf::VS_lineptr:
@@ -341,8 +337,13 @@ namespace
 				  // for much later
       case dwarf::VS_discr_list:
       case dwarf::VS_rangelistptr: // xxx same here
-      case dwarf::VS_location: // xxx and here
 	return false;
+
+      case dwarf::VS_location:
+	if (!value.location ().is_list ())
+	  return true;
+	else
+	  return false; // xxx and here, too
 
       case dwarf::VS_source_file:
 	if (source_file_is_string (tag, attr))
@@ -405,8 +406,13 @@ namespace
       case dwarf::VS_reference:
       case dwarf::VS_discr_list:
       case dwarf::VS_lineptr:
-      case dwarf::VS_location:
 	abort ();
+
+      case dwarf::VS_location:
+	if (!value.location ().is_list ())
+	  return value.location ().location ().size ();
+	else
+	  abort ();
       }
 
     abort ();
@@ -614,6 +620,20 @@ dwarf_output::writer::write_form (Iterator it, int form, uint64_t value)
 
   throw std::runtime_error (std::string ("Don't know how to write ")
 			    + dwarf_form_string (form));
+}
+
+template <class IteratorIn, class IteratorOut>
+void
+dwarf_output::writer::write_block (IteratorOut it, int form,
+				   IteratorIn begin, IteratorIn end)
+{
+  assert (form == DW_FORM_block
+	  || form == DW_FORM_block1
+	  || form == DW_FORM_block2
+	  || form == DW_FORM_block4);
+
+  write_form (it, form, end - begin);
+  std::copy (begin, end, it);
 }
 
 namespace
@@ -1235,11 +1255,9 @@ public:
 	    if (value.constant_is_integer ())
 	      _m_parent.write_form (inserter, form, value.constant ());
 	    else
-	      {
-		const std::vector<uint8_t> &block = value.constant_block ();
-		_m_parent.write_form (inserter, form, block.size ());
-		std::copy (block.begin (), block.end (), inserter);
-	      }
+	      _m_parent.write_block (inserter, form,
+				     value.constant_block ().begin (),
+				     value.constant_block ().end ());
 	    break;
 
 	  case dwarf::VS_dwarf_constant:
@@ -1293,9 +1311,14 @@ public:
 	    break;
 
 	  case dwarf::VS_location:
-	    _m_parent._m_loc_backpatch.push_back
-	      (std::make_pair (gap (_m_parent, appender, form),
-			       &value.location ()));
+	    if (!value.location ().is_list ())
+	      _m_parent.write_block (inserter, form,
+				     value.location ().location ().begin (),
+				     value.location ().location ().end ());
+	    else
+	      _m_parent._m_loc_backpatch.push_back
+		(std::make_pair (gap (_m_parent, appender, form),
+				 &value.location ()));
 	    break;
 
 	  case dwarf::VS_discr_list:
@@ -1858,7 +1881,8 @@ dwarf_output::writer::output_debug_loc (section_appender &appender)
 	  if (vs == dwarf::VS_location)
 	    {
 	      dwarf_output::location_attr const &loc = value.location ();
-	      locations.insert (&loc);
+	      if (loc.is_list ())
+		locations.insert (&loc);
 	    }
 	}
     }
