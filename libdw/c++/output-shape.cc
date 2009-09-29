@@ -1766,9 +1766,8 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 	    unsigned step = STEP;			\
 	    if (what != reg_what)			\
 	      {						\
-		assert (what > reg_what);		\
-		unsigned delta = what - reg_what;	\
-		unsigned advance = delta / step;	\
+		__typeof (WHAT) delta = what - reg_what;\
+		__typeof (WHAT) advance = delta / step;	\
 		assert (advance * step == delta);	\
 		standard_opcode (*this, OPCODE)		\
 		  .arg (advance)			\
