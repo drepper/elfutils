@@ -976,9 +976,9 @@ namespace elfutils
     class standard_opcode;
     class extended_opcode;
 
-    void write_string (std::string const &str,
-		       int form,
-		       section_appender &appender);
+    inline void write_string (std::string const &str,
+			      int form,
+			      section_appender &appender);
 
     template <class Iterator>
     void write_var (Iterator it, unsigned width, uint64_t value);
@@ -996,10 +996,44 @@ namespace elfutils
     void write_block (IteratorOut it, int form,
 		      IteratorIn begin, IteratorIn end);
 
-    /// @throws dwarf_32_not_enough
-    void assert_fits_32 (uint64_t value) const;
+    inline void write_version (section_appender &appender, unsigned version);
+
+    // Check that the value fits into 32-bits if !dwarf_64.  If it
+    // doesn't, throw an exception.  The client will then be able to
+    // restart the process with dwarf_64 == true.
+    inline void
+    assert_fits_32 (uint64_t value) const
+    {
+      if (!_m_config.dwarf_64 && value > (uint64_t)(uint32_t)-1)
+	throw dwarf_32_not_enough ();
+    }
 
   public:
+
+    template <class Iterator>
+    static inline void write_uleb128 (Iterator it, uint64_t value);
+
+    template <class Iterator>
+    static inline void write_sleb128 (Iterator it, int64_t value);
+
+    template <class Iterator>
+    static inline void write_u1 (Iterator it, uint8_t value);
+
+    template <class Iterator>
+    static inline void write_u2 (Iterator it, uint16_t value, bool big_endian);
+
+    template <class Iterator>
+    static inline void write_u4 (Iterator it, uint32_t value, bool big_endian);
+
+    template <class Iterator>
+    static inline void write_u8 (Iterator it, uint64_t value, bool big_endian);
+
+    static inline bool source_file_is_string (int tag, int attr);
+
+    /* Return width of data stored with given form.  For block forms,
+       return width of length field.  */
+    size_t
+    static inline form_width (int form, bool addr_64, bool dwarf_64);
 
     struct dwarf_32_not_enough
       : public std::runtime_error
