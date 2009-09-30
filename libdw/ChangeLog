@@ -1,5 +1,7 @@
 2009-09-30  Roland McGrath  <roland@redhat.com>
 
+	* c++/subr.hh (subr::sharing_stack::clear): New method.
+
 	* c++/values.cc (dwarf::attr_value::what_space):
 	Grok exprloc, flag_present, sec_offset.
 

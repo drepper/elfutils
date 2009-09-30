@@ -1184,15 +1184,19 @@ namespace elfutils
 	_m_size = n;
       }
 
-      inline void fini ()
+    public:
+      inline void clear ()
       {
 	if (_m_head == NULL)
 	  assert (_m_size == 0);
 	else
-	  _m_head->release ();
+	  {
+	    _m_head->release ();
+	    _m_head = NULL;
+	    _m_size = 0;
+	  }
       }
 
-    public:
       inline bool empty () const
       {
 	return _m_head == NULL;
@@ -1254,14 +1258,14 @@ namespace elfutils
 
       inline ~sharing_stack ()
       {
-	fini ();
+	clear ();
       }
 
       inline sharing_stack &operator= (const sharing_stack &other)
       {
 	if (&other != this)
 	  {
-	    fini ();
+	    clear ();
 	    init (other._m_head, other._m_size);
 	  }
 	return *this;
