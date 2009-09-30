@@ -78,6 +78,7 @@ dwarf::attr_value::what_space () const
   switch (dwarf_whatform (thisattr ()))
     {
     case DW_FORM_flag:
+    case DW_FORM_flag_present:
       return VS_flag;
 
     case DW_FORM_addr:
@@ -89,10 +90,13 @@ dwarf::attr_value::what_space () const
     case DW_FORM_block4:
       /* Location expression or target constant.  */
       possible = VS(location) | VS(constant);
-      if ((expected & possible) == possible)
+      if ((expected & possible) != possible)
 	/* When both are expected, a block is a location expression.  */
-	return VS_location;
-      break;
+	break;
+      /* Fall through.  */
+
+    case DW_FORM_exprloc:
+      return VS_location;
 
     case DW_FORM_data1:
     case DW_FORM_data2:
@@ -108,8 +112,11 @@ dwarf::attr_value::what_space () const
       // If a constant is not expected, these can be *ptr instead.
       possible = (VS(dwarf_constant) | VS(constant)
 		  | VS(source_file) | VS(source_line) | VS(source_column));
-      if ((expected & possible) == 0)
-	possible = VS(location) | VS(lineptr) | VS(macptr) | VS(rangelistptr);
+      if (expected & possible)
+	break;
+
+    case DW_FORM_sec_offset:
+      possible = VS(location) | VS(lineptr) | VS(macptr) | VS(rangelistptr);
       break;
 
     case DW_FORM_string:
@@ -124,8 +131,7 @@ dwarf::attr_value::what_space () const
     case DW_FORM_ref4:
     case DW_FORM_ref8:
     case DW_FORM_ref_udata:
-      possible = VS(reference);
-      break;
+      return VS_reference;
 
     default:
       throw std::runtime_error ("XXX bad form");
