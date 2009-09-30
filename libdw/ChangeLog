@@ -1,5 +1,8 @@
 2009-09-30  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf_comparator (dwarf_comparator::reference_match): Use the
+	subtracker/subcomparator for attributes too.
+
 	* c++/subr.hh (subr::sharing_stack::clear): New method.
 
 	* c++/values.cc (dwarf::attr_value::what_space):

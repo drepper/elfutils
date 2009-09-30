@@ -521,20 +521,28 @@ namespace elfutils
 	 contents and contexts in ascending order of costliness of a check.  */
       if (_m_tracker.context_quick_mismatch (lhs, rhs))
 	return nomatch (a, b, "quick context");
-      if (!match (a.attributes (), b.attributes ()))
-	return nomatch (a, b, "attribute");
-      if (!_m_tracker.context_match (lhs, rhs))
-	return nomatch (a, b, "context");
 
       /* To compare the children, we have to clone the tracker and use a
 	 new one, in case of any reference attributes in their subtrees.
 	 The new tracker jump-starts its walk to the referenced DIE from
-	 the root of the CU.  */
+	 the root of the CU.
+
+	 We use the subtracker and subcomparator for the attributes as well,
+	 in case the main tracker has side-effects like printing.  */
+
+      typename tracker::subtracker t (_m_tracker, matched, lhs, rhs);
+      subcomparator cmp (t);
+
+      if (!cmp.equals (a.attributes (), b.attributes ()))
+	return nomatch (a, b, "attribute");
+
+      if (!_m_tracker.context_match (lhs, rhs))
+	return nomatch (a, b, "context");
+
       bool result = !has_children;
       if (has_children)
 	{
-	  typename tracker::subtracker t (_m_tracker, matched, lhs, rhs);
-	  result = subcomparator (t).equals (a.children (), b.children ());
+	  result = cmp.equals (a.children (), b.children ());
 	  if (!result)
 	    result = nomatch (a, b, "children");
 	}
