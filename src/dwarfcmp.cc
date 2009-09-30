@@ -40,7 +40,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <cstdint>
+#include <cinttypes>
 #include "../libdw/libdwP.h"	// XXX
 
 #include "c++/dwarf"
@@ -80,10 +80,12 @@ static const struct argp_option options[] =
 
 /* Short description of program.  */
 static const char doc[] = N_("\
-Compare two DWARF files for semantic equality.");
+Compare two DWARF files for semantic equality.\n\
+In the second form, compare only the given pair of entries.");
 
 /* Strings for arguments in help texts.  */
-static const char args_doc[] = N_("FILE1 FILE2");
+static const char args_doc[] = N_("FILE1 FILE2\n\
+FILE1 FILE2 OFFSET1 OFFSET2");
 
 /* Prototype for option handler.  */
 static error_t parse_opt (int key, char *arg, struct argp_state *state);
@@ -196,7 +198,8 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     if (!visiting_result_)
       location () << dwarf::tags::name (a.tag ())
 		  << " vs "
-		  << dwarf::tags::name (b.tag ());
+		  << dwarf::tags::name (b.tag ())
+		  << endl;
   }
 
   inline bool keep_going ()
@@ -376,6 +379,24 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   }
 };
 
+template<class dw>
+static inline typename dw::compile_units::const_iterator
+find_cu (const dw &file, const typename dw::debug_info_entry &entry)
+{
+  dwarf::debug_info_entry::identity_type id = entry.compile_unit ().identity ();
+
+  for (typename dw::compile_units::const_iterator cu
+	 = file.compile_units ().begin ();
+       cu != file.compile_units ().end ();
+       ++cu)
+    {
+      if ((*cu).identity () == id)
+	return cu;
+    }
+
+  throw std::logic_error ("cannot find compile_unit for debug_info_entry!");
+}
+
 template<class dwarf1, class dwarf2, class tracker>
 struct cmp
   : public dwarf_comparator<dwarf1, dwarf2, false, tracker>
@@ -390,7 +411,24 @@ struct cmp
 template<class dwarf1, class dwarf2>
 struct quiet_cmp
   : public cmp<dwarf1, dwarf2, dwarf_ref_tracker<dwarf1, dwarf2> >
-{};
+{
+  typedef dwarf_ref_tracker<dwarf1, dwarf2> my_tracker;
+
+  inline bool operator () (const dwarf1 &a, const dwarf2 &b)
+  {
+    return equals (a, b);
+  }
+
+  inline bool operator () (const dwarf1 &file1, const dwarf2 &file2,
+			   const typename dwarf1::debug_info_entry &a,
+			   const typename dwarf2::debug_info_entry &b)
+  {
+    typename my_tracker::walk in (&this->_m_tracker,
+				  find_cu (file1, a), find_cu (file2, b));
+    in.jump (a, b);
+    return equals (a, b);
+  }
+};
 
 template<class dwarf1, class dwarf2>
 static inline bool
@@ -399,12 +437,25 @@ quiet_compare (const dwarf1 &a, const dwarf2 &b)
   return quiet_cmp<dwarf1, dwarf2> () (a, b);
 }
 
+template<class dwarf1, class dwarf2>
+static inline bool
+quiet_compare (const dwarf1 &file1, const dwarf2 &file2,
+	       const typename dwarf1::debug_info_entry &a,
+	       const typename dwarf2::debug_info_entry &b)
+
+{
+  return quiet_cmp<dwarf1, dwarf2> () (file1, file2, a, b);
+}
+
 // To be noisy, the talker wraps the standard tracker with verbosity hooks.
 template<class dwarf1, class dwarf2, bool print_all>
 struct noisy_cmp
   : public cmp<dwarf1, dwarf2, talker<dwarf1, dwarf2, print_all> >
 {
-  inline bool operator () (const dwarf1 &a, const dwarf2 &b)
+  typedef talker<dwarf1, dwarf2, print_all> my_tracker;
+
+  template<typename item1, typename item2>
+  inline bool compare (const item1 &a, const item2 &b)
   {
     if (equals (a, b) && this->_m_tracker.result_)
       {
@@ -413,6 +464,21 @@ struct noisy_cmp
       }
     this->_m_tracker.print_bad_context ();
     return false;
+  }
+
+  inline bool operator () (const dwarf1 &a, const dwarf2 &b)
+  {
+    return compare (a, b);
+  }
+
+  inline bool operator () (const dwarf1 &file1, const dwarf2 &file2,
+			   const typename dwarf1::debug_info_entry &a,
+			   const typename dwarf2::debug_info_entry &b)
+  {
+    typename my_tracker::walk in (&this->_m_tracker,
+				  find_cu (file1, a), find_cu (file2, b));
+    in.jump (a, b);
+    return compare (a, b);
   }
 };
 
@@ -423,6 +489,18 @@ noisy_compare (const dwarf1 &a, const dwarf2 &b, bool print_all)
   return (print_all
 	  ? noisy_cmp<dwarf1, dwarf2, true> () (a, b)
 	  : noisy_cmp<dwarf1, dwarf2, false> () (a, b));
+}
+
+template<class dwarf1, class dwarf2>
+static inline bool
+noisy_compare (const dwarf1 &file1, const dwarf2 &file2,
+	       const typename dwarf1::debug_info_entry &a,
+	       const typename dwarf2::debug_info_entry &b,
+	       bool print_all)
+{
+  return (print_all
+	  ? noisy_cmp<dwarf1, dwarf2, true> () (file1, file2, a, b)
+	  : noisy_cmp<dwarf1, dwarf2, false> () (file1, file2, a, b));
 }
 
 
@@ -514,6 +592,31 @@ static inline void do_writer_test (dwarf &, dwarf &, bool) {}
 #endif	// TEST
 
 
+static inline const dwarf::debug_info_entry
+parse_offset (const char *name, dwarf &file, const char *arg)
+{
+  char *end = NULL;
+  Dwarf_Off offset = strtoull (arg, &end, 16);
+  if (end == NULL || *end != '\0')
+    {
+      fputs (gettext ("Invalid offset parameter (use hex).\n"),
+	     stderr);
+      argp_help (&argp, stderr, ARGP_HELP_SEE,
+		 program_invocation_short_name);
+      exit (1);
+    }
+  try
+    {
+      return dwarf::debug_info_entry (file, offset);
+    }
+  catch (std::runtime_error x)
+    {
+      fprintf (stderr, gettext ("%s: offset %#" PRIx64 ": %s\n"),
+	       name, offset, x.what ());
+      exit (1);
+    }
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -531,17 +634,18 @@ main (int argc, char *argv[])
   (void) argp_parse (&argp, argc, argv, 0, &remaining, NULL);
 
   /* We expect exactly two non-option parameters.  */
-  if (unlikely (remaining + 2 != argc))
+  if (unlikely (remaining + 2 != argc)
+      && unlikely (remaining + 4 != argc))
     {
       fputs (gettext ("Invalid number of parameters.\n"), stderr);
       argp_help (&argp, stderr, ARGP_HELP_SEE, program_invocation_short_name);
       exit (1);
     }
-  const char *const fname1 = argv[remaining];
+  const char *const fname1 = argv[remaining++];
   int fd1;
   Dwarf *dw1 = open_file (fname1, &fd1);
 
-  const char *const fname2 = argv[remaining + 1];
+  const char *const fname2 = argv[remaining++];
   int fd2;
   Dwarf *dw2 = open_file (fname2, &fd2);
 
@@ -563,13 +667,29 @@ main (int argc, char *argv[])
       dwarf file1 (dw1);
       dwarf file2 (dw2);
 
-      bool same = (quiet
-		   ? quiet_compare (file1, file2)
-		   : noisy_compare (file1, file2, verbose));
+      if (remaining < argc)
+	{
+	  const dwarf::debug_info_entry a = parse_offset (fname1, file1,
+							  argv[remaining++]);
+	  const dwarf::debug_info_entry b = parse_offset (fname2, file2,
+							  argv[remaining++]);
 
-      do_writer_test (file1, file2, same);
+	  bool same = (quiet
+		       ? quiet_compare (file1, file2, a, b)
+		       : noisy_compare (file1, file2, a, b, verbose));
 
-      result = !same;
+	  result = !same;
+	}
+      else
+	{
+	  bool same = (quiet
+		       ? quiet_compare (file1, file2)
+		       : noisy_compare (file1, file2, verbose));
+
+	  do_writer_test (file1, file2, same);
+
+	  result = !same;
+	}
     }
 
   dwarf_end (dw1);

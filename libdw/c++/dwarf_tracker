@@ -161,16 +161,28 @@ namespace elfutils
     struct walk
     {
       dwarf_path_finder *_m_tracker;
+      bool _m_jumped;
+
       inline walk (dwarf_path_finder *w, const cu &root)
-	: _m_tracker (w)
+	: _m_tracker (w), _m_jumped (false)
       {
 	assert (_m_tracker->_m_path.empty ());
 	_m_tracker->_m_root = root;
       }
+
       inline ~walk ()
       {
-	assert (_m_tracker->_m_path.empty ());
+	if (_m_jumped)
+	  _m_tracker->_m_path.clear ();
+	else
+	  assert (_m_tracker->_m_path.empty ());
 	_m_tracker->_m_root = cu ();
+      }
+
+      inline void jump (const typename dw::debug_info_entry &there)
+      {
+	_m_jumped = true;
+	_m_tracker->prime_path_to (there);
       }
     };
 
@@ -199,10 +211,38 @@ namespace elfutils
       }
     };
 
+    void prime_path_to (const typename dw::debug_info_entry &here,
+			dwarf::debug_info_entry::identity_type id)
+    {
+      for (typename dw::debug_info_entry::children_type::const_iterator i
+	     = here.children ().begin ();
+	   i != here.children ().end ();
+	   ++i)
+	{
+	  step into (this, i);
+	  if ((*i).identity () == id)
+	    break;
+	  prime_path_to (*i, id);
+	}
+    }
+
+    inline void prime_path_to (const typename dw::debug_info_entry &there)
+    {
+      assert (_m_path.empty ());
+      prime_path_to (*_m_root, there.identity ());
+      assert (_m_path.empty ());
+      _m_path = (*_m_seen)[there.identity ()];
+    }
+
     // Random access to a DIE, find the path of the walk that gets there.
     inline const die_path &path_to (const die &a)
     {
-      const dwarf::debug_info_entry::identity_type id = (*a).identity ();
+      return path_to (*a);
+    }
+
+    inline const die_path &path_to (const typename dw::debug_info_entry &a)
+    {
+      const dwarf::debug_info_entry::identity_type id = a.identity ();
       std::pair<typename die_map::iterator, bool> found
 	= _m_seen->insert (std::make_pair (id, bad_die_path ()));
       if (found.second
@@ -462,6 +502,14 @@ namespace elfutils
       inline walk (dwarf_ref_tracker *w, const cu1 &a, const cu2 &b)
 	: _m_left (&w->_m_left, a), _m_right (&w->_m_right, b)
       {}
+
+      // Wind forward to cache everything up through A and B.
+      inline void jump (const typename dwarf1::debug_info_entry &a,
+			const typename dwarf2::debug_info_entry &b)
+      {
+	_m_left.jump (a);
+	_m_right.jump (b);
+      }
     };
 
     struct step

@@ -1,5 +1,8 @@
 2009-09-30  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf_tracker (dwarf_path_finder::walk::jump): New method.
+	(dwarf_ref_tracker::walk::jump): New method.
+
 	* c++/dwarf (dwarf::debug_info_entry): Make constructor from file and
 	offset public.
 	(dwarf::debug_info_entry::compile_unit): New method.
