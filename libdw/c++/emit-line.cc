@@ -332,12 +332,13 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
       // include_directories
       dwarf_output::directory_table const &dirs = lt.include_directories ();
       for (dwarf_output::directory_table::const_iterator dir_it
-	     = dirs.begin (); dir_it != dirs.end (); ++dir_it)
-	if (*dir_it != "")
-	  {
-	    std::copy (dir_it->begin (), dir_it->end (), inserter);
-	    *inserter++ = 0;
-	  }
+	     = dirs.begin () + 1; dir_it < dirs.end (); ++dir_it)
+	// +1 above skips the directory that libdw reports for
+	// DW_AT_comp_dir attribute.
+	{
+	  std::copy (dir_it->begin (), dir_it->end (), inserter);
+	  *inserter++ = 0;
+	}
       *inserter++ = 0;
 
       // file_names
@@ -345,7 +346,7 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 	     = offset_tab.source_files.begin ();
 	   sfit != offset_tab.source_files.end (); ++sfit)
 	{
-	  dwarf_output::source_file const &sf = sfit->first;
+	  source_file const &sf = sfit->first;
 
 	  // Find the best-fitting directory for this filename.
 	  size_t dir_index = 0;
