@@ -1,3 +1,8 @@
+2009-09-30  Roland McGrath  <roland@redhat.com>
+
+	* c++/values.cc (dwarf::attr_value::what_space): Fix data[48] case
+	to favor constants when expected.
+
 2009-09-25  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf (dwarf::location_attr::operator==): Compare a singleton as
