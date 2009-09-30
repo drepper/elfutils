@@ -437,13 +437,22 @@ namespace elfutils
 	memset (&_m_die, 0, sizeof _m_die);
       }
 
+    public:
+      debug_info_entry (const debug_info_entry &die) : _m_die (die._m_die) {}
+
       inline debug_info_entry (const dwarf &dw, ::Dwarf_Off off)
       {
 	dw.xif (::dwarf_offdie (dw._m_dw, off, &_m_die) == NULL);
       }
 
-    public:
-      debug_info_entry (const debug_info_entry &die) : _m_die (die._m_die) {}
+      /* Return the compile_unit entry containing this entry.
+	 Note this might be a DW_TAG_partial_unit.  */
+      inline debug_info_entry compile_unit () const
+      {
+	debug_info_entry result;
+	xif (::dwarf_diecu (thisdie (), &result._m_die, NULL, NULL) == NULL);
+	return result;
+      }
 
       // Containers, see class definitions below.
       class raw_children_type;
