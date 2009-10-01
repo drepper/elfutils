@@ -352,7 +352,9 @@ dwarf_output::writer::output_debug_line (section_appender &appender)
 	  size_t dir_index = 0;
 	  size_t match_len = 0;
 	  for (dwarf_output::directory_table::const_iterator dir_it
-		 = dirs.begin () + 1; dir_it != dirs.end (); ++dir_it)
+		 = dirs.begin (); dir_it != dirs.end (); ++dir_it)
+	    // Don't skip directory #0 when considering where to put
+	    // the file.
 	    {
 	      std::string const &dir = *dir_it;
 	      if (dir.length () > match_len
