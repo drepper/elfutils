@@ -1,5 +1,8 @@
 2009-10-01  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf_tracker (dwarf_path_finder::walk_down_to): Fix sibling
+	check for short-circuit optimization to handle end iterator case.
+
 	* c++/line_info.cc (dwarf::source_file::name): Check for failure
 	return from dwarf_formstring.
 	(dwarf::source_file::to_string): Likewise.

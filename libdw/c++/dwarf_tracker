@@ -125,6 +125,23 @@ namespace elfutils
       throw std::logic_error ("not copy-constructible");
     }
 
+    inline bool at_top () const
+    {
+      return _m_path.empty ();
+    }
+
+    inline const die &current_die () const
+    {
+      return _m_path.const_top ();
+    }
+
+    inline die current_end () const
+    {
+      return (at_top ()
+	      ? (*_m_root).children ().end ()
+	      : (*current_die ()).children ().end ());
+    }
+
   public:
     // Default constructor: an original tracker.
     inline dwarf_path_finder ()
@@ -211,27 +228,39 @@ namespace elfutils
       }
     };
 
-    void prime_path_to (const typename dw::debug_info_entry &here,
+    bool prime_path_to (const typename dw::debug_info_entry &here,
 			dwarf::debug_info_entry::identity_type id)
     {
+      if (here.identity () == id)
+	return true;
+
       for (typename dw::debug_info_entry::children_type::const_iterator i
 	     = here.children ().begin ();
 	   i != here.children ().end ();
 	   ++i)
 	{
 	  step into (this, i);
-	  if ((*i).identity () == id)
-	    break;
-	  prime_path_to (*i, id);
+	  if (prime_path_to (*i, id))
+	    return true;
 	}
+
+      return false;
+    }
+
+    inline void unreachable (const typename dw::debug_info_entry &) const
+    {
+      throw std::runtime_error ("DIE not reachable from CU!");
     }
 
     inline void prime_path_to (const typename dw::debug_info_entry &there)
     {
-      assert (_m_path.empty ());
-      prime_path_to (*_m_root, there.identity ());
-      assert (_m_path.empty ());
-      _m_path = (*_m_seen)[there.identity ()];
+      assert (at_top ());
+      bool found = prime_path_to (*_m_root, there.identity ());
+      assert (at_top ());
+      if (likely (found))
+	_m_path = (*_m_seen)[there.identity ()];
+      else
+	unreachable (there);
     }
 
     // Random access to a DIE, find the path of the walk that gets there.
@@ -258,7 +287,7 @@ namespace elfutils
 	  && !walk_down_to (id, found.first)
 	  && !walk_over_to (id, found.first)
 	  && !walk_up_to (id, found.first))
-	throw std::runtime_error ("DIE not reachable from CU!");
+	unreachable (a);
       assert (&found.first->second != NULL);
       assert (!bad_die_path (found.first->second));
       return found.first->second;
@@ -320,16 +349,19 @@ namespace elfutils
     inline bool walk_down_to (dwarf::debug_info_entry::identity_type there,
 			      typename die_map::iterator &cache)
     {
-      const die &start = _m_path.const_top ();
-      const typename die::value_type &here = *start;
+      if ((*current_die ()).has_children ())
+	{
+	  /* It's common to have a reference to the next sibling DIE.
+	     So bypass the descent to HERE's children if THERE is
+	     HERE's immediate next sibling.  */
 
-      /* It's common to have a reference to the next sibling DIE.
-	 So bypass the descent to HERE's children if THERE is
-	 HERE's immediate next sibling.  */
-      if (!here.has_children () || there == (*++die (start)).identity ())
-	return false;
+	  die next = current_die ();
+	  ++next;
 
-      return walk_to (here, there, cache);
+	  if (next == current_end () || there != (*next).identity ())
+	    return walk_to (*current_die (), there, cache);
+	}
+      return false;
     }
 
     /* A step_up object saves _m_path when constructed
@@ -354,7 +386,7 @@ namespace elfutils
       dwarf_path_finder *_m_walker;
       const die _m_here;
       inline step_back (dwarf_path_finder *w, die &copy)
-	: _m_walker (w), _m_here (w->_m_path.const_top ())
+	: _m_walker (w), _m_here (w->current_die ())
       {
 	w->_m_path.pop ();
 	copy = _m_here;
@@ -374,10 +406,7 @@ namespace elfutils
       step_back from (this, next);
       ++next;
 
-      return walk_to (next, (_m_path.empty ()
-			     ? (*_m_root).children ().end ()
-			     : (*_m_path.const_top ()).children ().end ()),
-		      there, cache);
+      return walk_to (next, current_end (), there, cache);
     }
 
     /* Now wind the walk forward starting from the current DIE's
@@ -385,20 +414,13 @@ namespace elfutils
     inline bool walk_up_to (dwarf::debug_info_entry::identity_type there,
 			    typename die_map::iterator &cache)
     {
-      if (_m_path.empty ())
-	return false;
-
-      step_up from (this);
-
-      do
+      if (!at_top ())
 	{
-	  _m_path.pop ();
-	  assert (!_m_path.empty ());
-	  if (walk_over_to (there, cache))
-	    return true;
+	  step_up from (this);
+	  while (_m_path.pop (), !at_top ())
+	    if (walk_over_to (there, cache))
+	      return true;
 	}
-      while (!_m_path.empty ());
-
       return false;
     }
   };
