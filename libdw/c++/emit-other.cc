@@ -117,6 +117,15 @@ dwarf_output::writer::output_debug_loc (section_appender &appender)
 	  .second)
 	throw std::runtime_error ("duplicate loc table address");
 
+      // xxx We emit everything with base address of 0.  Would be
+      // better to figure out effective base address of referencing
+      // CU, but this will do for the time being.
+      // xxx When this is being fixed, duplicate selection has to take
+      // base address into account.  So the set above will be set of
+      // (location attr, base address) pairs.
+      write_form (inserter, DW_FORM_addr, (uint64_t)-1);
+      write_form (inserter, DW_FORM_addr, 0);
+
       for (dwarf_output::location_attr::const_iterator jt = loc.begin ();
 	   jt != loc.end (); ++jt)
 	{
