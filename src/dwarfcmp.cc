@@ -158,10 +158,27 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     }
   };
 
-  typedef std::tr1::unordered_set<die2, die_hasher<die2> > die2_set;
+  template<typename die>
+  struct die_equal_to
+    : public std::equal_to<die>
+  {
+    inline dwarf::debug_info_entry::identity_type
+    operator () (const die &a, const die &b) const
+    {
+      return (*a).identity () == (*b).identity ();
+    }
+  };
+
+  typedef std::tr1::unordered_set<die2, die_hasher<die2>, die_equal_to<die2>
+				  > die2_set;
   typedef std::tr1::unordered_map<die1, die2_set,
-				  die_hasher<die1> > context_map;
+				  die_hasher<die1>, die_equal_to<die1>
+				  > context_map;
   context_map bad_context_;
+  context_map reference_mismatches_;
+  typedef std::pair<dwarf::debug_info_entry::identity_type,
+		    dwarf::debug_info_entry::identity_type> identity_pair;
+  std::set<identity_pair> mismatches_printed_;
 
   string prefix_;
 
@@ -169,9 +186,10 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   const typename dwarf2::debug_info_entry *b_;
   bool result_;
   bool visiting_result_;
+  bool mismatches_pending_;
 
   inline talker ()
-    : a_ (NULL), b_ (NULL), result_ (true)
+    : a_ (NULL), b_ (NULL), result_ (true), mismatches_pending_ (false)
   {}
 
   inline talker (const talker &proto, typename subtracker::reference_match &m,
@@ -321,6 +339,60 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 	  cout << " (" << ref1->to_string ()
 	       << " != " << ref2->to_string ()
 	       << ")";
+	if (reference_mismatches_[ref1].insert (ref2).second)
+	  mismatches_pending_ = true;
+      }
+  }
+
+  struct prefixer
+  {
+    string &string_;
+    inline explicit prefixer (string &p) : string_ (p) {}
+    inline ~prefixer ()
+    {
+      string_.clear ();
+    }
+  };
+
+  inline void
+  for_context_map (const context_map &context,
+		   void (talker::*method) (const die1 &, const die2 &))
+  {
+    for (typename context_map::const_iterator i = context.begin ();
+	 i != context.end ();
+	 ++i)
+      for (typename die2_set::const_iterator j = i->second.begin ();
+	   j != i->second.end ();
+	   ++j)
+	(this->*method) (i->first, *j);
+  }
+
+  inline void print_one_reference_mismatch (const die1 &ref1, const die2 &ref2)
+  {
+    if (mismatches_printed_.insert (identity_pair ((*ref1).identity (),
+						   (*ref2).identity ())).second)
+      {
+	prefixer here (prefix_);
+	{
+	  ostringstream pfx;
+	  pfx << "reference "
+	      << hex << (*ref1).offset () << " vs " << (*ref2).offset ()
+	      << ": ";
+	  prefix_ = pfx.str ();
+	}
+	dwarf_comparator<dwarf1, dwarf2, false, talker> (*this)
+	  .equals (ref1, ref2);
+      }
+  }
+
+  inline void print_reference_mismatches ()
+  {
+    // Print the pending mismatches and loop if that adds more fresh ones.
+    while (mismatches_pending_)
+      {
+	mismatches_pending_ = false;
+	for_context_map (reference_mismatches_,
+			 &talker::print_one_reference_mismatch);
       }
   }
 
@@ -328,6 +400,7 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
   {
     dwarf_comparator<dwarf1, dwarf2, true, talker> cmp (*this);
 
+    prefixer here (prefix_);
     {
       ostringstream pfx;
       pfx << hex << (*ref1).offset () << " vs " << (*ref2).offset ()
@@ -369,13 +442,7 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 
   inline void print_bad_context ()
   {
-    for (typename context_map::const_iterator i = bad_context_.begin ();
-	 i != bad_context_.end ();
-	 ++i)
-      for (typename die2_set::const_iterator j = i->second.begin ();
-	   j != i->second.end ();
-	   ++j)
-	print_one_bad_context (i->first, *j);
+    for_context_map (bad_context_, &talker::print_one_bad_context);
   }
 };
 
@@ -462,6 +529,7 @@ struct noisy_cmp
 	assert (this->_m_tracker.bad_context_.empty ());
 	return true;
       }
+    this->_m_tracker.print_reference_mismatches ();
     this->_m_tracker.print_bad_context ();
     return false;
   }

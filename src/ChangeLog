@@ -1,3 +1,8 @@
+2009-10-01  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (talker): Describe reference mismatch details at the
+	end, iterating when that mentions new mismatches.
+
 2009-09-30  Roland McGrath  <roland@redhat.com>
 
 	* dwarfcmp.cc: Support four-argument usage to compare specific entries.
