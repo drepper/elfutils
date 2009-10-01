@@ -1363,13 +1363,15 @@ namespace elfutils
        place of std::cout et al for disabled debugging spew.  */
     struct nostream
     {
-      inline const nostream &operator<< (std::ostream &(*) (std::ostream &))
+      inline const nostream &
+      operator<< (std::ostream &(*) (std::ostream &)) const
       {
 	return *this;
       }
 
       template<typename arg>
-      inline const nostream &operator<< (const arg &) const
+      inline const nostream &
+      operator<< (const arg &) const
       {
 	return *this;
       }
