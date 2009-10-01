@@ -347,42 +347,42 @@ namespace elfutils
 	return _m_contents[_m_idx + n];
       }
 
-      inline indexed_iterator operator+ (const indexed_iterator &i)
+      inline indexed_iterator operator+ (const indexed_iterator &i) const
       {
 	return indexed_iterator (_m_contents, _m_idx + i._m_idx);
       }
       inline indexed_iterator operator+ (const typename array::difference_type
-					 &i)
+					 &i) const
       {
 	return indexed_iterator (_m_contents, _m_idx + i);
       }
       inline typename array::difference_type
-      operator- (const indexed_iterator &i)
+      operator- (const indexed_iterator &i) const
       {
 	return _m_idx - i._m_idx;
       }
 
-      inline bool operator== (const indexed_iterator &i)
+      inline bool operator== (const indexed_iterator &i) const
       {
 	return _m_idx == i._m_idx;
       }
-      inline bool operator!= (const indexed_iterator &i)
+      inline bool operator!= (const indexed_iterator &i) const
       {
 	return _m_idx != i._m_idx;
       }
-      inline bool operator< (const indexed_iterator &i)
+      inline bool operator< (const indexed_iterator &i) const
       {
 	return _m_idx < i._m_idx;
       }
-      inline bool operator> (const indexed_iterator &i)
+      inline bool operator> (const indexed_iterator &i) const
       {
 	return _m_idx > i._m_idx;
       }
-      inline bool operator<= (const indexed_iterator &i)
+      inline bool operator<= (const indexed_iterator &i) const
       {
 	return _m_idx <= i._m_idx;
       }
-      inline bool operator>= (const indexed_iterator &i)
+      inline bool operator>= (const indexed_iterator &i) const
       {
 	return _m_idx >= i._m_idx;
       }
