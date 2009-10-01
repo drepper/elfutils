@@ -123,8 +123,11 @@ dwarf_output::writer::output_debug_loc (section_appender &appender)
       // xxx When this is being fixed, duplicate selection has to take
       // base address into account.  So the set above will be set of
       // (location attr, base address) pairs.
-      write_form (inserter, DW_FORM_addr, (uint64_t)-1);
-      write_form (inserter, DW_FORM_addr, 0);
+      if (loc.begin ()->first.first > 0)
+	{
+	  write_form (inserter, DW_FORM_addr, (uint64_t)-1);
+	  write_form (inserter, DW_FORM_addr, 0);
+	}
 
       for (dwarf_output::location_attr::const_iterator jt = loc.begin ();
 	   jt != loc.end (); ++jt)
