@@ -121,14 +121,16 @@ dwarf::source_file::size () const
 const char *
 dwarf::source_file::name () const
 {
+  const char *result;
   if (stringform (thisattr ()))
-    return dwarf_formstring (thisattr ());
-
-  Dwarf_Files *files;
-  Dwarf_Word idx;
-  xif (thisattr (), get_files (thisattr (), &files, &idx));
-
-  const char *result = dwarf_filesrc (files, idx, NULL, NULL);
+    result = dwarf_formstring (thisattr ());
+  else
+    {
+      Dwarf_Files *files;
+      Dwarf_Word idx;
+      xif (thisattr (), get_files (thisattr (), &files, &idx));
+     result = dwarf_filesrc (files, idx, NULL, NULL);
+    }
   xif (thisattr (), result == NULL);
   return result;
 }
@@ -136,14 +138,21 @@ dwarf::source_file::name () const
 static inline string
 plain_string (const char *filename)
 {
-  return string ("\"") + filename + "\"";
+  string result ("\"");
+  result += filename;
+  result += "\"";
+  return result;
 }
 
 string
 dwarf::source_file::to_string () const
 {
   if (stringform (thisattr ()))
-    return plain_string (dwarf_formstring (thisattr ()));
+    {
+      const char *result = dwarf_formstring (thisattr ());
+      xif (thisattr (), result == NULL);
+      return plain_string (result);
+    }
 
   Dwarf_Files *files;
   Dwarf_Word idx;
