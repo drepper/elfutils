@@ -1,5 +1,8 @@
 2009-10-01  Roland McGrath  <roland@redhat.com>
 
+	* dwarfcmp.cc: Support more than for arguments to compare multiple
+	right-hand side entries against the same left-hand side.
+
 	* dwarfcmp.cc (talker): Describe reference mismatch details at the
 	end, iterating when that mentions new mismatches.
 

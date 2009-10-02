@@ -81,11 +81,12 @@ static const struct argp_option options[] =
 /* Short description of program.  */
 static const char doc[] = N_("\
 Compare two DWARF files for semantic equality.\n\
-In the second form, compare only the given pair of entries.");
+In the second form, compare specific entries chosen by hexadecimal file offset,\
+\n\the entry at OFFSET1 in FILE1 against each of OFFSET2... in FILE2.");
 
 /* Strings for arguments in help texts.  */
 static const char args_doc[] = N_("FILE1 FILE2\n\
-FILE1 FILE2 OFFSET1 OFFSET2");
+FILE1 FILE2 OFFSET1 OFFSET2...");
 
 /* Prototype for option handler.  */
 static error_t parse_opt (int key, char *arg, struct argp_state *state);
@@ -504,14 +505,51 @@ quiet_compare (const dwarf1 &a, const dwarf2 &b)
   return quiet_cmp<dwarf1, dwarf2> () (a, b);
 }
 
+static inline const dwarf::debug_info_entry
+parse_offset (const char *name, const dwarf &file, const char *arg)
+{
+  char *end = NULL;
+  Dwarf_Off offset = strtoull (arg, &end, 16);
+  if (end == NULL || *end != '\0')
+    {
+      fputs (gettext ("Invalid offset parameter (use hex).\n"),
+	     stderr);
+      argp_help (&argp, stderr, ARGP_HELP_SEE,
+		 program_invocation_short_name);
+      exit (1);
+    }
+  try
+    {
+      return dwarf::debug_info_entry (file, offset);
+    }
+  catch (std::runtime_error x)
+    {
+      fprintf (stderr, gettext ("%s: offset %#" PRIx64 ": %s\n"),
+	       name, offset, x.what ());
+      exit (1);
+    }
+}
+
 template<class dwarf1, class dwarf2>
 static inline bool
 quiet_compare (const dwarf1 &file1, const dwarf2 &file2,
 	       const typename dwarf1::debug_info_entry &a,
-	       const typename dwarf2::debug_info_entry &b)
-
+	       const char *fname2, char **offsets, int noffsets)
 {
-  return quiet_cmp<dwarf1, dwarf2> () (file1, file2, a, b);
+  quiet_cmp<dwarf1, dwarf2> cmp;
+
+  bool same = true;
+
+  do
+    {
+      const dwarf::debug_info_entry b
+	= parse_offset (fname2, file2, *offsets++);
+
+      same = cmp (file1, file2, a, b);
+    }
+  while (--noffsets > 0);
+
+  return same;
 }
 
 // To be noisy, the talker wraps the standard tracker with verbosity hooks.
@@ -524,14 +562,13 @@ struct noisy_cmp
   template<typename item1, typename item2>
   inline bool compare (const item1 &a, const item2 &b)
   {
-    if (equals (a, b) && this->_m_tracker.result_)
-      {
-	assert (this->_m_tracker.bad_context_.empty ());
-	return true;
-      }
+    return equals (a, b) && this->_m_tracker.result_;
+  }
+
+  inline void print_more_details ()
+  {
     this->_m_tracker.print_reference_mismatches ();
     this->_m_tracker.print_bad_context ();
-    return false;
   }
 
   inline bool operator () (const dwarf1 &a, const dwarf2 &b)
@@ -559,16 +596,42 @@ noisy_compare (const dwarf1 &a, const dwarf2 &b, bool print_all)
 	  : noisy_cmp<dwarf1, dwarf2, false> () (a, b));
 }
 
-template<class dwarf1, class dwarf2>
+template<bool print_all>
 static inline bool
-noisy_compare (const dwarf1 &file1, const dwarf2 &file2,
-	       const typename dwarf1::debug_info_entry &a,
-	       const typename dwarf2::debug_info_entry &b,
+noisy_compare (const dwarf &file1, const dwarf &file2,
+	       const dwarf::debug_info_entry &a,
+	       const char *fname2, char **offsets, int noffsets)
+{
+  noisy_cmp<dwarf, dwarf, print_all> cmp;
+
+  bool same = true;
+
+  do
+    {
+      const dwarf::debug_info_entry b
+	= parse_offset (fname2, file2, *offsets++);
+
+      same = cmp (file1, file2, a, b);
+    }
+  while (--noffsets > 0);
+
+  if (!same)
+    cmp.print_more_details ();
+
+  return same;
+}
+
+static inline bool
+noisy_compare (const dwarf &file1, const dwarf &file2,
+	       const dwarf::debug_info_entry &a,
+	       const char *fname2, char *offsets[], int noffsets,
 	       bool print_all)
 {
   return (print_all
-	  ? noisy_cmp<dwarf1, dwarf2, true> () (file1, file2, a, b)
-	  : noisy_cmp<dwarf1, dwarf2, false> () (file1, file2, a, b));
+	  ? noisy_compare<true> (file1, file2, a,
+				      fname2, offsets, noffsets)
+	  : noisy_compare<false> (file1, file2, a,
+				  fname2, offsets, noffsets));
 }
 
 
@@ -659,32 +722,6 @@ static inline void do_writer_test (dwarf &, dwarf &, bool) {}
 
 #endif	// TEST
 
-
-static inline const dwarf::debug_info_entry
-parse_offset (const char *name, dwarf &file, const char *arg)
-{
-  char *end = NULL;
-  Dwarf_Off offset = strtoull (arg, &end, 16);
-  if (end == NULL || *end != '\0')
-    {
-      fputs (gettext ("Invalid offset parameter (use hex).\n"),
-	     stderr);
-      argp_help (&argp, stderr, ARGP_HELP_SEE,
-		 program_invocation_short_name);
-      exit (1);
-    }
-  try
-    {
-      return dwarf::debug_info_entry (file, offset);
-    }
-  catch (std::runtime_error x)
-    {
-      fprintf (stderr, gettext ("%s: offset %#" PRIx64 ": %s\n"),
-	       name, offset, x.what ());
-      exit (1);
-    }
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -703,7 +740,7 @@ main (int argc, char *argv[])
 
   /* We expect exactly two non-option parameters.  */
   if (unlikely (remaining + 2 != argc)
-      && unlikely (remaining + 4 != argc))
+      && unlikely (argc - remaining < 4))
     {
       fputs (gettext ("Invalid number of parameters.\n"), stderr);
       argp_help (&argp, stderr, ARGP_HELP_SEE, program_invocation_short_name);
@@ -739,12 +776,13 @@ main (int argc, char *argv[])
 	{
 	  const dwarf::debug_info_entry a = parse_offset (fname1, file1,
 							  argv[remaining++]);
-	  const dwarf::debug_info_entry b = parse_offset (fname2, file2,
-							  argv[remaining++]);
 
 	  bool same = (quiet
-		       ? quiet_compare (file1, file2, a, b)
-		       : noisy_compare (file1, file2, a, b, verbose));
+		       ? quiet_compare (file1, file2, a, fname2,
+					&argv[remaining], argc - remaining)
+		       : noisy_compare (file1, file2, a, fname2,
+					&argv[remaining], argc - remaining,
+					verbose));
 
 	  result = !same;
 	}
