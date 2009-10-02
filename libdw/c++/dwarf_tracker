@@ -132,7 +132,7 @@ namespace elfutils
 
     inline const die &current_die () const
     {
-      return _m_path.const_top ();
+      return _m_path.top ();
     }
 
     inline die current_end () const
