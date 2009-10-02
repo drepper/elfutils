@@ -1,3 +1,11 @@
+2009-10-02  Roland McGrath  <roland@redhat.com>
+
+	* dwarfcmp.cc (talker): Show missing/extra children, not just count.
+	(noisy_compare): In explicit-offsets case, print for a positive match.
+
+	* dwarfcmp.cc (talker::print_one_reference_mismatch): Compare entries,
+	not references.
+
 2009-10-01  Roland McGrath  <roland@redhat.com>
 
 	* dwarfcmp.cc: Support more than for arguments to compare multiple

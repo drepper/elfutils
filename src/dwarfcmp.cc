@@ -268,21 +268,21 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     return keep_going ();
   }
 
+  template<typename die>
+  inline void list_children (const char *prefix, die &it, const die &end) const
+  {
+    for (location () << prefix << hex; it != end; ++it)
+      cout << " " << (*it).offset () << "=" << (*it).to_string ();
+    cout << endl;
+  }
+
   inline bool mismatch (die1 &it1, const die1 &end1,
 			die2 &it2, const die2 &end2)
   {
     if (it1 == end1)		// a_ lacks some of b_'s children.
-      {
-	location () << dec << subr::length (it2, end2)
-		    << " extra children " << endl;
-	it2 = end2;
-      }
+      list_children ("extra children:", it2, end2);
     else if (it2 == end2)	// b_ lacks some of a_'s children.
-      {
-	location () << dec << subr::length (it1, end1)
-		    << " children missing " << endl;
-	it1 = end1;
-      }
+      list_children ("missing children:", it1, end1);
     else
       // Otherwise the differing child will have announced itself.
       ++it1, ++it2;
@@ -368,6 +368,7 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 	(this->*method) (i->first, *j);
   }
 
+  // REF1 and REF2 had unequal contents.  Describe the details.
   inline void print_one_reference_mismatch (const die1 &ref1, const die2 &ref2)
   {
     if (mismatches_printed_.insert (identity_pair ((*ref1).identity (),
@@ -382,7 +383,7 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 	  prefix_ = pfx.str ();
 	}
 	dwarf_comparator<dwarf1, dwarf2, false, talker> (*this)
-	  .equals (ref1, ref2);
+	  .equals (*ref1, *ref2);
       }
   }
 
@@ -392,11 +393,14 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
     while (mismatches_pending_)
       {
 	mismatches_pending_ = false;
-	for_context_map (reference_mismatches_,
-			 &talker::print_one_reference_mismatch);
+
+	// We need a copy so our iterators remain stable if we add new entries.
+	const context_map all = reference_mismatches_;
+	for_context_map (all, &talker::print_one_reference_mismatch);
       }
   }
 
+  // REF1 and REF2 had equal contents but different contexts.  Describe them.
   inline void print_one_bad_context (const die1 &ref1, const die2 &ref2)
   {
     dwarf_comparator<dwarf1, dwarf2, true, talker> cmp (*this);
@@ -611,7 +615,13 @@ noisy_compare (const dwarf &file1, const dwarf &file2,
       const dwarf::debug_info_entry b
 	= parse_offset (fname2, file2, *offsets++);
 
-      same = cmp (file1, file2, a, b);
+      if (cmp (file1, file2, a, b))
+	{
+	  cmp._m_tracker.visit (a, b);
+	  cmp._m_tracker.location () << "match" << endl;
+	}
+      else
+	same = false;
     }
   while (--noffsets > 0);
 
