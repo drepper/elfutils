@@ -1,5 +1,7 @@
 2009-10-02  Roland McGrath  <roland@redhat.com>
 
+	* c++/subr.hh (subr::stackish): New template type.
+
 	* c++/dwarf_comparator: Fix overload magic to distinguish reference
 	comparisons from child comparisons.
 

@@ -15,6 +15,7 @@
 #include <tr1/unordered_set>
 #include <vector>
 #include <deque>
+#include <stack>
 #include <algorithm>
 #include <utility>
 #include <stdexcept>
@@ -1225,11 +1226,6 @@ namespace elfutils
 	return *_m_head;
       }
 
-      inline const value_type &const_top ()
-      {
-	return const_cast<const sharing_stack *> (this)->top ();
-      }
-
       inline const value_type &const_top () const
       {
 	return top ();
@@ -1356,6 +1352,54 @@ namespace elfutils
 	const
       {
 	return !(*this == other);
+      }
+    };
+
+    // Compatible with sharing_stack, but actually a std::stack.
+    template<typename T, typename container_type = std::deque<T> >
+    struct stackish
+      : public std::stack<T, container_type>
+    {
+      inline const T &const_top () const
+      {
+	return this->top ();
+      }
+
+      inline void clear ()
+      {
+	this->c.clear ();
+      }
+
+      typedef typename container_type::const_reverse_iterator
+      const_reverse_iterator;
+
+      inline const_reverse_iterator rbegin () const
+      {
+	return this->c.rbegin ();
+      }
+
+      inline const_reverse_iterator rend () const
+      {
+	return this->c.rend ();
+      }
+
+      template<typename other_value_type, typename other_container_type,
+	       typename pred_type>
+      inline bool
+      equal (const stackish<other_value_type, other_container_type> &other,
+	     pred_type &pred, typename container_type::size_type skip = 0) const
+      {
+	if (other.size () != this->size ())
+	  return false;
+
+	typename container_type::const_reverse_iterator a = this->rbegin ();
+	typename other_container_type::const_reverse_iterator b
+	  = other.rbegin ();
+
+	std::advance (a, skip);
+	std::advance (b, skip);
+
+	return std::equal (a, this->rend (), b, pred);
       }
     };
 
