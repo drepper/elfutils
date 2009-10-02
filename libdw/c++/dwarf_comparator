@@ -208,7 +208,7 @@ namespace elfutils
 
       inline bool operator () (const item1 &a, const item2 &b)
       {
-	return _m_cmp.equals (a, b);
+	return _m_cmp.match_deref (a, b);
       }
     };
 #define MATCHER(item) \
@@ -242,7 +242,7 @@ namespace elfutils
 
     typedef typename dwarf1::debug_info_entry die1;
     typedef typename dwarf2::debug_info_entry die2;
-    inline bool match (const cu1_it &a, const cu2_it &b)
+    inline bool match_deref (const cu1_it &a, const cu2_it &b)
     {
       typename tracker::walk in (&_m_tracker, a, b);
       return equals (*a, *b);
@@ -376,7 +376,7 @@ namespace elfutils
       return equals (*a, *b);
     }
 
-    inline bool match (const cit1 &a, const cit2 &b)
+    inline bool match_deref (const cit1 &a, const cit2 &b)
     {
       // Maybe the tracker has already cached a correspondence of DIEs.
       typename tracker::reference_match matched;
@@ -549,6 +549,12 @@ namespace elfutils
 
       // Let the tracker cache a result for its reference_matched.
       return _m_tracker.notice_match (matched, ref1, ref2, result);
+    }
+
+    // This is what the public equals method uses for references.
+    inline bool match (const cit1 &a, const cit2 &b)
+    {
+      return reference_match (a, b);
     }
 
   public:
