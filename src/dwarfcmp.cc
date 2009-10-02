@@ -400,6 +400,14 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
       }
   }
 
+  // When using subr::sharing_stack, it is important this argument is const.
+  template<typename stack_type>
+  static inline const typename stack_type::value_type &
+  path_top (const stack_type &path)
+  {
+    return path.top ();
+  }
+
   // REF1 and REF2 had equal contents but different contexts.  Describe them.
   inline void print_one_bad_context (const die1 &ref1, const die2 &ref2)
   {
@@ -423,12 +431,12 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 	if (right.empty ())
 	  {
 	    cout << prefix_
-		 << (*left.const_top ()).offset () << " vs top-level" << endl;
+		 << (*path_top (left)).offset () << " vs top-level" << endl;
 	    return;
 	  }
 
 	// This prints the differences if it finds some.
-	visit (*left.const_top (), *right.const_top ());
+	visit (*path_top (left), *path_top (right));
 	if (!visiting_result_)
 	  {
 	    cout << endl;
@@ -442,7 +450,7 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
       }
     if (!right.empty ())
       cout << prefix_
-	   << "top-level vs " << (*right.const_top ()).offset () << endl;
+	   << "top-level vs " << (*path_top (right)).offset () << endl;
   }
 
   inline void print_bad_context ()
