@@ -43,6 +43,8 @@
 #include "../libdw/libdwP.h"
 #include "../libdw/c++/dwarf-knowledge.cc"
 
+using namespace elfutils;
+
 namespace
 {
   message_category cat (message_category c1,
@@ -53,14 +55,16 @@ namespace
   }
 }
 
-struct hl_ctx
+class hl_ctx
 {
-  Dwarf *dwarf;
-  elfutils::dwarf dw;
+  Dwarf *handle;
+
+public:
+  dwarf dw;
 
   hl_ctx (Elf *elf)
-    : dwarf (dwarf_begin_elf (elf, DWARF_C_READ, NULL))
-    , dw (dwarf)
+    : handle (dwarf_begin_elf (elf, DWARF_C_READ, NULL))
+    , dw (handle)
   {
     // See if we can iterate compile units.  If not, this throws an
     // exception that gets caught in the C wrapper below.
@@ -69,7 +73,7 @@ struct hl_ctx
 
   ~hl_ctx ()
   {
-    dwarf_end (dwarf);
+    dwarf_end (handle);
   }
 };
 
@@ -109,19 +113,19 @@ check_matching_ranges (hl_ctx *hlctx)
       where_r.ref = &where_ref;
       char buf[128];
 
-      const elfutils::dwarf::aranges_map &aranges = hlctx->dw.aranges ();
-      for (elfutils::dwarf::aranges_map::const_iterator i = aranges.begin ();
+      const dwarf::aranges_map &aranges = hlctx->dw.aranges ();
+      for (dwarf::aranges_map::const_iterator i = aranges.begin ();
 	   i != aranges.end (); ++i)
 	{
-	  const elfutils::dwarf::compile_unit &cu = i->first;
+	  const dwarf::compile_unit &cu = i->first;
 	  where_reset_1 (&where_ref, 0);
 	  where_reset_2 (&where_ref, cu.offset ());
 
-	  std::set<elfutils::dwarf::ranges::key_type>
+	  std::set<dwarf::ranges::key_type>
 	    cu_aranges = i->second,
 	    cu_ranges = cu.ranges ();
 
-	  typedef std::vector <elfutils::dwarf::arange_list::value_type>
+	  typedef std::vector <dwarf::arange_list::value_type>
 	    range_vec;
 	  range_vec missing;
 	  std::back_insert_iterator <range_vec> i_missing (missing);
@@ -160,15 +164,14 @@ check_matching_ranges (hl_ctx *hlctx)
 }
 
 struct name_extractor {
-  int operator () (elfutils::dwarf::attribute const &at) {
+  int operator () (dwarf::attribute const &at) {
     return at.first;
   }
 } extract_name;
 
 std::ostream &
-operator << (std::ostream &o, elfutils::dwarf::value_space vs)
+operator << (std::ostream &o, dwarf::value_space vs)
 {
-  using namespace elfutils;
   switch (vs)
     {
     case dwarf::VS_flag: return o << "flag";
@@ -191,92 +194,114 @@ operator << (std::ostream &o, elfutils::dwarf::value_space vs)
   abort ();
 }
 
-static void
-recursively_validate (elfutils::dwarf::compile_unit const &cu,
-		      elfutils::dwarf::debug_info_entry const &parent)
+bool
+check_expected_trees (hl_ctx *hlctx)
 {
-  struct where where = WHERE (sec_info, NULL);
-  where_reset_1 (&where, cu.offset ());
-  where_reset_2 (&where, parent.offset ());
-
-  int parent_tag = parent.tag ();
-
-  // Set of attributes of this DIE.
-  std::set <int> attributes;
-  std::transform (parent.attributes ().begin (),
-		  parent.attributes ().end (),
-		  std::inserter (attributes, attributes.end ()),
-		  extract_name);
-
-  // Attributes that we expect at this DIE.
-  expected_set::expectation_map const &expect
-    = expected_at.map (parent_tag);
-
-  // Check missing attributes.
-  for (expected_set::expectation_map::const_iterator jt
-	 = expect.begin (); jt != expect.end (); ++jt)
+  try
     {
-      std::set <int>::iterator kt = attributes.find (jt->first);
-      if (kt == attributes.end ())
-	switch (jt->second)
-	  {
-	  case opt_required:
-	    wr_message (cat (mc_impact_4, mc_info), &where,
-			": %s lacks required attribute %s.\n",
-			dwarf_tag_string (parent_tag),
-			dwarf_attr_string (jt->first));
-	    break;
+      struct
+      {
+	void operator () (dwarf::compile_unit const &cu,
+			  dwarf::debug_info_entry const &parent)
+	{
+	  struct where where = WHERE (sec_info, NULL);
+	  where_reset_1 (&where, cu.offset ());
+	  where_reset_2 (&where, parent.offset ());
 
-	  case opt_expected:
-	    wr_message (cat (mc_impact_2, mc_info), &where,
-			": %s should contain attribute %s.\n",
-			dwarf_tag_string (parent_tag),
-			dwarf_attr_string (jt->first));
-	  case opt_optional:
-	    break;
-	  };
+	  int parent_tag = parent.tag ();
+
+	  // Set of attributes of this DIE.
+	  std::set <int> attributes;
+	  std::transform (parent.attributes ().begin (),
+			  parent.attributes ().end (),
+			  std::inserter (attributes, attributes.end ()),
+			  extract_name);
+
+	  // Attributes that we expect at this DIE.
+	  expected_set::expectation_map const &expect
+	    = expected_at.map (parent_tag);
+
+	  // Check missing attributes.
+	  for (expected_set::expectation_map::const_iterator jt
+		 = expect.begin (); jt != expect.end (); ++jt)
+	    {
+	      std::set <int>::iterator kt = attributes.find (jt->first);
+	      if (kt == attributes.end ())
+		switch (jt->second)
+		  {
+		  case opt_required:
+		    wr_message (cat (mc_impact_4, mc_info), &where,
+				": %s lacks required attribute %s.\n",
+				dwarf_tag_string (parent_tag),
+				dwarf_attr_string (jt->first));
+		    break;
+
+		  case opt_expected:
+		    wr_message (cat (mc_impact_2, mc_info), &where,
+				": %s should contain attribute %s.\n",
+				dwarf_tag_string (parent_tag),
+				dwarf_attr_string (jt->first));
+		  case opt_optional:
+		    break;
+		  };
+	    }
+
+	  // Check present attributes for expected-ness, and validate value space.
+	  for (dwarf::debug_info_entry::attributes_type::const_iterator jt
+		 = parent.attributes ().begin (), jte = parent.attributes ().end ();
+	       jt != jte; ++jt)
+	    {
+	      unsigned name = extract_name (*jt);
+
+	      expected_set::expectation_map::const_iterator kt = expect.find (name);
+	      if (kt == expect.end ())
+		wr_message (cat (mc_impact_3, mc_info), &where,
+			    ": DIE \"%s\" has attribute \"%s\", which is not expected.\n",
+			    dwarf_tag_string (parent_tag),
+			    dwarf_attr_string (name));
+	      try
+		{
+		  unsigned exp_vs = expected_value_space (name, parent_tag);
+		  dwarf::value_space vs = (*jt).second.what_space ();
+		  if ((exp_vs & (1U << vs)) == 0)
+		    wr_message (cat (mc_impact_3, mc_info), &where,
+				": in DIE \"%s\", attribute \"%s\" has value of unexpected type \"%u\".\n",
+				dwarf_tag_string (parent_tag),
+				dwarf_attr_string (name),
+				vs);
+		}
+	      // XXX more specific class when <dwarf> has it
+	      catch (...)
+		{
+		  wr_message (cat (mc_impact_4, mc_info, mc_error), &where,
+			      ": in DIE \"%s\", couldn't obtain type of attribute \"%s\".\n",
+			      dwarf_tag_string (parent_tag),
+			      dwarf_attr_string (name));
+		}
+	    }
+
+	  // Check children recursively.
+	  dwarf::debug_info_entry::children_type const &children
+	    = parent.children ();
+	  for (dwarf::debug_info_entry::children_type::const_iterator
+		 jt = children.begin (); jt != children.end (); ++jt)
+	    (*this) (cu, *jt);
+	}
+      } recursively_validate;
+
+      class dwarf::compile_units const &cus = hlctx->dw.compile_units ();
+      for (dwarf::compile_units::const_iterator it = cus.begin ();
+	   it != cus.end (); ++it)
+	recursively_validate (*it, *it);
+      return true;
     }
-
-  // Check present attributes for expected-ness, and validate value space.
-  for (elfutils::dwarf::debug_info_entry::attributes_type::const_iterator jt
-	 = parent.attributes ().begin (), jte = parent.attributes ().end ();
-       jt != jte; ++jt)
+  // XXX more specific class when <dwarf> has it
+  catch (std::runtime_error &exc)
     {
-      unsigned name = extract_name (*jt);
-
-      expected_set::expectation_map::const_iterator kt = expect.find (name);
-      if (kt == expect.end ())
-	wr_message (cat (mc_impact_3, mc_info), &where,
-		    ": DIE \"%s\" has attribute \"%s\", which is not expected.\n",
-		    dwarf_tag_string (parent_tag),
-		    dwarf_attr_string (name));
-      try
-	{
-	  unsigned exp_vs = expected_value_space (name, parent_tag);
-	  elfutils::dwarf::value_space vs = (*jt).second.what_space ();
-	  if ((exp_vs & (1U << vs)) == 0)
-	    wr_message (cat (mc_impact_3, mc_info), &where,
-			": in DIE \"%s\", attribute \"%s\" has value of unexpected type \"%u\".\n",
-			dwarf_tag_string (parent_tag),
-			dwarf_attr_string (name),
-			vs);
-	}
-      // XXX more specific class when <dwarf> has it
-      catch (...)
-	{
-	  wr_message (cat (mc_impact_4, mc_info, mc_error), &where,
-		      ": in DIE \"%s\", couldn't obtain type of attribute \"%s\".\n",
-		      dwarf_tag_string (parent_tag),
-		      dwarf_attr_string (name));
-	}
+      wr_error (NULL, "Error while checking expected trees: %s.\n",
+		exc.what ());
+      return false;
     }
-
-  // Check children recursively.
-  elfutils::dwarf::debug_info_entry::children_type const &children
-    = parent.children ();
-  for (elfutils::dwarf::debug_info_entry::children_type::const_iterator jt
-	 = children.begin (); jt != children.end (); ++jt)
-    recursively_validate (cu, *jt);
 }
 
 bool
