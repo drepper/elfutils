@@ -1,7 +1,7 @@
-/* Pedantic checking of DWARF files.
+/* Coverage analysis.
+
    Copyright (C) 2008,2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Petr Machata <pmachata@redhat.com>, 2009.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
