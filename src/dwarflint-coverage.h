@@ -24,6 +24,9 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifndef DWARFLINT_COVERAGE_H
+#define DWARFLINT_COVERAGE_H
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,9 +48,15 @@
 
 #define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
 
+#ifdef __cplusplus
+# define IF_CPLUSPLUS(X) X
+extern "C"
+{
+#endif
+
 /* Functions and data structures for handling of address range
- coverage.  We use that to find holes of unused bytes in DWARF
- string table.  */
+   coverage.  We use that to find holes of unused bytes in DWARF
+   string table.  */
 
 struct cov_range
 {
@@ -90,3 +99,10 @@ bool coverage_find_holes (struct coverage *cov, uint64_t start, uint64_t length,
 bool coverage_find_ranges (struct coverage *cov,
 			  bool (*cb)(uint64_t start, uint64_t length, void *data),
 			  void *data);
+
+#ifdef __cplusplus
+# define IF_CPLUSPLUS(X) X
+}
+#endif
+
+#endif//DWARFLINT_COVERAGE_H

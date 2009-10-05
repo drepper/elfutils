@@ -28,6 +28,7 @@
 
 #include "../libdw/libdw.h"
 #include "../libebl/libebl.h"
+#include "dwarflint-coverage.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -187,8 +188,6 @@ extern "C"
   extern void wr_message_padding_n0 (enum message_category category,
 				     struct where *wh,
 				     uint64_t start, uint64_t end);
-
-# include "dwarflint-coverage.h"
 
   extern char *range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end);
 
