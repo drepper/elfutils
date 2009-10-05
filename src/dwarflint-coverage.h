@@ -71,11 +71,13 @@ struct coverage
   size_t alloc;
 };
 
-struct coverage *coverage_clone (struct coverage *cov) __attribute__ ((malloc));
+struct coverage *coverage_clone (struct coverage const *cov)
+  __attribute__ ((malloc));
 void coverage_free (struct coverage *cov);
 
 void coverage_add (struct coverage *cov, uint64_t start, uint64_t length);
-void coverage_add_all (struct coverage *cov, struct coverage *other);
+void coverage_add_all (struct coverage *__restrict__ cov,
+		       struct coverage const *__restrict__ other);
 
 /* Returns true if something was actually removed, false if whole
    range falls into hole in coverage.  */
@@ -83,21 +85,27 @@ bool coverage_remove (struct coverage *cov, uint64_t start, uint64_t length);
 
 /* Returns true if something was actually removed, false if whole
    range falls into hole in coverage.  */
-bool coverage_remove_all (struct coverage *cov, struct coverage *other);
+bool coverage_remove_all (struct coverage *__restrict__ cov,
+			  struct coverage const *__restrict__ other);
 
 /* Returns true if whole range ADDRESS/LENGTH is covered by COV.
    LENGTH may not be zero.  */
-bool coverage_is_covered (struct coverage *cov, uint64_t start, uint64_t length);
+bool coverage_is_covered (struct coverage const *cov,
+			  uint64_t start, uint64_t length);
 
 /* Returns true if at least some of the range ADDRESS/LENGTH is
    covered by COV.  Zero-LENGTH range never overlaps.  */
-bool coverage_is_overlap (struct coverage *cov, uint64_t start, uint64_t length);
+bool coverage_is_overlap (struct coverage const *cov,
+			  uint64_t start, uint64_t length);
 
-bool coverage_find_holes (struct coverage *cov, uint64_t start, uint64_t length,
-			  bool (*cb)(uint64_t start, uint64_t length, void *data),
+bool coverage_find_holes (struct coverage const *cov,
+			  uint64_t start, uint64_t length,
+			  bool (*cb)(uint64_t start, uint64_t length,
+				     void *data),
 			  void *data);
-bool coverage_find_ranges (struct coverage *cov,
-			  bool (*cb)(uint64_t start, uint64_t length, void *data),
+bool coverage_find_ranges (struct coverage const *cov,
+			  bool (*cb)(uint64_t start, uint64_t length,
+				     void *data),
 			  void *data);
 
 #ifdef __cplusplus

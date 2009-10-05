@@ -35,8 +35,8 @@
 #include <string.h>
 #include <inttypes.h>
 
-static struct cov_range *
-coverage_find (struct coverage *cov, uint64_t start)
+static size_t
+coverage_find (struct coverage const *cov, uint64_t start)
 {
   assert (cov->size > 0);
 
@@ -46,17 +46,17 @@ coverage_find (struct coverage *cov, uint64_t start)
   while (a < b)
     {
       size_t i = (a + b) / 2;
-      struct cov_range *r = cov->ranges + i;
+      struct cov_range const *r = cov->ranges + i;
 
       if (r->start > start)
 	b = i;
       else if (r->start < start)
 	a = i + 1;
       else
-	return r;
+	return i;
     }
 
-  return cov->ranges + a;
+  return a;
 }
 
 void
@@ -73,7 +73,7 @@ coverage_add (struct coverage *cov, uint64_t start, uint64_t length)
       return;
     }
 
-  struct cov_range *r = coverage_find (cov, start);
+  struct cov_range *r = cov->ranges + coverage_find (cov, start);
 
   struct cov_range *insert = &nr;
   struct cov_range *coalesce = &nr;
@@ -142,7 +142,7 @@ coverage_remove (struct coverage *cov, uint64_t begin, uint64_t length)
   if (cov->size == 0 || begin == end)
     return false;
 
-  struct cov_range *r = coverage_find (cov, begin);
+  struct cov_range *r = cov->ranges + coverage_find (cov, begin);
   struct cov_range *erase_begin = NULL, *erase_end = r; // end exclusive
   bool overlap = false;
 
@@ -206,14 +206,15 @@ coverage_remove (struct coverage *cov, uint64_t begin, uint64_t length)
 }
 
 bool
-coverage_is_covered (struct coverage *cov, uint64_t start, uint64_t length)
+coverage_is_covered (struct coverage const *cov,
+		     uint64_t start, uint64_t length)
 {
   assert (length > 0);
 
   if (cov->size == 0)
     return false;
 
-  struct cov_range *r = coverage_find (cov, start);
+  struct cov_range const *r = cov->ranges + coverage_find (cov, start);
   uint64_t end = start + length;
   if (r < cov->ranges + cov->size)
     if (start >= r->start)
@@ -229,20 +230,21 @@ coverage_is_covered (struct coverage *cov, uint64_t start, uint64_t length)
 }
 
 bool
-coverage_is_overlap (struct coverage *cov, uint64_t start, uint64_t length)
+coverage_is_overlap (struct coverage const *cov,
+		     uint64_t start, uint64_t length)
 {
   if (length == 0 || cov->size == 0)
     return false;
 
   uint64_t end = start + length;
-  bool overlaps (struct cov_range *r)
+  bool overlaps (struct cov_range const *r)
   {
     return (start >= r->start && start < r->start + r->length)
       || (end > r->start && end <= r->start + r->length)
       || (start < r->start && end > r->start + r->length);
   }
 
-  struct cov_range *r = coverage_find (cov, start);
+  struct cov_range const *r = cov->ranges + coverage_find (cov, start);
 
   if (r < cov->ranges + cov->size && overlaps (r))
     return true;
@@ -254,7 +256,8 @@ coverage_is_overlap (struct coverage *cov, uint64_t start, uint64_t length)
 }
 
 bool
-coverage_find_holes (struct coverage *cov, uint64_t start, uint64_t length,
+coverage_find_holes (struct coverage const *cov,
+		     uint64_t start, uint64_t length,
 		     bool (*hole)(uint64_t start, uint64_t length, void *data),
 		     void *data)
 {
@@ -290,7 +293,7 @@ coverage_find_holes (struct coverage *cov, uint64_t start, uint64_t length,
 }
 
 bool
-coverage_find_ranges (struct coverage *cov,
+coverage_find_ranges (struct coverage const *cov,
 		      bool (*cb)(uint64_t start, uint64_t length, void *data),
 		      void *data)
 {
@@ -308,7 +311,7 @@ coverage_free (struct coverage *cov)
 }
 
 struct coverage *
-coverage_clone (struct coverage *cov)
+coverage_clone (struct coverage const *cov)
 {
   struct coverage *ret = xmalloc (sizeof (*ret));
   WIPE (*ret);
@@ -317,14 +320,16 @@ coverage_clone (struct coverage *cov)
 }
 
 void
-coverage_add_all (struct coverage *cov, struct coverage *other)
+coverage_add_all (struct coverage *restrict cov,
+		  struct coverage const *restrict other)
 {
   for (size_t i = 0; i < other->size; ++i)
     coverage_add (cov, other->ranges[i].start, other->ranges[i].length);
 }
 
 bool
-coverage_remove_all (struct coverage *cov, struct coverage *other)
+coverage_remove_all (struct coverage *restrict cov,
+		     struct coverage const *restrict other)
 {
   bool ret = false;
   for (size_t i = 0; i < other->size; ++i)
