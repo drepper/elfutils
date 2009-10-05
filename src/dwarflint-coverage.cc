@@ -1,4 +1,4 @@
-/* Coverage analysis.
+/* Implementation of coverage analysis.
 
    Copyright (C) 2008,2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
@@ -28,35 +28,44 @@
 # include <config.h>
 #endif
 
-#include "dwarflint-coverage.h"
+#include "dwarflint-coverage.hh"
+extern "C"
+{
+#include "../lib/system.h"
+}
+
 #include <stdbool.h>
 #include <assert.h>
-#include <system.h>
 #include <string.h>
 #include <inttypes.h>
 
-static size_t
-coverage_find (struct coverage const *cov, uint64_t start)
+
+namespace
 {
-  assert (cov->size > 0);
+  template <class X>
+  decltype (((X *)0)->ranges)
+  coverage_find (X *cov, uint64_t start)
+  {
+    assert (cov->size > 0);
 
-  size_t a = 0;
-  size_t b = cov->size;
+    size_t a = 0;
+    size_t b = cov->size;
 
-  while (a < b)
-    {
-      size_t i = (a + b) / 2;
-      struct cov_range const *r = cov->ranges + i;
+    while (a < b)
+      {
+	size_t i = (a + b) / 2;
+	cov_range const *r = cov->ranges + i;
 
-      if (r->start > start)
-	b = i;
-      else if (r->start < start)
-	a = i + 1;
-      else
-	return i;
-    }
+	if (r->start > start)
+	  b = i;
+	else if (r->start < start)
+	  a = i + 1;
+	else
+	  return cov->ranges + i;
+      }
 
-  return a;
+    return cov->ranges + a;
+  }
 }
 
 void
@@ -73,7 +82,7 @@ coverage_add (struct coverage *cov, uint64_t start, uint64_t length)
       return;
     }
 
-  struct cov_range *r = cov->ranges + coverage_find (cov, start);
+  struct cov_range *r = coverage_find (cov, start);
 
   struct cov_range *insert = &nr;
   struct cov_range *coalesce = &nr;
@@ -142,7 +151,7 @@ coverage_remove (struct coverage *cov, uint64_t begin, uint64_t length)
   if (cov->size == 0 || begin == end)
     return false;
 
-  struct cov_range *r = cov->ranges + coverage_find (cov, begin);
+  struct cov_range *r = coverage_find (cov, begin);
   struct cov_range *erase_begin = NULL, *erase_end = r; // end exclusive
   bool overlap = false;
 
@@ -214,7 +223,7 @@ coverage_is_covered (struct coverage const *cov,
   if (cov->size == 0)
     return false;
 
-  struct cov_range const *r = cov->ranges + coverage_find (cov, start);
+  struct cov_range const *r = coverage_find (cov, start);
   uint64_t end = start + length;
   if (r < cov->ranges + cov->size)
     if (start >= r->start)
@@ -229,6 +238,17 @@ coverage_is_covered (struct coverage const *cov,
   return false;
 }
 
+namespace
+{
+  bool overlaps (uint64_t start, uint64_t end,
+		 struct cov_range const *r)
+  {
+    return (start >= r->start && start < r->start + r->length)
+      || (end > r->start && end <= r->start + r->length)
+      || (start < r->start && end > r->start + r->length);
+  }
+}
+
 bool
 coverage_is_overlap (struct coverage const *cov,
 		     uint64_t start, uint64_t length)
@@ -237,20 +257,14 @@ coverage_is_overlap (struct coverage const *cov,
     return false;
 
   uint64_t end = start + length;
-  bool overlaps (struct cov_range const *r)
-  {
-    return (start >= r->start && start < r->start + r->length)
-      || (end > r->start && end <= r->start + r->length)
-      || (start < r->start && end > r->start + r->length);
-  }
 
-  struct cov_range const *r = cov->ranges + coverage_find (cov, start);
+  struct cov_range const *r = coverage_find (cov, start);
 
-  if (r < cov->ranges + cov->size && overlaps (r))
+  if (r < cov->ranges + cov->size && overlaps (start, end, r))
     return true;
 
   if (r > cov->ranges)
-    return overlaps (r - 1);
+    return overlaps (start, end, r - 1);
 
   return false;
 }
@@ -267,25 +281,20 @@ coverage_find_holes (struct coverage const *cov,
   if (cov->size == 0)
     return hole (start, length, data);
 
-  uint64_t end (size_t i)
-  {
-    return cov->ranges[i].start + cov->ranges[i].length;
-  }
-
   if (start < cov->ranges[0].start)
     if (!hole (start, cov->ranges[0].start - start, data))
       return false;
 
   for (size_t i = 0; i < cov->size - 1; ++i)
     {
-      uint64_t end_i = end (i);
+      uint64_t end_i = cov->ranges[i].end ();
       if (!hole (end_i, cov->ranges[i+1].start - end_i, data))
 	return false;
     }
 
-  if (start + length > end (cov->size - 1))
+  if (start + length > cov->back ().end ())
     {
-      uint64_t end_last = end (cov->size - 1);
+      uint64_t end_last = cov->back ().end ();
       return hole (end_last, start + length - end_last, data);
     }
 
@@ -310,26 +319,26 @@ coverage_free (struct coverage *cov)
   free (cov->ranges);
 }
 
-struct coverage *
+coverage *
 coverage_clone (struct coverage const *cov)
 {
-  struct coverage *ret = xmalloc (sizeof (*ret));
+  coverage *ret = (coverage *)xmalloc (sizeof (*ret));
   WIPE (*ret);
   coverage_add_all (ret, cov);
   return ret;
 }
 
 void
-coverage_add_all (struct coverage *restrict cov,
-		  struct coverage const *restrict other)
+coverage_add_all (struct coverage *__restrict__ cov,
+		  struct coverage const *__restrict__ other)
 {
   for (size_t i = 0; i < other->size; ++i)
     coverage_add (cov, other->ranges[i].start, other->ranges[i].length);
 }
 
 bool
-coverage_remove_all (struct coverage *restrict cov,
-		     struct coverage const *restrict other)
+coverage_remove_all (struct coverage *__restrict__ cov,
+		     struct coverage const *__restrict__ other)
 {
   bool ret = false;
   for (size_t i = 0; i < other->size; ++i)

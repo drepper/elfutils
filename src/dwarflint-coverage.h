@@ -41,8 +41,9 @@
 	  _a->alloc = 8;					\
 	else							\
 	  _a->alloc *= 2;					\
-	_a->BUF = xrealloc (_a->BUF,				\
-			    sizeof (*_a->BUF) * _a->alloc);	\
+	_a->BUF = (typeof (_a->BUF))				\
+	  xrealloc (_a->BUF,					\
+		    sizeof (*_a->BUF) * _a->alloc);		\
       }								\
   } while (0)
 
@@ -62,6 +63,10 @@ struct cov_range
 {
   uint64_t start;
   uint64_t length;
+
+#ifdef __cplusplus
+  uint64_t end () const { return start + length; }
+#endif
 };
 
 struct coverage
@@ -69,6 +74,11 @@ struct coverage
   struct cov_range *ranges;
   size_t size;
   size_t alloc;
+
+#ifdef __cplusplus
+  cov_range &back () { return ranges[size - 1]; }
+  cov_range const &back () const { return ranges[size - 1]; }
+#endif
 };
 
 struct coverage *coverage_clone (struct coverage const *cov)
