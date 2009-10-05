@@ -303,23 +303,3 @@ check_expected_trees (hl_ctx *hlctx)
       return false;
     }
 }
-
-bool
-check_expected_trees (hl_ctx *hlctx)
-{
-  try
-    {
-      class elfutils::dwarf::compile_units const &cus = hlctx->dw.compile_units ();
-      for (elfutils::dwarf::compile_units::const_iterator it = cus.begin ();
-	   it != cus.end (); ++it)
-	recursively_validate (*it, *it);
-      return true;
-    }
-  // XXX more specific class when <dwarf> has it
-  catch (std::runtime_error &exc)
-    {
-      wr_error (NULL, "Error while checking expected trees: %s.\n",
-		exc.what ());
-      return false;
-    }
-}
