@@ -1289,8 +1289,10 @@ process_file (Elf *elf, const char *fname, bool only_one)
   else
     ranges_sound = false;
 
-  if (HAS_SEC(loc) && cu_chain != NULL)
-    check_loc_or_range_structural (&file, SEC(loc), cu_chain, NULL);
+  if (HAS_SEC(loc) && cu_chain != NULL
+      && check_loc_or_range_structural (&file, SEC(loc), cu_chain, NULL)
+      && cu_chain != NULL && hlctx != NULL)
+    check_range_out_of_scope (hlctx);
 
   if (HAS_SEC(aranges))
     {

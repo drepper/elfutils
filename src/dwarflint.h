@@ -31,9 +31,12 @@
 #include "dwarflint-coverage.h"
 
 #ifdef __cplusplus
+# define IF_CPLUSPLUS(X) X
+# include <string>
 extern "C"
 {
 #else
+# define IF_CPLUSPLUS(X) /*X*/
 # include <stdbool.h>
 #endif
 
@@ -46,6 +49,7 @@ extern "C"
   extern void hl_ctx_delete (struct hl_ctx *hlctx);
   extern bool check_matching_ranges (struct hl_ctx *hlctx);
   extern bool check_expected_trees (struct hl_ctx *hlctx);
+  extern bool check_range_out_of_scope (struct hl_ctx *hlctx);
 
 
   /* Functions and data structures describing location in Dwarf.  */
@@ -109,7 +113,7 @@ extern "C"
     (uint64_t)-1, (uint64_t)-1, (uint64_t)-1,				\
     NULL, NEXT})
 
-  extern const char *where_fmt (const struct where *wh, char *ptr);
+  extern const char *where_fmt (const struct where *wh, char *ptr IF_CPLUSPLUS (= NULL));
   extern void where_fmt_chain (const struct where *wh, const char *severity);
   extern void where_reset_1 (struct where *wh, uint64_t addr);
   extern void where_reset_2 (struct where *wh, uint64_t addr);
@@ -308,6 +312,8 @@ extern "C"
 
 #ifdef __cplusplus
 }
+
+extern std::string range_fmt (uint64_t start, uint64_t end);
 #endif
 
 #endif/*DWARFLINT_HL_H*/
