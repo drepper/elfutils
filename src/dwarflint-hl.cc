@@ -407,12 +407,16 @@ check_range_out_of_scope (hl_ctx *hlctx)
 		    if (result.size > 0)
 		      {
 			std::string super_wh = where_fmt (&wh_parent);
-			wr_error (&wh, ": range is not sub-range of %s.\n",
-				  super_wh.c_str ());
-			std::string range = cov::format_ranges (cov1);
-			std::string super_range = cov::format_ranges (cov2);
-			wr_error (&wh, ": range %s\n", range.c_str ());
-			wr_error (&wh_parent, ": range %s\n", super_range.c_str ());
+			{
+			  std::string rs = cov::format_ranges (cov1);
+			  wr_error (&wh, ": PC range %s is not a sub-range of "
+				    "containing scope.\n", rs.c_str ());
+			}
+			{
+			  std::string rs = cov::format_ranges (cov2);
+			  wr_error (&wh_parent, ": in this context: %s\n",
+				    rs.c_str ());
+			}
 		      }
 
 		    coverage_free (&result);
@@ -430,29 +434,6 @@ check_range_out_of_scope (hl_ctx *hlctx)
 	  for (ranges_t::const_iterator it = use_ranges.begin ();
 	       it != use_ranges.end (); ++it)
 	    coverage_add (&cov, (*it).first, (*it).second - (*it).first);
-
-	  /*
-	  if (use_ranges.size () > 0)
-	    {
-	      std::vector< ::Dwarf_Addr> low_pcs;
-	      std::vector< ::Dwarf_Addr> high_pcs;
-
-	      for (ranges_t::const_iterator it = use_ranges.begin ();
-		   it != use_ranges.end (); ++it)
-		{
-		  low_pcs.push_back (it->first);
-		  high_pcs.push_back (it->second);
-		}
-
-	      std::sort (low_pcs.begin (), low_pcs.end ());
-	      std::sort (high_pcs.begin (), high_pcs.end ());
-
-	      ::Dwarf_Addr lowest = low_pcs.front ();
-	      ::Dwarf_Addr highest = high_pcs.back ();
-	      assert (highest >= lowest);
-	      coverage_add (&cov, lowest, highest - lowest + 1);
-	    }
-	  */
 
 	  // Now finally look for location attributes and check that
 	  // _their_ PCs form a subset of ranges of this DIE.
@@ -480,8 +461,8 @@ check_range_out_of_scope (hl_ctx *hlctx)
 			    {
 			      runoff = true;
 			      std::string super_wh = where_fmt (&wh_parent);
-			      wr_error (&wh, ": attribute `%s': "
-					"range %s runs off DIE scope\n",
+			      wr_error (&wh, ": attribute `%s': PC range %s "
+					"outside containing scope\n",
 					dwarf_attr_string ((*at).first),
 					range_fmt (start, end).c_str ());
 			    }
@@ -489,7 +470,7 @@ check_range_out_of_scope (hl_ctx *hlctx)
 		      if (runoff)
 			{
 			  std::string rangestr = cov::format_ranges (cov);
-			  wr_error (&wh_parent, ": DIE scope is: %s\n",
+			  wr_error (&wh_parent, ": in this context: %s\n",
 				    rangestr.c_str ());
 			}
 		    }
