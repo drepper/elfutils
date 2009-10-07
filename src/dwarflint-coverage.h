@@ -81,6 +81,9 @@ struct coverage
 #endif
 };
 
+char *range_fmt (char *buf, size_t buf_size,
+		 uint64_t start, uint64_t end);
+
 struct coverage *coverage_clone (struct coverage const *cov)
   __attribute__ ((malloc));
 void coverage_free (struct coverage *cov);

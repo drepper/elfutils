@@ -344,13 +344,6 @@ wr_message (enum message_category category, const struct where *wh,
   va_end (ap);
 }
 
-char *
-range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end)
-{
-  snprintf (buf, buf_size, "[%#" PRIx64 ", %#" PRIx64 ")", start, end);
-  return buf;
-}
-
 void
 wr_format_padding_message (enum message_category category,
 			   struct where *wh,

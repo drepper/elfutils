@@ -193,8 +193,6 @@ extern "C"
 				     struct where *wh,
 				     uint64_t start, uint64_t end);
 
-  extern char *range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end);
-
   struct relocation
   {
     uint64_t offset;
@@ -312,8 +310,6 @@ extern "C"
 
 #ifdef __cplusplus
 }
-
-extern std::string range_fmt (uint64_t start, uint64_t end);
 #endif
 
 #endif/*DWARFLINT_HL_H*/

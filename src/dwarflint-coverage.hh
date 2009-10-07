@@ -31,6 +31,8 @@
 #include <sstream>
 #include "dwarflint-coverage.h"
 
+std::string range_fmt (uint64_t start, uint64_t end);
+
 namespace cov
 {
   class _format_base
@@ -44,7 +46,7 @@ namespace cov
     {
       if (_m_seen)
 	_m_os << _m_delim;
-      _m_os << "[" << start << ", " << start + length << ")";
+      _m_os << range_fmt (start, start + length);
       _m_seen = true;
       return true;
     }

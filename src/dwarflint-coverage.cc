@@ -39,7 +39,6 @@ extern "C"
 #include <string.h>
 #include <inttypes.h>
 
-
 namespace
 {
   template <class X>
@@ -247,6 +246,22 @@ namespace
       || (end > r->start && end <= r->start + r->length)
       || (start < r->start && end > r->start + r->length);
   }
+}
+
+std::string
+range_fmt (uint64_t start, uint64_t end)
+{
+  std::ostringstream os;
+  os << std::hex << "[0x" << start << ", 0x" << end << ")";
+  return os.str ();
+}
+
+char *
+range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end)
+{
+  std::string s = range_fmt (start, end);
+  strncpy (buf, s.c_str (), buf_size);
+  return buf;
 }
 
 bool

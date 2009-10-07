@@ -99,13 +99,6 @@ hl_ctx_delete (hl_ctx *hlctx)
   delete hlctx;
 }
 
-std::string
-range_fmt (uint64_t start, uint64_t end)
-{
-  char buf[128];
-  return std::string (range_fmt (buf, sizeof buf, start, end));
-}
-
 static const expected_at_map expected_at;
 //static const expected_children_map expected_children;
 
