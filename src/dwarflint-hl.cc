@@ -1,4 +1,4 @@
-/* Pedantic checking of DWARF files.
+/* Pedantic checking of DWARF files.  High level checks.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Petr Machata <pmachata@redhat.com>, 2009.
@@ -45,16 +45,6 @@
 #include "../libdw/c++/dwarf-knowledge.cc"
 
 using namespace elfutils;
-
-namespace
-{
-  message_category cat (message_category c1,
-			message_category c2,
-			message_category c3 = mc_none)
-  {
-    return static_cast<message_category> (c1 | c2 | c3);
-  }
-}
 
 class hl_ctx
 {

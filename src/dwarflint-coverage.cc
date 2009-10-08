@@ -29,10 +29,6 @@
 #endif
 
 #include "dwarflint-coverage.hh"
-extern "C"
-{
-#include "../lib/system.h"
-}
 
 #include <stdbool.h>
 #include <assert.h>

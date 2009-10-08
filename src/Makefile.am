@@ -78,10 +78,13 @@ dwarfcmp_test_CPPFLAGS = -DTEST
 dwarfcmp_test_SOURCES = $(dwarfcmp_SOURCES)
 dwarfcmp_test_LDADD = $(dwarfcmp_LDADD)
 
-dwarflint_SOURCES = dwarflint.c dwarflint.h dwarflint-hl.cc \
-		    dwarflint-expected-at.cc dwarflint-expected.hh \
-		    dwarfstrings.c dwarflint-coverage.c dwarflint-coverage.h \
-		    dwarflint-readctx.c dwarflint-readctx.h
+dwarflint_SOURCES = dwarfstrings.c \
+		    dwarflint-main.cc dwarflint.h dwarflint-misc.h \
+		    dwarflint.c \
+		    dwarflint-hl.cc dwarflint-expected-at.cc dwarflint-expected.hh \
+		    dwarflint-coverage.cc dwarflint-coverage.h \
+		    dwarflint-readctx.c  dwarflint-readctx.h \
+		    dwarflint-messages.cc dwarflint-messages.h dwarflint-where.h
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 

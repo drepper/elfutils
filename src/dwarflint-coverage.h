@@ -32,25 +32,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define REALLOC(A, BUF)						\
-  do {								\
-    typeof ((A)) _a = (A);					\
-    if (_a->size == _a->alloc)					\
-      {								\
-	if (_a->alloc == 0)					\
-	  _a->alloc = 8;					\
-	else							\
-	  _a->alloc *= 2;					\
-	_a->BUF = (typeof (_a->BUF))				\
-	  xrealloc (_a->BUF,					\
-		    sizeof (*_a->BUF) * _a->alloc);		\
-      }								\
-  } while (0)
-
-#define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
+#include "dwarflint-misc.h"
 
 #ifdef __cplusplus
-# define IF_CPLUSPLUS(X) X
 extern "C"
 {
 #endif
@@ -122,8 +106,9 @@ bool coverage_find_ranges (struct coverage const *cov,
 			  void *data);
 
 #ifdef __cplusplus
-# define IF_CPLUSPLUS(X) X
 }
+
+std::string range_fmt (uint64_t start, uint64_t end);
 #endif
 
 #endif//DWARFLINT_COVERAGE_H
