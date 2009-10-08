@@ -36,6 +36,7 @@
 #include <iostream>
 
 #include "dwarflint.h"
+#include "dwarflint-config.h"
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
@@ -78,19 +79,6 @@ Pedantic checking of DWARF stored in ELF files.");
 
 /* Strings for arguments in help texts.  */
 static const char args_doc[] = N_("FILE...");
-
-/* If true, we accept silently files without debuginfo.  */
-bool tolerate_nodebug = false;
-
-/* True if no message is to be printed if the run is succesful.  */
-bool be_quiet = false; /* -q */
-bool be_verbose = false; /* -v */
-bool be_strict = false; /* --strict */
-bool be_gnu = false; /* --gnu */
-bool be_tolerant = false; /* --tolerant */
-bool show_refs = false; /* --ref */
-bool do_high_level = true; /* ! --nohl */
-bool dump_die_offsets = false; /* --dump-offsets */
 
 /* Messages that are accepted (and made into warning).  */
 struct message_criteria warning_criteria;

@@ -84,7 +84,9 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint-hl.cc dwarflint-expected-at.cc dwarflint-expected.hh \
 		    dwarflint-coverage.cc dwarflint-coverage.h \
 		    dwarflint-readctx.c  dwarflint-readctx.h \
-		    dwarflint-messages.cc dwarflint-messages.h dwarflint-where.h
+		    dwarflint-messages.cc dwarflint-messages.h \
+		    dwarflint-where.c dwarflint-where.h \
+		    dwarflint-config.cc dwarflint-config.h
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 
