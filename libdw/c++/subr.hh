@@ -52,6 +52,12 @@ namespace elfutils
       hash_combine (seed, v.second);
     }
 
+    inline void
+    string_hash_combine (size_t &hash, const std::string::value_type &c)
+    {
+      hash = hash * 33 + c;
+    }
+
     template<typename T, typename B>
     struct base_hasher : public std::unary_function<T, size_t>
     {
@@ -106,24 +112,29 @@ namespace elfutils
       }
     };
 
-    template<typename T>
-    struct container_hasher : public std::unary_function<T, size_t>
+    template<typename T,
+	     void (*combiner) (size_t &, const typename T::value_type &)
+	       = hash_combine<typename T::value_type>,
+	     size_t initial_hash = 0>
+    class container_hasher
+      : public std::unary_function<T, size_t>
     {
+    private:
       struct hasher
       {
-	size_t _m_hash;
-	inline hasher (size_t init = 0) : _m_hash (init) {}
+	size_t &_m_hash;
+	inline explicit hasher (size_t &hash) : _m_hash (hash) {}
 	inline void operator () (const typename T::value_type &x)
 	{
-	  hash_combine (_m_hash, hash_this (x));
+	  return (*combiner) (_m_hash, x);
 	}
       };
-
+    public:
       inline size_t operator () (const T &x) const
       {
-	hasher h;
-	for_each (x, h);
-	return h._m_hash;
+	size_t hash = initial_hash;
+	for_each (x, hasher (hash));
+	return hash;
       }
     };
 
@@ -135,24 +146,8 @@ namespace elfutils
 
     template<>
     struct hash<std::string>
-      : public container_hasher<std::string>
+      : public container_hasher<std::string, string_hash_combine, 5381>
     {
-    private:
-      struct hasher : public container_hasher<std::string>::hasher
-      {
-	inline hasher () : container_hasher<std::string>::hasher (5381) {}
-	inline void operator () (std::string::value_type c)
-	{
-	  _m_hash = _m_hash * 33 + c;
-	}
-      };
-    public:
-      inline size_t operator () (const std::string &x) const
-      {
-	hasher h;
-	for_each (x, h);
-	return h._m_hash;
-      }
     };
 
     template<class T>
@@ -510,16 +505,7 @@ namespace elfutils
 
       inline void set_hash ()
       {
-	struct hashit
-	{
-	  size_t &_m_hash;
-	  hashit (size_t &h) : _m_hash (h) {}
-	  inline void operator () (const elt_type &p)
-	  {
-	    hash_combine (_m_hash, p);
-	  }
-	};
-	for_each (static_cast<_base &> (*this), hashit (_m_hash));
+	_m_hash = container_hasher<container> () (*this);
       }
 
     public:
@@ -528,14 +514,14 @@ namespace elfutils
 
       template<typename iterator>
       hashed_container (iterator first, iterator last)
-	: _base (first, last), _m_hash (0)
+	: _base (first, last)
       {
 	set_hash ();
       }
 
       template<typename other_container>
       hashed_container (const other_container &other)
-	: _base (other.begin (), other.end ()), _m_hash (0)
+	: _base (other.begin (), other.end ())
       {
 	set_hash ();
       }
