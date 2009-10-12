@@ -132,14 +132,17 @@ namespace elfutils
 
     inline const die &current_die () const
     {
+      assert (!at_top ());
       return _m_path.top ();
     }
 
     inline die current_end () const
     {
-      return (at_top ()
+      assert (!at_top ());
+      const typename die_path::const_reverse_iterator i = ++_m_path.rbegin ();
+      return (i == _m_path.rend ()
 	      ? (*_m_root).children ().end ()
-	      : (*current_die ()).children ().end ());
+	      : (**i).children ().end ());
     }
 
   public:
@@ -193,7 +196,6 @@ namespace elfutils
 	  _m_tracker->_m_path.clear ();
 	else
 	  assert (_m_tracker->_m_path.empty ());
-	_m_tracker->_m_root = cu ();
       }
 
       inline void jump (const typename dw::debug_info_entry &there)
@@ -402,11 +404,12 @@ namespace elfutils
     inline bool walk_over_to (dwarf::debug_info_entry::identity_type there,
 			      typename die_map::iterator &cache)
     {
+      const die end = current_end (); // Taken before step_back.
       die next;
       step_back from (this, next);
       ++next;
 
-      return walk_to (next, current_end (), there, cache);
+      return walk_to (next, end, there, cache);
     }
 
     /* Now wind the walk forward starting from the current DIE's
