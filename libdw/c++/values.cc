@@ -131,6 +131,7 @@ dwarf::attr_value::what_space () const
     case DW_FORM_ref4:
     case DW_FORM_ref8:
     case DW_FORM_ref_udata:
+    case DW_FORM_ref_sig8:
       return VS_reference;
 
     default:
