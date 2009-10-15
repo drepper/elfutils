@@ -4,6 +4,11 @@
 #include <stdbool.h>
 #include "../libelf/libelf.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /* Functions and data structures related to bounds-checked
    reading.  */
 
@@ -43,5 +48,9 @@ bool read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret);
 const char *read_ctx_read_str (struct read_ctx *ctx);
 bool read_ctx_skip (struct read_ctx *ctx, uint64_t len);
 bool read_ctx_eof (struct read_ctx *ctx);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

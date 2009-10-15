@@ -30,6 +30,7 @@
 #include "../libebl/libebl.h"
 #include "dwarflint-coverage.h"
 #include "dwarflint-messages.h"
+#include "dwarflint-readctx.h"
 
 #ifdef __cplusplus
 # include <string>
@@ -39,28 +40,16 @@ extern "C"
 # include <stdbool.h>
 #endif
 
-  /* Entry points for high-level checks.  */
-
   struct hl_ctx;
-
-  /* Check that .debug_aranges and .debug_ranges match.  */
-  extern struct hl_ctx *hl_ctx_new (Elf *elf);
-  extern void hl_ctx_delete (struct hl_ctx *hlctx);
-  extern bool check_matching_ranges (struct hl_ctx *hlctx);
-  extern bool check_expected_trees (struct hl_ctx *hlctx);
-  extern bool check_range_out_of_scope (struct hl_ctx *hlctx);
-  extern void process_file (Elf *elf, const char *fname, bool only_one);
-
   struct relocation
   {
     uint64_t offset;
     uint64_t addend;
     int symndx;
     int type;
-    bool invalid;		/* Whether this one relocation should be
-				   ignored.  Necessary so that we don't
-				   double-report invalid & missing
-				   relocation.  */
+    bool invalid;	/* Whether this one relocation should be
+			   ignored.  Necessary so that we don't report
+			   invalid & missing relocation twice.  */
   };
 
   struct relocation_data
@@ -105,7 +94,22 @@ extern "C"
     bool addr_64;	/* True if it's 64-bit Elf.  */
     bool other_byte_order; /* True if the file has a byte order
 			      different from the host.  */
+    // xxx add CUs etc here?
   };
+
+  /* Check that .debug_aranges and .debug_ranges match.  */
+  extern struct hl_ctx *hl_ctx_new (Elf *elf);
+  extern void hl_ctx_delete (struct hl_ctx *hlctx);
+  extern bool check_matching_ranges (struct hl_ctx *hlctx);
+  extern bool check_expected_trees (struct hl_ctx *hlctx);
+  extern bool check_range_out_of_scope (struct hl_ctx *hlctx);
+  extern bool elf_file_init (struct elf_file *file, Elf *elf);
+
+  // xxx will go away
+  extern struct abbrev_table * abbrev_table_load (struct read_ctx *ctx);
+  extern void abbrev_table_free (struct abbrev_table *abbr);
+  extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table *abbrevs,
+						  uint64_t abbrev_code);
 
   struct section_coverage
   {
@@ -124,6 +128,39 @@ extern "C"
     size_t alloc;
     bool allow_overlap;
   };
+
+  struct cu_coverage
+  {
+    struct coverage cov;
+    bool need_ranges;	/* If all CU DIEs have high_pc/low_pc
+			   attribute pair, we don't need separate
+			   range pass.  Otherwise we do.  As soon as
+			   ranges are projected into cov, the flag
+			   is set to false again.  */
+  };
+
+  // xxx low-level check entry points, will go away
+  extern struct cu * check_info_structural (struct elf_file *file,
+					    struct sec *sec,
+					    struct abbrev_table *abbrev_chain,
+					    Elf_Data *strings,
+					    struct cu_coverage *cu_coverage);
+  extern bool check_loc_or_range_structural (struct elf_file *file,
+					     struct sec *sec,
+					     struct cu *cu_chain,
+					     struct cu_coverage *cu_coverage);
+  extern bool check_aranges_structural (struct elf_file *file,
+					struct sec *sec,
+					struct cu *cu_chain,
+					struct coverage *coverage);
+  extern bool check_pub_structural (struct elf_file *file,
+				    struct sec *sec,
+				    struct cu *cu_chain);
+  extern bool check_line_structural (struct elf_file *file,
+				     struct sec *sec,
+				     struct cu *cu_chain);
+  extern void cu_free (struct cu *cu_chain);
+
 
   void section_coverage_init (struct section_coverage *sco,
 			      struct sec *sec, bool warn);

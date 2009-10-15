@@ -107,12 +107,6 @@ struct abbrev_table
 			   abbrevs should be skipped.  */
 };
 
-static struct abbrev_table *abbrev_table_load (struct read_ctx *ctx);
-static void abbrev_table_free (struct abbrev_table *abbr);
-static struct abbrev *abbrev_table_find_abbrev (struct abbrev_table *abbrevs,
-						uint64_t abbrev_code);
-
-
 /* Functions and data structures for address record handling.  We use
    that to check that all DIE references actually point to an existing
    die, not somewhere mid-DIE, where it just happens to be
@@ -176,36 +170,7 @@ struct cu
   bool has_pubtypes;            // Likewise for pubtypes.
 };
 
-static void cu_free (struct cu *cu_chain);
 static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
-
-struct cu_coverage
-{
-  struct coverage cov;
-  bool need_ranges;	/* If all CU DIEs have high_pc/low_pc
-			   attribute pair, we don't need separate
-			   range pass.  Otherwise we do.  As soon as
-			   ranges are projected into cov, the flag
-			   is set to false again.  */
-};
-
-
-/* Functions for checking of structural integrity.  */
-
-static struct cu * check_info_structural (struct elf_file *file,
-					  struct sec *sec,
-					  struct abbrev_table *abbrev_chain,
-					  Elf_Data *strings,
-					  struct cu_coverage *cu_coverage);
-
-static bool check_aranges_structural (struct elf_file *file,
-				      struct sec *sec,
-				      struct cu *cu_chain,
-				      struct coverage *coverage);
-
-static bool check_pub_structural (struct elf_file *file,
-				  struct sec *sec,
-				  struct cu *cu_chain);
 
 static bool check_location_expression (struct elf_file *file,
 				       struct read_ctx *ctx,
@@ -215,19 +180,10 @@ static bool check_location_expression (struct elf_file *file,
 				       size_t length,
 				       struct where *wh);
 
-static bool check_loc_or_range_structural (struct elf_file *file,
-					   struct sec *sec,
-					   struct cu *cu_chain,
-					   struct cu_coverage *cu_coverage);
-
 static bool read_rel (struct elf_file *file,
 		      struct sec *sec,
 		      Elf_Data *reldata,
 		      bool elf_64);
-
-static bool check_line_structural (struct elf_file *file,
-				   struct sec *sec,
-				   struct cu *cu_chain);
 
 static bool
 address_aligned (uint64_t addr, uint64_t align)
@@ -241,7 +197,7 @@ necessary_alignment (uint64_t start, uint64_t length, uint64_t align)
   return address_aligned (start + length, align) && length < align;
 }
 
-static bool
+bool
 elf_file_init (struct elf_file *file, Elf *elf)
 {
   WIPE (*file);
@@ -437,118 +393,6 @@ elf_file_init (struct elf_file *file, Elf *elf)
   return true;
 }
 
-void
-process_file (Elf *elf, const char *fname, bool only_one)
-{
-  if (!only_one)
-    printf ("\n%s:\n", fname);
-
-  struct elf_file file;
-  if (!elf_file_init (&file, elf))
-    return;
-
-  struct abbrev_table *abbrev_chain = NULL;
-  struct cu *cu_chain = NULL;
-  struct read_ctx ctx;
-  /* Don't attempt to do high-level checks if we couldn't initialize
-     high-level context.  The wrapper takes care of printing out error
-     messages if any.  */
-  struct hl_ctx *hlctx = do_high_level ? hl_ctx_new (elf) : NULL;
-
-#define SEC(sec) (file.debugsec[sec_##sec])
-#define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
-
-  if (likely (HAS_SEC(abbrev)))
-    {
-      read_ctx_init (&ctx, &file, SEC(abbrev)->data);
-      abbrev_chain = abbrev_table_load (&ctx);
-    }
-  else if (!tolerate_nodebug)
-    /* Hard error, not a message.  We can't debug without this.  */
-    wr_error (NULL, ".debug_abbrev data not found.\n");
-
-  Elf_Data *str_data = NULL;
-  if (SEC(str) != NULL)
-    {
-      str_data = SEC(str)->data;
-      if (str_data == NULL)
-	wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
-		    &WHERE (sec_str, NULL),
-		    ": the section is present but empty.\n");
-    }
-
-  struct cu_coverage *cu_coverage = NULL;
-  if (abbrev_chain != NULL)
-    {
-      if (likely (HAS_SEC(info)))
-	{
-	  cu_coverage = calloc (1, sizeof (struct cu_coverage));
-	  cu_chain = check_info_structural (&file, SEC(info), abbrev_chain,
-					    str_data, cu_coverage);
-	  if (cu_chain != NULL && hlctx != NULL)
-	    check_expected_trees (hlctx);
-	}
-      else if (!tolerate_nodebug)
-	/* Hard error, not a message.  We can't debug without this.  */
-	wr_error (NULL, ".debug_info data not found.\n");
-    }
-
-  bool ranges_sound;
-  if (HAS_SEC(ranges) && cu_chain != NULL)
-    ranges_sound = check_loc_or_range_structural (&file, SEC(ranges),
-						  cu_chain, cu_coverage);
-  else
-    ranges_sound = false;
-
-  if (HAS_SEC(loc) && cu_chain != NULL
-      && check_loc_or_range_structural (&file, SEC(loc), cu_chain, NULL)
-      && cu_chain != NULL && hlctx != NULL)
-    check_range_out_of_scope (hlctx);
-
-  if (HAS_SEC(aranges))
-    {
-      read_ctx_init (&ctx, &file, SEC(aranges)->data);
-
-      /* If ranges were needed and not loaded, don't pass them down
-	 for CU/aranges coverage analysis. */
-      struct coverage *cov
-	= (cu_coverage != NULL
-	   && cu_coverage->need_ranges) ? NULL : &cu_coverage->cov;
-
-      if (check_aranges_structural (&file, SEC(aranges), cu_chain, cov)
-	  && ranges_sound && hlctx != NULL && !be_tolerant && !be_gnu)
-	check_matching_ranges (hlctx);
-    }
-
-  if (HAS_SEC(pubnames))
-    check_pub_structural (&file, SEC(pubnames), cu_chain);
-  else if (!tolerate_nodebug)
-    wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
-		&WHERE (sec_pubnames, NULL), ": data not found.\n");
-
-  if (HAS_SEC(pubtypes))
-    check_pub_structural (&file, SEC(pubtypes), cu_chain);
-  else if (!tolerate_nodebug)
-    wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
-		&WHERE (sec_pubtypes, NULL), ": data not found.\n");
-
-  if (HAS_SEC(line))
-    check_line_structural (&file, SEC(line), cu_chain);
-  else if (!tolerate_nodebug)
-    wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_loc,
-		&WHERE (sec_line, NULL), ": data not found.\n");
-
-  cu_free (cu_chain);
-  abbrev_table_free (abbrev_chain);
-  if (file.ebl != NULL)
-    ebl_closebackend (file.ebl);
-  free (file.sec);
-  hl_ctx_delete (hlctx);
-
-#undef SEC
-#undef HAS_SEC
-}
-
 static bool
 checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
 		      struct where *where, const char *what)
@@ -702,7 +546,7 @@ is_location_attrib (uint64_t name)
     }
 }
 
-static struct abbrev_table *
+struct abbrev_table *
 abbrev_table_load (struct read_ctx *ctx)
 {
   struct abbrev_table *section_chain = NULL;
@@ -1011,7 +855,7 @@ abbrev_table_load (struct read_ctx *ctx)
   return NULL;
 }
 
-static void
+void
 abbrev_table_free (struct abbrev_table *abbr)
 {
   for (struct abbrev_table *it = abbr; it != NULL; )
@@ -1026,7 +870,7 @@ abbrev_table_free (struct abbrev_table *abbr)
     }
 }
 
-static struct abbrev *
+struct abbrev *
 abbrev_table_find_abbrev (struct abbrev_table *abbrevs, uint64_t abbrev_code)
 {
   size_t a = 0;
@@ -1389,7 +1233,7 @@ coverage_map_free (struct coverage_map *coverage_map)
 }
 
 
-static void
+void
 cu_free (struct cu *cu_chain)
 {
   for (struct cu *it = cu_chain; it != NULL; )
@@ -2635,7 +2479,7 @@ check_cu_structural (struct elf_file *file,
   return retval;
 }
 
-static struct cu *
+struct cu *
 check_info_structural (struct elf_file *file,
 		       struct sec *sec,
 		       struct abbrev_table *abbrev_chain,
@@ -2898,7 +2742,7 @@ compare_coverage (struct elf_file *file,
 /* COVERAGE is portion of address space covered by CUs (either via
    low_pc/high_pc pairs, or via DW_AT_ranges references).  If
    non-NULL, analysis of arange coverage is done against that set. */
-static bool
+bool
 check_aranges_structural (struct elf_file *file,
 			  struct sec *sec,
 			  struct cu *cu_chain,
@@ -3142,7 +2986,7 @@ check_aranges_structural (struct elf_file *file,
   return retval;
 }
 
-static bool
+bool
 check_pub_structural (struct elf_file *file,
 		      struct sec *sec,
 		      struct cu *cu_chain)
@@ -3670,7 +3514,7 @@ check_loc_or_range_ref (struct elf_file *file,
   return retval;
 }
 
-static bool
+bool
 check_loc_or_range_structural (struct elf_file *file,
 			       struct sec *sec,
 			       struct cu *cu_chain,
@@ -3949,7 +3793,7 @@ read_rel (struct elf_file *file,
   return true;
 }
 
-static bool
+bool
 check_line_structural (struct elf_file *file,
 		       struct sec *sec,
 		       struct cu *cu_chain)
