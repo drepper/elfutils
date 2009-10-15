@@ -1,5 +1,7 @@
 2009-10-15  Roland McGrath  <roland@redhat.com>
 
+	* c++/dwarf_output: Major copier revamp.
+
 	* c++/dwarf_comparator (dwarf_comparator::reference_match):
 	Don't bail out before calling tracker's notice_match on mismatches.
 
