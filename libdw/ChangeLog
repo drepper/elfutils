@@ -1,3 +1,8 @@
+2009-10-15  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_comparator (dwarf_comparator::reference_match):
+	Don't bail out before calling tracker's notice_match on mismatches.
+
 2009-10-02  Roland McGrath  <roland@redhat.com>
 
 	* c++/subr.hh (subr::stackish): New template type.

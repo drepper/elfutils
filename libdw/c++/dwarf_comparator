@@ -517,10 +517,12 @@ namespace elfutils
       const typename tracker::right_context_type &rhs
 	= _m_tracker.right_context (ref2);
 
+      bool result = true;
+
       /* First do the cheap mismatch check on the contexts, then check the
 	 contents and contexts in ascending order of costliness of a check.  */
       if (_m_tracker.context_quick_mismatch (lhs, rhs))
-	return nomatch (a, b, "quick context");
+	result = nomatch (a, b, "quick context");
 
       /* To compare the children, we have to clone the tracker and use a
 	 new one, in case of any reference attributes in their subtrees.
@@ -533,19 +535,14 @@ namespace elfutils
       typename tracker::subtracker t (_m_tracker, matched, lhs, rhs);
       subcomparator cmp (t);
 
-      if (!cmp.equals (a.attributes (), b.attributes ()))
-	return nomatch (a, b, "attribute");
+      if (result && !cmp.equals (a.attributes (), b.attributes ()))
+	result = nomatch (a, b, "attribute");
 
-      if (!_m_tracker.context_match (lhs, rhs))
-	return nomatch (a, b, "context");
+      if (result && !_m_tracker.context_match (lhs, rhs))
+	result = nomatch (a, b, "context");
 
-      bool result = !has_children;
-      if (has_children)
-	{
-	  result = cmp.equals (a.children (), b.children ());
-	  if (!result)
-	    result = nomatch (a, b, "children");
-	}
+      if (result && has_children && !cmp.equals (a.children (), b.children ()))
+	result = nomatch (a, b, "children");
 
       // Let the tracker cache a result for its reference_matched.
       return _m_tracker.notice_match (matched, ref1, ref2, result);
