@@ -39,6 +39,7 @@
 #include "dwarflint-config.h"
 #include "dwarflint-main.hh"
 #include "dwarflint-readctx.h"
+#include "dwarflint-checks.hh"
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;

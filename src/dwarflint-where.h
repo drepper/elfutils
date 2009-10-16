@@ -1,3 +1,6 @@
+#ifndef DWARFLINT_WHERE_H
+#define DWARFLINT_WHERE_H
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -77,3 +80,5 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
+
+#endif//DWARFLINT_WHERE_H

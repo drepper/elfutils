@@ -105,11 +105,16 @@ extern "C"
   extern bool check_range_out_of_scope (struct hl_ctx *hlctx);
   extern bool elf_file_init (struct elf_file *file, Elf *elf);
 
-  // xxx will go away
+  // xxx some of that will go away
   extern struct abbrev_table * abbrev_table_load (struct read_ctx *ctx);
   extern void abbrev_table_free (struct abbrev_table *abbr);
   extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table *abbrevs,
 						  uint64_t abbrev_code);
+  extern bool read_rel (struct elf_file *file, struct sec *sec,
+			Elf_Data *reldata, bool elf_64);
+  extern bool address_aligned (uint64_t addr, uint64_t align);
+  extern bool necessary_alignment (uint64_t start, uint64_t length,
+				   uint64_t align);
 
   struct section_coverage
   {

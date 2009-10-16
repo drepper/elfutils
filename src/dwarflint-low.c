@@ -180,217 +180,16 @@ static bool check_location_expression (struct elf_file *file,
 				       size_t length,
 				       struct where *wh);
 
-static bool read_rel (struct elf_file *file,
-		      struct sec *sec,
-		      Elf_Data *reldata,
-		      bool elf_64);
-
-static bool
+bool
 address_aligned (uint64_t addr, uint64_t align)
 {
   return align < 2 || (addr % align == 0);
 }
 
-static bool
+bool
 necessary_alignment (uint64_t start, uint64_t length, uint64_t align)
 {
   return address_aligned (start + length, align) && length < align;
-}
-
-bool
-elf_file_init (struct elf_file *file, Elf *elf)
-{
-  WIPE (*file);
-
-  file->elf = elf;
-  file->ebl = ebl_openbackend (elf);
-
-  if (file->ebl == NULL
-      || gelf_getehdr (elf, &file->ehdr) == NULL)
-    return false;
-
-  file->addr_64 = file->ehdr.e_ident[EI_CLASS] == ELFCLASS64;
-
-  /* Taken from dwarf_begin_elf.c.  */
-  if ((BYTE_ORDER == LITTLE_ENDIAN
-       && file->ehdr.e_ident[EI_DATA] == ELFDATA2MSB)
-      || (BYTE_ORDER == BIG_ENDIAN
-	  && file->ehdr.e_ident[EI_DATA] == ELFDATA2LSB))
-    file->other_byte_order = true;
-
-  struct secinfo
-  {
-    const char *name;
-    Elf_Data *reldata;  /* Relocation data if any found.  */
-    size_t reltype;	/* SHT_REL or SHT_RELA.  We need this
-			   temporary store to be able to resolve
-			   relocation section appearing before
-			   relocated section.  */
-    size_t secndx;	/* Index into file->sec or 0 if not yet loaded.  */
-    enum section_id id;	/* Section type.  */
-  };
-  struct secinfo secinfo[] = {
-#define SEC(n) {".debug_" #n, NULL, 0, 0, sec_##n},
-    DEBUGINFO_SECTIONS
-#undef SEC
-  };
-
-  Elf_Scn *reloc_symtab = NULL;
-
-  struct secinfo *find_secentry (const char *secname)
-  {
-    for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
-      if (strcmp (secinfo[i].name, secname) == 0)
-	return secinfo + i;
-    return NULL;
-  }
-
-  /* Now find all necessary debuginfo sections and associated
-     relocation sections.  */
-
-  /* Section 0 is special, skip it.  */
-  REALLOC (file, sec);
-  file->sec[file->size++].id = sec_invalid;
-
-  bool check_rel = true;
-
-  for (Elf_Scn *scn = NULL; (scn = elf_nextscn (elf, scn)); )
-    {
-      REALLOC (file, sec);
-      size_t curndx = file->size++;
-      struct sec *cursec = file->sec + curndx;
-
-      GElf_Shdr *shdr = gelf_getshdr (scn, &cursec->shdr);
-      if (shdr == NULL)
-	{
-	invalid_elf:
-	  wr_error (NULL, "Broken ELF.\n");
-	  return false;
-	}
-
-      const char *scnname = elf_strptr (elf, file->ehdr.e_shstrndx,
-					shdr->sh_name);
-      if (scnname == NULL)
-	goto invalid_elf;
-
-      if (!address_aligned (shdr->sh_addr, shdr->sh_addralign))
-	wr_error (NULL, "Base address of section %s, %#" PRIx64
-		  ", should have an alignment of %" PRId64 ".\n",
-		  scnname, shdr->sh_addr, shdr->sh_addralign);
-
-      struct secinfo *secentry = find_secentry (scnname);
-      cursec->scn = scn;
-      cursec->id = secentry != NULL ? secentry->id : sec_invalid;
-      cursec->name = scnname;
-      cursec->rel = (struct relocation_data){NULL, SHT_NULL, NULL, 0, 0, 0};
-
-      /* Dwarf section.  */
-      if (secentry != NULL)
-	{
-	  if (unlikely (secentry->secndx != 0))
-	    wr_error (NULL, "Multiple occurrences of section %s.\n", scnname);
-	  else
-	    {
-	      /* Haven't seen a section of that name yet.  */
-	      cursec->data = elf_getdata (scn, NULL);
-	      if (cursec->data == NULL || cursec->data->d_buf == NULL)
-		/* Don't print out a warning, we'll get to that in
-		   process_file.  */
-		cursec->data = NULL;
-	      secentry->secndx = curndx;
-	    }
-	}
-      /* Relocation section.  */
-      else if (shdr->sh_type == SHT_RELA || shdr->sh_type == SHT_REL)
-	{
-	  /* Get data of section that this REL(A) section relocates.  */
-	  Elf_Scn *relocated_scn = elf_getscn (elf, shdr->sh_info);
-	  Elf_Scn *symtab_scn = elf_getscn (elf, shdr->sh_link);
-	  if (relocated_scn == NULL || symtab_scn == NULL)
-	    goto invalid_elf;
-
-	  GElf_Shdr relocated_shdr_mem;
-	  GElf_Shdr *relocated_shdr = gelf_getshdr (relocated_scn,
-						    &relocated_shdr_mem);
-	  if (relocated_shdr == NULL)
-	    goto invalid_elf;
-
-	  const char *relocated_scnname
-	    = elf_strptr (elf, file->ehdr.e_shstrndx,
-			  relocated_shdr->sh_name);
-
-	  struct secinfo *relocated
-	    = find_secentry (relocated_scnname);
-
-	  if (relocated != NULL)
-	    {
-	      if (relocated->reldata != NULL)
-		wr_error (NULL,
-			  "Several relocation sections for debug section %s."
-			  "  Ignoring %s.\n",
-			  relocated_scnname, scnname);
-	      else
-		{
-		  relocated->reldata = elf_getdata (scn, NULL);
-		  if (unlikely (relocated->reldata == NULL
-				|| relocated->reldata->d_buf == NULL))
-		    {
-		      wr_error (NULL,
-				"Data-less relocation section %s.\n", scnname);
-		      relocated->reldata = NULL;
-		    }
-		  else
-		    relocated->reltype = shdr->sh_type;
-		}
-
-	      if (reloc_symtab == NULL)
-		reloc_symtab = symtab_scn;
-	      else if (reloc_symtab != symtab_scn)
-		wr_error (NULL,
-			  "Relocation sections use multiple symbol tables.\n");
-	    }
-	}
-    }
-
-  for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
-    if (secinfo[i].secndx != 0)
-      file->debugsec[secinfo[i].id] = file->sec + secinfo[i].secndx;
-
-  if (check_rel)
-    {
-      Elf_Data *reloc_symdata = NULL;
-      if (reloc_symtab != NULL)
-	{
-	  reloc_symdata = elf_getdata (reloc_symtab, NULL);
-	  if (reloc_symdata == NULL)
-	    /* Not a show stopper, we can check a lot of stuff even
-	       without a symbol table.  */
-	      wr_error (NULL,
-			"Couldn't obtain symtab data.\n");
-	}
-
-      /* Check relocation sections that we've got.  */
-      for (size_t i = 0; i < sizeof (secinfo) / sizeof (*secinfo); ++i)
-	{
-	  struct secinfo *cur = secinfo + i;
-	  if (cur->secndx != 0 && cur->reldata != NULL)
-	    {
-	      struct sec *sec = file->sec + cur->secndx;
-	      sec->rel.type = cur->reltype;
-	      if (sec->data == NULL)
-		wr_error (&WHERE (sec->id, NULL),
-			  ": this data-less section has a relocation section.\n");
-	      else if (read_rel (file, sec, cur->reldata, file->addr_64))
-		sec->rel.symdata = reloc_symdata;
-	    }
-	}
-
-      if (find_secentry (".debug_str")->reldata != NULL)
-	wr_message (mc_impact_2 | mc_elf, &WHERE (sec_str, NULL),
-		    ": there's a relocation section associated with this section.\n");
-    }
-
-  return true;
 }
 
 static bool
@@ -3656,7 +3455,7 @@ get_rel_or_rela (Elf_Data *data, int ndx,
     }
 }
 
-static bool
+bool
 read_rel (struct elf_file *file,
 	  struct sec *sec,
 	  Elf_Data *reldata,
