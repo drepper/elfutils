@@ -36,7 +36,7 @@
 #include <cassert>
 #include <iterator>
 
-#include "dwarflint.h"
+#include "dwarflint-low.h"
 #include "dwarflint-coverage.hh"
 #include "dwarflint-expected.hh"
 #include "dwarfstrings.h"

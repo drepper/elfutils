@@ -35,7 +35,7 @@
 
 #include <iostream>
 
-#include "dwarflint.h"
+#include "dwarflint-low.h"
 #include "dwarflint-config.h"
 #include "dwarflint-main.hh"
 #include "dwarflint-readctx.h"

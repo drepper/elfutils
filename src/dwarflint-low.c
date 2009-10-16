@@ -45,7 +45,7 @@
 #include "../libdw/known-dwarf.h"
 #include "../libebl/libebl.h"
 #include "dwarfstrings.h"
-#include "dwarflint.h"
+#include "dwarflint-low.h"
 #include "dwarflint-readctx.h"
 #include "dwarflint-config.h"
 #include "dwarf-opcodes.h"

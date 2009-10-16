@@ -25,7 +25,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "dwarflint-readctx.h"
-#include "dwarflint.h"
+#include "dwarflint-low.h"
 
 #include <stdlib.h>
 #include <assert.h>
