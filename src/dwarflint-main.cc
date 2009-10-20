@@ -270,7 +270,6 @@ dwarflint::dwarflint (Elf *a_elf)
   check_debug_info *check_info = check (check_info);
   // xxx check_expected_trees
   cu *cu_chain = check_info->cu_chain;
-  read_ctx ctx;
 
   /* Don't attempt to do high-level checks if we couldn't initialize
      high-level context.  The wrapper takes care of printing out error
@@ -279,51 +278,6 @@ dwarflint::dwarflint (Elf *a_elf)
 
 #define SEC(sec) (file.debugsec[sec_##sec])
 #define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
-
-  bool ranges_sound;
-  if (HAS_SEC(ranges) && cu_chain != NULL)
-    ranges_sound = check_loc_or_range_structural (&file, SEC(ranges),
-						  cu_chain, &check_info->cu_cov);
-  else
-    ranges_sound = false;
-
-  if (HAS_SEC(loc) && cu_chain != NULL
-      && check_loc_or_range_structural (&file, SEC(loc), cu_chain, NULL)
-      && cu_chain != NULL && hlctx != NULL)
-    check_range_out_of_scope (hlctx);
-
-  if (HAS_SEC(aranges))
-    {
-      read_ctx_init (&ctx, SEC(aranges)->data, file.other_byte_order);
-
-      /* If ranges were needed and not loaded, don't pass them down
-	 for CU/aranges coverage analysis. */
-      struct coverage *cov
-	= check_info->cu_cov.need_ranges ? NULL
-	: &check_info->cu_cov.cov;
-
-      if (check_aranges_structural (&file, SEC(aranges), cu_chain, cov)
-	  && ranges_sound && hlctx != NULL && !be_tolerant && !be_gnu)
-	check_matching_ranges (hlctx);
-    }
-
-  if (HAS_SEC(pubnames))
-    check_pub_structural (&file, SEC(pubnames), cu_chain);
-  else if (!tolerate_nodebug)
-    {
-      where wh = WHERE (sec_pubnames, NULL);
-      wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf,
-		  &wh, ": data not found.\n");
-    }
-
-  if (HAS_SEC(pubtypes))
-    check_pub_structural (&file, SEC(pubtypes), cu_chain);
-  else if (!tolerate_nodebug)
-    {
-      where wh = WHERE (sec_pubtypes, NULL);
-      wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_pubtypes,
-		  &wh, ": data not found.\n");
-    }
 
   if (HAS_SEC(line))
     check_line_structural (&file, SEC(line), cu_chain);

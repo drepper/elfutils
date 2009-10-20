@@ -87,8 +87,11 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint-messages.cc dwarflint-messages.h \
 		    dwarflint-where.c dwarflint-where.h \
 		    dwarflint-config.cc dwarflint-config.h \
-		    dwarflint-checks.hh \
-		    dwarflint-checks-low.cc dwarflint-checks-low.hh
+		    dwarflint-checks.cc dwarflint-checks.hh \
+		    dwarflint-checks-low.cc dwarflint-checks-low.hh \
+		    dwarflint-checks-high.hh \
+		    dwarflint-check_matching_ranges.cc \
+		    dwarflint-check_range_out_of_scope.cc
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 

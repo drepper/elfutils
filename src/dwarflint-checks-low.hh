@@ -39,10 +39,10 @@ public:
   explicit check_debug_abbrev (dwarflint &lint);
 
   // offset -> abbreviations
-  std::map < ::Dwarf_Off, abbrev_table> abbrevs;
+  std::map< ::Dwarf_Off, abbrev_table> abbrevs;
   struct abbrev_table *abbrev_chain; // xxx
 };
-static reg <check_debug_abbrev> reg_debug_abbrev;
+static reg<check_debug_abbrev> reg_debug_abbrev;
 
 class check_debug_info
   : public check<check_debug_info>
@@ -54,9 +54,42 @@ class check_debug_info
 
 public:
   cu_coverage cu_cov;
-  std::vector <cu> cus;
+  std::vector<cu> cus;
   cu *cu_chain; // xxx
 
   explicit check_debug_info (dwarflint &lint);
 };
-static reg <check_debug_info> reg_debug_info;
+static reg<check_debug_info> reg_debug_info;
+
+class check_debug_ranges
+  : public check<check_debug_ranges>
+{
+  section<sec_ranges> *_m_sec_ranges;
+  check_debug_info *_m_cus;
+
+public:
+  explicit check_debug_ranges (dwarflint &lint);
+};
+static reg<check_debug_ranges> reg_debug_ranges;
+
+class check_debug_aranges
+  : public check<check_debug_aranges>
+{
+  section<sec_aranges> *_m_sec_aranges;
+  check_debug_info *_m_cus;
+
+public:
+  explicit check_debug_aranges (dwarflint &lint);
+};
+static reg<check_debug_aranges> reg_debug_aranges;
+
+class check_debug_loc
+  : public check<check_debug_loc>
+{
+  section<sec_loc> *_m_sec_loc;
+  check_debug_info *_m_cus;
+
+public:
+  explicit check_debug_loc (dwarflint &lint);
+};
+static reg<check_debug_loc> reg_debug_loc;

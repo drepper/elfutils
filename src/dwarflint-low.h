@@ -99,9 +99,7 @@ extern "C"
   /* Check that .debug_aranges and .debug_ranges match.  */
   extern struct hl_ctx *hl_ctx_new (Elf *elf);
   extern void hl_ctx_delete (struct hl_ctx *hlctx);
-  extern bool check_matching_ranges (struct hl_ctx *hlctx);
   extern bool check_expected_trees (struct hl_ctx *hlctx);
-  extern bool check_range_out_of_scope (struct hl_ctx *hlctx);
   extern bool elf_file_init (struct elf_file *file, Elf *elf);
 
   // xxx some of that will go away

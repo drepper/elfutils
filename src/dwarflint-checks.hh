@@ -16,6 +16,8 @@ struct check_base
       : std::runtime_error (msg)
     {}
   };
+
+  static failed unscheduled;
 };
 
 template<class T>

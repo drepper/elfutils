@@ -313,3 +313,61 @@ check_debug_info::check_debug_info (dwarflint &lint)
   // cu_free (chain); xxx
   cu_chain = chain;
 }
+
+check_debug_ranges::check_debug_ranges (dwarflint &lint)
+  : _m_sec_ranges (lint.check (_m_sec_ranges))
+  , _m_cus (lint.check (_m_cus))
+{
+  if (!check_loc_or_range_structural (&_m_sec_ranges->file,
+				      &_m_sec_ranges->sect,
+				      _m_cus->cu_chain,
+				      &_m_cus->cu_cov))
+    throw check_base::failed (""); //xxx
+}
+
+check_debug_aranges::check_debug_aranges (dwarflint &lint)
+  : _m_sec_aranges (lint.check (_m_sec_aranges))
+  , _m_cus (lint.check (_m_cus))
+{
+  coverage *cov
+    = _m_cus->cu_cov.need_ranges ? NULL : &_m_cus->cu_cov.cov;
+  if (!check_aranges_structural (&_m_sec_aranges->file,
+				 &_m_sec_aranges->sect,
+				 _m_cus->cu_chain, cov))
+    throw check_base::failed (""); //xxx
+}
+
+check_debug_loc::check_debug_loc (dwarflint &lint)
+  : _m_sec_loc (lint.check (_m_sec_loc))
+  , _m_cus (lint.check (_m_cus))
+{
+  if (!check_loc_or_range_structural (&_m_sec_loc->file,
+				      &_m_sec_loc->sect,
+				      _m_cus->cu_chain, NULL))
+    throw check_base::failed (""); //xxx
+}
+
+namespace
+{
+  template<section_id sec_id>
+  class check_debug_pub
+    : public check<check_debug_pub<sec_id> >
+  {
+    section<sec_id> *_m_sec;
+    check_debug_info *_m_cus;
+
+  public:
+    explicit check_debug_pub (dwarflint &lint)
+      : _m_sec (lint.check (_m_sec))
+      , _m_cus (lint.check (_m_cus))
+    {
+      if (!check_pub_structural (&_m_sec->file,
+				 &_m_sec->sect,
+				 _m_cus->cu_chain))
+	throw check_base::failed (""); //xxx
+    }
+  };
+
+  reg<check_debug_pub<sec_pubnames> > reg_debug_pubnames;
+  reg<check_debug_pub<sec_pubtypes> > reg_debug_pubtypes;
+}
