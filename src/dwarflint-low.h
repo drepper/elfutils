@@ -94,7 +94,6 @@ extern "C"
     bool addr_64;	/* True if it's 64-bit Elf.  */
     bool other_byte_order; /* True if the file has a byte order
 			      different from the host.  */
-    // xxx add CUs etc here?
   };
 
   /* Check that .debug_aranges and .debug_ranges match.  */
@@ -207,6 +206,85 @@ extern "C"
   bool coverage_map_found_hole (uint64_t begin, uint64_t end,
 				struct section_coverage *sco, void *data);
 
+
+  struct abbrev
+  {
+    uint64_t code;
+    struct where where;
+
+    /* Attributes.  */
+    struct abbrev_attrib
+    {
+      struct where where;
+      uint16_t name;
+      uint8_t form;
+    } *attribs;
+    size_t size;
+    size_t alloc;
+
+    /* While ULEB128 can hold numbers > 32bit, these are not legal
+       values of many enum types.  So just use as large type as
+       necessary to cover valid values.  */
+    uint16_t tag;
+    bool has_children;
+
+    /* Whether some DIE uses this abbrev.  */
+    bool used;
+  };
+
+  struct abbrev_table
+  {
+    struct abbrev_table *next;
+    struct abbrev *abbr;
+    uint64_t offset;
+    size_t size;
+    size_t alloc;
+    bool used;		/* There are CUs using this table.  */
+    bool skip_check;	/* There were errors during loading one of the
+			   CUs that use this table.  Check for unused
+			   abbrevs should be skipped.  */
+  };
+
+  struct ref
+  {
+    uint64_t addr; // Referree address
+    struct where who;  // Referrer
+  };
+
+  struct ref_record
+  {
+    size_t size;
+    size_t alloc;
+    struct ref *refs;
+  };
+
+  struct addr_record
+  {
+    size_t size;
+    size_t alloc;
+    uint64_t *addrs;
+  };
+
+  struct cu
+  {
+    struct cu *next;
+    uint64_t offset;
+    uint64_t cudie_offset;
+    uint64_t length;
+    uint64_t low_pc;              // DW_AT_low_pc value of CU DIE, -1 if not present.
+    struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
+    struct ref_record die_refs;   // DIE references into other CUs from this CU.
+    struct ref_record loc_refs;   // references into .debug_loc from this CU.
+    struct ref_record range_refs; // references into .debug_ranges from this CU.
+    struct ref_record line_refs;	// references into .debug_line from this CU.
+    struct where where;           // Where was this section defined.
+    int address_size;             // Address size in bytes on the target machine.
+    int offset_size;		// Offset size in this CU.
+    int version;			// CU version
+    bool has_arange;              // Whether we saw arange section pointing to this CU.
+    bool has_pubnames;            // Likewise for pubnames.
+    bool has_pubtypes;            // Likewise for pubtypes.
+  };
 
 #ifdef __cplusplus
 }

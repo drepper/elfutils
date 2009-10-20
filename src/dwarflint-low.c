@@ -69,55 +69,10 @@ check_category (enum message_category cat)
 /* Functions and data structures related to raw (i.e. unassisted by
    libdw) Dwarf abbreviation handling.  */
 
-struct abbrev
-{
-  uint64_t code;
-  struct where where;
-
-  /* Attributes.  */
-  struct abbrev_attrib
-  {
-    struct where where;
-    uint16_t name;
-    uint8_t form;
-  } *attribs;
-  size_t size;
-  size_t alloc;
-
-  /* While ULEB128 can hold numbers > 32bit, these are not legal
-     values of many enum types.  So just use as large type as
-     necessary to cover valid values.  */
-  uint16_t tag;
-  bool has_children;
-
-  /* Whether some DIE uses this abbrev.  */
-  bool used;
-};
-
-struct abbrev_table
-{
-  struct abbrev_table *next;
-  struct abbrev *abbr;
-  uint64_t offset;
-  size_t size;
-  size_t alloc;
-  bool used;		/* There are CUs using this table.  */
-  bool skip_check;	/* There were errors during loading one of the
-			   CUs that use this table.  Check for unused
-			   abbrevs should be skipped.  */
-};
-
 /* Functions and data structures for address record handling.  We use
    that to check that all DIE references actually point to an existing
    die, not somewhere mid-DIE, where it just happens to be
    interpretable as a DIE.  */
-
-struct addr_record
-{
-  size_t size;
-  size_t alloc;
-  uint64_t *addrs;
-};
 
 static size_t addr_record_find_addr (struct addr_record *ar, uint64_t addr);
 static bool addr_record_has_addr (struct addr_record *ar, uint64_t addr);
@@ -130,45 +85,8 @@ static void addr_record_free (struct addr_record *ar);
    the above, this is not stored as sorted set, but simply as an array
    of records, because duplicates are unlikely.  */
 
-struct ref
-{
-  uint64_t addr; // Referree address
-  struct where who;  // Referrer
-};
-
-struct ref_record
-{
-  size_t size;
-  size_t alloc;
-  struct ref *refs;
-};
-
 static void ref_record_add (struct ref_record *rr, uint64_t addr, struct where *referrer);
 static void ref_record_free (struct ref_record *rr);
-
-
-/* Functions and data structures for CU handling.  */
-
-struct cu
-{
-  struct cu *next;
-  uint64_t offset;
-  uint64_t cudie_offset;
-  uint64_t length;
-  uint64_t low_pc;              // DW_AT_low_pc value of CU DIE, -1 if not present.
-  struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
-  struct ref_record die_refs;   // DIE references into other CUs from this CU.
-  struct ref_record loc_refs;   // references into .debug_loc from this CU.
-  struct ref_record range_refs; // references into .debug_ranges from this CU.
-  struct ref_record line_refs;	// references into .debug_line from this CU.
-  struct where where;           // Where was this section defined.
-  int address_size;             // Address size in bytes on the target machine.
-  int offset_size;		// Offset size in this CU.
-  int version;			// CU version
-  bool has_arange;              // Whether we saw arange section pointing to this CU.
-  bool has_pubnames;            // Likewise for pubnames.
-  bool has_pubtypes;            // Likewise for pubtypes.
-};
 
 static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 
@@ -2286,7 +2204,7 @@ check_info_structural (struct elf_file *file,
 		       struct cu_coverage *cu_coverage)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, file, sec->data);
+  read_ctx_init (&ctx, sec->data, file->other_byte_order);
 
   struct ref_record die_refs;
   WIPE (die_refs);
@@ -2548,7 +2466,7 @@ check_aranges_structural (struct elf_file *file,
 			  struct coverage *coverage)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, file, sec->data);
+  read_ctx_init (&ctx, sec->data, file->other_byte_order);
 
   bool retval = true;
 
@@ -2791,7 +2709,7 @@ check_pub_structural (struct elf_file *file,
 		      struct cu *cu_chain)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, file, sec->data);
+  read_ctx_init (&ctx, sec->data, file->other_byte_order);
   bool retval = true;
 
   while (!read_ctx_eof (&ctx))
@@ -3129,7 +3047,7 @@ check_loc_or_range_ref (struct elf_file *file,
   assert (coverage != NULL);
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, parent_ctx->file, parent_ctx->data);
+  read_ctx_init (&ctx, parent_ctx->data, file->other_byte_order);
   if (!read_ctx_skip (&ctx, addr))
     {
       wr_error (wh, ": invalid reference outside the section "
@@ -3323,7 +3241,7 @@ check_loc_or_range_structural (struct elf_file *file,
   assert (cu_chain != NULL);
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, file, sec->data);
+  read_ctx_init (&ctx, sec->data, file->other_byte_order);
 
   bool retval = true;
 
@@ -3466,7 +3384,7 @@ read_rel (struct elf_file *file,
   bool is_rela = sec->rel.type == SHT_RELA;
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, file, sec->data);
+  read_ctx_init (&ctx, sec->data, file->other_byte_order);
 
   size_t entrysize
     = elf_64
@@ -3559,12 +3477,12 @@ read_rel (struct elf_file *file,
       uint64_t value;
       if (width == 4)
 	value = dwarflint_read_4ubyte_unaligned
-	  (file, sec->data->d_buf + cur->offset);
+	  (sec->data->d_buf + cur->offset, file->other_byte_order);
       else
 	{
 	  assert (width == 8);
 	  value = dwarflint_read_8ubyte_unaligned
-	    (file, sec->data->d_buf + cur->offset);
+	    (sec->data->d_buf + cur->offset, file->other_byte_order);
 	}
 
       if (is_rela)
@@ -3598,7 +3516,7 @@ check_line_structural (struct elf_file *file,
 		       struct cu *cu_chain)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, file, sec->data);
+  read_ctx_init (&ctx, sec->data, file->other_byte_order);
   bool retval = true;
 
   struct addr_record line_tables;

@@ -4,11 +4,13 @@
 #include <map>
 #include <vector>
 #include <stdexcept>
+#include "../libelf/libelf.h"
 
 class dwarflint
 {
   typedef std::map <void const *, class check_base *> check_map;
   check_map _m_checks;
+  Elf * _m_elf;
 
 public:
   struct check_registrar
@@ -42,6 +44,7 @@ public:
   };
 
   dwarflint (Elf *elf);
+  Elf *elf () { return _m_elf; }
 
   template <class T>
   T *
@@ -63,7 +66,7 @@ public:
 
   template <class T>
   T *
-  check (T *fake)
+  check (__attribute__ ((unused)) T *fake)
   {
     return check<T> ();
   }

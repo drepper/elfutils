@@ -44,10 +44,10 @@ union unaligned
   } __attribute__ ((packed));
 
 static uint16_t
-read_2ubyte_unaligned (struct elf_file *file, const void *p)
+read_2ubyte_unaligned (const void *p, bool other_byte_order)
 {
   const union unaligned *up = p;
-  if (file->other_byte_order)
+  if (other_byte_order)
     return bswap_16 (up->u2);
   return up->u2;
 }
@@ -55,52 +55,52 @@ read_2ubyte_unaligned (struct elf_file *file, const void *p)
 /* Prefix with dwarflint_ for export, so that it doesn't get confused
    with functions and macros in memory-access.h.  */
 uint32_t
-dwarflint_read_4ubyte_unaligned (struct elf_file *file, const void *p)
+dwarflint_read_4ubyte_unaligned (const void *p, bool other_byte_order)
 {
   const union unaligned *up = p;
-  if (file->other_byte_order)
+  if (other_byte_order)
     return bswap_32 (up->u4);
   return up->u4;
 }
 
 uint64_t
-dwarflint_read_8ubyte_unaligned (struct elf_file *file, const void *p)
+dwarflint_read_8ubyte_unaligned (const void *p, bool other_byte_order)
 {
   const union unaligned *up = p;
-  if (file->other_byte_order)
+  if (other_byte_order)
     return bswap_64 (up->u8);
   return up->u8;
 }
 
 
-#define read_2ubyte_unaligned_inc(Dbg, Addr) \
-  ({ uint16_t t_ = read_2ubyte_unaligned (Dbg, Addr);			      \
-     Addr = (__typeof (Addr)) (((uintptr_t) (Addr)) + 2);		      \
-     t_; })
+#define read_2ubyte_unaligned_inc(Addr, OtherByteOrder)			\
+  ({ uint16_t t_ = read_2ubyte_unaligned (Addr, OtherByteOrder);	\
+    Addr = (__typeof (Addr)) (((uintptr_t) (Addr)) + 2);		\
+    t_; })
 
-#define read_4ubyte_unaligned_inc(Dbg, Addr) \
-  ({ uint32_t t_ = dwarflint_read_4ubyte_unaligned (Dbg, Addr);		      \
-     Addr = (__typeof (Addr)) (((uintptr_t) (Addr)) + 4);		      \
-     t_; })
+#define read_4ubyte_unaligned_inc(Addr, OtherByteOrder)			\
+  ({ uint32_t t_ = dwarflint_read_4ubyte_unaligned (Addr, OtherByteOrder); \
+    Addr = (__typeof (Addr)) (((uintptr_t) (Addr)) + 4);		\
+    t_; })
 
-#define read_8ubyte_unaligned_inc(Dbg, Addr) \
-  ({ uint64_t t_ = dwarflint_read_8ubyte_unaligned (Dbg, Addr);		      \
-     Addr = (__typeof (Addr)) (((uintptr_t) (Addr)) + 8);		      \
-     t_; })
+#define read_8ubyte_unaligned_inc(Addr, OtherByteOrder)			\
+  ({ uint64_t t_ = dwarflint_read_8ubyte_unaligned (Addr, OtherByteOrder); \
+    Addr = (__typeof (Addr)) (((uintptr_t) (Addr)) + 8);		\
+    t_; })
 
 
 
 void
-read_ctx_init (struct read_ctx *ctx, struct elf_file *file, Elf_Data *data)
+read_ctx_init (struct read_ctx *ctx, Elf_Data *data, bool other_byte_order)
 {
   if (data == NULL)
     abort ();
 
-  ctx->file = file;
   ctx->data = data;
   ctx->begin = data->d_buf;
   ctx->end = data->d_buf + data->d_size;
   ctx->ptr = data->d_buf;
+  ctx->other_byte_order = other_byte_order;
 }
 
 bool
@@ -114,11 +114,11 @@ read_ctx_init_sub (struct read_ctx *ctx, struct read_ctx *parent,
       || end > parent->end)
     return false;
 
-  ctx->file = parent->file;
   ctx->data = parent->data;
   ctx->begin = begin;
   ctx->end = end;
   ctx->ptr = begin;
+  ctx->other_byte_order = parent->other_byte_order;
   return true;
 }
 
@@ -217,7 +217,7 @@ read_ctx_read_2ubyte (struct read_ctx *ctx, uint16_t *ret)
 {
   if (!read_ctx_need_data (ctx, 2))
     return false;
-  uint16_t val = read_2ubyte_unaligned_inc (ctx->file, ctx->ptr);
+  uint16_t val = read_2ubyte_unaligned_inc (ctx->ptr, ctx->other_byte_order);
   if (ret != NULL)
     *ret = val;
   return true;
@@ -228,7 +228,7 @@ read_ctx_read_4ubyte (struct read_ctx *ctx, uint32_t *ret)
 {
   if (!read_ctx_need_data (ctx, 4))
     return false;
-  uint32_t val = read_4ubyte_unaligned_inc (ctx->file, ctx->ptr);
+  uint32_t val = read_4ubyte_unaligned_inc (ctx->ptr, ctx->other_byte_order);
   if (ret != NULL)
     *ret = val;
   return true;
@@ -239,7 +239,7 @@ read_ctx_read_8ubyte (struct read_ctx *ctx, uint64_t *ret)
 {
   if (!read_ctx_need_data (ctx, 8))
     return false;
-  uint64_t val = read_8ubyte_unaligned_inc (ctx->file, ctx->ptr);
+  uint64_t val = read_8ubyte_unaligned_inc (ctx->ptr, ctx->other_byte_order);
   if (ret != NULL)
     *ret = val;
   return true;

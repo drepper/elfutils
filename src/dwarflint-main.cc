@@ -40,6 +40,7 @@
 #include "dwarflint-main.hh"
 #include "dwarflint-readctx.h"
 #include "dwarflint-checks.hh"
+#include "dwarflint-checks-low.hh" // xxx
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
@@ -257,68 +258,32 @@ layout_rel_file (Elf *elf)
   return 0;
 }
 
-dwarflint::dwarflint (Elf *elf)
+dwarflint::dwarflint (Elf *a_elf)
+  : _m_elf (a_elf)
 {
   check_registrar::inst ()->enroll (*this);
 
   struct elf_file file;
-  if (!elf_file_init (&file, elf))
+  if (!elf_file_init (&file, a_elf))
     return;
 
-  struct abbrev_table *abbrev_chain = NULL;
-  struct cu *cu_chain = NULL;
-  struct read_ctx ctx;
+  check_debug_info *check_info = check (check_info);
+  // xxx check_expected_trees
+  cu *cu_chain = check_info->cu_chain;
+  read_ctx ctx;
 
   /* Don't attempt to do high-level checks if we couldn't initialize
      high-level context.  The wrapper takes care of printing out error
      messages if any.  */
-  struct hl_ctx *hlctx = do_high_level ? hl_ctx_new (elf) : NULL;
+  struct hl_ctx *hlctx = do_high_level ? hl_ctx_new (a_elf) : NULL;
 
 #define SEC(sec) (file.debugsec[sec_##sec])
 #define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
 
-  if (likely (HAS_SEC(abbrev)))
-    {
-      read_ctx_init (&ctx, &file, SEC(abbrev)->data);
-      abbrev_chain = abbrev_table_load (&ctx);
-    }
-  else if (!tolerate_nodebug)
-    /* Hard error, not a message.  We can't debug without this.  */
-    wr_error (NULL, ".debug_abbrev data not found.\n");
-
-  Elf_Data *str_data = NULL;
-  if (SEC(str) != NULL)
-    {
-      str_data = SEC(str)->data;
-      if (str_data == NULL)
-	{
-	  where wh = WHERE (sec_str, NULL);
-	  wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf, &wh,
-		      ": the section is present but empty.\n");
-	}
-    }
-
-  struct cu_coverage *cu_coverage = NULL;
-  if (abbrev_chain != NULL)
-    {
-      if (likely (HAS_SEC(info)))
-	{
-	  cu_coverage
-	    = (struct cu_coverage *)calloc (1, sizeof (struct cu_coverage));
-	  cu_chain = check_info_structural (&file, SEC(info), abbrev_chain,
-					    str_data, cu_coverage);
-	  if (cu_chain != NULL && hlctx != NULL)
-	    check_expected_trees (hlctx);
-	}
-      else if (!tolerate_nodebug)
-	/* Hard error, not a message.  We can't debug without this.  */
-	wr_error (NULL, ".debug_info data not found.\n");
-    }
-
   bool ranges_sound;
   if (HAS_SEC(ranges) && cu_chain != NULL)
     ranges_sound = check_loc_or_range_structural (&file, SEC(ranges),
-						  cu_chain, cu_coverage);
+						  cu_chain, &check_info->cu_cov);
   else
     ranges_sound = false;
 
@@ -329,13 +294,13 @@ dwarflint::dwarflint (Elf *elf)
 
   if (HAS_SEC(aranges))
     {
-      read_ctx_init (&ctx, &file, SEC(aranges)->data);
+      read_ctx_init (&ctx, SEC(aranges)->data, file.other_byte_order);
 
       /* If ranges were needed and not loaded, don't pass them down
 	 for CU/aranges coverage analysis. */
       struct coverage *cov
-	= (cu_coverage != NULL
-	   && cu_coverage->need_ranges) ? NULL : &cu_coverage->cov;
+	= check_info->cu_cov.need_ranges ? NULL
+	: &check_info->cu_cov.cov;
 
       if (check_aranges_structural (&file, SEC(aranges), cu_chain, cov)
 	  && ranges_sound && hlctx != NULL && !be_tolerant && !be_gnu)
@@ -370,7 +335,6 @@ dwarflint::dwarflint (Elf *elf)
     }
 
   cu_free (cu_chain);
-  abbrev_table_free (abbrev_chain);
   if (file.ebl != NULL)
     ebl_closebackend (file.ebl);
   free (file.sec);

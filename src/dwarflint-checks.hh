@@ -5,7 +5,6 @@
 #include <string>
 #include <iostream>
 #include "dwarflint-where.h"
-#include "dwarflint-low.h"
 #include "dwarflint-main.hh"
 
 struct check_base
@@ -57,23 +56,6 @@ struct reg
   {
     toplev_check <T> (lint);
   }
-};
-
-struct section_base
-  : public check<section_base>
-  , public sec
-{
-  section_base (dwarflint &lint, section_id secid);
-};
-
-template<section_id sec_id>
-class section
-  : public section_base
-{
-public:
-  explicit section (dwarflint &lint)
-    : section_base (lint, sec_id)
-  {}
 };
 
 #endif//DWARFLINT_CHECKS_HH

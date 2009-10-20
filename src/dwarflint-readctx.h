@@ -14,22 +14,22 @@ extern "C"
 
 struct read_ctx
 {
-  struct elf_file *file;
   Elf_Data *data;
   const unsigned char *ptr;
   const unsigned char *begin;
   const unsigned char *end;
+  bool other_byte_order;
 };
 
-uint32_t dwarflint_read_4ubyte_unaligned (struct elf_file *file,
-					  const void *p);
-uint64_t dwarflint_read_8ubyte_unaligned (struct elf_file *file,
-					  const void *p);
+uint32_t dwarflint_read_4ubyte_unaligned (const void *p,
+					  bool other_byte_order);
+uint64_t dwarflint_read_8ubyte_unaligned (const void *p,
+					  bool other_byte_order);
 
 
 void read_ctx_init (struct read_ctx *ctx,
-			   struct elf_file *file,
-			   Elf_Data *data);
+		    Elf_Data *data,
+		    bool other_byte_order);
 bool read_ctx_init_sub (struct read_ctx *ctx,
 			struct read_ctx *parent,
 			const unsigned char *begin,
