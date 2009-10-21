@@ -34,7 +34,6 @@
 #include "addr-record.h"
 
 #ifdef __cplusplus
-# include <string>
 extern "C"
 {
 #else
@@ -161,25 +160,8 @@ extern "C"
 				    struct cu *cu_chain);
   extern bool check_line_structural (struct elf_file *file,
 				     struct sec *sec,
-				     struct cu *cu_chain);
+				     struct addr_record *line_tables);
   extern void cu_free (struct cu *cu_chain);
-
-
-  void section_coverage_init (struct section_coverage *sco,
-			      struct sec *sec, bool warn);
-  bool coverage_map_init (struct coverage_map *coverage_map,
-			  struct elf_file *elf,
-			  Elf64_Xword mask,
-			  Elf64_Xword warn_mask,
-			  bool allow_overlap);
-  void coverage_map_add (struct coverage_map *coverage_map,
-			 uint64_t address, uint64_t length,
-			 struct where *where, enum message_category cat);
-  bool coverage_map_find_holes (struct coverage_map *coverage_map,
-				bool (*cb) (uint64_t, uint64_t,
-					    struct section_coverage *, void *),
-				void *user);
-  void coverage_map_free (struct coverage_map *coverage_map);
 
 
   struct hole_info

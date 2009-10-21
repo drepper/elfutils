@@ -262,34 +262,6 @@ dwarflint::dwarflint (Elf *a_elf)
   : _m_elf (a_elf)
 {
   check_registrar::inst ()->enroll (*this);
-
-  struct elf_file file;
-  if (!elf_file_init (&file, a_elf))
-    return;
-
-  check_debug_info *check_info = check (check_info);
-  // xxx check_expected_trees
-  cu *cu_chain = check_info->cu_chain;
-
-#define SEC(sec) (file.debugsec[sec_##sec])
-#define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
-
-  if (HAS_SEC(line))
-    check_line_structural (&file, SEC(line), cu_chain);
-  else if (!tolerate_nodebug)
-    {
-      where wh = WHERE (sec_line, NULL);
-      wr_message (mc_impact_4 | mc_acc_suboptimal | mc_elf | mc_loc,
-		  &wh, ": data not found.\n");
-    }
-
-  cu_free (cu_chain);
-  if (file.ebl != NULL)
-    ebl_closebackend (file.ebl);
-  free (file.sec);
-
-#undef SEC
-#undef HAS_SEC
 }
 
 int

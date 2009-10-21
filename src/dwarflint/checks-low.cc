@@ -32,6 +32,7 @@
 #include <map>
 #include <sstream>
 #include <cstring>
+#include <cassert>
 
 struct secentry
 {
@@ -256,6 +257,13 @@ load_sections::load_sections (dwarflint &lint)
   elf_file_init (&file, lint.elf ());
 }
 
+load_sections::~load_sections ()
+{
+  if (file.ebl != NULL)
+    ebl_closebackend (file.ebl);
+  free (file.sec);
+}
+
 sec &
 section_base::get_sec_or_throw (section_id secid)
 {
@@ -310,8 +318,26 @@ check_debug_info::check_debug_info (dwarflint &lint)
 
   for (cu *cu = chain; cu != NULL; cu = cu->next)
     cus.push_back (*cu);
-  // cu_free (chain); xxx
-  cu_chain = chain;
+
+  // re-link CUs so that they form a chain again.  This is to
+  // interface with C-level code.  The last CU's next is null, so we
+  // don't have to re-link it.
+  cu *last = NULL;
+  for (std::vector<cu>::iterator it = cus.begin ();
+       it != cus.end (); ++it)
+    {
+      cu *cur = &*it;
+      if (last != NULL)
+	last->next = cur;
+      last = cur;
+    }
+  if (cus.size () > 0)
+    assert (cus.back ().next == NULL);
+}
+
+check_debug_info::~check_debug_info ()
+{
+  cu_free (&cus.back ());
 }
 
 check_debug_ranges::check_debug_ranges (dwarflint &lint)
@@ -320,7 +346,7 @@ check_debug_ranges::check_debug_ranges (dwarflint &lint)
 {
   if (!check_loc_or_range_structural (&_m_sec_ranges->file,
 				      &_m_sec_ranges->sect,
-				      _m_cus->cu_chain,
+				      &_m_cus->cus.front (),
 				      &_m_cus->cu_cov))
     throw check_base::failed (""); //xxx
 }
@@ -333,7 +359,8 @@ check_debug_aranges::check_debug_aranges (dwarflint &lint)
     = _m_cus->cu_cov.need_ranges ? NULL : &_m_cus->cu_cov.cov;
   if (!check_aranges_structural (&_m_sec_aranges->file,
 				 &_m_sec_aranges->sect,
-				 _m_cus->cu_chain, cov))
+				 &_m_cus->cus.front (),
+				 cov))
     throw check_base::failed (""); //xxx
 }
 
@@ -343,7 +370,8 @@ check_debug_loc::check_debug_loc (dwarflint &lint)
 {
   if (!check_loc_or_range_structural (&_m_sec_loc->file,
 				      &_m_sec_loc->sect,
-				      _m_cus->cu_chain, NULL))
+				      &_m_cus->cus.front (),
+				      NULL))
     throw check_base::failed (""); //xxx
 }
 
@@ -363,11 +391,52 @@ namespace
     {
       if (!check_pub_structural (&_m_sec->file,
 				 &_m_sec->sect,
-				 _m_cus->cu_chain))
+				 &_m_cus->cus.front ()))
 	throw check_base::failed (""); //xxx
     }
   };
 
   reg<check_debug_pub<sec_pubnames> > reg_debug_pubnames;
   reg<check_debug_pub<sec_pubtypes> > reg_debug_pubtypes;
+}
+
+namespace
+{
+  class check_debug_line
+    : public check<check_debug_line>
+  {
+    section<sec_line> *_m_sec;
+
+  public:
+    explicit check_debug_line (dwarflint &lint)
+      : _m_sec (lint.check (_m_sec))
+    {
+      addr_record line_tables;
+      WIPE (line_tables);
+      if (!check_line_structural (&_m_sec->file,
+				  &_m_sec->sect,
+				  &line_tables))
+	throw check_base::failed (""); //xxx
+
+      check_debug_info *info = NULL;
+      info = toplev_check (lint, info);
+      if (info != NULL)
+	for (std::vector<cu>::iterator it = info->cus.begin ();
+	     it != info->cus.end (); ++it)
+	  for (size_t i = 0; i < it->line_refs.size; ++i)
+	    {
+	      struct ref *ref = it->line_refs.refs + i;
+	      if (!addr_record_has_addr (&line_tables, ref->addr))
+		{
+		  std::stringstream ss;
+		  ss << ": unresolved reference to .debug_line table "
+		     << "0x" << std::hex << ref->addr << ".";
+		  wr_error (&ref->who, "%s\n", ss.str ().c_str ());
+		}
+	    }
+      addr_record_free (&line_tables);
+    }
+  };
+
+  reg<check_debug_line> reg_debug_line;
 }

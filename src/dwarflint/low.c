@@ -3446,21 +3446,18 @@ read_rel (struct elf_file *file,
 bool
 check_line_structural (struct elf_file *file,
 		       struct sec *sec,
-		       struct cu *cu_chain)
+		       struct addr_record *line_tables)
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, sec->data, file->other_byte_order);
   bool retval = true;
-
-  struct addr_record line_tables;
-  WIPE (line_tables);
 
   while (!read_ctx_eof (&ctx))
     {
       struct where where = WHERE (sec->id, NULL);
       uint64_t set_offset = read_ctx_get_offset (&ctx);
       where_reset_1 (&where, set_offset);
-      addr_record_add (&line_tables, set_offset);
+      addr_record_add (line_tables, set_offset);
       const unsigned char *set_begin = ctx.ptr;
 
       /* Size.  */
@@ -3932,19 +3929,7 @@ check_line_structural (struct elf_file *file,
     }
 
   if (retval)
-    {
-      relocation_skip_rest (sec);
-
-      for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
-	for (size_t i = 0; i < cu->line_refs.size; ++i)
-	  {
-	    struct ref *ref = cu->line_refs.refs + i;
-	    if (!addr_record_has_addr (&line_tables, ref->addr))
-	      wr_error (&ref->who,
-			": unresolved reference to .debug_line table %#" PRIx64 ".\n",
-			ref->addr);
-	  }
-    }
+    relocation_skip_rest (sec);
 
   return retval;
 }

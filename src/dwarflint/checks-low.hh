@@ -7,6 +7,7 @@ class load_sections
 public:
   elf_file file;
   explicit load_sections (dwarflint &lint);
+  ~load_sections ();
 };
 
 class section_base
@@ -55,9 +56,9 @@ class check_debug_info
 public:
   cu_coverage cu_cov;
   std::vector<cu> cus;
-  cu *cu_chain; // xxx
 
   explicit check_debug_info (dwarflint &lint);
+  ~check_debug_info ();
 };
 static reg<check_debug_info> reg_debug_info;
 

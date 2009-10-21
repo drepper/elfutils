@@ -32,16 +32,18 @@ public:
 };
 
 template <class T>
-void
-toplev_check (dwarflint &lint)
+T *
+toplev_check (dwarflint &lint,
+	      __attribute__ ((unused)) T *tag = NULL)
 {
   try
     {
-      lint.check<T> ();
+      return lint.check<T> ();
     }
   catch (check_base::failed const &f)
     {
       std::cout << f.what () << std::endl;
+      return NULL;
     }
 }
 
