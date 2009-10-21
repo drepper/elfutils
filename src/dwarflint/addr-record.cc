@@ -56,3 +56,19 @@ addr_record_free (struct addr_record *ar)
   if (ar != NULL)
     free (ar->addrs);
 }
+
+void
+ref_record_add (struct ref_record *rr, uint64_t addr, struct where *referrer)
+{
+  REALLOC (rr, refs);
+  struct ref *ref = rr->refs + rr->size++;
+  ref->addr = addr;
+  ref->who = *referrer;
+}
+
+void
+ref_record_free (struct ref_record *rr)
+{
+  if (rr != NULL)
+    free (rr->refs);
+}

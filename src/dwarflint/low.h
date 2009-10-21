@@ -226,19 +226,6 @@ extern "C"
 			   abbrevs should be skipped.  */
   };
 
-  struct ref
-  {
-    uint64_t addr; // Referree address
-    struct where who;  // Referrer
-  };
-
-  struct ref_record
-  {
-    size_t size;
-    size_t alloc;
-    struct ref *refs;
-  };
-
   struct cu
   {
     struct cu *next;

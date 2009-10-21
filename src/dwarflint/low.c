@@ -66,18 +66,6 @@ check_category (enum message_category cat)
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"
 
 
-/* Functions and data structures related to raw (i.e. unassisted by
-   libdw) Dwarf abbreviation handling.  */
-
-
-/* Functions and data structures for reference handling.  Just like
-   the above, we use this to check validity of DIE references.  Unlike
-   the above, this is not stored as sorted set, but simply as an array
-   of records, because duplicates are unlikely.  */
-
-static void ref_record_add (struct ref_record *rr, uint64_t addr, struct where *referrer);
-static void ref_record_free (struct ref_record *rr);
-
 static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 
 static bool check_location_expression (struct elf_file *file,
@@ -598,22 +586,6 @@ abbrev_table_find_abbrev (struct abbrev_table *abbrevs, uint64_t abbrev_code)
     }
 
   return NULL;
-}
-
-static void
-ref_record_add (struct ref_record *rr, uint64_t addr, struct where *referrer)
-{
-  REALLOC (rr, refs);
-  struct ref *ref = rr->refs + rr->size++;
-  ref->addr = addr;
-  ref->who = *referrer;
-}
-
-static void
-ref_record_free (struct ref_record *rr)
-{
-  if (rr != NULL)
-    free (rr->refs);
 }
 
 bool
