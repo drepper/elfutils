@@ -24,8 +24,8 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "dwarflint-readctx.h"
-#include "dwarflint-low.h"
+#include "readctx.h"
+#include "low.h"
 
 #include <stdlib.h>
 #include <assert.h>

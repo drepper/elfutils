@@ -2,8 +2,8 @@
 # include <config.h>
 #endif
 
-#include "dwarflint-checks-high.hh"
-#include "dwarflint-expected.hh"
+#include "checks-high.hh"
+#include "expected.hh"
 #include "dwarfstrings.h"
 #include "../libdw/c++/dwarf-knowledge.cc"
 

@@ -79,20 +79,20 @@ dwarfcmp_test_SOURCES = $(dwarfcmp_SOURCES)
 dwarfcmp_test_LDADD = $(dwarfcmp_LDADD)
 
 dwarflint_SOURCES = dwarfstrings.c \
-		    dwarflint-main.cc dwarflint-main.hh dwarflint-misc.h \
-		    dwarflint-low.c dwarflint-low.h \
-		    dwarflint-expected-at.cc dwarflint-expected.hh \
-		    dwarflint-coverage.cc dwarflint-coverage.h \
-		    dwarflint-readctx.c  dwarflint-readctx.h \
-		    dwarflint-messages.cc dwarflint-messages.h \
-		    dwarflint-where.c dwarflint-where.h \
-		    dwarflint-config.cc dwarflint-config.h \
-		    dwarflint-checks.cc dwarflint-checks.hh \
-		    dwarflint-checks-low.cc dwarflint-checks-low.hh \
-		    dwarflint-checks-high.hh \
-		    dwarflint-check_matching_ranges.cc \
-		    dwarflint-check_range_out_of_scope.cc \
-		    dwarflint-check_expected_trees.cc
+		    dwarflint/main.cc dwarflint/main.hh dwarflint/misc.h \
+		    dwarflint/low.c dwarflint/low.h \
+		    dwarflint/expected-at.cc dwarflint/expected.hh \
+		    dwarflint/coverage.cc dwarflint/coverage.h \
+		    dwarflint/readctx.c  dwarflint/readctx.h \
+		    dwarflint/messages.cc dwarflint/messages.h \
+		    dwarflint/where.c dwarflint/where.h \
+		    dwarflint/config.cc dwarflint/config.h \
+		    dwarflint/checks.cc dwarflint/checks.hh \
+		    dwarflint/checks-low.cc dwarflint/checks-low.hh \
+		    dwarflint/checks-high.hh \
+		    dwarflint/check_matching_ranges.cc \
+		    dwarflint/check_range_out_of_scope.cc \
+		    dwarflint/check_expected_trees.cc
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 

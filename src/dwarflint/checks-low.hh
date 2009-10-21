@@ -1,5 +1,5 @@
-#include "dwarflint-checks.hh"
-#include "dwarflint-low.h"
+#include "checks.hh"
+#include "low.h"
 
 class load_sections
   : public check<load_sections>

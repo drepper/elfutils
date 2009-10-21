@@ -29,7 +29,7 @@
 
 #include <string>
 #include <sstream>
-#include "dwarflint-coverage.h"
+#include "coverage.h"
 
 std::string range_fmt (uint64_t start, uint64_t end);
 

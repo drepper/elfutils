@@ -2,8 +2,8 @@
 # include <config.h>
 #endif
 
-#include "dwarflint-checks-high.hh"
-#include "dwarflint-coverage.hh"
+#include "checks-high.hh"
+#include "coverage.hh"
 #include "dwarfstrings.h"
 
 using elfutils::dwarf;

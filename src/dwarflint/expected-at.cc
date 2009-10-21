@@ -25,7 +25,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include <config.h>
-#include "dwarflint-expected.hh"
+#include "expected.hh"
 #include "../libdw/dwarf.h"
 
 expected_at_map::expected_at_map ()

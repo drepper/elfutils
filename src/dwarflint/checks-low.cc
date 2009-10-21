@@ -27,8 +27,8 @@
 # include <config.h>
 #endif
 
-#include "dwarflint-checks-low.hh"
-#include "dwarflint-low.h"
+#include "checks-low.hh"
+#include "low.h"
 #include <map>
 #include <sstream>
 #include <cstring>

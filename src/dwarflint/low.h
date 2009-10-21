@@ -28,9 +28,9 @@
 
 #include "../libdw/libdw.h"
 #include "../libebl/libebl.h"
-#include "dwarflint-coverage.h"
-#include "dwarflint-messages.h"
-#include "dwarflint-readctx.h"
+#include "coverage.h"
+#include "messages.h"
+#include "readctx.h"
 
 #ifdef __cplusplus
 # include <string>

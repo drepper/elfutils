@@ -2,7 +2,7 @@
 # include <config.h>
 #endif
 
-#include "dwarflint-checks-high.hh"
+#include "checks-high.hh"
 
 using elfutils::dwarf;
 

@@ -1,5 +1,5 @@
-#include "dwarflint-where.h"
-#include "dwarflint-config.h"
+#include "where.h"
+#include "config.h"
 
 #include <inttypes.h>
 #include <assert.h>

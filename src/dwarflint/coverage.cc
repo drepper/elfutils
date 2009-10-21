@@ -28,7 +28,7 @@
 # include <config.h>
 #endif
 
-#include "dwarflint-coverage.hh"
+#include "coverage.hh"
 
 #include <stdbool.h>
 #include <assert.h>

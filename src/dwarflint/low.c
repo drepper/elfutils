@@ -45,9 +45,9 @@
 #include "../libdw/known-dwarf.h"
 #include "../libebl/libebl.h"
 #include "dwarfstrings.h"
-#include "dwarflint-low.h"
-#include "dwarflint-readctx.h"
-#include "dwarflint-config.h"
+#include "low.h"
+#include "readctx.h"
+#include "config.h"
 #include "dwarf-opcodes.h"
 
 /* True if coverage analysis of .debug_ranges vs. ELF sections should

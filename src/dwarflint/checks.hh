@@ -4,8 +4,8 @@
 #include <stdexcept>
 #include <string>
 #include <iostream>
-#include "dwarflint-where.h"
-#include "dwarflint-main.hh"
+#include "where.h"
+#include "main.hh"
 
 struct check_base
 {

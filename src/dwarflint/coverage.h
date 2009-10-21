@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "dwarflint-misc.h"
+#include "misc.h"
 
 #ifdef __cplusplus
 extern "C"

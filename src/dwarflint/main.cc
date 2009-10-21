@@ -35,12 +35,12 @@
 
 #include <iostream>
 
-#include "dwarflint-low.h"
-#include "dwarflint-config.h"
-#include "dwarflint-main.hh"
-#include "dwarflint-readctx.h"
-#include "dwarflint-checks.hh"
-#include "dwarflint-checks-low.hh" // xxx
+#include "low.h"
+#include "config.h"
+#include "main.hh"
+#include "readctx.h"
+#include "checks.hh"
+#include "checks-low.hh" // xxx
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
@@ -271,11 +271,6 @@ dwarflint::dwarflint (Elf *a_elf)
   // xxx check_expected_trees
   cu *cu_chain = check_info->cu_chain;
 
-  /* Don't attempt to do high-level checks if we couldn't initialize
-     high-level context.  The wrapper takes care of printing out error
-     messages if any.  */
-  struct hl_ctx *hlctx = do_high_level ? hl_ctx_new (a_elf) : NULL;
-
 #define SEC(sec) (file.debugsec[sec_##sec])
 #define HAS_SEC(sec) (SEC(sec) != NULL && SEC(sec)->data != NULL)
 
@@ -292,7 +287,6 @@ dwarflint::dwarflint (Elf *a_elf)
   if (file.ebl != NULL)
     ebl_closebackend (file.ebl);
   free (file.sec);
-  hl_ctx_delete (hlctx);
 
 #undef SEC
 #undef HAS_SEC

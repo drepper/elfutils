@@ -1,4 +1,4 @@
-#include "dwarflint-config.h"
+#include "config.h"
 
 /* If true, we accept silently files without debuginfo.  */
 bool tolerate_nodebug = false;

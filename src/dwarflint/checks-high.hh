@@ -1,5 +1,5 @@
-#include "dwarflint-checks-low.hh"
-#include "dwarflint-config.h"
+#include "checks-low.hh"
+#include "config.h"
 #include "c++/dwarf"
 
 template<class T>

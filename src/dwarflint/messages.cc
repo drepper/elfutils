@@ -1,6 +1,6 @@
-#include "dwarflint-messages.h"
-#include "dwarflint-misc.h"
-#include "dwarflint-coverage.h"
+#include "messages.h"
+#include "misc.h"
+#include "coverage.h"
 
 #include <vector>
 #include <sstream>

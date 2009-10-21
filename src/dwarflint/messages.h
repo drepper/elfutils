@@ -1,7 +1,7 @@
 #ifndef DWARFLINT_MESSAGES_H
 #define DWARFLINT_MESSAGES_H
 
-#include "dwarflint-where.h"
+#include "where.h"
 
 #ifdef __cplusplus
 # define IF_CPLUSPLUS(X) X
