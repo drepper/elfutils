@@ -353,13 +353,24 @@ check_debug_ranges::check_debug_ranges (dwarflint &lint)
 
 check_debug_aranges::check_debug_aranges (dwarflint &lint)
   : _m_sec_aranges (lint.check (_m_sec_aranges))
-  , _m_cus (lint.check (_m_cus))
 {
-  coverage *cov
-    = _m_cus->cu_cov.need_ranges ? NULL : &_m_cus->cu_cov.cov;
+  check_debug_info *info = toplev_check<check_debug_info> (lint);
+  coverage *cov = NULL;
+  if (info != NULL)
+    {
+      // xxx If need_ranges is true, we have to load ranges first.
+      // That's a flaw in design of checks, that data should have been
+      // stored in check_ranges, and that should have been requested
+      // explicitly.  But for the time being...
+      if (info->cu_cov.need_ranges)
+	toplev_check<check_debug_ranges> (lint);
+      if (!info->cu_cov.need_ranges)
+	cov = &info->cu_cov.cov;
+    }
+
   if (!check_aranges_structural (&_m_sec_aranges->file,
 				 &_m_sec_aranges->sect,
-				 &_m_cus->cus.front (),
+				 info != NULL ? &info->cus.front () : NULL,
 				 cov))
     throw check_base::failed (""); //xxx
 }

@@ -54,6 +54,9 @@ class check_debug_info
   check_debug_abbrev *_m_abbrevs;
 
 public:
+  // The check pass adds all low_pc/high_pc ranges loaded from DIE
+  // tree into this following cu_cov structure.  If it finds any
+  // rangeptr-class attributes, it sets cu_cov.need_ranges to true.
   cu_coverage cu_cov;
   std::vector<cu> cus;
 
@@ -77,7 +80,6 @@ class check_debug_aranges
   : public check<check_debug_aranges>
 {
   section<sec_aranges> *_m_sec_aranges;
-  check_debug_info *_m_cus;
 
 public:
   explicit check_debug_aranges (dwarflint &lint);
