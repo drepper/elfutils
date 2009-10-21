@@ -31,6 +31,7 @@
 #include "coverage.h"
 #include "messages.h"
 #include "readctx.h"
+#include "addr-record.h"
 
 #ifdef __cplusplus
 # include <string>
@@ -254,13 +255,6 @@ extern "C"
     size_t size;
     size_t alloc;
     struct ref *refs;
-  };
-
-  struct addr_record
-  {
-    size_t size;
-    size_t alloc;
-    uint64_t *addrs;
   };
 
   struct cu

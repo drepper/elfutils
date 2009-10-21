@@ -69,16 +69,6 @@ check_category (enum message_category cat)
 /* Functions and data structures related to raw (i.e. unassisted by
    libdw) Dwarf abbreviation handling.  */
 
-/* Functions and data structures for address record handling.  We use
-   that to check that all DIE references actually point to an existing
-   die, not somewhere mid-DIE, where it just happens to be
-   interpretable as a DIE.  */
-
-static size_t addr_record_find_addr (struct addr_record *ar, uint64_t addr);
-static bool addr_record_has_addr (struct addr_record *ar, uint64_t addr);
-static void addr_record_add (struct addr_record *ar, uint64_t addr);
-static void addr_record_free (struct addr_record *ar);
-
 
 /* Functions and data structures for reference handling.  Just like
    the above, we use this to check validity of DIE references.  Unlike
@@ -609,63 +599,6 @@ abbrev_table_find_abbrev (struct abbrev_table *abbrevs, uint64_t abbrev_code)
 
   return NULL;
 }
-
-static size_t
-addr_record_find_addr (struct addr_record *ar, uint64_t addr)
-{
-  size_t a = 0;
-  size_t b = ar->size;
-
-  while (a < b)
-    {
-      size_t i = (a + b) / 2;
-      uint64_t v = ar->addrs[i];
-
-      if (v > addr)
-	b = i;
-      else if (v < addr)
-	a = i + 1;
-      else
-	return i;
-    }
-
-  return a;
-}
-
-static bool
-addr_record_has_addr (struct addr_record *ar, uint64_t addr)
-{
-  if (ar->size == 0
-      || addr < ar->addrs[0]
-      || addr > ar->addrs[ar->size - 1])
-    return false;
-
-  size_t a = addr_record_find_addr (ar, addr);
-  return a < ar->size && ar->addrs[a] == addr;
-}
-
-static void
-addr_record_add (struct addr_record *ar, uint64_t addr)
-{
-  size_t a = addr_record_find_addr (ar, addr);
-  if (a >= ar->size || ar->addrs[a] != addr)
-    {
-      REALLOC (ar, addrs);
-      size_t len = ar->size - a;
-      memmove (ar->addrs + a + 1, ar->addrs + a, len * sizeof (*ar->addrs));
-
-      ar->addrs[a] = addr;
-      ar->size++;
-    }
-}
-
-static void
-addr_record_free (struct addr_record *ar)
-{
-  if (ar != NULL)
-    free (ar->addrs);
-}
-
 
 static void
 ref_record_add (struct ref_record *rr, uint64_t addr, struct where *referrer)
