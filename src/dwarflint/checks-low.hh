@@ -1,5 +1,5 @@
-#include "checks.hh"
 #include "low.h"
+#include "checks.hh"
 
 class load_sections
   : public check<load_sections>
@@ -35,13 +35,14 @@ class check_debug_abbrev
   : public check<check_debug_abbrev>
 {
   section<sec_abbrev> *_m_sec_abbr;
+  bool check_no_abbreviations () const;
 
 public:
   explicit check_debug_abbrev (dwarflint &lint);
 
   // offset -> abbreviations
-  std::map< ::Dwarf_Off, abbrev_table> abbrevs;
-  struct abbrev_table *abbrev_chain; // xxx
+  typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
+  abbrev_map abbrevs;
 };
 static reg<check_debug_abbrev> reg_debug_abbrev;
 

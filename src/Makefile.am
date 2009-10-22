@@ -91,6 +91,7 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/checks-low.cc dwarflint/checks-low.hh \
 		    dwarflint/addr-record.cc dwarflint/addr-record.h \
 		    dwarflint/checks-high.hh \
+		    dwarflint/check_debug_abbrev.cc \
 		    dwarflint/check_matching_ranges.cc \
 		    dwarflint/check_range_out_of_scope.cc \
 		    dwarflint/check_expected_trees.cc

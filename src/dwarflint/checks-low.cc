@@ -283,23 +283,6 @@ section_base::section_base (dwarflint &lint, section_id secid)
 {
 }
 
-check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
-  : _m_sec_abbr (lint.check (_m_sec_abbr))
-{
-  read_ctx ctx;
-  read_ctx_init (&ctx, _m_sec_abbr->sect.data,
-		 _m_sec_abbr->file.other_byte_order);
-
-  /* xxx wrap C routine before proper loading is in place.  */
-  abbrev_table *chain = abbrev_table_load (&ctx);
-  if (chain == NULL)
-    throw check_base::failed (""); // xxx
-  for (abbrev_table *it = chain; it != NULL; it = it->next)
-    abbrevs[it->offset] = *it;
-  // abbrev_table_free (chain); xxx
-  abbrev_chain = chain;
-}
-
 check_debug_info::check_debug_info (dwarflint &lint)
   : _m_sec_info (lint.check (_m_sec_info))
   , _m_sec_abbrev (lint.check (_m_sec_abbrev))
@@ -311,7 +294,8 @@ check_debug_info::check_debug_info (dwarflint &lint)
   /* xxx wrap C routine before proper loading is in place.  */
   cu *chain = check_info_structural
     (&_m_sec_info->file, &_m_sec_info->sect,
-     _m_abbrevs->abbrev_chain, _m_sec_str->sect.data, &cu_cov);
+     &_m_abbrevs->abbrevs.begin ()->second,
+     _m_sec_str->sect.data, &cu_cov);
 
   if (chain == NULL)
     throw check_base::failed (""); // xxx

@@ -102,8 +102,20 @@ extern "C"
   extern bool check_expected_trees (struct hl_ctx *hlctx);
   extern bool elf_file_init (struct elf_file *file, Elf *elf);
 
+  struct abbrev_table
+  {
+    struct abbrev_table *next;
+    struct abbrev *abbr;
+    uint64_t offset;
+    size_t size;
+    size_t alloc;
+    bool used;		/* There are CUs using this table.  */
+    bool skip_check;	/* There were errors during loading one of the
+			   CUs that use this table.  Check for unused
+			   abbrevs should be skipped.  */
+  };
+
   // xxx some of that will go away
-  extern struct abbrev_table * abbrev_table_load (struct read_ctx *ctx);
   extern void abbrev_table_free (struct abbrev_table *abbr);
   extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table *abbrevs,
 						  uint64_t abbrev_code);
@@ -163,6 +175,9 @@ extern "C"
 				     struct addr_record *line_tables);
   extern void cu_free (struct cu *cu_chain);
 
+  extern bool attrib_form_valid (uint64_t form);
+  extern int check_sibling_form (uint64_t form);
+  extern bool is_location_attrib (uint64_t name);
 
   struct hole_info
   {
@@ -186,7 +201,15 @@ extern "C"
      DATA->info.data has to be NULL, it is used by the callback.  */
   bool coverage_map_found_hole (uint64_t begin, uint64_t end,
 				struct section_coverage *sco, void *data);
+  bool checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
+			     struct where *where, const char *what);
 
+  struct abbrev_attrib
+  {
+    struct where where;
+    uint16_t name;
+    uint8_t form;
+  };
 
   struct abbrev
   {
@@ -194,12 +217,7 @@ extern "C"
     struct where where;
 
     /* Attributes.  */
-    struct abbrev_attrib
-    {
-      struct where where;
-      uint16_t name;
-      uint8_t form;
-    } *attribs;
+    struct abbrev_attrib *attribs;
     size_t size;
     size_t alloc;
 
@@ -211,19 +229,6 @@ extern "C"
 
     /* Whether some DIE uses this abbrev.  */
     bool used;
-  };
-
-  struct abbrev_table
-  {
-    struct abbrev_table *next;
-    struct abbrev *abbr;
-    uint64_t offset;
-    size_t size;
-    size_t alloc;
-    bool used;		/* There are CUs using this table.  */
-    bool skip_check;	/* There were errors during loading one of the
-			   CUs that use this table.  Check for unused
-			   abbrevs should be skipped.  */
   };
 
   struct cu

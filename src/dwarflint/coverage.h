@@ -108,6 +108,7 @@ bool coverage_find_ranges (struct coverage const *cov,
 #ifdef __cplusplus
 }
 
+#include <string>
 std::string range_fmt (uint64_t start, uint64_t end);
 #endif
 
