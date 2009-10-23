@@ -6,6 +6,7 @@
 
 #ifdef __cplusplus
 # define IF_CPLUSPLUS(X) X
+#include <iosfwd>
 extern "C"
 {
 #else
@@ -80,11 +81,21 @@ extern "C"
 #ifdef __cplusplus
 }
 
+#include <iostream>
+
 inline const char *
 where_fmt (where const &wh)
 {
   return where_fmt (&wh);
 }
+
+inline std::ostream &
+operator << (std::ostream &os, where const &wh)
+{
+  os << where_fmt (wh);
+  return os;
+}
+
 #endif
 
 #endif//DWARFLINT_WHERE_H

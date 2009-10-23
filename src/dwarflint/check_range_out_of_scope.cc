@@ -77,8 +77,9 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 	      if (high_pc != (::Dwarf_Addr)-1)
 		{
 		  if (my_ranges.size () != 0)
-		    wr_message (cat (mc_impact_4, mc_info, mc_error), &wh,
-				": both low_pc/high_pc pair and ranges present.\n");
+		    wr_message (wh, cat (mc_impact_4, mc_info, mc_error))
+		      << ": both low_pc/high_pc pair and ranges present."
+		      << std::endl;
 		  else
 		    my_ranges.push_back (std::make_pair (low_pc, high_pc));
 		}
@@ -123,17 +124,14 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 
 		    if (result.size > 0)
 		      {
-			std::string super_wh = where_fmt (&wh_parent);
-			{
-			  std::string rs = cov::format_ranges (cov1);
-			  wr_error (&wh, ": PC range %s is not a sub-range of "
-				    "containing scope.\n", rs.c_str ());
-			}
-			{
-			  std::string rs = cov::format_ranges (cov2);
-			  wr_error (&wh_parent, ": in this context: %s\n",
-				    rs.c_str ());
-			}
+			wr_error (wh)
+			  << ": PC range " << cov::format_ranges (cov1)
+			  << " is not a sub-range of containing scope."
+			  << std::endl;
+
+			wr_error (wh_parent)
+			  << ": in this context: " << cov::format_ranges (cov2)
+			  << std::endl;
 		      }
 
 		    coverage_free (&result);
@@ -177,19 +175,17 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 			      && !coverage_is_covered (&cov, start, length))
 			    {
 			      runoff = true;
-			      std::string super_wh = where_fmt (&wh_parent);
-			      wr_error (&wh, ": attribute `%s': PC range %s "
-					"outside containing scope\n",
-					dwarf_attr_string ((*at).first),
-					range_fmt (start, end).c_str ());
+			      wr_error (wh)
+				<< ": attribute `"
+				<< dwarf_attr_string ((*at).first)
+				<< "': PC range " << range_fmt (start, end)
+				<< " outside containing scope." << std::endl;
 			    }
 			}
 		      if (runoff)
-			{
-			  std::string rangestr = cov::format_ranges (cov);
-			  wr_error (&wh_parent, ": in this context: %s\n",
-				    rangestr.c_str ());
-			}
+			wr_error (wh_parent)
+			  << ": in this context: " << cov::format_ranges (cov)
+			  << '.' << std::endl;
 		    }
 		}
 	    }

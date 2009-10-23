@@ -143,6 +143,44 @@ cat (message_category c1,
   return static_cast<message_category> (c1 | c2 | c3 | c4);
 }
 
+std::ostream &wr_warning (where const &wh);
+std::ostream &wr_error (where const &wh);
+std::ostream &wr_message (where const &wh, message_category cat);
+
+namespace pri
+{
+  class pribase
+  {
+    std::string const &m_a;
+    std::string const &m_b;
+    std::string const &m_c;
+
+  protected:
+    pribase (std::string const &a,
+	     std::string const &b = "",
+	     std::string const &c = "")
+      : m_a (a), m_b (b), m_c (c)
+    {}
+    friend std::ostream &operator << (std::ostream &os, pribase const &obj);
+  };
+  std::ostream &operator << (std::ostream &os, pribase const &obj);
+
+  struct not_enough
+    : public pribase
+  {
+    not_enough (std::string const &what)
+      : pribase ("not enough data for ", what)
+    {}
+  };
+
+  struct lacks_relocation
+    : public pribase
+  {
+    lacks_relocation (std::string const &what)
+      : pribase (what, " seems to lack a relocation")
+    {}
+  };
+}
 #endif
 
 #endif//DWARFLINT_MESSAGES_H

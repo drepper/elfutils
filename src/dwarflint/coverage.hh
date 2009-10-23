@@ -66,7 +66,7 @@ namespace cov
     }
 
   public:
-    operator std::string ()
+    operator std::string () const
     {
       return _m_os.str ();
     }
@@ -94,4 +94,15 @@ namespace cov
   };
 }
 
+inline std::ostream &
+operator << (std::ostream &os, cov::format_ranges const &obj)
+{
+  return os << std::string (obj);
+}
+
+inline std::ostream &
+operator << (std::ostream &os, cov::format_holes const &obj)
+{
+  return os << std::string (obj);
+}
 #endif//DWARFLINT_COVERAGE_HH

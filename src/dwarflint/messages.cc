@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cassert>
 #include <cstdarg>
+#include <libintl.h>
 
 unsigned error_count = 0;
 
@@ -223,6 +224,42 @@ wr_message (unsigned long category, const struct where *wh,
   va_end (ap);
 }
 
+namespace
+{
+  class nostream: public std::ostream {};
+  nostream nostr;
+
+  std::ostream &get_stream ()
+  {
+    return std::cout;
+  }
+}
+
+std::ostream &
+wr_warning (where const &wh)
+{
+  ++error_count;
+  return get_stream () << gettext ("warning: ") << wh << ": ";
+}
+
+std::ostream &
+wr_error (where const &wh)
+{
+  ++error_count;
+  return get_stream () << gettext ("error: ") << wh << ": ";
+}
+
+std::ostream &
+wr_message (where const &wh, message_category category)
+{
+  if (!message_accept (&warning_criteria, category))
+    return nostr;
+  else if (message_accept (&error_criteria, category))
+    return wr_error (wh);
+  else
+    return wr_warning (wh);
+}
+
 void
 wr_format_padding_message (unsigned long category,
 			   struct where *wh,
@@ -266,4 +303,10 @@ wr_message_padding_n0 (unsigned long category,
   wr_format_padding_message (category | mc_acc_bloat | mc_impact_1,
 			     wh, start, end,
 			     "unreferenced non-zero bytes");
+}
+
+std::ostream &
+pri::operator << (std::ostream &os, pri::pribase const &obj)
+{
+  return os << obj.m_a << obj.m_b << obj.m_c;
 }
