@@ -23,8 +23,8 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_HL_H
-#define DWARFLINT_HL_H
+#ifndef DWARFLINT_LOW_H
+#define DWARFLINT_LOW_H
 
 #include "../libdw/libdw.h"
 #include "../libebl/libebl.h"
@@ -32,6 +32,7 @@
 #include "messages.h"
 #include "readctx.h"
 #include "addr-record.h"
+#include "reloc.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -41,30 +42,6 @@ extern "C"
 #endif
 
   struct hl_ctx;
-  struct relocation
-  {
-    uint64_t offset;
-    uint64_t addend;
-    int symndx;
-    int type;
-    bool invalid;	/* Whether this one relocation should be
-			   ignored.  Necessary so that we don't report
-			   invalid & missing relocation twice.  */
-  };
-
-  struct relocation_data
-  {
-    Elf_Data *symdata;		/* Symbol table associated with this
-				   relocation section.  */
-    size_t type;		/* SHT_REL or SHT_RELA.  */
-
-    struct relocation *rel;	/* Array of relocations.  May be NULL
-				   if there are no associated
-				   relocation data.  */
-    size_t size;
-    size_t alloc;
-    size_t index;		/* Current index. */
-  };
 
   struct sec
   {
@@ -124,6 +101,15 @@ extern "C"
   extern bool address_aligned (uint64_t addr, uint64_t align);
   extern bool necessary_alignment (uint64_t start, uint64_t length,
 				   uint64_t align);
+  extern bool read_size_extra (struct read_ctx *ctx, uint32_t size32,
+			       uint64_t *sizep, int *offset_sizep,
+			       struct where *wh);
+#define PRI_NOT_ENOUGH ": not enough data for %s.\n"
+  extern bool supported_version (unsigned version,
+				 size_t num_supported, struct where *where, ...);
+  extern bool check_zero_padding (struct read_ctx *ctx,
+				  enum message_category category,
+				  struct where *wh);
 
   struct section_coverage
   {
@@ -256,4 +242,4 @@ extern "C"
 }
 #endif
 
-#endif/*DWARFLINT_HL_H*/
+#endif/*DWARFLINT_LOW_H*/

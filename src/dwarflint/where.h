@@ -79,6 +79,12 @@ extern "C"
 
 #ifdef __cplusplus
 }
+
+inline const char *
+where_fmt (where const &wh)
+{
+  return where_fmt (&wh);
+}
 #endif
 
 #endif//DWARFLINT_WHERE_H
