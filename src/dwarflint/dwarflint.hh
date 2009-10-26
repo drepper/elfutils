@@ -70,6 +70,8 @@ public:
   {
     return check<T> ();
   }
+
+  template <class T> T * toplev_check (T *tag = NULL);
 };
 
 #endif//DWARFLINT_HH

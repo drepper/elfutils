@@ -258,12 +258,6 @@ layout_rel_file (Elf *elf)
   return 0;
 }
 
-dwarflint::dwarflint (Elf *a_elf)
-  : _m_elf (a_elf)
-{
-  check_registrar::inst ()->enroll (*this);
-}
-
 int
 main (int argc, char *argv[])
 {

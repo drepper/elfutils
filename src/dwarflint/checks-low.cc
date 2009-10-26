@@ -338,7 +338,7 @@ check_debug_ranges::check_debug_ranges (dwarflint &lint)
 check_debug_aranges::check_debug_aranges (dwarflint &lint)
   : _m_sec_aranges (lint.check (_m_sec_aranges))
 {
-  check_debug_info *info = toplev_check<check_debug_info> (lint);
+  check_debug_info *info = lint.toplev_check<check_debug_info> ();
   coverage *cov = NULL;
   if (info != NULL)
     {
@@ -347,7 +347,7 @@ check_debug_aranges::check_debug_aranges (dwarflint &lint)
       // stored in check_ranges, and that should have been requested
       // explicitly.  But for the time being...
       if (info->cu_cov.need_ranges)
-	toplev_check<check_debug_ranges> (lint);
+	lint.toplev_check<check_debug_ranges> ();
       if (!info->cu_cov.need_ranges)
 	cov = &info->cu_cov.cov;
     }

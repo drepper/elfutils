@@ -42,7 +42,7 @@ namespace
 	throw check_base::failed (""); //xxx
 
       check_debug_info *info = NULL;
-      info = toplev_check (lint, info);
+      info = lint.toplev_check (info);
       if (info != NULL)
 	for (std::vector<cu>::iterator it = info->cus.begin ();
 	     it != info->cus.end (); ++it)
@@ -66,11 +66,13 @@ namespace
       if (!checked_read_uleb128 (ctx, ptr,
 				 where, "directory index"))
 	return false;
+
       if (*name == '/' && *ptr != 0)
 	wr_message (*where, cat (mc_impact_2, mc_line, mc_header))
 	  << ": file #" << nfile
 	  << " has absolute pathname, but refers to directory != 0."
 	  << std::endl;
+
       if (*ptr > _m_include_directories.size ())
 	/* Not >=, dirs are indexed from 1.  */
 	{

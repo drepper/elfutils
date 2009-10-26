@@ -32,13 +32,12 @@ public:
 };
 
 template <class T>
-T *
-toplev_check (dwarflint &lint,
-	      __attribute__ ((unused)) T *tag = NULL)
+inline T *
+dwarflint::toplev_check (__attribute__ ((unused)) T *tag)
 {
   try
     {
-      return lint.check<T> ();
+      return check<T> ();
     }
   catch (check_base::failed const &f)
     {
@@ -58,7 +57,7 @@ struct reg
 
   virtual void run (dwarflint &lint)
   {
-    toplev_check <T> (lint);
+    lint.toplev_check <T> ();
   }
 };
 
