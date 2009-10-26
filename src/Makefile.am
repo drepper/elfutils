@@ -79,7 +79,7 @@ dwarfcmp_test_SOURCES = $(dwarfcmp_SOURCES)
 dwarfcmp_test_LDADD = $(dwarfcmp_LDADD)
 
 dwarflint_SOURCES = dwarfstrings.c \
-		    dwarflint/main.cc dwarflint/main.hh dwarflint/misc.h \
+		    dwarflint/main.cc dwarflint/dwarflint.hh dwarflint/misc.h \
 		    dwarflint/low.c dwarflint/low.h \
 		    dwarflint/expected-at.cc dwarflint/expected.hh \
 		    dwarflint/coverage.cc dwarflint/coverage.h \

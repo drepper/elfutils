@@ -5,7 +5,7 @@
 #include <string>
 #include <iostream>
 #include "where.h"
-#include "main.hh"
+#include "dwarflint.hh"
 
 struct check_base
 {
