@@ -212,8 +212,9 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
   // XXX more specific class when <dwarf> has it
   catch (std::runtime_error &exc)
     {
-      throw check_base::failed
-	(std::string ("Error while checking range out of scope: ")
-	 + exc.what () + ".\n");
+      wr_error (WHERE (sec_info, NULL))
+	<< "Exception while checking ranges out of scope: " << exc.what ()
+	<< std::endl;
+      throw check_base::failed ();
     }
 }

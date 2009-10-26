@@ -160,8 +160,9 @@ check_expected_trees::check_expected_trees (dwarflint &lint)
   // XXX more specific class when <dwarf> has it
   catch (std::runtime_error &exc)
     {
-      throw check_base::failed
-	(std::string ("Error while checking expected trees: ")
-	 + exc.what () + ".\n");
+      wr_error (WHERE (sec_info, NULL))
+	<< "Exception while checking expected trees: " << exc.what ()
+	<< std::endl;
+      throw check_base::failed ();
     }
 }

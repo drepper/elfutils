@@ -88,7 +88,7 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/messages.cc dwarflint/messages.h \
 		    dwarflint/where.c dwarflint/where.h \
 		    dwarflint/config.cc dwarflint/config.h \
-		    dwarflint/checks.cc dwarflint/checks.hh \
+		    dwarflint/checks.hh \
 		    dwarflint/checks-low.cc dwarflint/checks-low.hh \
 		    dwarflint/addr-record.cc dwarflint/addr-record.h \
 		    dwarflint/reloc.cc dwarflint/reloc.h \

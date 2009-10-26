@@ -46,23 +46,7 @@ public:
   dwarflint (Elf *elf);
   Elf *elf () { return _m_elf; }
 
-  template <class T>
-  T *
-  check ()
-  {
-    void const *key = T::key ();
-    check_map::iterator it = _m_checks.find (key);
-    T *c;
-    if (it != _m_checks.end ())
-      c = static_cast <T *> (it->second);
-    else
-      {
-	c = new T (*this);
-	if (!_m_checks.insert (std::make_pair (key, c)).second)
-	  throw std::runtime_error ("duplicate key");
-      }
-    return c;
-  }
+  template <class T> T *check ();
 
   template <class T>
   T *

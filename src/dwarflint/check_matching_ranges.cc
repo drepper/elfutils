@@ -22,7 +22,7 @@ check_matching_ranges::check_matching_ranges (dwarflint &lint)
   : highlevel_check<check_matching_ranges> (lint)
 {
   if (be_tolerant || be_gnu)
-    throw check_base::unscheduled;
+    throw check_base::unscheduled ();
 
   lint.check<check_debug_ranges> ();
   lint.check<check_debug_aranges> ();
@@ -78,8 +78,9 @@ check_matching_ranges::check_matching_ranges (dwarflint &lint)
   // XXX more specific class when <dwarf> has it
   catch (std::runtime_error &exc)
     {
-      throw check_base::failed
-	(std::string ("Error while checking matching ranges:")
-	 + exc.what () + ".\n");
+      wr_error (WHERE (sec_info, NULL))
+	<< "Exception while checking matching ranges: " << exc.what ()
+	<< std::endl;
+      throw check_base::failed ();
     }
 }

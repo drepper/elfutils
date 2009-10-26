@@ -158,7 +158,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 
 	    /* Abbreviation code.  */
 	    if (!checked_read_uleb128 (&ctx, &abbr_code, &where, "abbrev code"))
-	      throw check_base::failed (""); //xxx
+	      throw check_base::failed ();
 
 	    /* Note: we generally can't tell the difference between
     	       empty table and (excessive) padding.  But NUL byte(s)
@@ -239,14 +239,14 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
       /* Abbreviation tag.  */
       uint64_t abbr_tag;
       if (!checked_read_uleb128 (&ctx, &abbr_tag, &where, "abbrev tag"))
-	throw check_base::failed (""); //xxx
+	throw check_base::failed ();
 
       if (abbr_tag > DW_TAG_hi_user)
 	{
 	  std::stringstream ss;
 	  ss << ": invalid abbrev tag 0x" << std::hex << abbr_tag << '.';
 	  wr_error (&where, "%s\n", ss.str ().c_str ());
-	  throw check_base::failed (""); //xxx
+	  throw check_base::failed ();
 	}
       cur->tag = (typeof (cur->tag))abbr_tag;
 
@@ -255,7 +255,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
       if (!read_ctx_read_ubyte (&ctx, &has_children))
 	{
 	  wr_error (&where, ": can't read abbrev has_children.\n");
-	  throw check_base::failed (""); //xxx
+	  throw check_base::failed ();
 	}
 
       if (has_children != DW_CHILDREN_no
@@ -263,7 +263,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 	{
 	  wr_error (&where,
 		    ": invalid has_children value 0x%x.\n", cur->has_children);
-	  throw check_base::failed (""); //xxx
+	  throw check_base::failed ();
 	}
       cur->has_children = has_children == DW_CHILDREN_yes;
 
@@ -284,11 +284,11 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 	  /* Load attribute name and form.  */
 	  if (!checked_read_uleb128 (&ctx, &attrib_name, &where,
 				     "attribute name"))
-	    throw check_base::failed (""); //xxx
+	    throw check_base::failed ();
 
 	  if (!checked_read_uleb128 (&ctx, &attrib_form, &where,
 				     "attribute form"))
-	    throw check_base::failed (""); //xxx
+	    throw check_base::failed ();
 
 	  null_attrib = attrib_name == 0 && attrib_form == 0;
 
@@ -301,7 +301,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 		  std::stringstream ss;
 		  ss << ": invalid name 0x" << std::hex << attrib_name << '.';
 		  wr_error (&where, "%s\n", ss.str ().c_str ());
-		  throw check_base::failed (""); //xxx
+		  throw check_base::failed ();
 		}
 
 	      if (!attrib_form_valid (attrib_form))
@@ -309,7 +309,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 		  std::stringstream ss;
 		  ss << ": invalid form 0x" << std::hex << attrib_form << '.';
 		  wr_error (&where, "%s\n", ss.str ().c_str ());
-		  throw check_base::failed (""); //xxx
+		  throw check_base::failed ();
 		}
 	    }
 

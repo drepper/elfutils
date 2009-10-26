@@ -1,23 +1,14 @@
 #ifndef DWARFLINT_CHECKS_HH
 #define DWARFLINT_CHECKS_HH
 
-#include <stdexcept>
 #include <string>
-#include <iostream>
 #include "where.h"
 #include "dwarflint.hh"
 
 struct check_base
 {
-  struct failed
-    : public std::runtime_error
-  {
-    failed (std::string const &msg)
-      : std::runtime_error (msg)
-    {}
-  };
-
-  static failed unscheduled;
+  struct failed {};
+  struct unscheduled: public failed {};
 };
 
 template<class T>
@@ -32,6 +23,39 @@ public:
 };
 
 template <class T>
+T *
+dwarflint::check ()
+{
+  void const *key = T::key ();
+  check_map::iterator it = _m_checks.find (key);
+
+  T *c;
+  if (it != _m_checks.end ())
+    {
+      c = static_cast <T *> (it->second);
+
+      // We already tried to do the check, but failed.
+      if (c == NULL)
+	throw check_base::failed ();
+    }
+  else
+    {
+      // Put a marker there saying that we tried to do the check, but
+      // it failed.
+      if (!_m_checks.insert (std::make_pair (key, (T *)0)).second)
+	throw std::runtime_error ("duplicate key");
+
+      // Now do the check.
+      c = new T (*this);
+
+      // On success, put the actual check object there instead of the
+      // marker.
+      _m_checks[key] = c;
+    }
+  return c;
+}
+
+template <class T>
 inline T *
 dwarflint::toplev_check (__attribute__ ((unused)) T *tag)
 {
@@ -41,7 +65,6 @@ dwarflint::toplev_check (__attribute__ ((unused)) T *tag)
     }
   catch (check_base::failed const &f)
     {
-      std::cout << f.what () << std::endl;
       return NULL;
     }
 }

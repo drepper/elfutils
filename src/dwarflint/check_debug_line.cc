@@ -39,7 +39,7 @@ namespace
       if (!check_line_structural (&_m_sec->file,
 				  &_m_sec->sect,
 				  &line_tables))
-	throw check_base::failed (""); //xxx
+	throw check_base::failed ();
 
       check_debug_info *info = NULL;
       info = lint.toplev_check (info);

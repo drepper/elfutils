@@ -18,7 +18,7 @@ public:
     , dw (_m_handle)
   {
     if (!do_high_level)
-      throw check_base::unscheduled;
+      throw check_base::unscheduled ();
   }
 
   ~highlevel_check ()

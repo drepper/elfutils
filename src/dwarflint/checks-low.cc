@@ -29,6 +29,7 @@
 
 #include "checks-low.hh"
 #include "low.h"
+#include "config.h"
 #include <map>
 #include <sstream>
 #include <cstring>
@@ -264,16 +265,56 @@ load_sections::~load_sections ()
   free (file.sec);
 }
 
+namespace
+{
+  message_category
+  secid_to_cat (section_id secid)
+  {
+    switch (secid)
+      {
+      case sec_info: return mc_info;
+      case sec_abbrev: return mc_abbrevs;
+      case sec_aranges: return mc_aranges;
+      case sec_str: return mc_strings;
+      case sec_line: return mc_line;
+      case sec_loc: return mc_loc;
+      case sec_ranges: return mc_ranges;
+
+      case sec_pubnames:
+      case sec_pubtypes:
+	return mc_pubtables;
+
+      case sec_rel:
+      case sec_rela:
+	return mc_reloc;
+
+	// xxx don't have one
+      case sec_mac:
+      case sec_invalid:
+      case sec_locexpr:
+      case rel_value:
+      case rel_address:
+      case rel_exec:
+	break;
+      };
+    std::stringstream ss;
+    ss << "Couldn't convert secid " << secid << " to mc.";
+    throw std::runtime_error (ss.str ());
+  }
+}
 sec &
 section_base::get_sec_or_throw (section_id secid)
 {
   if (sec *s = sections->file.debugsec[secid])
     return *s;
 
-  where wh = WHERE (secid, NULL);
-  std::stringstream ss;
-  ss << where_fmt (&wh) << ": data not found.";
-  throw check_base::failed (ss.str ());
+  if (!tolerate_nodebug)
+    wr_message (WHERE (secid, NULL),
+		cat (mc_impact_4, mc_acc_suboptimal, mc_elf,
+		     secid_to_cat (secid)))
+      <<  ": data not found." << std::endl;
+
+  throw check_base::failed ();
 }
 
 section_base::section_base (dwarflint &lint, section_id secid)
@@ -298,7 +339,7 @@ check_debug_info::check_debug_info (dwarflint &lint)
      _m_sec_str->sect.data, &cu_cov);
 
   if (chain == NULL)
-    throw check_base::failed (""); // xxx
+    throw check_base::failed ();
 
   for (cu *cu = chain; cu != NULL; cu = cu->next)
     cus.push_back (*cu);
@@ -332,7 +373,7 @@ check_debug_ranges::check_debug_ranges (dwarflint &lint)
 				      &_m_sec_ranges->sect,
 				      &_m_cus->cus.front (),
 				      &_m_cus->cu_cov))
-    throw check_base::failed (""); //xxx
+    throw check_base::failed ();
 }
 
 check_debug_aranges::check_debug_aranges (dwarflint &lint)
@@ -356,7 +397,7 @@ check_debug_aranges::check_debug_aranges (dwarflint &lint)
 				 &_m_sec_aranges->sect,
 				 info != NULL ? &info->cus.front () : NULL,
 				 cov))
-    throw check_base::failed (""); //xxx
+    throw check_base::failed ();
 }
 
 check_debug_loc::check_debug_loc (dwarflint &lint)
@@ -367,7 +408,7 @@ check_debug_loc::check_debug_loc (dwarflint &lint)
 				      &_m_sec_loc->sect,
 				      &_m_cus->cus.front (),
 				      NULL))
-    throw check_base::failed (""); //xxx
+    throw check_base::failed ();
 }
 
 namespace
@@ -387,7 +428,7 @@ namespace
       if (!check_pub_structural (&_m_sec->file,
 				 &_m_sec->sect,
 				 &_m_cus->cus.front ()))
-	throw check_base::failed (""); //xxx
+	throw check_base::failed ();
     }
   };
 
