@@ -310,3 +310,11 @@ pri::operator << (std::ostream &os, pri::pribase const &obj)
 {
   return os << obj.m_a << obj.m_b << obj.m_c;
 }
+
+std::ostream &
+pri::operator << (std::ostream &os, pri::ref const &obj)
+{
+  std::stringstream ss;
+  ss << std::hex << "DIE " << obj.off;
+  return os << ss.str ();
+}

@@ -98,7 +98,8 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/check_debug_line.cc \
 		    dwarflint/check_matching_ranges.cc \
 		    dwarflint/check_range_out_of_scope.cc \
-		    dwarflint/check_expected_trees.cc
+		    dwarflint/check_expected_trees.cc \
+		    dwarflint/check_dups_abstract_origin.cc
 
 readelf_SOURCES = readelf.c dwarfstrings.c
 

@@ -2,6 +2,7 @@
 #define DWARFLINT_MESSAGES_H
 
 #include "where.h"
+#include "libdw.h"
 
 #ifdef __cplusplus
 # define IF_CPLUSPLUS(X) X
@@ -180,6 +181,18 @@ namespace pri
       : pribase (what, " seems to lack a relocation")
     {}
   };
+
+  class ref
+  {
+    Dwarf_Off off;
+  public:
+    template <class T>
+    ref (T const &die)
+      : off (die.offset ())
+    {}
+    friend std::ostream &operator << (std::ostream &os, ref const &obj);
+  };
+  std::ostream &operator << (std::ostream &os, ref const &obj);
 }
 #endif
 
