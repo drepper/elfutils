@@ -312,7 +312,7 @@ section_base::get_sec_or_throw (section_id secid)
     wr_message (WHERE (secid, NULL),
 		cat (mc_impact_4, mc_acc_suboptimal, mc_elf,
 		     secid_to_cat (secid)))
-      <<  ": data not found." << std::endl;
+      <<  "data not found." << std::endl;
 
   throw check_base::failed ();
 }
