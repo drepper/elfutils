@@ -92,6 +92,7 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/checks-low.cc dwarflint/checks-low.hh \
 		    dwarflint/addr-record.cc dwarflint/addr-record.h \
 		    dwarflint/reloc.cc dwarflint/reloc.h \
+		    dwarflint/all-dies-it.hh \
 		    dwarflint/checks-high.hh \
 		    dwarflint/check_debug_abbrev.cc \
 		    dwarflint/check_debug_line.cc \
