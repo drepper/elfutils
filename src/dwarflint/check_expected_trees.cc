@@ -109,37 +109,41 @@ check_expected_trees::check_expected_trees (dwarflint &lint)
 		  };
 	    }
 
-	  // Check present attributes for expected-ness, and validate value space.
-	  for (dwarf::debug_info_entry::attributes_type::const_iterator jt
-		 = parent.attributes ().begin (), jte = parent.attributes ().end ();
+	  // Check present attributes for expected-ness, and validate
+	  // value space.
+	  for (dwarf::debug_info_entry::attributes_type::const_iterator
+		 jt = parent.attributes ().begin (),
+		 jte = parent.attributes ().end ();
 	       jt != jte; ++jt)
 	    {
 	      unsigned name = extract_name (*jt);
 
-	      expected_set::expectation_map::const_iterator kt = expect.find (name);
+	      expected_set::expectation_map::const_iterator
+		kt = expect.find (name);
 	      if (kt == expect.end ())
-		wr_message (cat (mc_impact_3, mc_info), &where,
-			    ": DIE \"%s\" has attribute \"%s\", which is not expected.\n",
-			    dwarf_tag_string (parent_tag),
-			    dwarf_attr_string (name));
+		wr_message (where, cat (mc_impact_3, mc_info))
+		  << ": DIE \"" << dwarf_tag_string (parent_tag)
+		  << "\" has attribute \"" << dwarf_attr_string (name)
+		  << "\", which is not expected." << std::endl;
+
 	      try
 		{
 		  unsigned exp_vs = expected_value_space (name, parent_tag);
 		  dwarf::value_space vs = (*jt).second.what_space ();
 		  if ((exp_vs & (1U << vs)) == 0)
-		    wr_message (cat (mc_impact_3, mc_info), &where,
-				": in DIE \"%s\", attribute \"%s\" has value of unexpected type \"%u\".\n",
-				dwarf_tag_string (parent_tag),
-				dwarf_attr_string (name),
-				vs);
+		    wr_message (where, cat (mc_impact_3, mc_info))
+		      << ": in DIE \"" << dwarf_tag_string (parent_tag)
+		      << "\", attribute \"" << dwarf_attr_string (name)
+		      << "\" has value of unexpected type \"" << vs
+		      << "\"." << std::endl;
 		}
 	      // XXX more specific class when <dwarf> has it
 	      catch (...)
 		{
-		  wr_message (cat (mc_impact_4, mc_info, mc_error), &where,
-			      ": in DIE \"%s\", couldn't obtain type of attribute \"%s\".\n",
-			      dwarf_tag_string (parent_tag),
-			      dwarf_attr_string (name));
+		  wr_message (where, cat (mc_impact_4, mc_info, mc_error))
+		    << ": in DIE \"" << dwarf_tag_string (parent_tag)
+		    << "\", couldn't obtain type of attribute \""
+		    << dwarf_attr_string (name) << "\"." << std::endl;
 		}
 	    }
 
