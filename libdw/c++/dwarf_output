@@ -953,13 +953,14 @@ namespace elfutils
     }
 
     // Set of attribute maps.
-    subr::dynamic_equality_set<attrs_type> _m_attr_sets;
+    typedef std::pair<attrs_type, int> attrs_pair;
+    subr::dynamic_equality_set<attrs_pair> _m_attr_sets;
 
     template<typename match_type>
-    inline const attrs_type *
-    add_attributes (const attrs_type &candidate, match_type &matcher)
+    inline const attrs_pair *
+    add_attributes (int tag, const attrs_type &candidate, match_type &matcher)
     {
-      return _m_attr_sets.add (candidate, matcher);
+      return _m_attr_sets.add (std::make_pair (candidate, tag), matcher);
     }
 
     // Set of children lists.
@@ -1082,7 +1083,7 @@ namespace elfutils
 
       inline void
       operator () (size_t hash,
-		   const subr::dynamic_equality_set<attrs_type>::bucket_type &b)
+		   const subr::dynamic_equality_set<attrs_pair>::bucket_type &b)
 	const
       {
 	_m_out << "attrs bucket " << std::hex << hash
@@ -1090,10 +1091,11 @@ namespace elfutils
 	subr::for_each (b, *this);
       }
 
-      inline void operator () (const attrs_type &attrs) const
+      inline void operator () (const attrs_pair &attrs) const
       {
-	_m_out << "\t" << attrs.size ();
-	subr::for_each (attrs, *this);
+	_m_out << "\t" << dwarf::tags::name (attrs.second)
+	       << " " << attrs.first.size ();
+	subr::for_each (attrs.first, *this);
 	_m_out << "\n";
       }
 
@@ -1355,15 +1357,16 @@ namespace elfutils
 	return _m_self;
       }
 
+      typedef std::pair <debug_info_entry::attributes_type, int> attrs_pair;
       struct attrs_matcher
       {
 	copier *_m_copier;
 	inline explicit attrs_matcher (copier *c) : _m_copier (c) {}
 
-	inline bool operator () (const debug_info_entry::attributes_type &a,
-				 const debug_info_entry::attributes_type &b)
+	inline bool operator () (const attrs_pair &a, const attrs_pair &b)
 	{
-	  return _m_copier->attrs_match (a, b);
+	  return (a.second == b.second
+		  && _m_copier->attrs_match (a.first, b.first));
 	}
       };
 
@@ -1394,7 +1397,7 @@ namespace elfutils
 	  {
 	    attrs_matcher equalator (c);
 	    const debug_info_entry::attributes_type *attrs
-	      = co->add_attributes (_m_attributes, equalator);
+	      = &co->add_attributes (_m_tag, _m_attributes, equalator)->first;
 
 	    const debug_info_entry::children_type *children
 	      = co->add_children (get_final_children ()
