@@ -250,7 +250,8 @@ namespace elfutils
 	};
 
 	template<typename circular>
-	inline void reify_children (die_info_pair *, unsigned int &total) const;
+	inline void reify_children (die_info_pair *, bool, unsigned int &)
+	  const;
 
       public:
 	template<typename iter>
@@ -763,6 +764,18 @@ namespace elfutils
       return *_m_originals.begin ();
     }
 
+    template<typename streamish>
+    inline streamish &dump_originals (streamish &out) const
+    {
+      out << std::hex;
+      for (typename std::set< ::Dwarf_Off>::const_iterator i
+	     = _m_originals.begin ();
+	   i !=_m_originals.end ();
+	   ++i)
+	out << " " << *i;
+      return out << std::dec;
+    }
+
     inline ptrdiff_t output_cost () const
     {
       // XXX temporary proxy
@@ -821,6 +834,23 @@ namespace elfutils
 
     template<typename circular>
     inline void
+    reify_refs (const debug_info_entry::pointer &ref)
+    {
+      for (size_t n = _m_refs.size (); n > 0; --n)
+	{
+	  value::value_reference *self_ref = _m_refs.front ();
+	  self_ref->ref = ref;
+	  _m_refs.pop ();
+	  _m_refs.push (self_ref);
+
+	  circular *circle = dynamic_cast<circular *> (self_ref);
+	  if (circle != NULL && !circle->final ())
+	    circle->placed ();
+	}
+    }
+
+    template<typename circular>
+    inline void
     placed (die_info_pair *parent, const debug_info_entry::pointer &ref,
 	    bool have_sibling, unsigned int &total)
     {
@@ -839,23 +869,20 @@ namespace elfutils
 	  self (ref);
 	}
       else
-	for (size_t n = _m_refs.size (); n > 0; --n)
-	  {
-	    value::value_reference *self_ref = _m_refs.front ();
-	    self_ref->ref = ref;
-	    _m_refs.pop ();
-	    _m_refs.push (self_ref);
-
-	    circular *circle = dynamic_cast<circular *> (self_ref);
-	    if (circle != NULL && !circle->final ())
-	      circle->placed ();
-	  }
+	reify_refs<circular> (ref);
 
       ++total;
       ++_m_uses;
       _m_with_sibling[have_sibling] = true;
     }
   };
+
+  template<>
+  inline subr::nostream &
+  dwarf_output::die_info::dump_originals (subr::nostream &out) const
+  {
+    return out;
+  }
 
   /* This is the wrapper in the guts of a children_type iterator.
      It turns the real pointer we store into a debug_info_entry
@@ -872,7 +899,7 @@ namespace elfutils
   template<typename circular>
   inline void
   dwarf_output::debug_info_entry::children_type::
-  reify_children (die_info_pair *parent, unsigned int &total) const
+  reify_children (die_info_pair *parent, bool placed, unsigned int &total) const
   {
     _base::const_iterator i = _base::begin ();
     bool have_sibling = i != _base::end ();
@@ -880,8 +907,11 @@ namespace elfutils
       {
 	const const_iterator here (i, subr::nothing ());
 	have_sibling = ++i != _base::end ();
-	(*here.base ())->second.placed<circular>
-	  (parent, here, have_sibling, total);
+	die_info &child = (*here.base ())->second;
+	if (placed)
+	  child.placed<circular> (parent, here, have_sibling, total);
+	else
+	  child.reify_refs<circular> (here);
       }
   }
 
@@ -1045,6 +1075,34 @@ namespace elfutils
 	<< "\n";
     }
 
+    struct attr_collision
+    {
+      std::ostream &_m_out;
+      inline explicit attr_collision (std::ostream &out) : _m_out (out) {}
+
+      inline void
+      operator () (size_t hash,
+		   const subr::dynamic_equality_set<attrs_type>::bucket_type &b)
+	const
+      {
+	_m_out << "attrs bucket " << std::hex << hash
+	       << std::dec << ": " << b.size () << " collisions\n";
+	subr::for_each (b, *this);
+      }
+
+      inline void operator () (const attrs_type &attrs) const
+      {
+	_m_out << "\t" << attrs.size ();
+	subr::for_each (attrs, *this);
+	_m_out << "\n";
+      }
+
+      inline void operator () (const attrs_type::value_type &attr) const
+      {
+	_m_out << " " << dwarf::attributes::name (attr.first);
+      }
+    };
+
     const bool _m_ignore_context;
 
     inline dwarf_output_collector (const dwarf_output_collector &)
@@ -1068,6 +1126,22 @@ namespace elfutils
       out << "collected " << std::dec << _m_unique.size ()
 	  << " unique of " << _m_total << " total from "
 	  << _m_incoming << " DIEs\n";
+
+      subr::container_hash_stats (out, "strings", _m_strings);
+      subr::container_hash_stats (out, "identifiers", _m_identifiers);
+      subr::container_hash_stats (out, "address", _m_address);
+      subr::container_hash_stats (out, "ranges", _m_ranges);
+      subr::container_hash_stats (out, "line_info", _m_line_info);
+      subr::container_hash_stats (out, "constants", _m_constants);
+      subr::container_hash_stats (out, "const_block", _m_const_block);
+      subr::container_hash_stats (out, "dwarf_const", _m_dwarf_const);
+      subr::container_hash_stats (out, "source_file", _m_source_file);
+      subr::container_hash_stats (out, "source_line", _m_source_line);
+      subr::container_hash_stats (out, "source_column", _m_source_column);
+      subr::container_hash_stats (out, "locations", _m_locations);
+
+      subr::container_hash_stats (out, "broods", _m_broods);
+      _m_attr_sets.hash_stats (out, "attr_sets", attr_collision (out));
 
       die_stats_order ordered;
       subr::for_each (_m_unique, die_stats_sorter (ordered));
@@ -1129,29 +1203,54 @@ namespace elfutils
       : public value::value_reference
     {
     private:
-      std::vector<entry *> _m_entry; // Has at most one element.
+      const std::vector<entry *> *_m_entry;
+
+      inline circular_reference (const circular_reference &)
+	: value::value_reference ()
+      {
+	throw std::logic_error ("cannot copy-construct");
+      }
 
     public:
-      inline explicit circular_reference (const entry *die)
-	: _m_entry (1, const_cast<entry *> (die))
-      {}
+      inline circular_reference (const entry *die, copier *)
+	: value::value_reference (),
+	  _m_entry (new std::vector<entry *> (1, const_cast<entry *> (die)))
+      {
+	die->dump () << " new circular_reference " << this << "\n";
+      }
 
       inline bool final () const
       {
-	return _m_entry.empty ();
+	return _m_entry == NULL;
       }
 
       inline typename std::vector<entry *>::const_iterator pending () const
       {
-	assert (_m_entry.size () == 1);
-	return _m_entry.begin ();
+	return _m_entry->begin ();
+      }
+
+      inline entry *pending_entry () const
+      {
+	return *pending ();
       }
 
       // We've been stored in the collector, so we are no longer pending.
       inline void placed ()
       {
-	assert (_m_entry.size () == 1);
-	_m_entry.clear ();
+	pending_entry ()->dump () << " placed circular_reference "
+				  << this << "\n";
+	delete _m_entry;
+	_m_entry = NULL;
+      }
+
+      inline ~circular_reference ()
+      {
+	if (unlikely (_m_entry != NULL))
+	  {
+	    pending_entry ()->dump () << " destroy circular_reference "
+				      << this << "\n";
+	    delete _m_entry;
+	  }
       }
 
       /* We have a special case for a reference attribute that is part
@@ -1205,7 +1304,13 @@ namespace elfutils
       inline ~pending_entry ()
       {
 	if (unlikely (_m_self != NULL))
-	  delete _m_self;
+	  {
+	    if (_m_self->final ())
+	      entry::debug () << "XXX ~pending_entry _m_self is final\n";
+	    else
+	      _m_self->pending_entry ()->dump () << " ~pending_entry _m_self\n";
+	    delete _m_self;
+	  }
       }
 
       inline typename std::vector<entry *>::const_iterator
@@ -1243,10 +1348,10 @@ namespace elfutils
 	 resolving a circular reference attribute.  We cache the
 	 uninitialized reference in _m_self, and return it.  */
       inline value::value_reference *
-      make_circular_reference (const entry *self)
+      make_circular_reference (const entry *self, copier *c)
       {
 	if (_m_self == NULL)
-	  _m_self = new circular_reference (self);
+	  _m_self = new circular_reference (self, c);
 	return _m_self;
       }
 
@@ -1273,7 +1378,9 @@ namespace elfutils
       typedef typename subr::wrapped_input_iterator<
 	std::vector<entry *>,
 	std::pointer_to_unary_function<entry *, die_info_pair *>
-	>::template copy<debug_info_entry::children_type> get_final_children;
+	> final_children_getter;
+      typedef typename final_children_getter::
+      template copy<debug_info_entry::children_type> get_final_children;
 
       inline die_info_pair *final (copier *c,
 				   ::Dwarf_Off offset, ::Dwarf_Off cost)
@@ -1282,27 +1389,23 @@ namespace elfutils
 
 	assert (_m_pending_refs.empty ());
 
+	bool fresh = false;
 	if (_m_matched == NULL)
 	  {
 	    attrs_matcher equalator (c);
 	    const debug_info_entry::attributes_type *attrs
 	      = co->add_attributes (_m_attributes, equalator);
 
-	    bool fresh;
 	    const debug_info_entry::children_type *children
 	      = co->add_children (get_final_children ()
 				  (_m_children, std::ptr_fun (get_final_child)),
 				  fresh);
 
 	    _m_matched = co->add_entry (_m_tag, children, attrs);
-
-	    if (fresh)
-	      /* This candidate children_type actually got inserted into the
-		 set.  Now fix up all the backpointers into the _m_broods copy.
-		 Also make sure each child gets its _m_parent pointer.  */
-	      children->reify_children<circular_reference> (_m_matched,
-							    co->_m_total);
 	  }
+
+	// Final bookkeeping in the collector for this copied entry.
+	_m_matched->second.original (co->_m_incoming, offset, cost);
 
 	/* Now our entry is finalized in the collector (either newly
 	   created there, or discovered to be a duplicate already
@@ -1312,12 +1415,23 @@ namespace elfutils
 	   entry's _m_refs list.  From there it will get initialized.  */
 	if (_m_self != NULL)
 	  {
+	    assert (!_m_self->final ());
+	    _m_self->pending_entry ()->dump ()
+	      << " register circular_reference " << _m_self << " "
+	      << _m_matched->first.to_string () << " from";
+	    _m_matched->second.dump_originals (entry::debug ()) << "\n";
 	    _m_matched->second.self (_m_self);
 	    _m_self = NULL;
 	  }
 
-	// Final bookkeeping in the collector for this copied entry.
-	_m_matched->second.original (co->_m_incoming, offset, cost);
+	/* Now we have a children_type in the collector.  Fix up all
+	   the backpointers to point into that _m_broods copy.  Also
+	   make sure each child gets its _m_parent pointer.  Even if
+	   this candidate children_type didn't actually get inserted
+	   into the set (was not unique), we may need to reify new refs
+	   to these children.  */
+	_m_matched->first._m_children->reify_children<circular_reference>
+	  (_m_matched, fresh, co->_m_total);
 
 	return _m_matched;
       }
@@ -1343,7 +1457,7 @@ namespace elfutils
 	      = dynamic_cast<const circular_reference *> (*attr);
 	    if (circular != NULL && !circular->final ())
 	      {
-		ref = *circular->pending ();
+		ref = circular->pending_entry ();
 		ref->debug () << " *" << std::hex << ref->_m_offset << std::dec;
 	      }
 	  }
@@ -1387,6 +1501,7 @@ namespace elfutils
 	  {
 	    _m_entry->dump (false, true) << " finalized\n";
 	    assert (_m_entry->_m_final != NULL);
+	    _m_entry->dump_entry ();
 	  }
       }
     };
@@ -1501,6 +1616,22 @@ namespace elfutils
 	  assert (c->_m_undefined_entries > 0);
       }
 
+      /* A reference-following matching operation noticed along
+	 the way that we have a doppleganger in the collector.  */
+      inline void record_prematch (die_info_pair *doppleganger,
+				   bool lhs)
+      {
+	doppleganger->second.dump_originals
+	  (dump ()
+	   << " record_prematch to " << doppleganger->first.to_string ()
+	   << " from")
+	  << (lhs ? " on lhs\n" : " on rhs\n");
+	/* XXX disabled! tentative circularity matches taint this record!
+	   must record taint to avoid caching, or punt caching.
+	 */
+	//_m_pending->_m_matched = doppleganger;
+      }
+
       /* This is called by finalize_children.  In case of imported_unit
 	 use in the input, we could already have finalized this earlier
 	 in the copying walk of the logical CU, so there is nothing to
@@ -1567,7 +1698,7 @@ namespace elfutils
 
 		/* We are recursing inside a finalize call.
 		   This means we have a circular reference.  */
-		return _m_pending->make_circular_reference (this);
+		return _m_pending->make_circular_reference (this, c);
 	      }
 	  }
 	return self ();
@@ -1579,29 +1710,62 @@ namespace elfutils
 	return std::cout;
       }
 
-      std::ostream &dump (bool in = false, bool out = false) const
+      static inline std::ostream &
+      debug_prefix (bool in = false, bool out = false, bool print = true)
       {
 	static std::string prefix;
 	if (out)
 	  prefix.erase (--prefix.end ());
-	debug () << prefix << "XXX " << std::hex << _m_offset << std::dec;
-	if (_m_pending != NULL && _m_pending->_m_finalizing != NULL)
-	  debug () << " (finalizing "
-		   << (void *) _m_pending->_m_finalizing << ")";
+	if (print)
+	  debug () << prefix;
 	if (in)
 	  prefix.push_back (' ');
 	return debug ();
       }
-#else
-      static inline subr::nostream debug ()
+
+      std::ostream &dump (bool in = false, bool out = false) const
       {
-	return subr::nostream ();
+	debug_prefix (in, out) << "XXX " << std::hex << _m_offset << std::dec;
+	if (_m_pending != NULL && _m_pending->_m_finalizing != NULL)
+	  debug () << " (finalizing "
+		   << (void *) _m_pending->_m_finalizing << ")";
+	return debug ();
       }
 
-      inline subr::nostream dump (bool = false, bool = false) const
+      void dump_entry () const
+      {
+	if (_m_final != NULL)
+	  {
+	    dump () << " final " << _m_final->first.to_string ()
+		    << " hash=" << std::hex << subr::hash_this (_m_final->first)
+		    << " from";
+	    _m_final->second.dump_originals (debug ()) << "\n";
+	  }
+	else if (_m_pending != NULL)
+	  _m_pending->dump_tree (this);
+	else
+	  dump () << " undefined\n";
+      }
+#else
+      static inline subr::nostream &debug ()
+      {
+	static subr::nostream n;
+	return n;
+      }
+
+      static inline subr::nostream &
+      debug_prefix (bool = false, bool = false, bool = true)
       {
 	return debug ();
       }
+
+      inline subr::nostream &dump (bool = false, bool = false) const
+      {
+	return debug ();
+      }
+
+      inline void dump_entry () const
+      {}
 #endif
 
       // Find ourselves in a parent pending_entry's children vector.
@@ -1610,25 +1774,6 @@ namespace elfutils
 	debug () << std::flush;
 	assert (_m_pending != NULL);
 	return _m_parent->_m_pending->child (_m_self_idx);
-      }
-
-      void dump_entry () const
-      {
-	if (_m_final != NULL)
-	  {
-	    dump () << " final " << _m_final->first.to_string ()
-		    << " from" << std::hex;
-	    for (typename std::set< ::Dwarf_Off>::const_iterator i
-		   = _m_final->second._m_originals.begin ();
-		 i != _m_final->second._m_originals.end ();
-		 ++i)
-	      debug () << " " << _m_offset;
-	    debug () << std::dec << "\n";
-	  }
-	else if (_m_pending != NULL)
-	  _m_pending->dump_tree (this);
-	else
-	  dump () << " undefined\n";
       }
     };
 
@@ -1748,6 +1893,17 @@ namespace elfutils
 	: entry_copier (c, c->enter (in), in)
       {
 	populate (in);
+      }
+    };
+
+    struct dump_unplaced
+      : public std::unary_function<circular_reference *, void>
+    {
+      inline void operator () (circular_reference *ref)
+      {
+	std::cout << "XXX unplaced ref to "
+		  << std::hex << (ref->pending_entry ())->_m_offset
+		  << std::dec << "\n";
       }
     };
 
@@ -2246,50 +2402,72 @@ namespace elfutils
 	return b == NULL;
       }
 
+#if 0
+      static inline std::ostream &
+      dump (const typename pending_dwarf::debug_info_entry &a,
+	    const typename pending_dwarf::debug_info_entry &b,
+	    bool in = false, bool out = false)
+      {
+	return entry::debug_prefix (in, out)
+	  << "XXX " << (a.final () ? "final " : "pending ")
+	  << std::hex << a.original_offset ()
+	  << " vs " << (b.final () ? "final " : "pending ")
+	  << b.original_offset () << std::dec;
+      }
+
+      static inline std::ostream &
+      dump (const die1 &ref1, const die2 &ref2,
+	    bool in = false, bool out = false)
+      {
+	return dump (*ref1, *ref2, in, out);
+      }
+
+      struct step : public _base::step
+      {
+	inline step (tracker *t, const die1 &a, const die2 &b)
+	  : _base::step (t, a, b)
+	{
+	  dump (*a, *b, true) << " cmp\n";
+	}
+	inline ~step ()
+	{
+	  entry::debug_prefix (false, true, false);
+	}
+      };
+#else
+      static inline subr::nostream &
+      dump (const typename pending_dwarf::debug_info_entry &,
+	    const typename pending_dwarf::debug_info_entry &,
+	    bool = false, bool = false)
+      {
+	return entry::debug ();
+      }
+
+      static inline subr::nostream &
+      dump (const die1 &, const die2 &,
+	    bool = false, bool = false)
+      {
+	return entry::debug ();
+      }
+#endif
+
       class reference_match
       {
 	entry *_m_pending;
-
-#if 0
-	static unsigned int depth (int mod = 0)
-	{
-	  static unsigned int my_depth;
-	  return my_depth += mod;
-	}
-
-	static inline void
-	dump (const typename pending_dwarf::debug_info_entry &a,
-	      const typename pending_dwarf::debug_info_entry &b)
-	{
-	  std::cout << std::string (depth (), ' ')
-		    << (a.final () ? "final " : "pending ")
-		    << a.original_offset ()
-		    << " vs "
-		    << (b.final () ? "final " : "pending ")
-		    << b.original_offset ()
-		    << "\n";
-	}
-#else
-	static inline void depth (int)
-	{}
-
-	static inline void
-	dump (const typename pending_dwarf::debug_info_entry &,
-	      const typename pending_dwarf::debug_info_entry &)
-	{}
-#endif
 
       public:
 	inline reference_match ()
 	  : _m_pending (NULL)
 	{
-	  depth (+1);
+	  entry::debug_prefix (true, false, false);
 	}
 
-	inline bool prematch (const die1 &ref1, const die2 &ref2)
+	inline bool prematch (tracker *, const die1 &ref1, const die2 &ref2)
 	{
 	  const typename pending_dwarf::debug_info_entry a = *ref1;
 	  const typename pending_dwarf::debug_info_entry b = *ref2;
+
+	  dump (a, b) << " reference_match\n";
 
 	  if (!a.final ())
 	    // XXX pending circular lhs can never match ???
@@ -2306,24 +2484,29 @@ namespace elfutils
 	    return lhs == rhs->_m_pending->_m_matched;
 
 	  if (rhs->_m_comparing != NULL)
-	    /* We have a circularity on the right-hand side.  We can tell
-	       because _m_comparing remains set from an outer recursion
-	       still in progress.
+	    {
+	      /* We have a circularity on the right-hand side.  We can tell
+		 because _m_comparing remains set from an outer recursion
+		 still in progress.
 
-	       The circular chain of references rooted at A matches B if B
-	       is also the root of its own circularity and everything along
-	       those parallel chains matches.  If the chains hadn't matched
-	       so far, we would not have kept following them to get here.
+		 The circular chain of references rooted at A matches B if B
+		 is also the root of its own circularity and everything along
+		 those parallel chains matches.  If the chains hadn't matched
+		 so far, we would not have kept following them to get here.
 
-	       So, this matches if what we were comparing to was the same A.
-	       If it didn't match, we have left _m_pending clear, which makes
-	       negative_cache trigger (below).  */
-	    return rhs->_m_comparing == lhs;
+		 So, this matches if what we were comparing to was the same A.
+		 If it didn't match, we have left _m_pending clear, which makes
+		 negative_cache trigger (below).  */
+
+	      if (rhs->_m_comparing != lhs)
+		return false;
+
+	      dump (a, b) << " tentative circular match\n";
+	      return true;
+	    }
 
 	  if (rhs->_m_pending->cached_mismatch (lhs))
 	    return false;
-
-	  dump (a, b);
 
 	  /* Record that we have a walk in progress crossing B.  When this
 	     reference_match object goes out of scope in our caller, its
@@ -2340,12 +2523,12 @@ namespace elfutils
 
 	inline ~reference_match ()
 	{
-	  depth (-1);
 	  if (_m_pending != NULL)
 	    {
 	      assert (_m_pending->_m_comparing != NULL);
 	      _m_pending->_m_comparing = NULL;
 	    }
+	  entry::debug_prefix (false, true, false);
 	}
       };
 
@@ -2353,14 +2536,18 @@ namespace elfutils
       inline bool prematch (reference_match &matched,
 			    const die1 &a, const die2 &b)
       {
-	return matched.prematch (a, b);
+	bool same = matched.prematch (this, a, b);
+	dump (a, b) << " prematch => " << same << "\n";
+	return same;
       }
 
       // This call is used only as part of a real reference lookup.
       inline bool reference_matched (reference_match &matched,
 				     const die1 &a, const die2 &b)
       {
-	return matched.prematch (a, b);
+	bool same = matched.prematch (this, a, b);
+	dump (a, b) << " reference_matched => " << same << "\n";
+	return same;
       }
 
       // Check for a negative cache hit after prematch or reference_match.
@@ -2371,12 +2558,23 @@ namespace elfutils
       }
 
       // This can cache a result.
-      inline bool notice_match (reference_match &,
+      inline bool notice_match (reference_match &matched,
 				const die1 &ref1, const die2 &ref2,
 				bool result)
       {
+	if (result && matched.negative_cache ())
+	  {
+	    /* This positive result is from a tentative match of congruent
+	       circular references.  That doesn't mean they really match,
+	       only that they might if the rest of their trees do.  Don't
+	       cache it as a match now.  */
+	    dump (ref1, ref2) << " should ignore tentative match\n";
+	    return result;
+	  }
+
 	const typename pending_dwarf::debug_info_entry a = *ref1;
 	const typename pending_dwarf::debug_info_entry b = *ref2;
+	dump (a, b) << " notice_match (" << result << ")\n";
 	if (result)
 	  {
 	    /* We've found two matching entries.  If we just matched a
@@ -2387,10 +2585,10 @@ namespace elfutils
 	    if (a.final ())
 	      {
 		if (!b.final ())
-		  b.get_pending ()->_m_pending->_m_matched = a.get_final ();
+		  b.get_pending ()->record_prematch (a.get_final (), false);
 	      }
 	    else if (b.final ())
-	      a.get_pending ()->_m_pending->_m_matched = b.get_final ();
+	      a.get_pending ()->record_prematch (b.get_final (), true);
 	  }
 	else
 	  b.get_pending ()->_m_pending->notice_mismatch (a.get_final ());

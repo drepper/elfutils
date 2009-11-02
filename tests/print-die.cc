@@ -346,9 +346,10 @@ print_file (const char *name, const file &dw, const unsigned int limit)
     case copy_output:
       {
 	dwarf_output_collector c; // We'll just throw it away.
-	print_file (dwarf_output (dw, c), limit);
+	dwarf_output out (dw, c);
 	if (output_stats)
 	  c.stats ();
+	print_file (out, limit);
       }
       break;
     default:

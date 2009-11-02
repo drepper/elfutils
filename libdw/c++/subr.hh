@@ -16,6 +16,7 @@
 #include <vector>
 #include <deque>
 #include <stack>
+#include <set>
 #include <algorithm>
 #include <utility>
 #include <stdexcept>
@@ -993,10 +994,24 @@ namespace elfutils
       }
     };
 
+#if 0				// unused
+    template<typename T1, typename T2>
+    struct is<std::pair<T1, T2> > : public std::equal_to<std::pair<T1, T2> >
+    {
+      bool operator () (const std::pair<T1, T2> &a,
+			const std::pair<T1, T2> &b) const
+      {
+	return (is<T1> () (a.first, b.first)
+		&& is<T2> () (a.second, b.second));
+      }
+    };
+#endif
+
     template<typename T>
     struct identity_set
       : public std::tr1::unordered_set<T, typename T::hasher, is<T> >
-    {};
+    {
+    };
 
     template<typename key_type, typename mapped_type>
     struct identity_map
@@ -1012,17 +1027,18 @@ namespace elfutils
     template<typename T, typename hasher_type = hash<T> >
     class dynamic_equality_set
     {
-    private:
+    public:
+      typedef T value_type;
       typedef size_t hash_type;
       typedef std::deque<T> bucket_type;
+
+    private:
       typedef std::tr1::unordered_map<hash_type, bucket_type> map_type;
 
       map_type _m_map;
       hasher_type _m_hasher;
 
     public:
-      typedef T value_type;
-
       template<typename match_type>
       inline const value_type *
       add (const value_type &candidate, match_type &match)
@@ -1050,7 +1066,55 @@ namespace elfutils
 	is<value_type> equalator;
 	return add (candidate, equalator);
       }
+
+      template<typename reporter>
+      inline void hash_stats (std::ostream &out, const char *name,
+			      const reporter &report_collisions) const
+      {
+	size_t collisions = 0;
+	size_t empty_buckets = 0;
+	size_t total = 0;
+	size_t largest = 0;
+	for (typename map_type::const_iterator i = _m_map.begin ();
+	     i != _m_map.end ();
+	     ++i)
+	  {
+	    if (i->second.empty ())
+	      ++empty_buckets;
+	    else
+	      {
+		size_t n = i->second.size () - 1;
+		collisions += n;
+		if (n > 0)
+		  report_collisions (i->first, i->second);
+	      }
+	    if (i->second.size () > largest)
+	      largest = i->second.size ();
+	    total += i->second.size ();
+	  }
+	out << name << ": " << total << ", "
+	    << collisions << " collisions, "
+	    << largest << " in largest bucket";
+	if (empty_buckets > 0)
+	  out << ", " << empty_buckets << " empty buckets\n";
+	else
+	  out << "\n";
+      }
     };
+
+    template<typename set_type>
+    inline void container_hash_stats (std::ostream &out, const char *name,
+				      const set_type &set)
+    {
+      std::set<size_t> hashes;
+      for (typename set_type::const_iterator i = set.begin ();
+	   i != set.end ();
+	   ++i)
+	hashes.insert (hash_this (*i));
+      out << name << ": " << set.size () << ", "
+	  << hashes.size () << " hashes = "
+	  << (set.size () - hashes.size ()) << " collisions\n";
+    }
 
     /* sharing_stack<T> is like std::stack<T>, but copies share list
        tails to reduce the memory footprint.  Any non-const call to the
