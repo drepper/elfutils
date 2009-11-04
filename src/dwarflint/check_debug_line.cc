@@ -3,6 +3,7 @@
 #include <dwarf.h>
 #include "../libdw/known-dwarf.h"
 #include "dwarfstrings.h"
+#include "pri.hh"
 
 #include <sstream>
 

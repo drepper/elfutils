@@ -4,7 +4,7 @@
 
 #include "checks-high.hh"
 #include "coverage.hh"
-#include "dwarfstrings.h"
+#include "pri.hh"
 
 using elfutils::dwarf;
 
@@ -176,9 +176,8 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 			    {
 			      runoff = true;
 			      wr_error (wh)
-				<< ": attribute `"
-				<< dwarf_attr_string ((*at).first)
-				<< "': PC range " << range_fmt (start, end)
+				<< ": attribute `" << pri::attr ((*at).first)
+				<< "': PC range " << pri::range (start, end)
 				<< " outside containing scope." << std::endl;
 			    }
 			}

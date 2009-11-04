@@ -37,6 +37,7 @@
 #include "checks-high.hh"
 #include "dwarfstrings.h"
 #include "all-dies-it.hh"
+#include "pri.hh"
 #include <map>
 
 using elfutils::dwarf;

@@ -30,6 +30,7 @@
 #include "checks-low.hh"
 #include "low.h"
 #include "config.h"
+#include "pri.hh"
 #include <map>
 #include <sstream>
 #include <cstring>
@@ -113,7 +114,7 @@ elf_file_init (struct elf_file *file, Elf *elf)
       if (shdr == NULL)
 	{
 	invalid_elf:
-	  wr_error (NULL, "Broken ELF.\n");
+	  wr_error () << "Broken ELF." << std::endl;
 	  return false;
 	}
 
@@ -123,14 +124,10 @@ elf_file_init (struct elf_file *file, Elf *elf)
 	goto invalid_elf;
 
       if (!address_aligned (shdr->sh_addr, shdr->sh_addralign))
-	{
-	  std::ostringstream s;
-	  s << "Base address of section " << scnname << ", "
-	    << "0x" << std::hex << shdr->sh_addr
-	    << ", should have an alignment of "
-	    << std::dec << shdr->sh_addralign;
-	  wr_error (NULL, "%s\n", s.str ().c_str ());
-	}
+	wr_error ()
+	  << "Base address of section " << scnname << ", "
+	  << pri::addr (shdr->sh_addr) << ", should have an alignment of "
+	  << shdr->sh_addralign << std::endl;
 
       secentry *entry = secinfo.get (scnname);
       cursec->scn = scn;
@@ -142,7 +139,8 @@ elf_file_init (struct elf_file *file, Elf *elf)
       if (entry != NULL)
 	{
 	  if (unlikely (entry->secndx != 0))
-	    wr_error (NULL, "Multiple occurrences of section %s.\n", scnname);
+	    wr_error ()
+	      << "Multiple occurrences of section " << scnname << std::endl;
 	  else
 	    {
 	      /* Haven't seen a section of that name yet.  */
@@ -178,18 +176,19 @@ elf_file_init (struct elf_file *file, Elf *elf)
 	  if (relocated != NULL)
 	    {
 	      if (relocated->reldata != NULL)
-		wr_error (NULL,
-			  "Several relocation sections for debug section %s."
-			  "  Ignoring %s.\n",
-			  relocated_scnname, scnname);
+		wr_error ()
+		  << "Several relocation sections for debug section "
+		  << relocated_scnname << ". Ignoring " << scnname
+		  << "." << std::endl;
 	      else
 		{
 		  relocated->reldata = elf_getdata (scn, NULL);
 		  if (unlikely (relocated->reldata == NULL
 				|| relocated->reldata->d_buf == NULL))
 		    {
-		      wr_error (NULL,
-				"Data-less relocation section %s.\n", scnname);
+		      wr_error ()
+			<< "Data-less relocation section " << scnname
+			<< "." << std::endl;
 		      relocated->reldata = NULL;
 		    }
 		  else
@@ -199,8 +198,9 @@ elf_file_init (struct elf_file *file, Elf *elf)
 	      if (reloc_symtab == NULL)
 		reloc_symtab = symtab_scn;
 	      else if (reloc_symtab != symtab_scn)
-		wr_error (NULL,
-			  "Relocation sections use multiple symbol tables.\n");
+		wr_error ()
+		  << "Relocation sections use multiple symbol tables."
+		  << std::endl;
 	    }
 	}
     }
@@ -218,8 +218,7 @@ elf_file_init (struct elf_file *file, Elf *elf)
 	  if (reloc_symdata == NULL)
 	    /* Not a show stopper, we can check a lot of stuff even
 	       without a symbol table.  */
-	      wr_error (NULL,
-			"Couldn't obtain symtab data.\n");
+	    wr_error () << "Couldn't obtain symtab data." << std::endl;
 	}
 
       /* Check relocation sections that we've got.  */
@@ -231,11 +230,9 @@ elf_file_init (struct elf_file *file, Elf *elf)
 	      struct sec *sec = file->sec + cur->secndx;
 	      sec->rel.type = cur->reltype;
 	      if (sec->data == NULL)
-		{
-		  where wh = WHERE (sec->id, NULL);
-		  wr_error (&wh,
-			    ": this data-less section has a relocation section.\n");
-		}
+		wr_error (WHERE (sec->id, NULL))
+		  << "this data-less section has a relocation section."
+		  << std::endl;
 	      else if (read_rel (file, sec, cur->reldata, file->addr_64))
 		sec->rel.symdata = reloc_symdata;
 	    }
@@ -243,11 +240,9 @@ elf_file_init (struct elf_file *file, Elf *elf)
 
       if (secentry *str = secinfo.get (".debug_str"))
 	if (str->reldata != NULL)
-	  {
-	    where wh = WHERE (sec_str, NULL);
-	    wr_message (mc_impact_2 | mc_elf, &wh,
-			": there's a relocation section associated with this section.\n");
-	  }
+	  wr_message (WHERE (sec_str, NULL), cat (mc_impact_2, mc_elf))
+	    << "there's a relocation section associated with this section."
+	    << std::endl;
     }
 
   return true;
@@ -312,7 +307,7 @@ section_base::get_sec_or_throw (section_id secid)
     wr_message (WHERE (secid, NULL),
 		cat (mc_impact_4, mc_acc_suboptimal, mc_elf,
 		     secid_to_cat (secid)))
-      <<  "data not found." << std::endl;
+      << "data not found." << std::endl;
 
   throw check_base::failed ();
 }

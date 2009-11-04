@@ -31,8 +31,6 @@
 #include <sstream>
 #include "coverage.h"
 
-std::string range_fmt (uint64_t start, uint64_t end);
-
 namespace cov
 {
   class _format_base
@@ -42,31 +40,12 @@ namespace cov
     std::ostringstream _m_os;
     bool _m_seen;
 
-    inline bool fmt (uint64_t start, uint64_t length)
-    {
-      if (_m_seen)
-	_m_os << _m_delim;
-      _m_os << range_fmt (start, start + length);
-      _m_seen = true;
-      return true;
-    }
-
-    static bool
-    wrap_fmt (uint64_t start, uint64_t length, void *data)
-    {
-      _format_base *self = static_cast <_format_base *> (data);
-      return self->fmt (start, length);
-    }
-
-    _format_base (std::string const &delim)
-      : _m_delim (delim),
-	_m_seen (false)
-    {
-      _m_os << std::hex;
-    }
+    inline bool fmt (uint64_t start, uint64_t length);
+    static bool wrap_fmt (uint64_t start, uint64_t length, void *data);
+    _format_base (std::string const &delim);
 
   public:
-    operator std::string () const
+    inline operator std::string () const
     {
       return _m_os.str ();
     }
@@ -75,22 +54,14 @@ namespace cov
   struct format_ranges
     : public _format_base
   {
-    format_ranges (coverage const &cov, std::string const &delim = ", ")
-      : _format_base (delim)
-    {
-      coverage_find_ranges (&cov, &wrap_fmt, this);
-    }
+    format_ranges (coverage const &cov, std::string const &delim = ", ");
   };
 
   struct format_holes
     : public _format_base
   {
     format_holes (coverage const &cov, uint64_t start, uint64_t length,
-		  std::string const &delim = ", ")
-      : _format_base (delim)
-    {
-      coverage_find_holes (&cov, start, length, &wrap_fmt, this);
-    }
+		  std::string const &delim = ", ");
   };
 }
 

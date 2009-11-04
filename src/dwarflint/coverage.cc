@@ -29,6 +29,7 @@
 #endif
 
 #include "coverage.hh"
+#include "pri.hh"
 
 #include <stdbool.h>
 #include <assert.h>
@@ -244,18 +245,12 @@ namespace
   }
 }
 
-std::string
-range_fmt (uint64_t start, uint64_t end)
-{
-  std::ostringstream os;
-  os << std::hex << "[0x" << start << ", 0x" << end << ")";
-  return os.str ();
-}
-
 char *
 range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end)
 {
-  std::string s = range_fmt (start, end);
+  std::stringstream ss;
+  ss << pri::range (start, end);
+  std::string s = ss.str ();
   strncpy (buf, s.c_str (), buf_size);
   return buf;
 }
@@ -356,4 +351,41 @@ coverage_remove_all (struct coverage *__restrict__ cov,
     if (coverage_remove (cov, other->ranges[i].start, other->ranges[i].length))
       ret = true;
   return ret;
+}
+
+bool
+cov::_format_base::fmt (uint64_t start, uint64_t length)
+{
+  if (_m_seen)
+    _m_os << _m_delim;
+  _m_os << pri::range (start, start + length);
+  _m_seen = true;
+  return true;
+}
+
+bool
+cov::_format_base::wrap_fmt (uint64_t start, uint64_t length, void *data)
+{
+  _format_base *self = static_cast <_format_base *> (data);
+  return self->fmt (start, length);
+}
+
+cov::_format_base::_format_base (std::string const &delim)
+  : _m_delim (delim),
+    _m_seen (false)
+{}
+
+cov::format_ranges::format_ranges (coverage const &cov,
+				   std::string const &delim)
+  : _format_base (delim)
+{
+  coverage_find_ranges (&cov, &wrap_fmt, this);
+}
+
+cov::format_holes::format_holes (coverage const &cov,
+				 uint64_t start, uint64_t length,
+				 std::string const &delim)
+  : _format_base (delim)
+{
+  coverage_find_holes (&cov, start, length, &wrap_fmt, this);
 }
