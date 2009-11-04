@@ -227,16 +227,10 @@ relocate_one (struct elf_file *file,
 	      wr_error (&reloc_where, "%s\n", ss.str ().c_str ());
 	    }
 	  else if ((id = file->sec[section_index].id) != offset_into)
-	    {
-	      std::stringstream ss;
-	      ss << ": relocation references section "
-		 << (id != sec_invalid
-		     ? where_fmt (WHERE (id, NULL))
-		     : file->sec[section_index].name)
-		 << ", but " << where_fmt (WHERE (offset_into, NULL))
-		 << " was expected.";
-	      wr_error (&reloc_where, "%s\n", ss.str ().c_str ());
-	    }
+	    wr_error (reloc_where)
+	      << "relocation references section "
+	      << file->sec[section_index].name << ", but "
+	      << WHERE (offset_into, NULL) << " was expected." << std::endl;
 	}
 
       /* Only do the actual relocation if we have ET_REL files.  For

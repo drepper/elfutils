@@ -224,12 +224,9 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 
       struct abbrev *original = abbrev_table_find_abbrev (section, abbr_code);
       if (unlikely (original != NULL))
-	{
-	  std::stringstream ss;
-	  ss << ": duplicate abbrev code " << abbr_code
-	     << "; already defined at " << where_fmt (&original->where) << '.';
-	  wr_error (&where, "%s\n", ss.str ().c_str ());
-	}
+	wr_error (where)
+	  << "duplicate abbrev code " << abbr_code
+	  << "; already defined at " << original->where << '.' << std::endl;
 
       struct abbrev fake;
       struct abbrev *cur;
