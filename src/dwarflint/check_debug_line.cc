@@ -52,8 +52,8 @@ namespace
 	      struct ref *ref = it->line_refs.refs + i;
 	      if (!addr_record_has_addr (&line_tables, ref->addr))
 		wr_error (ref->who)
-		  << ": unresolved reference to .debug_line table "
-		  << "0x" << std::hex << ref->addr << "." << std::endl;
+		  << "unresolved reference to .debug_line table "
+		  << pri::hex (ref->addr) << '.' << std::endl;
 	    }
       addr_record_free (&line_tables);
     }

@@ -6,6 +6,10 @@ pri::attr::attr (int attr_name)
   : pribase (dwarf_attr_string (attr_name))
 {}
 
+pri::form::form (int attr_form)
+  : pribase (dwarf_form_string (attr_form))
+{}
+
 std::ostream &
 pri::operator << (std::ostream &os, pri::pribase const &obj)
 {
@@ -21,10 +25,10 @@ pri::operator << (std::ostream &os, pri::ref const &obj)
 }
 
 std::ostream &
-pri::operator << (std::ostream &os, pri::addr const &obj)
+pri::operator << (std::ostream &os, pri::hex const &obj)
 {
   std::stringstream ss;
-  ss << std::hex << "0x" << obj.off;
+  ss << std::hex << "0x" << obj.value;
   return os << ss.str ();
 }
 

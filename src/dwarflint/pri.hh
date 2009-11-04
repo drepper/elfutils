@@ -44,6 +44,12 @@ namespace pri
     attr (int attr_name);
   };
 
+  struct form
+    : public pribase
+  {
+    form (int attr_form);
+  };
+
   class ref
   {
     Dwarf_Off off;
@@ -56,16 +62,20 @@ namespace pri
   };
   std::ostream &operator << (std::ostream &os, ref const &obj);
 
-  class addr
+  class hex
   {
-    Dwarf_Off off;
+    Dwarf_Off value;
   public:
-    addr (Dwarf_Off a_off)
-      : off (a_off)
+    hex (Dwarf_Off a_value)
+      : value (a_value)
     {}
-    friend std::ostream &operator << (std::ostream &os, addr const &obj);
+    friend std::ostream &operator << (std::ostream &os, hex const &obj);
   };
-  std::ostream &operator << (std::ostream &os, addr const &obj);
+  std::ostream &operator << (std::ostream &os, hex const &obj);
+
+  struct addr : public hex {
+    addr (Dwarf_Off off) : hex (off) {}
+  };
 
   class range
   {

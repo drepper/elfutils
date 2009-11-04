@@ -28,7 +28,7 @@
 #endif
 
 #include "checks-low.hh"
-#include "dwarfstrings.h"
+#include "pri.hh"
 
 #include <dwarf.h>
 #include <sstream>
@@ -119,6 +119,16 @@ namespace
       return a.code < b.code;
     }
   };
+
+  void
+  complain_invalid_form (where const &where, int name, int form,
+			 std::string const &specification = "")
+  {
+    wr_error (where)
+      << specification << (" "[specification == ""])
+      << pri::attr (name) << " with invalid form "
+      << pri::form (form) << '.' << std::endl;
+  }
 }
 
 check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
@@ -243,9 +253,9 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 
       if (abbr_tag > DW_TAG_hi_user)
 	{
-	  std::stringstream ss;
-	  ss << ": invalid abbrev tag 0x" << std::hex << abbr_tag << '.';
-	  wr_error (&where, "%s\n", ss.str ().c_str ());
+	  wr_error (where)
+	    << "invalid abbrev tag " << pri::hex (abbr_tag)
+	    << '.' << std::endl;
 	  throw check_base::failed ();
 	}
       cur->tag = (typeof (cur->tag))abbr_tag;
@@ -261,8 +271,9 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
       if (has_children != DW_CHILDREN_no
 	  && has_children != DW_CHILDREN_yes)
 	{
-	  wr_error (&where,
-		    ": invalid has_children value 0x%x.\n", cur->has_children);
+	  wr_error (where)
+	    << "invalid has_children value " << pri::hex (cur->has_children)
+	    << '.' << std::endl;
 	  throw check_base::failed ();
 	}
       cur->has_children = has_children == DW_CHILDREN_yes;
@@ -298,17 +309,17 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 	      /* Otherwise validate name and form.  */
 	      if (attrib_name > DW_AT_hi_user)
 		{
-		  std::stringstream ss;
-		  ss << ": invalid name 0x" << std::hex << attrib_name << '.';
-		  wr_error (&where, "%s\n", ss.str ().c_str ());
+		  wr_error (where)
+		    << "invalid name " << pri::hex (attrib_name)
+		    << '.' << std::endl;
 		  throw check_base::failed ();
 		}
 
 	      if (!attrib_form_valid (attrib_form))
 		{
-		  std::stringstream ss;
-		  ss << ": invalid form 0x" << std::hex << attrib_form << '.';
-		  wr_error (&where, "%s\n", ss.str ().c_str ());
+		  wr_error (where)
+		    << "invalid form " << pri::hex (attrib_form)
+		    << '.' << std::endl;
 		  throw check_base::failed ();
 		}
 	    }
@@ -326,44 +337,42 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 	  if (attrib_name == DW_AT_sibling)
 	    {
 	      if (sibling_attr != 0)
-		{
-		  std::stringstream ss;
-		  ss << ": Another DW_AT_sibling attribute in one abbreviation. "
-		     << "(First was 0x" << std::hex << sibling_attr << ".)";
-		  wr_error (&where, "%s\n", ss.str ().c_str ());
-		}
+		wr_error (where)
+		  << "another DW_AT_sibling attribute in one abbreviation "
+		  << "(first was " << pri::hex (sibling_attr) << ")."
+		  << std::endl;
 	      else
 		{
 		  assert (attr_off > 0);
 		  sibling_attr = attr_off;
 
 		  if (!cur->has_children)
-		    wr_message (mc_die_rel | mc_acc_bloat | mc_impact_1,
-				&where,
-				": Excessive DW_AT_sibling attribute at childless abbrev.\n");
+		    wr_message (where,
+				cat (mc_die_rel, mc_acc_bloat, mc_impact_1))
+		      << "excessive DW_AT_sibling attribute at childless abbrev."
+		      << std::endl;
 		}
 
 	      switch (check_sibling_form (attrib_form))
 		{
 		case -1:
-		  wr_message (mc_die_rel | mc_impact_2, &where,
-			      ": DW_AT_sibling attribute with form DW_FORM_ref_addr.\n");
+		  wr_message (where, cat (mc_die_rel, mc_impact_2))
+		    << "DW_AT_sibling attribute with form DW_FORM_ref_addr."
+		    << std::endl;
 		  break;
 
 		case -2:
-		  wr_error (&where,
-			    ": DW_AT_sibling attribute with non-reference form \"%s\".\n",
-			    dwarf_form_string (attrib_form));
+		  wr_error (where)
+		    << "DW_AT_sibling attribute with non-reference form "
+		    << pri::form (attrib_form) << '.' << std::endl;
 		};
 	    }
 	  /* Similar for DW_AT_location and friends.  */
 	  else if (is_location_attrib (attrib_name))
 	    {
 	      if (!check_abbrev_location_form (attrib_form))
-		wr_error (&where,
-			  ": location attribute %s with invalid form \"%s\".\n",
-			  dwarf_attr_string (attrib_name),
-			  dwarf_form_string (attrib_form));
+		complain_invalid_form (where, attrib_name, attrib_form,
+				       "location attribute");
 	    }
 	  /* Similar for DW_AT_ranges.  */
 	  else if (attrib_name == DW_AT_ranges
@@ -373,10 +382,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 		  && attrib_form != DW_FORM_data8
 		  && attrib_form != DW_FORM_sec_offset
 		  && attrib_form != DW_FORM_indirect)
-		wr_error (&where,
-			  ": %s with invalid form \"%s\".\n",
-			  dwarf_attr_string (attrib_name),
-			  dwarf_form_string (attrib_form));
+		complain_invalid_form (where, attrib_name, attrib_form);
 	      if (attrib_name == DW_AT_ranges)
 		ranges = true;
 	    }
@@ -387,10 +393,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 	    {
 	      if (attrib_form != DW_FORM_addr
 		  && attrib_form != DW_FORM_ref_addr)
-		wr_error (&where,
-			  ": %s with invalid form \"%s\".\n",
-			  dwarf_attr_string (attrib_name),
-			  dwarf_form_string (attrib_form));
+		complain_invalid_form (where, attrib_name, attrib_form);
 
 	      if (attrib_name == DW_AT_low_pc)
 		low_pc = true;
@@ -406,13 +409,13 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 
       where_reset_2 (&where, where.addr2); // drop addr 3
       if (high_pc && !low_pc)
-	wr_error (&where,
-		  ": the abbrev has DW_AT_high_pc"
-		  " without also having DW_AT_low_pc.\n");
+	wr_error (where)
+	  << "the abbrev has DW_AT_high_pc without also having DW_AT_low_pc."
+	  << std::endl;
       else if (high_pc && ranges)
-	wr_error (&where,
-		  ": the abbrev has DW_AT_high_pc & DW_AT_low_pc,"
-		  " but also has DW_AT_ranges.\n");
+	wr_error (where)
+	  << "the abbrev has DW_AT_high_pc & DW_AT_low_pc, "
+	  << "but also has DW_AT_ranges." << std::endl;
     }
 
   abbrev_table *last = NULL;
