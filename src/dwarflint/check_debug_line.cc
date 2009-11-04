@@ -70,7 +70,7 @@ namespace
 
       if (*name == '/' && *ptr != 0)
 	wr_message (*where, cat (mc_impact_2, mc_line, mc_header))
-	  << ": file #" << nfile
+	  << "file #" << nfile
 	  << " has absolute pathname, but refers to directory != 0."
 	  << std::endl;
 
@@ -78,7 +78,7 @@ namespace
 	/* Not >=, dirs are indexed from 1.  */
 	{
 	  wr_message (*where, cat (mc_impact_4, mc_line, mc_header))
-	    << ": file #" << nfile
+	    << "file #" << nfile
 	    << " refers to directory #" << *ptr
 	    << ", which wasn't defined." << std::endl;
 
@@ -96,7 +96,7 @@ namespace
       if (file_idx == 0 || file_idx > _m_files.size ())
 	{
 	  wr_error (*where)
-	     << ": DW_LNS_set_file: invalid file index " << file_idx << '.'
+	     << "DW_LNS_set_file: invalid file index " << file_idx << '.'
 	     << std::endl;
 	  return false;
 	}
@@ -137,7 +137,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
       int offset_size;
       if (!read_ctx_read_4ubyte (&ctx, &size32))
 	{
-	  wr_error (where) << ": can't read table length." << std::endl;
+	  wr_error (where) << "can't read table length." << std::endl;
 	  return false;
 	}
       if (!read_size_extra (&ctx, size32, &size, &offset_size, &where))
@@ -149,7 +149,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	{
 	not_enough:
 	  wr_error (where)
-	    << ": " << pri::not_enough ("next unit") << '.' << std::endl;
+	    << pri::not_enough ("next unit") << '.' << std::endl;
 	  return false;
 	}
       sub_ctx.ptr = ctx.ptr;
@@ -160,7 +160,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
       uint16_t version;
       if (!read_ctx_read_2ubyte (&sub_ctx, &version))
 	{
-	  wr_error (where) << ": can't read set version." << std::endl;
+	  wr_error (where) << "can't read set version." << std::endl;
 	skip:
 	  retval = false;
 	  goto next;
@@ -172,7 +172,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
       uint64_t header_length;
       if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &header_length))
 	{
-	  wr_error (where) << ": can't read attribute value." << std::endl;
+	  wr_error (where) << "can't read attribute value." << std::endl;
 	  goto skip;
 	}
       const unsigned char *program_start = sub_ctx.ptr + header_length;
@@ -182,7 +182,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
       if (!read_ctx_read_ubyte (&sub_ctx, &minimum_i_length))
 	{
 	  wr_error (where)
-	    << ": can't read minimum instruction length." << std::endl;
+	    << "can't read minimum instruction length." << std::endl;
 	  goto skip;
 	}
 
@@ -190,7 +190,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
       uint8_t default_is_stmt;
       if (!read_ctx_read_ubyte (&sub_ctx, &default_is_stmt))
 	{
-	  wr_error (where) << ": can't read default_is_stmt." << std::endl;
+	  wr_error (where) << "can't read default_is_stmt." << std::endl;
 	  goto skip;
 	}
       /* 7.21: The boolean values "true" and "false" used by the line
@@ -200,14 +200,14 @@ check_debug_line::check_line_structural (struct elf_file *file,
       if (default_is_stmt != 0
 	  && default_is_stmt != 1)
 	wr_message (where, cat (mc_line, mc_impact_2, mc_header))
-	  << ": default_is_stmt should be 0 or 1, not "
+	  << "default_is_stmt should be 0 or 1, not "
 	  << default_is_stmt << '.' << std::endl;
 
       /* Line base.  */
       int8_t line_base;
       if (!read_ctx_read_ubyte (&sub_ctx, (uint8_t *)&line_base))
 	{
-	  wr_error (where) << ": can't read line_base." << std::endl;
+	  wr_error (where) << "can't read line_base." << std::endl;
 	  goto skip;
 	}
 
@@ -215,7 +215,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
       uint8_t line_range;
       if (!read_ctx_read_ubyte (&sub_ctx, &line_range))
 	{
-	  wr_error (where) << ": can't read line_range." << std::endl;
+	  wr_error (where) << "can't read line_range." << std::endl;
 	  goto skip;
 	}
 
@@ -223,14 +223,14 @@ check_debug_line::check_line_structural (struct elf_file *file,
       uint8_t opcode_base;
       if (!read_ctx_read_ubyte (&sub_ctx, &opcode_base))
 	{
-	  wr_error (where) << ": can't read opcode_base." << std::endl;
+	  wr_error (where) << "can't read opcode_base." << std::endl;
 	  goto skip;
 	}
 
       /* Standard opcode lengths.  */
       if (opcode_base == 0)
 	{
-	  wr_error (where) << ": opcode base set to 0." << std::endl;
+	  wr_error (where) << "opcode base set to 0." << std::endl;
 	  opcode_base = 1; // so that in following, our -1s don't underrun
 	}
       uint8_t std_opc_lengths[opcode_base - 1]; /* -1, opcodes go from 1.  */
@@ -238,7 +238,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	if (!read_ctx_read_ubyte (&sub_ctx, std_opc_lengths + i))
 	  {
 	    wr_error (where)
-	      << ": can't read length of standard opcode #" << i << '.'
+	      << "can't read length of standard opcode #" << i << '.'
 	      << std::endl;
 	    goto skip;
 	  }
@@ -249,7 +249,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	  if (name == NULL)
 	    {
 	      wr_error (where)
-		<< ": can't read name of include directory #"
+		<< "can't read name of include directory #"
 		<< _m_include_directories.size () + 1 // Numbered from 1.
 		<< '.' << std::endl;
 	      goto skip;
@@ -267,7 +267,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	  if (name == NULL)
 	    {
 	      wr_error (where)
-		<< ": can't read name of file #"
+		<< "can't read name of file #"
 		<< _m_files.size () + 1 // Numbered from 1.
 		<< '.' << std::endl;
 	      goto skip;
@@ -298,10 +298,9 @@ check_debug_line::check_line_structural (struct elf_file *file,
       if (sub_ctx.ptr > program_start)
 	{
 	  wr_error (where)
-	    << ": header claims that it has a size of 0x"
-	    << std::hex << header_length
-	    << ", but in fact it has a size of 0x"
-	    << sub_ctx.ptr - program_start + header_length
+	    << "header claims that it has a size of " << header_length
+	    << ", but in fact it has a size of "
+	    << (sub_ctx.ptr - program_start + header_length)
 	    << '.' << std::endl;
 
 	  /* Assume that the header lies, and what follows is in
@@ -327,7 +326,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	  uint8_t opcode;
 	  if (!read_ctx_read_ubyte (&sub_ctx, &opcode))
 	    {
-	      wr_error (where) << ": can't read opcode." << std::endl;
+	      wr_error (where) << "can't read opcode." << std::endl;
 	      goto skip;
 	    }
 
@@ -346,7 +345,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		if (!read_ctx_read_ubyte (&sub_ctx, &extended))
 		  {
 		    wr_error (where)
-		      << ": can't read extended opcode." << std::endl;
+		      << "can't read extended opcode." << std::endl;
 		    goto skip;
 		  }
 
@@ -365,7 +364,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 						 file->addr_64, &addr))
 			{
 			  wr_error (where)
-			    << ": can't read operand of DW_LNE_set_address."
+			    << "can't read operand of DW_LNE_set_address."
 			    << std::endl;
 			  goto skip;
 			}
@@ -378,7 +377,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 				      &addr, &where, rel_address, NULL);
 		      else if (file->ehdr.e_type == ET_REL)
 			wr_message (where, cat (mc_impact_2, mc_line, mc_reloc))
-			  << ": " << pri::lacks_relocation ("DW_LNE_set_address")
+			  << pri::lacks_relocation ("DW_LNE_set_address")
 			  << '.' << std::endl;
 		      break;
 		    }
@@ -389,7 +388,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		      if ((name = read_ctx_read_str (&sub_ctx)) == NULL)
 			{
 			  wr_error (where)
-			    << ": can't read filename operand of DW_LNE_define_file."
+			    << "can't read filename operand of DW_LNE_define_file."
 			    << std::endl;
 			  goto skip;
 			}
@@ -413,7 +412,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		      default:
 			/* No we don't, emit a warning.  */
 			wr_message (where, cat (mc_impact_2, mc_line))
-			  << ": unknown extended opcode #" << extended
+			  << "unknown extended opcode #" << extended
 			  << '.' << std::endl;
 		      };
 		  };
@@ -421,9 +420,8 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		if (sub_ctx.ptr > next)
 		  {
 		    wr_error (where)
-		      << ": opcode claims that it has a size of 0x"
-		      << std::hex << skip_len
-		      << ", but in fact it has a size of 0x"
+		      << "opcode claims that it has a size of " << skip_len
+		      << ", but in fact it has a size of "
 		      << (skip_len + (next - sub_ctx.ptr)) << '.' << std::endl;
 		    retval = false;
 		  }
@@ -450,7 +448,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		if (!read_ctx_read_2ubyte (&sub_ctx, &a))
 		  {
 		    wr_error (where)
-		      << ": can't read operand of DW_LNS_fixed_advance_pc."
+		      << "can't read operand of DW_LNS_fixed_advance_pc."
 		      << std::endl;
 		    goto skip;
 		  }
@@ -488,7 +486,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		default:
 		  if (opcode < opcode_base)
 		    wr_message (where, cat (mc_impact_2, mc_line))
-		      << ": unknown standard opcode #" << opcode
+		      << "unknown standard opcode #" << opcode
 		      << '.' << std::endl;
 		};
 	    };
@@ -522,7 +520,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	if (!_m_include_directories[i].used)
 	  wr_message (where,
 		      cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
-	    << ": the include #" << i + 1
+	    << "the include #" << i + 1
 	    << " `" << _m_include_directories[i].name
 	    << "' is not used." << std::endl;
 
@@ -530,17 +528,17 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	if (!_m_files[i].used)
 	  wr_message (where,
 		      cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
-	    << ": the file #" << i + 1
+	    << "the file #" << i + 1
 	    << " `" << _m_files[i].name << "' is not used." << std::endl;
 
       if (!seen_opcode)
 	wr_message (where, cat (mc_line, mc_acc_bloat, mc_impact_3))
-	  << ": empty line number program." << std::endl;
+	  << "empty line number program." << std::endl;
 
       struct where wh = WHERE (sec_line, NULL);
       if (!terminated)
 	wr_error (where)
-	  << ": sequence of opcodes not terminated with DW_LNE_end_sequence."
+	  << "sequence of opcodes not terminated with DW_LNE_end_sequence."
 	  << std::endl;
       else if (sub_ctx.ptr != sub_ctx.end
 	       && !check_zero_padding (&sub_ctx, mc_line, &wh))
