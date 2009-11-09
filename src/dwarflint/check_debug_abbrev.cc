@@ -422,5 +422,6 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 		 cmp_abbrev ());
       if (last != NULL)
 	last->next = &it->second;
+      last = &it->second;
     }
 }
