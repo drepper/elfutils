@@ -1453,7 +1453,7 @@ check_cu_structural (struct elf_file *file,
   if (abbrevs == NULL)
     {
       wr_error (&cu->where,
-		": couldn't find abbrev section with offset 0x%" PRIx64 ".\n",
+		": couldn't find abbrev section with offset %" PRId64 ".\n",
 		abbrev_offset);
       return false;
     }
