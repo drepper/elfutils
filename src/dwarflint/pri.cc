@@ -10,6 +10,10 @@ pri::form::form (int attr_form)
   : pribase (dwarf_form_string (attr_form))
 {}
 
+pri::tag::tag (int die_tag)
+  : pribase (dwarf_tag_string (die_tag))
+{}
+
 std::ostream &
 pri::operator << (std::ostream &os, pri::pribase const &obj)
 {

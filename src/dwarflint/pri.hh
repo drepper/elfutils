@@ -50,6 +50,12 @@ namespace pri
     form (int attr_form);
   };
 
+  struct tag
+    : public pribase
+  {
+    tag (int tag);
+  };
+
   class ref
   {
     Dwarf_Off off;

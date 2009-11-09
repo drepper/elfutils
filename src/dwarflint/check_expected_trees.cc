@@ -6,6 +6,7 @@
 #include "expected.hh"
 #include "dwarfstrings.h"
 #include "../libdw/c++/dwarf-knowledge.cc"
+#include "pri.hh"
 
 using elfutils::dwarf;
 
@@ -93,17 +94,16 @@ check_expected_trees::check_expected_trees (dwarflint &lint)
 		switch (jt->second)
 		  {
 		  case opt_required:
-		    wr_message (cat (mc_impact_4, mc_info), &where,
-				": %s lacks required attribute %s.\n",
-				dwarf_tag_string (parent_tag),
-				dwarf_attr_string (jt->first));
+		    wr_message (where, cat (mc_impact_4, mc_info))
+		      << pri::tag (parent_tag) << " lacks required attribute "
+		      << pri::attr (jt->first) << '\n' << std::endl;
 		    break;
 
 		  case opt_expected:
-		    wr_message (cat (mc_impact_2, mc_info), &where,
-				": %s should contain attribute %s.\n",
-				dwarf_tag_string (parent_tag),
-				dwarf_attr_string (jt->first));
+		    wr_message (where, cat (mc_impact_2, mc_info))
+		      << pri::tag (parent_tag) << " should contain attribute "
+		      << pri::attr (jt->first) << '\n' << std::endl;
+
 		  case opt_optional:
 		    break;
 		  };
