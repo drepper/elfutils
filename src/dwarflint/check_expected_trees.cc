@@ -96,13 +96,13 @@ check_expected_trees::check_expected_trees (dwarflint &lint)
 		  case opt_required:
 		    wr_message (where, cat (mc_impact_4, mc_info))
 		      << pri::tag (parent_tag) << " lacks required attribute "
-		      << pri::attr (jt->first) << '\n' << std::endl;
+		      << pri::attr (jt->first) << '.' << std::endl;
 		    break;
 
 		  case opt_expected:
 		    wr_message (where, cat (mc_impact_2, mc_info))
 		      << pri::tag (parent_tag) << " should contain attribute "
-		      << pri::attr (jt->first) << '\n' << std::endl;
+		      << pri::attr (jt->first) << '.' << std::endl;
 
 		  case opt_optional:
 		    break;
