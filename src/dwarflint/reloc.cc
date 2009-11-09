@@ -41,13 +41,11 @@ relocation_next (relocation_data *reloc, uint64_t offset,
 	    {
 	      struct where reloc_where = where_from_reloc (reloc, where);
 	      where_reset_2 (&reloc_where, rel->offset);
-	      std::stringstream ss;
-	      if (st == skip_unref)
-		ss << ": relocation targets "
-		  "unreferenced portion of the section.";
-	      else
-		ss << ": relocation is mismatched.";
-	      wr_error (&reloc_where, "%s\n", ss.str ().c_str ());
+	      wr_error (reloc_where)
+		<< (st == skip_unref
+		    ? "relocation targets unreferenced portion of the section."
+		    : "relocation is mismatched.")
+		<< std::endl;
 	    }
 	  continue;
 	}
@@ -221,11 +219,9 @@ relocate_one (struct elf_file *file,
 	  /* If symtab[symndx].st_shndx does not match the expected
 	     debug section's index, complain.  */
 	  if (section_index >= file->size)
-	    {
-	      std::stringstream ss;
-	      ss << ": invalid associated section #" << section_index << ".";
-	      wr_error (&reloc_where, "%s\n", ss.str ().c_str ());
-	    }
+	    wr_error (reloc_where)
+	      << "invalid associated section #" << section_index
+	      << '.' << std::endl;
 	  else if ((id = file->sec[section_index].id) != offset_into)
 	    wr_error (reloc_where)
 	      << "relocation references section "
