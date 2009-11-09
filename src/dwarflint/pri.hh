@@ -8,15 +8,13 @@ namespace pri
 {
   class pribase
   {
-    std::string const &m_a;
-    std::string const &m_b;
-    std::string const &m_c;
+    std::string m_s;
 
   protected:
     pribase (std::string const &a,
 	     std::string const &b = "",
 	     std::string const &c = "")
-      : m_a (a), m_b (b), m_c (c)
+      : m_s (a + b + c)
     {}
     friend std::ostream &operator << (std::ostream &os, pribase const &obj);
   };

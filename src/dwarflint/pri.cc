@@ -2,6 +2,12 @@
 #include "pri.hh"
 #include <sstream>
 
+std::ostream &
+pri::operator << (std::ostream &os, pri::pribase const &obj)
+{
+  return os << obj.m_s;
+}
+
 pri::attr::attr (int attr_name)
   : pribase (dwarf_attr_string (attr_name))
 {}
@@ -13,12 +19,6 @@ pri::form::form (int attr_form)
 pri::tag::tag (int die_tag)
   : pribase (dwarf_tag_string (die_tag))
 {}
-
-std::ostream &
-pri::operator << (std::ostream &os, pri::pribase const &obj)
-{
-  return os << obj.m_a << obj.m_b << obj.m_c;
-}
 
 std::ostream &
 pri::operator << (std::ostream &os, pri::ref const &obj)
