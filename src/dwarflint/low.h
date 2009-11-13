@@ -33,6 +33,7 @@
 #include "readctx.h"
 #include "addr-record.h"
 #include "reloc.h"
+#include "tables.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -161,8 +162,7 @@ extern "C"
 				     struct addr_record *line_tables);
   extern void cu_free (struct cu *cu_chain);
 
-  extern bool attrib_form_valid (uint64_t form);
-  extern int check_sibling_form (uint64_t form);
+  extern int check_sibling_form (dwarf_version_h ver, uint64_t form);
   extern bool is_location_attrib (uint64_t name);
 
   struct hole_info

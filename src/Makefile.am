@@ -85,7 +85,7 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/expected-at.cc dwarflint/expected.hh \
 		    dwarflint/coverage.cc dwarflint/coverage.h \
 		    dwarflint/readctx.c  dwarflint/readctx.h \
-		    dwarflint/pri.cc dwarflint/pri.h \
+		    dwarflint/pri.cc dwarflint/pri.hh \
 		    dwarflint/messages.cc dwarflint/messages.h \
 		    dwarflint/where.c dwarflint/where.h \
 		    dwarflint/config.cc dwarflint/config.h \
@@ -93,6 +93,7 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/checks-low.cc dwarflint/checks-low.hh \
 		    dwarflint/addr-record.cc dwarflint/addr-record.h \
 		    dwarflint/reloc.cc dwarflint/reloc.h \
+		    dwarflint/tables.cc dwarflint/tables.hh dwarflint/tables.h \
 		    dwarflint/all-dies-it.hh \
 		    dwarflint/checks-high.hh \
 		    dwarflint/check_debug_abbrev.cc \

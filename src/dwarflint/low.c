@@ -48,6 +48,7 @@
 #include "readctx.h"
 #include "config.h"
 #include "dwarf-opcodes.h"
+#include "tables.h"
 
 /* True if coverage analysis of .debug_ranges vs. ELF sections should
    be done.  */
@@ -169,33 +170,15 @@ read_ctx_read_form (struct read_ctx *ctx, struct cu *cu, uint8_t form,
   return false;
 }
 
-bool
-attrib_form_valid (uint64_t form)
-{
-  return form > 0 && form <= DW_FORM_ref_sig8;
-}
-
 int
-check_sibling_form (uint64_t form)
+check_sibling_form (dwarf_version_h ver, uint64_t form)
 {
-  switch (form)
-    {
-    case DW_FORM_indirect:
-      /* Tolerate this in abbrev loading, even during the DIE loading.
-	 We check that dereferenced indirect form yields valid form.  */
-    case DW_FORM_ref1:
-    case DW_FORM_ref2:
-    case DW_FORM_ref4:
-    case DW_FORM_ref8:
-    case DW_FORM_ref_udata:
-      return 0;
-
-    case DW_FORM_ref_addr:
-      return -1;
-
-    default:
-      return -2;
-    };
+  if (!dwver_form_allowed (ver, DW_AT_sibling, form))
+    return -2;
+  else if (form == DW_FORM_ref_addr)
+    return -1;
+  else
+    return 0;
 }
 
 bool
@@ -769,7 +752,8 @@ check_range_relocations (enum message_category cat,
     +1 in case some dies were actually loaded
  */
 static int
-read_die_chain (struct elf_file *file,
+read_die_chain (dwarf_version_h ver,
+		struct elf_file *file,
 		struct read_ctx *ctx,
 		struct cu *cu,
 		struct abbrev_table *abbrevs,
@@ -885,7 +869,7 @@ read_die_chain (struct elf_file *file,
 					 "indirect attribute form"))
 		return -1;
 
-	      if (!attrib_form_valid (value))
+	      if (!dwver_form_valid (ver, form))
 		{
 		  wr_error (&where,
 			    ": invalid indirect form 0x%" PRIx64 ".\n", value);
@@ -894,7 +878,7 @@ read_die_chain (struct elf_file *file,
 	      form = value;
 
 	      if (it->name == DW_AT_sibling)
-		switch (check_sibling_form (form))
+		switch (check_sibling_form (ver, form))
 		  {
 		  case -1:
 		    wr_message (mc_die_rel | mc_impact_2, &where,
@@ -1335,7 +1319,7 @@ read_die_chain (struct elf_file *file,
 
       if (abbrev->has_children)
 	{
-	  int st = read_die_chain (file, ctx, cu, abbrevs, strings,
+	  int st = read_die_chain (ver, file, ctx, cu, abbrevs, strings,
 				   local_die_refs,
 				   strings_coverage, reloc,
 				   cu_coverage);
@@ -1409,9 +1393,10 @@ check_cu_structural (struct elf_file *file,
       wr_error (&cu->where, ": can't read version.\n");
       return false;
     }
-  if (!supported_version (version, 2, &cu->where, 2, 3))
+  dwarf_version_h ver = get_dwarf_version (version);
+  if (ver == NULL)
     return false;
-  if (version == 2 && cu->offset_size == 8)
+  if (version == 2 && cu->offset_size == 8) // xxx?
     /* Keep going.  It's a standard violation, but we may still be
        able to read the unit under consideration and do high-level
        checks.  */
@@ -1465,7 +1450,7 @@ check_cu_structural (struct elf_file *file,
   WIPE (local_die_refs);
 
   cu->cudie_offset = read_ctx_get_offset (ctx) + cu->offset;
-  if (read_die_chain (file, ctx, cu, abbrevs, strings,
+  if (read_die_chain (ver, file, ctx, cu, abbrevs, strings,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
 		      cu_coverage) < 0)

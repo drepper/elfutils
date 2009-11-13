@@ -29,6 +29,7 @@
 
 #include "checks-low.hh"
 #include "pri.hh"
+#include "tables.hh"
 
 #include <dwarf.h>
 #include <sstream>
@@ -134,6 +135,13 @@ namespace
 check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
   : _m_sec_abbr (lint.check (_m_sec_abbr))
 {
+  // xxx Hmm, we need to know a dwarf version to consider which
+  // attributes are legal for DW_AT_sibling.  But there's no way to
+  // get it, we need to parse abbrevs first to parse info.  We could
+  // peek to info to get CU version/table offset mapping though, but
+  // for the time being, just take version 2.
+  dwarf_version_h ver = get_dwarf_version (2);
+
   read_ctx ctx;
   read_ctx_init (&ctx, _m_sec_abbr->sect.data,
 		 _m_sec_abbr->file.other_byte_order);
@@ -312,7 +320,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 		  throw check_base::failed ();
 		}
 
-	      if (!attrib_form_valid (attrib_form))
+	      if (!ver->form_allowed (attrib_form))
 		{
 		  wr_error (where)
 		    << "invalid form " << pri::hex (attrib_form)
@@ -350,7 +358,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 		      << std::endl;
 		}
 
-	      switch (check_sibling_form (attrib_form))
+	      switch (check_sibling_form (ver, attrib_form))
 		{
 		case -1:
 		  wr_message (where, cat (mc_die_rel, mc_impact_2))
@@ -425,3 +433,4 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
       last = &it->second;
     }
 }
+
