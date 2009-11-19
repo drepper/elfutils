@@ -36,31 +36,6 @@
 #include <cassert>
 #include <algorithm>
 
-/* Check that given form may in fact be valid in some CU.  */
-static bool
-check_abbrev_location_form (uint64_t form)
-{
-  switch (form)
-    {
-    case DW_FORM_indirect:
-
-      /* loclistptr */
-    case DW_FORM_data4:
-    case DW_FORM_data8:
-    case DW_FORM_sec_offset: // DWARF 4
-
-      /* block */
-    case DW_FORM_block1:
-    case DW_FORM_block2:
-    case DW_FORM_block4:
-    case DW_FORM_block:
-      return true;
-
-    default:
-      return false;
-    };
-}
-
 void
 abbrev_table_free (struct abbrev_table *abbr)
 {
@@ -375,7 +350,7 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 	  /* Similar for DW_AT_location and friends.  */
 	  else if (is_location_attrib (attrib_name))
 	    {
-	      if (!check_abbrev_location_form (attrib_form))
+	      if (!dwver_form_allowed (ver, attrib_name, attrib_form))
 		complain_invalid_form (where, attrib_name, attrib_form,
 				       "location attribute");
 	    }
