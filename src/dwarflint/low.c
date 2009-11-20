@@ -119,13 +119,13 @@ checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
    type-casted int64_t.  WHAT and WHERE describe error message and
    context for LEB128 loading.  */
 static bool
-read_ctx_read_form (struct read_ctx *ctx, struct cu *cu, uint8_t form,
+read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
 		    uint64_t *valuep, struct where *where, const char *what)
 {
   switch (form)
     {
     case DW_FORM_addr:
-      return read_ctx_read_offset (ctx, cu->address_size == 8, valuep);
+      return read_ctx_read_offset (ctx, address_size == 8, valuep);
     case DW_FORM_udata:
       return checked_read_uleb128 (ctx, valuep, where, what);
     case DW_FORM_sdata:
@@ -479,25 +479,6 @@ cu_find_cu (struct cu *cu_chain, uint64_t offset)
   return NULL;
 }
 
-
-static bool
-check_die_references (struct cu *cu,
-		      struct ref_record *die_refs)
-{
-  bool retval = true;
-  for (size_t i = 0; i < die_refs->size; ++i)
-    {
-      struct ref *ref = die_refs->refs + i;
-      if (!addr_record_has_addr (&cu->die_addrs, ref->addr))
-	{
-	  wr_error (&ref->who,
-		    ": unresolved reference to " PRI_DIE ".\n", ref->addr);
-	  retval = false;
-	}
-    }
-  return retval;
-}
-
 bool
 read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 		 int *offset_sizep, struct where *wh)
@@ -708,7 +689,7 @@ check_range_relocations (enum message_category cat,
        terminating zero die.
     +1 in case some dies were actually loaded
  */
-static int
+int
 read_die_chain (dwarf_version_h ver,
 		struct elf_file *file,
 		struct read_ctx *ctx,
@@ -909,7 +890,7 @@ read_die_chain (dwarf_version_h ver,
 	  /* Callback for rangeptr values.  */
 	  void check_rangeptr (uint64_t value, struct where *who)
 	  {
-	    if ((value % cu->address_size) != 0)
+	    if ((value % cu->head->address_size) != 0)
 	      wr_message (mc_ranges | mc_impact_2, who,
 			  ": rangeptr value %#" PRIx64
 			  " not aligned to CU address size.\n", value);
@@ -1071,9 +1052,9 @@ read_die_chain (dwarf_version_h ver,
 	      value_check_cb = check_die_ref_global;
 	      width = cu->head->offset_size;
 
-	      if (cu->version == 2)
+	      if (cu->head->version == 2)
 	    case DW_FORM_addr:
-		width = cu->address_size;
+		width = cu->head->address_size;
 
 	      if (!read_ctx_read_offset (ctx, width == 8, &value))
 		goto cant_read;
@@ -1297,10 +1278,10 @@ read_die_chain (dwarf_version_h ver,
   return got_die ? 1 : 0;
 }
 
-static bool
-read_address_size (struct elf_file *file,
+bool
+read_address_size (bool elf_64,
 		   struct read_ctx *ctx,
-		   uint8_t *address_sizep,
+		   int *address_sizep,
 		   struct where const *where)
 {
   uint8_t address_size;
@@ -1317,109 +1298,16 @@ read_address_size (struct elf_file *file,
       wr_error (where,
 		": invalid address size: %d (only 4 or 8 allowed).\n",
 		address_size);
-      address_size = file->addr_64 ? 8 : 4;
+      address_size = elf_64 ? 8 : 4;
     }
-  else if ((address_size == 8) != file->addr_64)
+  else if ((address_size == 8) != elf_64)
     /* Keep going, we may still be able to parse it.  */
     wr_error (where,
 	      ": CU reports address size of %d in %d-bit ELF.\n",
-	      address_size, file->addr_64 ? 64 : 32);
+	      address_size, elf_64 ? 64 : 32);
 
   *address_sizep = address_size;
   return true;
-}
-
-bool
-check_cu_structural (struct elf_file *file,
-		     struct read_ctx *ctx,
-		     struct cu *const cu,
-		     struct abbrev_table *abbrev_chain,
-		     Elf_Data *strings,
-		     struct coverage *strings_coverage,
-		     struct relocation_data *reloc,
-		     struct cu_coverage *cu_coverage)
-{
-  if (dump_die_offsets)
-    fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->head->where, NULL));
-  bool retval = true;
-
-  /* Version.  */
-  uint16_t version;
-  if (!read_ctx_read_2ubyte (ctx, &version))
-    {
-      wr_error (&cu->head->where, ": can't read version.\n");
-      return false;
-    }
-  dwarf_version_h ver = get_dwarf_version (version);
-  if (ver == NULL)
-    return false;
-  if (version == 2 && cu->head->offset_size == 8) // xxx?
-    /* Keep going.  It's a standard violation, but we may still be
-       able to read the unit under consideration and do high-level
-       checks.  */
-    wr_error (&cu->head->where, ": invalid 64-bit unit in DWARF 2 format.\n");
-  cu->version = version;
-
-  /* Abbrev offset.  */
-  uint64_t abbrev_offset;
-  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->head->offset;
-  if (!read_ctx_read_offset (ctx, cu->head->offset_size == 8, &abbrev_offset))
-    {
-      wr_error (&cu->head->where, ": can't read abbrev offset.\n");
-      return false;
-    }
-
-  struct relocation *rel
-    = relocation_next (reloc, ctx_offset, &cu->head->where, skip_mismatched);
-  if (rel != NULL)
-    relocate_one (file, reloc, rel, cu->head->offset_size,
-		  &abbrev_offset, &cu->head->where, sec_abbrev, NULL);
-  else if (file->ehdr.e_type == ET_REL)
-    wr_message (mc_impact_2 | mc_info | mc_reloc, &cu->head->where,
-		PRI_LACK_RELOCATION, "abbrev offset");
-
-  /* Address size.  */
-  {
-    uint8_t address_size;
-    if (!read_address_size (file, ctx, &address_size, &cu->head->where))
-      return false;
-    cu->address_size = address_size;
-  }
-
-  /* Look up Abbrev table for this CU.  */
-  struct abbrev_table *abbrevs = abbrev_chain;
-  for (; abbrevs != NULL; abbrevs = abbrevs->next)
-    if (abbrevs->offset == abbrev_offset)
-      break;
-
-  if (abbrevs == NULL)
-    {
-      wr_error (&cu->head->where,
-		": couldn't find abbrev section with offset %" PRId64 ".\n",
-		abbrev_offset);
-      return false;
-    }
-
-  abbrevs->used = true;
-
-  /* Read DIEs.  */
-  struct ref_record local_die_refs;
-  WIPE (local_die_refs);
-
-  cu->cudie_offset = read_ctx_get_offset (ctx) + cu->head->offset;
-  if (read_die_chain (ver, file, ctx, cu, abbrevs, strings,
-		      &local_die_refs, strings_coverage,
-		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      cu_coverage) < 0)
-    {
-      abbrevs->skip_check = true;
-      retval = false;
-    }
-  else if (!check_die_references (cu, &local_die_refs))
-    retval = false;
-
-  ref_record_free (&local_die_refs);
-  return retval;
 }
 
 static struct coverage_map *
@@ -1607,7 +1495,7 @@ check_aranges_structural (struct elf_file *file,
 	}
 
       /* Address size.  */
-      uint8_t address_size;
+      int address_size;
       if (!read_address_size (file, &sub_ctx, &address_size, &where))
 	{
 	  retval = false;
@@ -1983,7 +1871,7 @@ check_location_expression (struct elf_file *file,
 	  {								\
 	    uint64_t _off = read_ctx_get_offset (&ctx) + init_off;	\
 	    uint64_t *_ptr = (PTR);					\
-	    if (!read_ctx_read_form (&ctx, cu, (OP),			\
+	    if (!read_ctx_read_form (&ctx, cu->head->address_size, (OP), \
 				     _ptr, &where, STR " operand"))	\
 	      {								\
 		wr_error (&where, ": opcode \"%s\""			\
@@ -1996,7 +1884,7 @@ check_location_expression (struct elf_file *file,
 	    if ((_rel = relocation_next (reloc, _off,			\
 					 &where, skip_mismatched)))	\
 	      relocate_one (file, reloc, _rel,				\
-			    cu->address_size, _ptr, &where,		\
+			    cu->head->address_size, _ptr, &where,		\
 			    reloc_target_loc (opcode), NULL);		\
 	  }								\
       } while (0)
@@ -2033,13 +1921,13 @@ check_location_expression (struct elf_file *file,
 
 	case DW_OP_const8u:
 	case DW_OP_const8s:
-	  if (cu->address_size == 4)
+	  if (cu->head->address_size == 4)
 	    wr_error (&where, ": %s on 32-bit machine.\n",
 		      dwarf_locexpr_opcode_string (opcode));
 	  break;
 
 	default:
-	  if (cu->address_size == 4
+	  if (cu->head->address_size == 4
 	      && (opcode == DW_OP_constu
 		  || opcode == DW_OP_consts
 		  || opcode == DW_OP_deref_size
@@ -2106,7 +1994,7 @@ check_loc_or_range_ref (struct elf_file *file,
       retval = false;
     }
 
-  uint64_t escape = cu->address_size == 8
+  uint64_t escape = cu->head->address_size == 8
     ? (uint64_t)-1 : (uint64_t)(uint32_t)-1;
 
   bool overlap = false;
@@ -2129,10 +2017,10 @@ check_loc_or_range_ref (struct elf_file *file,
       GElf_Sym begin_symbol_mem, *begin_symbol = &begin_symbol_mem;
       bool begin_relocated = false;
       if (!overlap
-	  && coverage_is_overlap (coverage, begin_off, cu->address_size))
+	  && coverage_is_overlap (coverage, begin_off, cu->head->address_size))
 	HAVE_OVERLAP;
 
-      if (!read_ctx_read_offset (&ctx, cu->address_size == 8, &begin_addr))
+      if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8, &begin_addr))
 	{
 	  wr_error (&where, ": can't read address range beginning.\n");
 	  return false;
@@ -2143,7 +2031,7 @@ check_loc_or_range_ref (struct elf_file *file,
 				  &where, skip_mismatched)))
 	{
 	  begin_relocated = true;
-	  relocate_one (file, &sec->rel, rel, cu->address_size,
+	  relocate_one (file, &sec->rel, rel, cu->head->address_size,
 			&begin_addr, &where, rel_value,	&begin_symbol);
 	}
 
@@ -2153,10 +2041,10 @@ check_loc_or_range_ref (struct elf_file *file,
       GElf_Sym end_symbol_mem, *end_symbol = &end_symbol_mem;
       bool end_relocated = false;
       if (!overlap
-	  && coverage_is_overlap (coverage, end_off, cu->address_size))
+	  && coverage_is_overlap (coverage, end_off, cu->head->address_size))
 	HAVE_OVERLAP;
 
-      if (!read_ctx_read_offset (&ctx, cu->address_size == 8, &end_addr))
+      if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8, &end_addr))
 	{
 	  wr_error (&where, ": can't read address range ending.\n");
 	  return false;
@@ -2166,7 +2054,7 @@ check_loc_or_range_ref (struct elf_file *file,
 				  &where, skip_mismatched)))
 	{
 	  end_relocated = true;
-	  relocate_one (file, &sec->rel, rel, cu->address_size,
+	  relocate_one (file, &sec->rel, rel, cu->head->address_size,
 			&end_addr, &where, rel_value, &end_symbol);
 	  if (begin_addr != escape)
 	    {
@@ -2375,7 +2263,7 @@ check_loc_or_range_structural (struct elf_file *file,
       coverage_find_holes (&coverage, 0, ctx.data->d_size, found_hole,
 			   &((struct hole_info)
 			     {sec->id, cat, ctx.data->d_buf,
-			      cu_chain->address_size}));
+			      cu_chain->head->address_size}));
 
       if (coverage_map)
 	coverage_map_find_holes (coverage_map, &coverage_map_found_hole,

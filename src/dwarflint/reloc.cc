@@ -67,6 +67,13 @@ relocation_skip (struct relocation_data *reloc, uint64_t offset,
     relocation_next (reloc, offset - 1, where, st);
 }
 
+void
+relocation_reset (struct relocation_data *reloc)
+{
+  if (reloc != NULL)
+    reloc->index = 0;
+}
+
 /* Skip all the remaining relocations.  */
 void
 relocation_skip_rest (struct relocation_data *reloc,

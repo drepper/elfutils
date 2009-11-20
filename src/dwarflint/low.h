@@ -111,6 +111,10 @@ extern "C"
   extern bool check_zero_padding (struct read_ctx *ctx,
 				  enum message_category category,
 				  struct where const *wh);
+  extern bool read_address_size (bool elf_64,
+				 struct read_ctx *ctx,
+				 int *address_sizep,
+				 struct where const *where);
 
   struct section_coverage
   {
@@ -142,14 +146,16 @@ extern "C"
 
   // xxx low-level check entry points, will go away
   struct cu;
-  extern bool check_cu_structural (struct elf_file *file,
-				   struct read_ctx *ctx,
-				   struct cu *const cu,
-				   struct abbrev_table *abbrev_chain,
-				   Elf_Data *strings,
-				   struct coverage *strings_coverage,
-				   struct relocation_data *reloc,
-				   struct cu_coverage *cu_coverage);
+  extern int read_die_chain (dwarf_version_h ver,
+			     struct elf_file *file,
+			     struct read_ctx *ctx,
+			     struct cu *cu,
+			     struct abbrev_table *abbrevs,
+			     Elf_Data *strings,
+			     struct ref_record *local_die_refs,
+			     struct coverage *strings_coverage,
+			     struct relocation_data *reloc,
+			     struct cu_coverage *cu_coverage);
   extern bool check_loc_or_range_structural (struct elf_file *file,
 					     struct sec *sec,
 					     struct cu *cu_chain,
@@ -231,6 +237,8 @@ extern "C"
     int offset_size;		  // Offset size in this CU.
     struct where where;           // Where was this section defined.
     Dwarf_Off abbrev_offset;      // Abbreviation section that this CU uses.
+    int version;                  // CU version
+    int address_size;             // Address size in bytes on the target machine.
   };
 
   struct cu
@@ -245,8 +253,6 @@ extern "C"
     struct ref_record loc_refs;   // references into .debug_loc from this CU.
     struct ref_record range_refs; // references into .debug_ranges from this CU.
     struct ref_record line_refs;  // references into .debug_line from this CU.
-    int address_size;             // Address size in bytes on the target machine.
-    int version;                  // CU version
     bool has_arange;              // Whether we saw arange section pointing to this CU.
     bool has_pubnames;            // Likewise for pubnames.
     bool has_pubtypes;            // Likewise for pubtypes.

@@ -76,6 +76,8 @@ extern "C"
 				      struct where const *where,
 				      enum skip_type st);
 
+  void relocation_reset (struct relocation_data *reloc);
+
   void relocation_skip (struct relocation_data *reloc, uint64_t offset,
 			struct where const *where, enum skip_type st);
 

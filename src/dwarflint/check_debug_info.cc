@@ -39,6 +39,7 @@
 #include "low.h"
 #include "checks-low.hh"
 #include "pri.hh"
+#include "config.h"
 
 namespace
 {
@@ -46,6 +47,24 @@ namespace
   check_category (enum message_category cat)
   {
     return message_accept (&warning_criteria, cat);
+  }
+
+  bool
+  check_die_references (struct cu *cu,
+			struct ref_record *die_refs)
+  {
+    bool retval = true;
+    for (size_t i = 0; i < die_refs->size; ++i)
+      {
+	struct ref *ref = die_refs->refs + i;
+	if (!addr_record_has_addr (&cu->die_addrs, ref->addr))
+	  {
+	    wr_error (&ref->who,
+		      ": unresolved reference to " PRI_DIE ".\n", ref->addr);
+	    retval = false;
+	  }
+      }
+    return retval;
   }
 
   bool
@@ -87,7 +106,8 @@ namespace
 
   std::vector <cu_head>
   read_info_headers (struct elf_file *file,
-		     struct sec *sec)
+		     struct sec *sec,
+		     struct relocation_data *reloc)
   {
     struct read_ctx ctx;
     read_ctx_init (&ctx, sec->data, file->other_byte_order);
@@ -95,6 +115,8 @@ namespace
     std::vector <cu_head> ret;
     while (!read_ctx_eof (&ctx))
       {
+	std::cout << "head " << read_ctx_get_offset (&ctx)
+		  << ' ' << pri::hex (read_ctx_get_offset (&ctx)) << std::endl;
 	const unsigned char *cu_begin = ctx.ptr;
 	struct where where = WHERE (sec_info, NULL);
 	where_reset_1 (&where, read_ctx_get_offset (&ctx));
@@ -110,7 +132,11 @@ namespace
 	    && check_zero_padding (&ctx, cat (mc_info, mc_header), &where))
 	  break;
 
-	/* CU length.  */
+	/* CU length.  In DWARF 2, (uint32_t)-1 is simply a CU of that
+	   length.  In DWARF 3+ that's an escape for 64bit length.
+	   Unfortunately to read CU version, we have to get through
+	   this field.  So we just assume that (uint32_t)-1 is an
+	   escape in all cases.  */
 	uint32_t size32;
 	if (!read_ctx_read_4ubyte (&ctx, &size32))
 	  {
@@ -121,31 +147,72 @@ namespace
 	    && check_zero_padding (&ctx, cat (mc_info, mc_header), &where))
 	  break;
 
-	if (!read_size_extra (&ctx, size32, &head.size,
+	Dwarf_Off cu_size;
+	if (!read_size_extra (&ctx, size32, &cu_size,
 			      &head.offset_size, &where))
 	  throw check_base::failed ();
 
-	if (!read_ctx_need_data (&ctx, head.size))
+	if (!read_ctx_need_data (&ctx, cu_size))
 	  {
 	    wr_error (where)
 	      << "section doesn't have enough data to read CU of size "
-	      << head.size << '.' << std::endl;
+	      << cu_size << '.' << std::endl;
 	    throw check_base::failed ();
 	  }
 
-	/* version + debug_abbrev_offset + address_size */
-	Dwarf_Off cu_head_size = 2 + head.offset_size + 1;
-	if (head.size < cu_head_size)
+	/* CU size captures the size from the end of the length field
+	   to the end of the CU.  */
+	const unsigned char *cu_end = ctx.ptr + cu_size;
+
+    	/* Version.  */
+	uint16_t version;
+	if (!read_ctx_read_2ubyte (&ctx, &version))
 	  {
-	    wr_error (where)
-	      << "claimed length of " << head.size
-	      << " doesn't even cover CU head." << std::endl;
+	    wr_error (head.where) << "can't read version." << std::endl;
+	    throw check_base::failed ();
+	  }
+	if (get_dwarf_version (version) == NULL)
+	  {
+	    wr_error (head.where) << "unsupported CU version "
+				  << version << '.' << std::endl;
+	    throw check_base::failed ();
+	  }
+	if (version == 2 && head.offset_size == 8) // xxx?
+	  /* Keep going.  It's a standard violation, but we may still
+    	     be able to read the unit under consideration and do
+    	     high-level checks.  */
+	  wr_error (head.where) << "invalid 64-bit unit in DWARF 2 format.\n";
+	head.version = version;
+
+	/* Abbrev offset.  */
+	uint64_t ctx_offset = read_ctx_get_offset (&ctx) + head.offset;
+	if (!read_ctx_read_offset (&ctx, head.offset_size == 8,
+				   &head.abbrev_offset))
+	  {
+	    wr_error (head.where) << "can't read abbrev offset." << std::endl;
 	    throw check_base::failed ();
 	  }
 
-	const unsigned char *cu_end = ctx.ptr + head.size;
-	head.head_size = ctx.ptr - cu_begin; // Length of the head itself.
-	head.total_size = cu_end - cu_begin; // Length including the length field.
+	struct relocation *rel
+	  = relocation_next (reloc, ctx_offset, &head.where, skip_ok);
+	if (rel != NULL)
+	  {
+	    relocate_one (file, reloc, rel, head.offset_size,
+			  &head.abbrev_offset, &head.where, sec_abbrev, NULL);
+	    rel->invalid = true; // mark as invalid so it's skipped
+    				 // next time we pass by this
+	  }
+	else if (file->ehdr.e_type == ET_REL)
+	  wr_message (head.where, cat (mc_impact_2, mc_info, mc_reloc))
+	    << pri::lacks_relocation ("abbrev offset") << std::endl;
+
+	/* Address size.  */
+	if (!read_address_size (file, &ctx, &head.address_size, &head.where))
+	  throw check_base::failed ();
+
+	head.head_size = ctx.ptr - cu_begin; // Length of the headers itself.
+	head.total_size = cu_end - cu_begin; // Length including headers field.
+	head.size = head.total_size - head.head_size;
 
 	if (!read_ctx_skip (&ctx, head.size))
 	  {
@@ -157,6 +224,59 @@ namespace
       }
 
     return ret;
+  }
+
+  bool
+  check_cu_structural (struct elf_file *file,
+		       struct read_ctx *ctx,
+		       struct cu *const cu,
+		       struct abbrev_table *abbrev_chain,
+		       Elf_Data *strings,
+		       struct coverage *strings_coverage,
+		       struct relocation_data *reloc,
+		       struct cu_coverage *cu_coverage)
+  {
+    if (dump_die_offsets)
+      fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->head->where, NULL));
+    bool retval = true;
+
+    dwarf_version_h ver = get_dwarf_version (cu->head->version);
+    assert (ver != NULL);
+
+    /* Look up Abbrev table for this CU.  */
+    struct abbrev_table *abbrevs = abbrev_chain;
+    for (; abbrevs != NULL; abbrevs = abbrevs->next)
+      if (abbrevs->offset == cu->head->abbrev_offset)
+	break;
+
+    if (abbrevs == NULL)
+      {
+	wr_error (&cu->head->where,
+		  ": couldn't find abbrev section with offset %" PRId64 ".\n",
+		  cu->head->abbrev_offset);
+	return false;
+      }
+
+    abbrevs->used = true;
+
+    /* Read DIEs.  */
+    struct ref_record local_die_refs;
+    WIPE (local_die_refs);
+
+    cu->cudie_offset = read_ctx_get_offset (ctx) + cu->head->offset;
+    if (read_die_chain (ver, file, ctx, cu, abbrevs, strings,
+			&local_die_refs, strings_coverage,
+			(reloc != NULL && reloc->size > 0) ? reloc : NULL,
+			cu_coverage) < 0)
+      {
+	abbrevs->skip_check = true;
+	retval = false;
+      }
+    else if (!check_die_references (cu, &local_die_refs))
+      retval = false;
+
+    ref_record_free (&local_die_refs);
+    return retval;
   }
 
   struct cu *
@@ -180,14 +300,18 @@ namespace
       }
 
     struct relocation_data *reloc = sec->rel.size > 0 ? &sec->rel : NULL;
+    // xxx temporary static xxx
+    static std::vector <cu_head> cu_headers = read_info_headers (file, sec, reloc);
+    if (reloc != NULL)
+      relocation_reset (reloc);
 
-    std::vector <cu_head> cu_headers = read_info_headers (file, sec);
     struct read_ctx ctx;
     read_ctx_init (&ctx, sec->data, file->other_byte_order);
     for (std::vector <cu_head>::const_iterator it = cu_headers.begin ();
 	 it != cu_headers.end (); ++it)
       {
 	cu_head const &head = *it;
+	std::cout << "read " << pri::hex (head.offset) << std::endl;
 	where const &where = head.where;
 	struct cu *cur = (cu *)xcalloc (1, sizeof (*cur));
 	cur->head = &head;
