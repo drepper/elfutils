@@ -18,6 +18,11 @@ public:
   sec &sect;
   elf_file &file;
   section_base (dwarflint &lint, section_id secid);
+
+  relocation_data *reldata () const
+  {
+    return sect.rel.size > 0 ? &sect.rel : NULL;
+  }
 };
 
 template<section_id sec_id>
@@ -31,10 +36,23 @@ public:
   {}
 };
 
+/** The pass for reading basic .debug_info data -- the layout of
+    sections and their headers.  */
+class read_cu_headers
+  : public check<read_cu_headers>
+{
+  section<sec_info> *_m_sec_info;
+
+public:
+  std::vector<cu_head> const cu_headers;
+  explicit read_cu_headers (dwarflint &lint);
+};
+
 class check_debug_abbrev
   : public check<check_debug_abbrev>
 {
   section<sec_abbrev> *_m_sec_abbr;
+
   bool check_no_abbreviations () const;
 
 public:
@@ -53,6 +71,7 @@ class check_debug_info
   section<sec_abbrev> *_m_sec_abbrev;
   section<sec_str> *_m_sec_str;
   check_debug_abbrev *_m_abbrevs;
+  read_cu_headers *_m_cu_headers;
 
 public:
   // The check pass adds all low_pc/high_pc ranges loaded from DIE

@@ -110,13 +110,6 @@ namespace
 check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
   : _m_sec_abbr (lint.check (_m_sec_abbr))
 {
-  // xxx Hmm, we need to know a dwarf version to consider which
-  // attributes are legal for DW_AT_sibling.  But there's no way to
-  // get it, we need to parse abbrevs first to parse info.  We could
-  // peek to info to get CU version/table offset mapping though, but
-  // for the time being, just take version 2.
-  dwarf_version_h ver = get_dwarf_version (2);
-
   read_ctx ctx;
   read_ctx_init (&ctx, _m_sec_abbr->sect.data,
 		 _m_sec_abbr->file.other_byte_order);
@@ -124,6 +117,17 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
   struct abbrev_table *section = NULL;
   uint64_t first_attr_off = 0;
   struct where where = WHERE (sec_abbrev, NULL);
+
+  // Tolerate failure here.
+  read_cu_headers *cu_headers = lint.toplev_check<read_cu_headers> ();
+  dwarf_version_h ver = NULL;
+  if (cu_headers == NULL)
+    {
+      wr_error (where)
+	<< "couldn't get CU header info; assuming CUs are of latest DWARF flavor."
+	<< std::endl;
+      ver = get_latest_dwarf_version ();
+    }
   where.addr1 = 0;
 
   while (true)
@@ -203,6 +207,48 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
 
 	  where_reset_1 (&where, abbr_off);
 	  where_reset_2 (&where, abbr_off);
+
+	  // Find CU that uses this abbrev table, so that we know what
+	  // version to validate against.
+	  if (cu_headers != NULL)
+	    {
+	      ver = NULL;
+	      cu_head const *other_head = NULL;
+	      for (std::vector <cu_head>::const_iterator it
+		     = cu_headers->cu_headers.begin ();
+		   it != cu_headers->cu_headers.end (); ++it)
+		if (it->abbrev_offset == abbr_off)
+		  {
+		    section->used = true;
+		    dwarf_version_h nver = get_dwarf_version (it->version);
+		    if (ver == NULL)
+		      ver = nver;
+		    else if (nver != ver)
+		      {
+			wr_error (it->where)
+			  << " and " << other_head->where << " both use "
+			  << where << ", but each has a different version ("
+			  << it->version << " vs. " << other_head->version
+			  << ")." << std::endl;
+
+			// Arbitrarily pick newer version.
+			if (it->version > other_head->version)
+			  ver = nver;
+		      }
+
+		    other_head = &*it;
+		  }
+
+	      if (ver == NULL)
+		{
+		  // This is hard error, we can't validate abbrev
+		  // table without knowing what version to use.
+		  wr_error (where)
+		    << "abbreviation table is never used." << std::endl;
+		  ver = get_latest_dwarf_version ();
+		}
+	    }
+	  assert (ver != NULL);
 	}
 
       struct abbrev *original = abbrev_table_find_abbrev (section, abbr_code);

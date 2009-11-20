@@ -376,6 +376,12 @@ get_dwarf_version (unsigned version)
     };
 }
 
+dwarf_version_h
+get_latest_dwarf_version ()
+{
+  return &dwarf4;
+}
+
 bool
 dwver_form_valid (dwarf_version const *ver, int form)
 {

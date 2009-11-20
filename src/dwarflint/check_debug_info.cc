@@ -115,8 +115,6 @@ namespace
     std::vector <cu_head> ret;
     while (!read_ctx_eof (&ctx))
       {
-	std::cout << "head " << read_ctx_get_offset (&ctx)
-		  << ' ' << pri::hex (read_ctx_get_offset (&ctx)) << std::endl;
 	const unsigned char *cu_begin = ctx.ptr;
 	struct where where = WHERE (sec_info, NULL);
 	where_reset_1 (&where, read_ctx_get_offset (&ctx));
@@ -257,8 +255,6 @@ namespace
 	return false;
       }
 
-    abbrevs->used = true;
-
     /* Read DIEs.  */
     struct ref_record local_die_refs;
     WIPE (local_die_refs);
@@ -284,7 +280,8 @@ namespace
 			 struct sec *sec,
 			 struct abbrev_table *abbrev_chain,
 			 Elf_Data *strings,
-			 struct cu_coverage *cu_coverage)
+			 struct cu_coverage *cu_coverage,
+			 std::vector <cu_head> const &cu_headers)
   {
     struct ref_record die_refs;
     WIPE (die_refs);
@@ -300,8 +297,6 @@ namespace
       }
 
     struct relocation_data *reloc = sec->rel.size > 0 ? &sec->rel : NULL;
-    // xxx temporary static xxx
-    static std::vector <cu_head> cu_headers = read_info_headers (file, sec, reloc);
     if (reloc != NULL)
       relocation_reset (reloc);
 
@@ -311,7 +306,6 @@ namespace
 	 it != cu_headers.end (); ++it)
       {
 	cu_head const &head = *it;
-	std::cout << "read " << pri::hex (head.offset) << std::endl;
 	where const &where = head.where;
 	struct cu *cur = (cu *)xcalloc (1, sizeof (*cur));
 	cur->head = &head;
@@ -367,21 +361,12 @@ namespace
 	   analysis.  */
 	for (struct abbrev_table *abbrevs = abbrev_chain;
 	     abbrevs != NULL; abbrevs = abbrevs->next)
-	  {
-	    if (!abbrevs->used)
-	      {
-		struct where wh = WHERE (sec_abbrev, NULL);
-		where_reset_1 (&wh, abbrevs->offset);
-		wr_message (mc_impact_4 | mc_acc_bloat | mc_abbrevs, &wh,
-			    ": abbreviation table is never used.\n");
-	      }
-	    else if (!abbrevs->skip_check)
-	      for (size_t i = 0; i < abbrevs->size; ++i)
-		if (!abbrevs->abbr[i].used)
-		  wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
-			      &abbrevs->abbr[i].where,
-			      ": abbreviation is never used.\n");
-	  }
+	  if (abbrevs->used && !abbrevs->skip_check)
+	    for (size_t i = 0; i < abbrevs->size; ++i)
+	      if (!abbrevs->abbr[i].used)
+		wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
+			    &abbrevs->abbr[i].where,
+			    ": abbreviation is never used.\n");
       }
 
 
@@ -426,19 +411,28 @@ namespace
   }
 }
 
+read_cu_headers::read_cu_headers (dwarflint &lint)
+  : _m_sec_info (lint.check (_m_sec_info))
+  , cu_headers (read_info_headers (&_m_sec_info->file,
+				   &_m_sec_info->sect,
+				   _m_sec_info->reldata ()))
+{
+}
+
 check_debug_info::check_debug_info (dwarflint &lint)
   : _m_sec_info (lint.check (_m_sec_info))
   , _m_sec_abbrev (lint.check (_m_sec_abbrev))
   , _m_sec_str (lint.check (_m_sec_str))
   , _m_abbrevs (lint.check (_m_abbrevs))
+  , _m_cu_headers (lint.check (_m_cu_headers))
 {
   memset (&cu_cov, 0, sizeof (cu_cov));
 
-  /* xxx wrap C routine before proper loading is in place.  */
   cu *chain = check_info_structural
     (&_m_sec_info->file, &_m_sec_info->sect,
      &_m_abbrevs->abbrevs.begin ()->second,
-     _m_sec_str->sect.data, &cu_cov);
+     _m_sec_str->sect.data, &cu_cov,
+     _m_cu_headers->cu_headers);
 
   if (chain == NULL)
     throw check_base::failed ();

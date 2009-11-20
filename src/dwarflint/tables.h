@@ -40,6 +40,9 @@ extern "C"
   dwarf_version_h get_dwarf_version (unsigned version)
     __attribute__ ((pure));
 
+  dwarf_version_h get_latest_dwarf_version ()
+    __attribute__ ((pure));
+
   bool dwver_form_valid (dwarf_version_h ver, int form);
 
   bool dwver_form_allowed (dwarf_version_h ver, int attr, int form);
