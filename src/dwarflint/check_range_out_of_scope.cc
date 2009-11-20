@@ -78,7 +78,7 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 		{
 		  if (my_ranges.size () != 0)
 		    wr_message (wh, cat (mc_impact_4, mc_info, mc_error))
-		      << ": both low_pc/high_pc pair and ranges present."
+		      << "both low_pc/high_pc pair and ranges present."
 		      << std::endl;
 		  else
 		    my_ranges.push_back (std::make_pair (low_pc, high_pc));
@@ -125,12 +125,12 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 		    if (result.size > 0)
 		      {
 			wr_error (wh)
-			  << ": PC range " << cov::format_ranges (cov1)
+			  << "PC range " << cov::format_ranges (cov1)
 			  << " is not a sub-range of containing scope."
 			  << std::endl;
 
 			wr_error (wh_parent)
-			  << ": in this context: " << cov::format_ranges (cov2)
+			  << "in this context: " << cov::format_ranges (cov2)
 			  << std::endl;
 		      }
 
@@ -176,14 +176,14 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 			    {
 			      runoff = true;
 			      wr_error (wh)
-				<< ": attribute `" << pri::attr ((*at).first)
+				<< "attribute `" << pri::attr ((*at).first)
 				<< "': PC range " << pri::range (start, end)
 				<< " outside containing scope." << std::endl;
 			    }
 			}
 		      if (runoff)
 			wr_error (wh_parent)
-			  << ": in this context: " << cov::format_ranges (cov)
+			  << "in this context: " << cov::format_ranges (cov)
 			  << '.' << std::endl;
 		    }
 		}
