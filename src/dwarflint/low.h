@@ -110,7 +110,7 @@ extern "C"
 				 size_t num_supported, struct where *where, ...);
   extern bool check_zero_padding (struct read_ctx *ctx,
 				  enum message_category category,
-				  struct where *wh);
+				  struct where const *wh);
 
   struct section_coverage
   {
@@ -141,11 +141,15 @@ extern "C"
   };
 
   // xxx low-level check entry points, will go away
-  extern struct cu * check_info_structural (struct elf_file *file,
-					    struct sec *sec,
-					    struct abbrev_table *abbrev_chain,
-					    Elf_Data *strings,
-					    struct cu_coverage *cu_coverage);
+  struct cu;
+  extern bool check_cu_structural (struct elf_file *file,
+				   struct read_ctx *ctx,
+				   struct cu *const cu,
+				   struct abbrev_table *abbrev_chain,
+				   Elf_Data *strings,
+				   struct coverage *strings_coverage,
+				   struct relocation_data *reloc,
+				   struct cu_coverage *cu_coverage);
   extern bool check_loc_or_range_structural (struct elf_file *file,
 					     struct sec *sec,
 					     struct cu *cu_chain,
@@ -217,22 +221,32 @@ extern "C"
     bool used;
   };
 
+  struct cu_head
+  {
+    uint64_t offset;
+    Dwarf_Off size;               // Size of this CU.
+    Dwarf_Off head_size;          // Size from begin to 1st byte of CU.
+    Dwarf_Off total_size;         // size + head_size
+
+    int offset_size;		  // Offset size in this CU.
+    struct where where;           // Where was this section defined.
+    Dwarf_Off abbrev_offset;      // Abbreviation section that this CU uses.
+  };
+
   struct cu
   {
-    struct cu *next;
-    uint64_t offset;
+    struct cu *next;              // For compatibility with C level.
+                                  // xxx will probably go away eventually
+    struct cu_head const *head;
     uint64_t cudie_offset;
-    uint64_t length;
     uint64_t low_pc;              // DW_AT_low_pc value of CU DIE, -1 if not present.
     struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
     struct ref_record die_refs;   // DIE references into other CUs from this CU.
     struct ref_record loc_refs;   // references into .debug_loc from this CU.
     struct ref_record range_refs; // references into .debug_ranges from this CU.
-    struct ref_record line_refs;	// references into .debug_line from this CU.
-    struct where where;           // Where was this section defined.
+    struct ref_record line_refs;  // references into .debug_line from this CU.
     int address_size;             // Address size in bytes on the target machine.
-    int offset_size;		// Offset size in this CU.
-    int version;			// CU version
+    int version;                  // CU version
     bool has_arange;              // Whether we saw arange section pointing to this CU.
     bool has_pubnames;            // Likewise for pubnames.
     bool has_pubtypes;            // Likewise for pubtypes.

@@ -280,7 +280,7 @@ wr_message (where const &wh, message_category category)
 
 void
 wr_format_padding_message (unsigned long category,
-			   struct where *wh,
+			   struct where const *wh,
 			   uint64_t start, uint64_t end, char const *kind)
 {
   char msg[128];
@@ -289,7 +289,8 @@ wr_format_padding_message (unsigned long category,
 }
 
 void
-wr_format_leb128_message (struct where *where, const char *what,
+wr_format_leb128_message (struct where const *where,
+			  const char *what,
 			  const char *purpose,
 			  const unsigned char *begin, const unsigned char *end)
 {
@@ -305,7 +306,7 @@ wr_format_leb128_message (struct where *where, const char *what,
 
 void
 wr_message_padding_0 (unsigned long category,
-		      struct where *wh,
+		      struct where const *wh,
 		      uint64_t start, uint64_t end)
 {
   wr_format_padding_message (category | mc_acc_bloat | mc_impact_1,
@@ -315,7 +316,7 @@ wr_message_padding_0 (unsigned long category,
 
 void
 wr_message_padding_n0 (unsigned long category,
-		       struct where *wh,
+		       struct where const *wh,
 		       uint64_t start, uint64_t end)
 {
   wr_format_padding_message (category | mc_acc_bloat | mc_impact_1,

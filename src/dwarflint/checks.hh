@@ -15,7 +15,9 @@ template<class T>
 class check
   : public check_base
 {
-public:
+private:
+  template <class X>
+  friend X *dwarflint::check ();
   static void const *key ()
   {
     return reinterpret_cast <void const *> (&key);

@@ -103,21 +103,22 @@ extern "C"
     __attribute__ ((format (printf, 3, 4)));
 
   extern void wr_format_padding_message (unsigned long category,
-					 struct where *wh,
+					 struct where const *wh,
 					 uint64_t start, uint64_t end,
 					 char const *kind);
 
-  extern void wr_format_leb128_message (struct where *where, const char *what,
+  extern void wr_format_leb128_message (struct where const *where,
+					const char *what,
 					const char *purpose,
 					const unsigned char *begin,
 					const unsigned char *end);
 
   extern void wr_message_padding_0 (unsigned long category,
-				    struct where *wh,
+				    struct where const *wh,
 				    uint64_t start, uint64_t end);
 
   extern void wr_message_padding_n0 (unsigned long category,
-				     struct where *wh,
+				     struct where const *wh,
 				     uint64_t start, uint64_t end);
 
   extern bool message_accept (struct message_criteria const *cri,

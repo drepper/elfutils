@@ -6,7 +6,7 @@
 #include <cassert>
 
 static struct where
-where_from_reloc (struct relocation_data *reloc, struct where *ref)
+where_from_reloc (struct relocation_data *reloc, struct where const *ref)
 {
   struct where where
     = WHERE (reloc->type == SHT_REL ? sec_rel : sec_rela, NULL);
@@ -17,7 +17,7 @@ where_from_reloc (struct relocation_data *reloc, struct where *ref)
 
 relocation *
 relocation_next (relocation_data *reloc, uint64_t offset,
-		 struct where *where, enum skip_type st)
+		 struct where const *where, enum skip_type st)
 {
   if (reloc == NULL || reloc->rel == NULL)
     return NULL;
@@ -61,7 +61,7 @@ relocation_next (relocation_data *reloc, uint64_t offset,
    matching that offset is immediately yielded.  */
 void
 relocation_skip (struct relocation_data *reloc, uint64_t offset,
-		 struct where *where, enum skip_type st)
+		 struct where const *where, enum skip_type st)
 {
   if (reloc != NULL && reloc->rel != NULL)
     relocation_next (reloc, offset - 1, where, st);
@@ -88,7 +88,8 @@ void
 relocate_one (struct elf_file *file,
 	      struct relocation_data *reloc,
 	      struct relocation *rel,
-	      unsigned width, uint64_t *value, struct where *where,
+	      unsigned width, uint64_t *value,
+	      struct where const *where,
 	      enum section_id offset_into, GElf_Sym **symptr)
 {
   if (rel->invalid)

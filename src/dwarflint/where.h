@@ -62,8 +62,9 @@ extern "C"
     uint64_t addr1; // E.g. a CU offset.
     uint64_t addr2; // E.g. a DIE address.
     uint64_t addr3; // E.g. an attribute.
-    struct where *ref; // Related reference, e.g. an abbrev related to given DIE.
-    struct where *next; // For forming "caused-by" chains.
+    struct where const *ref; // Related reference, e.g. an abbrev
+			     // related to given DIE.
+    struct where const *next; // For forming "caused-by" chains.
   };
 
 # define WHERE(SECTION, NEXT)						\

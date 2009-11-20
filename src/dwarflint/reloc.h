@@ -72,11 +72,12 @@ extern "C"
   };
 
   struct relocation *relocation_next (struct relocation_data *reloc,
-				      uint64_t offset, struct where *where,
+				      uint64_t offset,
+				      struct where const *where,
 				      enum skip_type st);
 
   void relocation_skip (struct relocation_data *reloc, uint64_t offset,
-			struct where *where, enum skip_type st);
+			struct where const *where, enum skip_type st);
 
   void relocation_skip_rest (struct relocation_data *reloc,
 			     enum section_id id);
@@ -84,7 +85,8 @@ extern "C"
   void relocate_one (struct elf_file *file,
 		     struct relocation_data *reloc,
 		     struct relocation *rel,
-		     unsigned width, uint64_t *value, struct where *where,
+		     unsigned width, uint64_t *value,
+		     struct where const *where,
 		     enum section_id offset_into, GElf_Sym **symptr);
 
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"

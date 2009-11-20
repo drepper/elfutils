@@ -54,12 +54,6 @@
    be done.  */
 static const bool do_range_coverage = false;
 
-static bool
-check_category (enum message_category cat)
-{
-  return message_accept (&warning_criteria, cat);
-}
-
 #define PRI_CU "CU 0x%" PRIx64
 #define PRI_DIE "DIE 0x%" PRIx64
 
@@ -480,7 +474,7 @@ static struct cu *
 cu_find_cu (struct cu *cu_chain, uint64_t offset)
 {
   for (struct cu *it = cu_chain; it != NULL; it = it->next)
-    if (it->offset == offset)
+    if (it->head->offset == offset)
       return it;
   return NULL;
 }
@@ -501,43 +495,6 @@ check_die_references (struct cu *cu,
 	  retval = false;
 	}
     }
-  return retval;
-}
-
-static bool
-check_global_die_references (struct cu *cu_chain)
-{
-  bool retval = true;
-  for (struct cu *it = cu_chain; it != NULL; it = it->next)
-    for (size_t i = 0; i < it->die_refs.size; ++i)
-      {
-	struct ref *ref = it->die_refs.refs + i;
-	struct cu *ref_cu = NULL;
-	for (struct cu *jt = cu_chain; jt != NULL; jt = jt->next)
-	  if (addr_record_has_addr (&jt->die_addrs, ref->addr))
-	    {
-	      ref_cu = jt;
-	      break;
-	    }
-
-	if (ref_cu == NULL)
-	  {
-	    wr_error (&ref->who,
-		      ": unresolved (non-CU-local) reference to " PRI_DIE ".\n",
-		      ref->addr);
-	    retval = false;
-	  }
-	else if (ref_cu == it)
-	  /* This is technically not a problem, so long as the
-	     reference is valid, which it is.  But warn about this
-	     anyway, perhaps local reference could be formed on fewer
-	     number of bytes.  */
-	  wr_message (mc_impact_2 | mc_acc_suboptimal | mc_die_rel,
-		      &ref->who,
-		      ": local reference to " PRI_DIE " formed as global.\n",
-		      ref->addr);
-      }
-
   return retval;
 }
 
@@ -573,7 +530,7 @@ read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 bool
 check_zero_padding (struct read_ctx *ctx,
 		    enum message_category category,
-		    struct where *wh)
+		    struct where const *wh)
 {
   assert (ctx->ptr != ctx->end);
   const unsigned char *save_ptr = ctx->ptr;
@@ -772,11 +729,11 @@ read_die_chain (dwarf_version_h ver,
 
   while (!read_ctx_eof (ctx))
     {
-      where = cu->where;
+      where = cu->head->where;
       die_off = read_ctx_get_offset (ctx);
       /* Shift reported DIE offset by CU offset, to match the way
 	 readelf reports DIEs.  */
-      where_reset_2 (&where, die_off + cu->offset);
+      where_reset_2 (&where, die_off + cu->head->offset);
 
       uint64_t abbr_code;
 
@@ -785,7 +742,7 @@ read_die_chain (dwarf_version_h ver,
 
 #define DEF_PREV_WHERE							\
       struct where prev_where = where;					\
-      where_reset_2 (&prev_where, prev_die_off + cu->offset)
+      where_reset_2 (&prev_where, prev_die_off + cu->head->offset)
 
       /* Check sibling value advertised last time through the loop.  */
       if (sibling_addr != 0)
@@ -847,7 +804,7 @@ read_die_chain (dwarf_version_h ver,
 	}
       abbrev->used = true;
 
-      addr_record_add (&cu->die_addrs, cu->offset + die_off);
+      addr_record_add (&cu->die_addrs, cu->head->offset + die_off);
 
       uint64_t low_pc = (uint64_t)-1, high_pc = (uint64_t)-1;
       bool low_pc_relocated = false, high_pc_relocated = false;
@@ -913,7 +870,7 @@ read_die_chain (dwarf_version_h ver,
 	    if (local_die_refs != NULL)
 	      /* Address holds a CU-local reference, so add CU offset
 		 to turn it into section offset.  */
-	      ref_record_add (local_die_refs, addr += cu->offset, who);
+	      ref_record_add (local_die_refs, addr += cu->head->offset, who);
 	  }
 
 	  /* Callback for global DIE references.  */
@@ -972,7 +929,7 @@ read_die_chain (dwarf_version_h ver,
 	    ref_record_add (&cu->loc_refs, value, who);
 	  }
 
-	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
+	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->head->offset;
 	  bool type_is_rel = file->ehdr.e_type == ET_REL;
 
 	  /* Attribute value.  */
@@ -1008,7 +965,7 @@ read_die_chain (dwarf_version_h ver,
 	      switch (form)
 		{
 		case DW_FORM_data8:
-		  if (cu->offset_size == 4)
+		  if (cu->head->offset_size == 4)
 		    wr_error (&where,
 			      ": location attribute with form \"%s\" in 32-bit CU.\n",
 			      dwarf_form_string (form));
@@ -1042,7 +999,7 @@ read_die_chain (dwarf_version_h ver,
 	    switch (form)
 	      {
 	      case DW_FORM_data8:
-		if (cu->offset_size == 4)
+		if (cu->head->offset_size == 4)
 		  wr_error (&where,
 			    ": %s with form DW_FORM_data8 in 32-bit CU.\n",
 			    dwarf_attr_string (it->name));
@@ -1093,7 +1050,7 @@ read_die_chain (dwarf_version_h ver,
 	    case DW_FORM_strp:
 	      value_check_cb = check_strp;
 	    case DW_FORM_sec_offset:
-	      if (!read_ctx_read_offset (ctx, cu->offset_size == 8, &value))
+	      if (!read_ctx_read_offset (ctx, cu->head->offset_size == 8, &value))
 		{
 		cant_read:
 		  wr_error (&where, ": can't read value of attribute %s.\n",
@@ -1102,7 +1059,7 @@ read_die_chain (dwarf_version_h ver,
 		}
 
 	      relocate = rel_require;
-	      width = cu->offset_size;
+	      width = cu->head->offset_size;
 	      break;
 
 	    case DW_FORM_string:
@@ -1112,7 +1069,7 @@ read_die_chain (dwarf_version_h ver,
 
 	    case DW_FORM_ref_addr:
 	      value_check_cb = check_die_ref_global;
-	      width = cu->offset_size;
+	      width = cu->head->offset_size;
 
 	      if (cu->version == 2)
 	    case DW_FORM_addr:
@@ -1217,7 +1174,7 @@ read_die_chain (dwarf_version_h ver,
 		if (is_location_attrib (it->name))
 		  {
 		    uint64_t expr_start
-		      = cu->offset + read_ctx_get_offset (ctx);
+		      = cu->head->offset + read_ctx_get_offset (ctx);
 		    if (!check_location_expression (file, ctx, cu, expr_start,
 						    reloc, length, &where))
 		      return -1;
@@ -1344,7 +1301,7 @@ static bool
 read_address_size (struct elf_file *file,
 		   struct read_ctx *ctx,
 		   uint8_t *address_sizep,
-		   struct where *where)
+		   struct where const *where)
 {
   uint8_t address_size;
   if (!read_ctx_read_ubyte (ctx, &address_size))
@@ -1372,7 +1329,7 @@ read_address_size (struct elf_file *file,
   return true;
 }
 
-static bool
+bool
 check_cu_structural (struct elf_file *file,
 		     struct read_ctx *ctx,
 		     struct cu *const cu,
@@ -1383,48 +1340,48 @@ check_cu_structural (struct elf_file *file,
 		     struct cu_coverage *cu_coverage)
 {
   if (dump_die_offsets)
-    fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->where, NULL));
+    fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->head->where, NULL));
   bool retval = true;
 
   /* Version.  */
   uint16_t version;
   if (!read_ctx_read_2ubyte (ctx, &version))
     {
-      wr_error (&cu->where, ": can't read version.\n");
+      wr_error (&cu->head->where, ": can't read version.\n");
       return false;
     }
   dwarf_version_h ver = get_dwarf_version (version);
   if (ver == NULL)
     return false;
-  if (version == 2 && cu->offset_size == 8) // xxx?
+  if (version == 2 && cu->head->offset_size == 8) // xxx?
     /* Keep going.  It's a standard violation, but we may still be
        able to read the unit under consideration and do high-level
        checks.  */
-    wr_error (&cu->where, ": invalid 64-bit unit in DWARF 2 format.\n");
+    wr_error (&cu->head->where, ": invalid 64-bit unit in DWARF 2 format.\n");
   cu->version = version;
 
   /* Abbrev offset.  */
   uint64_t abbrev_offset;
-  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->offset;
-  if (!read_ctx_read_offset (ctx, cu->offset_size == 8, &abbrev_offset))
+  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->head->offset;
+  if (!read_ctx_read_offset (ctx, cu->head->offset_size == 8, &abbrev_offset))
     {
-      wr_error (&cu->where, ": can't read abbrev offset.\n");
+      wr_error (&cu->head->where, ": can't read abbrev offset.\n");
       return false;
     }
 
   struct relocation *rel
-    = relocation_next (reloc, ctx_offset, &cu->where, skip_mismatched);
+    = relocation_next (reloc, ctx_offset, &cu->head->where, skip_mismatched);
   if (rel != NULL)
-    relocate_one (file, reloc, rel, cu->offset_size,
-		  &abbrev_offset, &cu->where, sec_abbrev, NULL);
+    relocate_one (file, reloc, rel, cu->head->offset_size,
+		  &abbrev_offset, &cu->head->where, sec_abbrev, NULL);
   else if (file->ehdr.e_type == ET_REL)
-    wr_message (mc_impact_2 | mc_info | mc_reloc, &cu->where,
+    wr_message (mc_impact_2 | mc_info | mc_reloc, &cu->head->where,
 		PRI_LACK_RELOCATION, "abbrev offset");
 
   /* Address size.  */
   {
     uint8_t address_size;
-    if (!read_address_size (file, ctx, &address_size, &cu->where))
+    if (!read_address_size (file, ctx, &address_size, &cu->head->where))
       return false;
     cu->address_size = address_size;
   }
@@ -1437,7 +1394,7 @@ check_cu_structural (struct elf_file *file,
 
   if (abbrevs == NULL)
     {
-      wr_error (&cu->where,
+      wr_error (&cu->head->where,
 		": couldn't find abbrev section with offset %" PRId64 ".\n",
 		abbrev_offset);
       return false;
@@ -1449,7 +1406,7 @@ check_cu_structural (struct elf_file *file,
   struct ref_record local_die_refs;
   WIPE (local_die_refs);
 
-  cu->cudie_offset = read_ctx_get_offset (ctx) + cu->offset;
+  cu->cudie_offset = read_ctx_get_offset (ctx) + cu->head->offset;
   if (read_die_chain (ver, file, ctx, cu, abbrevs, strings,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
@@ -1463,194 +1420,6 @@ check_cu_structural (struct elf_file *file,
 
   ref_record_free (&local_die_refs);
   return retval;
-}
-
-struct cu *
-check_info_structural (struct elf_file *file,
-		       struct sec *sec,
-		       struct abbrev_table *abbrev_chain,
-		       Elf_Data *strings,
-		       struct cu_coverage *cu_coverage)
-{
-  struct read_ctx ctx;
-  read_ctx_init (&ctx, sec->data, file->other_byte_order);
-
-  struct ref_record die_refs;
-  WIPE (die_refs);
-
-  struct cu *cu_chain = NULL;
-
-  bool success = true;
-
-  struct coverage strings_coverage_mem, *strings_coverage = NULL;
-  if (strings != NULL && check_category (mc_strings))
-    {
-      WIPE (strings_coverage_mem);
-      strings_coverage = &strings_coverage_mem;
-    }
-
-  struct relocation_data *reloc = sec->rel.size > 0 ? &sec->rel : NULL;
-  while (!read_ctx_eof (&ctx))
-    {
-      const unsigned char *cu_begin = ctx.ptr;
-      struct where where = WHERE (sec_info, NULL);
-      where_reset_1 (&where, read_ctx_get_offset (&ctx));
-
-      struct cu *cur = xcalloc (1, sizeof (*cur));
-      cur->offset = where.addr1;
-      cur->next = cu_chain;
-      cur->where = where;
-      cur->low_pc = (uint64_t)-1;
-      cu_chain = cur;
-
-      uint32_t size32;
-      uint64_t size;
-
-      /* Reading CU header is a bit tricky, because we don't know if
-	 we have run into (superfluous but allowed) zero padding.  */
-      if (!read_ctx_need_data (&ctx, 4)
-	  && check_zero_padding (&ctx, mc_info | mc_header, &where))
-	break;
-
-      /* CU length.  */
-      if (!read_ctx_read_4ubyte (&ctx, &size32))
-	{
-	  wr_error (&where, ": can't read CU length.\n");
-	  success = false;
-	  break;
-	}
-      if (size32 == 0 && check_zero_padding (&ctx, mc_info | mc_header, &where))
-	break;
-
-      if (!read_size_extra (&ctx, size32, &size, &cur->offset_size, &where))
-	{
-	  success = false;
-	  break;
-	}
-
-      if (!read_ctx_need_data (&ctx, size))
-	{
-	  wr_error (&where,
-		    ": section doesn't have enough data"
-		    " to read CU of size %" PRId64 ".\n", size);
-	  ctx.ptr = ctx.end;
-	  success = false;
-	  break;
-	}
-
-      const unsigned char *cu_end = ctx.ptr + size;
-      cur->length = cu_end - cu_begin; // Length including the length field.
-
-      /* version + debug_abbrev_offset + address_size */
-      uint64_t cu_header_size = 2 + cur->offset_size + 1;
-      if (size < cu_header_size)
-	{
-	  wr_error (&where, ": claimed length of %" PRIx64
-		    " doesn't even cover CU header.\n", size);
-	  success = false;
-	  break;
-	}
-      else
-	{
-	  /* Make CU context begin just before the CU length, so that DIE
-	     offsets are computed correctly.  */
-	  struct read_ctx cu_ctx;
-	  if (!read_ctx_init_sub (&cu_ctx, &ctx, cu_begin, cu_end))
-	    {
-	    not_enough:
-	      wr_error (&where, PRI_NOT_ENOUGH, "next CU");
-	      success = false;
-	      break;
-	    }
-	  cu_ctx.ptr = ctx.ptr;
-
-	  if (!check_cu_structural (file, &cu_ctx, cur, abbrev_chain,
-				    strings, strings_coverage, reloc,
-				    cu_coverage))
-	    {
-	      success = false;
-	      break;
-	    }
-	  if (cu_ctx.ptr != cu_ctx.end
-	      && !check_zero_padding (&cu_ctx, mc_info, &where))
-	    wr_message_padding_n0 (mc_info, &where,
-				   read_ctx_get_offset (&ctx),
-				   read_ctx_get_offset (&ctx) + size);
-	}
-
-      if (!read_ctx_skip (&ctx, size))
-	goto not_enough;
-    }
-
-  if (success)
-    {
-      if (ctx.ptr != ctx.end)
-	/* Did we read up everything?  */
-	wr_message (mc_die_other | mc_impact_4,
-		    &WHERE (sec_info, NULL),
-		    ": CU lengths don't exactly match Elf_Data contents.");
-      else
-	/* Did we consume all the relocations?  */
-	relocation_skip_rest (&sec->rel, sec->id);
-
-      /* If we managed to read up everything, now do abbrev usage
-	 analysis.  */
-      for (struct abbrev_table *abbrevs = abbrev_chain;
-	   abbrevs != NULL; abbrevs = abbrevs->next)
-	{
-	  if (!abbrevs->used)
-	    {
-	      struct where wh = WHERE (sec_abbrev, NULL);
-	      where_reset_1 (&wh, abbrevs->offset);
-	      wr_message (mc_impact_4 | mc_acc_bloat | mc_abbrevs, &wh,
-			  ": abbreviation table is never used.\n");
-	    }
-	  else if (!abbrevs->skip_check)
-	    for (size_t i = 0; i < abbrevs->size; ++i)
-	      if (!abbrevs->abbr[i].used)
-		wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
-			    &abbrevs->abbr[i].where,
-			    ": abbreviation is never used.\n");
-	}
-    }
-
-
-  /* We used to check that all CUs have the same address size.  Now
-     that we validate address_size of each CU against the ELF header,
-     that's not necessary anymore.  */
-
-  bool references_sound = check_global_die_references (cu_chain);
-  ref_record_free (&die_refs);
-
-  if (strings_coverage != NULL)
-    {
-      if (success)
-	coverage_find_holes (strings_coverage, 0, strings->d_size, found_hole,
-			     &((struct hole_info)
-			       {sec_str, mc_strings, strings->d_buf, 0}));
-      coverage_free (strings_coverage);
-    }
-
-  if (!success || !references_sound)
-    {
-      cu_free (cu_chain);
-      cu_chain = NULL;
-    }
-
-  /* Reverse the chain, so that it's organized "naturally".  Has
-     significant impact on performance when handling loc_ref and
-     range_ref fields in loc/range validation.  */
-  struct cu *last = NULL;
-  for (struct cu *it = cu_chain; it != NULL; )
-    {
-      struct cu *next = it->next;
-      it->next = last;
-      last = it;
-      it = next;
-    }
-  cu_chain = last;
-
-  return cu_chain;
 }
 
 static struct coverage_map *
@@ -2047,7 +1816,7 @@ check_pub_structural (struct elf_file *file,
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
       if (cu != NULL)
 	{
-	  where.ref = &cu->where;
+	  where.ref = &cu->head->where;
 	  bool *has = sec->id == sec_pubnames
 			? &cu->has_pubnames : &cu->has_pubtypes;
 	  if (*has)
@@ -2065,11 +1834,12 @@ check_pub_structural (struct elf_file *file,
 	  retval = false;
 	  goto next;
 	}
-      if (cu != NULL && cu_len != cu->length)
+      if (cu != NULL && cu_len != cu->head->total_size)
 	{
 	  wr_error (&where,
 		    ": the table covers length %" PRId64
-		    " but CU has length %" PRId64 ".\n", cu_len, cu->length);
+		    " but CU has length %" PRId64 ".\n",
+		    cu_len, cu->head->total_size);
 	  retval = false;
 	  goto next;
 	}
@@ -2091,7 +1861,8 @@ check_pub_structural (struct elf_file *file,
 	    break;
 
 	  if (cu != NULL
-	      && !addr_record_has_addr (&cu->die_addrs, offset + cu->offset))
+	      && !addr_record_has_addr (&cu->die_addrs,
+					offset + cu->head->offset))
 	    {
 	      wr_error (&where,
 			": unresolved reference to " PRI_DIE ".\n", offset);

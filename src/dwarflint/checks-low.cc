@@ -319,47 +319,6 @@ section_base::section_base (dwarflint &lint, section_id secid)
 {
 }
 
-check_debug_info::check_debug_info (dwarflint &lint)
-  : _m_sec_info (lint.check (_m_sec_info))
-  , _m_sec_abbrev (lint.check (_m_sec_abbrev))
-  , _m_sec_str (lint.check (_m_sec_str))
-  , _m_abbrevs (lint.check (_m_abbrevs))
-{
-  memset (&cu_cov, 0, sizeof (cu_cov));
-
-  /* xxx wrap C routine before proper loading is in place.  */
-  cu *chain = check_info_structural
-    (&_m_sec_info->file, &_m_sec_info->sect,
-     &_m_abbrevs->abbrevs.begin ()->second,
-     _m_sec_str->sect.data, &cu_cov);
-
-  if (chain == NULL)
-    throw check_base::failed ();
-
-  for (cu *cu = chain; cu != NULL; cu = cu->next)
-    cus.push_back (*cu);
-
-  // re-link CUs so that they form a chain again.  This is to
-  // interface with C-level code.  The last CU's next is null, so we
-  // don't have to re-link it.
-  cu *last = NULL;
-  for (std::vector<cu>::iterator it = cus.begin ();
-       it != cus.end (); ++it)
-    {
-      cu *cur = &*it;
-      if (last != NULL)
-	last->next = cur;
-      last = cur;
-    }
-  if (cus.size () > 0)
-    assert (cus.back ().next == NULL);
-}
-
-check_debug_info::~check_debug_info ()
-{
-  cu_free (&cus.back ());
-}
-
 check_debug_ranges::check_debug_ranges (dwarflint &lint)
   : _m_sec_ranges (lint.check (_m_sec_ranges))
   , _m_cus (lint.check (_m_cus))

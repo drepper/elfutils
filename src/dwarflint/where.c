@@ -115,7 +115,7 @@ where_fmt (const struct where *wh, char *ptr)
       ptr = stpcpy (buf, inf->name);
       if (is_reloc)
 	{
-	  struct where *ref = wh->ref;
+	  struct where const *ref = wh->ref;
 	  assert (ref != NULL);
 	  if (ref->section == sec_locexpr)
 	    {
@@ -155,7 +155,7 @@ void
 where_fmt_chain (const struct where *wh, const char *severity)
 {
   if (wh != NULL && show_refs)
-    for (struct where *it = wh->next; it != NULL; it = it->next)
+    for (struct where const *it = wh->next; it != NULL; it = it->next)
       printf ("%s: %s: caused by this reference.\n",
 	      severity, where_fmt (it, NULL));
 }
