@@ -1,3 +1,7 @@
+2009-11-22  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac: Use sed and expr instead of modern bash extensions.
+
 2009-09-21  Ulrich Drepper  <drepper@redhat.com>
 
 	* configure.ac: Update for more modern autoconf.
