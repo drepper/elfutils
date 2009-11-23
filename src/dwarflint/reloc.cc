@@ -44,7 +44,8 @@ relocation_next (relocation_data *reloc, uint64_t offset,
 	      wr_error (reloc_where)
 		<< (st == skip_unref
 		    ? "relocation targets unreferenced portion of the section."
-		    : "relocation is mismatched.")
+		    : (assert (st == skip_mismatched),
+		       "relocation relocates unknown datum."))
 		<< std::endl;
 	    }
 	  continue;
