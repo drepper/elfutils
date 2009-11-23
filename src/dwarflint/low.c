@@ -116,13 +116,19 @@ checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
 }
 
 /* The value passed back in uint64_t VALUEP may actually be
-   type-casted int64_t.  WHAT and WHERE describe error message and
-   context for LEB128 loading.  */
+   type-casted signed quantity.  WHAT and WHERE describe error message
+   and context for LEB128 loading.
+
+   If IS_BLOCKP is non-NULL, block values are accepted, and *IS_BLOCKP
+   is initialized depending on whether FORM is a block form.  For
+   block forms, the value passed back in VALUEP is block length.  */
 static bool
 read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
 		    uint64_t *valuep, struct where *where, const char *what,
-		    bool allow_block)
+		    bool *is_blockp)
 {
+  if (is_blockp != NULL)
+    *is_blockp = false;
   switch (form)
     {
     case DW_FORM_addr:
@@ -162,7 +168,7 @@ read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
       return read_ctx_read_8ubyte (ctx, valuep);
     };
 
-  if (allow_block)
+  if (is_blockp != NULL)
     {
       int dform;
       switch (form)
@@ -180,10 +186,10 @@ read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
 	  return false;
 	}
 
-      uint64_t length;
+      *is_blockp = true;
       return read_ctx_read_form (ctx, address_size, dform,
-				 &length, where, what, false)
-	&& read_ctx_skip (ctx, length);
+				 valuep, where, what, NULL)
+	&& read_ctx_skip (ctx, *valuep);
     }
 
   return false;
@@ -1846,6 +1852,57 @@ get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
 }
 
 static bool
+op_read_form (struct elf_file *file,
+	      struct read_ctx *ctx,
+	      struct cu *cu,
+	      uint64_t init_off,
+	      struct relocation_data *reloc,
+	      int opcode,
+	      int form,
+	      uint64_t *valuep,
+	      char const *str,
+	      struct where *where)
+{
+  if (form == 0)
+    return true;
+
+  bool isblock;
+  uint64_t off = read_ctx_get_offset (ctx) + init_off;
+
+  if (!read_ctx_read_form (ctx, cu->head->address_size, form,
+			   valuep, where, str, &isblock))
+    {
+      wr_error (where, ": opcode \"%s\": can't read %s (form \"%s\").\n",
+		dwarf_locexpr_opcode_string (opcode),
+		str, dwarf_form_string (form));
+      return false;
+    }
+
+  /* For non-block forms, allow relocation of the datum.  For block
+     form, allow relocation of block contents, but not the
+     block length).  */
+
+  struct relocation *rel;
+  if ((rel = relocation_next (reloc, off,
+			      where, skip_mismatched)))
+    {
+      if (!isblock)
+	relocate_one (file, reloc, rel,
+		      cu->head->address_size, valuep, where,
+		      reloc_target_loc (opcode), NULL);
+      else
+	wr_error (where, ": relocation relocates a length field.\n");
+    }
+  if (isblock)
+    {
+      uint64_t off_block_end = read_ctx_get_offset (ctx) + init_off - 1;
+      relocation_next (reloc, off_block_end, where, skip_ok);
+    }
+
+  return true;
+}
+
+static bool
 check_location_expression (struct elf_file *file,
 			   struct read_ctx *parent_ctx,
 			   struct cu *cu,
@@ -1890,34 +1947,12 @@ check_location_expression (struct elf_file *file,
 	  break;
 	}
 
-#define READ_FORM(OP, STR, PTR)						\
-      do {								\
-	if (OP != 0)							\
-	  {								\
-	    uint64_t _off = read_ctx_get_offset (&ctx) + init_off;	\
-	    uint64_t *_ptr = (PTR);					\
-	    if (!read_ctx_read_form (&ctx, cu->head->address_size, (OP), \
-				     _ptr, &where, STR " operand", true)) \
-	      {								\
-		wr_error (&where, ": opcode \"%s\""			\
-			  ": can't read " STR " operand (form \"%s\").\n", \
-			  dwarf_locexpr_opcode_string (opcode),		\
-			  dwarf_form_string ((OP)));			\
-		goto out;						\
-	      }								\
-	    struct relocation *_rel;					\
-	    if ((_rel = relocation_next (reloc, _off,			\
-					 &where, skip_mismatched)))	\
-	      relocate_one (file, reloc, _rel,				\
-			    cu->head->address_size, _ptr, &where,		\
-			    reloc_target_loc (opcode), NULL);		\
-	  }								\
-      } while (0)
-
       uint64_t value1, value2;
-      READ_FORM (op1, "1st", &value1);
-      READ_FORM (op2, "2st", &value2);
-#undef READ_FORM
+      if (!op_read_form (file, &ctx, cu, init_off, reloc,
+			 opcode, op1, &value1, "1st operand", &where)
+	  || !op_read_form (file, &ctx, cu, init_off, reloc,
+			    opcode, op2, &value2, "2st operand", &where))
+	goto out;
 
       switch (opcode)
 	{
