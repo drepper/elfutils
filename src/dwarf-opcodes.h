@@ -201,4 +201,7 @@
   DW_OP_0 (DW_OP_GNU_push_tls_address)				\
   DW_OP_0 (DW_OP_call_frame_cfa)				\
   DW_OP_2 (DW_OP_bit_piece, DW_FORM_udata, DW_FORM_udata)	\
-  DW_OP_0 (DW_OP_GNU_uninit)
+  DW_OP_0 (DW_OP_GNU_uninit)					\
+  /* DWARF 4 */							\
+  DW_OP_0 (DW_OP_stack_value)					\
+  DW_OP_1 (DW_OP_implicit_value, DW_FORM_block)

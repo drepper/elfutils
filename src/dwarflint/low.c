@@ -120,7 +120,8 @@ checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
    context for LEB128 loading.  */
 static bool
 read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
-		    uint64_t *valuep, struct where *where, const char *what)
+		    uint64_t *valuep, struct where *where, const char *what,
+		    bool allow_block)
 {
   switch (form)
     {
@@ -160,6 +161,30 @@ read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
     case DW_FORM_data8:
       return read_ctx_read_8ubyte (ctx, valuep);
     };
+
+  if (allow_block)
+    {
+      int dform;
+      switch (form)
+	{
+#define HANDLE(BFORM, DFORM)			\
+	  case BFORM:				\
+	    dform = DFORM;			\
+	    break
+	  HANDLE (DW_FORM_block, DW_FORM_udata);
+	  HANDLE (DW_FORM_block1, DW_FORM_data1);
+	  HANDLE (DW_FORM_block2, DW_FORM_data2);
+	  HANDLE (DW_FORM_block4, DW_FORM_data4);
+#undef HANDLE
+	default:
+	  return false;
+	}
+
+      uint64_t length;
+      return read_ctx_read_form (ctx, address_size, dform,
+				 &length, where, what, false)
+	&& read_ctx_skip (ctx, length);
+    }
 
   return false;
 }
@@ -1872,7 +1897,7 @@ check_location_expression (struct elf_file *file,
 	    uint64_t _off = read_ctx_get_offset (&ctx) + init_off;	\
 	    uint64_t *_ptr = (PTR);					\
 	    if (!read_ctx_read_form (&ctx, cu->head->address_size, (OP), \
-				     _ptr, &where, STR " operand"))	\
+				     _ptr, &where, STR " operand", true)) \
 	      {								\
 		wr_error (&where, ": opcode \"%s\""			\
 			  ": can't read " STR " operand (form \"%s\").\n", \
