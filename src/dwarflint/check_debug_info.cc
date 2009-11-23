@@ -182,12 +182,12 @@ namespace
 	  wr_error (head.where) << "invalid 64-bit unit in DWARF 2 format.\n";
 	head.version = version;
 
-	/* Abbrev offset.  */
-	uint64_t ctx_offset = read_ctx_get_offset (&ctx) + head.offset;
+	/* Abbrev table offset.  */
+	uint64_t ctx_offset = read_ctx_get_offset (&ctx);
 	if (!read_ctx_read_offset (&ctx, head.offset_size == 8,
 				   &head.abbrev_offset))
 	  {
-	    wr_error (head.where) << "can't read abbrev offset." << std::endl;
+	    wr_error (head.where) << "can't read abbrev table offset." << std::endl;
 	    throw check_base::failed ();
 	  }
 
@@ -202,7 +202,7 @@ namespace
 	  }
 	else if (file->ehdr.e_type == ET_REL)
 	  wr_message (head.where, cat (mc_impact_2, mc_info, mc_reloc))
-	    << pri::lacks_relocation ("abbrev offset") << std::endl;
+	    << pri::lacks_relocation ("abbrev table offset") << std::endl;
 
 	/* Address size.  */
 	if (!read_address_size (file, &ctx, &head.address_size, &head.where))
