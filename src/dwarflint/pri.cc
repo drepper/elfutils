@@ -20,6 +20,10 @@ pri::tag::tag (int die_tag)
   : pribase (dwarf_tag_string (die_tag))
 {}
 
+pri::locexpr_opcode::locexpr_opcode (int opcode)
+  : pribase (dwarf_locexpr_opcode_string (opcode))
+{}
+
 std::ostream &
 pri::operator << (std::ostream &os, pri::ref const &obj)
 {

@@ -54,6 +54,12 @@ namespace pri
     tag (int tag);
   };
 
+  struct locexpr_opcode
+    : public pribase
+  {
+    locexpr_opcode (int opcode);
+  };
+
   class ref
   {
     Dwarf_Off off;

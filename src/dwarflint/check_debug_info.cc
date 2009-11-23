@@ -42,6 +42,7 @@
 #include "checks-low.hh"
 #include "pri.hh"
 #include "config.h"
+#include "check_debug_loc_range.hh"
 
 namespace
 {

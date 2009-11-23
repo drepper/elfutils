@@ -39,6 +39,8 @@
 #include "low.h"
 #include "config.h"
 #include "check_debug_loc_range.hh"
+#include "dwarf-opcodes.h"
+#include "pri.hh"
 
 namespace
 {
@@ -122,6 +124,12 @@ namespace
 	      range_fmt (buf2, sizeof buf2, env->address, env->end));
     return true;
   }
+
+  struct coverage_map_hole_info
+  {
+    struct elf_file *elf;
+    struct hole_info info;
+  };
 
   /* begin is inclusive, end is exclusive. */
   bool
@@ -675,6 +683,314 @@ check_debug_loc::check_debug_loc (dwarflint &lint)
 					&_m_cus->cus.front (),
 					NULL))
     throw check_base::failed ();
+}
+
+namespace
+{
+  /* Operands are passed back as attribute forms.  In particular,
+     DW_FORM_dataX for X-byte operands, DW_FORM_[us]data for
+     ULEB128/SLEB128 operands, and DW_FORM_addr for 32b/64b operands.
+     If the opcode takes no operands, 0 is passed.
+
+     Return value is false if we couldn't determine (i.e. invalid
+     opcode).
+  */
+
+  bool
+  get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
+  {
+    switch (opcode)
+      {
+#define DW_OP_2(OPCODE, OP1, OP2)				\
+	case OPCODE: *op1 = OP1; *op2 = OP2; return true;
+#define DW_OP_1(OPCODE, OP1) DW_OP_2(OPCODE, OP1, 0)
+#define DW_OP_0(OPCODE) DW_OP_2(OPCODE, 0, 0)
+
+	DW_OP_OPERANDS
+
+#undef DEF_DW_OP_2
+#undef DEF_DW_OP_1
+#undef DEF_DW_OP_0
+      default:
+	return false;
+      };
+  }
+
+  /* The value passed back in uint64_t VALUEP may actually be
+     type-casted signed quantity.  WHAT and WHERE describe error
+     message and context for LEB128 loading.
+
+     If IS_BLOCKP is non-NULL, block values are accepted, and
+     *IS_BLOCKP is initialized depending on whether FORM is a block
+     form.  For block forms, the value passed back in VALUEP is block
+     length.  */
+  bool
+  read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
+		      uint64_t *valuep, struct where *where, const char *what,
+		      bool *is_blockp)
+  {
+    if (is_blockp != NULL)
+      *is_blockp = false;
+    switch (form)
+      {
+      case DW_FORM_addr:
+	return read_ctx_read_offset (ctx, address_size == 8, valuep);
+      case DW_FORM_udata:
+	return checked_read_uleb128 (ctx, valuep, where, what);
+      case DW_FORM_sdata:
+	return checked_read_sleb128 (ctx, (int64_t *)valuep, where, what);
+      case DW_FORM_data1:
+	{
+	  uint8_t v;
+	  if (!read_ctx_read_ubyte (ctx, &v))
+	    return false;
+	  if (valuep != NULL)
+	    *valuep = v;
+	  return true;
+	}
+      case DW_FORM_data2:
+	{
+	  uint16_t v;
+	  if (!read_ctx_read_2ubyte (ctx, &v))
+	    return false;
+	  if (valuep != NULL)
+	    *valuep = v;
+	  return true;
+	}
+      case DW_FORM_data4:
+	{
+	  uint32_t v;
+	  if (!read_ctx_read_4ubyte (ctx, &v))
+	    return false;
+	  if (valuep != NULL)
+	    *valuep = v;
+	  return true;
+	}
+      case DW_FORM_data8:
+	return read_ctx_read_8ubyte (ctx, valuep);
+      };
+
+    if (is_blockp != NULL)
+      {
+	int dform;
+	switch (form)
+	  {
+#define HANDLE(BFORM, DFORM)			\
+	    case BFORM:				\
+	      dform = DFORM;			\
+	      break
+	    HANDLE (DW_FORM_block, DW_FORM_udata);
+	    HANDLE (DW_FORM_block1, DW_FORM_data1);
+	    HANDLE (DW_FORM_block2, DW_FORM_data2);
+	    HANDLE (DW_FORM_block4, DW_FORM_data4);
+#undef HANDLE
+	  default:
+	    return false;
+	  }
+
+	*is_blockp = true;
+	return read_ctx_read_form (ctx, address_size, dform,
+				   valuep, where, what, NULL)
+	  && read_ctx_skip (ctx, *valuep);
+      }
+
+    return false;
+  }
+
+  static enum section_id
+  reloc_target_loc (uint8_t opcode)
+  {
+    switch (opcode)
+      {
+      case DW_OP_call2:
+      case DW_OP_call4:
+	return sec_info;
+
+      case DW_OP_addr:
+	return rel_address;
+
+      case DW_OP_call_ref:
+	assert (!"Can't handle call_ref!");
+      };
+
+    std::cout << "XXX don't know how to handle opcode="
+	      << pri::locexpr_opcode (opcode) << std::endl;
+
+    return rel_value;
+  }
+
+  bool
+  op_read_form (struct elf_file *file,
+		struct read_ctx *ctx,
+		struct cu *cu,
+		uint64_t init_off,
+		struct relocation_data *reloc,
+		int opcode,
+		int form,
+		uint64_t *valuep,
+		char const *str,
+		struct where *where)
+  {
+    if (form == 0)
+      return true;
+
+    bool isblock;
+    uint64_t off = read_ctx_get_offset (ctx) + init_off;
+
+    if (!read_ctx_read_form (ctx, cu->head->address_size, form,
+			     valuep, where, str, &isblock))
+      {
+	wr_error (*where)
+	  << "opcode \"" << pri::locexpr_opcode (opcode)
+	  << "\": can't read " << str << " (form \""
+	  << pri::form (form) << "\")." << std::endl;
+	return false;
+      }
+
+    /* For non-block forms, allow relocation of the datum.  For block
+       form, allow relocation of block contents, but not the
+       block length).  */
+
+    struct relocation *rel;
+    if ((rel = relocation_next (reloc, off,
+				where, skip_mismatched)))
+      {
+	if (!isblock)
+	  relocate_one (file, reloc, rel,
+			cu->head->address_size, valuep, where,
+			reloc_target_loc (opcode), NULL);
+	else
+	  wr_error (where, ": relocation relocates a length field.\n");
+      }
+    if (isblock)
+      {
+	uint64_t off_block_end = read_ctx_get_offset (ctx) + init_off - 1;
+	relocation_next (reloc, off_block_end, where, skip_ok);
+      }
+
+    return true;
+  }
+}
+
+bool
+check_location_expression (struct elf_file *file,
+			   struct read_ctx *parent_ctx,
+			   struct cu *cu,
+			   uint64_t init_off,
+			   struct relocation_data *reloc,
+			   size_t length,
+			   struct where *wh)
+{
+  struct read_ctx ctx;
+  if (!read_ctx_init_sub (&ctx, parent_ctx, parent_ctx->ptr,
+			  parent_ctx->ptr + length))
+    {
+      wr_error (wh, PRI_NOT_ENOUGH, "location expression");
+      return false;
+    }
+
+  struct ref_record oprefs;
+  WIPE (oprefs);
+
+  struct addr_record opaddrs;
+  WIPE (opaddrs);
+
+  while (!read_ctx_eof (&ctx))
+    {
+      struct where where = WHERE (sec_locexpr, wh);
+      uint64_t opcode_off = read_ctx_get_offset (&ctx) + init_off;
+      where_reset_1 (&where, opcode_off);
+      addr_record_add (&opaddrs, opcode_off);
+
+      uint8_t opcode;
+      if (!read_ctx_read_ubyte (&ctx, &opcode))
+	{
+	  wr_error (&where, ": can't read opcode.\n");
+	  break;
+	}
+
+      uint8_t op1, op2;
+      if (!get_location_opcode_operands (opcode, &op1, &op2))
+	{
+	  wr_error (where)
+	    << "can't decode opcode \""
+	    << pri::locexpr_opcode (opcode) << "\"." << std::endl;
+	  break;
+	}
+
+      uint64_t value1, value2;
+      if (!op_read_form (file, &ctx, cu, init_off, reloc,
+			 opcode, op1, &value1, "1st operand", &where)
+	  || !op_read_form (file, &ctx, cu, init_off, reloc,
+			    opcode, op2, &value2, "2st operand", &where))
+	goto out;
+
+      switch (opcode)
+	{
+	case DW_OP_bra:
+	case DW_OP_skip:
+	  {
+	    int16_t skip = (uint16_t)value1;
+
+	    if (skip == 0)
+	      wr_message (where, cat (mc_loc, mc_acc_bloat, mc_impact_3))
+		<< pri::locexpr_opcode (opcode)
+		<< " with skip 0." << std::endl;
+	    else if (skip > 0 && !read_ctx_need_data (&ctx, (size_t)skip))
+	      wr_error (where)
+		<< pri::locexpr_opcode (opcode)
+		<< " branches out of location expression." << std::endl;
+	    /* Compare with the offset after the two-byte skip value.  */
+	    else if (skip < 0 && ((uint64_t)-skip) > read_ctx_get_offset (&ctx))
+	      wr_error (where)
+		<< pri::locexpr_opcode (opcode)
+		<< " branches before the beginning of location expression."
+		<< std::endl;
+	    else
+	      {
+		uint64_t off_after = read_ctx_get_offset (&ctx) + init_off;
+		ref_record_add (&oprefs, off_after + skip, &where);
+	      }
+
+	    break;
+	  }
+
+	case DW_OP_const8u:
+	case DW_OP_const8s:
+	  if (cu->head->address_size == 4)
+	    wr_error (where)
+	      << pri::locexpr_opcode (opcode) << " on 32-bit machine."
+	      << std::endl;
+	  break;
+
+	default:
+	  if (cu->head->address_size == 4
+	      && (opcode == DW_OP_constu
+		  || opcode == DW_OP_consts
+		  || opcode == DW_OP_deref_size
+		  || opcode == DW_OP_plus_uconst)
+	      && (value1 > (uint64_t)(uint32_t)-1))
+	    wr_message (where, cat (mc_loc, mc_acc_bloat, mc_impact_3))
+	      << pri::locexpr_opcode (opcode)
+	      << " with operand " << pri::hex (value1)
+	      << " on a 32-bit machine." << std::endl;
+	};
+    }
+
+ out:
+  for (size_t i = 0; i < oprefs.size; ++i)
+    {
+      struct ref *ref = oprefs.refs + i;
+      if (!addr_record_has_addr (&opaddrs, ref->addr))
+	wr_error (&ref->who,
+		  ": unresolved reference to opcode at %#" PRIx64 ".\n",
+		  ref->addr);
+    }
+
+  addr_record_free (&opaddrs);
+  ref_record_free (&oprefs);
+
+  return true;
 }
 
 bool

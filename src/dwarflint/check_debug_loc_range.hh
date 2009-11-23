@@ -46,4 +46,22 @@ public:
   explicit check_debug_loc (dwarflint &lint);
 };
 
+struct hole_info
+{
+  enum section_id section;
+  enum message_category category;
+  void *data;
+  unsigned align;
+};
+
+/* DATA has to be a pointer to an instance of struct hole_info.
+   DATA->data has to point at d_buf of section in question.  */
 extern bool found_hole (uint64_t start, uint64_t length, void *data);
+
+extern bool check_location_expression (struct elf_file *file,
+				       struct read_ctx *parent_ctx,
+				       struct cu *cu,
+				       uint64_t init_off,
+				       struct relocation_data *reloc,
+				       size_t length,
+				       struct where *wh);

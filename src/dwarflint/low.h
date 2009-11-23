@@ -156,13 +156,6 @@ extern "C"
   extern bool check_line_structural (struct elf_file *file,
 				     struct sec *sec,
 				     struct addr_record *line_tables);
-  extern bool check_location_expression (struct elf_file *file,
-					 struct read_ctx *parent_ctx,
-					 struct cu *cu,
-					 uint64_t init_off,
-					 struct relocation_data *reloc,
-					 size_t length,
-					 struct where *wh);
   extern void check_range_relocations (enum message_category cat,
 				       struct where *where,
 				       struct elf_file *file,
@@ -175,28 +168,6 @@ extern "C"
   extern int check_sibling_form (dwarf_version_h ver, uint64_t form);
   extern bool is_location_attrib (uint64_t name);
 
-  struct hole_info
-  {
-    enum section_id section;
-    enum message_category category;
-    void *data;
-    unsigned align;
-  };
-
-  /* DATA has to be a pointer to an instance of struct hole_info.
-     DATA->data has to point at d_buf of section in question.  */
-  bool found_hole (uint64_t begin, uint64_t end, void *data);
-
-  struct coverage_map_hole_info
-  {
-    struct elf_file *elf;
-    struct hole_info info;
-  };
-
-  /* DATA has to be a pointer to an instance of struct hole_info.
-     DATA->info.data has to be NULL, it is used by the callback.  */
-  bool coverage_map_found_hole (uint64_t begin, uint64_t end,
-				struct section_coverage *sco, void *data);
   bool checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
 			     struct where *where, const char *what);
   bool checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
