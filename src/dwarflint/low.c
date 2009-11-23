@@ -1974,7 +1974,10 @@ check_location_expression (struct elf_file *file,
 			": %s branches before the beginning of location expression.\n",
 			dwarf_locexpr_opcode_string (opcode));
 	    else
-	      ref_record_add (&oprefs, opcode_off + skip, &where);
+	      {
+		uint64_t off_after = read_ctx_get_offset (&ctx) + init_off;
+		ref_record_add (&oprefs, off_after + skip, &where);
+	      }
 
 	    break;
 	  }
