@@ -146,16 +146,6 @@ extern "C"
 
   // xxx low-level check entry points, will go away
   struct cu;
-  extern int read_die_chain (dwarf_version_h ver,
-			     struct elf_file *file,
-			     struct read_ctx *ctx,
-			     struct cu *cu,
-			     struct abbrev_table *abbrevs,
-			     Elf_Data *strings,
-			     struct ref_record *local_die_refs,
-			     struct coverage *strings_coverage,
-			     struct relocation_data *reloc,
-			     struct cu_coverage *cu_coverage);
   extern bool check_loc_or_range_structural (struct elf_file *file,
 					     struct sec *sec,
 					     struct cu *cu_chain,
@@ -170,6 +160,20 @@ extern "C"
   extern bool check_line_structural (struct elf_file *file,
 				     struct sec *sec,
 				     struct addr_record *line_tables);
+  extern bool check_location_expression (struct elf_file *file,
+					 struct read_ctx *parent_ctx,
+					 struct cu *cu,
+					 uint64_t init_off,
+					 struct relocation_data *reloc,
+					 size_t length,
+					 struct where *wh);
+  extern void check_range_relocations (enum message_category cat,
+				       struct where *where,
+				       struct elf_file *file,
+				       GElf_Sym *begin_symbol,
+				       GElf_Sym *end_symbol,
+				       const char *description);
+
   extern void cu_free (struct cu *cu_chain);
 
   extern int check_sibling_form (dwarf_version_h ver, uint64_t form);
@@ -198,6 +202,8 @@ extern "C"
   bool coverage_map_found_hole (uint64_t begin, uint64_t end,
 				struct section_coverage *sco, void *data);
   bool checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
+			     struct where *where, const char *what);
+  bool checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
 			     struct where *where, const char *what);
 
   struct abbrev_attrib
