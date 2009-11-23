@@ -713,6 +713,101 @@ check_range_relocations (enum message_category cat,
 		file->sec[end_symbol->st_shndx].name);
 }
 
+struct value_check_cb_ctx
+{
+  struct read_ctx *const ctx;
+  struct where *const where;
+  struct cu *const cu;
+  struct ref_record *local_die_refs;
+  Elf_Data *strings;
+  struct coverage *strings_coverage;
+  struct cu_coverage *cu_coverage;
+};
+
+typedef void (*value_check_cb_t) (uint64_t addr,
+				  struct value_check_cb_ctx const *ctx);
+
+/* Callback for local DIE references.  */
+static void
+check_die_ref_local (uint64_t addr, struct value_check_cb_ctx const *ctx)
+{
+  assert (ctx->ctx->end > ctx->ctx->begin);
+  if (addr > (uint64_t)(ctx->ctx->end - ctx->ctx->begin))
+    {
+      wr_error (ctx->where,
+		": invalid reference outside the CU: 0x%" PRIx64 ".\n",
+		addr);
+      return;
+    }
+
+  if (ctx->local_die_refs != NULL)
+    /* Address holds a CU-local reference, so add CU offset
+       to turn it into section offset.  */
+    ref_record_add (ctx->local_die_refs,
+		    addr + ctx->cu->head->offset, ctx->where);
+}
+
+/* Callback for global DIE references.  */
+static void
+check_die_ref_global (uint64_t addr, struct value_check_cb_ctx const *ctx)
+{
+  ref_record_add (&ctx->cu->die_refs, addr, ctx->where);
+}
+
+/* Callback for strp values.  */
+static void
+check_strp (uint64_t addr, struct value_check_cb_ctx const *ctx)
+{
+  if (ctx->strings == NULL)
+    wr_error (ctx->where, ": strp attribute, but no .debug_str data.\n");
+  else if (addr >= ctx->strings->d_size)
+    wr_error (ctx->where,
+	      ": Invalid offset outside .debug_str: 0x%" PRIx64 ".\n",
+	      addr);
+  else
+    {
+      /* Record used part of .debug_str.  */
+      const char *startp = (const char *)ctx->strings->d_buf + addr;
+      const char *data_end = ctx->strings->d_buf + ctx->strings->d_size;
+      const char *strp = startp;
+      while (strp < data_end && *strp != 0)
+	++strp;
+      if (strp == data_end)
+	wr_error (ctx->where,
+		  ": String at .debug_str: 0x%" PRIx64
+		  " is not zero-terminated.\n", addr);
+
+      if (ctx->strings_coverage != NULL)
+	coverage_add (ctx->strings_coverage, addr, strp - startp + 1);
+    }
+}
+
+/* Callback for rangeptr values.  */
+static void
+check_rangeptr (uint64_t value, struct value_check_cb_ctx const *ctx)
+{
+  if ((value % ctx->cu->head->address_size) != 0)
+    wr_message (mc_ranges | mc_impact_2, ctx->where,
+		": rangeptr value %#" PRIx64
+		" not aligned to CU address size.\n", value);
+  ctx->cu_coverage->need_ranges = true;
+  ref_record_add (&ctx->cu->range_refs, value, ctx->where);
+}
+
+/* Callback for lineptr values.  */
+static void
+check_lineptr (uint64_t value, struct value_check_cb_ctx const *ctx)
+{
+  ref_record_add (&ctx->cu->line_refs, value, ctx->where);
+}
+
+/* Callback for locptr values.  */
+static void
+check_locptr (uint64_t value, struct value_check_cb_ctx const *ctx)
+{
+  ref_record_add (&ctx->cu->loc_refs, value, ctx->where);
+}
+
 /*
   Returns:
     -1 in case of error
@@ -738,6 +833,13 @@ read_die_chain (dwarf_version_h ver,
   struct abbrev *abbrev = NULL;
   struct abbrev *prev_abbrev = NULL;
   struct where where = WHERE (sec_info, NULL);
+
+  struct value_check_cb_ctx cb_ctx = {
+    ctx, &where, cu,
+    local_die_refs,
+    strings, strings_coverage,
+    cu_coverage
+  };
 
   while (!read_ctx_eof (ctx))
     {
@@ -861,85 +963,11 @@ read_die_chain (dwarf_version_h ver,
 		  };
 	    }
 
-	  void (*value_check_cb) (uint64_t, struct where *) = NULL;
+	  value_check_cb_t value_check_cb = NULL;
 
 	  /* For checking lineptr, rangeptr, locptr.  */
 	  bool check_someptr = false;
 	  enum message_category extra_mc = mc_none;
-
-	  /* Callback for local DIE references.  */
-	  void check_die_ref_local (uint64_t addr, struct where *who)
-	  {
-	    assert (ctx->end > ctx->begin);
-	    if (addr > (uint64_t)(ctx->end - ctx->begin))
-	      {
-		wr_error (&where,
-			  ": invalid reference outside the CU: 0x%" PRIx64 ".\n",
-			  addr);
-		return;
-	      }
-
-	    if (local_die_refs != NULL)
-	      /* Address holds a CU-local reference, so add CU offset
-		 to turn it into section offset.  */
-	      ref_record_add (local_die_refs, addr += cu->head->offset, who);
-	  }
-
-	  /* Callback for global DIE references.  */
-	  void check_die_ref_global (uint64_t addr, struct where *who)
-	  {
-	    ref_record_add (&cu->die_refs, addr, who);
-	  }
-
-	  /* Callback for strp values.  */
-	  void check_strp (uint64_t addr, struct where *who)
-	  {
-	    if (strings == NULL)
-	      wr_error (who, ": strp attribute, but no .debug_str data.\n");
-	    else if (addr >= strings->d_size)
-	      wr_error (who,
-			": Invalid offset outside .debug_str: 0x%" PRIx64 ".\n",
-			addr);
-	    else
-	      {
-		/* Record used part of .debug_str.  */
-		const char *startp = (const char *)strings->d_buf + addr;
-		const char *data_end = strings->d_buf + strings->d_size;
-		const char *strp = startp;
-		while (strp < data_end && *strp != 0)
-		  ++strp;
-		if (strp == data_end)
-		  wr_error (who,
-			    ": String at .debug_str: 0x%" PRIx64
-			    " is not zero-terminated.\n", addr);
-
-		if (strings_coverage != NULL)
-		  coverage_add (strings_coverage, addr, strp - startp + 1);
-	      }
-	  }
-
-	  /* Callback for rangeptr values.  */
-	  void check_rangeptr (uint64_t value, struct where *who)
-	  {
-	    if ((value % cu->head->address_size) != 0)
-	      wr_message (mc_ranges | mc_impact_2, who,
-			  ": rangeptr value %#" PRIx64
-			  " not aligned to CU address size.\n", value);
-	    cu_coverage->need_ranges = true;
-	    ref_record_add (&cu->range_refs, value, who);
-	  }
-
-	  /* Callback for lineptr values.  */
-	  void check_lineptr (uint64_t value, struct where *who)
-	  {
-	    ref_record_add (&cu->line_refs, value, who);
-	  }
-
-	  /* Callback for locptr values.  */
-	  void check_locptr (uint64_t value, struct where *who)
-	  {
-	    ref_record_add (&cu->loc_refs, value, who);
-	  }
 
 	  uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->head->offset;
 	  bool type_is_rel = file->ehdr.e_type == ET_REL;
@@ -1252,7 +1280,7 @@ read_die_chain (dwarf_version_h ver,
 	      valuep = &sibling_addr;
 	    }
 	  else if (value_check_cb != NULL)
-	    value_check_cb (value, &where);
+	    value_check_cb (value, &cb_ctx);
 
 	  /* Store the relocated value.  Note valuep may point to
 	     low_pc or high_pc.  */
