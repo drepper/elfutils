@@ -3,6 +3,7 @@
 #endif
 
 #include "checks-high.hh"
+#include "check_debug_loc_range.hh"
 
 using elfutils::dwarf;
 

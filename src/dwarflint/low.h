@@ -146,10 +146,6 @@ extern "C"
 
   // xxx low-level check entry points, will go away
   struct cu;
-  extern bool check_loc_or_range_structural (struct elf_file *file,
-					     struct sec *sec,
-					     struct cu *cu_chain,
-					     struct cu_coverage *cu_coverage);
   extern bool check_aranges_structural (struct elf_file *file,
 					struct sec *sec,
 					struct cu *cu_chain,

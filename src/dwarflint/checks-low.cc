@@ -27,10 +27,10 @@
 # include <config.h>
 #endif
 
-#include "checks-low.hh"
 #include "low.h"
 #include "config.h"
 #include "pri.hh"
+#include "check_debug_loc_range.hh"
 #include <map>
 #include <sstream>
 #include <cstring>
@@ -319,17 +319,6 @@ section_base::section_base (dwarflint &lint, section_id secid)
 {
 }
 
-check_debug_ranges::check_debug_ranges (dwarflint &lint)
-  : _m_sec_ranges (lint.check (_m_sec_ranges))
-  , _m_cus (lint.check (_m_cus))
-{
-  if (!check_loc_or_range_structural (&_m_sec_ranges->file,
-				      &_m_sec_ranges->sect,
-				      &_m_cus->cus.front (),
-				      &_m_cus->cu_cov))
-    throw check_base::failed ();
-}
-
 check_debug_aranges::check_debug_aranges (dwarflint &lint)
   : _m_sec_aranges (lint.check (_m_sec_aranges))
 {
@@ -351,17 +340,6 @@ check_debug_aranges::check_debug_aranges (dwarflint &lint)
 				 &_m_sec_aranges->sect,
 				 info != NULL ? &info->cus.front () : NULL,
 				 cov))
-    throw check_base::failed ();
-}
-
-check_debug_loc::check_debug_loc (dwarflint &lint)
-  : _m_sec_loc (lint.check (_m_sec_loc))
-  , _m_cus (lint.check (_m_cus))
-{
-  if (!check_loc_or_range_structural (&_m_sec_loc->file,
-				      &_m_sec_loc->sect,
-				      &_m_cus->cus.front (),
-				      NULL))
     throw check_base::failed ();
 }
 

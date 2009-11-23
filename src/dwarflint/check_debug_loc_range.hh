@@ -1,5 +1,6 @@
-/*
-   Copyright (C) 2008,2009 Red Hat, Inc.
+/* Routines related to .debug_loc and .debug_range.
+
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,26 +24,26 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef __cplusplus
-extern "C"
+#include "checks-low.hh"
+
+class check_debug_ranges
+  : public check<check_debug_ranges>
 {
-#else
-#include <stdbool.h>
-#endif
+  section<sec_ranges> *_m_sec_ranges;
+  check_debug_info *_m_cus;
 
-  /* Whole-program options.  */
-  extern bool tolerate_nodebug;
-  extern bool be_quiet; /* -q */
-  extern bool be_verbose; /* -v */
-  extern bool be_strict; /* --strict */
-  extern bool be_gnu; /* --gnu */
-  extern bool be_tolerant; /* --tolerant */
-  extern bool show_refs; /* --ref */
-  extern bool do_high_level; /* ! --nohl */
-  extern bool dump_die_offsets; /* --dump-offsets */
+public:
+  explicit check_debug_ranges (dwarflint &lint);
+};
 
-  extern bool do_range_coverage;
+class check_debug_loc
+  : public check<check_debug_loc>
+{
+  section<sec_loc> *_m_sec_loc;
+  check_debug_info *_m_cus;
 
-#ifdef __cplusplus
-}
-#endif
+public:
+  explicit check_debug_loc (dwarflint &lint);
+};
+
+extern bool found_hole (uint64_t start, uint64_t length, void *data);
