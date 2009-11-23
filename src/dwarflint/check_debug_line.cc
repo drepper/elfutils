@@ -32,31 +32,7 @@ namespace
     files_t _m_files;
 
   public:
-    explicit check_debug_line (dwarflint &lint)
-      : _m_sec (lint.check (_m_sec))
-    {
-      addr_record line_tables;
-      WIPE (line_tables);
-      if (!check_line_structural (&_m_sec->file,
-				  &_m_sec->sect,
-				  &line_tables))
-	throw check_base::failed ();
-
-      check_debug_info *info = NULL;
-      info = lint.toplev_check (info);
-      if (info != NULL)
-	for (std::vector<cu>::iterator it = info->cus.begin ();
-	     it != info->cus.end (); ++it)
-	  for (size_t i = 0; i < it->line_refs.size; ++i)
-	    {
-	      struct ref *ref = it->line_refs.refs + i;
-	      if (!addr_record_has_addr (&line_tables, ref->addr))
-		wr_error (ref->who)
-		  << "unresolved reference to .debug_line table "
-		  << pri::hex (ref->addr) << '.' << std::endl;
-	    }
-      addr_record_free (&line_tables);
-    }
+    explicit check_debug_line (dwarflint &lint);
 
     /* Directory index.  */
     bool read_directory_index (read_ctx *ctx,
@@ -104,31 +80,30 @@ namespace
 	_m_files[file_idx - 1].used = true;
       return true;
     }
-
-    bool
-    check_line_structural (struct elf_file *file,
-			   struct sec *sec,
-			   struct addr_record *line_tables);
   };
 
   reg<check_debug_line> reg_debug_line;
 }
 
-bool
-check_debug_line::check_line_structural (struct elf_file *file,
-					 struct sec *sec,
-					 struct addr_record *line_tables)
+check_debug_line::check_debug_line (dwarflint &lint)
+  : _m_sec (lint.check (_m_sec))
 {
+  addr_record line_tables;
+  WIPE (line_tables);
+
+  bool addr_64 = _m_sec->file.addr_64;
   struct read_ctx ctx;
-  read_ctx_init (&ctx, sec->data, file->other_byte_order);
-  bool retval = true;
+  read_ctx_init (&ctx, _m_sec->sect.data, _m_sec->file.other_byte_order);
+
+  // For violations that the high-level might not handle.
+  bool success = true;
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (sec->id, NULL);
+      struct where where = WHERE (_m_sec->sect.id, NULL);
       uint64_t set_offset = read_ctx_get_offset (&ctx);
       where_reset_1 (&where, set_offset);
-      addr_record_add (line_tables, set_offset);
+      addr_record_add (&line_tables, set_offset);
       const unsigned char *set_begin = ctx.ptr;
 
       /* Size.  */
@@ -138,10 +113,10 @@ check_debug_line::check_line_structural (struct elf_file *file,
       if (!read_ctx_read_4ubyte (&ctx, &size32))
 	{
 	  wr_error (where) << "can't read table length." << std::endl;
-	  return false;
+	  throw check_base::failed ();
 	}
       if (!read_size_extra (&ctx, size32, &size, &offset_size, &where))
-	return false;
+	throw check_base::failed ();
 
       struct read_ctx sub_ctx;
       const unsigned char *set_end = ctx.ptr + size;
@@ -150,7 +125,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	not_enough:
 	  wr_error (where)
 	    << pri::not_enough ("next unit") << '.' << std::endl;
-	  return false;
+	  throw check_base::failed ();
 	}
       sub_ctx.ptr = ctx.ptr;
       sub_ctx.begin = ctx.begin;
@@ -162,7 +137,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	{
 	  wr_error (where) << "can't read set version." << std::endl;
 	skip:
-	  retval = false;
+	  success = false;
 	  goto next;
 	}
       if (!supported_version (version, 2, &where, 2, 3))
@@ -276,7 +251,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	    break;
 
 	  uint64_t dir_idx;
-	  if (!read_directory_index (&sub_ctx, name, &dir_idx, &where, retval))
+	  if (!read_directory_index (&sub_ctx, name, &dir_idx, &where, success))
 	    goto skip;
 
 	  /* Time of last modification.  */
@@ -305,7 +280,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 
 	  /* Assume that the header lies, and what follows is in
 	     fact line number program.  */
-	  retval = false;
+	  success = false;
 	}
       else if (sub_ctx.ptr < program_start)
 	{
@@ -360,8 +335,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		    {
 		      uint64_t ctx_offset = read_ctx_get_offset (&sub_ctx);
 		      uint64_t addr;
- 		      if (!read_ctx_read_offset (&sub_ctx,
-						 file->addr_64, &addr))
+ 		      if (!read_ctx_read_offset (&sub_ctx, addr_64, &addr))
 			{
 			  wr_error (where)
 			    << "can't read operand of DW_LNE_set_address."
@@ -370,12 +344,12 @@ check_debug_line::check_line_structural (struct elf_file *file,
 			}
 
 		      struct relocation *rel;
-		      if ((rel = relocation_next (&sec->rel, ctx_offset,
+		      if ((rel = relocation_next (&_m_sec->sect.rel, ctx_offset,
 						  &where, skip_mismatched)))
-			relocate_one (file, &sec->rel, rel,
-				      file->addr_64 ? 8 : 4,
+			relocate_one (&_m_sec->file, &_m_sec->sect.rel, rel,
+				      addr_64 ? 8 : 4,
 				      &addr, &where, rel_address, NULL);
-		      else if (file->ehdr.e_type == ET_REL)
+		      else if (_m_sec->file.ehdr.e_type == ET_REL)
 			wr_message (where, cat (mc_impact_2, mc_line, mc_reloc))
 			  << pri::lacks_relocation ("DW_LNE_set_address")
 			  << '.' << std::endl;
@@ -394,7 +368,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 			}
 		      uint64_t dir_idx;
 		      if (!read_directory_index (&sub_ctx, name, &dir_idx,
-						 &where, retval))
+						 &where, success))
 			goto skip;
 		      _m_files.push_back
 			((struct file_t){name, dir_idx, false});
@@ -423,7 +397,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 		      << "opcode claims that it has a size of " << skip_len
 		      << ", but in fact it has a size of "
 		      << (skip_len + (next - sub_ctx.ptr)) << '.' << std::endl;
-		    retval = false;
+		    success = false;
 		  }
 		else if (sub_ctx.ptr < next)
 		  {
@@ -462,7 +436,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 					   "DW_LNS_set_file operand"))
 		  goto skip;
 		if (!use_file (file_idx, &where))
-		  retval = false;
+		  success = false;
 		first_file = false;
 	      }
 	      break;
@@ -508,7 +482,7 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	  if (first_file)
 	    {
 	      if (!use_file (1, &where))
-		retval = false;
+		success = false;
 	      first_file = false;
 	    }
 
@@ -558,8 +532,23 @@ check_debug_line::check_line_structural (struct elf_file *file,
 	goto not_enough;
     }
 
-  if (retval)
-    relocation_skip_rest (&sec->rel, sec->id);
+  if (success)
+    relocation_skip_rest (&_m_sec->sect.rel, _m_sec->sect.id);
+  else
+    throw check_base::failed ();
 
-  return retval;
+  check_debug_info *info = NULL;
+  info = lint.toplev_check (info);
+  if (info != NULL)
+    for (std::vector<cu>::iterator it = info->cus.begin ();
+	 it != info->cus.end (); ++it)
+      for (size_t i = 0; i < it->line_refs.size; ++i)
+	{
+	  struct ref *ref = it->line_refs.refs + i;
+	  if (!addr_record_has_addr (&line_tables, ref->addr))
+	    wr_error (ref->who)
+	      << "unresolved reference to .debug_line table "
+	      << pri::hex (ref->addr) << '.' << std::endl;
+	}
+  addr_record_free (&line_tables);
 }
