@@ -310,7 +310,7 @@ AC_SUBST([eu_version])
 
 # 1.234<whatever> -> 1234<whatever>
 case "$PACKAGE_VERSION" in
-[[0-9]].*) eu_version=`echo "$PACKAGE_VERSION" | sed 's@\.@@'`
+[[0-9]].*) eu_version=`echo "$PACKAGE_VERSION" | sed 's@\.@@'` ;;
 *)     	   AC_MSG_ERROR([confused by version number '$PACKAGE_VERSION']) ;;
 esac
 case "$eu_version" in
