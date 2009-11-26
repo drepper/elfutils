@@ -88,9 +88,9 @@ namespace
 
 	  if (ref_cu == NULL)
 	    {
-	      wr_error (&ref->who,
-			": unresolved (non-CU-local) reference to " PRI_DIE ".\n",
-			ref->addr);
+	      wr_error (ref->who)
+		<< "unresolved (non-CU-local) reference to "
+		<< pri::hex (ref->addr) << '.' << std::endl;
 	      retval = false;
 	    }
 	  else if (ref_cu == it)
@@ -165,7 +165,7 @@ namespace
 	   to the end of the CU.  */
 	const unsigned char *cu_end = ctx.ptr + cu_size;
 
-    	/* Version.  */
+	/* Version.  */
 	uint16_t version;
 	if (!read_ctx_read_2ubyte (&ctx, &version))
 	  {
@@ -180,8 +180,8 @@ namespace
 	  }
 	if (version == 2 && head.offset_size == 8) // xxx?
 	  /* Keep going.  It's a standard violation, but we may still
-    	     be able to read the unit under consideration and do
-    	     high-level checks.  */
+	     be able to read the unit under consideration and do
+	     high-level checks.  */
 	  wr_error (head.where) << "invalid 64-bit unit in DWARF 2 format.\n";
 	head.version = version;
 
@@ -190,7 +190,8 @@ namespace
 	if (!read_ctx_read_offset (&ctx, head.offset_size == 8,
 				   &head.abbrev_offset))
 	  {
-	    wr_error (head.where) << "can't read abbrev table offset." << std::endl;
+	    wr_error (head.where)
+	      << "can't read abbrev table offset." << std::endl;
 	    throw check_base::failed ();
 	  }
 
@@ -201,7 +202,7 @@ namespace
 	    relocate_one (file, reloc, rel, head.offset_size,
 			  &head.abbrev_offset, &head.where, sec_abbrev, NULL);
 	    rel->invalid = true; // mark as invalid so it's skipped
-    				 // next time we pass by this
+				 // next time we pass by this
 	  }
 	else if (file->ehdr.e_type == ET_REL)
 	  wr_message (head.where, cat (mc_impact_2, mc_info, mc_reloc))
@@ -488,8 +489,10 @@ namespace
 	       reason we can't simply check this when loading
 	       abbrevs.  */
 	    DEF_PREV_WHERE;
-	    wr_message (mc_die_rel | mc_acc_suboptimal | mc_impact_4, &prev_where,
-			": This DIE had children, but no DW_AT_sibling attribute.\n");
+	    wr_message (prev_where, cat (mc_die_rel, mc_acc_suboptimal,
+					 mc_impact_4))
+	      << "This DIE had children, but no DW_AT_sibling attribute."
+	      << std::endl;
 	  }
 #undef DEF_PREV_WHERE
 
@@ -500,7 +503,9 @@ namespace
 	  break;
 	if (read_ctx_eof (ctx))
 	  {
-	    wr_error (&where, ": DIE chain not terminated with DIE with zero abbrev code.\n");
+	    wr_error (where)
+	      << "DIE chain not terminated with DIE with zero abbrev code."
+	      << std::endl;
 	    break;
 	  }
 
@@ -547,8 +552,9 @@ namespace
 
 		if (!dwver_form_valid (ver, form))
 		  {
-		    wr_error (&where,
-			      ": invalid indirect form 0x%" PRIx64 ".\n", value);
+		    wr_error (where)
+		      << "invalid indirect form " << pri::hex (value)
+		      << '.' << std::endl;
 		    return -1;
 		  }
 		form = value;
@@ -557,14 +563,16 @@ namespace
 		  switch (check_sibling_form (ver, form))
 		    {
 		    case -1:
-		      wr_message (mc_die_rel | mc_impact_2, &where,
-				  ": DW_AT_sibling attribute with (indirect) form DW_FORM_ref_addr.\n");
+		      wr_message (where, cat (mc_die_rel, mc_impact_2))
+			<< "DW_AT_sibling attribute with (indirect) form "
+			"DW_FORM_ref_addr." << std::endl;
 		      break;
 
 		    case -2:
 		      wr_error (where)
-			<< "DW_AT_sibling attribute with non-reference (indirect) form \""
-			<< pri::form (value) << "\"." << std::endl;
+			<< "DW_AT_sibling attribute with non-reference "
+			"(indirect) form \"" << pri::form (value)
+			<< "\"." << std::endl;
 		    };
 	      }
 
@@ -696,7 +704,8 @@ namespace
 	      case DW_FORM_strp:
 		value_check_cb = check_strp;
 	      case DW_FORM_sec_offset:
-		if (!read_ctx_read_offset (ctx, cu->head->offset_size == 8, &value))
+		if (!read_ctx_read_offset (ctx, cu->head->offset_size == 8,
+					   &value))
 		  {
 		  cant_read:
 		    wr_error (where)
@@ -764,7 +773,7 @@ namespace
 		    width = 4;
 		  }
 		if (false)
-		case DW_FORM_ref4:
+	      case DW_FORM_ref4:
 		  value_check_cb = check_die_ref_local;
 		if (!read_ctx_read_var (ctx, 4, &value))
 		  goto cant_read;
@@ -911,8 +920,9 @@ namespace
 	if (high_pc != (uint64_t)-1 && low_pc != (uint64_t)-1)
 	  {
 	    if (high_pc_relocated != low_pc_relocated)
-	      wr_message (mc_die_other | mc_impact_2 | mc_reloc, &where,
-			  ": only one of DW_AT_low_pc and DW_AT_high_pc is relocated.\n");
+	      wr_message (where, cat (mc_die_other, mc_impact_2, mc_reloc))
+		<< "only one of DW_AT_low_pc and DW_AT_high_pc is relocated."
+		<< std::endl;
 	    else
 	      check_range_relocations (mc_die_other, &where,
 				       file,
