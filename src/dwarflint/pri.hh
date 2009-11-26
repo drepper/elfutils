@@ -17,6 +17,9 @@ namespace pri
       : m_s (a + b + c)
     {}
     friend std::ostream &operator << (std::ostream &os, pribase const &obj);
+
+  public:
+    operator std::string const &() const { return m_s; }
   };
   std::ostream &operator << (std::ostream &os, pribase const &obj);
 

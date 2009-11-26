@@ -645,6 +645,7 @@ namespace
 		{
 		case DW_FORM_data8:
 		  if (cu->head->offset_size == 4)
+		    // xxx could now also be checked during abbrev loading
 		    wr_error (where)
 		      << pri::attr (it->name)
 		      << " with form DW_FORM_data8 in 32-bit CU." << std::endl;
@@ -871,13 +872,9 @@ namespace
 		    && (relocate == rel_require
 			|| (relocate == rel_nonzero
 			    && value != 0)))
-		  {
-		    std::stringstream ss;
-		    ss << pri::form (form);
-		    wr_message (where, cat (mc_impact_2, mc_die_other,
-					    mc_reloc, extra_mc))
-		      << pri::lacks_relocation (ss.str ()) << std::endl;
-		  }
+		  wr_message (where, cat (mc_impact_2, mc_die_other,
+					  mc_reloc, extra_mc))
+		    << pri::lacks_relocation (pri::form (form)) << std::endl;
 	      }
 
 	    /* Dispatch value checking.  */
