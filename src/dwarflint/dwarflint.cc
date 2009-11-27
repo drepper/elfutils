@@ -1,7 +1,7 @@
 #include "dwarflint.hh"
 
-dwarflint::dwarflint (Elf *a_elf)
-  : _m_elf (a_elf)
+dwarflint::dwarflint (int a_fd)
+  : _m_fd (a_fd)
 {
   check_registrar::inst ()->enroll (*this);
 }

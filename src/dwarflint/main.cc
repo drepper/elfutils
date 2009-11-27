@@ -156,108 +156,6 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
   return 0;
 }
 
-static int
-layout_rel_file (Elf *elf)
-{
-  GElf_Ehdr ehdr;
-  if (gelf_getehdr (elf, &ehdr) == NULL)
-    return 1;
-
-  if (ehdr.e_type != ET_REL)
-    return 0;
-
-  /* Taken from libdwfl. */
-  GElf_Addr base = 0;
-  GElf_Addr start = 0, end = 0, bias = 0;
-
-  bool first = true;
-  Elf_Scn *scn = NULL;
-  while ((scn = elf_nextscn (elf, scn)) != NULL)
-    {
-      GElf_Shdr shdr_mem;
-      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
-      if (unlikely (shdr == NULL))
-	return 1;
-
-      if (shdr->sh_flags & SHF_ALLOC)
-	{
-	  const GElf_Xword align = shdr->sh_addralign ?: 1;
-	  const GElf_Addr next = (end + align - 1) & -align;
-	  if (shdr->sh_addr == 0
-	      /* Once we've started doing layout we have to do it all,
-		 unless we just layed out the first section at 0 when
-		 it already was at 0.  */
-	      || (bias == 0 && end > start && end != next))
-	    {
-	      shdr->sh_addr = next;
-	      if (end == base)
-		/* This is the first section assigned a location.
-		   Use its aligned address as the module's base.  */
-		start = base = shdr->sh_addr;
-	      else if (unlikely (base & (align - 1)))
-		{
-		  /* If BASE has less than the maximum alignment of
-		     any section, we eat more than the optimal amount
-		     of padding and so make the module's apparent
-		     size come out larger than it would when placed
-		     at zero.  So reset the layout with a better base.  */
-
-		  start = end = base = (base + align - 1) & -align;
-		  Elf_Scn *prev_scn = NULL;
-		  do
-		    {
-		      prev_scn = elf_nextscn (elf, prev_scn);
-		      GElf_Shdr prev_shdr_mem;
-		      GElf_Shdr *prev_shdr = gelf_getshdr (prev_scn,
-							   &prev_shdr_mem);
-		      if (unlikely (prev_shdr == NULL))
-			return 1;
-		      if (prev_shdr->sh_flags & SHF_ALLOC)
-			{
-			  const GElf_Xword prev_align
-			    = prev_shdr->sh_addralign ?: 1;
-
-			  prev_shdr->sh_addr
-			    = (end + prev_align - 1) & -prev_align;
-			  end = prev_shdr->sh_addr + prev_shdr->sh_size;
-
-			  if (unlikely (! gelf_update_shdr (prev_scn,
-							    prev_shdr)))
-			    return 1;
-			}
-		    }
-		  while (prev_scn != scn);
-		  continue;
-		}
-
-	      end = shdr->sh_addr + shdr->sh_size;
-	      if (likely (shdr->sh_addr != 0)
-		  && unlikely (! gelf_update_shdr (scn, shdr)))
-		return 1;
-	    }
-	  else
-	    {
-	      /* The address is already assigned.  Just track it.  */
-	      if (first || end < shdr->sh_addr + shdr->sh_size)
-		end = shdr->sh_addr + shdr->sh_size;
-	      if (first || bias > shdr->sh_addr)
-		/* This is the lowest address in the module.  */
-		bias = shdr->sh_addr;
-
-	      if ((shdr->sh_addr - bias + base) & (align - 1))
-		/* This section winds up misaligned using BASE.
-		   Adjust BASE upwards to make it congruent to
-		   the lowest section address in the file modulo ALIGN.  */
-		base = (((base + align - 1) & -align)
-			+ (bias & (align - 1)));
-	    }
-
-	  first = false;
-	}
-    }
-  return 0;
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -320,33 +218,13 @@ main (int argc, char *argv[])
 	}
 
       /* Create an `Elf' descriptor.  */
-      Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (elf == NULL)
-      invalid_elf:
-	wr_error (NULL,
-		  gettext ("Error processing ELF file: %s\n"),
-		  elf_errmsg (-1));
-      else
-	{
-	  unsigned int prev_error_count = error_count;
-	  if (layout_rel_file (elf))
-	    goto invalid_elf;
+      unsigned int prev_error_count = error_count;
+      if (!only_one)
+	std::cout << std::endl << argv[remaining] << ":" << std::endl;
+      dwarflint lint (fd);
 
-	  if (!only_one)
-	    std::cout << std::endl << argv[remaining] << ":" << std::endl;
-	  dwarflint lint (elf);
-
-	  elf_errno (); /* Clear errno.  */
-	  elf_end (elf);
-	  int err = elf_errno ();
-	  if (err != 0)
-	    wr_error (NULL,
-		      gettext ("error while closing Elf descriptor: %s\n"),
-		      elf_errmsg (err));
-
-	  if (prev_error_count == error_count && !be_quiet)
-	    puts (gettext ("No errors"));
-	}
+      if (prev_error_count == error_count && !be_quiet)
+	puts (gettext ("No errors"));
 
       close (fd);
     }

@@ -1,4 +1,4 @@
-/* Pedantic checking of DWARF files.
+/* Initialization of high-level check context
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -23,56 +23,25 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECKS_HIGH_HH
-#define DWARFLINT_CHECKS_HIGH_HH
-
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#include "checks-low.hh"
-#include "config.h"
-#include "c++/dwarf"
-
-struct dwarf_handle_loader
-{
-  Dwarf *get_dwarf_handle (int fd);
-};
-
-template<class T>
-class highlevel_check
-  : public check<highlevel_check<T> >
-  , private dwarf_handle_loader
-{
-  ::Dwarf *_m_handle;
-
-public:
-  elfutils::dwarf dw;
-
   // xxx this will throw an exception on <c++/dwarf> or <libdw.h>
   // failure.  We need to catch it and convert to check_base::failed.
-  explicit highlevel_check (dwarflint &lint)
-    : _m_handle (get_dwarf_handle (lint.fd ()))
-    , dw (_m_handle)
-  {
-    if (!do_high_level)
-      throw check_base::unscheduled ();
-  }
 
-  ~highlevel_check ()
-  {
-    dwarf_end (_m_handle);
-  }
-};
+#include "checks-high.hh" // xxx rename
+#include "../libdwfl/libdwfl.h"
 
-template <class T>
-inline where
-to_where (T const &die)
+Dwarf *
+dwarf_handle_loader::get_dwarf_handle (int fd)
 {
-  where ret = WHERE (sec_info, NULL);
-  where_reset_1 (&ret, 0);
-  where_reset_2 (&ret, die.offset ());
-  return ret;
+  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP, NULL);
+  /*
+    static const Dwfl_Callbacks callbacks =
+    {
+    .section_address = dwfl_offline_section_address,
+    .find_debuginfo = find_no_debuginfo
+    };
+    Dwfl *dwfl = dwfl_begin (&callbacks);
+    if (unlikely (dwfl == NULL))
+      throw check_base::failed ();
+    */
+  return dwarf_begin_elf (elf, DWARF_C_READ, NULL);
 }
-
-#endif//DWARFLINT_CHECKS_HIGH_HH
