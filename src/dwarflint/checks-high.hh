@@ -33,35 +33,33 @@
 #include "checks-low.hh"
 #include "config.h"
 #include "c++/dwarf"
+#include "../libdwfl/libdwfl.h"
 
-struct dwarf_handle_loader
+class open_highlevel_dwarf
+  : public check<open_highlevel_dwarf>
 {
-  Dwarf *get_dwarf_handle (int fd);
+  Dwfl *const _m_dwfl;
+  Dwarf *const _m_dw;
+public:
+  elfutils::dwarf const dw;
+  explicit open_highlevel_dwarf (dwarflint &lint);
+  ~open_highlevel_dwarf ();
 };
 
 template<class T>
 class highlevel_check
   : public check<highlevel_check<T> >
-  , private dwarf_handle_loader
 {
-  ::Dwarf *_m_handle;
-
+  open_highlevel_dwarf *_m_loader;
 public:
-  elfutils::dwarf dw;
+  elfutils::dwarf const &dw;
 
-  // xxx this will throw an exception on <c++/dwarf> or <libdw.h>
-  // failure.  We need to catch it and convert to check_base::failed.
   explicit highlevel_check (dwarflint &lint)
-    : _m_handle (get_dwarf_handle (lint.fd ()))
-    , dw (_m_handle)
+    : _m_loader (lint.check (_m_loader))
+    , dw (_m_loader->dw)
   {
     if (!do_high_level)
       throw check_base::unscheduled ();
-  }
-
-  ~highlevel_check ()
-  {
-    dwarf_end (_m_handle);
   }
 };
 

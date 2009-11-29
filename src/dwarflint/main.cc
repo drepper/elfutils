@@ -1,4 +1,4 @@
-/* Pedantic checking of DWARF files.  Low-level checks.
+/* Main entry point for dwarflint, a pedantic checker for DWARF files.
    Copyright (C) 2008,2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -30,8 +30,6 @@
 #include <libintl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <fcntl.h>
-#include <error.h>
 
 #include <iostream>
 
@@ -209,24 +207,23 @@ main (int argc, char *argv[])
   bool only_one = remaining + 1 == argc;
   do
     {
-      /* Open the file.  */
-      int fd = open (argv[remaining], O_RDONLY);
-      if (fd == -1)
+      try
 	{
-	  error (0, errno, gettext ("cannot open input file"));
+	  char const *fname = argv[remaining];
+	  /* Create an `Elf' descriptor.  */
+	  unsigned int prev_error_count = error_count;
+	  if (!only_one)
+	    std::cout << std::endl << fname << ":" << std::endl;
+	  dwarflint lint (fname);
+
+	  if (prev_error_count == error_count && !be_quiet)
+	    puts (gettext ("No errors"));
+	}
+      catch (std::runtime_error &e)
+	{
+	  wr_error () << e.what () << std::endl;
 	  continue;
 	}
-
-      /* Create an `Elf' descriptor.  */
-      unsigned int prev_error_count = error_count;
-      if (!only_one)
-	std::cout << std::endl << argv[remaining] << ":" << std::endl;
-      dwarflint lint (fd);
-
-      if (prev_error_count == error_count && !be_quiet)
-	puts (gettext ("No errors"));
-
-      close (fd);
     }
   while (++remaining < argc);
 

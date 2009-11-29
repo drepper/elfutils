@@ -10,6 +10,7 @@ class dwarflint
 {
   typedef std::map <void const *, class check_base *> check_map;
   check_map _m_checks;
+  char const *_m_fname;
   int _m_fd;
 
 public:
@@ -43,8 +44,10 @@ public:
     std::vector <item *> _m_items;
   };
 
-  explicit dwarflint (int fd);
+  explicit dwarflint (char const *fname);
+  ~dwarflint ();
   int fd () { return _m_fd; }
+  char const *fname () { return _m_fname; }
 
   template <class T> T *check ();
 
