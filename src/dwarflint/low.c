@@ -305,6 +305,7 @@ compare_coverage (struct elf_file *file,
 
   coverage_find_ranges (cov, &hole, file);
   coverage_free (cov);
+  free (cov);
 }
 
 /* COVERAGE is portion of address space covered by CUs (either via
