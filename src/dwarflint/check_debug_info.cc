@@ -1015,7 +1015,7 @@ read_cu_headers::read_cu_headers (dwarflint &lint)
 {
 }
 
-struct cu *
+void
 check_debug_info::check_info_structural (struct elf_file *file,
 					 Elf_Data *strings)
 {
@@ -1024,7 +1024,6 @@ check_debug_info::check_info_structural (struct elf_file *file,
   struct ref_record die_refs;
   WIPE (die_refs);
 
-  struct cu *cu_chain = NULL;
   bool success = true;
 
   struct coverage strings_coverage_mem, *strings_coverage = NULL;
@@ -1146,21 +1145,6 @@ check_debug_info::check_info_structural (struct elf_file *file,
 	}
       coverage_free (strings_coverage);
     }
-
-  /* Reverse the chain, so that it's organized "naturally".  Has
-     significant impact on performance when handling loc_ref and
-     range_ref fields in loc/range validation.  */
-  struct cu *last = NULL;
-  for (struct cu *it = cu_chain; it != NULL; )
-    {
-      struct cu *next = it->next;
-      it->next = last;
-      last = it;
-      it = next;
-    }
-  cu_chain = last;
-
-  return cu_chain;
 }
 
 check_debug_info::check_debug_info (dwarflint &lint)
@@ -1171,14 +1155,7 @@ check_debug_info::check_debug_info (dwarflint &lint)
   , _m_cu_headers (lint.check (_m_cu_headers))
 {
   memset (&cu_cov, 0, sizeof (cu_cov));
-
-  cu *chain = check_info_structural (&_m_sec_info->file, _m_sec_str->sect.data);
-
-  if (chain == NULL)
-    throw check_base::failed ();
-
-  for (cu *cu = chain; cu != NULL; cu = cu->next)
-    cus.push_back (*cu);
+  check_info_structural (&_m_sec_info->file, _m_sec_str->sect.data);
 
   // re-link CUs so that they form a chain again.  This is to
   // interface with C-level code.  The last CU's next is NULL, so we
