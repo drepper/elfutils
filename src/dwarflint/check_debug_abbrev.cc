@@ -30,6 +30,7 @@
 #include "checks-low.hh"
 #include "pri.hh"
 #include "tables.hh"
+#include "check_debug_info.hh"
 
 #include <dwarf.h>
 #include <sstream>

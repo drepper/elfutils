@@ -97,7 +97,7 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/all-dies-it.hh \
 		    dwarflint/check_highlevel.cc dwarflint/checks-high.hh \
 		    dwarflint/check_debug_abbrev.cc \
-		    dwarflint/check_debug_info.cc \
+		    dwarflint/check_debug_info.cc dwarflint/check_debug_info.hh dwarflint/check_debug_info.ii \
 		    dwarflint/check_debug_line.cc \
 		    dwarflint/check_debug_loc_range.cc dwarflint/check_debug_loc_range.hh \
 		    dwarflint/check_matching_ranges.cc \

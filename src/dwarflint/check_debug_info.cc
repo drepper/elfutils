@@ -40,10 +40,10 @@
 
 #include "messages.h"
 #include "low.h"
-#include "checks-low.hh"
 #include "pri.hh"
 #include "config.h"
 #include "check_debug_loc_range.hh"
+#include "check_debug_info.hh"
 
 namespace
 {

@@ -1,9 +1,10 @@
 #include "checks-low.hh"
+#include "check_debug_info.hh"
+#include "pri.hh"
 
 #include <dwarf.h>
 #include "../libdw/known-dwarf.h"
 #include "dwarfstrings.h"
-#include "pri.hh"
 
 #include <sstream>
 
@@ -58,7 +59,7 @@ namespace
 	    << " refers to directory #" << *ptr
 	    << ", which wasn't defined." << std::endl;
 
-    	  /* Consumer might choke on that.  */
+	  /* Consumer might choke on that.  */
 	  retval = false;
 	}
       else if (*ptr != 0)

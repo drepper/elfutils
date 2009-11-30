@@ -39,6 +39,7 @@
 #include "low.h"
 #include "config.h"
 #include "check_debug_loc_range.hh"
+#include "check_debug_info.hh"
 #include "dwarf-opcodes.h"
 #include "pri.hh"
 

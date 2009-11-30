@@ -25,6 +25,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "checks-low.hh"
+#include "check_debug_info.ii"
 
 class check_debug_ranges
   : public check<check_debug_ranges>

@@ -31,6 +31,7 @@
 #include "config.h"
 #include "pri.hh"
 #include "check_debug_loc_range.hh"
+#include "check_debug_info.hh"
 #include <map>
 #include <sstream>
 #include <cstring>

@@ -64,18 +64,6 @@ public:
   {}
 };
 
-/** The pass for reading basic .debug_info data -- the layout of
-    sections and their headers.  */
-class read_cu_headers
-  : public check<read_cu_headers>
-{
-  section<sec_info> *_m_sec_info;
-
-public:
-  std::vector<cu_head> const cu_headers;
-  explicit read_cu_headers (dwarflint &lint);
-};
-
 class check_debug_abbrev
   : public check<check_debug_abbrev>
 {
@@ -89,42 +77,6 @@ public:
   explicit check_debug_abbrev (dwarflint &lint);
 };
 static reg<check_debug_abbrev> reg_debug_abbrev;
-
-class check_debug_info
-  : public check<check_debug_info>
-{
-  section<sec_info> *_m_sec_info;
-  section<sec_abbrev> *_m_sec_abbrev;
-  section<sec_str> *_m_sec_str;
-  check_debug_abbrev *_m_abbrevs;
-  read_cu_headers *_m_cu_headers;
-
-  // Abbreviation table with that offset had user(s) that failed
-  // validation.  Check for unused abbrevs should be skipped.
-  std::vector< ::Dwarf_Off> _m_abbr_skip;
-
-  bool check_cu_structural (struct elf_file *file,
-			    struct read_ctx *ctx,
-			    struct cu *const cu,
-			    Elf_Data *strings,
-			    struct coverage *strings_coverage,
-			    struct relocation_data *reloc,
-			    struct cu_coverage *cu_coverage);
-
-  struct cu *check_info_structural (elf_file *file,
-				    Elf_Data *strings);
-
-public:
-  // The check pass adds all low_pc/high_pc ranges loaded from DIE
-  // tree into this following cu_cov structure.  If it finds any
-  // rangeptr-class attributes, it sets cu_cov.need_ranges to true.
-  cu_coverage cu_cov;
-  std::vector<cu> cus;
-
-  explicit check_debug_info (dwarflint &lint);
-  ~check_debug_info ();
-};
-static reg<check_debug_info> reg_debug_info;
 
 class check_debug_aranges
   : public check<check_debug_aranges>

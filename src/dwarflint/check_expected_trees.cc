@@ -2,6 +2,7 @@
 # include <config.h>
 #endif
 
+#include "check_debug_info.hh"
 #include "checks-high.hh"
 #include "expected.hh"
 #include "dwarfstrings.h"
