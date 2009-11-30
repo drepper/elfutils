@@ -99,6 +99,7 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/check_debug_abbrev.cc dwarflint/check_debug_abbrev.hh dwarflint/check_debug_abbrev.ii \
 		    dwarflint/check_debug_info.cc dwarflint/check_debug_info.hh dwarflint/check_debug_info.ii \
 		    dwarflint/check_debug_line.cc \
+		    dwarflint/check_debug_pub.cc \
 		    dwarflint/check_debug_loc_range.cc dwarflint/check_debug_loc_range.hh \
 		    dwarflint/check_matching_ranges.cc \
 		    dwarflint/check_range_out_of_scope.cc \

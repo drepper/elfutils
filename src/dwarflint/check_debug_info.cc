@@ -1180,3 +1180,14 @@ check_debug_info::~check_debug_info ()
     }
   coverage_free (&cu_cov.cov);
 }
+
+cu *
+check_debug_info::find_cu (::Dwarf_Off offset)
+{
+  for (std::vector<cu>::iterator it = cus.begin ();
+       it != cus.end (); ++it)
+    if (it->head->offset == offset)
+      return &*it;
+
+  return NULL;
+}

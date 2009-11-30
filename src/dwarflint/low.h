@@ -146,9 +146,6 @@ extern "C"
 					struct sec *sec,
 					struct cu *cu_chain,
 					struct coverage *coverage);
-  extern bool check_pub_structural (struct elf_file *file,
-				    struct sec *sec,
-				    struct cu *cu_chain);
   extern bool check_line_structural (struct elf_file *file,
 				     struct sec *sec,
 				     struct addr_record *line_tables);

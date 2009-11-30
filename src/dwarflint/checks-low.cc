@@ -487,28 +487,3 @@ check_debug_aranges::check_debug_aranges (dwarflint &lint)
 				 cov))
     throw check_base::failed ();
 }
-
-namespace
-{
-  template<section_id sec_id>
-  class check_debug_pub
-    : public check<check_debug_pub<sec_id> >
-  {
-    section<sec_id> *_m_sec;
-    check_debug_info *_m_cus;
-
-  public:
-    explicit check_debug_pub (dwarflint &lint)
-      : _m_sec (lint.check (_m_sec))
-      , _m_cus (lint.check (_m_cus))
-    {
-      if (!check_pub_structural (&_m_sec->file,
-				 &_m_sec->sect,
-				 &_m_cus->cus.front ()))
-	throw check_base::failed ();
-    }
-  };
-
-  reg<check_debug_pub<sec_pubnames> > reg_debug_pubnames;
-  reg<check_debug_pub<sec_pubtypes> > reg_debug_pubtypes;
-}

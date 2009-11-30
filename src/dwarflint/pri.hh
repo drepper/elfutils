@@ -96,6 +96,10 @@ namespace pri
     DIE (Dwarf_Off off) : hex (off, "DIE ") {}
   };
 
+  struct CU: public hex {
+    CU (Dwarf_Off off) : hex (off, "CU ") {}
+  };
+
   class range
   {
     Dwarf_Off start;

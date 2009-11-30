@@ -72,6 +72,8 @@ public:
 
   explicit check_debug_info (dwarflint &lint);
   ~check_debug_info ();
+
+  cu *find_cu (::Dwarf_Off offset);
 };
 static reg<check_debug_info> reg_debug_info;
 
