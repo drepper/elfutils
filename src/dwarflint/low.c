@@ -342,7 +342,7 @@ check_aranges_structural (struct elf_file *file,
 			range_fmt (buf, sizeof buf, begin, begin + length));
 	  }
 
-    	coverage_add (aranges_coverage, begin, length);
+	coverage_add (aranges_coverage, begin, length);
       }
 
       /* Size.  */
@@ -475,12 +475,12 @@ check_aranges_structural (struct elf_file *file,
       while (!read_ctx_eof (&sub_ctx))
 	{
 	  /* We would like to report aranges the same way that readelf
-    	     does.  But readelf uses index of the arange in the array
-    	     as returned by dwarf_getaranges, which sorts the aranges
-    	     beforehand.  We don't want to disturb the memory this
-    	     way, the better to catch structural errors accurately.
-    	     So report arange offset instead.  If this becomes a
-    	     problem, we will achieve this by two-pass analysis.  */
+	     does.  But readelf uses index of the arange in the array
+	     as returned by dwarf_getaranges, which sorts the aranges
+	     beforehand.  We don't want to disturb the memory this
+	     way, the better to catch structural errors accurately.
+	     So report arange offset instead.  If this becomes a
+	     problem, we will achieve this by two-pass analysis.  */
 	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
 
 	  /* Record address.  */
@@ -494,7 +494,7 @@ check_aranges_structural (struct elf_file *file,
 	      goto next;
 	    }
 
-    	  if ((rel = relocation_next (&sec->rel, ctx_offset,
+	  if ((rel = relocation_next (&sec->rel, ctx_offset,
 				      &where, skip_mismatched)))
 	    {
 	      address_relocated = true;
@@ -523,7 +523,7 @@ check_aranges_structural (struct elf_file *file,
 	       followed by the _non-zero_ length of that range.  */
 	    wr_error (&where, ": zero-length address range.\n");
 	  /* Skip coverage analysis if we have errors.  */
-	  else if (retval && aranges_coverage)
+	  else if (retval && aranges_coverage != NULL)
 	    aranges_coverage_add (address, length);
 	}
 
