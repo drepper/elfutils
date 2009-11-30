@@ -37,36 +37,6 @@
 #include <cstring>
 #include <cassert>
 
-struct secentry
-{
-  Elf_Data *reldata;	/* Relocation data if any found.  */
-  size_t reltype;	/* SHT_REL or SHT_RELA.  We need this
-			   temporary store to be able to resolve
-			   relocation section appearing before
-			   relocated section.  */
-  size_t secndx;	/* Index into file->sec or 0 if not yet loaded.  */
-  section_id id;	/* Section type.  */
-
-  explicit secentry (section_id a_id = sec_invalid)
-    : reldata (NULL)
-    , reltype (0)
-    , secndx (0)
-    , id (a_id)
-  {}
-};
-
-struct secinfo_map
-  : public std::map <std::string, secentry>
-{
-  secentry *get (const char *name)
-  {
-    iterator it = find (std::string (name));
-    if (it == end ())
-      return NULL;
-    else
-      return &it->second;
-  }
-};
 
 namespace
 {
@@ -192,6 +162,37 @@ namespace
 
     return elf;
   }
+
+  struct secentry
+  {
+    Elf_Data *reldata;	/* Relocation data if any found.  */
+    size_t reltype;	/* SHT_REL or SHT_RELA.  We need this
+			   temporary store to be able to resolve
+			   relocation section appearing before
+			   relocated section.  */
+    size_t secndx;	/* Index into file->sec or 0 if not yet loaded.  */
+    section_id id;	/* Section type.  */
+
+    explicit secentry (section_id a_id = sec_invalid)
+      : reldata (NULL)
+      , reltype (0)
+      , secndx (0)
+      , id (a_id)
+    {}
+  };
+
+  struct secinfo_map
+    : public std::map <std::string, secentry>
+  {
+    secentry *get (const char *name)
+    {
+      iterator it = find (std::string (name));
+      if (it == end ())
+	return NULL;
+      else
+	return &it->second;
+    }
+  };
 
   bool
   elf_file_init (struct elf_file *file, int fd)
