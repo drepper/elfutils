@@ -954,11 +954,12 @@ namespace
 
     return got_die ? 1 : 0;
   }
+
   bool
   check_cu_structural (struct elf_file *file,
 		       struct read_ctx *ctx,
 		       struct cu *const cu,
-		       struct abbrev_table *abbrev_chain,
+		       check_debug_abbrev::abbrev_map &abbrev_tables,
 		       Elf_Data *strings,
 		       struct coverage *strings_coverage,
 		       struct relocation_data *reloc,
@@ -972,30 +973,28 @@ namespace
     assert (ver != NULL);
 
     /* Look up Abbrev table for this CU.  */
-    struct abbrev_table *abbrevs = abbrev_chain;
-    for (; abbrevs != NULL; abbrevs = abbrevs->next)
-      if (abbrevs->offset == cu->head->abbrev_offset)
-	break;
-
-    if (abbrevs == NULL)
+    check_debug_abbrev::abbrev_map::iterator abbrev_it
+      = abbrev_tables.find (cu->head->abbrev_offset);
+    if (abbrev_it == abbrev_tables.end ())
       {
-	wr_error (&cu->head->where,
-		  ": couldn't find abbrev section with offset %" PRId64 ".\n",
-		  cu->head->abbrev_offset);
+	wr_error (cu->head->where)
+	  << "couldn't find abbrev section with offset "
+	  << pri::addr (cu->head->abbrev_offset) << '.' << std::endl;
 	return false;
       }
+    struct abbrev_table &abbrevs = abbrev_it->second;
 
     /* Read DIEs.  */
     struct ref_record local_die_refs;
     WIPE (local_die_refs);
 
     cu->cudie_offset = read_ctx_get_offset (ctx) + cu->head->offset;
-    if (read_die_chain (ver, file, ctx, cu, abbrevs, strings,
+    if (read_die_chain (ver, file, ctx, cu, &abbrevs, strings,
 			&local_die_refs, strings_coverage,
 			(reloc != NULL && reloc->size > 0) ? reloc : NULL,
 			cu_coverage) < 0)
       {
-	abbrevs->skip_check = true;
+	abbrevs.skip_check = true;
 	retval = false;
       }
     else if (!check_die_references (cu, &local_die_refs))
@@ -1003,141 +1002,6 @@ namespace
 
     ref_record_free (&local_die_refs);
     return retval;
-  }
-
-  struct cu *
-  check_info_structural (struct elf_file *file,
-			 struct sec *sec,
-			 struct abbrev_table *abbrev_chain,
-			 Elf_Data *strings,
-			 struct cu_coverage *cu_coverage,
-			 std::vector <cu_head> const &cu_headers)
-  {
-    struct ref_record die_refs;
-    WIPE (die_refs);
-
-    struct cu *cu_chain = NULL;
-    bool success = true;
-
-    struct coverage strings_coverage_mem, *strings_coverage = NULL;
-    if (strings != NULL && check_category (mc_strings))
-      {
-	WIPE (strings_coverage_mem);
-	strings_coverage = &strings_coverage_mem;
-      }
-
-    struct relocation_data *reloc = sec->rel.size > 0 ? &sec->rel : NULL;
-    if (reloc != NULL)
-      relocation_reset (reloc);
-
-    struct read_ctx ctx;
-    read_ctx_init (&ctx, sec->data, file->other_byte_order);
-    for (std::vector <cu_head>::const_iterator it = cu_headers.begin ();
-	 it != cu_headers.end (); ++it)
-      {
-	cu_head const &head = *it;
-	where const &where = head.where;
-	struct cu *cur = (cu *)xcalloc (1, sizeof (*cur));
-	cur->head = &head;
-	cur->low_pc = (uint64_t)-1;
-	cur->next = cu_chain;
-	cu_chain = cur;
-
-	assert (read_ctx_need_data (&ctx, head.total_size));
-
-	// Make CU context begin just before the CU length, so that
-	// DIE offsets are computed correctly.
-	struct read_ctx cu_ctx;
-	const unsigned char *cu_end = ctx.ptr + head.total_size;
-	read_ctx_init_sub (&cu_ctx, &ctx, ctx.ptr, cu_end);
-	cu_ctx.ptr += head.head_size;
-
-	if (!check_cu_structural (file, &cu_ctx, cur, abbrev_chain,
-				  strings, strings_coverage, reloc,
-				  cu_coverage))
-	  {
-	    success = false;
-	    break;
-	  }
-
-	if (cu_ctx.ptr != cu_ctx.end
-	    && !check_zero_padding (&cu_ctx, mc_info, &where))
-	  {
-	    // Garbage coordinates:
-	    uint64_t start
-	      = read_ctx_get_offset (&ctx) + read_ctx_get_offset (&cu_ctx);
-	    uint64_t end = read_ctx_get_offset (&ctx) + head.total_size;
-	    wr_message_padding_n0 (mc_info, &where, start, end);
-	  }
-
-	int i = read_ctx_skip (&ctx, head.total_size);
-	assert (i);
-      }
-
-    if (success)
-      {
-	if (ctx.ptr != ctx.end)
-	  /* Did we read up everything?  */
-	  {
-	    where wh = WHERE (sec_info, NULL);
-	    wr_message (cat (mc_die_other, mc_impact_4), &wh,
-			": CU lengths don't exactly match Elf_Data contents.");
-	  }
-	else
-	  /* Did we consume all the relocations?  */
-	  relocation_skip_rest (&sec->rel, sec->id);
-
-	/* If we managed to read up everything, now do abbrev usage
-	   analysis.  */
-	for (struct abbrev_table *abbrevs = abbrev_chain;
-	     abbrevs != NULL; abbrevs = abbrevs->next)
-	  if (abbrevs->used && !abbrevs->skip_check)
-	    for (size_t i = 0; i < abbrevs->size; ++i)
-	      if (!abbrevs->abbr[i].used)
-		wr_message (mc_impact_3 | mc_acc_bloat | mc_abbrevs,
-			    &abbrevs->abbr[i].where,
-			    ": abbreviation is never used.\n");
-      }
-
-
-    /* We used to check that all CUs have the same address size.  Now
-       that we validate address_size of each CU against the ELF header,
-       that's not necessary anymore.  */
-
-    bool references_sound = check_global_die_references (cu_chain);
-    ref_record_free (&die_refs);
-
-    if (strings_coverage != NULL)
-      {
-	if (success)
-	  {
-	    struct hole_info info = {sec_str, mc_strings, strings->d_buf, 0};
-	    coverage_find_holes (strings_coverage, 0, strings->d_size,
-				 found_hole, &info);
-	  }
-	coverage_free (strings_coverage);
-      }
-
-    if (!success || !references_sound)
-      {
-	cu_free (cu_chain);
-	cu_chain = NULL;
-      }
-
-    /* Reverse the chain, so that it's organized "naturally".  Has
-       significant impact on performance when handling loc_ref and
-       range_ref fields in loc/range validation.  */
-    struct cu *last = NULL;
-    for (struct cu *it = cu_chain; it != NULL; )
-      {
-	struct cu *next = it->next;
-	it->next = last;
-	last = it;
-	it = next;
-      }
-    cu_chain = last;
-
-    return cu_chain;
   }
 }
 
@@ -1149,6 +1013,140 @@ read_cu_headers::read_cu_headers (dwarflint &lint)
 {
 }
 
+struct cu *
+check_debug_info::check_info_structural (struct elf_file *file,
+					 struct sec *sec,
+					 Elf_Data *strings)
+{
+  std::vector <cu_head> const &cu_headers = _m_cu_headers->cu_headers;
+  struct ref_record die_refs;
+  WIPE (die_refs);
+
+  struct cu *cu_chain = NULL;
+  bool success = true;
+
+  struct coverage strings_coverage_mem, *strings_coverage = NULL;
+  if (strings != NULL && check_category (mc_strings))
+    {
+      WIPE (strings_coverage_mem);
+      strings_coverage = &strings_coverage_mem;
+    }
+
+  struct relocation_data *reloc = sec->rel.size > 0 ? &sec->rel : NULL;
+  if (reloc != NULL)
+    relocation_reset (reloc);
+
+  struct read_ctx ctx;
+  read_ctx_init (&ctx, sec->data, file->other_byte_order);
+  for (std::vector <cu_head>::const_iterator it = cu_headers.begin ();
+       it != cu_headers.end (); ++it)
+    {
+      cu_head const &head = *it;
+      where const &where = head.where;
+      cu *cur = (cu *)xcalloc (1, sizeof (struct cu));
+      cur->head = &head;
+      cur->low_pc = (uint64_t)-1;
+      cur->next = cu_chain;
+      cu_chain = cur;
+
+      assert (read_ctx_need_data (&ctx, head.total_size));
+
+      // Make CU context begin just before the CU length, so that
+      // DIE offsets are computed correctly.
+      struct read_ctx cu_ctx;
+      const unsigned char *cu_end = ctx.ptr + head.total_size;
+      read_ctx_init_sub (&cu_ctx, &ctx, ctx.ptr, cu_end);
+      cu_ctx.ptr += head.head_size;
+
+      if (!check_cu_structural (file, &cu_ctx, cur, _m_abbrevs->abbrevs,
+				strings, strings_coverage, reloc,
+				&cu_cov))
+	{
+	  success = false;
+	  break;
+	}
+
+      if (cu_ctx.ptr != cu_ctx.end
+	  && !check_zero_padding (&cu_ctx, mc_info, &where))
+	{
+	  // Garbage coordinates:
+	  uint64_t start
+	    = read_ctx_get_offset (&ctx) + read_ctx_get_offset (&cu_ctx);
+	  uint64_t end = read_ctx_get_offset (&ctx) + head.total_size;
+	  wr_message_padding_n0 (mc_info, &where, start, end);
+	}
+
+      int i = read_ctx_skip (&ctx, head.total_size);
+      assert (i);
+    }
+
+  if (success)
+    {
+      if (ctx.ptr != ctx.end)
+	/* Did we read up everything?  */
+	{
+	  where wh = WHERE (sec_info, NULL);
+	  wr_message (cat (mc_die_other, mc_impact_4), &wh,
+		      ": CU lengths don't exactly match Elf_Data contents.");
+	}
+      else
+	/* Did we consume all the relocations?  */
+	relocation_skip_rest (&sec->rel, sec->id);
+
+      /* If we managed to read up everything, now do abbrev usage
+	 analysis.  */
+      for (check_debug_abbrev::abbrev_map::const_iterator it
+	     = _m_abbrevs->abbrevs.begin ();
+	   it != _m_abbrevs->abbrevs.end (); ++it)
+	if (it->second.used && !it->second.skip_check)
+	  for (size_t i = 0; i < it->second.size; ++i)
+	    if (!it->second.abbr[i].used)
+	      wr_message (it->second.abbr[i].where,
+			  cat (mc_impact_3, mc_acc_bloat, mc_abbrevs))
+		<< ": abbreviation is never used." << std::endl;
+    }
+
+
+  /* We used to check that all CUs have the same address size.  Now
+     that we validate address_size of each CU against the ELF header,
+     that's not necessary anymore.  */
+
+  bool references_sound = check_global_die_references (cu_chain);
+  ref_record_free (&die_refs);
+
+  if (strings_coverage != NULL)
+    {
+      if (success)
+	{
+	  struct hole_info info = {sec_str, mc_strings, strings->d_buf, 0};
+	  coverage_find_holes (strings_coverage, 0, strings->d_size,
+			       found_hole, &info);
+	}
+      coverage_free (strings_coverage);
+    }
+
+  if (!success || !references_sound)
+    {
+      cu_free (cu_chain);
+      cu_chain = NULL;
+    }
+
+  /* Reverse the chain, so that it's organized "naturally".  Has
+     significant impact on performance when handling loc_ref and
+     range_ref fields in loc/range validation.  */
+  struct cu *last = NULL;
+  for (struct cu *it = cu_chain; it != NULL; )
+    {
+      struct cu *next = it->next;
+      it->next = last;
+      last = it;
+      it = next;
+    }
+  cu_chain = last;
+
+  return cu_chain;
+}
+
 check_debug_info::check_debug_info (dwarflint &lint)
   : _m_sec_info (lint.check (_m_sec_info))
   , _m_sec_abbrev (lint.check (_m_sec_abbrev))
@@ -1158,11 +1156,8 @@ check_debug_info::check_debug_info (dwarflint &lint)
 {
   memset (&cu_cov, 0, sizeof (cu_cov));
 
-  cu *chain = check_info_structural
-    (&_m_sec_info->file, &_m_sec_info->sect,
-     &_m_abbrevs->abbrevs.begin ()->second,
-     _m_sec_str->sect.data, &cu_cov,
-     _m_cu_headers->cu_headers);
+  cu *chain = check_info_structural (&_m_sec_info->file, &_m_sec_info->sect,
+				     _m_sec_str->sect.data);
 
   if (chain == NULL)
     throw check_base::failed ();

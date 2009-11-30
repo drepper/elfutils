@@ -101,6 +101,10 @@ class check_debug_info
   check_debug_abbrev *_m_abbrevs;
   read_cu_headers *_m_cu_headers;
 
+  struct cu *check_info_structural (elf_file *file,
+				    struct sec *sec,
+				    Elf_Data *strings);
+
 public:
   // The check pass adds all low_pc/high_pc ranges loaded from DIE
   // tree into this following cu_cov structure.  If it finds any
