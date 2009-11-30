@@ -25,6 +25,8 @@
 
 #include "dwarflint.hh"
 #include "messages.h"
+#include "checks.hh"
+
 #include <fcntl.h>
 #include <cstring>
 #include <cerrno>
@@ -62,4 +64,7 @@ dwarflint::~dwarflint ()
     // Not that we can do anything about it...
     wr_error () << "Couldn't close the file " << _m_fname << ": "
 		<< strerror (errno) << "." << std::endl;
+  for (check_map::const_iterator it = _m_checks.begin ();
+       it != _m_checks.end (); ++it)
+    delete it->second;
 }

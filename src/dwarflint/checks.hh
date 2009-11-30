@@ -34,6 +34,7 @@ struct check_base
 {
   struct failed {};
   struct unscheduled: public failed {};
+  virtual ~check_base () {}
 };
 
 template<class T>
