@@ -3,7 +3,7 @@
 #endif
 
 #include "check_debug_info.hh"
-#include "checks-high.hh"
+#include "highlevel_check.hh"
 #include "expected.hh"
 #include "dwarfstrings.h"
 #include "../libdw/c++/dwarf-knowledge.cc"

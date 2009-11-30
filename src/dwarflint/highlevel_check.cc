@@ -23,10 +23,7 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-  // xxx this will throw an exception on <c++/dwarf> or <libdw.h>
-  // failure.  We need to catch it and convert to check_base::failed.
-
-#include "checks-high.hh" // xxx rename
+#include "highlevel_check.hh"
 
 namespace
 {

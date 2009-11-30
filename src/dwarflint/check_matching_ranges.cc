@@ -2,7 +2,7 @@
 # include <config.h>
 #endif
 
-#include "checks-high.hh"
+#include "highlevel_check.hh"
 #include "check_debug_loc_range.hh"
 
 using elfutils::dwarf;

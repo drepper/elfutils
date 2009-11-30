@@ -34,7 +34,7 @@
 # include <config.h>
 #endif
 
-#include "checks-high.hh"
+#include "highlevel_check.hh"
 #include "dwarfstrings.h"
 #include "all-dies-it.hh"
 #include "pri.hh"
