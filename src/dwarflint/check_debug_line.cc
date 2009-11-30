@@ -21,7 +21,6 @@ namespace
       bool used;
     };
     typedef std::vector<include_directory_t> include_directories_t;
-    include_directories_t _m_include_directories;
 
     struct file_t
     {
@@ -30,17 +29,17 @@ namespace
       bool used;
     };
     typedef std::vector<file_t> files_t;
-    files_t _m_files;
 
   public:
     explicit check_debug_line (dwarflint &lint);
 
     /* Directory index.  */
-    bool read_directory_index (read_ctx *ctx,
+    bool read_directory_index (include_directories_t &include_directories,
+			       files_t &files, read_ctx *ctx,
 			       const char *name, uint64_t *ptr,
 			       where *where, bool &retval)
     {
-      size_t nfile = _m_files.size () + 1;
+      size_t nfile = files.size () + 1;
       if (!checked_read_uleb128 (ctx, ptr,
 				 where, "directory index"))
 	return false;
@@ -51,7 +50,7 @@ namespace
 	  << " has absolute pathname, but refers to directory != 0."
 	  << std::endl;
 
-      if (*ptr > _m_include_directories.size ())
+      if (*ptr > include_directories.size ())
 	/* Not >=, dirs are indexed from 1.  */
 	{
 	  wr_message (*where, cat (mc_impact_4, mc_line, mc_header))
@@ -63,22 +62,23 @@ namespace
 	  retval = false;
 	}
       else if (*ptr != 0)
-	_m_include_directories[*ptr - 1].used = true;
+	include_directories[*ptr - 1].used = true;
       return true;
     }
 
     bool
-    use_file (uint64_t file_idx, where *where)
+    use_file (files_t &files, uint64_t file_idx,
+	      where *where, char const *msg = "")
     {
-      if (file_idx == 0 || file_idx > _m_files.size ())
+      if (file_idx == 0 || file_idx > files.size ())
 	{
 	  wr_error (*where)
-	     << "DW_LNS_set_file: invalid file index " << file_idx << '.'
-	     << std::endl;
+	    << msg << "invalid file index " << file_idx << '.'
+	    << std::endl;
 	  return false;
 	}
       else
-	_m_files[file_idx - 1].used = true;
+	files[file_idx - 1].used = true;
       return true;
     }
   };
@@ -89,6 +89,8 @@ namespace
 check_debug_line::check_debug_line (dwarflint &lint)
   : _m_sec (lint.check (_m_sec))
 {
+  check_debug_info *cus = lint.toplev_check<check_debug_info> ();
+
   addr_record line_tables;
   WIPE (line_tables);
 
@@ -219,6 +221,7 @@ check_debug_line::check_debug_line (dwarflint &lint)
 	    goto skip;
 	  }
 
+      include_directories_t include_directories;
       while (!read_ctx_eof (&sub_ctx))
 	{
 	  const char *name = read_ctx_read_str (&sub_ctx);
@@ -226,17 +229,18 @@ check_debug_line::check_debug_line (dwarflint &lint)
 	    {
 	      wr_error (where)
 		<< "can't read name of include directory #"
-		<< _m_include_directories.size () + 1 // Numbered from 1.
+		<< include_directories.size () + 1 // Numbered from 1.
 		<< '.' << std::endl;
 	      goto skip;
 	    }
 	  if (*name == 0)
 	    break;
 
-	  _m_include_directories.push_back ((include_directory_t){name, false});
+	  include_directories.push_back ((include_directory_t){name, false});
 	}
 
       /* File names.  */
+      files_t files;
       while (1)
 	{
 	  const char *name = read_ctx_read_str (&sub_ctx);
@@ -244,7 +248,7 @@ check_debug_line::check_debug_line (dwarflint &lint)
 	    {
 	      wr_error (where)
 		<< "can't read name of file #"
-		<< _m_files.size () + 1 // Numbered from 1.
+		<< files.size () + 1 // Numbered from 1.
 		<< '.' << std::endl;
 	      goto skip;
 	    }
@@ -252,7 +256,8 @@ check_debug_line::check_debug_line (dwarflint &lint)
 	    break;
 
 	  uint64_t dir_idx;
-	  if (!read_directory_index (&sub_ctx, name, &dir_idx, &where, success))
+	  if (!read_directory_index (include_directories, files,
+				     &sub_ctx, name, &dir_idx, &where, success))
 	    goto skip;
 
 	  /* Time of last modification.  */
@@ -267,7 +272,30 @@ check_debug_line::check_debug_line (dwarflint &lint)
 				     &where, "file size of file entry"))
 	    goto skip;
 
-	  _m_files.push_back ((struct file_t){name, dir_idx, false});
+	  files.push_back ((struct file_t){name, dir_idx, false});
+	}
+
+      /* Now that we have table of filenames, validate DW_AT_decl_file
+	 references.  We don't include filenames defined through
+	 DW_LNE_define_file in consideration.  */
+
+      if (cus != NULL)
+	{
+	  bool found = false;
+	  for (std::vector<cu>::const_iterator it = cus->cus.begin ();
+	       it != cus->cus.end (); ++it)
+	    if (it->stmt_list.addr == set_offset)
+	      {
+		found = true;
+		for (size_t i = 0; i < it->decl_file_refs.size; ++i)
+		  if (!use_file (files,
+				 it->decl_file_refs.refs[i].addr,
+				 &it->decl_file_refs.refs[i].who))
+		    success = false;
+	      }
+	  if (!found)
+	    wr_message (where, mc_line)
+	      << "no CU uses this line table." << std::endl;
 	}
 
       /* Skip the rest of the header.  */
@@ -336,7 +364,7 @@ check_debug_line::check_debug_line (dwarflint &lint)
 		    {
 		      uint64_t ctx_offset = read_ctx_get_offset (&sub_ctx);
 		      uint64_t addr;
- 		      if (!read_ctx_read_offset (&sub_ctx, addr_64, &addr))
+		      if (!read_ctx_read_offset (&sub_ctx, addr_64, &addr))
 			{
 			  wr_error (where)
 			    << "can't read operand of DW_LNE_set_address."
@@ -368,10 +396,11 @@ check_debug_line::check_debug_line (dwarflint &lint)
 			  goto skip;
 			}
 		      uint64_t dir_idx;
-		      if (!read_directory_index (&sub_ctx, name, &dir_idx,
-						 &where, success))
+		      if (!read_directory_index (include_directories,
+						 files, &sub_ctx, name,
+						 &dir_idx, &where, success))
 			goto skip;
-		      _m_files.push_back
+		      files.push_back
 			((struct file_t){name, dir_idx, false});
 		      operands = 2; /* Skip mtime & size of the file.  */
 		    }
@@ -436,7 +465,7 @@ check_debug_line::check_debug_line (dwarflint &lint)
 		if (!checked_read_uleb128 (&sub_ctx, &file_idx, &where,
 					   "DW_LNS_set_file operand"))
 		  goto skip;
-		if (!use_file (file_idx, &where))
+		if (!use_file (files, file_idx, &where, "DW_LNS_set_file: "))
 		  success = false;
 		first_file = false;
 	      }
@@ -452,7 +481,7 @@ check_debug_line::check_debug_line (dwarflint &lint)
 	      if (opcode < opcode_base)
 		operands = std_opc_lengths[opcode - 1];
 
-    	      switch (opcode)
+	      switch (opcode)
 		{
 #define ONE_KNOWN_DW_LNS(NAME, CODE) case CODE: break;
 		  ALL_KNOWN_DW_LNS
@@ -482,7 +511,8 @@ check_debug_line::check_debug_line (dwarflint &lint)
 
 	  if (first_file)
 	    {
-	      if (!use_file (1, &where))
+	      if (!use_file (files, 1, &where,
+			     "initial value of `file' register: "))
 		success = false;
 	      first_file = false;
 	    }
@@ -491,20 +521,20 @@ check_debug_line::check_debug_line (dwarflint &lint)
 	    seen_opcode = true;
 	}
 
-      for (size_t i = 0; i < _m_include_directories.size (); ++i)
-	if (!_m_include_directories[i].used)
+      for (size_t i = 0; i < include_directories.size (); ++i)
+	if (!include_directories[i].used)
 	  wr_message (where,
 		      cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
 	    << "the include #" << i + 1
-	    << " `" << _m_include_directories[i].name
+	    << " `" << include_directories[i].name
 	    << "' is not used." << std::endl;
 
-      for (size_t i = 0; i < _m_files.size (); ++i)
-	if (!_m_files[i].used)
+      for (size_t i = 0; i < files.size (); ++i)
+	if (!files[i].used)
 	  wr_message (where,
 		      cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
 	    << "the file #" << i + 1
-	    << " `" << _m_files[i].name << "' is not used." << std::endl;
+	    << " `" << files[i].name << "' is not used." << std::endl;
 
       if (!seen_opcode)
 	wr_message (where, cat (mc_line, mc_acc_bloat, mc_impact_3))
@@ -543,13 +573,10 @@ check_debug_line::check_debug_line (dwarflint &lint)
   if (info != NULL)
     for (std::vector<cu>::iterator it = info->cus.begin ();
 	 it != info->cus.end (); ++it)
-      for (size_t i = 0; i < it->line_refs.size; ++i)
-	{
-	  struct ref *ref = it->line_refs.refs + i;
-	  if (!addr_record_has_addr (&line_tables, ref->addr))
-	    wr_error (ref->who)
-	      << "unresolved reference to .debug_line table "
-	      << pri::hex (ref->addr) << '.' << std::endl;
-	}
+      if (it->stmt_list.addr != (uint64_t)-1
+	  && !addr_record_has_addr (&line_tables, it->stmt_list.addr))
+	wr_error (it->stmt_list.who)
+	  << "unresolved reference to .debug_line table "
+	  << pri::hex (it->stmt_list.addr) << '.' << std::endl;
   addr_record_free (&line_tables);
 }

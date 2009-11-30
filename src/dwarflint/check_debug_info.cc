@@ -401,7 +401,11 @@ namespace
   void
   check_lineptr (uint64_t value, struct value_check_cb_ctx const *ctx)
   {
-    ref_record_add (&ctx->cu->line_refs, value, ctx->where);
+    if (ctx->cu->stmt_list.addr != (uint64_t)-1)
+      wr_error (*ctx->where)
+	<< "DW_AT_stmt_list mentioned twice in a CU." << std::endl;
+    ctx->cu->stmt_list.addr = value;
+    ctx->cu->stmt_list.who = *ctx->where;
   }
 
   /* Callback for locptr values.  */
@@ -409,6 +413,12 @@ namespace
   check_locptr (uint64_t value, struct value_check_cb_ctx const *ctx)
   {
     ref_record_add (&ctx->cu->loc_refs, value, ctx->where);
+  }
+
+  void
+  check_decl_file (uint64_t value, struct value_check_cb_ctx const *ctx)
+  {
+    ref_record_add (&ctx->cu->decl_file_refs, value, ctx->where);
   }
 
   /*
@@ -642,56 +652,67 @@ namespace
 		  };
 	      }
 	    /* Setup rangeptr or lineptr checking.  */
-	    else if (it->name == DW_AT_ranges
-		     || it->name == DW_AT_stmt_list)
-	      switch (form)
+	    else
+	      switch (it->name)
 		{
-		case DW_FORM_data8:
-		  if (cu->head->offset_size == 4)
-		    // xxx could now also be checked during abbrev loading
-		    wr_error (where)
-		      << pri::attr (it->name)
-		      << " with form DW_FORM_data8 in 32-bit CU." << std::endl;
-		  /* fall-through */
+		case DW_AT_ranges:
+		case DW_AT_stmt_list:
+		  {
+		    switch (form)
+		      {
+		      case DW_FORM_data8:
+			if (cu->head->offset_size == 4)
+			  // xxx could now also be checked during abbrev loading
+			  wr_error (where)
+			    << pri::attr (it->name)
+			    << " with form DW_FORM_data8 in 32-bit CU."
+			    << std::endl;
+			/* fall-through */
 
-		case DW_FORM_data4:
-		case DW_FORM_sec_offset:
-		  check_someptr = true;
-		  if (it->name == DW_AT_ranges)
-		    {
-		      value_check_cb = check_rangeptr;
-		      extra_mc = mc_ranges;
-		    }
-		  else
-		    {
-		      assert (it->name == DW_AT_stmt_list);
-		      value_check_cb = check_lineptr;
-		      extra_mc = mc_line;
-		    }
-		  break;
+		      case DW_FORM_data4:
+		      case DW_FORM_sec_offset:
+			check_someptr = true;
+			if (it->name == DW_AT_ranges)
+			  {
+			    value_check_cb = check_rangeptr;
+			    extra_mc = mc_ranges;
+			  }
+			else
+			  {
+			    assert (it->name == DW_AT_stmt_list);
+			    value_check_cb = check_lineptr;
+			    extra_mc = mc_line;
+			  }
+			break;
 
-		default:
-		  /* Only print error if it's indirect.  Otherwise we
-		     gave diagnostic during abbrev loading.  */
-		  if (indirect)
-		    wr_error (where)
-		      << pri::attr (it->name)
-		      << " with invalid (indirect) form \"" << pri::form (form)
-		      << "\"." << std::endl;
+		      default:
+			/* Only print error if it's indirect.  Otherwise we
+			   gave diagnostic during abbrev loading.  */
+			if (indirect)
+			  wr_error (where)
+			    << pri::attr (it->name)
+			    << " with invalid (indirect) form \""
+			    << pri::form (form) << "\"." << std::endl;
+		      }
+		    break;
+
+		  case DW_AT_low_pc:
+		    relocatedp = &low_pc_relocated;
+		    symbolp = &low_pc_symbol;
+		    valuep = &low_pc;
+		    break;
+
+		  case DW_AT_high_pc:
+		    relocatedp = &high_pc_relocated;
+		    symbolp = &high_pc_symbol;
+		    valuep = &high_pc;
+		    break;
+
+		  case DW_AT_decl_file:
+		    value_check_cb = check_decl_file;
+		    break;
+		  }
 		}
-	    /* Setup low_pc and high_pc checking.  */
-	    else if (it->name == DW_AT_low_pc)
-	      {
-		relocatedp = &low_pc_relocated;
-		symbolp = &low_pc_symbol;
-		valuep = &low_pc;
-	      }
-	    else if (it->name == DW_AT_high_pc)
-	      {
-		relocatedp = &high_pc_relocated;
-		symbolp = &high_pc_symbol;
-		valuep = &high_pc;
-	      }
 
 	    /* Load attribute value and setup per-form checking.  */
 	    switch (form)
@@ -1041,8 +1062,8 @@ check_debug_info::check_info_structural ()
 	cu cur;
 	memset (&cur, 0, sizeof (cur));
 	cur.head = &head;
-	cur.low_pc = (uint64_t)-1;
-	//cur.next = (cu *)(uintptr_t)0xdead;
+	cur.low_pc = cur.stmt_list.addr = (uint64_t)-1;
+	cur.next = (cu *)(uintptr_t)0xdead;
 	cus.push_back (cur);
       }
       cu &cur = cus.back ();
@@ -1175,8 +1196,8 @@ check_debug_info::~check_debug_info ()
       addr_record_free (&it->die_addrs);
       ref_record_free (&it->die_refs);
       ref_record_free (&it->range_refs);
-      ref_record_free (&it->line_refs);
       ref_record_free (&it->loc_refs);
+      ref_record_free (&it->decl_file_refs);
     }
   coverage_free (&cu_cov.cov);
 }

@@ -977,7 +977,7 @@ check_location_expression (elf_file const &file,
 	      << pri::locexpr_opcode (opcode)
 	      << " with operand " << pri::hex (value1)
 	      << " on a 32-bit machine." << std::endl;
-	};
+	}
     }
 
  out:
