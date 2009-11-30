@@ -27,6 +27,7 @@
 #define DWARFLINT_CHECKS_HH
 
 #include <string>
+#include <cassert>
 #include "where.h"
 #include "dwarflint.hh"
 
@@ -65,16 +66,28 @@ dwarflint::check ()
       // We already tried to do the check, but failed.
       if (c == NULL)
 	throw check_base::failed ();
+      else
+	// Recursive dependency!
+	assert (c != (T *)-1);
     }
   else
     {
-      // Put a marker there saying that we tried to do the check, but
-      // it failed.
-      if (!_m_checks.insert (std::make_pair (key, (T *)0)).second)
+      // Put a marker there saying that we are trying to satisfy that
+      // dependency.
+      if (!_m_checks.insert (std::make_pair (key, (T *)-1)).second)
 	throw std::runtime_error ("duplicate key");
 
       // Now do the check.
-      c = new T (*this);
+      try
+	{
+	  c = new T (*this);
+	}
+      catch (...)
+	{
+	  // Nope, we failed.  Put the anchor there.
+	  _m_checks[key] = NULL;
+	  throw;
+	}
 
       // On success, put the actual check object there instead of the
       // marker.
