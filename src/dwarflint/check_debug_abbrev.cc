@@ -31,6 +31,7 @@
 #include "pri.hh"
 #include "tables.hh"
 #include "check_debug_info.hh"
+#include "check_debug_abbrev.hh"
 
 #include <dwarf.h>
 #include <sstream>

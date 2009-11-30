@@ -1,4 +1,4 @@
-/*
+/* Low-level checking of .debug_abbrev.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -23,55 +23,24 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECKS_LOW_HH
-#define DWARFLINT_CHECKS_LOW_HH
+#ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#define DWARFLINT_CHECK_DEBUG_ABBREV_HH
 
-#include "low.h"
-#include "checks.hh"
+#include "checks-low.hh"
 
-class load_sections
-  : public check<load_sections>
+class check_debug_abbrev
+  : public check<check_debug_abbrev>
 {
-public:
-  elf_file file;
-  explicit load_sections (dwarflint &lint);
-  ~load_sections ();
-};
-
-class section_base
-{
-  load_sections *sections;
-  sec &get_sec_or_throw (section_id secid);
-public:
-  sec &sect;
-  elf_file &file;
-  section_base (dwarflint &lint, section_id secid);
-
-  relocation_data *reldata () const
-  {
-    return sect.rel.size > 0 ? &sect.rel : NULL;
-  }
-};
-
-template<section_id sec_id>
-class section
-  : public section_base
-  , public check<section<sec_id> >
-{
-public:
-  explicit section (dwarflint &lint)
-    : section_base (lint, sec_id)
-  {}
-};
-
-class check_debug_aranges
-  : public check<check_debug_aranges>
-{
-  section<sec_aranges> *_m_sec_aranges;
+  section<sec_abbrev> *_m_sec_abbr;
 
 public:
-  explicit check_debug_aranges (dwarflint &lint);
-};
-static reg<check_debug_aranges> reg_debug_aranges;
+  // offset -> abbreviations
+  typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
+  abbrev_map const abbrevs;
 
-#endif//DWARFLINT_CHECKS_LOW_HH
+  explicit check_debug_abbrev (dwarflint &lint);
+  ~check_debug_abbrev ();
+};
+static reg<check_debug_abbrev> reg_debug_abbrev;
+
+#endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH

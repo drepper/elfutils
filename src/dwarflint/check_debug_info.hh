@@ -1,4 +1,4 @@
-/* Checking of .debug_info
+/* Low-level checking of .debug_info.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -27,6 +27,7 @@
 #define DWARFLINT_CHECK_DEBUG_INFO_HH
 
 #include "checks-low.hh"
+#include "check_debug_abbrev.ii"
 
 /** The pass for reading basic .debug_info data -- the layout of
     sections and their headers.  */
