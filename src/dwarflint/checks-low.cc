@@ -192,7 +192,7 @@ layout_rel_file (Elf *elf)
     return elf;
   }
 
-  Elf *
+  bool
   elf_file_init (struct elf_file *file, int fd)
   {
     Elf *elf = open_elf (fd);
@@ -372,7 +372,7 @@ layout_rel_file (Elf *elf)
 	      << std::endl;
       }
 
-    return elf;
+    return true;
 
   close_and_out:
     if (elf != NULL)
@@ -385,13 +385,14 @@ layout_rel_file (Elf *elf)
 	    << "error while closing Elf descriptor: "
 	    << elf_errmsg (err) << std::endl;
       }
-    return NULL;
+    return false;
   }
 }
 
 load_sections::load_sections (dwarflint &lint)
 {
-  elf_file_init (&file, lint.fd ());
+  if (!elf_file_init (&file, lint.fd ()))
+    throw check_base::failed ();
 }
 
 load_sections::~load_sections ()
@@ -399,6 +400,7 @@ load_sections::~load_sections ()
   if (file.ebl != NULL)
     ebl_closebackend (file.ebl);
   free (file.sec);
+  elf_end (file.elf);
 }
 
 namespace
