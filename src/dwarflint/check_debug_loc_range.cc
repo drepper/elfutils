@@ -596,7 +596,7 @@ namespace
 	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
 	size += rec->size;
       }
-    struct ref_cu *refs = (ref_cu *)xmalloc (sizeof (*refs) * size);
+    struct ref_cu *refs = (ref_cu *)alloca (sizeof (*refs) * size);
     struct ref_cu *refptr = refs;
     for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
       {
