@@ -91,7 +91,6 @@ extern "C"
   };
 
   // xxx some of that will go away
-  extern void abbrev_table_free (struct abbrev_table *abbr);
   extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
 						  uint64_t abbrev_code);
   extern bool read_rel (struct elf_file *file, struct sec *sec,

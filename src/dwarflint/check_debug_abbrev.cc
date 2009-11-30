@@ -38,21 +38,6 @@
 #include <cassert>
 #include <algorithm>
 
-void
-abbrev_table_free (struct abbrev_table *abbr)
-{
-  for (struct abbrev_table *it = abbr; it != NULL; )
-    {
-      for (size_t i = 0; i < it->size; ++i)
-	free (it->abbr[i].attribs);
-      free (it->abbr);
-
-      struct abbrev_table *temp = it;
-      it = it->next;
-      free (temp);
-    }
-}
-
 struct abbrev *
 abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
 			  uint64_t abbrev_code)
@@ -468,4 +453,20 @@ check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
   : _m_sec_abbr (lint.check (_m_sec_abbr))
   , abbrevs (load_debug_abbrev (lint, _m_sec_abbr->sect, _m_sec_abbr->file))
 {
+}
+
+check_debug_abbrev::~check_debug_abbrev ()
+{
+  // xxx So using new[]/delete[] would be nicer (delete ignores
+  // const-ness), but I'm not dipping into that right now.  Just cast
+  // away the const, we're in the dtor so what the heck.
+  abbrev_map &my_abbrevs = const_cast<abbrev_map &> (abbrevs);
+
+  for (abbrev_map::iterator it = my_abbrevs.begin ();
+       it != my_abbrevs.end (); ++it)
+    {
+      for (size_t i = 0; i < it->second.size; ++i)
+	free (it->second.abbr[i].attribs);
+      free (it->second.abbr);
+    }
 }
