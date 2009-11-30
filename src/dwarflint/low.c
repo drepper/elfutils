@@ -549,6 +549,7 @@ check_aranges_structural (struct elf_file *file,
       compare_coverage (file, coverage, aranges_coverage,
 			sec_aranges, "aranges");
       coverage_free (aranges_coverage);
+      free (aranges_coverage);
     }
 
   return retval;
