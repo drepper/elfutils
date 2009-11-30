@@ -5,12 +5,9 @@
 #include <stdlib.h>
 
 #ifdef __cplusplus
-# define IF_CPLUSPLUS(X) X
 #include <iosfwd>
 extern "C"
 {
-#else
-# define IF_CPLUSPLUS(X) /*X*/
 #endif
 
 #define DEBUGINFO_SECTIONS \
@@ -73,7 +70,7 @@ extern "C"
     (uint64_t)-1, (uint64_t)-1, (uint64_t)-1,				\
     NULL, NEXT})
 
-  extern const char *where_fmt (const struct where *wh, char *ptr IF_CPLUSPLUS (= NULL));
+  extern const char *where_fmt (const struct where *wh,	char *ptr);
   extern void where_fmt_chain (const struct where *wh, const char *severity);
   extern void where_reset_1 (struct where *wh, uint64_t addr);
   extern void where_reset_2 (struct where *wh, uint64_t addr);
@@ -84,16 +81,10 @@ extern "C"
 
 #include <iostream>
 
-inline const char *
-where_fmt (where const &wh)
-{
-  return where_fmt (&wh);
-}
-
 inline std::ostream &
 operator << (std::ostream &os, where const &wh)
 {
-  os << where_fmt (wh);
+  os << where_fmt (&wh, NULL);
   return os;
 }
 
