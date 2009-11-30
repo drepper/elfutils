@@ -98,9 +98,12 @@ where_fmt (const struct where *wh, char *ptr)
 
 #define SETUP_ADDR(N)							\
   char *addr##N##s;							\
+  bool free_s##N = false;						\
   if (wh->addr##N == (uint64_t)-1)					\
     addr##N##s = NULL;							\
-  else if (x_asprintf (&addr##N##s, inf->addr##N##f, wh->addr##N) < 0)	\
+  else if (x_asprintf (&addr##N##s, inf->addr##N##f, wh->addr##N) >= 0)	\
+    free_s##N = true;							\
+  else									\
     addr##N##s = "(fmt error)"
 
   SETUP_ADDR (1);
@@ -136,6 +139,13 @@ where_fmt (const struct where *wh, char *ptr)
     ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr2n), " "), addr2s);
   else if (addr1s != NULL)
     ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr1n), " "), addr1s);
+
+  if (free_s1)
+    free (addr1s);
+  if (free_s2)
+    free (addr2s);
+  if (free_s3)
+    free (addr3s);
 
   if (wh->ref != NULL && !is_reloc)
     {
