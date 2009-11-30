@@ -1186,8 +1186,3 @@ check_debug_info::check_debug_info (dwarflint &lint)
   if (cus.size () > 0)
     assert (cus.back ().next == NULL);
 }
-
-check_debug_info::~check_debug_info ()
-{
-  cu_free (&cus.back ());
-}
