@@ -78,16 +78,22 @@ namespace pri
   class hex
   {
     Dwarf_Off value;
+    char const *const pre;
   public:
-    hex (Dwarf_Off a_value)
+    hex (Dwarf_Off a_value, char const *a_pre = NULL)
       : value (a_value)
+      , pre (a_pre)
     {}
     friend std::ostream &operator << (std::ostream &os, hex const &obj);
   };
   std::ostream &operator << (std::ostream &os, hex const &obj);
 
-  struct addr : public hex {
+  struct addr: public hex {
     addr (Dwarf_Off off) : hex (off) {}
+  };
+
+  struct DIE: public hex {
+    DIE (Dwarf_Off off) : hex (off, "DIE ") {}
   };
 
   class range

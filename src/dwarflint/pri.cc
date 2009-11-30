@@ -36,6 +36,8 @@ std::ostream &
 pri::operator << (std::ostream &os, pri::hex const &obj)
 {
   std::stringstream ss;
+  if (obj.pre)
+    ss << obj.pre << " ";
   ss << std::hex << "0x" << obj.value;
   return os << ss.str ();
 }

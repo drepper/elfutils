@@ -24,22 +24,15 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-// xxx drop as soon as not necessary
-#define __STDC_FORMAT_MACROS
-#define PRI_DIE "DIE 0x%" PRIx64
-#include <inttypes.h>
-
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
 
 #include <cassert>
-#include <sstream>
 #include <algorithm>
 #include "../libdw/dwarf.h"
 
 #include "messages.h"
-#include "low.h"
 #include "pri.hh"
 #include "config.h"
 #include "check_debug_loc_range.hh"
@@ -63,8 +56,9 @@ namespace
 	struct ref *ref = die_refs->refs + i;
 	if (!addr_record_has_addr (&cu->die_addrs, ref->addr))
 	  {
-	    wr_error (&ref->who,
-		      ": unresolved reference to " PRI_DIE ".\n", ref->addr);
+	    wr_error (ref->who)
+	      << "unresolved reference to " << pri::DIE (ref->addr)
+	      << '.' << std::endl;
 	    retval = false;
 	  }
       }
@@ -99,10 +93,10 @@ namespace
 	       reference is valid, which it is.  But warn about this
 	       anyway, perhaps local reference could be formed on
 	       smaller number of bytes.  */
-	    wr_message (mc_impact_2 | mc_acc_suboptimal | mc_die_rel,
-			&ref->who,
-			": local reference to " PRI_DIE " formed as global.\n",
-			ref->addr);
+	    wr_message (ref->who,
+			cat (mc_impact_2, mc_acc_suboptimal, mc_die_rel))
+	      << "local reference to " << pri::DIE (ref->addr)
+	      << " formed as global." << std::endl;
 	}
 
     return retval;
@@ -340,9 +334,9 @@ namespace
     assert (ctx->ctx->end > ctx->ctx->begin);
     if (addr > (uint64_t)(ctx->ctx->end - ctx->ctx->begin))
       {
-	wr_error (ctx->where,
-		  ": invalid reference outside the CU: 0x%" PRIx64 ".\n",
-		  addr);
+	wr_error (*ctx->where)
+	  << "invalid reference outside the CU: " << pri::hex (addr)
+	  << '.' << std::endl;
 	return;
       }
 
@@ -365,11 +359,12 @@ namespace
   check_strp (uint64_t addr, struct value_check_cb_ctx const *ctx)
   {
     if (ctx->strings == NULL)
-      wr_error (ctx->where, ": strp attribute, but no .debug_str data.\n");
+      wr_error (*ctx->where)
+	<< "strp attribute, but no .debug_str data." << std::endl;
     else if (addr >= ctx->strings->d_size)
-      wr_error (ctx->where,
-		": Invalid offset outside .debug_str: 0x%" PRIx64 ".\n",
-		addr);
+      wr_error (*ctx->where)
+	<< "invalid offset outside .debug_str: " << pri::hex (addr)
+	<< '.' << std::endl;
     else
       {
 	/* Record used part of .debug_str.  */
@@ -380,9 +375,9 @@ namespace
 	while (strp < data_end && *strp != 0)
 	  ++strp;
 	if (strp == data_end)
-	  wr_error (ctx->where,
-		    ": String at .debug_str: 0x%" PRIx64
-		    " is not zero-terminated.\n", addr);
+	  wr_error (*ctx->where)
+	    << "string at .debug_str: " << pri::hex (addr)
+	    << " is not zero-terminated." << std::endl;
 
 	if (ctx->strings_coverage != NULL)
 	  coverage_add (ctx->strings_coverage, addr, strp - startp + 1);
@@ -394,9 +389,9 @@ namespace
   check_rangeptr (uint64_t value, struct value_check_cb_ctx const *ctx)
   {
     if ((value % ctx->cu->head->address_size) != 0)
-      wr_message (mc_ranges | mc_impact_2, ctx->where,
-		  ": rangeptr value %#" PRIx64
-		  " not aligned to CU address size.\n", value);
+      wr_message (*ctx->where, cat (mc_ranges, mc_impact_2))
+	<< "rangeptr value " << pri::hex (value)
+	<< " not aligned to CU address size." << std::endl;
     ctx->cu_coverage->need_ranges = true;
     ref_record_add (&ctx->cu->range_refs, value, ctx->where);
   }
@@ -475,10 +470,10 @@ namespace
 	    else if (sibling_addr != die_off)
 	      {
 		DEF_PREV_WHERE;
-		wr_error (&prev_where,
-			  ": This DIE claims that its sibling is 0x%"
-			  PRIx64 ", but it's actually 0x%" PRIx64 ".\n",
-			  sibling_addr, die_off);
+		wr_error (prev_where)
+		  << "this DIE claims that its sibling is "
+		  << pri::hex (sibling_addr) << " but it's actually "
+		  << pri::hex (die_off) << '.' << std::endl;
 	      }
 	    sibling_addr = 0;
 	  }
@@ -513,18 +508,16 @@ namespace
 	prev_die_off = die_off;
 	got_die = true;
 	if (dump_die_offsets)
-	  fprintf (stderr, "%s: abbrev %" PRId64 "\n",
-		   where_fmt (&where, NULL), abbr_code);
+	  std::cerr << where << ": abbrev " << abbr_code << std::endl;
 
 	/* Find the abbrev matching the code.  */
 	prev_abbrev = abbrev;
 	abbrev = abbrev_table_find_abbrev (abbrevs, abbr_code);
 	if (abbrev == NULL)
 	  {
-	    wr_error (&where,
-		      ": abbrev section at 0x%" PRIx64
-		      " doesn't contain code %" PRIu64 ".\n",
-		      abbrevs->offset, abbr_code);
+	    wr_error (where)
+	      << "abbrev section at " << pri::hex (abbrevs->offset)
+	      << " doesn't contain code " << abbr_code << '.' << std::endl;
 	    return -1;
 	  }
 	abbrev->used = true;
@@ -949,9 +942,9 @@ namespace
       }
 
     if (sibling_addr != 0)
-      wr_error (&where,
-		": this DIE should have had its sibling at 0x%"
-		PRIx64 ", but the DIE chain ended.\n", sibling_addr);
+      wr_error (where)
+	<< "this DIE should have had its sibling at " << pri::hex (sibling_addr)
+	<< ", but the DIE chain ended." << std::endl;
 
     return got_die ? 1 : 0;
   }
