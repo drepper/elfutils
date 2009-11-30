@@ -1171,7 +1171,7 @@ check_debug_info::check_debug_info (dwarflint &lint)
     cus.push_back (*cu);
 
   // re-link CUs so that they form a chain again.  This is to
-  // interface with C-level code.  The last CU's next is null, so we
+  // interface with C-level code.  The last CU's next is NULL, so we
   // don't have to re-link it.
   cu *last = NULL;
   for (std::vector<cu>::iterator it = cus.begin ();
