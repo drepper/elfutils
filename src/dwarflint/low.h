@@ -88,14 +88,11 @@ extern "C"
     size_t size;
     size_t alloc;
     bool used;		/* There are CUs using this table.  */
-    bool skip_check;	/* There were errors during loading one of the
-			   CUs that use this table.  Check for unused
-			   abbrevs should be skipped.  */
   };
 
   // xxx some of that will go away
   extern void abbrev_table_free (struct abbrev_table *abbr);
-  extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table *abbrevs,
+  extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
 						  uint64_t abbrev_code);
   extern bool read_rel (struct elf_file *file, struct sec *sec,
 			Elf_Data *reldata, bool elf_64);
