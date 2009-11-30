@@ -137,6 +137,7 @@ check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
 
 		    coverage_free (&result);
 		    coverage_free (&cov2);
+		    coverage_free (&cov1);
 		  }
 		}
 	    }

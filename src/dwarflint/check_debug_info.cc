@@ -1171,5 +1171,12 @@ check_debug_info::~check_debug_info ()
 {
   for (std::vector<cu>::iterator it = cus.begin ();
        it != cus.end (); ++it)
-    addr_record_free (&it->die_addrs);
+    {
+      addr_record_free (&it->die_addrs);
+      ref_record_free (&it->die_refs);
+      ref_record_free (&it->range_refs);
+      ref_record_free (&it->line_refs);
+      ref_record_free (&it->loc_refs);
+    }
+  coverage_free (&cu_cov.cov);
 }
