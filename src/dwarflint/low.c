@@ -213,7 +213,7 @@ supported_version (unsigned version,
 void
 check_range_relocations (enum message_category cat,
 			 struct where *where,
-			 struct elf_file *file,
+			 struct elf_file const *file,
 			 GElf_Sym *begin_symbol,
 			 GElf_Sym *end_symbol,
 			 const char *description)

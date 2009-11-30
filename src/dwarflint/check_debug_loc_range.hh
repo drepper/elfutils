@@ -59,7 +59,7 @@ struct hole_info
    DATA->data has to point at d_buf of section in question.  */
 extern bool found_hole (uint64_t start, uint64_t length, void *data);
 
-extern bool check_location_expression (struct elf_file *file,
+extern bool check_location_expression (elf_file const &file,
 				       struct read_ctx *parent_ctx,
 				       struct cu *cu,
 				       uint64_t init_off,

@@ -420,7 +420,7 @@ namespace
   */
   int
   read_die_chain (dwarf_version_h ver,
-		  struct elf_file *file,
+		  elf_file const &file,
 		  struct read_ctx *ctx,
 		  struct cu *cu,
 		  struct abbrev_table const *abbrevs,
@@ -578,7 +578,7 @@ namespace
 	    enum message_category extra_mc = mc_none;
 
 	    uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->head->offset;
-	    bool type_is_rel = file->ehdr.e_type == ET_REL;
+	    bool type_is_rel = file.ehdr.e_type == ET_REL;
 
 	    /* Attribute value.  */
 	    uint64_t value = 0;
@@ -862,7 +862,7 @@ namespace
 		    << "unexpected relocation of " << pri::form (form) << '.'
 		    << std::endl;
 
-		relocate_one (file, reloc, rel, width, &value, &where,
+		relocate_one (&file, reloc, rel, width, &value, &where,
 			      reloc_target (form, it), symbolp);
 
 		if (relocatedp != NULL)
@@ -920,7 +920,7 @@ namespace
 		<< std::endl;
 	    else
 	      check_range_relocations (mc_die_other, &where,
-				       file,
+				       &file,
 				       low_pc_symbol, high_pc_symbol,
 				       "DW_AT_low_pc and DW_AT_high_pc");
 	  }
@@ -951,14 +951,20 @@ namespace
   }
 }
 
+read_cu_headers::read_cu_headers (dwarflint &lint)
+  : _m_sec_info (lint.check (_m_sec_info))
+  , cu_headers (read_info_headers (&_m_sec_info->file,
+				   &_m_sec_info->sect,
+				   _m_sec_info->reldata ()))
+{
+}
+
 bool
-check_debug_info::check_cu_structural (struct elf_file *file,
-				       struct read_ctx *ctx,
+check_debug_info::check_cu_structural (struct read_ctx *ctx,
 				       struct cu *const cu,
 				       Elf_Data *strings,
 				       struct coverage *strings_coverage,
-				       struct relocation_data *reloc,
-				       struct cu_coverage *cu_coverage)
+				       struct relocation_data *reloc)
 {
   check_debug_abbrev::abbrev_map const &abbrev_tables = _m_abbrevs->abbrevs;
 
@@ -986,10 +992,10 @@ check_debug_info::check_cu_structural (struct elf_file *file,
   WIPE (local_die_refs);
 
   cu->cudie_offset = read_ctx_get_offset (ctx) + cu->head->offset;
-  if (read_die_chain (ver, file, ctx, cu, &abbrevs, strings,
+  if (read_die_chain (ver, _m_file, ctx, cu, &abbrevs, strings,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      cu_coverage) < 0)
+		      &cu_cov) < 0)
     {
       _m_abbr_skip.push_back (abbrevs.offset);
       retval = false;
@@ -1001,20 +1007,13 @@ check_debug_info::check_cu_structural (struct elf_file *file,
   return retval;
 }
 
-read_cu_headers::read_cu_headers (dwarflint &lint)
-  : _m_sec_info (lint.check (_m_sec_info))
-  , cu_headers (read_info_headers (&_m_sec_info->file,
-				   &_m_sec_info->sect,
-				   _m_sec_info->reldata ()))
-{
-}
-
 void
-check_debug_info::check_info_structural (struct elf_file *file,
-					 Elf_Data *strings)
+check_debug_info::check_info_structural ()
 {
   std::vector <cu_head> const &cu_headers = _m_cu_headers->cu_headers;
   sec &sec = _m_sec_info->sect;
+  Elf_Data *const strings = _m_sec_str->sect.data;
+
   struct ref_record die_refs;
   WIPE (die_refs);
 
@@ -1032,7 +1031,7 @@ check_debug_info::check_info_structural (struct elf_file *file,
     relocation_reset (reloc);
 
   struct read_ctx ctx;
-  read_ctx_init (&ctx, sec.data, file->other_byte_order);
+  read_ctx_init (&ctx, sec.data, _m_file.other_byte_order);
   for (std::vector <cu_head>::const_iterator it = cu_headers.begin ();
        it != cu_headers.end (); ++it)
     {
@@ -1057,9 +1056,8 @@ check_debug_info::check_info_structural (struct elf_file *file,
       read_ctx_init_sub (&cu_ctx, &ctx, ctx.ptr, cu_end);
       cu_ctx.ptr += head.head_size;
 
-      if (!check_cu_structural (file, &cu_ctx, &cur,
-				strings, strings_coverage, reloc,
-				&cu_cov))
+      if (!check_cu_structural (&cu_ctx, &cur,
+				strings, strings_coverage, reloc))
 	{
 	  success = false;
 	  break;
@@ -1145,11 +1143,12 @@ check_debug_info::check_debug_info (dwarflint &lint)
   : _m_sec_info (lint.check (_m_sec_info))
   , _m_sec_abbrev (lint.check (_m_sec_abbrev))
   , _m_sec_str (lint.check (_m_sec_str))
+  , _m_file (_m_sec_info->file)
   , _m_abbrevs (lint.check (_m_abbrevs))
   , _m_cu_headers (lint.check (_m_cu_headers))
 {
   memset (&cu_cov, 0, sizeof (cu_cov));
-  check_info_structural (&_m_sec_info->file, _m_sec_str->sect.data);
+  check_info_structural ();
 
   // re-link CUs so that they form a chain again.  This is to
   // interface with C-level code.  The last CU's next is NULL, so we

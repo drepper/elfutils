@@ -84,7 +84,7 @@ extern "C"
   void relocation_skip_rest (struct relocation_data *reloc,
 			     enum section_id id);
 
-  void relocate_one (struct elf_file *file,
+  void relocate_one (struct elf_file const *file,
 		     struct relocation_data *reloc,
 		     struct relocation *rel,
 		     unsigned width, uint64_t *value,

@@ -491,13 +491,15 @@ namespace
 
 		if (!read_ctx_read_2ubyte (&ctx, &len))
 		  {
-		    wr_error (&where, ": can't read length of location expression.\n");
+		    wr_error (where)
+		      << "can't read length of location expression."
+		      << std::endl;
 		    return false;
 		  }
 
 		/* location expression itself */
 		uint64_t expr_start = read_ctx_get_offset (&ctx);
-		if (!check_location_expression (file, &ctx, cu, expr_start,
+		if (!check_location_expression (*file, &ctx, cu, expr_start,
 						&sec->rel, len, &where))
 		  return false;
 		uint64_t expr_end = read_ctx_get_offset (&ctx);
@@ -821,7 +823,7 @@ namespace
   }
 
   bool
-  op_read_form (struct elf_file *file,
+  op_read_form (struct elf_file const &file,
 		struct read_ctx *ctx,
 		struct cu *cu,
 		uint64_t init_off,
@@ -857,7 +859,7 @@ namespace
 				where, skip_mismatched)))
       {
 	if (!isblock)
-	  relocate_one (file, reloc, rel,
+	  relocate_one (&file, reloc, rel,
 			cu->head->address_size, valuep, where,
 			reloc_target_loc (opcode), NULL);
 	else
@@ -874,7 +876,7 @@ namespace
 }
 
 bool
-check_location_expression (struct elf_file *file,
+check_location_expression (elf_file const &file,
 			   struct read_ctx *parent_ctx,
 			   struct cu *cu,
 			   uint64_t init_off,

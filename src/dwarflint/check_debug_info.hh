@@ -47,6 +47,7 @@ class check_debug_info
   section<sec_info> *_m_sec_info;
   section<sec_abbrev> *_m_sec_abbrev;
   section<sec_str> *_m_sec_str;
+  elf_file const &_m_file;
   check_debug_abbrev *_m_abbrevs;
   read_cu_headers *_m_cu_headers;
 
@@ -54,16 +55,13 @@ class check_debug_info
   // validation.  Check for unused abbrevs should be skipped.
   std::vector< ::Dwarf_Off> _m_abbr_skip;
 
-  bool check_cu_structural (struct elf_file *file,
-			    struct read_ctx *ctx,
+  bool check_cu_structural (struct read_ctx *ctx,
 			    struct cu *const cu,
 			    Elf_Data *strings,
 			    struct coverage *strings_coverage,
-			    struct relocation_data *reloc,
-			    struct cu_coverage *cu_coverage);
+			    struct relocation_data *reloc);
 
-  void check_info_structural (elf_file *file,
-			      Elf_Data *strings);
+  void check_info_structural ();
 
 public:
   // The check pass adds all low_pc/high_pc ranges loaded from DIE

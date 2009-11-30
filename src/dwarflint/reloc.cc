@@ -93,7 +93,7 @@ relocation_skip_rest (struct relocation_data *reloc,
    which case we failed or didn't get around to obtain the symbol from
    symbol table, or non-NULL, in which case the symbol was initialized.  */
 void
-relocate_one (struct elf_file *file,
+relocate_one (struct elf_file const *file,
 	      struct relocation_data *reloc,
 	      struct relocation *rel,
 	      unsigned width, uint64_t *value,
