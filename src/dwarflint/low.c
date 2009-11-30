@@ -128,19 +128,6 @@ is_location_attrib (uint64_t name)
     }
 }
 
-void
-cu_free (struct cu *cu_chain)
-{
-  for (struct cu *it = cu_chain; it != NULL; )
-    {
-      addr_record_free (&it->die_addrs);
-
-      struct cu *temp = it;
-      it = it->next;
-      free (temp);
-    }
-}
-
 static struct cu *
 cu_find_cu (struct cu *cu_chain, uint64_t offset)
 {

@@ -122,6 +122,7 @@ public:
   std::vector<cu> cus;
 
   explicit check_debug_info (dwarflint &lint);
+  ~check_debug_info ();
 };
 static reg<check_debug_info> reg_debug_info;
 

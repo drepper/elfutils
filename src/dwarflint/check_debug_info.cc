@@ -1045,11 +1045,15 @@ check_debug_info::check_info_structural (struct elf_file *file,
     {
       cu_head const &head = *it;
       where const &where = head.where;
-      cu *cur = (cu *)xcalloc (1, sizeof (struct cu));
-      cur->head = &head;
-      cur->low_pc = (uint64_t)-1;
-      cur->next = cu_chain;
-      cu_chain = cur;
+      {
+	cu cur;
+	memset (&cur, 0, sizeof (cur));
+	cur.head = &head;
+	cur.low_pc = (uint64_t)-1;
+	//cur.next = (cu *)(uintptr_t)0xdead;
+	cus.push_back (cur);
+      }
+      cu &cur = cus.back ();
 
       assert (read_ctx_need_data (&ctx, head.total_size));
 
@@ -1060,7 +1064,7 @@ check_debug_info::check_info_structural (struct elf_file *file,
       read_ctx_init_sub (&cu_ctx, &ctx, ctx.ptr, cu_end);
       cu_ctx.ptr += head.head_size;
 
-      if (!check_cu_structural (file, &cu_ctx, cur,
+      if (!check_cu_structural (file, &cu_ctx, &cur,
 				strings, strings_coverage, reloc,
 				&cu_cov))
 	{
@@ -1110,12 +1114,26 @@ check_debug_info::check_info_structural (struct elf_file *file,
 		<< ": abbreviation is never used." << std::endl;
     }
 
+  // Relink the CU chain.
+  {
+    cu *last = NULL;
+    for (std::vector<cu>::iterator it = cus.begin ();
+	 it != cus.end (); ++it)
+      {
+	if (last != NULL)
+	  last->next = &*it;
+	last = &*it;
+      }
+    if (last != NULL)
+      last->next = NULL;
+  }
+
 
   /* We used to check that all CUs have the same address size.  Now
      that we validate address_size of each CU against the ELF header,
      that's not necessary anymore.  */
 
-  bool references_sound = check_global_die_references (cu_chain);
+  check_global_die_references (&cus.front ());
   ref_record_free (&die_refs);
 
   if (strings_coverage != NULL)
@@ -1127,12 +1145,6 @@ check_debug_info::check_info_structural (struct elf_file *file,
 			       found_hole, &info);
 	}
       coverage_free (strings_coverage);
-    }
-
-  if (!success || !references_sound)
-    {
-      cu_free (cu_chain);
-      cu_chain = NULL;
     }
 
   /* Reverse the chain, so that it's organized "naturally".  Has
@@ -1183,4 +1195,11 @@ check_debug_info::check_debug_info (dwarflint &lint)
 
   if (cus.size () > 0)
     assert (cus.back ().next == NULL);
+}
+
+check_debug_info::~check_debug_info ()
+{
+  for (std::vector<cu>::iterator it = cus.begin ();
+       it != cus.end (); ++it)
+    addr_record_free (&it->die_addrs);
 }

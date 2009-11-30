@@ -160,8 +160,6 @@ extern "C"
 				       GElf_Sym *end_symbol,
 				       const char *description);
 
-  extern void cu_free (struct cu *cu_chain);
-
   extern int check_sibling_form (dwarf_version_h ver, uint64_t form);
   extern bool is_location_attrib (uint64_t name);
 
