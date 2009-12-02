@@ -33,7 +33,6 @@
 #include "../libelf/gelf.h"
 
 #include "sections.hh"
-
 #include "messages.h"
 #include "pri.hh"
 #include "config.h"
@@ -442,11 +441,13 @@ namespace
     throw std::runtime_error (ss.str ());
   }
 }
+
 sec &
 section_base::get_sec_or_throw (section_id secid)
 {
   if (sec *s = sections->file.debugsec[secid])
-    return *s;
+    if (s->data != NULL)
+      return *s;
 
   if (!tolerate_nodebug)
     wr_message (WHERE (secid, NULL),
