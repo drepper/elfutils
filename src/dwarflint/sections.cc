@@ -1,4 +1,4 @@
-/* Pedantic checking of DWARF files
+/* Low-level section handling.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -27,16 +27,16 @@
 # include <config.h>
 #endif
 
-#include "low.h"
-#include "config.h"
-#include "pri.hh"
-#include "check_debug_loc_range.hh"
-#include "check_debug_info.hh"
-#include <map>
-#include <sstream>
+#include <cstdlib>
 #include <cstring>
-#include <cassert>
+#include <sstream>
+#include "../libelf/gelf.h"
 
+#include "sections.hh"
+
+#include "messages.h"
+#include "pri.hh"
+#include "config.h"
 
 namespace
 {
@@ -462,28 +462,4 @@ section_base::section_base (dwarflint &lint, section_id secid)
   , sect (get_sec_or_throw (secid))
   , file (sections->file)
 {
-}
-
-check_debug_aranges::check_debug_aranges (dwarflint &lint)
-  : _m_sec_aranges (lint.check (_m_sec_aranges))
-{
-  check_debug_info *info = lint.toplev_check<check_debug_info> ();
-  coverage *cov = NULL;
-  if (info != NULL)
-    {
-      // xxx If need_ranges is true, we have to load ranges first.
-      // That's a flaw in design of checks, that data should have been
-      // stored in check_ranges, and that should have been requested
-      // explicitly.  But for the time being...
-      if (info->cu_cov.need_ranges)
-	lint.toplev_check<check_debug_ranges> ();
-      if (!info->cu_cov.need_ranges)
-	cov = &info->cu_cov.cov;
-    }
-
-  if (!check_aranges_structural (&_m_sec_aranges->file,
-				 &_m_sec_aranges->sect,
-				 info != NULL ? &info->cus.front () : NULL,
-				 cov))
-    throw check_base::failed ();
 }

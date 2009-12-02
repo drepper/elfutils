@@ -26,8 +26,10 @@
 #ifndef DWARFLINT_CHECK_DEBUG_INFO_HH
 #define DWARFLINT_CHECK_DEBUG_INFO_HH
 
-#include "checks-low.hh"
 #include "check_debug_abbrev.ii"
+#include "sections.ii"
+#include "checks.hh"
+#include "low.h"
 
 /** The pass for reading basic .debug_info data -- the layout of
     sections and their headers.  */

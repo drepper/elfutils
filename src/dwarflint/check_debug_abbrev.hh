@@ -26,8 +26,6 @@
 #ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
 #define DWARFLINT_CHECK_DEBUG_ABBREV_HH
 
-#include "checks-low.hh"
-
 class check_debug_abbrev
   : public check<check_debug_abbrev>
 {

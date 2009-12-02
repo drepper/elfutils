@@ -1,4 +1,4 @@
-/*
+/* Low-level section handling.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -23,11 +23,11 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECKS_LOW_HH
-#define DWARFLINT_CHECKS_LOW_HH
+#ifndef DWARFLINT_SECTIONS_HH
+#define DWARFLINT_SECTIONS_HH
 
-#include "low.h"
 #include "checks.hh"
+#include "low.h"
 
 class load_sections
   : public check<load_sections>
@@ -53,25 +53,15 @@ public:
   }
 };
 
-template<section_id sec_id>
+template<unsigned sec_id>
 class section
   : public section_base
   , public check<section<sec_id> >
 {
 public:
   explicit section (dwarflint &lint)
-    : section_base (lint, sec_id)
+    : section_base (lint, static_cast <enum section_id> (sec_id))
   {}
 };
 
-class check_debug_aranges
-  : public check<check_debug_aranges>
-{
-  section<sec_aranges> *_m_sec_aranges;
-
-public:
-  explicit check_debug_aranges (dwarflint &lint);
-};
-static reg<check_debug_aranges> reg_debug_aranges;
-
-#endif//DWARFLINT_CHECKS_LOW_HH
+#endif//DWARFLINT_SECTIONS_HH

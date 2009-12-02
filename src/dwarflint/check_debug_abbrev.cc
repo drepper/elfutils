@@ -27,11 +27,11 @@
 # include <config.h>
 #endif
 
-#include "checks-low.hh"
-#include "pri.hh"
-#include "tables.hh"
 #include "check_debug_info.hh"
 #include "check_debug_abbrev.hh"
+#include "pri.hh"
+#include "tables.hh"
+#include "sections.hh"
 
 #include <dwarf.h>
 #include <sstream>

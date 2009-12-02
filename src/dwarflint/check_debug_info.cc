@@ -35,6 +35,7 @@
 #include "messages.h"
 #include "pri.hh"
 #include "config.h"
+#include "sections.hh"
 #include "check_debug_loc_range.hh"
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"

@@ -24,6 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "highlevel_check.hh"
+#include "messages.h"
 
 namespace
 {

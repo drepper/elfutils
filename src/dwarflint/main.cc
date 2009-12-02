@@ -38,7 +38,6 @@
 #include "dwarflint.hh"
 #include "readctx.h"
 #include "checks.hh"
-#include "checks-low.hh" // xxx
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;

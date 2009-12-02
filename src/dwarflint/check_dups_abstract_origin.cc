@@ -38,6 +38,7 @@
 #include "dwarfstrings.h"
 #include "all-dies-it.hh"
 #include "pri.hh"
+#include "messages.h"
 #include <map>
 
 using elfutils::dwarf;

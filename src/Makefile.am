@@ -89,18 +89,19 @@ dwarflint_SOURCES = dwarfstrings.c \
 		    dwarflint/messages.cc dwarflint/messages.h \
 		    dwarflint/where.c dwarflint/where.h \
 		    dwarflint/config.cc dwarflint/config.h \
-		    dwarflint/checks.hh \
-		    dwarflint/checks-low.cc dwarflint/checks-low.hh \
 		    dwarflint/addr-record.cc dwarflint/addr-record.h \
 		    dwarflint/reloc.cc dwarflint/reloc.h \
 		    dwarflint/tables.cc dwarflint/tables.hh dwarflint/tables.h \
 		    dwarflint/all-dies-it.hh \
+		    dwarflint/checks.hh \
+		    dwarflint/sections.cc dwarflint/sections.hh dwarflint/sections.ii \
 		    dwarflint/highlevel_check.cc dwarflint/highlevel_check.hh \
 		    dwarflint/check_debug_abbrev.cc dwarflint/check_debug_abbrev.hh dwarflint/check_debug_abbrev.ii \
 		    dwarflint/check_debug_info.cc dwarflint/check_debug_info.hh dwarflint/check_debug_info.ii \
 		    dwarflint/check_debug_line.cc \
 		    dwarflint/check_debug_pub.cc \
 		    dwarflint/check_debug_loc_range.cc dwarflint/check_debug_loc_range.hh \
+		    dwarflint/check_debug_aranges.cc dwarflint/check_debug_aranges.hh \
 		    dwarflint/check_matching_ranges.cc \
 		    dwarflint/check_range_out_of_scope.cc \
 		    dwarflint/check_expected_trees.cc \

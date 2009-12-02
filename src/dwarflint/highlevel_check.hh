@@ -30,7 +30,7 @@
 # include <config.h>
 #endif
 
-#include "checks-low.hh"
+#include "checks.hh"
 #include "config.h"
 #include "c++/dwarf"
 #include "../libdwfl/libdwfl.h"

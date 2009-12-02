@@ -1,4 +1,4 @@
-/* Low-level checking of .debug_loc and .debug_range.
+/* Low-level checking of .debug_aranges.
    Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -23,48 +23,36 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "sections.ii"
-#include "check_debug_info.ii"
-#include "checks.hh"
-#include "messages.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "low.h"
+#include "sections.hh"
+#include "check_debug_aranges.hh"
+#include "check_debug_info.hh"
+#include "check_debug_loc_range.hh"
 
-class check_debug_ranges
-  : public check<check_debug_ranges>
+check_debug_aranges::check_debug_aranges (dwarflint &lint)
+  : _m_sec_aranges (lint.check (_m_sec_aranges))
 {
-  section<sec_ranges> *_m_sec_ranges;
-  check_debug_info *_m_cus;
+  check_debug_info *info = lint.toplev_check<check_debug_info> ();
+  coverage *cov = NULL;
+  if (info != NULL)
+    {
+      // xxx If need_ranges is true, we have to load ranges first.
+      // That's a flaw in design of checks, that data should have been
+      // stored in check_ranges, and that should have been requested
+      // explicitly.  But for the time being...
+      if (info->cu_cov.need_ranges)
+	lint.toplev_check<check_debug_ranges> ();
+      if (!info->cu_cov.need_ranges)
+	cov = &info->cu_cov.cov;
+    }
 
-public:
-  explicit check_debug_ranges (dwarflint &lint);
-};
-
-class check_debug_loc
-  : public check<check_debug_loc>
-{
-  section<sec_loc> *_m_sec_loc;
-  check_debug_info *_m_cus;
-
-public:
-  explicit check_debug_loc (dwarflint &lint);
-};
-
-struct hole_info
-{
-  enum section_id section;
-  enum message_category category;
-  void *data;
-  unsigned align;
-};
-
-/* DATA has to be a pointer to an instance of struct hole_info.
-   DATA->data has to point at d_buf of section in question.  */
-extern bool found_hole (uint64_t start, uint64_t length, void *data);
-
-extern bool check_location_expression (elf_file const &file,
-				       struct read_ctx *parent_ctx,
-				       struct cu *cu,
-				       uint64_t init_off,
-				       struct relocation_data *reloc,
-				       size_t length,
-				       struct where *wh);
+  if (!check_aranges_structural (&_m_sec_aranges->file,
+				 &_m_sec_aranges->sect,
+				 info != NULL ? &info->cus.front () : NULL,
+				 cov))
+    throw check_base::failed ();
+}
