@@ -48,9 +48,7 @@ runtest()
 }
 
 runtest ../src/addr2line
-runtest ../src/dwarfcmp
-runtest ../src/dwarfcmp-test
-runtest ../src/dwarflint
+runtest ../src/ar
 runtest ../src/elfcmp
 runtest ../src/elflint
 runtest ../src/findtextrel
@@ -62,5 +60,10 @@ runtest ../src/size
 runtest ../src/strip
 runtest ../src/unstrip
 runtest ../*/*.so
+
+# These are the biggest ones.
+runtest ../src/dwarflint
+runtest ../src/dwarfcmp
+runtest ../src/dwarfcmp-test
 
 exit $status

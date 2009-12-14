@@ -1,3 +1,7 @@
+2009-12-13  Roland McGrath  <roland@redhat.com>
+
+	* run-dwarfcmp-self.sh: Move the hairiest/largest cases to last.
+
 2009-09-15  Roland McGrath  <roland@redhat.com>
 
 	* print-die.cc: Grok --refs-shared-cu, --refs-shared-file options
