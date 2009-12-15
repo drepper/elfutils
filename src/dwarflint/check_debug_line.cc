@@ -554,12 +554,15 @@ check_debug_line::check_debug_line (dwarflint &lint)
 	    << " `" << include_directories[i].name
 	    << "' is not used." << std::endl;
 
-      for (size_t i = 0; i < files.size (); ++i)
-	if (!files[i].used)
-	  wr_message (where,
-		      cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
-	    << "the file #" << i + 1
-	    << " `" << files[i].name << "' is not used." << std::endl;
+      if (cus != NULL)
+	// We can't do full analysis unless we know which DIEs refer
+	// to files.
+	for (size_t i = 0; i < files.size (); ++i)
+	  if (!files[i].used)
+	    wr_message (where,
+			cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
+	      << "the file #" << i + 1
+	      << " `" << files[i].name << "' is not used." << std::endl;
 
       if (!seen_opcode)
 	wr_message (where, cat (mc_line, mc_acc_bloat, mc_impact_3))
