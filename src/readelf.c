@@ -1,5 +1,5 @@
 /* Print information from ELF file in human-readable form.
-   Copyright (C) 1999-2008, 2009 Red Hat, Inc.
+   Copyright (C) 1999-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 
@@ -69,8 +69,9 @@ ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
 {
-  { NULL, 0, NULL, 0, N_("Output selection:"), 0 },
-  { "all", 'a', NULL, 0, N_("Equivalent to: -e -h -l"), 0 },
+  { NULL, 0, NULL, 0, N_("ELF output selection:"), 0 },
+  { "all", 'a', NULL, 0,
+    N_("All these plus -p .strtab -p .dynstr -p .comment"), 0 },
   { "dynamic", 'd', NULL, 0, N_("Display the dynamic segment"), 0 },
   { "file-header", 'h', NULL, 0, N_("Display the ELF file header"), 0 },
   { "histogram", 'I', NULL, 0,
@@ -78,17 +79,21 @@ static const struct argp_option options[] =
   { "program-headers", 'l', NULL, 0, N_("Display the program headers"), 0 },
   { "segments", 'l', NULL, OPTION_ALIAS | OPTION_HIDDEN, NULL, 0 },
   { "relocs", 'r', NULL, 0, N_("Display relocations"), 0 },
-  { "section-headers", 'S', NULL, 0, N_("Display the sections' header"), 0 },
+  { "section-headers", 'S', NULL, 0, N_("Display the sections' headers"), 0 },
   { "sections", 'S', NULL, OPTION_ALIAS | OPTION_HIDDEN, NULL, 0 },
   { "symbols", 's', NULL, 0, N_("Display the symbol table"), 0 },
   { "version-info", 'V', NULL, 0, N_("Display versioning information"), 0 },
+  { "notes", 'n', NULL, 0, N_("Display the ELF notes"), 0 },
+  { "arch-specific", 'A', NULL, 0,
+    N_("Display architecture specific information, if any"), 0 },
+  { "exception", 'e', NULL, 0,
+    N_("Display sections for exception handling"), 0 },
+
+  { NULL, 0, NULL, 0, N_("Additional output selection:"), 0 },
   { "debug-dump", 'w', "SECTION", OPTION_ARG_OPTIONAL,
     N_("Display DWARF section content.  SECTION can be one of abbrev, "
        "aranges, frame, info, loc, line, ranges, pubnames, str, macinfo, "
        "or exception"), 0 },
-  { "notes", 'n', NULL, 0, N_("Display the core notes"), 0 },
-  { "arch-specific", 'A', NULL, 0,
-    N_("Display architecture specific information (if any)"), 0 },
   { "hex-dump", 'x', "SECTION", 0,
     N_("Dump the uninterpreted contents of SECTION, by number or name"), 0 },
   { "strings", 'p', "SECTION", OPTION_ARG_OPTIONAL,
@@ -96,8 +101,6 @@ static const struct argp_option options[] =
   { "string-dump", 'p', NULL, OPTION_ALIAS | OPTION_HIDDEN, NULL, 0 },
   { "archive-index", 'c', NULL, 0,
     N_("Display the symbol index of an archive"), 0 },
-  { "exception", 'e', NULL, 0, N_("Display sections for exception handling"),
-    0 },
 
   { NULL, 0, NULL, 0, N_("Output control:"), 0 },
   { "numeric-addresses", 'N', NULL, 0,
@@ -188,7 +191,7 @@ static enum section_e
 		 | section_info | section_line | section_loc
 		 | section_pubnames | section_str | section_macinfo
 		 | section_ranges | section_exception)
-} print_debug_sections;
+} print_debug_sections, implicit_debug_sections;
 
 /* Select hex dumping of sections.  */
 static struct section_argument *dump_data_sections;
@@ -202,6 +205,7 @@ struct section_argument
 {
   struct section_argument *next;
   const char *arg;
+  bool implicit;
 };
 
 /* Number of sections in the file.  */
@@ -282,11 +286,12 @@ static error_t
 parse_opt (int key, char *arg,
 	   struct argp_state *state __attribute__ ((unused)))
 {
-  void add_dump_section (const char *name)
+  void add_dump_section (const char *name, bool implicit)
   {
     struct section_argument *a = xmalloc (sizeof *a);
     a->arg = name;
     a->next = NULL;
+    a->implicit = implicit;
     struct section_argument ***tailp
       = key == 'x' ? &dump_data_sections_tail : &string_sections_tail;
     **tailp = a;
@@ -307,10 +312,10 @@ parse_opt (int key, char *arg,
       print_histogram = true;
       print_arch = true;
       print_notes = true;
-      print_debug_sections |= section_exception;
-      add_dump_section (".strtab");
-      add_dump_section (".dynstr");
-      add_dump_section (".comment");
+      implicit_debug_sections |= section_exception;
+      add_dump_section (".strtab", true);
+      add_dump_section (".dynstr", true);
+      add_dump_section (".comment", true);
       any_control_option = true;
       break;
     case 'A':
@@ -408,7 +413,7 @@ parse_opt (int key, char *arg,
 	}
       /* Fall through.  */
     case 'x':
-      add_dump_section (arg);
+      add_dump_section (arg, false);
       any_control_option = true;
       break;
     case 'N':
@@ -679,7 +684,7 @@ process_elf_file (Dwfl_Module *dwflmod, int fd)
     dump_data (pure_ebl);
   if (string_sections != NULL)
     dump_strings (ebl);
-  if (print_debug_sections != 0)
+  if ((print_debug_sections | implicit_debug_sections) != 0)
     print_debug (dwflmod, ebl, ehdr);
   if (print_notes)
     handle_notes (pure_ebl, ehdr);
@@ -3469,6 +3474,14 @@ dwarf_attr_string (unsigned int attrnum)
 
       case DW_AT_body_end:
 	result = "body_end";
+	break;
+
+      case DW_AT_GNU_vector:
+	result = "GNU_vector";
+	break;
+
+      case DW_AT_GNU_template_name:
+	result = "GNU_template_name";
 	break;
 
       default:
@@ -6504,8 +6517,9 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
   Dwarf *dbg = dwfl_module_getdwarf (dwflmod, &dwbias);
   if (dbg == NULL)
     {
-      error (0, 0, gettext ("cannot get debug context descriptor: %s"),
-	     dwfl_errmsg (-1));
+      if (print_debug_sections != 0)
+	error (0, 0, gettext ("cannot get debug context descriptor: %s"),
+	       dwfl_errmsg (-1));
       return;
     }
 
@@ -6560,7 +6574,8 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 	  for (n = 0; n < ndebug_sections; ++n)
 	    if (strcmp (name, debug_sections[n].name) == 0)
 	      {
-		if (print_debug_sections & debug_sections[n].bitmask)
+		if ((print_debug_sections | implicit_debug_sections)
+		    & debug_sections[n].bitmask)
 		  debug_sections[n].fp (dwflmod, ebl, ehdr, scn, shdr, dbg);
 		break;
 	      }
@@ -6676,11 +6691,11 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
 	  convsize = count * size;
 	  *repeated_size -= convsize;
 	}
-      else
+      else if (item->count != 0 || item->format != '\n')
 	*repeated_size -= size;
     }
 
-  desc = convert (core, item->type, count, data, desc + item->offset, convsize);
+  convert (core, item->type, count, data, desc + item->offset, convsize);
 
   Elf_Type type = item->type;
   if (type == ELF_T_ADDR)
@@ -6824,6 +6839,33 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
     case 's':
       colno = print_core_item (colno, ',', ITEM_WRAP_COLUMN, 0, item->name,
 			       count, "%.*s", (int) count, value.Byte);
+      break;
+
+    case '\n':
+      /* This is a list of strings separated by '\n'.  */
+      assert (item->count == 0);
+      assert (repeated_size != NULL);
+      assert (item->name == NULL);
+      if (unlikely (item->offset >= *repeated_size))
+	break;
+
+      const char *s = desc + item->offset;
+      size = *repeated_size - item->offset;
+      *repeated_size = 0;
+      while (size > 0)
+	{
+	  const char *eol = memchr (s, '\n', size);
+	  int len = size;
+	  if (eol != NULL)
+	    len = eol - s;
+	  printf ("%*s%.*s\n", ITEM_INDENT, "", len, s);
+	  if (eol == NULL)
+	    break;
+	  size -= eol + 1 - s;
+	  s = eol + 1;
+	}
+
+      colno = ITEM_WRAP_COLUMN;
       break;
 
     default:
@@ -7270,7 +7312,8 @@ handle_auxv_note (Ebl *ebl, Elf *core, GElf_Word descsz, GElf_Off desc_pos)
 }
 
 static void
-handle_core_note (Ebl *ebl, const GElf_Nhdr *nhdr, const void *desc)
+handle_core_note (Ebl *ebl, const GElf_Nhdr *nhdr,
+		  const char *name, const void *desc)
 {
   GElf_Word regs_offset;
   size_t nregloc;
@@ -7278,7 +7321,7 @@ handle_core_note (Ebl *ebl, const GElf_Nhdr *nhdr, const void *desc)
   size_t nitems;
   const Ebl_Core_Item *items;
 
-  if (! ebl_core_note (ebl, nhdr->n_type, nhdr->n_descsz,
+  if (! ebl_core_note (ebl, nhdr, name,
 		       &regs_offset, &nregloc, &reglocs, &nitems, &items))
     return;
 
@@ -7335,11 +7378,14 @@ handle_notes_data (Ebl *ebl, const GElf_Ehdr *ehdr,
 	{
 	  if (ehdr->e_type == ET_CORE)
 	    {
-	      if (nhdr.n_type == NT_AUXV)
+	      if (nhdr.n_type == NT_AUXV
+		  && (nhdr.n_namesz == 4 /* Broken old Linux kernels.  */
+		      || (nhdr.n_namesz == 5 && name[4] == '\0'))
+		  && !memcmp (name, "CORE", 4))
 		handle_auxv_note (ebl, ebl->elf, nhdr.n_descsz,
 				  start + desc_offset);
 	      else
-		handle_core_note (ebl, &nhdr, desc);
+		handle_core_note (ebl, &nhdr, name, desc);
 	    }
 	  else
 	    ebl_object_note (ebl, name, nhdr.n_type, nhdr.n_descsz, desc);
@@ -7554,7 +7600,8 @@ for_each_section_argument (Elf *elf, const struct section_argument *list,
 
 	  if (unlikely (scn == NULL))
 	    {
-	      error (0, 0, gettext ("\nsection '%s' does not exist"), a->arg);
+	      if (!a->implicit)
+		error (0, 0, gettext ("\nsection '%s' does not exist"), a->arg);
 	      continue;
 	    }
 	}
