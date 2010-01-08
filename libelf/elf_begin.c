@@ -1,5 +1,5 @@
 /* Create descriptor for processing file.
-   Copyright (C) 1998-2009 Red Hat, Inc.
+   Copyright (C) 1998-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -296,12 +296,21 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
   else if (scncnt > SIZE_MAX / (sizeof (Elf_Scn) + sizeof (Elf64_Shdr)))
     return NULL;
 
-  /* We can now allocate the memory.  */
+  /* We can now allocate the memory.  Even if there are no section headers,
+     we allocate space for a zeroth section in case we need it later.  */
+  const size_t scnmax = (scncnt ?: (cmd == ELF_C_RDWR || cmd == ELF_C_RDWR_MMAP)
+			 ? 1 : 0);
   Elf *elf = allocate_elf (fildes, map_address, offset, maxsize, cmd, parent,
-			   ELF_K_ELF, scncnt * sizeof (Elf_Scn));
+			   ELF_K_ELF, scnmax * sizeof (Elf_Scn));
   if (elf == NULL)
     /* Not enough memory.  */
     return NULL;
+
+  assert ((unsigned int) scncnt == scncnt);
+  assert (offsetof (struct Elf, state.elf32.scns)
+	  == offsetof (struct Elf, state.elf64.scns));
+  elf->state.elf32.scns.cnt = scncnt;
+  elf->state.elf32.scns.max = scnmax;
 
   /* Some more or less arbitrary value.  */
   elf->state.elf.scnincr = 10;
@@ -314,9 +323,6 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
       /* This pointer might not be directly usable if the alignment is
 	 not sufficient for the architecture.  */
       Elf32_Ehdr *ehdr = (Elf32_Ehdr *) ((char *) map_address + offset);
-
-      assert ((unsigned int) scncnt == scncnt);
-      elf->state.elf32.scns.cnt = elf->state.elf32.scns.max = scncnt;
 
       /* This is a 32-bit binary.  */
       if (map_address != NULL && e_ident[EI_DATA] == MY_ELFDATA
@@ -342,16 +348,19 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	  elf->state.elf32.shdr
 	    = (Elf32_Shdr *) ((char *) ehdr + ehdr->e_shoff);
 
-	  if (ehdr->e_phnum > 0)
+	  size_t phnum = ehdr->e_phnum;
+	  if (phnum == PN_XNUM && scncnt > 0)
+	    phnum = elf->state.elf32.shdr[0].sh_info;
+	  if (phnum > 0)
 	    {
-	    /* Assign a value only if there really is a program
-	       header.  Otherwise the value remains NULL.  */
+	      /* Assign a value only if there really is a program
+		 header.  Otherwise the value remains NULL.  */
 	      if (unlikely (ehdr->e_phoff >= maxsize)
 		  || unlikely (maxsize - ehdr->e_phoff
-			       < ehdr->e_phnum * sizeof (Elf32_Phdr)))
+			       < phnum * sizeof (Elf32_Phdr)))
 		goto free_and_out;
-	    elf->state.elf32.phdr
-	      = (Elf32_Phdr *) ((char *) ehdr + ehdr->e_phoff);
+	      elf->state.elf32.phdr
+		= (Elf32_Phdr *) ((char *) ehdr + ehdr->e_phoff);
 	    }
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
@@ -420,9 +429,6 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	 not sufficient for the architecture.  */
       Elf64_Ehdr *ehdr = (Elf64_Ehdr *) ((char *) map_address + offset);
 
-      assert ((unsigned int) scncnt == scncnt);
-      elf->state.elf64.scns.cnt = elf->state.elf64.scns.max = scncnt;
-
       /* This is a 64-bit binary.  */
       if (map_address != NULL && e_ident[EI_DATA] == MY_ELFDATA
 	  && (ALLOW_UNALIGNED
@@ -442,17 +448,19 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	  elf->state.elf64.shdr
 	    = (Elf64_Shdr *) ((char *) ehdr + ehdr->e_shoff);
 
-	  if (ehdr->e_phnum > 0)
+	  size_t phnum = ehdr->e_phnum;
+	  if (phnum == PN_XNUM && scncnt > 0)
+	    phnum = elf->state.elf64.shdr[0].sh_info;
+	  if (phnum > 0)
 	    {
-	    /* Assign a value only if there really is a program
-	       header.  Otherwise the value remains NULL.  */
+	      /* Assign a value only if there really is a program
+		 header.  Otherwise the value remains NULL.  */
 	      if (unlikely (ehdr->e_phoff >= maxsize)
 		  || unlikely (ehdr->e_phoff
-			       + ehdr->e_phnum
-			       * sizeof (Elf32_Phdr) > maxsize))
+			       + phnum * sizeof (Elf32_Phdr) > maxsize))
 		goto free_and_out;
-	    elf->state.elf64.phdr
-	      = (Elf64_Phdr *) ((char *) ehdr + ehdr->e_phoff);
+	      elf->state.elf64.phdr
+		= (Elf64_Phdr *) ((char *) ehdr + ehdr->e_phoff);
 	    }
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
