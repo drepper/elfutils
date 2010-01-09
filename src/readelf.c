@@ -209,8 +209,9 @@ struct section_argument
   bool implicit;
 };
 
-/* Number of sections in the file.  */
+/* Numbers of sections and program headers in the file.  */
 static size_t shnum;
+static size_t phnum;
 
 
 /* Declarations of local functions.  */
@@ -220,7 +221,7 @@ static void print_ehdr (Ebl *ebl, GElf_Ehdr *ehdr);
 static void print_shdr (Ebl *ebl, GElf_Ehdr *ehdr);
 static void print_phdr (Ebl *ebl, GElf_Ehdr *ehdr);
 static void print_scngrp (Ebl *ebl);
-static void print_dynamic (Ebl *ebl, GElf_Ehdr *ehdr);
+static void print_dynamic (Ebl *ebl);
 static void print_relocs (Ebl *ebl, GElf_Ehdr *ehdr);
 static void handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn,
 			       GElf_Shdr *shdr);
@@ -627,6 +628,12 @@ process_elf_file (Dwfl_Module *dwflmod, int fd)
 	   gettext ("cannot determine number of sections: %s"),
 	   elf_errmsg (-1));
 
+  /* Determine the number of phdrs.  */
+  if (unlikely (elf_getphdrnum (ebl->elf, &phnum) < 0))
+    error (EXIT_FAILURE, 0,
+	   gettext ("cannot determine number of program headers: %s"),
+	   elf_errmsg (-1));
+
   /* For an ET_REL file, libdwfl has adjusted the in-core shdrs
      and may have applied relocation to some sections.
      So we need to get a fresh Elf handle on the file to display those.  */
@@ -666,7 +673,7 @@ process_elf_file (Dwfl_Module *dwflmod, int fd)
   if (print_section_groups)
     print_scngrp (ebl);
   if (print_dynamic_table)
-    print_dynamic (ebl, ehdr);
+    print_dynamic (ebl);
   if (print_relocations)
     print_relocs (pure_ebl, ehdr);
   if (print_histogram)
@@ -785,8 +792,19 @@ print_ehdr (Ebl *ebl, GElf_Ehdr *ehdr)
   printf (gettext ("  Size of program header entries:    %" PRId16 " %s\n"),
 	  ehdr->e_phentsize, gettext ("(bytes)"));
 
-  printf (gettext ("  Number of program headers entries: %" PRId16 "\n"),
+  printf (gettext ("  Number of program headers entries: %" PRId16),
 	  ehdr->e_phnum);
+  if (ehdr->e_phnum == PN_XNUM)
+    {
+      GElf_Shdr shdr_mem;
+      GElf_Shdr *shdr = gelf_getshdr (elf_getscn (ebl->elf, 0), &shdr_mem);
+      if (shdr != NULL)
+	printf (gettext (" (%" PRIu32 " in [0].sh_info)"),
+		(uint32_t) shdr->sh_info);
+      else
+	fputs_unlocked (gettext (" ([0] not available)"), stdout);
+    }
+  fputc_unlocked ('\n', stdout);
 
   printf (gettext ("  Size of section header entries:    %" PRId16 " %s\n"),
 	  ehdr->e_shentsize, gettext ("(bytes)"));
@@ -954,7 +972,7 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
   bool has_relro = false;
   GElf_Addr relro_from = 0;
   GElf_Addr relro_to = 0;
-  for (size_t cnt = 0; cnt < ehdr->e_phnum; ++cnt)
+  for (size_t cnt = 0; cnt < phnum; ++cnt)
     {
       char buf[128];
       GElf_Phdr mem;
@@ -1010,7 +1028,7 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 
   puts (gettext ("\n Section to Segment mapping:\n  Segment Sections..."));
 
-  for (size_t cnt = 0; cnt < ehdr->e_phnum; ++cnt)
+  for (size_t cnt = 0; cnt < phnum; ++cnt)
     {
       /* Print the segment number.  */
       printf ("   %2.2zu     ", cnt);
@@ -1080,7 +1098,7 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 		  /* Determine the segment this section is part of.  */
 		  size_t cnt2;
 		  GElf_Phdr *phdr2 = NULL;
-		  for (cnt2 = 0; cnt2 < ehdr->e_phnum; ++cnt2)
+		  for (cnt2 = 0; cnt2 < phnum; ++cnt2)
 		    {
 		      GElf_Phdr phdr2_mem;
 		      phdr2 = gelf_getphdr (ebl->elf, cnt2, &phdr2_mem);
@@ -1092,7 +1110,7 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 			break;
 		    }
 
-		  if (cnt2 < ehdr->e_phnum)
+		  if (cnt2 < phnum)
 		    {
 		      if ((phdr2->p_flags & PF_W) == 0 && !in_ro)
 			{
@@ -1443,9 +1461,9 @@ handle_dynamic (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 
 /* Print the dynamic segment.  */
 static void
-print_dynamic (Ebl *ebl, GElf_Ehdr *ehdr)
+print_dynamic (Ebl *ebl)
 {
-  for (int i = 0; i < ehdr->e_phnum; ++i)
+  for (size_t i = 0; i < phnum; ++i)
     {
       GElf_Phdr phdr_mem;
       GElf_Phdr *phdr = gelf_getphdr (ebl->elf, i, &phdr_mem);
@@ -1587,7 +1605,7 @@ handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 		    {
 		      is_statically_linked = 1;
 
-		      for (size_t inner = 0; inner < ehdr->e_phnum; ++inner)
+		      for (size_t inner = 0; inner < phnum; ++inner)
 			{
 			  GElf_Phdr phdr_mem;
 			  GElf_Phdr *phdr = gelf_getphdr (ebl->elf, inner,
@@ -1760,7 +1778,7 @@ handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 		    {
 		      is_statically_linked = 1;
 
-		      for (size_t inner = 0; inner < ehdr->e_phnum; ++inner)
+		      for (size_t inner = 0; inner < phnum; ++inner)
 			{
 			  GElf_Phdr phdr_mem;
 			  GElf_Phdr *phdr = gelf_getphdr (ebl->elf, inner,
@@ -6806,7 +6824,7 @@ handle_notes (Ebl *ebl, GElf_Ehdr *ehdr)
 
   /* We have to look through the program header to find the note
      sections.  There can be more than one.  */
-  for (size_t cnt = 0; cnt < ehdr->e_phnum; ++cnt)
+  for (size_t cnt = 0; cnt < phnum; ++cnt)
     {
       GElf_Phdr mem;
       GElf_Phdr *phdr = gelf_getphdr (ebl->elf, cnt, &mem);
