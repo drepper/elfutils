@@ -806,7 +806,7 @@ namespace elfutils
       private:
 
 	typedef raw_children_type::const_iterator raw_iterator;
-	subr::sharing_stack<raw_iterator> _m_stack;
+	subr::stackish<raw_iterator> _m_stack;
 
 	/* Push and pop until _m_stack.top () == raw_children_type::end ()
 	   or it's looking at a DIE other than DW_TAG_imported_unit.  */
