@@ -1,3 +1,26 @@
+2010-02-15  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am: Use config/eu.am for common stuff.
+
+	* readelf.c (print_debug_frame_section): Add a cast to avoid sign
+	mismatch in comparison.
+
+2010-02-02  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_encoding_base): Handle DW_EH_PE_absptr (zero).
+	(read_encoded): Likewise.
+	(print_debug_frame_section): Check for bogus augmentation length.
+	For P augmentation, use read_encoded, print the encoding description,
+	and use hex for unsigned values.
+
+2010-01-15  Roland McGrath  <roland@redhat.com>
+
+	* ar.c: Include <sys/stat.h>.
+	* elflint.c: Likewise.
+	* readelf.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise
+
 2010-01-07  Roland McGrath  <roland@redhat.com>
 
 	* readelf.c (print_ehdr): Handle PN_XNUM.
