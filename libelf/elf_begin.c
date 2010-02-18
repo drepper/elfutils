@@ -369,10 +369,13 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	      elf->state.elf32.scns.data[cnt].elf = elf;
 	      elf->state.elf32.scns.data[cnt].shdr.e32 =
 		&elf->state.elf32.shdr[cnt];
-	      elf->state.elf32.scns.data[cnt].rawdata_base =
-		elf->state.elf32.scns.data[cnt].data_base =
-		((char *) map_address + offset
-		 + elf->state.elf32.shdr[cnt].sh_offset);
+	      if (likely (elf->state.elf32.shdr[cnt].sh_offset < maxsize)
+		  && likely (maxsize - elf->state.elf32.shdr[cnt].sh_offset
+			     <= elf->state.elf32.shdr[cnt].sh_size))
+		elf->state.elf32.scns.data[cnt].rawdata_base =
+		  elf->state.elf32.scns.data[cnt].data_base =
+		  ((char *) map_address + offset
+		   + elf->state.elf32.shdr[cnt].sh_offset);
 	      elf->state.elf32.scns.data[cnt].list = &elf->state.elf32.scns;
 
 	      /* If this is a section with an extended index add a
@@ -469,10 +472,13 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	      elf->state.elf64.scns.data[cnt].elf = elf;
 	      elf->state.elf64.scns.data[cnt].shdr.e64 =
 		&elf->state.elf64.shdr[cnt];
-	      elf->state.elf64.scns.data[cnt].rawdata_base =
-		elf->state.elf64.scns.data[cnt].data_base =
-		((char *) map_address + offset
-		 + elf->state.elf64.shdr[cnt].sh_offset);
+	      if (likely (elf->state.elf64.shdr[cnt].sh_offset < maxsize)
+		  && likely (maxsize - elf->state.elf64.shdr[cnt].sh_offset
+			     <= elf->state.elf64.shdr[cnt].sh_size))
+		elf->state.elf64.scns.data[cnt].rawdata_base =
+		  elf->state.elf64.scns.data[cnt].data_base =
+		  ((char *) map_address + offset
+		   + elf->state.elf64.shdr[cnt].sh_offset);
 	      elf->state.elf64.scns.data[cnt].list = &elf->state.elf64.scns;
 
 	      /* If this is a section with an extended index add a
