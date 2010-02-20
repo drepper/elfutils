@@ -255,6 +255,7 @@ struct Dwarf_Line_s
 struct Dwarf_Lines_s
 {
   size_t nlines;
+  bool uses_stmt;
   struct Dwarf_Line_s info[0];
 };
 

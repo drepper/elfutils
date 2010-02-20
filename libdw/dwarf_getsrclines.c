@@ -1,5 +1,5 @@
 /* Return line number information of CU.
-   Copyright (C) 2004-2009 Red Hat, Inc.
+   Copyright (C) 2004-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -267,6 +267,8 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	};
       struct filelist *filelist = &null_file;
       unsigned int nfilelist = 1;
+
+      bool uses_stmt = default_is_stmt == 0;
 
       if (unlikely (linep >= lineendp))
 	goto invalid_data;
@@ -548,6 +550,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		    goto invalid_data;
 
 		  is_stmt = 1 - is_stmt;
+		  uses_stmt = true;
 		  break;
 
 		case DW_LNS_set_basic_block:
@@ -664,6 +667,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	 The buffers overlap, so we've clobbered the early elements
 	 of SORTLINES by the time we're reading the later ones.  */
       cu->lines = buf;
+      cu->lines->uses_stmt = uses_stmt;
       cu->lines->nlines = nlinelist;
       for (i = 0; i < nlinelist; ++i)
 	{
