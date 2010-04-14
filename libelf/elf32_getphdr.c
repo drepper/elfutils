@@ -105,6 +105,13 @@ __elfw2(LIBELFBITS,getphdr_wrlock) (elf)
 
       size_t size = phnum * sizeof (ElfW2(LIBELFBITS,Phdr));
 
+      if (ehdr->e_phoff > elf->maximum_size
+	  || elf->maximum_size - ehdr->e_phoff < size)
+	{
+	  __libelf_seterrno (ELF_E_INVALID_DATA);
+	  goto out;
+	}
+
       if (elf->map_address != NULL)
 	{
 	  /* First see whether the information in the ELF header is

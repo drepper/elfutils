@@ -348,20 +348,8 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	  elf->state.elf32.shdr
 	    = (Elf32_Shdr *) ((char *) ehdr + ehdr->e_shoff);
 
-	  size_t phnum = ehdr->e_phnum;
-	  if (phnum == PN_XNUM && scncnt > 0)
-	    phnum = elf->state.elf32.shdr[0].sh_info;
-	  if (phnum > 0)
-	    {
-	      /* Assign a value only if there really is a program
-		 header.  Otherwise the value remains NULL.  */
-	      if (unlikely (ehdr->e_phoff >= maxsize)
-		  || unlikely (maxsize - ehdr->e_phoff
-			       < phnum * sizeof (Elf32_Phdr)))
-		goto free_and_out;
-	      elf->state.elf32.phdr
-		= (Elf32_Phdr *) ((char *) ehdr + ehdr->e_phoff);
-	    }
+	  /* Don't precache the phdr pointer here.
+	     elf32_getphdr will validate it against the size when asked.  */
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
 	    {
@@ -451,20 +439,8 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	  elf->state.elf64.shdr
 	    = (Elf64_Shdr *) ((char *) ehdr + ehdr->e_shoff);
 
-	  size_t phnum = ehdr->e_phnum;
-	  if (phnum == PN_XNUM && scncnt > 0)
-	    phnum = elf->state.elf64.shdr[0].sh_info;
-	  if (phnum > 0)
-	    {
-	      /* Assign a value only if there really is a program
-		 header.  Otherwise the value remains NULL.  */
-	      if (unlikely (ehdr->e_phoff >= maxsize)
-		  || unlikely (ehdr->e_phoff
-			       + phnum * sizeof (Elf32_Phdr) > maxsize))
-		goto free_and_out;
-	      elf->state.elf64.phdr
-		= (Elf64_Phdr *) ((char *) ehdr + ehdr->e_phoff);
-	    }
+	  /* Don't precache the phdr pointer here.
+	     elf64_getphdr will validate it against the size when asked.  */
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
 	    {

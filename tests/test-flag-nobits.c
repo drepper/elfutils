@@ -1,7 +1,5 @@
-/* Initialization of SH specific backend library.
-   Copyright (C) 2000, 2001, 2002, 2005 Red Hat, Inc.
+/* Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -24,38 +22,22 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include <fcntl.h>
+#include <stdlib.h>
+#include <gelf.h>
 
-#define BACKEND		sh_
-#define RELOC_PREFIX	R_SH_
-#include "libebl_CPU.h"
-
-/* This defines the common reloc hooks based on sh_reloc.def.  */
-#include "common-reloc.c"
-
-
-const char *
-sh_init (elf, machine, eh, ehlen)
-     Elf *elf __attribute__ ((unused));
-     GElf_Half machine __attribute__ ((unused));
-     Ebl *eh;
-     size_t ehlen;
+int
+main (int argc, char **argv)
 {
-  /* Check whether the Elf_BH object has a sufficent size.  */
-  if (ehlen < sizeof (Ebl))
-    return NULL;
+  if (argc != 2)
+    abort ();
 
-  /* We handle it.  */
-  eh->name = "Hitachi SH";
-  sh_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
-  HOOK (eh, gotpc_reloc_check);
-  HOOK (eh, machine_flag_check);
-  HOOK (eh, core_note);
-  HOOK (eh, register_info);
-  HOOK (eh, return_value_location);
+  elf_version (EV_CURRENT);
 
-  return MODVERSION;
+  int fd = open64 (argv[1], O_RDONLY);
+  Elf *stripped = elf_begin (fd, ELF_C_READ, NULL);
+
+  Elf_Scn *scn = NULL;
+  while ((scn = elf_nextscn (stripped, scn)) != NULL)
+    elf_flagdata (elf_getdata (scn, NULL), ELF_C_SET, ELF_F_DIRTY);
 }

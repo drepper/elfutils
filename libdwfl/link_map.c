@@ -1,5 +1,5 @@
 /* Report modules by examining dynamic linker data structures.
-   Copyright (C) 2008, 2009 Red Hat, Inc.
+   Copyright (C) 2008-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -123,8 +123,7 @@ auxv_format_probe (const void *auxv, size_t size,
     return false;
   }
 
-  size_t i;
-  for (i = 0; i < size / sizeof (Elf64_auxv_t); ++i)
+  for (size_t i = 0; i < size / sizeof (Elf64_auxv_t); ++i)
     {
       if (check64 (i))
 	{
@@ -132,18 +131,12 @@ auxv_format_probe (const void *auxv, size_t size,
 	  return true;
 	}
 
-      if (check32 (i))
+      if (check32 (i * 2) || check32 (i * 2 + 1))
 	{
 	  *elfclass = ELFCLASS32;
 	  return true;
 	}
     }
-  for (; i < size / sizeof (Elf64_auxv_t); ++i)
-    if (check32 (i))
-      {
-	*elfclass = ELFCLASS32;
-	return true;
-      }
 
   return false;
 }
@@ -336,7 +329,13 @@ report_r_debug (uint_fast8_t elfclass, uint_fast8_t elfdata,
 
   Dwfl_Module **lastmodp = &dwfl->modulelist;
   int result = 0;
-  while (next != 0)
+
+  /* There can't be more elements in the link_map list than there are
+     segments.  DWFL->lookup_elts is probably twice that number, so it
+     is certainly above the upper bound.  If we iterate too many times,
+     there must be a loop in the pointers due to link_map clobberation.  */
+  size_t iterations = 0;
+  while (next != 0 && ++iterations < dwfl->lookup_elts)
     {
       if (read_addrs (next, 4))
 	return release_buffer (-1);
@@ -805,7 +804,7 @@ dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
 			   ? elf32_xlatetom : elf64_xlatetom)
 			  (&out, &in, elfdata) != NULL))
 		{
-		  /* We are looking for PT_DYNAMIC.  */
+		  /* We are looking for DT_DEBUG.  */
 		  const union
 		  {
 		    Elf32_Dyn d32[dyn_filesz / sizeof (Elf32_Dyn)];
