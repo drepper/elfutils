@@ -570,13 +570,14 @@ process_file (int fd, const char *fname, bool only_one)
   if (dwfl_report_offline (dwfl, fname, fname, dwfl_fd) == NULL)
     {
       struct stat64 st;
-      if (fstat64 (fd, &st) != 0)
+      if (fstat64 (dwfl_fd, &st) != 0)
 	error (0, errno, gettext ("cannot stat input file"));
       else if (unlikely (st.st_size == 0))
 	error (0, 0, gettext ("input file is empty"));
       else
 	error (0, 0, gettext ("failed reading '%s': %s"),
 	       fname, dwfl_errmsg (-1));
+      close (dwfl_fd);		/* Consumed on success, not on failure.  */
     }
   else
     {
@@ -2631,6 +2632,7 @@ print_hash_info (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr, size_t shstrndx,
     {
       uint64_t success = 0;
 
+      /* xgettext:no-c-format */
       fputs_unlocked (gettext ("\
  Length  Number  % of total  Coverage\n"), stdout);
       printf (gettext ("      0  %6" PRIu32 "      %5.1f%%\n"),
@@ -6729,16 +6731,25 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
 	  {
 	    unsigned int bit = ((void *) i - data) * 8;
 	    unsigned int w = negate ? ~*i : *i;
+	    unsigned int run = 0;
 	    while (w != 0)
 	      {
 		int n = ffs (w);
 		w >>= n;
 		bit += n;
 
-		if (lastbit + 1 != bit)
-		  p += sprintf (p, "-%u,%u", lastbit - bias, bit - bias);
-		else if (lastbit == 0)
-		  p += sprintf (p, "%u", bit - bias);
+		if (lastbit + 1 == bit)
+		  ++run;
+		else
+		  {
+		    if (lastbit == 0)
+		      p += sprintf (p, "%u", bit - bias);
+		    else if (run == 0)
+		      p += sprintf (p, ",%u", bit - bias);
+		    else
+		      p += sprintf (p, "-%u,%u", lastbit - bias, bit - bias);
+		    run = 0;
+		  }
 
 		lastbit = bit;
 	      }
