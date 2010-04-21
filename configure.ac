@@ -16,7 +16,7 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; if not, write to the Free Software Foundation,
 dnl Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 dnl
-AC_INIT([Red Hat elfutils],[0.145.90],[http://bugzilla.redhat.com/bugzilla/],[elfutils])
+AC_INIT([Red Hat elfutils],[0.146],[http://bugzilla.redhat.com/bugzilla/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
@@ -89,14 +89,6 @@ CFLAGS="$save_CFLAGS"
 LDFLAGS="$save_LDFLAGS"])
 AS_IF([test "x$ac_cv_tls" != xyes],
       AC_MSG_ERROR([__thread support required]))
-
-LOCALEDIR=$datadir
-AC_SUBST(LOCALEDIR)
-AC_DEFINE_UNQUOTED(LOCALEDIR, "$LOCALEDIR")
-AH_TEMPLATE([LOCALEDIR], [Directory to place translation files in.])
-
-DATADIRNAME=$datadir
-AC_SUBST(DATADIRNAME)
 
 dnl This test must come as early as possible after the compiler configuration
 dnl tests, because the choice of the file model can (in principle) affect
