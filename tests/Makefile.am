@@ -59,7 +59,9 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
-		  dwarf-print dwarf_edit
+		  dwarf-print dwarf_edit \
+		  test-flag-nobits
+
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -86,7 +88,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
 	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh \
-	run-dwarf_edit.sh run-dwarfcmp-test-self.sh
+	run-dwarf_edit.sh run-dwarfcmp-test-self.sh \
+	run-test-flag-nobits.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -119,7 +122,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-find-prologues.sh run-allregs.sh run-native-test.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
-	     run-dwarf-getmacros.sh \
+	     run-dwarf-getmacros.sh run-test-flag-nobits.sh \
 	     run-dwarfcmp-self.sh run-dwarfcmp-test-self.sh \
 	     run-dwarflint-self.sh run-dwarf-attributes.sh run-dwarf_edit.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
@@ -246,6 +249,7 @@ dwfl_addr_sect_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 sha1_tst_LDADD = $(libeu) $(libmudflap)
 dwarf_getmacros_LDADD = $(libdw) $(libmudflap)
 addrcfi_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
+test_flag_nobits_LDADD = $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage

@@ -1,3 +1,18 @@
+2010-04-14  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add run-test-flag-nobits.sh here too.
+
+2010-04-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* msg_tst.c: Adjust expected error message.
+
+2010-04-01  Petr Machata  <pmachata@redhat.com>
+
+	* test-flag-nobits.c: New test.
+	* run-test-flag-nobits.sh: And its wrapper.
+	* Makefile.am (noinst_PROGRAMS, TESTS): Add them.
+	(test_flag_nobits_LDADD): New variable.
+
 2009-12-13  Roland McGrath  <roland@redhat.com>
 
 	* run-dwarfcmp-self.sh: Move the hairiest/largest cases to last.
