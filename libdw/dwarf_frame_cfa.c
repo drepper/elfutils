@@ -84,8 +84,13 @@ dwarf_frame_cfa (fs, ops, nops)
       result = __libdw_intern_expression
 	(NULL, fs->cache->other_byte_order,
 	 fs->cache->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8,
-	 &fs->cache->expr_tree, &fs->cfa_data.expr, false,
+	 &fs->cache->expr_tree, &fs->cfa_data.expr, false, false,
 	 ops, nops, IDX_debug_frame);
+      break;
+
+    case cfa_invalid:
+      __libdw_seterrno (DWARF_E_INVALID_CFI);
+      result = -1;
       break;
 
     default:
