@@ -72,7 +72,8 @@ gelf_update_shdr (Elf_Scn *scn, GElf_Shdr *src)
 
   if (elf->class == ELFCLASS32)
     {
-      Elf32_Shdr *shdr = scn->shdr.e32 ?: INTUSE(elf32_getshdr) (scn);
+      Elf32_Shdr *shdr
+	= scn->shdr.e32 ?: __elf32_getshdr_wrlock (scn);
 
       if (shdr == NULL)
 	{
@@ -106,7 +107,8 @@ gelf_update_shdr (Elf_Scn *scn, GElf_Shdr *src)
     }
   else
     {
-      Elf64_Shdr *shdr = scn->shdr.e64 ?: INTUSE(elf64_getshdr) (scn);
+      Elf64_Shdr *shdr
+	= scn->shdr.e64 ?: __elf64_getshdr_wrlock (scn);
 
       if (shdr == NULL)
 	{

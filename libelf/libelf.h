@@ -1,5 +1,5 @@
 /* Interface for libelf.
-   Copyright (C) 1998, 1999, 2000, 2002, 2004, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 1998-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -95,7 +95,7 @@ typedef struct
   Elf_Type d_type;		/* Type of this piece of data.  */
   unsigned int d_version;	/* ELF version.  */
   size_t d_size;		/* Size in bytes.  */
-  off64_t d_off;		/* Offset into section.  */
+  loff_t d_off;			/* Offset into section.  */
   size_t d_align;		/* Alignment in section.  */
 } Elf_Data;
 
@@ -157,7 +157,7 @@ typedef struct
   uid_t ar_uid;			/* User ID.  */
   gid_t ar_gid;			/* Group ID.  */
   mode_t ar_mode;		/* File mode.  */
-  off64_t ar_size;		/* File size.  */
+  loff_t ar_size;		/* File size.  */
   char *ar_rawname;		/* Original name of archive member.  */
 } Elf_Arhdr;
 
@@ -198,13 +198,13 @@ extern Elf_Cmd elf_next (Elf *__elf);
 extern int elf_end (Elf *__elf);
 
 /* Update ELF descriptor and write file to disk.  */
-extern off64_t elf_update (Elf *__elf, Elf_Cmd __cmd);
+extern loff_t elf_update (Elf *__elf, Elf_Cmd __cmd);
 
 /* Determine what kind of file is associated with ELF.  */
 extern Elf_Kind elf_kind (Elf *__elf) __attribute__ ((__pure__));
 
 /* Get the base offset for an object file.  */
-extern off64_t elf_getbase (Elf *__elf);
+extern loff_t elf_getbase (Elf *__elf);
 
 
 /* Retrieve file identification data.  */
@@ -219,6 +219,12 @@ extern Elf64_Ehdr *elf64_getehdr (Elf *__elf);
 extern Elf32_Ehdr *elf32_newehdr (Elf *__elf);
 /* Similar but this time the binary calls is ELFCLASS64.  */
 extern Elf64_Ehdr *elf64_newehdr (Elf *__elf);
+
+/* Get the number of program headers in the ELF file.  If the file uses
+   more headers than can be represented in the e_phnum field of the ELF
+   header the information from the sh_info field in the zeroth section
+   header is used.  */
+extern int elf_getphdrnum (Elf *__elf, size_t *__dst);
 
 /* Retrieve class-dependent program header table.  */
 extern Elf32_Phdr *elf32_getphdr (Elf *__elf);
@@ -248,18 +254,32 @@ extern Elf_Scn *elf_nextscn (Elf *__elf, Elf_Scn *__scn);
 /* Create a new section and append it at the end of the table.  */
 extern Elf_Scn *elf_newscn (Elf *__elf);
 
+/* Get the section index of the extended section index table for the
+   given symbol table.  */
+extern int elf_scnshndx (Elf_Scn *__scn);
+
 /* Get the number of sections in the ELF file.  If the file uses more
    sections than can be represented in the e_shnum field of the ELF
    header the information from the sh_size field in the zeroth section
    header is used.  */
-extern int elf_getshnum (Elf *__elf, size_t *__dst);
+extern int elf_getshdrnum (Elf *__elf, size_t *__dst);
+/* Sun messed up the implementation of 'elf_getshnum' in their implementation.
+   It was agreed to make the same functionality available under a different
+   name and obsolete the old name.  */
+extern int elf_getshnum (Elf *__elf, size_t *__dst)
+     __attribute__ ((__deprecated__));
 
 
 /* Get the section index of the section header string table in the ELF
    file.  If the index cannot be represented in the e_shnum field of
    the ELF header the information from the sh_link field in the zeroth
    section header is used.  */
-extern int elf_getshstrndx (Elf *__elf, size_t *__dst);
+extern int elf_getshdrstrndx (Elf *__elf, size_t *__dst);
+/* Sun messed up the implementation of 'elf_getshnum' in their implementation.
+   It was agreed to make the same functionality available under a different
+   name and obsolete the old name.  */
+extern int elf_getshstrndx (Elf *__elf, size_t *__dst)
+     __attribute__ ((__deprecated__));
 
 
 /* Retrieve section header of ELFCLASS32 binary.  */
@@ -302,7 +322,7 @@ extern Elf_Data *elf_newdata (Elf_Scn *__scn);
    would be for TYPE.  The resulting Elf_Data pointer is valid until
    elf_end (ELF) is called.  */
 extern Elf_Data *elf_getdata_rawchunk (Elf *__elf,
-				       off64_t __offset, size_t __size,
+				       loff_t __offset, size_t __size,
 				       Elf_Type __type);
 
 
@@ -314,7 +334,7 @@ extern char *elf_strptr (Elf *__elf, size_t __index, size_t __offset);
 extern Elf_Arhdr *elf_getarhdr (Elf *__elf);
 
 /* Return offset in archive for current file ELF.  */
-extern off64_t elf_getaroff (Elf *__elf);
+extern loff_t elf_getaroff (Elf *__elf);
 
 /* Select archive element at OFFSET.  */
 extern size_t elf_rand (Elf *__elf, size_t __offset);

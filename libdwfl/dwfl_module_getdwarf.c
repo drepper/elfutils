@@ -1,5 +1,5 @@
 /* Find debugging and symbol information for a module in libdwfl.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -61,33 +61,69 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
 {
   if (file->elf == NULL)
     {
+      /* If there was a pre-primed file name left that the callback left
+	 behind, try to open that file name.  */
+      if (file->fd < 0 && file->name != NULL)
+	file->fd = TEMP_FAILURE_RETRY (open64 (file->name, O_RDONLY));
+
       if (file->fd < 0)
 	return CBFAIL;
 
-      file->elf = elf_begin (file->fd, ELF_C_READ_MMAP_PRIVATE, NULL);
+      Dwfl_Error error = __libdw_open_file (&file->fd, &file->elf, true, false);
+      if (error != DWFL_E_NOERROR)
+	return error;
+    }
+  else if (unlikely (elf_kind (file->elf) != ELF_K_ELF))
+    {
+      elf_end (file->elf);
+      file->elf = NULL;
+      close (file->fd);
+      file->fd = -1;
+      return DWFL_E_BADELF;
     }
 
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (file->elf, &ehdr_mem);
   if (ehdr == NULL)
     {
     elf_error:
+      elf_end (file->elf);
+      file->elf = NULL;
       close (file->fd);
       file->fd = -1;
-      return DWFL_E_LIBELF;
+      return DWFL_E (LIBELF, elf_errno ());
     }
 
+  /* The addresses in an ET_EXEC file are absolute.  The lowest p_vaddr of
+     the main file can differ from that of the debug file due to prelink.
+     But that doesn't not change addresses that symbols, debuginfo, or
+     sh_addr of any program sections refer to.  */
   file->bias = 0;
-  for (uint_fast16_t i = 0; i < ehdr->e_phnum; ++i)
+  if (mod->e_type != ET_EXEC)
     {
-      GElf_Phdr ph_mem;
-      GElf_Phdr *ph = gelf_getphdr (file->elf, i, &ph_mem);
-      if (ph == NULL)
+      size_t phnum;
+      if (unlikely (elf_getphdrnum (file->elf, &phnum) != 0))
 	goto elf_error;
-      if (ph->p_type == PT_LOAD)
+
+      for (size_t i = 0; i < phnum; ++i)
 	{
-	  file->bias = ((mod->low_addr & -ph->p_align)
-			- (ph->p_vaddr & -ph->p_align));
-	  break;
+	  GElf_Phdr ph_mem;
+	  GElf_Phdr *ph = gelf_getphdr (file->elf, i, &ph_mem);
+	  if (ph == NULL)
+	    goto elf_error;
+	  if (ph->p_type == PT_LOAD)
+	    {
+	      GElf_Addr align = mod->dwfl->segment_align;
+	      if (align <= 1)
+		{
+		  if ((mod->low_addr & (ph->p_align - 1)) == 0)
+		    align = ph->p_align;
+		  else
+		    align = ((GElf_Addr) 1 << ffsll (mod->low_addr)) >> 1;
+		}
+
+	      file->bias = ((mod->low_addr & -align) - (ph->p_vaddr & -align));
+	      break;
+	    }
 	}
     }
 
@@ -102,8 +138,9 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
 
 /* Find the main ELF file for this module and open libelf on it.
    When we return success, MOD->main.elf and MOD->main.bias are set up.  */
-static void
-find_file (Dwfl_Module *mod)
+void
+internal_function
+__libdwfl_getelf (Dwfl_Module *mod)
 {
   if (mod->main.elf != NULL	/* Already done.  */
       || mod->elferr != DWFL_E_NOERROR)	/* Cached failure.  */
@@ -112,15 +149,54 @@ find_file (Dwfl_Module *mod)
   mod->main.fd = (*mod->dwfl->callbacks->find_elf) (MODCB_ARGS (mod),
 						    &mod->main.name,
 						    &mod->main.elf);
+  const bool fallback = mod->main.elf == NULL && mod->main.fd < 0;
   mod->elferr = open_elf (mod, &mod->main);
+  if (mod->elferr != DWFL_E_NOERROR)
+    return;
 
-  if (mod->elferr == DWFL_E_NOERROR && !mod->main.valid)
+  if (!mod->main.valid)
     {
       /* Clear any explicitly reported build ID, just in case it was wrong.
 	 We'll fetch it from the file when asked.  */
-      if (mod->build_id_len > 0)
-	free (mod->build_id_bits);
+      free (mod->build_id_bits);
+      mod->build_id_bits = NULL;
       mod->build_id_len = 0;
+    }
+  else if (fallback)
+    {
+      /* We have an authoritative build ID for this module, so
+	 don't use a file by name that doesn't match that ID.  */
+
+      assert (mod->build_id_len > 0);
+
+      switch (__builtin_expect (__libdwfl_find_build_id (mod, false,
+							 mod->main.elf), 2))
+	{
+	case 2:
+	  /* Build ID matches as it should. */
+	  return;
+
+	case -1:			/* ELF error.  */
+	  mod->elferr = INTUSE(dwfl_errno) ();
+	  break;
+
+	case 0:			/* File has no build ID note.  */
+	case 1:			/* FIle has a build ID that does not match.  */
+	  mod->elferr = DWFL_E_WRONG_ID_ELF;
+	  break;
+
+	default:
+	  abort ();
+	}
+
+      /* We get here when it was the right ELF file.  Clear it out.  */
+      elf_end (mod->main.elf);
+      mod->main.elf = NULL;
+      if (mod->main.fd >= 0)
+	{
+	  close (mod->main.fd);
+	  mod->main.fd = -1;
+	}
     }
 }
 
@@ -129,7 +205,7 @@ static const char *
 find_debuglink (Elf *elf, GElf_Word *crc)
 {
   size_t shstrndx;
-  if (elf_getshstrndx (elf, &shstrndx) < 0)
+  if (elf_getshdrstrndx (elf, &shstrndx) < 0)
     return NULL;
 
   Elf_Scn *scn = NULL;
@@ -213,6 +289,7 @@ load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 	     Elf_Scn **symscn, Elf_Scn **xndxscn,
 	     size_t *syments, GElf_Word *strshndx)
 {
+  bool symtab = false;
   Elf_Scn *scn = NULL;
   while ((scn = elf_nextscn (file->elf, scn)) != NULL)
     {
@@ -221,6 +298,7 @@ load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 	switch (shdr->sh_type)
 	  {
 	  case SHT_SYMTAB:
+	    symtab = true;
 	    *symscn = scn;
 	    *symfile = file;
 	    *strshndx = shdr->sh_link;
@@ -230,6 +308,8 @@ load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 	    break;
 
 	  case SHT_DYNSYM:
+	    if (symtab)
+	      break;
 	    /* Use this if need be, but keep looking for SHT_SYMTAB.  */
 	    *symscn = scn;
 	    *symfile = file;
@@ -239,7 +319,7 @@ load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 
 	  case SHT_SYMTAB_SHNDX:
 	    *xndxscn = scn;
-	    if (*symscn != NULL)
+	    if (symtab)
 	      return DWFL_E_NOERROR;
 	    break;
 
@@ -248,7 +328,7 @@ load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 	  }
     }
 
-  if (*symscn != NULL)
+  if (symtab)
     /* We found one, though no SHT_SYMTAB_SHNDX to go with it.  */
     return DWFL_E_NOERROR;
 
@@ -262,11 +342,11 @@ load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 /* Translate addresses into file offsets.
    OFFS[*] start out zero and remain zero if unresolved.  */
 static void
-find_offsets (Elf *elf, const GElf_Ehdr *ehdr, size_t n,
+find_offsets (Elf *elf, size_t phnum, size_t n,
 	      GElf_Addr addrs[n], GElf_Off offs[n])
 {
   size_t unsolved = n;
-  for (uint_fast16_t i = 0; i < ehdr->e_phnum; ++i)
+  for (size_t i = 0; i < phnum; ++i)
     {
       GElf_Phdr phdr_mem;
       GElf_Phdr *phdr = gelf_getphdr (elf, i, &phdr_mem);
@@ -290,7 +370,11 @@ find_dynsym (Dwfl_Module *mod)
   GElf_Ehdr ehdr_mem;
   GElf_Ehdr *ehdr = gelf_getehdr (mod->main.elf, &ehdr_mem);
 
-  for (uint_fast16_t i = 0; i < ehdr->e_phnum; ++i)
+  size_t phnum;
+  if (unlikely (elf_getphdrnum (mod->main.elf, &phnum) != 0))
+    return;
+
+  for (size_t i = 0; i < phnum; ++i)
     {
       GElf_Phdr phdr_mem;
       GElf_Phdr *phdr = gelf_getphdr (mod->main.elf, i, &phdr_mem);
@@ -357,7 +441,7 @@ find_dynsym (Dwfl_Module *mod)
 
 	  /* Translate pointers into file offsets.  */
 	  GElf_Off offs[i_max] = { 0, };
-	  find_offsets (mod->main.elf, ehdr, i_max, addrs, offs);
+	  find_offsets (mod->main.elf, phnum, i_max, addrs, offs);
 
 	  /* Figure out the size of the symbol table.  */
 	  if (offs[i_hash] != 0)
@@ -474,7 +558,7 @@ find_symtab (Dwfl_Module *mod)
       || mod->symerr != DWFL_E_NOERROR) /* Cached previous failure.  */
     return;
 
-  find_file (mod);
+  __libdwfl_getelf (mod);
   mod->symerr = mod->elferr;
   if (mod->symerr != DWFL_E_NOERROR)
     return;
@@ -570,7 +654,7 @@ __libdwfl_module_getebl (Dwfl_Module *mod)
 {
   if (mod->ebl == NULL)
     {
-      find_file (mod);
+      __libdwfl_getelf (mod);
       if (mod->elferr != DWFL_E_NOERROR)
 	return mod->elferr;
 
@@ -585,7 +669,7 @@ __libdwfl_module_getebl (Dwfl_Module *mod)
 static Dwfl_Error
 load_dw (Dwfl_Module *mod, struct dwfl_file *debugfile)
 {
-  if (mod->e_type == ET_REL)
+  if (mod->e_type == ET_REL && !debugfile->relocated)
     {
       const Dwfl_Callbacks *const cb = mod->dwfl->callbacks;
 
@@ -638,7 +722,7 @@ find_dw (Dwfl_Module *mod)
       || mod->dwerr != DWFL_E_NOERROR) /* Cached previous failure.  */
     return;
 
-  find_file (mod);
+  __libdwfl_getelf (mod);
   mod->dwerr = mod->elferr;
   if (mod->dwerr != DWFL_E_NOERROR)
     return;
@@ -678,46 +762,6 @@ find_dw (Dwfl_Module *mod)
  canonicalize:
   mod->dwerr = __libdwfl_canon_error (mod->dwerr);
 }
-
-
-Elf *
-dwfl_module_getelf (Dwfl_Module *mod, GElf_Addr *loadbase)
-{
-  if (mod == NULL)
-    return NULL;
-
-  find_file (mod);
-  if (mod->elferr == DWFL_E_NOERROR)
-    {
-      if (mod->e_type == ET_REL && ! mod->main.relocated)
-	{
-	  /* Before letting them get at the Elf handle,
-	     apply all the relocations we know how to.  */
-
-	  mod->main.relocated = true;
-	  if (likely (__libdwfl_module_getebl (mod) == DWFL_E_NOERROR))
-	    {
-	      (void) __libdwfl_relocate (mod, mod->main.elf, false);
-
-	      if (mod->debug.elf == mod->main.elf)
-		mod->debug.relocated = true;
-	      else if (mod->debug.elf != NULL && ! mod->debug.relocated)
-		{
-		  mod->debug.relocated = true;
-		  (void) __libdwfl_relocate (mod, mod->debug.elf, false);
-		}
-	    }
-	}
-
-      *loadbase = mod->main.bias;
-      return mod->main.elf;
-    }
-
-  __libdwfl_seterrno (mod->elferr);
-  return NULL;
-}
-INTDEF (dwfl_module_getelf)
-
 
 Dwarf *
 dwfl_module_getdwarf (Dwfl_Module *mod, Dwarf_Addr *bias)

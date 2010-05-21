@@ -1,5 +1,5 @@
 /* Standard argp argument parsers for tools using libdwfl.
-   Copyright (C) 2005, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -91,7 +91,7 @@ static const Dwfl_Callbacks offline_callbacks =
     .section_address = INTUSE(dwfl_offline_section_address),
 
     /* We use this table for core files too.  */
-    .find_elf = INTUSE(dwfl_core_file_find_elf),
+    .find_elf = INTUSE(dwfl_build_id_find_elf),
   };
 
 static const Dwfl_Callbacks proc_callbacks =
@@ -116,13 +116,13 @@ parse_opt (int key, char *arg, struct argp_state *state)
 {
   inline void failure (Dwfl *dwfl, int errnum, const char *msg)
     {
+      if (dwfl != NULL)
+	dwfl_end (dwfl);
       if (errnum == -1)
 	argp_failure (state, EXIT_FAILURE, 0, "%s: %s",
 		      msg, INTUSE(dwfl_errmsg) (-1));
       else
 	argp_failure (state, EXIT_FAILURE, errnum, "%s", msg);
-      if (dwfl != NULL)
-	dwfl_end (dwfl);
     }
   inline error_t fail (Dwfl *dwfl, int errnum, const char *msg)
     {
@@ -208,22 +208,21 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	if (dwfl == NULL)
 	  state->hook = dwfl = INTUSE(dwfl_begin) (&offline_callbacks);
 	/* Permit -e and --core together.  */
-	else if (dwfl->callbacks != &offline_callbacks
-		 || dwfl->cb_data != NULL)
+	else if (dwfl->callbacks != &offline_callbacks)
 	  goto toomany;
 
 	int fd = open64 (arg, O_RDONLY);
 	if (fd < 0)
 	  goto nofile;
 
-	Elf *core = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-	if (core == NULL)
+	Elf *core;
+	Dwfl_Error error = __libdw_open_file (&fd, &core, true, false);
+	if (error != DWFL_E_NOERROR)
 	  {
-	    close (fd);
 	    argp_failure (state, EXIT_FAILURE, 0,
 			  _("cannot read ELF core file: %s"),
-			  elf_errmsg (-1));
-	    return EIO;
+			  INTUSE(dwfl_errmsg) (error));
+	    return error == DWFL_E_ERRNO ? errno : EIO;
 	  }
 
 	int result = INTUSE(dwfl_core_file_report) (dwfl, core);

@@ -1,5 +1,5 @@
 /* Return section type name.
-   Copyright (C) 2001, 2002, 2006 Red Hat, Inc.
+   Copyright (C) 2001, 2002, 2006, 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -110,31 +110,38 @@ ebl_section_type_name (ebl, section, buf, len)
 	  res = sunwtypes[section - SHT_LOSUNW];
 	}
       else
-	{
-	  /* A few GNU additions.  */
-	  if (section == SHT_CHECKSUM)
+	/* A few GNU additions.  */
+	switch (section)
+	  {
+	  case SHT_CHECKSUM:
 	    res = "CHECKSUM";
-	  else if (section == SHT_GNU_LIBLIST)
+	    break;
+	  case SHT_GNU_LIBLIST:
 	    res = "GNU_LIBLIST";
-	  else if (section == SHT_GNU_HASH)
+	    break;
+	  case SHT_GNU_HASH:
 	    res = "GNU_HASH";
-	  /* Handle OS-specific section names.  */
-	  else
-	    {
-	      if (section >= SHT_LOOS && section <= SHT_HIOS)
-		snprintf (buf, len, "SHT_LOOS+%x", section - SHT_LOOS);
-	      /* Handle processor-specific section names.  */
-	      else if (section >= SHT_LOPROC && section <= SHT_HIPROC)
-		snprintf (buf, len, "SHT_LOPROC+%x", section - SHT_LOPROC);
-	      else if ((unsigned int) section >= SHT_LOUSER
-		       && (unsigned int) section <= SHT_HIUSER)
-		snprintf (buf, len, "SHT_LOUSER+%x", section - SHT_LOUSER);
-	      else
-		snprintf (buf, len, "%s: %d", gettext ("<unknown>"), section);
+	    break;
+	  case SHT_GNU_ATTRIBUTES:
+	    res = "GNU_ATTRIBUTES";
+	    break;
 
-	      res = buf;
-	    }
-	}
+	  default:
+	    /* Handle OS-specific section names.  */
+	    if (section >= SHT_LOOS && section <= SHT_HIOS)
+	      snprintf (buf, len, "SHT_LOOS+%x", section - SHT_LOOS);
+	    /* Handle processor-specific section names.  */
+	    else if (section >= SHT_LOPROC && section <= SHT_HIPROC)
+	      snprintf (buf, len, "SHT_LOPROC+%x", section - SHT_LOPROC);
+	    else if ((unsigned int) section >= SHT_LOUSER
+		     && (unsigned int) section <= SHT_HIUSER)
+	      snprintf (buf, len, "SHT_LOUSER+%x", section - SHT_LOUSER);
+	    else
+	      snprintf (buf, len, "%s: %d", gettext ("<unknown>"), section);
+
+	    res = buf;
+	    break;
+	  }
     }
 
   return res;

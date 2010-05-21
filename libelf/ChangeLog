@@ -1,3 +1,343 @@
+2010-04-14  Roland McGrath  <roland@redhat.com>
+
+	* elf32_getphdr.c: Check for e_phoff/size outside the file bounds.
+	* elf_begin.c (file_read_elf): Don't set .phdr here.
+
+2010-04-13  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2010-04-06  Roland McGrath  <roland@redhat.com>
+
+	* elf_error.c (ELF_E_FD_MISMATCH_IDX): Avoid nonobvious abbreviation
+	in error message.
+
+2010-04-01  Petr Machata  <pmachata@redhat.com>
+
+	* elf_getdata.c (__elf_getdata_rdlock): Initialize data.s for data
+	that do not need a conversion.
+
+2010-03-11  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2010-03-04  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2010-02-17  Roland McGrath  <roland@redhat.com>
+
+	* elf_begin.c (file_read_elf): Leave section rawdata_base and
+	data_base pointers null when [sh_offset,sh_size) points outside
+	the mapped file.
+
+2010-02-15  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am: Use config/eu.am for common stuff.
+
+2010-01-07  Roland McGrath  <roland@redhat.com>
+
+	* elf32_getphdr.c: Use __elf_getphdrnum_rdlock.
+	* gelf_getphdr.c: Likewise.
+	* gelf_update_phdr.c: Likewise.
+	* elf32_updatefile.c (__elf32_updatemmap, __elf32_updatefile): Likewise.
+	* elf32_updatenull.c (__elf32_updatenull_wrlock): Likewise.
+	* elf32_newphdr.c: Clear section 0's sh_info when resetting e_phnum.
+	If COUNT is too large, use store PN_XNUM instead and set sh_info.
+	* elf_begin.c (file_read_elf): Always allocate space we can use later
+	for section 0 if doing RDWR.
+
+	* elf_getphdrnum.c: New file.
+	* Makefile.am (libelf_a_SOURCES): Add it.
+	* libelf.h: Declare elf_getphdrnum.
+	* libelfP.h: Declare __elf_getphdrnum_rdlock.
+	* libelf.map (ELFUTILS_1.6): New set, add elf_getphdrnum.
+
+	* elf.h: Update from glibc.
+
+2009-10-23  Lubomir Rintel  <lkundrak@v3.sk>
+
+	* elf32_updatefile.c (fill_mmap): When starting past shdr_end, start
+	filling from section start, not shdr_end.
+
+2009-11-10  Roland McGrath  <roland@redhat.com>
+
+	* elf_readall.c (__libelf_readall): Fetch file size if not yet known.
+
+2009-11-06  Mark Wielaard  <mjw@redhat.com>
+
+	* elf_next.c (elf_next): Mark the archive header as unusable when
+	there is no next ar element.
+
+2009-08-12  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (libelf.so): Use -Wl,-z,defs not -defs.
+
+2009-07-26  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2009-07-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32_updatefile.c (__elfXX_updatemmap): Fix handling of gaps between
+	sections.  Patch by Lubomir Rintel <lkundrak@v3.sk>.
+
+2009-07-08  Roland McGrath  <roland@redhat.com>
+
+	* libelfP.h (struct Elf): Remove unused ar.has_index field.
+	Reorder various members for optimal packing.
+
+2009-07-08  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2009-06-13  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am (libelf_a_SOURCES): Replace elf_getshnum.c and
+	elf_getshstrndx.c with elf_getshdrnum.c and elf_getshdrstrndx.c.
+	* elf_getshnum.c: Renamed to...
+	* elf_getshdrnum.c: ...this.  Rename function and add old name as
+	alias.  Likewise for internal functions with derived names.
+	* elf_getshstrndx.c: Renamed to...
+	* elf_getshdrstrndx.c: ...this.  Rename function and add old name as
+	alias.  Likewise for internal functions with derived names.
+	* libelf.h: Add prototypes for new names.  Make old names as
+	deprecated.
+	* libelfP.h: Rename internal function prototypes.
+	* libelf.map: Export for names.
+	* elf32_checksum.c: Don't use deprecated functions.
+	* elf32_getshdr.c: Likewise.
+
+2009-06-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2009-04-14  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2009-04-01  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2009-02-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32_updatefile.c (updatefile): For the zeroth section we still
+	have to copy the section header.
+
+2009-02-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf_strptr.c: Add comment re possible problem.
+
+2009-01-26  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32_updatenull.c (updatenull_wrlock): Fix comment of
+	ELF_F_LAYOUT behaviour re section header table.
+
+2009-01-22  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32_updatefile.c (__elfXX_updatemmap): Fill the gap between
+	sections even if only the section at the start of the gap has been
+	changed.
+	(__elfXX_updatefile): Likewise.
+
+2009-01-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32_updatefile.c (__elfXX_updatemmap): Skip most of the loop to
+	handle sections for NOBITS sections.
+	(elfXX_updatefile): Likewise.
+
+	* elf32_updatefile.c (__elfXX_updatemmap): When skipping non-NOBITS
+	sections we haven't loaded, update last_position based on scn_start,
+	not based on old value.  Don't run the loop for the dummy section 0.
+	(elfXX_updatefile): Don't run the loop for the dummy section 0.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* libelfP.h (_): We only have one translation domain, elfutils.
+
+	* Makefile.am: Use USE_LOCKS instead of USE_TLS.
+	* elf_error.c: Always use __thread.  Remove all !USE_TLS code.
+
+2009-01-04  Roland McGrath  <roland@redhat.com>
+
+	* note_xlate.h (elf_cvt_note): Don't examine a size too small to
+	container a note header.
+
+2008-12-11  Roland McGrath  <roland@redhat.com>
+
+	* elf32_updatefile.c (__elfw2(LIBELFBITS,updatemmap)): Handle
+	placement offset going backwards, for out-of-order or overlapping
+	(bogus) sh_offset layouts.  It's a dumb use, but should not crash.
+	(__elfw2(LIBELFBITS,updatefile)): Likewise.
+	Fixes RHBZ#476136.
+
+	* libelf.h (Elf_Data): Whitespace fix.
+
+2008-12-10  Roland McGrath  <roland@redhat.com>
+
+	* elf_getarhdr.c (elf_getarhdr): Fix missing rename in last change.
+
+2008-10-22  Petr Machata  <pmachata@redhat.com>
+
+	* elf_rawfile.c (elf_rawfile): Lock around elf-> references.
+
+2008-10-21  Petr Machata  <pmachata@redhat.com>
+
+	* libelfP.h: Rename getehdr_rdlock to getehdr_wrlock.
+	* elf32_getehdr.c (getehdr_rdlock): Move the code to new function
+	getehdr_impl and make it a wrapper.  Rename to getehdr_wrlock.
+	(getehdr_impl): Guard elf->class init with wrlock.
+	(getehdr): Also make it a wrapper of getehdr_impl.
+	* elf32_updatenull.c (updatenull_wrlock): Call getehdr_wrlock.
+
+2008-10-20  Petr Machata  <pmachata@redhat.com>
+
+	* elf_getdata_rawchunk.c (elf_getdata_rawchunk): Lock around the
+	code that reads mutable elf state.  Relock to write lock to chain
+	the new chunk on the elf rawchunks list.
+
+2008-10-20  Petr Machata  <pmachata@redhat.com>
+
+	* elf32_checksum.c (checksum): Place a lock around the code that
+	processes data.  Make it wrlock if the code needs to xlate the
+	data before processing.
+
+2008-10-16  Petr Machata  <pmachata@redhat.com>
+
+	* elf_begin.c
+	(__libelf_next_arhdr): Rename to __libelf_next_arhdr_wrlock.
+	(dup_elf): Adjust the call.
+	(elf_begin): New local function lock_dup_elf.  Relocks the elf if
+	necessary before calling dup.  Call this instead of dup_elf.
+	* elf_getarhdr.c
+	(elf_getarhdr): Lock before calling __libelf_next_arhdr_wrlock.
+	* elf_next.c (elf_next): Likewise.
+	* elf_rand.c (elf_rand): Likewise.
+
+2008-10-14  Petr Machata  <pmachata@redhat.com>
+
+	* elf_getdata.c (__elf_getdata_rdlock): Lock before converting.
+
+2008-11-26  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2008-10-06  Roland McGrath  <roland@redhat.com>
+
+	* elf_getarhdr.c (elf_getarhdr): Return NULL when passed NULL.
+
+2008-08-27  Roland McGrath  <roland@redhat.com>
+
+	* elf_begin.c (get_shnum): Avoid misaligned reads for matching endian.
+
+	* libelfP.h [!ALLOW_UNALIGNED] (__libelf_type_align): Fix CLASS index.
+
+2008-08-25  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (libelf_so_LDLIBS): New variable.
+	(libelf.so): Use it in the link.
+
+2008-08-21  Petr Machata  <pmachata@redhat.com>
+
+	* elf_getdata.c, libelfP.h
+	(__elf_getdata_internal): Rename to __elf_getdata_rdlock.
+	(__libelf_set_rawdata_wrlock): New function.
+	(__libelf_set_rawdata): Make it a wrapper that calls *_wrlock.
+	* elf32_updatenull.c, libelfP.h
+	(__elfNN_updatenull): Rename to __elfNN_updatenull_wrlock.
+
+2008-08-21  Petr Machata  <pmachata@redhat.com>
+
+	* elf32_getphdr.c, libelfP.h
+	(__elfNN_getphdr_internal): Drop.  Move __elfNN_getphdr_internal
+	code to __elfNN_getphdr_wrlock.
+	(__elfNN_getphdr_rdlock, __elfNN_getphdr_wrlock): New functions.
+	(__elfNN_getphdr_rdlock, __elfNN_getphdr_wrlock): Make these
+	wrappers of getphdr_impl.
+
+2008-08-21  Petr Machata  <pmachata@redhat.com>
+
+	* elf32_getehdr.c, libelfP.h
+	(__elfNN_getehdr_internal): Rename to __elfNN_getehdr_rdlock.
+	* gelf_getehdr, libelfP.h:
+	(__gelf_getehdr_internal): Rename to __gelf_getehdr_rdlock.
+
+2008-08-21  Petr Machata  <pmachata@redhat.com>
+
+	* elf32_getshdr.c
+	(__elfNN_getshdr_internal): Drop.
+	(load_shdr_wrlock, scn_valid): New functions, contain bits of
+	behaviour from __elfNN_getshdr_internal.
+	(__elfNN_getshdr_rdlock, __elfNN_getshdr_wrlock): Replacements for
+	dropped _internal functions above.
+	* elf_getshnum.c
+	(__elf_getshnum_internal): Rename to __elf_getshnum_rdlock.
+
+2008-08-04  Petr Machata  <pmachata@redhat.com>
+
+	* libelfP.h (RWLOCK_RDLOCK, RWLOCK_WRLOCK, RWLOCK_UNLOCK): New macros.
+
+2008-07-28  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2008-03-31  Roland McGrath  <roland@redhat.com>
+
+	* elf32_offscn.c: Make sure shdrs have been read in.
+
+2008-02-19  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2008-02-08  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2008-01-31  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf_strptr.c (elf_strptr): Don't fail if the ELF file is currently
+	under construction and no raw data can be read from disk.
+
+2008-01-30  Roland McGrath  <roland@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2008-01-26  Roland McGrath  <roland@redhat.com>
+
+	* elf_begin.c (__libelf_next_arhdr): Rewrite conversions using a macro.
+	Fixes various pastos in wrong type in sizeof, wrong string parsed.
+
+2008-01-20  Roland McGrath  <roland@redhat.com>
+
+	* elf_getaroff.c: Calculate from start_offset, instead of using
+	parent's state.ar.offset field.
+
+2008-01-08  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (euinclude): Variable removed.
+	(pkginclude_HEADERS): Set this instead of euinclude_HEADERS.
+
+2008-01-03  Roland McGrath  <roland@redhat.com>
+
+	* common.h: Add __attribute__ ((unused)) to static functions.
+
+2007-12-20  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am (libelf_a_SOURCES): Add elf_scnshndx.
+	* libelfP.h (struct Elf_Scn): Add shndx_index field.
+	Declare __elf_scnshndx_internal.
+	* elf32_getshdr.c: Record location of extended section header.
+	* elf_begin.c (file_read_elf): Likewise.
+	* elf_scnshndx.c: New file.
+	* libelf.h: Declare elf_scnshndx.
+	* libelf.map: Add elf_scnshndx to version ELFUTILS_1.4.
+
+2007-11-12  Roland McGrath  <roland@redhat.com>
+
+	* libelf.h: Replace off64_t with loff_t throughout.
+	Only that type name is unconditionally defined by <sys/types.h>
+
 2007-03-12  Roland McGrath  <roland@redhat.com>
 
 	* gelf_begin_embedded.c: New file.

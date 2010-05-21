@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2006, 2007 Red Hat, Inc.
+## Copyright (C) 1996-2010 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -24,24 +24,12 @@
 ## Network licensing program, please visit www.openinventionnetwork.com
 ## <http://www.openinventionnetwork.com>.
 ##
-DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H
-if MUDFLAP
-AM_CFLAGS = -fmudflap
-else
-AM_CFLAGS =
-endif
+include $(top_srcdir)/config/eu.am
 if BUILD_STATIC
 AM_CFLAGS += -fpic
 endif
-AM_CFLAGS += -Wall -Wshadow -Werror -Wunused -Wextra -Wformat=2 -std=gnu99 \
-	     $($(*F)_CFLAGS)
-INCLUDES = -I$(srcdir) -I$(top_srcdir)/lib -I..
 GCC_INCLUDE = -I$(shell $(CC) -print-file-name=include)
 VERSION = 1
-PACKAGE_VERSION = @PACKAGE_VERSION@
-
-COMPILE.os = $(filter-out -fprofile-arcs, $(filter-out -ftest-coverage, \
-						       $(COMPILE)))
 
 lib_LIBRARIES = libelf.a
 if !MUDFLAP
@@ -50,8 +38,7 @@ noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
 endif
 include_HEADERS = libelf.h gelf.h nlist.h
 
-euincludedir = $(includedir)/elfutils
-euinclude_HEADERS = elf-knowledge.h
+pkginclude_HEADERS = elf-knowledge.h
 
 libelf_a_SOURCES = elf_version.c elf_hash.c elf_error.c elf_fill.c \
 		   elf_begin.c elf_next.c elf_rand.c elf_end.c elf_kind.c \
@@ -92,36 +79,34 @@ libelf_a_SOURCES = elf_version.c elf_hash.c elf_error.c elf_fill.c \
 		   gelf_update_versym.c gelf_update_verneed.c \
 		   gelf_update_vernaux.c gelf_update_verdef.c \
 		   gelf_update_verdaux.c \
-		   elf_getshnum.c elf_getshstrndx.c \
+		   elf_getphdrnum.c elf_getshdrnum.c elf_getshdrstrndx.c \
 		   gelf_checksum.c elf32_checksum.c elf64_checksum.c \
 		   gelf_getdata_memory.c gelf_getdata_rawchunk.c \
 		   libelf_crc32.c libelf_next_prime.c \
 		   elf_clone.c \
+		   gelf_begin_embedded.c \
 		   gelf_getlib.c gelf_update_lib.c \
 		   elf32_offscn.c elf64_offscn.c gelf_offscn.c \
 		   elf_getaroff.c \
 		   elf_gnu_hash.c \
-		   gelf_begin_embedded.c
+		   elf_scnshndx.c
 
 if !MUDFLAP
 libelf_pic_a_SOURCES =
 am_libelf_pic_a_OBJECTS = $(libelf_a_SOURCES:.c=.os)
 
+libelf_so_LDLIBS =
+if USE_LOCKS
+libelf_so_LDLIBS += -lpthread
+endif
+
 libelf_so_SOURCES =
 libelf.so: libelf_pic.a libelf.map
 	$(LINK) -shared -o $@ -Wl,--whole-archive,$<,--no-whole-archive \
 		-Wl,--version-script,$(srcdir)/libelf.map,--no-undefined \
-		-Wl,--soname,$@.$(VERSION),-z,-defs,-z,relro
+		-Wl,--soname,$@.$(VERSION),-z,defs,-z,relro $(libelf_so_LDLIBS)
 	if readelf -d $@ | fgrep -q TEXTREL; then exit 1; fi
 	ln -fs $@ $@.$(VERSION)
-
-%.os: %.c %.o
-	if $(COMPILE.os) -c -o $@ -fpic -DPIC -DSHARED -MT $@ -MD -MP \
-	  -MF "$(DEPDIR)/$*.Tpo" `test -f '$<' || echo '$(srcdir)/'`$<; \
-	then cat "$(DEPDIR)/$*.Tpo" >> "$(DEPDIR)/$*.Po"; \
-	     rm -f "$(DEPDIR)/$*.Tpo"; \
-	else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; \
-	fi
 
 install: install-am libelf.so
 	$(mkinstalldirs) $(DESTDIR)$(libdir)
@@ -139,4 +124,4 @@ noinst_HEADERS = elf.h abstract.h common.h exttypes.h gelf_xlate.h libelfP.h \
 		 version_xlate.h gnuhash_xlate.h note_xlate.h dl-hash.h
 EXTRA_DIST = libelf.map
 
-CLEANFILES = $(am_libelf_pic_a_OBJECTS) *.gcno *.gcda libelf.so.$(VERSION)
+CLEANFILES += $(am_libelf_pic_a_OBJECTS) libelf.so.$(VERSION)

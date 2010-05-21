@@ -1,5 +1,5 @@
 /* Return unsigned constant represented by attribute.
-   Copyright (C) 2003, 2005 Red Hat, Inc.
+   Copyright (C) 2003-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2003.
 
@@ -55,6 +55,61 @@
 #include <dwarf.h>
 #include "libdwP.h"
 
+internal_function unsigned char *
+__libdw_formptr (Dwarf_Attribute *attr, int sec_index,
+		 int err_nodata, unsigned char **endpp,
+		 Dwarf_Off *offsetp)
+{
+  if (attr == NULL)
+    return NULL;
+
+  const Elf_Data *d = attr->cu->dbg->sectiondata[sec_index];
+  if (unlikely (d == NULL))
+    {
+      __libdw_seterrno (err_nodata);
+      return NULL;
+    }
+
+  Dwarf_Word offset;
+  if (attr->form == DW_FORM_sec_offset)
+    {
+      if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
+			       attr->cu->offset_size, &offset, sec_index, 0))
+	return NULL;
+    }
+  else if (attr->cu->version > 3)
+    goto invalid;
+
+  switch (attr->form)
+    {
+    case DW_FORM_data4:
+    case DW_FORM_data8:
+      if (__libdw_read_offset (attr->cu->dbg, IDX_debug_info, attr->valp,
+			       attr->form == DW_FORM_data4 ? 4 : 8,
+			       &offset, sec_index, 0))
+	return NULL;
+      break;
+
+    default:
+      if (INTUSE(dwarf_formudata) (attr, &offset))
+	return NULL;
+    };
+
+  unsigned char *readp = d->d_buf + offset;
+  unsigned char *endp = d->d_buf + d->d_size;
+  if (unlikely (readp >= endp))
+    {
+    invalid:
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return NULL;
+    }
+
+  if (endpp != NULL)
+    *endpp = endp;
+  if (offsetp != NULL)
+    *offsetp = offset;
+  return readp;
+}
 
 int
 dwarf_formudata (attr, return_uval)
@@ -77,11 +132,11 @@ dwarf_formudata (attr, return_uval)
       break;
 
     case DW_FORM_data4:
-      *return_uval = read_4ubyte_unaligned (attr->cu->dbg, attr->valp);
-      break;
-
     case DW_FORM_data8:
-      *return_uval = read_8ubyte_unaligned (attr->cu->dbg, attr->valp);
+      if (__libdw_read_address (attr->cu->dbg, IDX_debug_info, attr->valp,
+				attr->form == DW_FORM_data4 ? 4 : 8,
+				return_uval))
+	return -1;
       break;
 
     case DW_FORM_sdata:

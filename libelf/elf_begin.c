@@ -1,5 +1,5 @@
 /* Create descriptor for processing file.
-   Copyright (C) 1998-2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 1998-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -111,7 +111,11 @@ get_shnum (void *map_address, unsigned char *e_ident, int fildes, off_t offset,
   bool is32 = e_ident[EI_CLASS] == ELFCLASS32;
 
   /* Make the ELF header available.  */
-  if (e_ident[EI_DATA] == MY_ELFDATA)
+  if (e_ident[EI_DATA] == MY_ELFDATA
+      && (ALLOW_UNALIGNED
+	  || (((size_t) e_ident
+	       & ((is32 ? __alignof__ (Elf32_Ehdr) : __alignof__ (Elf64_Ehdr))
+		  - 1)) == 0)))
     ehdr.p = e_ident;
   else
     {
@@ -130,8 +134,11 @@ get_shnum (void *map_address, unsigned char *e_ident, int fildes, off_t offset,
 	  else
 	    memcpy (&ehdr_mem, e_ident, sizeof (Elf32_Ehdr));
 
-	  CONVERT (ehdr_mem.e32.e_shnum);
-	  CONVERT (ehdr_mem.e32.e_shoff);
+	  if (e_ident[EI_DATA] != MY_ELFDATA)
+	    {
+	      CONVERT (ehdr_mem.e32.e_shnum);
+	      CONVERT (ehdr_mem.e32.e_shoff);
+	    }
 	}
       else
 	{
@@ -143,8 +150,11 @@ get_shnum (void *map_address, unsigned char *e_ident, int fildes, off_t offset,
 	  else
 	    memcpy (&ehdr_mem, e_ident, sizeof (Elf64_Ehdr));
 
-	  CONVERT (ehdr_mem.e64.e_shnum);
-	  CONVERT (ehdr_mem.e64.e_shoff);
+	  if (e_ident[EI_DATA] != MY_ELFDATA)
+	    {
+	      CONVERT (ehdr_mem.e64.e_shnum);
+	      CONVERT (ehdr_mem.e64.e_shoff);
+	    }
 	}
     }
 
@@ -275,12 +285,21 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
     /* Could not determine the number of sections.  */
     return NULL;
 
-  /* We can now allocate the memory.  */
+  /* We can now allocate the memory.  Even if there are no section headers,
+     we allocate space for a zeroth section in case we need it later.  */
+  const size_t scnmax = (scncnt ?: (cmd == ELF_C_RDWR || cmd == ELF_C_RDWR_MMAP)
+			 ? 1 : 0);
   Elf *elf = allocate_elf (fildes, map_address, offset, maxsize, cmd, parent,
-			   ELF_K_ELF, scncnt * sizeof (Elf_Scn));
+			   ELF_K_ELF, scnmax * sizeof (Elf_Scn));
   if (elf == NULL)
     /* Not enough memory.  */
     return NULL;
+
+  assert ((unsigned int) scncnt == scncnt);
+  assert (offsetof (struct Elf, state.elf32.scns)
+	  == offsetof (struct Elf, state.elf64.scns));
+  elf->state.elf32.scns.cnt = scncnt;
+  elf->state.elf32.scns.max = scnmax;
 
   /* Some more or less arbitrary value.  */
   elf->state.elf.scnincr = 10;
@@ -293,9 +312,6 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
       /* This pointer might not be directly usable if the alignment is
 	 not sufficient for the architecture.  */
       Elf32_Ehdr *ehdr = (Elf32_Ehdr *) ((char *) map_address + offset);
-
-      assert ((unsigned int) scncnt == scncnt);
-      elf->state.elf32.scns.cnt = elf->state.elf32.scns.max = scncnt;
 
       /* This is a 32-bit binary.  */
       if (map_address != NULL && e_ident[EI_DATA] == MY_ELFDATA
@@ -310,11 +326,9 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	  elf->state.elf32.ehdr = ehdr;
 	  elf->state.elf32.shdr
 	    = (Elf32_Shdr *) ((char *) ehdr + ehdr->e_shoff);
-	  if (ehdr->e_phnum > 0)
-	    /* Assign a value only if there really is a program
-	       header.  Otherwise the value remains NULL.  */
-	    elf->state.elf32.phdr
-	      = (Elf32_Phdr *) ((char *) ehdr + ehdr->e_phoff);
+
+	  /* Don't precache the phdr pointer here.
+	     elf32_getphdr will validate it against the size when asked.  */
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
 	    {
@@ -322,11 +336,27 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	      elf->state.elf32.scns.data[cnt].elf = elf;
 	      elf->state.elf32.scns.data[cnt].shdr.e32 =
 		&elf->state.elf32.shdr[cnt];
-	      elf->state.elf32.scns.data[cnt].rawdata_base =
-		elf->state.elf32.scns.data[cnt].data_base =
-		((char *) map_address + offset
-		 + elf->state.elf32.shdr[cnt].sh_offset);
+	      if (likely (elf->state.elf32.shdr[cnt].sh_offset < maxsize)
+		  && likely (maxsize - elf->state.elf32.shdr[cnt].sh_offset
+			     <= elf->state.elf32.shdr[cnt].sh_size))
+		elf->state.elf32.scns.data[cnt].rawdata_base =
+		  elf->state.elf32.scns.data[cnt].data_base =
+		  ((char *) map_address + offset
+		   + elf->state.elf32.shdr[cnt].sh_offset);
 	      elf->state.elf32.scns.data[cnt].list = &elf->state.elf32.scns;
+
+	      /* If this is a section with an extended index add a
+		 reference in the section which uses the extended
+		 index.  */
+	      if (elf->state.elf32.shdr[cnt].sh_type == SHT_SYMTAB_SHNDX
+		  && elf->state.elf32.shdr[cnt].sh_link < scncnt)
+		elf->state.elf32.scns.data[elf->state.elf32.shdr[cnt].sh_link].shndx_index
+		  = cnt;
+
+	      /* Set the own shndx_index field in case it has not yet
+		 been set.  */
+	      if (elf->state.elf32.scns.data[cnt].shndx_index == 0)
+		elf->state.elf32.scns.data[cnt].shndx_index = -1;
 	    }
 	}
       else
@@ -369,9 +399,6 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	 not sufficient for the architecture.  */
       Elf64_Ehdr *ehdr = (Elf64_Ehdr *) ((char *) map_address + offset);
 
-      assert ((unsigned int) scncnt == scncnt);
-      elf->state.elf64.scns.cnt = elf->state.elf64.scns.max = scncnt;
-
       /* This is a 64-bit binary.  */
       if (map_address != NULL && e_ident[EI_DATA] == MY_ELFDATA
 	  && (ALLOW_UNALIGNED
@@ -385,11 +412,9 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	  elf->state.elf64.ehdr = ehdr;
 	  elf->state.elf64.shdr
 	    = (Elf64_Shdr *) ((char *) ehdr + ehdr->e_shoff);
-	  if (ehdr->e_phnum > 0)
-	    /* Assign a value only if there really is a program
-	       header.  Otherwise the value remains NULL.  */
-	    elf->state.elf64.phdr
-	      = (Elf64_Phdr *) ((char *) ehdr + ehdr->e_phoff);
+
+	  /* Don't precache the phdr pointer here.
+	     elf64_getphdr will validate it against the size when asked.  */
 
 	  for (size_t cnt = 0; cnt < scncnt; ++cnt)
 	    {
@@ -397,11 +422,27 @@ file_read_elf (int fildes, void *map_address, unsigned char *e_ident,
 	      elf->state.elf64.scns.data[cnt].elf = elf;
 	      elf->state.elf64.scns.data[cnt].shdr.e64 =
 		&elf->state.elf64.shdr[cnt];
-	      elf->state.elf64.scns.data[cnt].rawdata_base =
-		elf->state.elf64.scns.data[cnt].data_base =
-		((char *) map_address + offset
-		 + elf->state.elf64.shdr[cnt].sh_offset);
+	      if (likely (elf->state.elf64.shdr[cnt].sh_offset < maxsize)
+		  && likely (maxsize - elf->state.elf64.shdr[cnt].sh_offset
+			     <= elf->state.elf64.shdr[cnt].sh_size))
+		elf->state.elf64.scns.data[cnt].rawdata_base =
+		  elf->state.elf64.scns.data[cnt].data_base =
+		  ((char *) map_address + offset
+		   + elf->state.elf64.shdr[cnt].sh_offset);
 	      elf->state.elf64.scns.data[cnt].list = &elf->state.elf64.scns;
+
+	      /* If this is a section with an extended index add a
+		 reference in the section which uses the extended
+		 index.  */
+	      if (elf->state.elf64.shdr[cnt].sh_type == SHT_SYMTAB_SHNDX
+		  && elf->state.elf64.shdr[cnt].sh_link < scncnt)
+		elf->state.elf64.scns.data[elf->state.elf64.shdr[cnt].sh_link].shndx_index
+		  = cnt;
+
+	      /* Set the own shndx_index field in case it has not yet
+		 been set.  */
+	      if (elf->state.elf64.scns.data[cnt].shndx_index == 0)
+		elf->state.elf64.scns.data[cnt].shndx_index = -1;
 	    }
 	}
       else
@@ -714,7 +755,7 @@ read_long_names (Elf *elf)
 /* Read the next archive header.  */
 int
 internal_function
-__libelf_next_arhdr (elf)
+__libelf_next_arhdr_wrlock (elf)
      Elf *elf;
 {
   struct ar_hdr *ar_hdr;
@@ -824,112 +865,45 @@ __libelf_next_arhdr (elf)
       elf_ar_hdr->ar_name = elf->state.ar.ar_name;
     }
 
+  if (unlikely (ar_hdr->ar_size[0] == ' '))
+    /* Something is really wrong.  We cannot live without a size for
+       the member since it will not be possible to find the next
+       archive member.  */
+    {
+      __libelf_seterrno (ELF_E_INVALID_ARCHIVE);
+      return -1;
+    }
+
   /* Since there are no specialized functions to convert ASCII to
      time_t, uid_t, gid_t, mode_t, and off_t we use either atol or
      atoll depending on the size of the types.  We are also prepared
      for the case where the whole field in the `struct ar_hdr' is
      filled in which case we cannot simply use atol/l but instead have
      to create a temporary copy.  */
-  if (ar_hdr->ar_date[sizeof (ar_hdr->ar_date) - 1] == ' ')
-    {
-      if (ar_hdr->ar_date[0] == ' ')
-	elf_ar_hdr->ar_date = 0;
-      else
-	elf_ar_hdr->ar_date = (sizeof (time_t) <= sizeof (long int)
-			       ? (time_t) atol (ar_hdr->ar_date)
-			       : (time_t) atoll (ar_hdr->ar_date));
-    }
-  else
-    {
-      char buf[sizeof (ar_hdr->ar_date) + 1];
-      *((char *) __mempcpy (buf, ar_hdr->ar_date, sizeof (ar_hdr->ar_date)))
-	= '\0';
-      elf_ar_hdr->ar_date = (sizeof (time_t) <= sizeof (long int)
-			     ? (time_t) atol (ar_hdr->ar_date)
-			     : (time_t) atoll (ar_hdr->ar_date));
-    }
 
-  if (ar_hdr->ar_uid[sizeof (ar_hdr->ar_uid) - 1] == ' ')
-    {
-      if (ar_hdr->ar_uid[0] == ' ')
-	elf_ar_hdr->ar_uid = 0;
-      else
-	elf_ar_hdr->ar_uid = (sizeof (uid_t) <= sizeof (long int)
-			      ? (uid_t) atol (ar_hdr->ar_uid)
-			      : (uid_t) atoll (ar_hdr->ar_uid));
-    }
-  else
-    {
-      char buf[sizeof (ar_hdr->ar_uid) + 1];
-      *((char *) __mempcpy (buf, ar_hdr->ar_uid, sizeof (ar_hdr->ar_uid)))
-	= '\0';
-      elf_ar_hdr->ar_uid = (sizeof (uid_t) <= sizeof (long int)
-			     ? (uid_t) atol (ar_hdr->ar_uid)
-			     : (uid_t) atoll (ar_hdr->ar_uid));
-    }
+#define INT_FIELD(FIELD)						      \
+  do									      \
+    {									      \
+      char buf[sizeof (ar_hdr->FIELD) + 1];				      \
+      const char *string = ar_hdr->FIELD;				      \
+      if (ar_hdr->FIELD[sizeof (ar_hdr->FIELD) - 1] != ' ')		      \
+	{								      \
+	  *((char *) __mempcpy (buf, ar_hdr->FIELD, sizeof (ar_hdr->FIELD)))  \
+	    = '\0';							      \
+	  string = buf;							      \
+	}								      \
+      if (sizeof (elf_ar_hdr->FIELD) <= sizeof (long int))		      \
+	elf_ar_hdr->FIELD = (__typeof (elf_ar_hdr->FIELD)) atol (string);     \
+      else								      \
+	elf_ar_hdr->FIELD = (__typeof (elf_ar_hdr->FIELD)) atoll (string);    \
+    }									      \
+  while (0)
 
-  if (ar_hdr->ar_gid[sizeof (ar_hdr->ar_gid) - 1] == ' ')
-    {
-      if (ar_hdr->ar_gid[0] == ' ')
-	elf_ar_hdr->ar_gid = 0;
-      else
-	elf_ar_hdr->ar_gid = (sizeof (gid_t) <= sizeof (long int)
-			      ? (gid_t) atol (ar_hdr->ar_gid)
-			      : (gid_t) atoll (ar_hdr->ar_gid));
-    }
-  else
-    {
-      char buf[sizeof (ar_hdr->ar_gid) + 1];
-      *((char *) __mempcpy (buf, ar_hdr->ar_gid, sizeof (ar_hdr->ar_gid)))
-	= '\0';
-      elf_ar_hdr->ar_gid = (sizeof (gid_t) <= sizeof (long int)
-			     ? (gid_t) atol (ar_hdr->ar_gid)
-			     : (gid_t) atoll (ar_hdr->ar_gid));
-    }
-
-  if (ar_hdr->ar_mode[sizeof (ar_hdr->ar_mode) - 1] == ' ')
-    {
-      if (ar_hdr->ar_mode[0] == ' ')
-	elf_ar_hdr->ar_mode = 0;
-      else
-	elf_ar_hdr->ar_mode = (sizeof (mode_t) <= sizeof (long int)
-			       ? (mode_t) strtol (ar_hdr->ar_mode, NULL, 8)
-			       : (mode_t) strtoll (ar_hdr->ar_mode, NULL, 8));
-    }
-  else
-    {
-      char buf[sizeof (ar_hdr->ar_mode) + 1];
-      *((char *) __mempcpy (buf, ar_hdr->ar_mode, sizeof (ar_hdr->ar_mode)))
-	= '\0';
-      elf_ar_hdr->ar_mode = (sizeof (mode_t) <= sizeof (long int)
-			     ? (mode_t) strtol (ar_hdr->ar_mode, NULL, 8)
-			     : (mode_t) strtoll (ar_hdr->ar_mode, NULL, 8));
-    }
-
-  if (ar_hdr->ar_size[sizeof (ar_hdr->ar_size) - 1] == ' ')
-    {
-      if (unlikely (ar_hdr->ar_size[0] == ' '))
-	/* Something is really wrong.  We cannot live without a size for
-	   the member since it will not be possible to find the next
-	   archive member.  */
-	{
-	  __libelf_seterrno (ELF_E_INVALID_ARCHIVE);
-	  return -1;
-	}
-      else
-	elf_ar_hdr->ar_size = (sizeof (time_t) == sizeof (long int)
-			       ? (off_t) atol (ar_hdr->ar_size)
-			       : (off_t) atoll (ar_hdr->ar_size));
-    }
-  else
-    {
-      char buf[sizeof (ar_hdr->ar_size) + 1];
-      *((char *) __mempcpy (buf, ar_hdr->ar_size, sizeof (ar_hdr->ar_size)))
-	= '\0';
-      elf_ar_hdr->ar_size = (sizeof (time_t) == sizeof (long int)
-			     ? (off_t) atol (ar_hdr->ar_size)
-			     : (off_t) atoll (ar_hdr->ar_size));
-    }
+  INT_FIELD (ar_date);
+  INT_FIELD (ar_uid);
+  INT_FIELD (ar_gid);
+  INT_FIELD (ar_mode);
+  INT_FIELD (ar_size);
 
   return 0;
 }
@@ -984,7 +958,7 @@ __libelf_dup_elf (int fildes, Elf_Cmd cmd, Elf *ref,
 	 pointing to.  First read the header of the next member if this
 	 has not happened already.  */
       if (ref->state.ar.elf_ar_hdr.ar_name == NULL
-	  && __libelf_next_arhdr (ref) != 0)
+	  && __libelf_next_arhdr_wrlock (ref) != 0)
 	/* Something went wrong.  Maybe there is no member left.  */
 	return NULL;
 
@@ -1061,6 +1035,19 @@ elf_begin (fildes, cmd, ref)
       return NULL;
     }
 
+  Elf *lock_dup_elf ()
+  {
+    /* We need wrlock to dup an archive.  */
+    if (ref->kind == ELF_K_AR)
+      {
+	rwlock_unlock (ref->lock);
+	rwlock_wrlock (ref->lock);
+      }
+
+    /* Duplicate the descriptor.  */
+    return dup_elf (fildes, cmd, ref);
+  }
+
   switch (cmd)
     {
     case ELF_C_NULL:
@@ -1081,8 +1068,7 @@ elf_begin (fildes, cmd, ref)
     case ELF_C_READ:
     case ELF_C_READ_MMAP:
       if (ref != NULL)
-	/* Duplicate the descriptor.  */
-	retval = __libelf_dup_elf (fildes, cmd, ref, 0, 0);
+	retval = lock_dup_elf ();
       else
 	/* Create descriptor for existing file.  */
 	retval = read_file (fildes, 0, ~((size_t) 0), cmd, NULL);
@@ -1103,8 +1089,7 @@ elf_begin (fildes, cmd, ref)
 	      retval = NULL;
 	    }
 	  else
-	    /* Duplicate this descriptor.  */
-	    retval = __libelf_dup_elf (fildes, cmd, ref, 0, 0);
+	    retval = lock_dup_elf ();
 	}
       else
 	/* Create descriptor for existing file.  */

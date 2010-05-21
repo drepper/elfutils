@@ -1,5 +1,5 @@
 /* Return list address ranges.
-   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2006 Red Hat, Inc.
+   Copyright (C) 2000-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -55,7 +55,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "libdwP.h"
-
+#include <dwarf.h>
 
 struct arangelist
 {
@@ -104,13 +104,13 @@ dwarf_getaranges (dbg, aranges, naranges)
   struct arangelist *arangelist = NULL;
   unsigned int narangelist = 0;
 
-  const char *readp
-    = (const char *) dbg->sectiondata[IDX_debug_aranges]->d_buf;
-  const char *readendp = readp + dbg->sectiondata[IDX_debug_aranges]->d_size;
+  const unsigned char *readp = dbg->sectiondata[IDX_debug_aranges]->d_buf;
+  const unsigned char *readendp
+    = readp + dbg->sectiondata[IDX_debug_aranges]->d_size;
 
   while (readp < readendp)
     {
-      const char *hdrstart = readp;
+      const unsigned char *hdrstart = readp;
 
       /* Each entry starts with a header:
 
@@ -131,11 +131,14 @@ dwarf_getaranges (dbg, aranges, naranges)
 	 a segment descriptor on the target system.  */
       Dwarf_Word length = read_4ubyte_unaligned_inc (dbg, readp);
       unsigned int length_bytes = 4;
-      if (length == 0xffffffff)
+      if (length == DWARF3_LENGTH_64_BIT)
 	{
 	  length = read_8ubyte_unaligned_inc (dbg, readp);
 	  length_bytes = 8;
 	}
+      else if (unlikely (length >= DWARF3_LENGTH_MIN_ESCAPE_CODE
+			 && length <= DWARF3_LENGTH_MAX_ESCAPE_CODE))
+	goto invalid;
 
       unsigned int version = read_2ubyte_unaligned_inc (dbg, readp);
       if (version != 2)
@@ -146,14 +149,10 @@ dwarf_getaranges (dbg, aranges, naranges)
 	}
 
       Dwarf_Word offset;
-      if (length_bytes == 4)
-	offset = read_4ubyte_unaligned_inc (dbg, readp);
-      else
-	offset = read_8ubyte_unaligned_inc (dbg, readp);
-
-      /* Sanity-check the offset.  */
-      if (offset + 4 > dbg->sectiondata[IDX_debug_info]->d_size)
-	goto invalid;
+      if (__libdw_read_offset_inc (dbg,
+				   IDX_debug_aranges, &readp,
+				   length_bytes, &offset, IDX_debug_info, 4))
+	return -1;
 
       unsigned int address_size = *readp++;
       if (address_size != 4 && address_size != 8)
@@ -172,16 +171,14 @@ dwarf_getaranges (dbg, aranges, naranges)
 	  Dwarf_Word range_address;
 	  Dwarf_Word range_length;
 
+	  if (__libdw_read_address_inc (dbg, IDX_debug_aranges, &readp,
+					address_size, &range_address))
+	    return -1;
+
 	  if (address_size == 4)
-	    {
-	      range_address = read_4ubyte_unaligned_inc (dbg, readp);
-	      range_length = read_4ubyte_unaligned_inc (dbg, readp);
-	    }
+	    range_length = read_4ubyte_unaligned_inc (dbg, readp);
 	  else
-	    {
-	      range_address = read_8ubyte_unaligned_inc (dbg, readp);
-	      range_length = read_8ubyte_unaligned_inc (dbg, readp);
-	    }
+	    range_length = read_8ubyte_unaligned_inc (dbg, readp);
 
 	  /* Two zero values mark the end.  */
 	  if (range_address == 0 && range_length == 0)
@@ -197,11 +194,12 @@ dwarf_getaranges (dbg, aranges, naranges)
 	  const char *cu_header = (dbg->sectiondata[IDX_debug_info]->d_buf
 				   + offset);
 	  unsigned int offset_size;
-	  if (read_4ubyte_unaligned_noncvt (cu_header) == 0xffffffff)
+	  if (read_4ubyte_unaligned_noncvt (cu_header) == DWARF3_LENGTH_64_BIT)
 	    offset_size = 8;
 	  else
 	    offset_size = 4;
-	  new_arange->arange.offset = offset + 3 * offset_size - 4 + 3;
+	  new_arange->arange.offset = DIE_OFFSET_FROM_CU_OFFSET (offset,
+								 offset_size);
 
 	  /* Sanity-check the data.  */
 	  if (new_arange->arange.offset

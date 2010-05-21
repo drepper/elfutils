@@ -1,5 +1,5 @@
 /* This file defines standard DWARF types, structures, and macros.
-   Copyright (C) 2000, 2002, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -111,6 +111,8 @@ enum
     DW_TAG_mutable_type = 0x3e,
     DW_TAG_condition = 0x3f,
     DW_TAG_shared_type = 0x40,
+    DW_TAG_type_unit = 0x41,
+    DW_TAG_rvalue_reference_type = 0x42,
     DW_TAG_lo_user = 0x4080,
     DW_TAG_MIPS_loop = 0x4081,
     DW_TAG_format_label = 0x4101,
@@ -220,8 +222,13 @@ enum
     DW_AT_elemental = 0x66,
     DW_AT_pure = 0x67,
     DW_AT_recursive = 0x68,
+    DW_AT_signature = 0x69,
+    DW_AT_main_subprogram = 0x6a,
+    DW_AT_data_bit_offset = 0x6b,
+    DW_AT_const_expr = 0x6c,
 
     DW_AT_lo_user = 0x2000,
+
     DW_AT_MIPS_fde = 0x2001,
     DW_AT_MIPS_loop_begin = 0x2002,
     DW_AT_MIPS_tail_loop_begin = 0x2003,
@@ -239,12 +246,25 @@ enum
     DW_AT_MIPS_allocatable_dopetype = 0x200f,
     DW_AT_MIPS_assumed_shape_dopetype = 0x2010,
     DW_AT_MIPS_assumed_size = 0x2011,
+
+    /* GNU extensions.  */
     DW_AT_sf_names = 0x2101,
     DW_AT_src_info = 0x2102,
     DW_AT_mac_info = 0x2103,
     DW_AT_src_coords = 0x2104,
     DW_AT_body_begin = 0x2105,
     DW_AT_body_end = 0x2106,
+    DW_AT_GNU_vector = 0x2107,
+    DW_AT_GNU_guarded_by = 0x2108,
+    DW_AT_GNU_pt_guarded_by = 0x2109,
+    DW_AT_GNU_guarded = 0x210a,
+    DW_AT_GNU_pt_guarded = 0x210b,
+    DW_AT_GNU_locks_excluded = 0x210c,
+    DW_AT_GNU_exclusive_locks_required = 0x210d,
+    DW_AT_GNU_shared_locks_required = 0x210e,
+    DW_AT_GNU_odr_signature = 0x210f,
+    DW_AT_GNU_template_name = 0x2110,
+
     DW_AT_hi_user = 0x3fff
   };
 
@@ -272,7 +292,11 @@ enum
     DW_FORM_ref4 = 0x13,
     DW_FORM_ref8 = 0x14,
     DW_FORM_ref_udata = 0x15,
-    DW_FORM_indirect = 0x16
+    DW_FORM_indirect = 0x16,
+    DW_FORM_sec_offset = 0x17,
+    DW_FORM_exprloc = 0x18,
+    DW_FORM_flag_present = 0x19,
+    DW_FORM_ref_sig8 = 0x20
   };
 
 
@@ -431,6 +455,13 @@ enum
     DW_OP_form_tls_address = 0x9b,/* TLS offset to address in current thread */
     DW_OP_call_frame_cfa = 0x9c,/* CFA as determined by CFI.  */
     DW_OP_bit_piece = 0x9d,	/* ULEB128 size and ULEB128 offset in bits.  */
+    DW_OP_implicit_value = 0x9e, /* DW_FORM_block follows opcode.  */
+    DW_OP_stack_value = 0x9f,	 /* No operands, special like DW_OP_piece.  */
+
+    /* GNU extensions.  */
+    DW_OP_GNU_push_tls_address = 0xe0,
+    DW_OP_GNU_uninit = 0xf0,
+    DW_OP_GNU_encoded_addr = 0xf1,
 
     DW_OP_lo_user = 0xe0,	/* Implementation-defined range start.  */
     DW_OP_hi_user = 0xff	/* Implementation-defined range end.  */
@@ -515,25 +546,25 @@ enum
 /* DWARF language encodings.  */
 enum
   {
-    DW_LANG_C89 = 0x0001,
-    DW_LANG_C = 0x0002,
-    DW_LANG_Ada83 = 0x0003,
-    DW_LANG_C_plus_plus	= 0x0004,
-    DW_LANG_Cobol74 = 0x0005,
-    DW_LANG_Cobol85 = 0x0006,
-    DW_LANG_Fortran77 = 0x0007,
-    DW_LANG_Fortran90 = 0x0008,
-    DW_LANG_Pascal83 = 0x0009,
-    DW_LANG_Modula2 = 0x000a,
-    DW_LANG_Java = 0x000b,
-    DW_LANG_C99 = 0x000c,
-    DW_LANG_Ada95 = 0x000d,
-    DW_LANG_Fortran95 = 0x000e,
-    DW_LANG_PL1 = 0x000f,
-    DW_LANG_Objc = 0x0010,
-    DW_LANG_ObjC_plus_plus = 0x0011,
-    DW_LANG_UPC = 0x0012,
-    DW_LANG_D = 0x0013,
+    DW_LANG_C89 = 0x0001,	     /* ISO C:1989 */
+    DW_LANG_C = 0x0002,		     /* C */
+    DW_LANG_Ada83 = 0x0003,	     /* ISO Ada:1983 */
+    DW_LANG_C_plus_plus	= 0x0004,    /* ISO C++:1998 */
+    DW_LANG_Cobol74 = 0x0005,	     /* ISO Cobol:1974 */
+    DW_LANG_Cobol85 = 0x0006,	     /* ISO Cobol:1985 */
+    DW_LANG_Fortran77 = 0x0007,	     /* ISO FORTRAN 77 */
+    DW_LANG_Fortran90 = 0x0008,	     /* ISO Fortran 90 */
+    DW_LANG_Pascal83 = 0x0009,	     /* ISO Pascal:1983 */
+    DW_LANG_Modula2 = 0x000a,	     /* ISO Modula-2:1996 */
+    DW_LANG_Java = 0x000b,	     /* Java */
+    DW_LANG_C99 = 0x000c,	     /* ISO C:1999 */
+    DW_LANG_Ada95 = 0x000d,	     /* ISO Ada:1995 */
+    DW_LANG_Fortran95 = 0x000e,	     /* ISO Fortran 95 */
+    DW_LANG_PL1 = 0x000f,	     /* ISO PL/1:1976 */
+    DW_LANG_Objc = 0x0010,	     /* Objective-C */
+    DW_LANG_ObjC_plus_plus = 0x0011, /* Objective-C++ */
+    DW_LANG_UPC = 0x0012,	     /* Unified Parallel C */
+    DW_LANG_D = 0x0013,		     /* D */
 
     DW_LANG_lo_user = 0x8000,
     DW_LANG_Mips_Assembler = 0x8001,
@@ -665,11 +696,62 @@ enum
     DW_CFA_MIPS_advance_loc8 = 0x1d,
     DW_CFA_GNU_window_save = 0x2d,
     DW_CFA_GNU_args_size = 0x2e,
+    DW_CFA_GNU_negative_offset_extended = 0x2f,
     DW_CFA_high_user = 0x3f
+  };
+
+/* ID indicating CIE as opposed to FDE in .debug_frame.  */
+enum
+  {
+    DW_CIE_ID_32 = 0xffffffffU,		 /* In 32-bit format CIE header.  */
+    DW_CIE_ID_64 = 0xffffffffffffffffULL /* In 64-bit format CIE header.  */
+  };
+
+
+/* Information for GNU unwind information.  */
+enum
+  {
+    DW_EH_PE_absptr = 0x00,
+    DW_EH_PE_omit = 0xff,
+
+    /* FDE data encoding.  */
+    DW_EH_PE_uleb128 = 0x01,
+    DW_EH_PE_udata2 = 0x02,
+    DW_EH_PE_udata4 = 0x03,
+    DW_EH_PE_udata8 = 0x04,
+    DW_EH_PE_sleb128 = 0x09,
+    DW_EH_PE_sdata2 = 0x0a,
+    DW_EH_PE_sdata4 = 0x0b,
+    DW_EH_PE_sdata8 = 0x0c,
+    DW_EH_PE_signed = 0x08,
+
+    /* FDE flags.  */
+    DW_EH_PE_pcrel = 0x10,
+    DW_EH_PE_textrel = 0x20,
+    DW_EH_PE_datarel = 0x30,
+    DW_EH_PE_funcrel = 0x40,
+    DW_EH_PE_aligned = 0x50,
+
+    DW_EH_PE_indirect = 0x80
   };
 
 
 /* DWARF XXX.  */
 #define DW_ADDR_none	0
+
+/* Section 7.2.2 of the DWARF3 specification defines a range of escape
+   codes that can appear in the length field of certain DWARF structures.
+
+   These defines enumerate the minium and maximum values of this range.
+   Currently only the maximum value is used (to indicate that 64-bit
+   values are going to be used in the dwarf data that accompanies the
+   structure).  The other values are reserved.
+
+   Note: There is a typo in DWARF3 spec (published Dec 20, 2005).  In
+   sections 7.4, 7.5.1, 7.19, 7.20 the minimum escape code is referred to
+   as 0xffffff00 whereas in fact it should be 0xfffffff0.  */
+#define DWARF3_LENGTH_MIN_ESCAPE_CODE 0xfffffff0u
+#define DWARF3_LENGTH_MAX_ESCAPE_CODE 0xffffffffu
+#define DWARF3_LENGTH_64_BIT          DWARF3_LENGTH_MAX_ESCAPE_CODE
 
 #endif	/* dwarf.h */

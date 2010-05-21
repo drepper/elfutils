@@ -193,8 +193,8 @@ elf_update (elf, cmd)
      will come right after the ELF header.  The count the size of all
      sections and finally place the section table.  */
   size = (elf->class == ELFCLASS32
-	  ? __elf32_updatenull (elf, &change_bo, shnum)
-	  : __elf64_updatenull (elf, &change_bo, shnum));
+	  ? __elf32_updatenull_wrlock (elf, &change_bo, shnum)
+	  : __elf64_updatenull_wrlock (elf, &change_bo, shnum));
   if (likely (size != -1)
       /* See whether we actually have to write out the data.  */
       && (cmd == ELF_C_WRITE || cmd == ELF_C_WRITE_MMAP))

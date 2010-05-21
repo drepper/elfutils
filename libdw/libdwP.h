@@ -1,5 +1,5 @@
 /* Internal definitions for libdwarf.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -62,7 +62,7 @@
 
 
 /* Version of the DWARF specification we support.  */
-#define DWARF_VERSION 2
+#define DWARF_VERSION 3
 
 /* Version of the CIE format.  */
 #define CIE_VERSION 1
@@ -76,6 +76,16 @@ struct loc_s
   size_t nloc;
 };
 
+/* Known DW_OP_implicit_value blocks already decoded.
+   This overlaps struct loc_s exactly, but only the
+   first member really has to match.  */
+struct loc_block_s
+{
+  void *addr;
+  unsigned char *data;
+  size_t length;
+};
+
 /* Valid indeces for the section data.  */
 enum
   {
@@ -84,7 +94,6 @@ enum
     IDX_debug_aranges,
     IDX_debug_line,
     IDX_debug_frame,
-    IDX_eh_frame,
     IDX_debug_loc,
     IDX_debug_pubnames,
     IDX_debug_str,
@@ -136,6 +145,7 @@ enum
   DWARF_E_NO_FLAG,
   DWARF_E_INVALID_OFFSET,
   DWARF_E_NO_DEBUG_RANGES,
+  DWARF_E_INVALID_CFI,
 };
 
 
@@ -172,6 +182,9 @@ struct Dwarf
   /* Address ranges.  */
   Dwarf_Aranges *aranges;
 
+  /* Cached info from the CFI section.  */
+  struct Dwarf_CFI_s *cfi;
+
   /* Internal memory handling.  This is basically a simplified
      reimplementation of obstacks.  Unfortunately the standard obstack
      implementation is not usable in libraries.  */
@@ -194,12 +207,12 @@ struct Dwarf
 /* Abbreviation representation.  */
 struct Dwarf_Abbrev
 {
+  Dwarf_Off offset;
+  unsigned char *attrp;
+  unsigned int attrcnt;
   unsigned int code;
   unsigned int tag;
-  int has_children;
-  unsigned int attrcnt;
-  unsigned char *attrp;
-  Dwarf_Off offset;
+  bool has_children;
 };
 
 #include "dwarf_abbrev_hash.h"
@@ -208,7 +221,7 @@ struct Dwarf_Abbrev
 /* Files in line information records.  */
 struct Dwarf_Files_s
   {
-    Dwarf *dbg;
+    struct Dwarf_CU *cu;
     unsigned int ndirs;
     unsigned int nfiles;
     struct Dwarf_Fileinfo_s
@@ -223,26 +236,27 @@ typedef struct Dwarf_Fileinfo_s Dwarf_Fileinfo;
 
 
 /* Representation of a row in the line table.  */
+
+struct Dwarf_Line_s
+{
+  Dwarf_Files *files;
+
+  Dwarf_Addr addr;
+  unsigned int file;
+  int line;
+  unsigned short int column;
+  unsigned int is_stmt:1;
+  unsigned int basic_block:1;
+  unsigned int end_sequence:1;
+  unsigned int prologue_end:1;
+  unsigned int epilogue_begin:1;
+};
+
 struct Dwarf_Lines_s
-  {
-    size_t nlines;
-
-    struct Dwarf_Line_s
-    {
-      Dwarf_Addr addr;
-      unsigned int file;
-      int line;
-      unsigned short int column;
-      unsigned int is_stmt:1;
-      unsigned int basic_block:1;
-      unsigned int end_sequence:1;
-      unsigned int prologue_end:1;
-      unsigned int epilogue_begin:1;
-
-      Dwarf_Files *files;
-    } info[0];
-  };
-
+{
+  size_t nlines;
+  struct Dwarf_Line_s info[0];
+};
 
 /* Representation of address ranges.  */
 struct Dwarf_Aranges_s
@@ -285,6 +299,19 @@ struct Dwarf_CU
   /* Known location lists.  */
   void *locs;
 };
+
+/* Compute the offset of a CU's first DIE from its offset.  This
+   is either:
+        LEN       VER     OFFSET    ADDR
+      4-bytes + 2-bytes + 4-bytes + 1-byte  for 32-bit dwarf
+     12-bytes + 2-bytes + 8-bytes + 1-byte  for 64-bit dwarf
+
+   Note the trick in the computation.  If the offset_size is 4
+   the '- 4' term changes the '3 *' into a '2 *'.  If the
+   offset_size is 8 it accounts for the 4-byte escape value
+   used at the start of the length.  */
+#define DIE_OFFSET_FROM_CU_OFFSET(cu_offset, offset_size) \
+  ((cu_offset) + 3 * (offset_size) - 4 + 3)
 
 #define CUDIE(fromcu) \
   ((Dwarf_Die)								      \
@@ -400,12 +427,176 @@ extern int __libdw_visit_scopes (unsigned int depth,
 				 void *arg)
   __nonnull_attribute__ (2, 3) internal_function;
 
+/* Parse a DWARF Dwarf_Block into an array of Dwarf_Op's,
+   and cache the result (via tsearch).  */
+extern int __libdw_intern_expression (Dwarf *dbg,
+				      bool other_byte_order,
+				      unsigned int address_size,
+				      unsigned int ref_size,
+				      void **cache, const Dwarf_Block *block,
+				      bool cfap, bool valuep,
+				      Dwarf_Op **llbuf, size_t *listlen,
+				      int sec_index)
+  __nonnull_attribute__ (5, 6, 9, 10) internal_function;
+
+
 /* Return error code of last failing function call.  This value is kept
    separately for each thread.  */
 extern int __dwarf_errno_internal (void);
 
 
+/* Reader hooks.  */
+
+/* Relocation hooks return -1 on error (in that case the error code
+   must already have been set), 0 if there is no relocation and 1 if a
+   relocation was present.*/
+
+static inline int
+__libdw_relocate_address (Dwarf *dbg __attribute__ ((unused)),
+			  int sec_index __attribute__ ((unused)),
+			  const void *addr __attribute__ ((unused)),
+			  int width __attribute__ ((unused)),
+			  Dwarf_Addr *val __attribute__ ((unused)))
+{
+  return 0;
+}
+
+static inline int
+__libdw_relocate_offset (Dwarf *dbg __attribute__ ((unused)),
+			 int sec_index __attribute__ ((unused)),
+			 const void *addr __attribute__ ((unused)),
+			 int width __attribute__ ((unused)),
+			 Dwarf_Off *val __attribute__ ((unused)))
+{
+  return 0;
+}
+
+static inline Elf_Data *
+__libdw_checked_get_data (Dwarf *dbg, int sec_index)
+{
+  Elf_Data *data = dbg->sectiondata[sec_index];
+  if (unlikely (data == NULL)
+      || unlikely (data->d_buf == NULL))
+    {
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return NULL;
+    }
+  return data;
+}
+
+static inline int
+__libdw_offset_in_section (Dwarf *dbg, int sec_index,
+			   Dwarf_Off offset, size_t size)
+{
+  Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
+  if (data == NULL)
+    return -1;
+  if (unlikely (offset > data->d_size)
+      || unlikely (data->d_size - offset < size))
+    {
+      __libdw_seterrno (DWARF_E_INVALID_OFFSET);
+      return -1;
+    }
+
+  return 0;
+}
+
+static inline bool
+__libdw_in_section (Dwarf *dbg, int sec_index,
+		    const void *addr, size_t size)
+{
+  Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
+  if (data == NULL)
+    return false;
+  if (unlikely (addr < data->d_buf)
+      || unlikely (data->d_size - (addr - data->d_buf) < size))
+    {
+      __libdw_seterrno (DWARF_E_INVALID_OFFSET);
+      return false;
+    }
+
+  return true;
+}
+
+#define READ_AND_RELOCATE(RELOC_HOOK, VAL)				\
+  ({									\
+    if (!__libdw_in_section (dbg, sec_index, addr, width))		\
+      return -1;							\
+									\
+    const unsigned char *orig_addr = addr;				\
+    if (width == 4)							\
+      VAL = read_4ubyte_unaligned_inc (dbg, addr);			\
+    else								\
+      VAL = read_8ubyte_unaligned_inc (dbg, addr);			\
+									\
+    int status = RELOC_HOOK (dbg, sec_index, orig_addr, width, &VAL);	\
+    if (status < 0)							\
+      return status;							\
+    status > 0;								\
+   })
+
+static inline int
+__libdw_read_address_inc (Dwarf *dbg,
+			  int sec_index, const unsigned char **addrp,
+			  int width, Dwarf_Addr *ret)
+{
+  const unsigned char *addr = *addrp;
+  READ_AND_RELOCATE (__libdw_relocate_address, (*ret));
+  *addrp = addr;
+  return 0;
+}
+
+static inline int
+__libdw_read_address (Dwarf *dbg,
+		      int sec_index, const unsigned char *addr,
+		      int width, Dwarf_Addr *ret)
+{
+  READ_AND_RELOCATE (__libdw_relocate_address, (*ret));
+  return 0;
+}
+
+static inline int
+__libdw_read_offset_inc (Dwarf *dbg,
+			 int sec_index, const unsigned char **addrp,
+			 int width, Dwarf_Off *ret, int sec_ret,
+			 size_t size)
+{
+  const unsigned char *addr = *addrp;
+  READ_AND_RELOCATE (__libdw_relocate_offset, (*ret));
+  *addrp = addr;
+  return __libdw_offset_in_section (dbg, sec_ret, *ret, size);
+}
+
+static inline int
+__libdw_read_offset (Dwarf *dbg,
+		     int sec_index, const unsigned char *addr,
+		     int width, Dwarf_Off *ret, int sec_ret,
+		     size_t size)
+{
+  READ_AND_RELOCATE (__libdw_relocate_offset, (*ret));
+  return __libdw_offset_in_section (dbg, sec_ret, *ret, size);
+}
+
+/* Read up begin/end pair and increment read pointer.
+    - If it's normal range record, set up *BEGINP and *ENDP and return 0.
+    - If it's base address selection record, set up *BASEP and return 1.
+    - If it's end of rangelist, don't set anything and return 2
+    - If an error occurs, don't set anything and return <0.  */
+int __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
+				     unsigned char **addr, int width,
+				     Dwarf_Addr *beginp, Dwarf_Addr *endp,
+				     Dwarf_Addr *basep)
+  internal_function;
+
+unsigned char * __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
+				 int err_nodata, unsigned char **endpp,
+				 Dwarf_Off *offsetp)
+  internal_function;
+
+
+
 /* Aliases to avoid PLTs.  */
+INTDECL (dwarf_aggregate_size)
 INTDECL (dwarf_attr)
 INTDECL (dwarf_attr_integrate)
 INTDECL (dwarf_begin_elf)
@@ -435,6 +626,7 @@ INTDECL (dwarf_nextcu)
 INTDECL (dwarf_offdie)
 INTDECL (dwarf_ranges)
 INTDECL (dwarf_siblingof)
+INTDECL (dwarf_srclang)
 INTDECL (dwarf_tag)
 
 #endif	/* libdwP.h */

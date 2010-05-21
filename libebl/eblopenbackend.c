@@ -1,5 +1,5 @@
 /* Generate ELF backend handle.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -186,7 +186,7 @@ static const char *default_core_note_type_name (uint32_t, char *buf,
 						size_t len);
 static const char *default_object_note_type_name (uint32_t, char *buf,
 						  size_t len);
-static int default_core_note (GElf_Word n_type, GElf_Word descsz,
+static int default_core_note (const GElf_Nhdr *nhdr, const char *name,
 			      GElf_Word *regs_offset, size_t *nregloc,
 			      const Ebl_Register_Location **reglocs,
 			      size_t *nitems, const Ebl_Core_Item **);
@@ -202,6 +202,8 @@ static bool default_check_special_symbol (Elf *elf, GElf_Ehdr *ehdr,
 					  const GElf_Sym *sym,
 					  const char *name,
 					  const GElf_Shdr *destshdr);
+static bool default_check_special_section (Ebl *, int,
+					   const GElf_Shdr *, const char *);
 static bool default_bss_plt_p (Elf *elf, GElf_Ehdr *ehdr);
 static int default_return_value_location (Dwarf_Die *functypedie,
 					  const Dwarf_Op **locops);
@@ -210,6 +212,13 @@ static ssize_t default_register_info (Ebl *ebl,
 				      const char **prefix,
 				      const char **setname,
 				      int *bits, int *type);
+static int default_syscall_abi (Ebl *ebl, int *sp, int *pc,
+				int *callno, int args[6]);
+static bool default_check_object_attribute (Ebl *ebl, const char *vendor,
+					    int tag, uint64_t value,
+					    const char **tag_name,
+					    const char **value_name);
+static int default_abi_cfi (Ebl *ebl, Dwarf_CIE *abi_info);
 
 
 static void
@@ -227,6 +236,7 @@ fill_defaults (Ebl *result)
   result->machine_flag_name = default_machine_flag_name;
   result->machine_flag_check = default_machine_flag_check;
   result->machine_section_flag_check = default_machine_section_flag_check;
+  result->check_special_section = default_check_special_section;
   result->symbol_type_name = default_symbol_type_name;
   result->symbol_binding_name = default_symbol_binding_name;
   result->dynamic_tag_name = default_dynamic_tag_name;
@@ -246,6 +256,10 @@ fill_defaults (Ebl *result)
   result->bss_plt_p = default_bss_plt_p;
   result->return_value_location = default_return_value_location;
   result->register_info = default_register_info;
+  result->syscall_abi = default_syscall_abi;
+  result->check_object_attribute = default_check_object_attribute;
+  result->disasm = NULL;
+  result->abi_cfi = default_abi_cfi;
   result->destr = default_destr;
   result->sysvhash_entrysize = sizeof (Elf32_Word);
 }
@@ -515,6 +529,15 @@ default_machine_section_flag_check (GElf_Xword flags)
   return flags == 0;
 }
 
+static bool
+default_check_special_section (Ebl *ebl __attribute__ ((unused)),
+			       int ndx __attribute__ ((unused)),
+			       const GElf_Shdr *shdr __attribute__ ((unused)),
+			       const char *sname __attribute__ ((unused)))
+{
+  return false;
+}
+
 static const char *
 default_symbol_type_name (int ignore __attribute__ ((unused)),
 			  char *buf __attribute__ ((unused)),
@@ -581,8 +604,8 @@ default_auxv_info (GElf_Xword a_type __attribute__ ((unused)),
 }
 
 static int
-default_core_note (GElf_Word n_type __attribute__ ((unused)),
-		   GElf_Word descsz __attribute__ ((unused)),
+default_core_note (const GElf_Nhdr *nhdr __attribute__ ((unused)),
+		   const char *name __attribute__ ((unused)),
 		   GElf_Word *ro __attribute__ ((unused)),
 		   size_t *nregloc  __attribute__ ((unused)),
 		   const Ebl_Register_Location **reglocs
@@ -636,6 +659,9 @@ default_debugscn_p (const char *name)
       ".debug_macinfo",
       /* DWARF 3 */
       ".debug_ranges",
+      ".debug_pubtypes",
+      /* DWARF 4 */
+      ".debug_types",
       /* SGI/MIPS DWARF 2 extensions */
       ".debug_weaknames",
       ".debug_funcnames",
@@ -698,4 +724,37 @@ default_register_info (Ebl *ebl __attribute__ ((unused)),
   *bits = -1;
   *type = DW_ATE_void;
   return snprintf (name, namelen, "reg%d", regno);
+}
+
+static int
+default_syscall_abi (Ebl *ebl __attribute__ ((unused)),
+		     int *sp, int *pc, int *callno, int args[6])
+{
+  *sp = *pc = *callno = -1;
+  args[0] = -1;
+  args[1] = -1;
+  args[2] = -1;
+  args[3] = -1;
+  args[4] = -1;
+  args[5] = -1;
+  return -1;
+}
+
+static bool
+default_check_object_attribute (Ebl *ebl __attribute__ ((unused)),
+				const char *vendor  __attribute__ ((unused)),
+				int tag __attribute__ ((unused)),
+				uint64_t value __attribute__ ((unused)),
+				const char **tag_name, const char **value_name)
+{
+  *tag_name = NULL;
+  *value_name = NULL;
+  return false;
+}
+
+static int
+default_abi_cfi (Ebl *ebl __attribute__ ((unused)),
+		 Dwarf_CIE *abi_info __attribute__ ((unused)))
+{
+  return 0;
 }

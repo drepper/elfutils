@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+## Copyright (C) 1996-2010 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -24,23 +24,16 @@
 ## Network licensing program, please visit www.openinventionnetwork.com
 ## <http://www.openinventionnetwork.com>.
 ##
-DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H $(YYDEBUG) \
-       -DSRCDIR=\"$(shell cd $(srcdir);pwd)\" -DOBJDIR=\"$(shell pwd)\"
-if MUDFLAP
-AM_CFLAGS = -fmudflap
-else
-AM_CFLAGS =
-endif
-AM_CFLAGS += -Wall -Wshadow -std=gnu99 $(native_ld_cflags) \
-	     $(if $($(*F)_no_Werror),,-Werror) \
-	     $(if $($(*F)_no_Wunused),,-Wunused -Wextra) \
-	     $(if $($(*F)_no_Wformat),,-Wformat=2) $(CFLAGS_$(*F))
-
-INCLUDES = -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
-	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwfl \
-	   -I$(srcdir)/../lib -I..
+include $(top_srcdir)/config/eu.am
+DEFS += $(YYDEBUG) -DDEBUGPRED=@DEBUGPRED@ \
+	-DSRCDIR=\"$(shell cd $(srcdir);pwd)\" -DOBJDIR=\"$(shell pwd)\"
+INCLUDES += -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
+	    -I$(srcdir)/../libdw -I$(srcdir)/../libdwfl \
+	    -I$(srcdir)/../libasm
 
 AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
+
+no_mudflap.os = -fmudflap
 
 YACC = @YACC@ -d
 AM_YFLAGS = -pld
@@ -70,8 +63,6 @@ noinst_LIBRARIES += libdummy.a
 libdummy_a_SOURCES = i386_ld.c
 endif
 
-textrel_check = if readelf -d $@ | fgrep -q TEXTREL; then exit 1; fi
-
 
 ld_SOURCES = ld.c ldgeneric.c ldlex.l ldscript.y symbolhash.c sectionhash.c \
 	     versionhash.c
@@ -81,21 +72,20 @@ libar_a_SOURCES = arlib.c arlib2.c
 noinst_HEADERS = ld.h symbolhash.h sectionhash.h versionhash.h \
 		 ldscript.h xelf.h unaligned.h
 
-EXTRA_DIST = elf32-i386.script libld_elf_i386.map $(ld_modules) arlib.h
+EXTRA_DIST = elf32-i386.script libld_elf_i386.map $(ld_modules) arlib.h \
+	     debugpred.h
 ld_modules = i386_ld.c
 
 bin_SCRIPTS = make-debug-archive
 EXTRA_DIST += make-debug-archive.in
-CLEANFILES = make-debug-archive
-
-if MUDFLAP
-libmudflap = -lmudflap
-endif
+CLEANFILES += make-debug-archive
 
 if BUILD_STATIC
-libdw = ../libdw/libdw.a $(libelf) $(libebl) -ldl
+libasm = ../libasm/libasm.a
+libdw = ../libdw/libdw.a $(zip_LIBS) $(libelf) $(libebl) -ldl
 libelf = ../libelf/libelf.a
 else
+libasm = ../libasm/libasm.so
 libdw = ../libdw/libdw.so
 libelf = ../libelf/libelf.so
 endif
@@ -105,6 +95,7 @@ libeu = ../lib/libeu.a
 nm_no_Wformat = yes
 size_no_Wformat = yes
 strings_no_Wformat = yes
+addr2line_no_Wformat = yes
 # XXX While the file is not finished, don't warn about this
 ldgeneric_no_Wunused = yes
 
@@ -120,13 +111,12 @@ endif
 ld_LDFLAGS = -rdynamic
 elflint_LDADD  = $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 findtextrel_LDADD = $(libdw) $(libelf) $(libmudflap)
-addr2line_LDADD = $(libdw) $(libmudflap)
+addr2line_LDADD = $(libdw) $(libelf) $(libmudflap)
 elfcmp_LDADD = $(libebl) $(libelf) $(libmudflap) -ldl
-objdump_LDADD  = $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
+objdump_LDADD  = $(libasm) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
 ranlib_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 strings_LDADD = $(libelf) $(libeu) $(libmudflap)
 ar_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
-CFLAGS_ar = -DAR=\"$(shell echo ar|sed '$(transform)')\"
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(libmudflap) -ldl
 
 ldlex.o: ldscript.c
@@ -147,16 +137,6 @@ libld_elf_i386.so: libld_elf_i386_pic.a libld_elf_i386.map
 		-Wl,--version-script,$(srcdir)/libld_elf_i386.map
 	$(textrel_check)
 endif
-
-
-%.os: %.c %.o
-	if $(filter-out -fmudflap,$(COMPILE)) -c -o $@ -fpic -DPIC -DSHARED \
-	  -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" \
-	  `test -f '$<' || echo '$(srcdir)/'`$<; \
-	then cat "$(DEPDIR)/$*.Tpo" >> "$(DEPDIR)/$*.Po"; \
-	     rm -f "$(DEPDIR)/$*.Tpo"; \
-	else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; \
-	fi
 
 # Special rule to make it possible to define libld_elf_a_SOURCES as we do.
 # Otherwise make would complain.
@@ -180,7 +160,7 @@ installcheck-binPROGRAMS: $(bin_PROGRAMS)
 	  done; \
 	done; rm -f c$${pid}_.???; exit $$bad
 
-CLEANFILES += none_ld.os $(ld_modules:.c=.os) *.gcno *.gcda *.gconv
+CLEANFILES += none_ld.os $(ld_modules:.c=.os) *.gconv
 
 MAINTAINERCLEANFILES = ldlex.c ldscript.c ldscript.h
 

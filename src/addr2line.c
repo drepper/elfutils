@@ -1,5 +1,5 @@
 /* Locate source files and line information for given addresses
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2005.
 
@@ -46,13 +46,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <system.h>
+
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 
 /* Values for the parameters which have no short form.  */
@@ -67,6 +69,8 @@ static const struct argp_option options[] =
     N_("Show absolute file names using compilation directory"), 0 },
   { "functions", 'f', NULL, 0, N_("Also show function names"), 0 },
   { "symbols", 'S', NULL, 0, N_("Also show symbol or section names"), 0 },
+  { "section", 'j', "NAME", 0,
+    N_("Treat addresses as offsets relative to NAME section."), 0 },
 
   { NULL, 0, NULL, 0, N_("Miscellaneous:"), 0 },
   /* Unsupported options.  */
@@ -96,7 +100,7 @@ static const struct argp argp =
 
 
 /* Handle ADDR.  */
-static void handle_address (GElf_Addr addr, Dwfl *dwfl);
+static int handle_address (const char *addr, Dwfl *dwfl);
 
 
 /* True if only base names of files should be shown.  */
@@ -110,6 +114,9 @@ static bool show_functions;
 
 /* True if ELF symbol or section info should be shown.  */
 static bool show_symbols;
+
+/* If non-null, take address parameters as relative to named section.  */
+static const char *just_section;
 
 
 int
@@ -154,12 +161,7 @@ main (int argc, char *argv[])
 	  if (getline (&buf, &len, stdin) < 0)
 	    break;
 
-	  char *endp;
-	  uintmax_t addr = strtoumax (buf, &endp, 0);
-	  if (endp != buf)
-	    handle_address (addr, dwfl);
-	  else
-	    result = 1;
+	  result = handle_address (buf, dwfl);
 	}
 
       free (buf);
@@ -167,14 +169,7 @@ main (int argc, char *argv[])
   else
     {
       do
-	{
-	  char *endp;
-	  uintmax_t addr = strtoumax (argv[remaining], &endp, 0);
-	  if (endp != argv[remaining])
-	    handle_address (addr, dwfl);
-	  else
-	    result = 1;
-	}
+	result = handle_address (argv[remaining], dwfl);
       while (++remaining < argc);
     }
 
@@ -191,15 +186,14 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2007");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
 
 /* Handle program arguments.  */
 static error_t
-parse_opt (int key, char *arg __attribute__ ((unused)),
-	   struct argp_state *state)
+parse_opt (int key, char *arg, struct argp_state *state)
 {
   switch (key)
     {
@@ -227,6 +221,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case 'S':
       show_symbols = true;
+      break;
+
+    case 'j':
+      just_section = arg;
       break;
 
     default:
@@ -286,15 +284,35 @@ print_dwarf_function (Dwfl_Module *mod, Dwarf_Addr addr)
 						   DW_AT_call_column,
 						   &attr_mem), &val) == 0)
 		    colno = val;
-		  if (lineno == 0)
+
+		  const char *comp_dir = "";
+		  const char *comp_dir_sep = "";
+
+		  if (file == NULL)
+		    file = "???";
+		  else if (only_basenames)
+		    file = basename (file);
+		  else if (use_comp_dir && file[0] != '/')
 		    {
-		      if (file != NULL)
-			printf (" from %s", file);
+		      const char *const *dirs;
+		      size_t ndirs;
+		      if (dwarf_getsrcdirs (files, &dirs, &ndirs) == 0
+			  && dirs[0] != NULL)
+			{
+			  comp_dir = dirs[0];
+			  comp_dir_sep = "/";
+			}
 		    }
+
+		  if (lineno == 0)
+		    printf (" from %s%s%s",
+			    comp_dir, comp_dir_sep, file);
 		  else if (colno == 0)
-		    printf (" at %s:%u", file, lineno);
+		    printf (" at %s%s%s:%u",
+			    comp_dir, comp_dir_sep, file, lineno);
 		  else
-		    printf (" at %s:%u:%u", file, lineno, colno);
+		    printf (" at %s%s%s:%u:%u",
+			    comp_dir, comp_dir_sep, file, lineno, colno);
 		}
 	    }
 	  printf (" in ");
@@ -328,9 +346,148 @@ print_addrsym (Dwfl_Module *mod, GElf_Addr addr)
     printf ("%s+%#" PRIx64 "\n", name, addr - s.st_value);
 }
 
-static void
-handle_address (GElf_Addr addr, Dwfl *dwfl)
+static int
+see_one_module (Dwfl_Module *mod,
+		void **userdata __attribute__ ((unused)),
+		const char *name __attribute__ ((unused)),
+		Dwarf_Addr start __attribute__ ((unused)),
+		void *arg)
 {
+  Dwfl_Module **result = arg;
+  if (*result != NULL)
+    return DWARF_CB_ABORT;
+  *result = mod;
+  return DWARF_CB_OK;
+}
+
+static int
+find_symbol (Dwfl_Module *mod,
+	     void **userdata __attribute__ ((unused)),
+	     const char *name __attribute__ ((unused)),
+	     Dwarf_Addr start __attribute__ ((unused)),
+	     void *arg)
+{
+  const char *looking_for = ((void **) arg)[0];
+  GElf_Sym *symbol = ((void **) arg)[1];
+
+  int n = dwfl_module_getsymtab (mod);
+  for (int i = 1; i < n; ++i)
+    {
+      const char *symbol_name = dwfl_module_getsym (mod, i, symbol, NULL);
+      if (symbol_name == NULL || symbol_name[0] == '\0')
+	continue;
+      switch (GELF_ST_TYPE (symbol->st_info))
+	{
+	case STT_SECTION:
+	case STT_FILE:
+	case STT_TLS:
+	  break;
+	default:
+	  if (!strcmp (symbol_name, looking_for))
+	    {
+	      ((void **) arg)[0] = NULL;
+	      return DWARF_CB_ABORT;
+	    }
+	}
+    }
+
+  return DWARF_CB_OK;
+}
+
+static bool
+adjust_to_section (const char *name, uintmax_t *addr, Dwfl *dwfl)
+{
+  /* It was (section)+offset.  This makes sense if there is
+     only one module to look in for a section.  */
+  Dwfl_Module *mod = NULL;
+  if (dwfl_getmodules (dwfl, &see_one_module, &mod, 0) != 0
+      || mod == NULL)
+    error (EXIT_FAILURE, 0, gettext ("Section syntax requires"
+				     " exactly one module"));
+
+  int nscn = dwfl_module_relocations (mod);
+  for (int i = 0; i < nscn; ++i)
+    {
+      GElf_Word shndx;
+      const char *scn = dwfl_module_relocation_info (mod, i, &shndx);
+      if (unlikely (scn == NULL))
+	break;
+      if (!strcmp (scn, name))
+	{
+	  /* Found the section.  */
+	  GElf_Shdr shdr_mem;
+	  GElf_Addr shdr_bias;
+	  GElf_Shdr *shdr = gelf_getshdr
+	    (elf_getscn (dwfl_module_getelf (mod, &shdr_bias), shndx),
+	     &shdr_mem);
+	  if (unlikely (shdr == NULL))
+	    break;
+
+	  if (*addr >= shdr->sh_size)
+	    error (0, 0,
+		   gettext ("offset %#" PRIxMAX " lies outside"
+			    " section '%s'"),
+		   *addr, scn);
+
+	  *addr += shdr->sh_addr + shdr_bias;
+	  return true;
+	}
+    }
+
+  return false;
+}
+
+static int
+handle_address (const char *string, Dwfl *dwfl)
+{
+  char *endp;
+  uintmax_t addr = strtoumax (string, &endp, 0);
+  if (endp == string)
+    {
+      bool parsed = false;
+      int i, j;
+      char *name = NULL;
+      if (sscanf (string, "(%m[^)])%" PRIiMAX "%n", &name, &addr, &i) == 2
+	  && string[i] == '\0')
+	parsed = adjust_to_section (name, &addr, dwfl);
+      switch (sscanf (string, "%m[^-+]%n%" PRIiMAX "%n", &name, &i, &addr, &j))
+	{
+	default:
+	  break;
+	case 1:
+	  addr = 0;
+	  j = i;
+	case 2:
+	  if (string[j] != '\0')
+	    break;
+
+	  /* It was symbol[+offset].  */
+	  GElf_Sym sym;
+	  void *arg[2] = { name, &sym };
+	  (void) dwfl_getmodules (dwfl, &find_symbol, arg, 0);
+	  if (arg[0] != NULL)
+	    error (0, 0, gettext ("cannot find symbol '%s'"), name);
+	  else
+	    {
+	      if (sym.st_size != 0 && addr >= sym.st_size)
+		error (0, 0,
+		       gettext ("offset %#" PRIxMAX " lies outside"
+				" contents of '%s'"),
+		       addr, name);
+	      addr += sym.st_value;
+	      parsed = true;
+	    }
+	  break;
+	}
+
+      free (name);
+      if (!parsed)
+	return 1;
+    }
+  else if (just_section != NULL
+	   && !adjust_to_section (just_section, &addr, dwfl))
+    return 1;
+
   Dwfl_Module *mod = dwfl_addrmodule (dwfl, addr);
 
   if (show_functions)
@@ -372,4 +529,9 @@ handle_address (GElf_Addr addr, Dwfl *dwfl)
     }
   else
     puts ("??:0");
+
+  return 0;
 }
+
+
+#include "debugpred.h"

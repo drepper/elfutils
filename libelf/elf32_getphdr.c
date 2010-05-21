@@ -1,5 +1,5 @@
 /* Get ELF program header table.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006 Red Hat, Inc.
+   Copyright (C) 1998-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -53,6 +53,7 @@
 #endif
 
 #include <errno.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
@@ -65,21 +66,11 @@
 # define LIBELFBITS 32
 #endif
 
-
 ElfW2(LIBELFBITS,Phdr) *
-elfw2(LIBELFBITS,getphdr) (elf)
+__elfw2(LIBELFBITS,getphdr_wrlock) (elf)
      Elf *elf;
 {
   ElfW2(LIBELFBITS,Phdr) *result;
-
-  if (elf == NULL)
-    return NULL;
-
-  if (unlikely (elf->kind != ELF_K_ELF))
-    {
-      __libelf_seterrno (ELF_E_INVALID_HANDLE);
-      return NULL;
-    }
 
   /* If the program header entry has already been filled in the code
      below must already have been run.  So the class is set, too.  No
@@ -87,8 +78,6 @@ elfw2(LIBELFBITS,getphdr) (elf)
   result = elf->state.ELFW(elf,LIBELFBITS).phdr;
   if (likely (result != NULL))
     return result;
-
-  rwlock_wrlock (elf->lock);
 
   if (elf->class == 0)
     elf->class = ELFW(ELFCLASS,LIBELFBITS);
@@ -105,7 +94,9 @@ elfw2(LIBELFBITS,getphdr) (elf)
       ElfW2(LIBELFBITS,Ehdr) *ehdr = elf->state.ELFW(elf,LIBELFBITS).ehdr;
 
       /* If no program header exists return NULL.  */
-      size_t phnum = ehdr->e_phnum;
+      size_t phnum;
+      if (__elf_getphdrnum_rdlock (elf, &phnum) != 0)
+	goto out;
       if (phnum == 0)
 	{
 	  __libelf_seterrno (ELF_E_NO_PHDR);
@@ -113,6 +104,13 @@ elfw2(LIBELFBITS,getphdr) (elf)
 	}
 
       size_t size = phnum * sizeof (ElfW2(LIBELFBITS,Phdr));
+
+      if (ehdr->e_phoff > elf->maximum_size
+	  || elf->maximum_size - ehdr->e_phoff < size)
+	{
+	  __libelf_seterrno (ELF_E_INVALID_DATA);
+	  goto out;
+	}
 
       if (elf->map_address != NULL)
 	{
@@ -234,6 +232,33 @@ elfw2(LIBELFBITS,getphdr) (elf)
     }
 
  out:
+  return result;
+}
+
+ElfW2(LIBELFBITS,Phdr) *
+elfw2(LIBELFBITS,getphdr) (elf)
+     Elf *elf;
+{
+  ElfW2(LIBELFBITS,Phdr) *result;
+
+  if (elf == NULL)
+    return NULL;
+
+  if (unlikely (elf->kind != ELF_K_ELF))
+    {
+      __libelf_seterrno (ELF_E_INVALID_HANDLE);
+      return NULL;
+    }
+
+  /* If the program header entry has already been filled in the code
+   * in getphdr_wrlock must already have been run.  So the class is
+   * set, too.  No need to waste any more time here.  */
+  result = elf->state.ELFW(elf,LIBELFBITS).phdr;
+  if (likely (result != NULL))
+    return result;
+
+  rwlock_wrlock (elf->lock);
+  result = __elfw2(LIBELFBITS,getphdr_wrlock) (elf);
   rwlock_unlock (elf->lock);
 
   return result;

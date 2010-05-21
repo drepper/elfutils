@@ -1,3 +1,51 @@
+2010-02-15  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am: Use config/eu.am for common stuff.
+
+2009-08-09  Roland McGrath  <roland@redhat.com>
+
+	* eu-config.h (OLD_VERSION, NEW_VERSION, COMPAT_VERSION): New macros.
+
+2009-01-23  Roland McGrath  <roland@redhat.com>
+
+	* eu-config.h: Add multiple inclusion protection.
+
+2009-01-17  Ulrich Drepper  <drepper@redhat.com>
+
+	* system.h (ARGP_PROGRAM_VERSION_HOOK_DEF): Define.
+	(ARGP_PROGRAM_BUG_ADDRESS_DEF): Define.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* eu-config.h: Remove tls_key_t, key_create, getspecific, setspecific,
+	once_define, and once_execute macros.  Use USE_LOCKS instead of
+	USE_TLS.
+
+2008-08-25  Roland McGrath  <roland@redhat.com>
+
+	* eu-config.h [USE_TLS] (RWLOCK_CALL): New macro.
+	(rwlock_init, rwlock_fini, rwlock_rdlock, rwlock_wrlock, rwlock_unlock):
+	Use it.
+
+2008-08-24  Roland McGrath  <roland@redhat.com>
+
+	* eu-config.h: New file.
+	* Makefile.am (noinst_HEADERS): Add it.
+
+2008-02-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am (libeu_a_SOURCES): Add sha1.c.
+	(noinst_HEADERS): Add sha1.h.
+	* sha1.c: New file.
+	* sha1.h: New file.
+
+2008-01-31  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am (libeu_a_SOURCES): Add md5.c.
+	(noinst_HEADERS): Add md5.h.
+	* md5.c: New file.
+	* md5.h: New file.
+
 2006-04-04  Ulrich Drepper  <drepper@redhat.com>
 
 	* Makefile.am (libeu_a_SOURCES): We don't need xstrdup in the moment.

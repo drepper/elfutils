@@ -1,3 +1,38 @@
+2010-02-15  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am: Use config/eu.am for common stuff.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am: Use USE_LOCKS instead of USE_TLS.
+	* asm_error.c: Always use __thread.  Remove all !USE_TLS code.
+
+2008-12-03  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am [USE_TLS]: Like libasm.so with libpthread.
+
+2008-01-11  Ulrich Drepper  <drepper@redhat.com>
+
+	* libasm.h (DisasmGetSymCB_t): Change type of fourth and fifth
+	parameter.
+	* disasm_cb.c: Adjust accordingly.
+
+2008-01-08  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (euinclude): Variable removed.
+	(pkginclude_HEADERS): Set this instead of euinclude_HEADERS.
+
+2007-12-20  Ulrich Drepper  <drepper@redhat.com>
+
+	* disasm_cb.c: Add initial support to resolve addresses to symbols.
+
+2007-02-05  Ulrich Drepper  <drepper@redhat.com>
+
+	* disasm_begin.c: New file.
+	* disasm_cb.c: New file.
+	* disasm_end.c: New file.
+	* disasm_str.c: New file.
+
 2006-08-29  Roland McGrath  <roland@redhat.com>
 
 	* Makefile.am (CLEANFILES): Add libasm.so.$(VERSION).

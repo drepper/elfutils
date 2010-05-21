@@ -1,5 +1,5 @@
-/* Examine a core file to guess the modules used in the crashed process.
-   Copyright (C) 2007 Red Hat, Inc.
+/* Core file handling.
+   Copyright (C) 2008-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -48,844 +48,437 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include <config.h>
+#include "../libelf/libelfP.h"	/* For NOTE_ALIGN.  */
+#undef	_
 #include "libdwflP.h"
-
 #include <gelf.h>
-#include <inttypes.h>
-#include <alloca.h>
 
-#define MIN(a, b)  ((a) < (b) ? (a) : (b))
+#include <sys/param.h>
+#include <unistd.h>
+#include <endian.h>
+#include <byteswap.h>
+#include "system.h"
 
 
-/* Determine whether a module already reported in this reporting phase
-   overlaps START..END.  If REORDER, move it to the end of the list
-   as dwfl_report_module on an existing module would do.  */
-static Dwfl_Module *
-module_overlapping (Dwfl *dwfl, GElf_Addr start, GElf_Addr end, bool reorder)
+/* This is a prototype of what a new libelf interface might be.
+   This implementation is pessimal for non-mmap cases and should
+   be replaced by more diddling inside libelf internals.  */
+static Elf *
+elf_begin_rand (Elf *parent, loff_t offset, loff_t size, loff_t *next)
 {
-  Dwfl_Module **tailp = &dwfl->modulelist, **prevp = tailp;
-  for (Dwfl_Module *mod = *prevp; mod != NULL; mod = *(prevp = &mod->next))
-    if (! mod->gc)
-      {
-	if ((start >= mod->low_addr && start < mod->high_addr)
-	    || (end >= mod->low_addr && end < mod->high_addr)
-	    || (mod->low_addr >= start && mod->low_addr < end))
-	  {
-	    if (reorder)
-	      {
-		*prevp = mod->next;
-		mod->next = *tailp;
-		*tailp = mod;
-	      }
-	    return mod;
-	  }
+  if (parent == NULL)
+    return NULL;
 
-	tailp = &mod->next;
-      }
+  /* On failure return, we update *NEXT to point back at OFFSET.  */
+  inline Elf *fail (int error)
+  {
+    if (next != NULL)
+      *next = offset;
+    //__libelf_seterrno (error);
+    __libdwfl_seterrno (DWFL_E (LIBELF, error));
+    return NULL;
+  }
 
-  return NULL;
-}
+  loff_t min = (parent->kind == ELF_K_ELF ?
+		(parent->class == ELFCLASS32
+		 ? sizeof (Elf32_Ehdr) : sizeof (Elf64_Ehdr))
+		: parent->kind == ELF_K_AR ? SARMAG
+		: 0);
 
+  if (unlikely (offset < min)
+      || unlikely (offset >= (loff_t) parent->maximum_size))
+    return fail (ELF_E_RANGE);
 
-/* Collected ideas about each module, stored in Dwfl_Module.cb_data.  */
-struct core_module_info
-{
-  GElf_Off offset;		/* Start position in the core file.  */
-  GElf_Word whole_size;		/* Zero or size of whole image at offset.  */
-  GElf_Addr l_name_vaddr;	/* l_name file name from dynamic linker.  */
-};
-
-
-static GElf_Off
-offset_from_addr (Elf *elf, GElf_Addr addr, GElf_Off *limit)
-{
-  // XXX optimize with binary search of cached merged regions
-
-  GElf_Ehdr ehdr_mem;
-  GElf_Ehdr *ehdr = gelf_getehdr (elf, &ehdr_mem);
-  if (ehdr == NULL)
-    return 0;
-
-  GElf_Addr end = 0;
-  GElf_Off offset = 0;
-  for (uint_fast16_t i = 0; i < ehdr->e_phnum; ++i)
+  /* For an archive, fetch just the size field
+     from the archive header to override SIZE.  */
+  if (parent->kind == ELF_K_AR)
     {
-      GElf_Phdr phdr_mem;
-      GElf_Phdr *phdr = gelf_getphdr (elf, i, &phdr_mem);
-      if (phdr == NULL)
-	break;
-      if (phdr->p_type != PT_LOAD || phdr->p_vaddr + phdr->p_memsz <= addr)
-	continue;
-      if (offset == 0)
-	offset = addr - phdr->p_vaddr + phdr->p_offset;
-      else if ((phdr->p_vaddr & -phdr->p_align) > end)
-	break;
-      end = phdr->p_vaddr + phdr->p_filesz;
+      struct ar_hdr h = { .ar_size = "" };
+
+      if (unlikely (parent->maximum_size - offset < sizeof h))
+	return fail (ELF_E_RANGE);
+
+      if (parent->map_address != NULL)
+	memcpy (h.ar_size, parent->map_address + parent->start_offset + offset,
+		sizeof h.ar_size);
+      else if (unlikely (pread_retry (parent->fildes,
+				      h.ar_size, sizeof (h.ar_size),
+				      parent->start_offset + offset
+				      + offsetof (struct ar_hdr, ar_size))
+			 != sizeof (h.ar_size)))
+	return fail (ELF_E_READ_ERROR);
+
+      offset += sizeof h;
+
+      char *endp;
+      size = strtoll (h.ar_size, &endp, 10);
+      if (unlikely (endp == h.ar_size)
+	  || unlikely ((loff_t) parent->maximum_size - offset < size))
+	return fail (ELF_E_INVALID_ARCHIVE);
     }
 
-  *limit = end - addr + offset;
-  return offset;
-}
+  if (unlikely ((loff_t) parent->maximum_size - offset < size))
+    return fail (ELF_E_RANGE);
 
-/* Do gelf_rawchunk to get a '\0'-terminated string at
-   the given offset in the core file.  Ignore an empty string.  */
-static char *
-string_from_offset (Elf *core, GElf_Off string_offset, GElf_Off limit)
-{
-  GElf_Off offset = string_offset;
+  /* Even if we fail at this point, update *NEXT to point past the file.  */
+  if (next != NULL)
+    *next = offset + size;
 
-#define STRING_BUF_SIZE	64
-  while (offset < limit)
-    {
-      const size_t sample_size = MIN (limit - offset, STRING_BUF_SIZE);
-      char *sample = gelf_rawchunk (core, offset, sample_size);
-      if (sample == NULL)
-	break;
-      char *end = memchr (sample, '\0', sample_size);
-      if (end == NULL)
-	{
-	  gelf_freechunk (core, sample);
-	  offset += sample_size;
-	}
-      else if (offset == string_offset)
-	{
-	  if (end != sample)
-	    return sample;
-	  /* It's the empty string.  */
-	  gelf_freechunk (core, sample);
-	  return NULL;
-	}
-      else
-	{
-	  gelf_freechunk (core, sample);
-	  return gelf_rawchunk (core, string_offset,
-				(offset - string_offset) + (end - sample));
-	}
-    }
+  if (unlikely (offset == 0)
+      && unlikely (size == (loff_t) parent->maximum_size))
+    return elf_clone (parent, parent->cmd);
 
-  return NULL;
-}
-
-// XXX l_name can be in elided text (.interp), needs module-integrated read here
-/* Do gelf_rawchunk to get a '\0'-terminated string at
-   the given address in the core file memory image.  */
-static char *
-string_from_memory (Elf *core, GElf_Addr addr)
-{
-  GElf_Off limit;
-  GElf_Off offset = offset_from_addr (core, addr, &limit);
-  return offset == 0 ? NULL : string_from_offset (core, offset, limit);
-}
-
-/* Do gelf_getdata_rawchunk given an address in the core file memory image.  */
-static Elf_Data *
-getdata_core (Elf *core, GElf_Addr addr, GElf_Word size, Elf_Type type)
-{
-  GElf_Off limit;
-  GElf_Off offset = offset_from_addr (core, addr, &limit);
-  return (limit - offset < size ? NULL
-	  : gelf_getdata_rawchunk (core, offset, size, type));
-}
-
-/* Fetch one address word from the core file memory image.  */
-static GElf_Addr
-addr_from_memory (Elf *core, GElf_Addr addr)
-{
-  const size_t addrsize = gelf_fsize (core, ELF_T_ADDR, 1, EV_CURRENT);
-  Elf_Data *data = getdata_core (core, addr, addrsize, ELF_T_ADDR);
+  /* Note the image is guaranteed live only as long as PARENT
+     lives.  Using elf_memory is quite suboptimal if the whole
+     file is not mmap'd.  We really should have something like
+     a generalization of the archive support.  */
+  Elf_Data *data = elf_getdata_rawchunk (parent, offset, size, ELF_T_BYTE);
   if (data == NULL)
-    return 0;
-  return (addrsize == 4
-	  ? *(const Elf32_Addr *) data->d_buf
-	  : *(const Elf64_Addr *) data->d_buf);
-}
-
-/* Process a struct link_map extracted from the core file.
-   Report a module if it describes one we can figure out.  */
-static int
-report_link_map (int result, Elf *core, Dwfl *dwfl,
-		 GElf_Addr l_addr, GElf_Addr l_name, GElf_Addr l_ld)
-{
-  /* The l_ld address is a runtime address inside the module,
-     so we can use that alone to see if we already know this module.
-     This moves the one found to the end of the order as a side effect. */
-  Dwfl_Module *mod = module_overlapping (dwfl, l_ld, l_ld + 1, true);
-
-  if (mod == NULL)
-    {
-      /* We have to find the file's phdrs to compute along with l_addr
-	 what its runtime address boundaries are.  */
-
-      char *file_name = string_from_memory (core, l_name);
-      if (file_name != NULL)
-	{
-	  mod = INTUSE(dwfl_report_elf) (dwfl, basename (file_name),
-					 file_name, -1, l_addr);
-	  if (mod != NULL)
-	    result = 1;
-	  gelf_freechunk (core, file_name);
-	}
-
-      return result;
-    }
-
-  if (mod->cb_data != NULL)
-    {
-      /* This is a module we recognized before from the core contents.  */
-      struct core_module_info *info = mod->cb_data;
-      info->l_name_vaddr = l_name;
-      if (mod->name[0] == '[')
-	{
-	  /* We gave it a boring synthetic name.
-	     Use the basename of its l_name string instead.  */
-	  char *chunk = string_from_memory (core, info->l_name_vaddr);
-	  if (chunk != NULL)
-	    {
-	      char *newname = strdup (basename (chunk));
-	      if (newname != NULL)
-		{
-		  free (mod->name);
-		  mod->name = newname;
-		}
-	      gelf_freechunk (core, chunk);
-	    }
-	}
-    }
-
-  return result;
-}
-
-/* Call report_link_map for each struct link_map in the linked list at r_map
-   in the struct r_debug at R_DEBUG_VADDR.  */
-static int
-report_r_debug (int result, Elf *core, Dwfl *dwfl, GElf_Addr r_debug_vaddr)
-{
-  const size_t addrsize = gelf_fsize (core, ELF_T_ADDR, 1, EV_CURRENT);
-
-  /* Skip r_version, to aligned r_map field.  */
-  GElf_Addr next = addr_from_memory (core, r_debug_vaddr + addrsize);
-
-  while (result >= 0 && next != 0)
-    {
-      Elf_Data *data = getdata_core (core, next, addrsize * 4, ELF_T_ADDR);
-      if (unlikely (data == NULL))
-	result = -1;
-      else
-	{
-	  GElf_Addr addr;
-	  GElf_Addr name;
-	  GElf_Addr ld;
-
-	  if (addrsize == 4)
-	    {
-	      const Elf32_Addr *map = data->d_buf;
-	      addr = map[0];
-	      name = map[1];
-	      ld = map[2];
-	      next = map[3];
-	    }
-	  else
-	    {
-	      const Elf64_Addr *map = data->d_buf;
-	      addr = map[0];
-	      name = map[1];
-	      ld = map[2];
-	      next = map[3];
-	    }
-
-	  result = report_link_map (result, core, dwfl, addr, name, ld);
-	}
-    }
-
-  return result;
-}
-
-/* Find the vaddr of the DT_DEBUG's d_ptr.  This is the memory address
-   where &r_debug was written at runtime.  */
-static GElf_Addr
-find_dt_debug (Elf *elf, GElf_Addr bias)
-{
-  GElf_Ehdr ehdr_mem;
-  GElf_Ehdr *ehdr = gelf_getehdr (elf, &ehdr_mem);
-  if (ehdr == NULL)
-    return 0;
-
-  for (uint_fast16_t i = 0; i < ehdr->e_phnum; ++i)
-    {
-      GElf_Phdr phdr_mem;
-      GElf_Phdr *phdr = gelf_getphdr (elf, i, &phdr_mem);
-      if (phdr == NULL)
-	break;
-      if (phdr->p_type == PT_DYNAMIC)
-	{
-	  Elf_Data *data = gelf_getdata_rawchunk (elf, phdr->p_offset,
-						  phdr->p_filesz, ELF_T_DYN);
-	  if (data == NULL)
-	    continue;
-	  const size_t entsize = gelf_fsize (elf, ELF_T_DYN, 1, EV_CURRENT);
-	  const size_t n = data->d_size / entsize;
-	  for (size_t j = 0; j < n; ++j)
-	    {
-	      GElf_Dyn dyn_mem;
-	      GElf_Dyn *dyn = gelf_getdyn (data, j, &dyn_mem);
-	      if (dyn != NULL && dyn->d_tag == DT_DEBUG)
-		return phdr->p_vaddr + bias + entsize * j + entsize / 2;
-	    }
-	}
-    }
-
-  return 0;
+    return NULL;
+  assert ((loff_t) data->d_size == size);
+  return elf_memory (data->d_buf, size);
 }
 
 
 int
-dwfl_core_file_report (Dwfl *dwfl, Elf *core)
+dwfl_report_core_segments (Dwfl *dwfl, Elf *elf, size_t phnum, GElf_Phdr *notes)
 {
-  if (dwfl == NULL)
+  if (unlikely (dwfl == NULL))
     return -1;
 
   int result = 0;
-  const size_t ehdr_size = gelf_fsize (core, ELF_T_EHDR, 1, EV_CURRENT);
 
-  /* Record when we find a GNU build-ID note.  */
-  GElf_Off build_id_offset;
-  GElf_Word build_id_size;
-  GElf_Addr build_id_vaddr;
-  inline void handle_build_id (GElf_Off offset, GElf_Word size, GElf_Addr vaddr)
+  if (notes != NULL)
+    notes->p_type = PT_NULL;
+
+  for (size_t ndx = 0; result >= 0 && ndx < phnum; ++ndx)
     {
-      build_id_offset = offset;
-      build_id_size = size;
-      build_id_vaddr = vaddr;
-    }
-
-  /* We've found a PT_NOTE segment inside an ELF image.  Investigate.  */
-  inline void handle_note (GElf_Off offset, GElf_Xword filesz, GElf_Addr vaddr)
-    {
-      Elf_Data *data = gelf_getdata_rawchunk (core, offset, filesz, ELF_T_NHDR);
-      if (data == NULL)
-	return;
-      size_t pos = 0;
-      GElf_Nhdr nhdr;
-      size_t name_offset;
-      size_t desc_offset;
-      while (pos < data->d_size
-	     && (pos = gelf_getnote (data, pos,
-				     &nhdr, &name_offset, &desc_offset)) > 0)
-	if (nhdr.n_type == NT_GNU_BUILD_ID
-	    && nhdr.n_namesz == sizeof "GNU"
-	    && !memcmp (data->d_buf + name_offset, "GNU", sizeof "GNU"))
-	  handle_build_id (offset + desc_offset, nhdr.n_descsz,
-			   vaddr + desc_offset);
-    }
-
-  /* We've found the PT_DYNAMIC segment inside an ELF image.
-     Return the absolute vaddr of the SONAME string if we find one.  */
-  inline GElf_Addr handle_dyn (GElf_Off offset, GElf_Word filesz,
- 			       GElf_Addr loadbase, GElf_Addr *strtab_end,
-			       GElf_Addr *r_debug)
-    {
-      GElf_Xword soname = 0;
-      GElf_Addr strtab = 0;
-      GElf_Xword strsz = 0;
-
-      Elf_Data *data = gelf_getdata_rawchunk (core, offset, filesz, ELF_T_DYN);
-      if (data == NULL)
-	return 0;
-      size_t n = data->d_size / gelf_fsize (core, ELF_T_DYN, 1, EV_CURRENT);
-      for (size_t i = 0;
-	   i < n && (soname == 0 || strtab == 0 || strsz == 0);
-	   ++i)
-	{
-	  GElf_Dyn dyn_mem;
-	  GElf_Dyn *dyn = gelf_getdyn (data, i, &dyn_mem);
-	  if (dyn != NULL)
-	    switch (dyn->d_tag)
-	      {
-	      case DT_STRTAB:
-		strtab = dyn->d_un.d_ptr;
-		continue;
-
-	      case DT_STRSZ:
-		strsz = dyn->d_un.d_val;
-		continue;
-
-	      case DT_SONAME:
-		soname = dyn->d_un.d_val;
-		continue;
-
-	      case DT_DEBUG:
-		if (*r_debug == 0)
-		  *r_debug = dyn->d_un.d_ptr;
-		continue;
-
-	      default:
-		continue;
-
-	      case DT_NULL:
-		break;
-	      }
-	  break;
-	}
-
-      if (strtab != 0)
-	{
-	  *strtab_end = loadbase + strtab + strsz;
-	  if (soname != 0)
-	    return loadbase + strtab + soname;
-	}
-      return 0;
-    }
-
-  /* We think this PT_LOAD segment starts with an ELF header.  Investigate.  */
-  inline GElf_Half consider_segment (GElf_Phdr *phdr, char *header,
-				     GElf_Addr *vaddr_end,
-				     GElf_Off *file_size_available,
-				     GElf_Off *file_size_total,
-				     GElf_Addr *loadbase,
-				     GElf_Addr *dyn_vaddr,
-				     GElf_Word *dyn_filesz)
-    {
-      union
-      {
-	Elf32_Ehdr e32;
-	Elf64_Ehdr e64;
-      } ehdr;
-
-      Elf_Data xlatefrom =
-	{
-	  .d_type = ELF_T_EHDR,
-	  .d_buf = header,
-	  .d_version = EV_CURRENT,
-	};
-      Elf_Data xlateto =
-	{
-	  .d_type = ELF_T_EHDR,
-	  .d_buf = &ehdr,
-	  .d_size = sizeof ehdr,
-	  .d_version = EV_CURRENT,
-	};
-      GElf_Half e_type = ET_NONE;
-      GElf_Off phoff = 0;
-      GElf_Off shdrs_end = 0;
-      GElf_Half phnum = 0;
-      GElf_Half phentsize = 0;
-      switch (header[EI_CLASS])
-	{
-	case ELFCLASS32:
-	  xlatefrom.d_size = sizeof (Elf32_Ehdr);
-	  if (elf32_xlatetom (&xlateto, &xlatefrom, header[EI_DATA]) != NULL)
-	    {
-	      e_type = ehdr.e32.e_type;
-	      phoff = ehdr.e32.e_phoff;
-	      phnum = ehdr.e32.e_phnum;
-	      phentsize = ehdr.e32.e_phentsize;
-	      shdrs_end = ehdr.e32.e_shoff;
-	      shdrs_end += ehdr.e32.e_shnum * ehdr.e32.e_shentsize;
-	    }
-	  break;
-
-	case ELFCLASS64:
-	  xlatefrom.d_size = sizeof (Elf64_Ehdr);
-	  if (elf64_xlatetom (&xlateto, &xlatefrom, header[EI_DATA]) != NULL)
-	    {
-	      e_type = ehdr.e64.e_type;
-	      phoff = ehdr.e64.e_phoff;
-	      phnum = ehdr.e64.e_phnum;
-	      phentsize = ehdr.e64.e_phentsize;
-	      shdrs_end = ehdr.e64.e_shoff;
-	      shdrs_end += ehdr.e64.e_shnum * ehdr.e64.e_shentsize;
-	    }
-	  break;
-	}
-
-      /* We're done with the original header we read in.  */
-      gelf_freechunk (core, header);
-
-      /* We see if we actually have phdrs to look at.  */
-      if ((e_type != ET_EXEC && e_type != ET_DYN)
-	  || phnum == 0 || phoff < ehdr_size
-	  || phdr->p_filesz < phoff + phnum * phentsize
-	  || phentsize != gelf_fsize (core, ELF_T_PHDR, 1, EV_CURRENT))
-	return ET_NONE;
-
-      /* Fetch the raw program headers to translate and examine.  */
-      char *rawphdrs = gelf_rawchunk (core, phdr->p_offset + phoff,
-				      phnum * phentsize);
-      if (rawphdrs == NULL)
+      GElf_Phdr phdr_mem;
+      GElf_Phdr *phdr = gelf_getphdr (elf, ndx, &phdr_mem);
+      if (unlikely (phdr == NULL))
 	{
 	  __libdwfl_seterrno (DWFL_E_LIBELF);
-	  result = -1;
-	  return ET_NONE;
+	  return -1;
 	}
-      xlatefrom.d_buf = rawphdrs;
-      xlatefrom.d_size = phnum * phentsize;
-      xlatefrom.d_type = ELF_T_PHDR;
-      union
-      {
-	Elf32_Phdr p32[phnum];
-	Elf64_Phdr p64[phnum];
-      } phdrs;
-      xlateto.d_buf = &phdrs;
-      xlateto.d_size = sizeof phdrs;
-      bool phdrs_ok = false;
-      switch (ehdr.e32.e_ident[EI_CLASS])
+      switch (phdr->p_type)
 	{
-	case ELFCLASS32:
-	  phdrs_ok = elf32_xlatetom (&xlateto, &xlatefrom,
-				     ehdr.e32.e_ident[EI_DATA]) != NULL;
+	case PT_LOAD:
+	  result = dwfl_report_segment (dwfl, ndx, phdr, 0, NULL);
 	  break;
 
-	case ELFCLASS64:
-	  phdrs_ok = elf64_xlatetom (&xlateto, &xlatefrom,
-				     ehdr.e64.e_ident[EI_DATA]) != NULL;
-	  break;
-	}
-      gelf_freechunk (core, rawphdrs);
-
-      if (!phdrs_ok)
-	return ET_NONE;
-
-      /* The p_align of a core file PT_LOAD segment gives the ELF page size
-	 of the process that dumped the core.  This is what controlled the
-	 interpretation of p_offset and p_vaddr values in PT_LOAD headers
-	 of objects it loaded.  */
-      const GElf_Xword pagesz = phdr->p_align;
-
-      /* Consider each phdr of the embedded image.  */
-      *loadbase = phdr->p_vaddr;
-      bool found_base = false;
-      GElf_Addr vaddr_limit = 0;
-      GElf_Off file_should_end = 0;
-      GElf_Off file_end = 0;
-      GElf_Off file_end_aligned = 0;
-      inline void handle_segment (GElf_Word type,
-				  GElf_Addr vaddr, GElf_Off offset,
-				  GElf_Xword filesz, GElf_Xword memsz)
-	{
-	  switch (type)
+	case PT_NOTE:
+	  if (notes != NULL)
 	    {
-	    case PT_LOAD:
-	      /* For load segments, keep track of the bounds of the image.  */
-	      file_should_end = offset + filesz;
-	      if (!found_base && (offset & -pagesz) == 0)
-		{
-		  *loadbase = phdr->p_vaddr - (vaddr & -pagesz);
-		  found_base = true;
-		}
-	      vaddr_limit = (*loadbase + vaddr + memsz + pagesz - 1) & -pagesz;
+	      *notes = *phdr;
+	      notes = NULL;
+	    }
+	  break;
+	}
+    }
 
-	      /* If this segment starts contiguous with the previous one,
-		 it extends the verbatim file image we have to use.  */
-	      if (file_end_aligned == 0
-		  || (offset & -pagesz) <= file_end_aligned)
-		{
-		  file_end = offset + filesz;
-		  file_end_aligned = (offset + filesz + pagesz - 1) & -pagesz;
-		}
-	      break;
+  return result;
+}
 
-	    case PT_NOTE:
-	      /* For note segments, inspect the contents if they are within
-		 this segment of the core file.  */
-	      if (offset < phdr->p_filesz && phdr->p_filesz - offset >= filesz)
-		handle_note (vaddr - phdr->p_vaddr + phdr->p_offset, filesz,
-			     vaddr);
-	      break;
+/* Never read more than this much without mmap.  */
+#define MAX_EAGER_COST	8192
 
-	    case PT_DYNAMIC:
-	      /* Save the address of the dynamic section.  */
-	      *dyn_vaddr = *loadbase + vaddr;
-	      *dyn_filesz = filesz;
-	      break;
+static bool
+core_file_read_eagerly (Dwfl_Module *mod,
+			void **userdata __attribute__ ((unused)),
+			const char *name __attribute__ ((unused)),
+			Dwarf_Addr start __attribute__ ((unused)),
+			void **buffer, size_t *buffer_available,
+			GElf_Off cost, GElf_Off worthwhile,
+			GElf_Off whole,
+			GElf_Off contiguous __attribute__ ((unused)),
+			void *arg, Elf **elfp)
+{
+  Elf *core = arg;
+
+  if (whole <= *buffer_available)
+    {
+      /* All there ever was, we already have on hand.  */
+
+      if (core->map_address == NULL)
+	{
+	  /* We already malloc'd the buffer.  */
+	  *elfp = elf_memory (*buffer, whole);
+	  if (unlikely (*elfp == NULL))
+	    return false;
+
+	  (*elfp)->flags |= ELF_F_MALLOCED;
+	  *buffer = NULL;
+	  *buffer_available = 0;
+	  return true;
+	}
+
+      /* We can use the image inside the core file directly.  */
+      *elfp = elf_begin_rand (core, *buffer - core->map_address, whole, NULL);
+      *buffer = NULL;
+      *buffer_available = 0;
+      return *elfp != NULL;
+    }
+
+  /* We don't have the whole file.
+     Figure out if this is better than nothing.  */
+
+  if (worthwhile == 0)
+    /* Caller doesn't think so.  */
+    return false;
+
+  /*
+    XXX would like to fall back to partial file via memory
+    when build id find_elf fails
+    also, link_map name may give file name from disk better than partial here
+    requires find_elf hook re-doing the magic to fall back if no file found
+  */
+
+  if (mod->build_id_len > 0)
+    /* There is a build ID that could help us find the whole file,
+       which might be more useful than what we have.
+       We'll just rely on that.  */
+    return false;
+
+  if (core->map_address != NULL)
+    /* It's cheap to get, so get it.  */
+    return true;
+
+  /* Only use it if there isn't too much to be read.  */
+  return cost <= MAX_EAGER_COST;
+}
+
+bool
+dwfl_elf_phdr_memory_callback (Dwfl *dwfl, int ndx,
+			       void **buffer, size_t *buffer_available,
+			       GElf_Addr vaddr,
+			       size_t minread,
+			       void *arg)
+{
+  Elf *elf = arg;
+
+  if (ndx == -1)
+    {
+      /* Called for cleanup.  */
+      if (elf->map_address == NULL)
+	free (*buffer);
+      *buffer = NULL;
+      *buffer_available = 0;
+      return false;
+    }
+
+  const GElf_Off align = dwfl->segment_align ?: 1;
+  GElf_Phdr phdr;
+
+  do
+    if (unlikely (gelf_getphdr (elf, ndx++, &phdr) == NULL))
+      return false;
+  while (phdr.p_type != PT_LOAD
+	 || ((phdr.p_vaddr + phdr.p_memsz + align - 1) & -align) <= vaddr);
+
+  GElf_Off start = vaddr - phdr.p_vaddr + phdr.p_offset;
+  GElf_Off end;
+  GElf_Addr end_vaddr;
+
+  inline void update_end ()
+  {
+    end = (phdr.p_offset + phdr.p_filesz + align - 1) & -align;
+    end_vaddr = (phdr.p_vaddr + phdr.p_memsz + align - 1) & -align;
+  }
+
+  update_end ();
+
+  /* Use following contiguous segments to get towards SIZE.  */
+  inline bool more (size_t size)
+  {
+    while (end <= start || end - start < size)
+      {
+	if (phdr.p_filesz < phdr.p_memsz)
+	  /* This segment is truncated, so no following one helps us.  */
+	  return false;
+
+	if (unlikely (gelf_getphdr (elf, ndx++, &phdr) == NULL))
+	  return false;
+
+	if (phdr.p_type == PT_LOAD)
+	  {
+	    if (phdr.p_offset > end
+		|| phdr.p_vaddr > end_vaddr)
+	      /* It's discontiguous!  */
+	      return false;
+
+	    update_end ();
+	  }
+      }
+    return true;
+  }
+
+  /* We need at least this much.  */
+  if (! more (minread))
+    return false;
+
+  /* See how much more we can get of what the caller wants.  */
+  (void) more (*buffer_available);
+
+  /* If it's already on hand anyway, use as much as there is.  */
+  if (elf->map_address != NULL)
+    (void) more (elf->maximum_size - start);
+
+  /* Make sure we don't look past the end of the actual file,
+     even if the headers tell us to.  */
+  if (unlikely (end > elf->maximum_size))
+    end = elf->maximum_size;
+
+  /* If the file is too small, there is nothing at all to get.  */
+  if (unlikely (start >= end))
+    return false;
+
+  if (elf->map_address != NULL)
+    {
+      void *contents = elf->map_address + elf->start_offset + start;
+      size_t size = end - start;
+
+      if (minread == 0)		/* String mode.  */
+	{
+	  const void *eos = memchr (contents, '\0', size);
+	  if (unlikely (eos == NULL) || unlikely (eos == contents))
+	    return false;
+	  size = eos + 1 - contents;
+	}
+
+      if (*buffer == NULL)
+	{
+	  *buffer = contents;
+	  *buffer_available = size;
+	}
+      else
+	{
+	  *buffer_available = MIN (size, *buffer_available);
+	  memcpy (*buffer, contents, *buffer_available);
+	}
+    }
+  else
+    {
+      void *into = *buffer;
+      if (*buffer == NULL)
+	{
+	  *buffer_available = MIN (minread ?: 512,
+				   MAX (4096, MIN (end - start,
+						   *buffer_available)));
+	  into = malloc (*buffer_available);
+	  if (unlikely (into == NULL))
+	    {
+	      __libdwfl_seterrno (DWFL_E_NOMEM);
+	      return false;
 	    }
 	}
 
-      switch (ehdr.e32.e_ident[EI_CLASS])
+      ssize_t nread = pread_retry (elf->fildes, into, *buffer_available, start);
+      if (nread < (ssize_t) minread)
 	{
-	case ELFCLASS32:
-	  for (uint_fast16_t i = 0; i < phnum && result >= 0; ++i)
-	    handle_segment (phdrs.p32[i].p_type,
-			    phdrs.p32[i].p_vaddr, phdrs.p32[i].p_offset,
-			    phdrs.p32[i].p_filesz, phdrs.p32[i].p_memsz);
-	  break;
-
-	case ELFCLASS64:
-	  for (uint_fast16_t i = 0; i < phnum && result >= 0; ++i)
-	    handle_segment (phdrs.p64[i].p_type,
-			    phdrs.p64[i].p_vaddr, phdrs.p64[i].p_offset,
-			    phdrs.p64[i].p_filesz, phdrs.p64[i].p_memsz);
-	  break;
-
-	default:
-	  abort ();
-	  break;
+	  if (into != *buffer)
+	    free (into);
+	  if (nread < 0)
+	    __libdwfl_seterrno (DWFL_E_ERRNO);
+	  return false;
 	}
 
-      /* Trim the last segment so we don't bother with zeros in the last page
-	 that are off the end of the file.  However, if the extra bit in that
-	 page includes the section headers, keep them.  */
-      if (file_end < shdrs_end && shdrs_end <= file_end_aligned)
-	file_end = shdrs_end;
+      if (minread == 0)		/* String mode.  */
+	{
+	  const void *eos = memchr (into, '\0', nread);
+	  if (unlikely (eos == NULL) || unlikely (eos == into))
+	    {
+	      if (*buffer == NULL)
+		free (into);
+	      return false;
+	    }
+	  nread = eos + 1 - into;
+	}
 
-      /* If there were section headers in the file, we'd like to have them.  */
-      if (shdrs_end != 0 && shdrs_end <= file_end
-	  && shdrs_end > file_should_end)
-	file_should_end = shdrs_end;
-
-      *file_size_available = file_end;
-      *file_size_total = file_should_end;
-      *vaddr_end = vaddr_limit;
-      return e_type;
+      if (*buffer == NULL)
+	*buffer = into;
+      *buffer_available = nread;
     }
 
-  GElf_Ehdr ehdr_mem;
-  GElf_Ehdr *ehdr = gelf_getehdr (core, &ehdr_mem);
-  if (ehdr == NULL)
+  return true;
+}
+
+int
+dwfl_core_file_report (Dwfl *dwfl, Elf *elf)
+{
+  size_t phnum;
+  if (unlikely (elf_getphdrnum (elf, &phnum) != 0))
     {
-    elf_error:
       __libdwfl_seterrno (DWFL_E_LIBELF);
       return -1;
     }
 
-  size_t earlier_modules = dwfl->nmodules;
-  GElf_Addr r_debug_vaddr = 0;
-  for (uint_fast16_t i = 0; i < ehdr->e_phnum; ++i)
+  /* First report each PT_LOAD segment.  */
+  GElf_Phdr notes_phdr;
+  int ndx = dwfl_report_core_segments (dwfl, elf, phnum, &notes_phdr);
+  if (unlikely (ndx <= 0))
+    return ndx;
+
+  /* Now sniff segment contents for modules.  */
+  int sniffed = 0;
+  ndx = 0;
+  do
     {
-      GElf_Phdr phdr_mem;
-      GElf_Phdr *phdr = gelf_getphdr (core, i, &phdr_mem);
-      if (phdr == NULL)
-	goto elf_error;
-
-      /* Consider read-only segments where we have enough to look at.  */
-      if (phdr->p_type == PT_LOAD
-	  && (phdr->p_flags & (PF_R|PF_W)) == PF_R
-	  && phdr->p_filesz > ehdr_size)
+      int seg = dwfl_segment_report_module (dwfl, ndx, NULL,
+					    &dwfl_elf_phdr_memory_callback, elf,
+					    core_file_read_eagerly, elf);
+      if (unlikely (seg < 0))
+	return seg;
+      if (seg > ndx)
 	{
-	  /* Look at the ELF ident bytes to see if this might be an ELF file
-	     image in the format of the core file.  */
-	  char *header = gelf_rawchunk (core, phdr->p_offset, ehdr_size);
-	  if (header == NULL)
-	    goto elf_error;
-	  if (memcmp (header, ehdr->e_ident, EI_VERSION))
-	    {
-	      /* Doesn't look like the right header.  */
-	      gelf_freechunk (core, header);
-	      continue;
-	    }
+	  ndx = seg;
+	  ++sniffed;
+	}
+      else
+	++ndx;
+    }
+  while (ndx < (int) phnum);
 
-	  /* Consider this segment.  Bail if we get an unexpected error.  */
-	  build_id_offset = 0;
-	  build_id_size = 0;
-	  build_id_vaddr = 0;
-	  GElf_Addr dyn_vaddr = 0;
-	  GElf_Word dyn_filesz = 0;
-	  GElf_Addr vaddr_end;
-	  GElf_Off available_size;
-	  GElf_Off whole_size;
-	  GElf_Addr loadbase;
-	  GElf_Half type = consider_segment (phdr, header,
-					     &vaddr_end,
-					     &available_size, &whole_size,
-					     &loadbase,
-					     &dyn_vaddr, &dyn_filesz);
-	  if (result < 0)
-	    break;
+  /* Next, we should follow the chain from DT_DEBUG.  */
 
-	  if (type == ET_NONE)	/* Nothing there.  */
-	    continue;
+  const void *auxv = NULL;
+  size_t auxv_size = 0;
+  if (likely (notes_phdr.p_type == PT_NOTE))
+    {
+      /* PT_NOTE -> NT_AUXV -> AT_PHDR -> PT_DYNAMIC -> DT_DEBUG */
 
-	  /* Check if this segment contains the dynamic section.  */
-	  GElf_Addr soname_vaddr = 0;
-	  GElf_Addr dynstr_end = 0;
-	  inline void check_dyn (void)
-	    {
-	      if (soname_vaddr == 0 && dyn_vaddr != 0
-		  && dyn_vaddr >= phdr->p_vaddr
-		  && dyn_vaddr - phdr->p_vaddr + dyn_filesz <= phdr->p_filesz)
-		soname_vaddr = handle_dyn (dyn_vaddr - phdr->p_vaddr
-					   + phdr->p_offset,
-					   dyn_filesz, loadbase, &dynstr_end,
-					   &r_debug_vaddr);
-	    }
-
-	  check_dyn ();
-
-	  /* Skip some following segments if the object we found
-	     has phdrs that say they are part of its segments.  */
-	  const uint_fast16_t considering = i;
-	  GElf_Addr vaddr_start = phdr->p_vaddr & -phdr->p_align;
-	  GElf_Off file_start = phdr->p_offset & -phdr->p_align;
-	  GElf_Off file_end = (phdr->p_offset + phdr->p_filesz
-			       + phdr->p_align - 1) & -phdr->p_align;
-	  while ((phdr->p_type != PT_LOAD
-		  || vaddr_end > phdr->p_vaddr + phdr->p_memsz)
-		 && ++i < ehdr->e_phnum)
-	    {
-	      phdr = gelf_getphdr (core, i, &phdr_mem);
-	      if (phdr == NULL)
-		goto elf_error;
-
-	      if (phdr->p_type != PT_LOAD)
-		continue;
-
-	      check_dyn ();
-
-	      /* If we had all of the previous segment, we have this
-		 segment as part of the contiguous file image.  */
-	      GElf_Off segment_start = phdr->p_offset & -phdr->p_align;
-	      GElf_Off segment_end = (phdr->p_offset + phdr->p_filesz
-				      + phdr->p_align - 1) & -phdr->p_align;
-	      if (file_end == segment_start)
-		file_end = segment_end;
-	    }
-	  if (i == ehdr->e_phnum)
-	    {
-	      /* Somehing is amiss.  Punt this supposed object we found.  */
-	      i = considering;
-	      continue;
-	    }
-
-	  /* We have as much of the file as the dumped segments contain.  */
-	  available_size = MIN (file_end - file_start, available_size);
-
-	  /* We found an object that goes from VADDR_START to VADDR_END.  */
-	  result = 1;
-
-	  /* A dumped partial ELF file is only useful to us if it
-	     contained a dynamic segment and a string table.  */
-	  if (available_size < whole_size
-	      && (dynstr_end == 0
-		  || available_size < dynstr_end - vaddr_start + file_start))
-	    available_size = 0;
-
-	  char *soname = NULL;
-	  if (dynstr_end == 0)
-	    dynstr_end = vaddr_end;
-	  if (soname_vaddr >= vaddr_start && soname_vaddr < dynstr_end)
-	    {
-	      GElf_Off soname_offset = soname_vaddr - vaddr_start + file_start;
-	      GElf_Off limit = dynstr_end - vaddr_start + file_start;
-	      if (limit > file_end)
-		limit = file_end;
-	      soname = string_from_offset (core, soname_offset, limit);
-	    }
-
-	  // XXX maybe record or verify build_id against explicit exe?
-	  if (module_overlapping (dwfl, vaddr_start, vaddr_end, false) == NULL)
-	    {
-	      /* Record what we've learned, for find_elf to use.  */
-	      struct core_module_info *mod_data = malloc (sizeof *mod_data);
-	      if (mod_data == NULL)
-		result = -1;
-	      else
-		{
-		  mod_data->offset = file_start;
-		  mod_data->whole_size = available_size;
-		  mod_data->l_name_vaddr = 0;
-
-		  Dwfl_Module *mod = INTUSE(dwfl_report_module)
-		    (dwfl,
-		     soname ?: type == ET_EXEC ? "[exe]"
-		     : available_size == 0 ? "[dso]" : "[dumped-dso]",
-		     vaddr_start, vaddr_end);
-
-		  if (mod == NULL)
-		    {
-		      free (mod_data);
-		      result = -1;
-		    }
-		  else
-		    {
-		      /* We already eliminated duplicates.  */
-		      assert (mod->cb_data == NULL);
-		      mod->cb_data = mod_data;
-		    }
-
-		  if (build_id_size != 0)
-		    {
-		      void *build_id = gelf_rawchunk (core, build_id_offset,
-						      build_id_size);
-		      if (build_id != NULL)
-			INTUSE(dwfl_module_report_build_id) (mod, build_id,
-							     build_id_size,
-							     build_id_vaddr);
-		      gelf_freechunk (core, build_id);
-		    }
-		}
-	    }
-
-	  if (soname != NULL)
-	    gelf_freechunk (core, soname);
-
-	  if (result < 0)
-	    break;
+      Elf_Data *notes = elf_getdata_rawchunk (elf,
+					      notes_phdr.p_offset,
+					      notes_phdr.p_filesz,
+					      ELF_T_NHDR);
+      if (likely (notes != NULL))
+	{
+	  size_t pos = 0;
+	  GElf_Nhdr nhdr;
+	  size_t name_pos;
+	  size_t desc_pos;
+	  while ((pos = gelf_getnote (notes, pos, &nhdr,
+				      &name_pos, &desc_pos)) > 0)
+	    if (nhdr.n_type == NT_AUXV
+		&& nhdr.n_namesz == sizeof "CORE"
+		&& !memcmp (notes->d_buf + name_pos, "CORE", sizeof "CORE"))
+	      {
+		auxv = notes->d_buf + desc_pos;
+		auxv_size = nhdr.n_descsz;
+		break;
+	      }
 	}
     }
 
-  if (result >= 0 && r_debug_vaddr == 0 && earlier_modules > 0)
-    /* Try to find an existing executable module with a DT_DEBUG.  */
-    for (Dwfl_Module *mod = dwfl->modulelist;
-	 earlier_modules-- > 0 && r_debug_vaddr == 0;
-	 mod = mod->next)
-      if (mod->main.elf != NULL)
-	{
-	  GElf_Addr dt_debug = find_dt_debug (mod->main.elf, mod->main.bias);
-	  if (dt_debug != 0)
-	    r_debug_vaddr = addr_from_memory (core, dt_debug);
-	}
+  /* Now we have NT_AUXV contents.  From here on this processing could be
+     used for a live process with auxv read from /proc.  */
 
-  if (result >= 0 && r_debug_vaddr != 0)
-    /* Now we can try to find the dynamic linker's library list.  */
-    result = report_r_debug (result, core, dwfl, r_debug_vaddr);
+  int listed = dwfl_link_map_report (dwfl, auxv, auxv_size,
+				     dwfl_elf_phdr_memory_callback, elf);
 
-  if (result >= 0)
-    dwfl->cb_data = core;
-
-  return result;
+  /* We return the number of modules we found if we found any.
+     If we found none, we return -1 instead of 0 if there was an
+     error rather than just nothing found.  If link_map handling
+     failed, we still have the sniffed modules.  */
+  return sniffed == 0 || listed > sniffed ? listed : sniffed;
 }
 INTDEF (dwfl_core_file_report)
-
-
-/* Dwfl_Callbacks.find_elf */
-
-int
-dwfl_core_file_find_elf (Dwfl_Module *mod,
-			 void **userdata __attribute__ ((unused)),
-			 const char *module_name __attribute__ ((unused)),
-			 Dwarf_Addr base __attribute__ ((unused)),
-			 char **file_name, Elf **elfp)
-{
-  Elf *core = mod->dwfl->cb_data;
-  struct core_module_info *info = mod->cb_data;
-
-  int fd = -1;
-  *file_name = NULL;
-
-  /* If we have the whole image in the core file, just use it directly.  */
-  if (info != NULL && info->whole_size != 0)
-    *elfp = gelf_begin_embedded (ELF_C_READ_MMAP_PRIVATE, core,
-				 info->offset, info->whole_size);
-
-  /* If we found a build ID, try to follow that.  */
-  if (*elfp == NULL && mod->build_id_len > 0)
-    {
-      fd = INTUSE(dwfl_build_id_find_elf) (mod, NULL, NULL, 0,
-					   file_name, elfp);
-      if (fd >= 0)
-	return fd;
-    }
-
-  /* If we found the dynamic linker's idea of the file name, report that.  */
-  if (info != NULL && info->l_name_vaddr != 0)
-    {
-      char *chunk = string_from_memory (core, info->l_name_vaddr);
-      if (chunk != NULL)
-	{
-	  *file_name = strdup (chunk);
-	  gelf_freechunk (core, chunk);
-	}
-    }
-
-  return fd;
-}
-INTDEF (dwfl_core_file_find_elf)

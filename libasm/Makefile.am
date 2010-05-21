@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2002, 2004, 2005, 2006 Red Hat, Inc.
+## Copyright (C) 2002-2010 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -24,29 +24,18 @@
 ## Network licensing program, please visit www.openinventionnetwork.com
 ## <http://www.openinventionnetwork.com>.
 ##
-DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H
-if MUDFLAP
-AM_CFLAGS = -fmudflap
-else
-AM_CFLAGS =
-endif
-AM_CFLAGS += -std=gnu99 -Wall -Wshadow -Werror -Wunused -Wextra -Wformat=2
-INCLUDES = -I. -I$(srcdir) -I.. \
-	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libebl -I$(top_srcdir)/libdw\
-	   -I$(top_srcdir)/lib
+include $(top_srcdir)/config/eu.am
+INCLUDES += -I$(top_srcdir)/libelf -I$(top_srcdir)/libebl -I$(top_srcdir)/libdw
+
 GCC_INCLUDE = -I$(shell $(CC) -print-file-name=include)
 VERSION = 1
-
-COMPILE.os = $(filter-out -fprofile-arcs, $(filter-out -ftest-coverage, \
-						       $(COMPILE)))
 
 lib_LIBRARIES = libasm.a
 if !MUDFLAP
 noinst_LIBRARIES = libasm_pic.a
 noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
 endif
-euincludedir = ${includedir}/elfutils
-euinclude_HEADERS = libasm.h
+pkginclude_HEADERS = libasm.h
 
 libasm_a_SOURCES = asm_begin.c asm_abort.c asm_end.c asm_error.c \
 		   asm_getelf.c asm_newscn.c asm_newscn_ingrp.c \
@@ -59,29 +48,26 @@ libasm_a_SOURCES = asm_begin.c asm_abort.c asm_end.c asm_error.c \
 		   asm_addint32.c asm_adduint32.c \
 		   asm_addint64.c asm_adduint64.c \
 		   asm_adduleb128.c asm_addsleb128.c \
+		   disasm_begin.c disasm_cb.c disasm_end.c disasm_str.c \
 		   symbolhash.c
 
 if !MUDFLAP
 libasm_pic_a_SOURCES =
 am_libasm_pic_a_OBJECTS = $(libasm_a_SOURCES:.c=.os)
 
+libasm_so_LDLIBS =
+if USE_LOCKS
+libasm_so_LDLIBS += -lpthread
+endif
+
 libasm_so_SOURCES =
 libasm.so: libasm_pic.a libasm.map
 	$(LINK) -shared -o $@ -Wl,--whole-archive,$<,--no-whole-archive \
 		-Wl,--version-script,$(srcdir)/libasm.map,--no-undefined \
 		-Wl,--soname,$@.$(VERSION) \
-		../libebl/libebl.a ../libelf/libelf.so
+		../libebl/libebl.a ../libelf/libelf.so  $(libasm_so_LDLIBS)
 	if readelf -d $@ | fgrep -q TEXTREL; then exit 1; fi
 	ln -fs $@ $@.$(VERSION)
-
-
-%.os: %.c %.o
-	if $(COMPILE.os) -c -o $@ -fpic -DPIC -DSHARED -MT $@ -MD -MP \
-	  -MF "$(DEPDIR)/$*.Tpo" `test -f '$<' || echo '$(srcdir)/'`$<; \
-	then cat "$(DEPDIR)/$*.Tpo" >> "$(DEPDIR)/$*.Po"; \
-	     rm -f "$(DEPDIR)/$*.Tpo"; \
-	else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; \
-	fi
 
 install: install-am libasm.so
 	$(mkinstalldirs) $(DESTDIR)$(libdir)
@@ -99,4 +85,4 @@ endif
 noinst_HEADERS = libasmP.h symbolhash.h
 EXTRA_DIST = libasm.map
 
-CLEANFILES = $(am_libasm_pic_a_OBJECTS) *.gcno *.gcda libasm.so.$(VERSION)
+CLEANFILES += $(am_libasm_pic_a_OBJECTS) libasm.so.$(VERSION)

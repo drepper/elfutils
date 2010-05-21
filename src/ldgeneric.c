@@ -1,4 +1,4 @@
-/* Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+/* Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -28,6 +28,7 @@
 #endif
 
 #include <assert.h>
+#include <ctype.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <error.h>
@@ -44,9 +45,12 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 
-#include <system.h>
+#include <elf-knowledge.h>
 #include "ld.h"
 #include "list.h"
+#include <md5.h>
+#include <sha1.h>
+#include <system.h>
 
 
 /* Header of .eh_frame_hdr section.  */
@@ -88,8 +92,11 @@ static void ld_generic_initialize_plt (struct ld_state *statep, Elf_Scn *scn);
 static void ld_generic_initialize_pltrel (struct ld_state *statep,
 					  Elf_Scn *scn);
 static void ld_generic_initialize_got (struct ld_state *statep, Elf_Scn *scn);
+static void ld_generic_initialize_gotplt (struct ld_state *statep,
+					  Elf_Scn *scn);
 static void ld_generic_finalize_plt (struct ld_state *statep, size_t nsym,
-				     size_t nsym_dyn);
+				     size_t nsym_dyn,
+				     struct symbol **ndxtosymp);
 static int ld_generic_rel_type (struct ld_state *statep);
 static void ld_generic_count_relocations (struct ld_state *statep,
 					  struct scninfo *scninfo);
@@ -220,6 +227,7 @@ ld_prepare_state (const char *emulation)
   ld_state.callbacks.initialize_plt = ld_generic_initialize_plt;
   ld_state.callbacks.initialize_pltrel = ld_generic_initialize_pltrel;
   ld_state.callbacks.initialize_got = ld_generic_initialize_got;
+  ld_state.callbacks.initialize_gotplt = ld_generic_initialize_gotplt;
   ld_state.callbacks.finalize_plt = ld_generic_finalize_plt;
   ld_state.callbacks.rel_type = ld_generic_rel_type;
   ld_state.callbacks.count_relocations = ld_generic_count_relocations;
@@ -514,6 +522,38 @@ open_along_path (struct usedfiles *fileinfo)
 }
 
 
+static int
+matching_group_comdat_scn (const XElf_Sym *sym, size_t shndx,
+			   struct usedfiles *fileinfo, struct symbol *oldp)
+{
+  if ((shndx >= SHN_LORESERVE && shndx <= SHN_HIRESERVE)
+      || (oldp->scndx >= SHN_LORESERVE && oldp->scndx <= SHN_HIRESERVE))
+    /* Cannot be a group COMDAT section.  */
+    return 0;
+
+  size_t newgrpid = fileinfo->scninfo[shndx].grpid;
+  size_t oldgrpid = oldp->file->scninfo[oldp->scndx].grpid;
+  if (newgrpid == 0 || oldgrpid == 0)
+    return 0;
+
+  assert (SCNINFO_SHDR (fileinfo->scninfo[newgrpid].shdr).sh_type
+	  == SHT_GROUP);
+  assert (SCNINFO_SHDR (oldp->file->scninfo[oldgrpid].shdr).sh_type
+	  == SHT_GROUP);
+
+  if (! fileinfo->scninfo[newgrpid].comdat_group
+      || ! oldp->file->scninfo[oldgrpid].comdat_group)
+    return 0;
+
+  if (strcmp (fileinfo->scninfo[newgrpid].symbols->name,
+	      oldp->file->scninfo[oldgrpid].symbols->name) != 0)
+    return 0;
+
+  /* This is a matching, duplicate COMDAT group section.  Ignore it.  */
+  return 1;
+}
+
+
 static void
 check_type_and_size (const XElf_Sym *sym, struct usedfiles *fileinfo,
 		     struct symbol *oldp)
@@ -551,7 +591,7 @@ Warning: size of `%s' changed from %" PRIu64 " in %s to %" PRIu64 " in %s"),
 
 
 static int
-check_definition (const XElf_Sym *sym, size_t symidx,
+check_definition (const XElf_Sym *sym, size_t shndx, size_t symidx,
 		  struct usedfiles *fileinfo, struct symbol *oldp)
 {
   int result = 0;
@@ -559,9 +599,9 @@ check_definition (const XElf_Sym *sym, size_t symidx,
   bool new_in_dso = FILEINFO_EHDR (fileinfo->ehdr).e_type == ET_DYN;
   bool use_new_def = false;
 
-  if (sym->st_shndx != SHN_UNDEF
+  if (shndx != SHN_UNDEF
       && (! oldp->defined
-	  || (sym->st_shndx != SHN_COMMON && oldp->common && ! new_in_dso)
+	  || (shndx != SHN_COMMON && oldp->common && ! new_in_dso)
 	  || (old_in_dso && ! new_in_dso)))
     {
       /* We found a definition for a previously undefined symbol or a
@@ -591,10 +631,17 @@ check_definition (const XElf_Sym *sym, size_t symidx,
       /* Use the values of the definition from now on.  */
       use_new_def = true;
     }
-  else if (sym->st_shndx != SHN_UNDEF
+  else if (shndx != SHN_UNDEF
+	   && oldp->defined
+	   && matching_group_comdat_scn (sym, shndx, fileinfo, oldp))
+    /* The duplicate symbol is in a group COMDAT section with the same
+       signature as the one containing the original definition.
+       Just ignore the second definition.  */
+    /* nothing */;
+  else if (shndx != SHN_UNDEF
 	   && unlikely (! oldp->common)
 	   && oldp->defined
-	   && sym->st_shndx != SHN_COMMON
+	   && shndx != SHN_COMMON
 	   /* Multiple definitions are no fatal errors if the -z muldefs flag
 	      is used.  We don't warn about the multiple definition unless we
 	      are told to be verbose.  */
@@ -607,24 +654,22 @@ check_definition (const XElf_Sym *sym, size_t symidx,
       struct usedfiles *oldfile;
       const char *scnname;
       Elf32_Word xndx;
-      size_t shndx;
       size_t shnum;
 
-      if (elf_getshnum (fileinfo->elf, &shnum) < 0)
+      if (elf_getshdrnum (fileinfo->elf, &shnum) < 0)
 	error (EXIT_FAILURE, 0,
 	       gettext ("cannot determine number of sections: %s"),
 	       elf_errmsg (-1));
 
       /* XXX Use only ebl_section_name.  */
-      if (sym->st_shndx < SHN_LORESERVE // || sym->st_shndx > SHN_HIRESERVE
-	  && sym->st_shndx < shnum)
+      if (shndx < SHN_LORESERVE || (shndx > SHN_HIRESERVE && shndx < shnum))
 	scnname = elf_strptr (fileinfo->elf,
 			      fileinfo->shstrndx,
-			      SCNINFO_SHDR (fileinfo->scninfo[sym->st_shndx].shdr).sh_name);
+			      SCNINFO_SHDR (fileinfo->scninfo[shndx].shdr).sh_name);
       else
 	// XXX extended section
-	scnname = ebl_section_name (ld_state.ebl, sym->st_shndx, 0,
-				    buf, sizeof (buf), NULL, shnum);
+	scnname = ebl_section_name (ld_state.ebl, shndx, 0, buf, sizeof (buf),
+				    NULL, shnum);
 
       /* XXX Print source file and line number.  */
       print_file_name (stderr, fileinfo, 1, 0);
@@ -639,23 +684,16 @@ check_definition (const XElf_Sym *sym, size_t symidx,
       oldfile = oldp->file;
       xelf_getsymshndx (oldfile->symtabdata, oldfile->xndxdata, oldp->symidx,
 			oldsym, xndx);
-      if (oldsym == NULL)
-	/* This should never happen since the same call
-	   succeeded before.  */
-	abort ();
-
-      shndx = oldsym->st_shndx;
-      if (unlikely (oldsym->st_shndx == SHN_XINDEX))
-	shndx = xndx;
+      assert (oldsym != NULL);
 
       /* XXX Use only ebl_section_name.  */
-      if (shndx < SHN_LORESERVE || shndx > SHN_HIRESERVE)
+      if (oldp->scndx < SHN_LORESERVE || oldp->scndx > SHN_HIRESERVE)
 	scnname = elf_strptr (oldfile->elf,
 			      oldfile->shstrndx,
 			      SCNINFO_SHDR (oldfile->scninfo[shndx].shdr).sh_name);
       else
-	scnname = ebl_section_name (ld_state.ebl, oldsym->st_shndx, shndx, buf,
-				    sizeof (buf), NULL, shnum);
+	scnname = ebl_section_name (ld_state.ebl, oldp->scndx, oldp->scndx,
+				    buf, sizeof (buf), NULL, shnum);
 
       /* XXX Print source file and line number.  */
       print_file_name (stderr, oldfile, 1, 0);
@@ -666,7 +704,7 @@ check_definition (const XElf_Sym *sym, size_t symidx,
 	result = 1;
     }
   else if (old_in_dso && fileinfo->file_type == relocatable_file_type
-	   && sym->st_shndx != SHN_UNDEF)
+	   && shndx != SHN_UNDEF)
     /* We use the definition from a normal relocatable file over the
        definition in a DSO.  This is what the dynamic linker would
        do, too.  */
@@ -685,7 +723,7 @@ check_definition (const XElf_Sym *sym, size_t symidx,
 
       oldp->on_dsolist = 1;
     }
-  else if (oldp->common && sym->st_shndx == SHN_COMMON)
+  else if (oldp->common && shndx == SHN_COMMON)
     {
       /* The symbol size is the largest of all common definitions.  */
       oldp->size = MAX (oldp->size, sym->st_size);
@@ -714,23 +752,23 @@ check_definition (const XElf_Sym *sym, size_t symidx,
       oldp->size = sym->st_size;
       oldp->type = XELF_ST_TYPE (sym->st_info);
       oldp->symidx = symidx;
-      oldp->scndx = sym->st_shndx;
+      oldp->scndx = shndx;
       //oldp->symscndx = THESYMSCNDX must be passed;
       oldp->file = fileinfo;
       oldp->defined = 1;
       oldp->in_dso = new_in_dso;
-      oldp->common = sym->st_shndx == SHN_COMMON;
+      oldp->common = shndx == SHN_COMMON;
       if (likely (fileinfo->file_type == relocatable_file_type))
 	{
 	  /* If the definition comes from a DSO we pertain the weak flag
 	     and it's indicating whether the reference is weak or not.  */
 	  oldp->weak = XELF_ST_BIND (sym->st_info) == STB_WEAK;
 
-	  if (sym->st_shndx != SHN_COMMON)
+	  // XXX Really exclude SHN_ABS?
+	  if (shndx != SHN_COMMON && shndx != SHN_ABS)
 	    {
 	      struct scninfo *ignore;
-	      mark_section_used (&fileinfo->scninfo[sym->st_shndx],
-				 sym->st_shndx, &ignore);
+	      mark_section_used (&fileinfo->scninfo[shndx], shndx, &ignore);
 	    }
 	}
 
@@ -749,7 +787,7 @@ check_definition (const XElf_Sym *sym, size_t symidx,
 
 	  oldp->on_dsolist = 1;
 	}
-      else if (sym->st_shndx == SHN_COMMON)
+      else if (shndx == SHN_COMMON)
 	{
 	  /* Store the alignment.  */
 	  oldp->merge.value = sym->st_value;
@@ -843,13 +881,11 @@ mark_section_group (struct usedfiles *fileinfo, Elf32_Word shndx,
       Elf32_Word idx = grpref[--cnt];
       XElf_Shdr *shdr = &SCNINFO_SHDR (fileinfo->scninfo[idx].shdr);
 
-      if (fileinfo->scninfo[idx].grpid != 0)
+      if (fileinfo->scninfo[idx].grpid != grpscn->grpid)
 	error (EXIT_FAILURE, 0, gettext ("\
-%s: section [%2d] '%s' is in more than one section group"),
+%s: section [%2d] '%s' is not in the correct section group"),
 	       fileinfo->fname, (int) idx,
 	       elf_strptr (fileinfo->elf, fileinfo->shstrndx, shdr->sh_name));
-
-      fileinfo->scninfo[idx].grpid = grpscn->grpid;
 
       if (ld_state.strip == strip_none
 	  /* If we are stripping, remove debug sections.  */
@@ -1049,6 +1085,9 @@ add_section (struct usedfiles *fileinfo, struct scninfo *scninfo)
       queued->segment_nr = ~0;
       queued->last = scninfo->next = scninfo;
 
+      /* Check whether we need a TLS segment.  */
+      ld_state.need_tls |= (shdr->sh_flags & SHF_TLS) != 0;
+
       /* Add to the hash table and possibly overwrite existing value.  */
       ld_section_tab_insert (&ld_state.section_tab, hval, queued);
     }
@@ -1069,6 +1108,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
   size_t nsymbols = 0;
   size_t nlocalsymbols = 0;
   bool has_merge_sections = false;
+  bool has_tls_symbols = false;
   /* Unless we have different information we assume the code needs
      an executable stack.  */
   enum execstack execstack = execstack_true;
@@ -1077,7 +1117,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
   assert (fileinfo->elf != NULL);
 
   /* Allocate memory for the sections.  */
-  if (unlikely (elf_getshnum (fileinfo->elf, &scncnt) < 0))
+  if (unlikely (elf_getshdrnum (fileinfo->elf, &scncnt) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot determine number of sections: %s"),
 	   elf_errmsg (-1));
@@ -1125,6 +1165,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 
       /* Check whether this section is marked as merge-able.  */
       has_merge_sections |= (shdr->sh_flags & SHF_MERGE) != 0;
+      has_tls_symbols |= (shdr->sh_flags & SHF_TLS) != 0;
 
       /* Get the ELF section header and data.  */
       /* Make the file structure available.  */
@@ -1222,6 +1263,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 	  symscn = elf_getscn (fileinfo->elf, shdr->sh_link);
 	  xelf_getshdr (symscn, symshdr);
 	  symdata = elf_getdata (symscn, NULL);
+
 	  if (symshdr != NULL)
 	    {
 	      XElf_Sym_vardef (sym);
@@ -1233,9 +1275,26 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 		{
 		  struct symbol *symbol = fileinfo->scninfo[cnt].symbols;
 
-		  symbol->name = elf_strptr (fileinfo->elf, symshdr->sh_link,
-					     sym->st_name);
-		  symbol->symidx = shdr->sh_info;
+#ifndef NO_HACKS
+		  if (XELF_ST_TYPE (sym->st_info) == STT_SECTION)
+		    {
+		      XElf_Shdr_vardef (buggyshdr);
+		      xelf_getshdr (elf_getscn (fileinfo->elf, sym->st_shndx),
+				    buggyshdr);
+
+		      symbol->name = elf_strptr (fileinfo->elf,
+						 FILEINFO_EHDR (fileinfo->ehdr).e_shstrndx,
+						 buggyshdr->sh_name);
+		      symbol->symidx = -1;
+		    }
+		  else
+#endif
+		    {
+		      symbol->name = elf_strptr (fileinfo->elf,
+						 symshdr->sh_link,
+						 sym->st_name);
+		      symbol->symidx = shdr->sh_info;
+		    }
 		  symbol->file = fileinfo;
 		}
 	    }
@@ -1247,6 +1306,35 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 		   elf_strptr (fileinfo->elf, fileinfo->shstrndx,
 			       shdr->sh_name),
 		   elf_errmsg (-1));
+
+
+	  /* For all the sections which are part of this group, add
+	     the reference.  */
+	  if (data == NULL)
+	    error (EXIT_FAILURE, 0, gettext ("\
+%s: cannot get content of section group [%2zd] '%s': %s'"),
+		   fileinfo->fname, elf_ndxscn (fileinfo->scninfo[cnt].scn),
+		   elf_strptr (fileinfo->elf, fileinfo->shstrndx,
+			       shdr->sh_name),
+		   elf_errmsg (-1));
+
+	  Elf32_Word *grpdata = (Elf32_Word *) data->d_buf;
+	  if (grpdata[0] & GRP_COMDAT)
+	    fileinfo->scninfo[cnt].comdat_group = true;
+	  for (size_t inner = 1; inner < data->d_size / sizeof (Elf32_Word);
+	       ++inner)
+	    {
+	      if (grpdata[inner] >= scncnt)
+		error (EXIT_FAILURE, 0, gettext ("\
+%s: group member %zu of section group [%2zd] '%s' has too high index: %" PRIu32),
+		       fileinfo->fname,
+		       inner, elf_ndxscn (fileinfo->scninfo[cnt].scn),
+		       elf_strptr (fileinfo->elf, fileinfo->shstrndx,
+				   shdr->sh_name),
+		       grpdata[inner]);
+
+	      fileinfo->scninfo[grpdata[inner]].grpid = cnt;
+	    }
 
 	  /* The 'used' flag is used to indicate when the information
 	     in the section group is used to mark all other sections
@@ -1279,7 +1367,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 			  || shdr->sh_type == SHT_FINI_ARRAY
 			  || shdr->sh_type == SHT_PREINIT_ARRAY))
 	{
-	  /* Check whether the check needs to be executable.  */
+	  /* Check whether the section needs to be executable.  */
 	  if (shdr->sh_type == SHT_PROGBITS
 	      && (shdr->sh_flags & SHF_EXECINSTR) == 0
 	      && strcmp (elf_strptr (fileinfo->elf, fileinfo->shstrndx,
@@ -1306,7 +1394,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
       /* In case this file contains merge-able sections we have to
 	 locate the symbols which are in these sections.  */
       fileinfo->has_merge_sections = has_merge_sections;
-      if (likely (has_merge_sections))
+      if (likely (has_merge_sections || has_tls_symbols))
 	{
 	  fileinfo->symref = (struct symbol **)
 	    obstack_calloc (&ld_state.smem,
@@ -1338,8 +1426,9 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 
 	      if (XELF_ST_TYPE (sym->st_info) != STT_SECTION
 		  && (shndx < SHN_LORESERVE || shndx > SHN_HIRESERVE)
-		  && (SCNINFO_SHDR (fileinfo->scninfo[shndx].shdr).sh_flags
-		      & SHF_MERGE))
+		  && ((SCNINFO_SHDR (fileinfo->scninfo[shndx].shdr).sh_flags
+		       & SHF_MERGE)
+		      || XELF_ST_TYPE (sym->st_info) == STT_TLS))
 		{
 		  /* Create a symbol record for this symbol and add it
 		     to the list for this section.  */
@@ -1351,6 +1440,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 		  newp->symidx = cnt;
 		  newp->scndx = shndx;
 		  newp->file = fileinfo;
+		  newp->defined = 1;
 		  fileinfo->symref[cnt] = newp;
 
 		  if (fileinfo->scninfo[shndx].symbols == NULL)
@@ -1412,8 +1502,8 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 	    /* The symbol is not used.  */
 	    continue;
 
-	  /* If the DSO uses symbols determine whether this is the default
-	     version.  Otherwise we'll ignore the symbol.  */
+	  /* If the DSO uses symbol versions determine whether this is
+	     the default version.  Otherwise we'll ignore the symbol.  */
 	  if (versymdata != NULL)
 	    {
 	      XElf_Versym versym;
@@ -1511,7 +1601,8 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 	      else if (hval == 6672457 && strcmp (newp->name, "_fini") == 0)
 		ld_state.fini_symbol = newp;
 	    }
-	  else if (unlikely (check_definition (sym, cnt, fileinfo, oldp) != 0))
+	  else if (unlikely (check_definition (sym, shndx, cnt, fileinfo, oldp)
+			     != 0))
 	    /* A fatal error (multiple definition of a symbol)
 	       occurred, no need to continue.  */
 	    return 1;
@@ -1528,7 +1619,7 @@ add_relocatable_file (struct usedfiles *fileinfo, GElf_Word secttype)
 
 #ifndef NDEBUG
 	      size_t shnum;
-	      assert (elf_getshnum (fileinfo->elf, &shnum) == 0);
+	      assert (elf_getshdrnum (fileinfo->elf, &shnum) == 0);
 	      assert (shndx < shnum);
 #endif
 
@@ -1785,15 +1876,16 @@ extract_from_archive (struct usedfiles *fileinfo)
   static int archive_seq;
   int res = 0;
 
-  /* This is an archive we are not using completely.  Give it a
-     unique number.  */
-  fileinfo->archive_seq = ++archive_seq;
+  if (fileinfo->archive_seq == 0)
+    /* This is an archive we are not using completely.  Give it a
+       unique number.  */
+    fileinfo->archive_seq = ++archive_seq;
 
   /* If there are no unresolved symbols don't do anything.  */
+  assert (ld_state.extract_rule == defaultextract
+	  || ld_state.extract_rule == weakextract);
   if ((likely (ld_state.extract_rule == defaultextract)
-       && ld_state.nunresolved_nonweak == 0)
-      || (unlikely (ld_state.extract_rule == weakextract)
-	  && ld_state.nunresolved == 0))
+       ? ld_state.nunresolved_nonweak : ld_state.nunresolved) == 0)
     return 0;
 
   Elf_Arsym *syms;
@@ -1818,7 +1910,6 @@ extract_from_archive (struct usedfiles *fileinfo)
      the first definition.  */
   // XXX Is this a compatible behavior?
   bool any_used;
-  int nround = 0;
   do
     {
       any_used = false;
@@ -1876,7 +1967,7 @@ extract_from_archive (struct usedfiles *fileinfo)
 	    }
 	}
 
-      if (++nround == 1)
+      if (any_used)
 	{
 	  /* This is an archive therefore it must have a number.  */
 	  assert (fileinfo->archive_seq != 0);
@@ -1947,7 +2038,7 @@ file_process2 (struct usedfiles *fileinfo)
 	    }
 
 	  /* Determine the section header string table section index.  */
-	  if (unlikely (elf_getshstrndx (fileinfo->elf, &fileinfo->shstrndx)
+	  if (unlikely (elf_getshdrstrndx (fileinfo->elf, &fileinfo->shstrndx)
 			< 0))
 	    {
 	      fprintf (stderr, gettext ("\
@@ -2069,9 +2160,22 @@ cannot use DSO '%s' when generating relocatable object file"),
 	  res = 0;
 	}
       else
-	/* Extract only the members from the archive which are
-	   currently referenced by unresolved symbols.  */
-	res = extract_from_archive (fileinfo);
+	{
+	  if (ld_state.group_start_requested
+	      && ld_state.group_start_archive == NULL)
+	    ld_state.group_start_archive = fileinfo;
+
+	  if (ld_state.archives == NULL)
+	    ld_state.archives = fileinfo;
+
+	  if (ld_state.tailarchives != NULL)
+	    ld_state.tailarchives->next = fileinfo;
+	  ld_state.tailarchives = fileinfo;
+
+	  /* Extract only the members from the archive which are
+	     currently referenced by unresolved symbols.  */
+	  res = extract_from_archive (fileinfo);
+	}
     }
   else
     /* This should never happen, we know about no other types.  */
@@ -2127,7 +2231,7 @@ ld_generic_file_process (int fd, struct usedfiles *fileinfo,
       /* We found the file.  Now test whether it is a file type we can
 	 handle.
 
-	 XXX Do we have to have the ability to start from a given
+	 XXX Do we need to have the ability to start from a given
 	 position in the search path again to look for another file if
 	 the one found has not the right type?  */
       res = open_elf (fileinfo, elf_begin (fileinfo->fd,
@@ -2170,19 +2274,24 @@ ld_generic_file_process (int fd, struct usedfiles *fileinfo,
 	      runp = runp->next;
 	    }
 	  while (runp != fileinfo->next);
+
+	  /* Do not do this again.  */
+	  ld_state.archives = NULL;
+
+	  /* Do not move on to the next archive.  */
+	  *nextp = fileinfo->next = NULL;
 	}
     }
   else if (unlikely (fileinfo->group_end))
     {
-      /* This is the end of a group.  We possibly of to go back.
+      /* This is the end of a group.  We possibly have to go back.
 	 Determine which file we would go back to and see whether it
 	 makes sense.  If there has not been an archive we don't have
 	 to do anything.  */
-      if (!ld_state.group_start_requested)
+      if (ld_state.group_start_requested)
 	{
 	  if (ld_state.group_start_archive != ld_state.tailarchives)
-	    /* The loop would include more than one archive, add the
-	       pointer.  */
+	    /* The loop includes more than one archive, add the pointer.  */
 	    {
 	      *nextp = ld_state.tailarchives->group_backref =
 		ld_state.group_start_archive;
@@ -2201,6 +2310,7 @@ ld_generic_file_process (int fd, struct usedfiles *fileinfo,
 
       /* Clear the flags.  */
       ld_state.group_start_requested = false;
+      ld_state.group_start_archive = NULL;
       fileinfo->group_end = false;
     }
 
@@ -2333,6 +2443,11 @@ ld_generic_generate_sections (struct ld_state *statep)
   /* The relocation section type.  */
   int rel_type = REL_TYPE (&ld_state) == DT_REL ? SHT_REL : SHT_RELA;
 
+  /* When requested, every output file will have a build ID section.  */
+  if (statep->build_id != NULL)
+    new_generated_scn (scn_dot_note_gnu_build_id, ".note.gnu.build-id",
+		       SHT_NOTE, SHF_ALLOC, 0, 4);
+
   /* When building dynamically linked object we have to include a
      section containing a string describing the interpreter.  This
      should be at the very beginning of the file together with the
@@ -2372,8 +2487,13 @@ ld_generic_generate_sections (struct ld_state *statep)
 			 0, 1);
       /* And a hashing table.  */
       // XXX For Linux/Alpha we need other sizes unless they change...
-      new_generated_scn (scn_dot_hash, ".hash", SHT_HASH, SHF_ALLOC,
-			 sizeof (Elf32_Word), sizeof (Elf32_Word));
+      if (GENERATE_SYSV_HASH)
+	new_generated_scn (scn_dot_hash, ".hash", SHT_HASH, SHF_ALLOC,
+			   sizeof (Elf32_Word), sizeof (Elf32_Word));
+      if (GENERATE_GNU_HASH)
+	new_generated_scn (scn_dot_gnu_hash, ".gnu.hash", SHT_GNU_HASH,
+			   SHF_ALLOC, sizeof (Elf32_Word),
+			   sizeof (Elf32_Word));
 
       /* Create the section associated with the PLT if necessary.  */
       if (ld_state.nplt > 0)
@@ -2394,8 +2514,11 @@ ld_generic_generate_sections (struct ld_state *statep)
 			     : xelf_fsize (ld_state.outelf, ELF_T_RELA, 1),
 			     xelf_fsize (ld_state.outelf, ELF_T_ADDR, 1));
 
-	  /* This means we will also need the .got section.  */
-	  ld_state.need_got = true;
+	  /* XXX We might need a function which returns the section flags.  */
+	  new_generated_scn (scn_dot_gotplt, ".got.plt", SHT_PROGBITS,
+			     SHF_ALLOC | SHF_WRITE,
+			     xelf_fsize (ld_state.outelf, ELF_T_ADDR, 1),
+			     xelf_fsize (ld_state.outelf, ELF_T_ADDR, 1));
 
 	  /* Mark all used DSOs as used.  Determine whether any referenced
 	     object uses symbol versioning.  */
@@ -3427,7 +3550,8 @@ optimal_bucket_size (Elf32_Word *hashcodes, size_t maxcnt, int optlevel)
       memset (counts, '\0', (maxcnt + 1) * sizeof (uint32_t));
 
       /* Determine how often each hash bucket is used.  */
-      for (inner = 0; inner < maxcnt; ++inner)
+      assert (hashcodes[0] == 0);
+      for (inner = 1; inner < maxcnt; ++inner)
 	++lengths[hashcodes[inner] % size];
 
       /* Determine the lengths.  */
@@ -3485,6 +3609,17 @@ optimal_bucket_size (Elf32_Word *hashcodes, size_t maxcnt, int optlevel)
   free (counts);
 
   return bestsize;
+}
+
+
+static void
+optimal_gnu_hash_size (Elf32_Word *hashcodes, size_t maxcnt, int optlevel,
+		       size_t *bitmask_nwords, size_t *shift, size_t *nbuckets)
+{
+  // XXX Implement something real
+  *bitmask_nwords = 256;
+  *shift = 6;
+  *nbuckets = 3 * maxcnt / 2;
 }
 
 
@@ -3585,6 +3720,8 @@ fillin_special_symbol (struct symbol *symst, size_t scnidx, size_t nsym,
   sym->st_shndx = scnidx;
   /* We want the beginning of the section.  */
   sym->st_value = 0;
+  // XXX What size?
+  sym->st_size = 0;
 
   /* Determine the size of the section.  */
   if (scnidx != SHN_ABS)
@@ -3722,6 +3859,435 @@ create_verneed_data (XElf_Off offset, Elf_Data *verneeddata,
 }
 
 
+/* Callback for qsort to sort dynamic string table.  */
+static Elf32_Word *global_hashcodes;
+static size_t global_nbuckets;
+static int
+sortfct_hashval (const void *p1, const void *p2)
+{
+  size_t idx1 = *(size_t *) p1;
+  size_t idx2 = *(size_t *) p2;
+
+  int def1 = ndxtosym[idx1]->defined && !ndxtosym[idx1]->in_dso;
+  int def2 = ndxtosym[idx2]->defined && !ndxtosym[idx2]->in_dso;
+
+  if (! def1 && def2)
+    return -1;
+  if (def1 && !def2)
+    return 1;
+  if (! def1)
+    return 0;
+
+  Elf32_Word hval1 = (global_hashcodes[ndxtosym[idx1]->outdynsymidx]
+		      % global_nbuckets);
+  Elf32_Word hval2 = (global_hashcodes[ndxtosym[idx2]->outdynsymidx]
+		      % global_nbuckets);
+
+  if (hval1 < hval2)
+    return -1;
+  if (hval1 > hval2)
+    return 1;
+  return 0;
+}
+
+
+/* Sort the dynamic symbol table.  The GNU hash table lookup assumes
+   that all symbols with the same hash value module the bucket table
+   size follow one another.  This avoids the extra hash chain table.
+   There is no need (and no way) to perform this operation if we do
+   not use the new hash table format.  */
+static void
+create_gnu_hash (size_t nsym_local, size_t nsym, size_t nsym_dyn,
+		 Elf32_Word *gnuhashcodes)
+{
+  size_t gnu_bitmask_nwords = 0;
+  size_t gnu_shift = 0;
+  size_t gnu_nbuckets = 0;
+  Elf32_Word *gnu_bitmask = NULL;
+  Elf32_Word *gnu_buckets = NULL;
+  Elf32_Word *gnu_chain = NULL;
+  XElf_Shdr_vardef (shdr);
+
+  /* Determine the "optimal" bucket size.  */
+  optimal_gnu_hash_size (gnuhashcodes, nsym_dyn, ld_state.optlevel,
+			 &gnu_bitmask_nwords, &gnu_shift, &gnu_nbuckets);
+
+  /* Create the .gnu.hash section data structures.  */
+  Elf_Scn *hashscn = elf_getscn (ld_state.outelf, ld_state.gnuhashscnidx);
+  xelf_getshdr (hashscn, shdr);
+  Elf_Data *hashdata = elf_newdata (hashscn);
+  if (shdr == NULL || hashdata == NULL)
+    error (EXIT_FAILURE, 0, gettext ("\
+cannot create GNU hash table section for output file: %s"),
+	   elf_errmsg (-1));
+
+  shdr->sh_link = ld_state.dynsymscnidx;
+  (void) xelf_update_shdr (hashscn, shdr);
+
+  hashdata->d_size = (xelf_fsize (ld_state.outelf, ELF_T_ADDR,
+				  gnu_bitmask_nwords)
+		      + (4 + gnu_nbuckets + nsym_dyn) * sizeof (Elf32_Word));
+  hashdata->d_buf = xcalloc (1, hashdata->d_size);
+  hashdata->d_align = sizeof (Elf32_Word);
+  hashdata->d_type = ELF_T_WORD;
+  hashdata->d_off = 0;
+
+  ((Elf32_Word *) hashdata->d_buf)[0] = gnu_nbuckets;
+  ((Elf32_Word *) hashdata->d_buf)[2] = gnu_bitmask_nwords;
+  ((Elf32_Word *) hashdata->d_buf)[3] = gnu_shift;
+  gnu_bitmask = &((Elf32_Word *) hashdata->d_buf)[4];
+  gnu_buckets = &gnu_bitmask[xelf_fsize (ld_state.outelf, ELF_T_ADDR,
+					 gnu_bitmask_nwords)
+			     / sizeof (*gnu_buckets)];
+  gnu_chain = &gnu_buckets[gnu_nbuckets];
+#ifndef NDEBUG
+  void *endp = &gnu_chain[nsym_dyn];
+#endif
+  assert (endp == (void *) ((char *) hashdata->d_buf + hashdata->d_size));
+
+
+  size_t *remap = xmalloc (nsym_dyn * sizeof (size_t));
+#ifndef NDEBUG
+  size_t nsym_dyn_cnt = 1;
+#endif
+  for (size_t cnt = nsym_local; cnt < nsym; ++cnt)
+    if (symstrent[cnt] != NULL)
+      {
+	assert (ndxtosym[cnt]->outdynsymidx > 0);
+	assert (ndxtosym[cnt]->outdynsymidx < nsym_dyn);
+	remap[ndxtosym[cnt]->outdynsymidx] = cnt;
+#ifndef NDEBUG
+	++nsym_dyn_cnt;
+#endif
+      }
+  assert (nsym_dyn_cnt == nsym_dyn);
+
+  // XXX Until we can rely on qsort_r use global variables.
+  global_hashcodes = gnuhashcodes;
+  global_nbuckets = gnu_nbuckets;
+  qsort (remap + 1, nsym_dyn - 1, sizeof (size_t), sortfct_hashval);
+
+  bool bm32 = (xelf_fsize (ld_state.outelf, ELF_T_ADDR, 1)
+	       ==  sizeof (Elf32_Word));
+
+  size_t first_defined = 0;
+  Elf64_Word bitmask_idxbits = gnu_bitmask_nwords - 1;
+  Elf32_Word last_bucket = 0;
+  for (size_t cnt = 1; cnt < nsym_dyn; ++cnt)
+    {
+      if (first_defined == 0)
+	{
+	  if (! ndxtosym[remap[cnt]]->defined
+	      || ndxtosym[remap[cnt]]->in_dso)
+	    goto next;
+
+	  ((Elf32_Word *) hashdata->d_buf)[1] = first_defined = cnt;
+	}
+
+      Elf32_Word hval = gnuhashcodes[ndxtosym[remap[cnt]]->outdynsymidx];
+
+      if (bm32)
+	{
+	  Elf32_Word *bsw = &gnu_bitmask[(hval / 32) & bitmask_idxbits];
+	  assert ((void *) gnu_bitmask <= (void *) bsw);
+	  assert ((void *) bsw < (void *) gnu_buckets);
+	  *bsw |= 1 << (hval & 31);
+	  *bsw |= 1 << ((hval >> gnu_shift) & 31);
+	}
+      else
+	{
+	  Elf64_Word *bsw = &((Elf64_Word *) gnu_bitmask)[(hval / 64)
+							  & bitmask_idxbits];
+	  assert ((void *) gnu_bitmask <= (void *) bsw);
+	  assert ((void *) bsw < (void *) gnu_buckets);
+	  *bsw |= 1 << (hval & 63);
+	  *bsw |= 1 << ((hval >> gnu_shift) & 63);
+	}
+
+      size_t this_bucket = hval % gnu_nbuckets;
+      if (cnt == first_defined || this_bucket != last_bucket)
+	{
+	  if (cnt != first_defined)
+	    {
+	      /* Terminate the previous chain.  */
+	      assert ((void *) &gnu_chain[cnt - first_defined - 1] < endp);
+	      gnu_chain[cnt - first_defined - 1] |= 1;
+	    }
+
+	  assert (this_bucket < gnu_nbuckets);
+	  gnu_buckets[this_bucket] = cnt;
+	  last_bucket = this_bucket;
+	}
+
+      assert (cnt >= first_defined);
+      assert (cnt - first_defined < nsym_dyn);
+      gnu_chain[cnt - first_defined] = hval & ~1u;
+
+    next:
+      ndxtosym[remap[cnt]]->outdynsymidx = cnt;
+    }
+
+  /* Terminate the last chain.  */
+  if (first_defined != 0)
+    {
+      assert (nsym_dyn > first_defined);
+      assert (nsym_dyn - first_defined - 1 < nsym_dyn);
+      gnu_chain[nsym_dyn - first_defined - 1] |= 1;
+
+      hashdata->d_size -= first_defined * sizeof (Elf32_Word);
+    }
+  else
+    /* We do not need any hash table.  */
+    // XXX
+    do { } while (0);
+
+  free (remap);
+}
+
+
+/* Create the SysV-style hash table.  */
+static void
+create_hash (size_t nsym_local, size_t nsym, size_t nsym_dyn,
+	     Elf32_Word *hashcodes)
+{
+  size_t nbucket = 0;
+  Elf32_Word *bucket = NULL;
+  Elf32_Word *chain = NULL;
+  XElf_Shdr_vardef (shdr);
+
+  /* Determine the "optimal" bucket size.  If we also generate the
+     new-style hash function there is no need to waste effort and
+     space on the old one which should not be used.  Make it as small
+     as possible.  */
+  if (GENERATE_GNU_HASH)
+    nbucket = 1;
+  else
+    nbucket = optimal_bucket_size (hashcodes, nsym_dyn, ld_state.optlevel);
+  /* Create the .hash section data structures.  */
+  Elf_Scn *hashscn = elf_getscn (ld_state.outelf, ld_state.hashscnidx);
+  xelf_getshdr (hashscn, shdr);
+  Elf_Data *hashdata = elf_newdata (hashscn);
+  if (shdr == NULL || hashdata == NULL)
+    error (EXIT_FAILURE, 0, gettext ("\
+cannot create hash table section for output file: %s"),
+	   elf_errmsg (-1));
+
+  shdr->sh_link = ld_state.dynsymscnidx;
+  (void) xelf_update_shdr (hashscn, shdr);
+
+  hashdata->d_size = (2 + nsym_dyn + nbucket) * sizeof (Elf32_Word);
+  hashdata->d_buf = xcalloc (1, hashdata->d_size);
+  hashdata->d_align = sizeof (Elf32_Word);
+  hashdata->d_type = ELF_T_WORD;
+  hashdata->d_off = 0;
+
+  ((Elf32_Word *) hashdata->d_buf)[0] = nbucket;
+  ((Elf32_Word *) hashdata->d_buf)[1] = nsym_dyn;
+  bucket = &((Elf32_Word *) hashdata->d_buf)[2];
+  chain = &((Elf32_Word *) hashdata->d_buf)[2 + nbucket];
+
+  for (size_t cnt = nsym_local; cnt < nsym; ++cnt)
+    if (symstrent[cnt] != NULL)
+      {
+	size_t dynidx = ndxtosym[cnt]->outdynsymidx;
+	size_t hashidx = hashcodes[dynidx] % nbucket;
+	if (bucket[hashidx] == 0)
+	  bucket[hashidx] = dynidx;
+	else
+	  {
+	    hashidx = bucket[hashidx];
+	    while (chain[hashidx] != 0)
+	      hashidx = chain[hashidx];
+
+	    chain[hashidx] = dynidx;
+	  }
+      }
+}
+
+
+static void
+create_build_id_section (Elf_Scn *scn)
+{
+  /* We know how large the section will be so we can create it now.  */
+  Elf_Data *d = elf_newdata (scn);
+  if (d == NULL)
+    error (EXIT_FAILURE, 0, gettext ("cannot create build ID section: %s"),
+	   elf_errmsg (-1));
+
+  d->d_type = ELF_T_BYTE;
+  d->d_version = EV_CURRENT;
+
+  /* The note section header.  */
+  assert (sizeof (Elf32_Nhdr) == sizeof (Elf64_Nhdr));
+  d->d_size = sizeof (GElf_Nhdr);
+  /* The string is four bytes long.  */
+  d->d_size += sizeof (ELF_NOTE_GNU);
+  assert (d->d_size % 4 == 0);
+
+  if (strcmp (ld_state.build_id, "md5") == 0
+      || strcmp (ld_state.build_id, "uuid") == 0)
+    d->d_size += 16;
+  else if (strcmp (ld_state.build_id, "sha1") == 0)
+    d->d_size += 20;
+  else
+    {
+      assert (ld_state.build_id[0] == '0' && ld_state.build_id[1] == 'x');
+      /* Use an upper limit of the possible number of bytes generated
+	 from the string.  */
+      d->d_size += strlen (ld_state.build_id) / 2;
+    }
+
+  d->d_buf = xcalloc (d->d_size, 1);
+  d->d_off = 0;
+  d->d_align = 0;
+}
+
+
+static void
+compute_hash_sum (void (*hashfct) (const void *, size_t, void *), void *ctx)
+{
+  /* The call cannot fail.  */
+  size_t shstrndx;
+  (void) elf_getshdrstrndx (ld_state.outelf, &shstrndx);
+
+  const char *ident = elf_getident (ld_state.outelf, NULL);
+  bool same_byte_order = ((ident[EI_DATA] == ELFDATA2LSB
+			   && __BYTE_ORDER == __LITTLE_ENDIAN)
+			  || (ident[EI_DATA] == ELFDATA2MSB
+			      && __BYTE_ORDER == __BIG_ENDIAN));
+
+  /* Iterate over all sections to find those which are not strippable.  */
+  Elf_Scn *scn = NULL;
+  while ((scn = elf_nextscn (ld_state.outelf, scn)) != NULL)
+    {
+      /* Get the section header.  */
+      GElf_Shdr shdr_mem;
+      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
+      assert (shdr != NULL);
+
+      if (SECTION_STRIP_P (shdr, elf_strptr (ld_state.outelf, shstrndx,
+					     shdr->sh_name), true))
+	/* The section can be stripped.  Don't use it.  */
+	continue;
+
+      /* Do not look at NOBITS sections.  */
+      if (shdr->sh_type == SHT_NOBITS)
+	continue;
+
+      /* Iterate through the list of data blocks.  */
+      Elf_Data *data = NULL;
+      while ((data = INTUSE(elf_getdata) (scn, data)) != NULL)
+	/* If the file byte order is the same as the host byte order
+	   process the buffer directly.  If the data is just a stream
+	   of bytes which the library will not convert we can use it
+	   as well.  */
+	if (likely (same_byte_order) || data->d_type == ELF_T_BYTE)
+	  hashfct (data->d_buf, data->d_size, ctx);
+	else
+	  {
+	    /* Convert the data to file byte order.  */
+	    if (gelf_xlatetof (ld_state.outelf, data, data, ident[EI_DATA])
+		== NULL)
+	      error (EXIT_FAILURE, 0, gettext ("\
+cannot convert section data to file format: %s"),
+		     elf_errmsg (-1));
+
+	    hashfct (data->d_buf, data->d_size, ctx);
+
+	    /* And convert it back.  */
+	    if (gelf_xlatetom (ld_state.outelf, data, data, ident[EI_DATA])
+		== NULL)
+	      error (EXIT_FAILURE, 0, gettext ("\
+cannot convert section data to memory format: %s"),
+		     elf_errmsg (-1));
+	  }
+    }
+}
+
+
+/* Iterate over the sections */
+static void
+compute_build_id (void)
+{
+  Elf_Data *d = elf_getdata (elf_getscn (ld_state.outelf,
+					 ld_state.buildidscnidx), NULL);
+  assert (d != NULL);
+
+  GElf_Nhdr *hdr = d->d_buf;
+  hdr->n_namesz = sizeof (ELF_NOTE_GNU);
+  hdr->n_type = NT_GNU_BUILD_ID;
+  char *dp = mempcpy (hdr + 1, ELF_NOTE_GNU, sizeof (ELF_NOTE_GNU));
+
+  if (strcmp (ld_state.build_id, "sha1") == 0)
+    {
+      /* Compute the SHA1 sum of various parts of the generated file.
+	 We compute the hash sum over the external representation.  */
+      struct sha1_ctx ctx;
+      sha1_init_ctx (&ctx);
+
+      /* Compute the hash sum by running over all sections.  */
+      compute_hash_sum ((void (*) (const void *, size_t, void *)) sha1_process_bytes,
+			&ctx);
+
+      /* We are done computing the checksum.  */
+      (void) sha1_finish_ctx (&ctx, dp);
+
+      hdr->n_descsz = SHA1_DIGEST_SIZE;
+    }
+  else if (strcmp (ld_state.build_id, "md5") == 0)
+    {
+      /* Compute the MD5 sum of various parts of the generated file.
+	 We compute the hash sum over the external representation.  */
+      struct md5_ctx ctx;
+      md5_init_ctx (&ctx);
+
+      /* Compute the hash sum by running over all sections.  */
+      compute_hash_sum ((void (*) (const void *, size_t, void *)) md5_process_bytes,
+			&ctx);
+
+      /* We are done computing the checksum.  */
+      (void) md5_finish_ctx (&ctx, dp);
+
+      hdr->n_descsz = MD5_DIGEST_SIZE;
+    }
+  else if (strcmp (ld_state.build_id, "uuid") == 0)
+    {
+      int fd = open ("/dev/urandom", O_RDONLY);
+      if (fd == -1)
+	error (EXIT_FAILURE, errno, gettext ("cannot open '%s'"),
+	       "/dev/urandom");
+
+      if (TEMP_FAILURE_RETRY (read (fd, dp, 16)) != 16)
+	error (EXIT_FAILURE, 0, gettext ("cannot read enough data for UUID"));
+
+      close (fd);
+
+      hdr->n_descsz = 16;
+    }
+  else
+    {
+      const char *cp = ld_state.build_id + 2;
+
+      /* The form of the string has been verified before so here we can
+	 simplify the scanning.  */
+      do
+	{
+	  if (isxdigit (cp[0]))
+	    {
+	      char ch1 = tolower (cp[0]);
+	      char ch2 = tolower (cp[1]);
+
+	      *dp++ = (((isdigit (ch1) ? ch1 - '0' : ch1 - 'a' + 10) << 4)
+		       | (isdigit (ch2) ? ch2 - '0' : ch2 - 'a' + 10));
+	    }
+	  else
+	    ++cp;
+	}
+      while (*cp != '\0');
+    }
+}
+
+
 /* Create the output file.
 
    For relocatable files what basically has to happen is that all
@@ -3775,6 +4341,7 @@ ld_generic_create_outfile (struct ld_state *statep)
   Elf_Data *dynsymdata = NULL;
   Elf_Data *dynstrdata = NULL;
   Elf32_Word *hashcodes = NULL;
+  Elf32_Word *gnuhashcodes = NULL;
   size_t nsym_dyn_allocated = 0;
   Elf_Scn *versymscn = NULL;
   Elf_Data *versymdata = NULL;
@@ -3914,6 +4481,17 @@ ld_generic_create_outfile (struct ld_state *statep)
 
 	  /* Give the backend the change to initialize the section.  */
 	  INITIALIZE_GOT (&ld_state, scn);
+
+	  continue;
+	}
+
+      if (unlikely (head->kind == scn_dot_gotplt))
+	{
+	  /* Remember the index of this section.  */
+	  ld_state.gotpltscnidx = elf_ndxscn (scn);
+
+	  /* Give the backend the change to initialize the section.  */
+	  INITIALIZE_GOTPLT (&ld_state, scn);
 
 	  continue;
 	}
@@ -4060,6 +4638,14 @@ ld_generic_create_outfile (struct ld_state *statep)
 	  continue;
 	}
 
+      if (unlikely (head->kind == scn_dot_gnu_hash))
+	{
+	  /* Remember the index of this section.  */
+	  ld_state.gnuhashscnidx = elf_ndxscn (scn);
+
+	  continue;
+	}
+
       if (unlikely (head->kind == scn_dot_plt))
 	{
 	  /* Remember the index of this section.  */
@@ -4094,6 +4680,16 @@ ld_generic_create_outfile (struct ld_state *statep)
 	{
 	  /* Remember the index of this section.  */
 	  ld_state.verneedscnidx = elf_ndxscn (scn);
+
+	  continue;
+	}
+
+      if (unlikely (head->kind == scn_dot_note_gnu_build_id))
+	{
+	  /* Remember the index of this section.  */
+	  ld_state.buildidscnidx = elf_ndxscn (scn);
+
+	  create_build_id_section (scn);
 
 	  continue;
 	}
@@ -4572,7 +5168,8 @@ ld_generic_create_outfile (struct ld_state *statep)
   if (ld_state.got_symbol != NULL)
     {
       assert (nsym < nsym_allocated);
-      fillin_special_symbol (ld_state.got_symbol, ld_state.gotscnidx,
+      // XXX Fix so that it works even if no PLT is needed.
+      fillin_special_symbol (ld_state.got_symbol, ld_state.gotpltscnidx,
 			     nsym++, symdata, strtab);
     }
 
@@ -4873,6 +5470,10 @@ section index too large in dynamic symbol table"));
 
 	  if (reduce_symbol_p (sym, symstrent[cnt]))
 	    {
+	      // XXX Check whether this is correct...
+	      assert (ndxtosym[cnt]->outdynsymidx != 0);
+	      ndxtosym[cnt]->outdynsymidx = 0;
+
 	      sym->st_info = XELF_ST_INFO (STB_LOCAL,
 					   XELF_ST_TYPE (sym->st_info));
 	      (void) xelf_update_sym (symdata, cnt, sym);
@@ -5190,7 +5791,7 @@ section index too large in dynamic symbol table"));
 		  gelf_getversym (symp->file->versymdata, symp->symidx,
 				  &versym);
 
-		  (void) gelf_update_versym (versymdata, nsym_dyn,
+		  (void) gelf_update_versym (versymdata, symp->outdynsymidx,
 					     &symp->file->verdefused[versym]);
 		}
 	      }
@@ -5229,15 +5830,15 @@ cannot create dynamic symbol table for output file: %s"),
 
       /* We need one more array which contains the hash codes of the
 	 symbol names.  */
-      hashcodes = (Elf32_Word *) xcalloc (nsym_dyn_allocated,
+      hashcodes = (Elf32_Word *) xcalloc (__builtin_popcount ((int) ld_state.hash_style)
+					  * nsym_dyn_allocated,
 					  sizeof (Elf32_Word));
+      gnuhashcodes = hashcodes;
+      if (GENERATE_SYSV_HASH)
+	gnuhashcodes += nsym_dyn_allocated;
 
       /* We have and empty entry at the beginning.  */
       nsym_dyn = 1;
-
-      /* We don't mix PLT symbols and others.  */
-      size_t plt_idx = 1;
-      size_t obj_idx = 1 + ld_state.nplt;
 
       /* Populate the table.  */
       for (cnt = nsym_local; cnt < nsym; ++cnt)
@@ -5270,20 +5871,43 @@ section index too large in dynamic symbol table"));
 	      continue;
 	    }
 
-	  size_t idx;
-	  if (ndxtosym[cnt]->in_dso && ndxtosym[cnt]->type == STT_FUNC)
-	    {
-	      idx = plt_idx++;
-	      assert (idx < 1 + ld_state.nplt);
-	    }
-	  else
-	    {
-	      idx = obj_idx++;
-	      assert (idx < nsym_dyn_allocated);
-	    }
+	  /* Store the index of the symbol in the dynamic symbol
+	     table.  This is a preliminary value in case we use the
+	     GNU-style hash table.  */
+	  ndxtosym[cnt]->outdynsymidx = nsym_dyn;
+
+	  /* Create a new string table entry.  */
+	  const char *str = ndxtosym[cnt]->name;
+	  symstrent[cnt] = ebl_strtabadd (dynstrtab, str, 0);
+	  if (GENERATE_SYSV_HASH)
+	    hashcodes[nsym_dyn] = elf_hash (str);
+	  if (GENERATE_GNU_HASH)
+	    gnuhashcodes[nsym_dyn] = elf_gnu_hash (str);
+	  ++nsym_dyn;
+	}
+
+      if (ld_state.file_type != relocatable_file_type)
+	{
+	  /* Finalize the dynamic string table.  */
+	  ebl_strtabfinalize (dynstrtab, dynstrdata);
+
+	  assert (ld_state.hashscnidx != 0 || ld_state.gnuhashscnidx != 0);
+
+	  /* Create the GNU-style hash table.  */
+	  if (GENERATE_GNU_HASH)
+	    create_gnu_hash (nsym_local, nsym, nsym_dyn, gnuhashcodes);
+
+	  /* Create the SysV-style hash table.  This has to happen
+	     after the GNU-style table is created since
+	     CREATE-GNU-HASH might reorder the dynamic symbol table.  */
+	  if (GENERATE_SYSV_HASH)
+	    create_hash (nsym_local, nsym, nsym_dyn, hashcodes);
+	}
 
 	  /* Add the version information.  */
-	  if (versymdata != NULL)
+      if (versymdata != NULL)
+	for (cnt = nsym_local; cnt < nsym; ++cnt)
+	  if (symstrent[cnt] != NULL)
 	    {
 	      struct symbol *symp = ndxtosym[cnt];
 
@@ -5296,28 +5920,16 @@ section index too large in dynamic symbol table"));
 		  gelf_getversym (symp->file->versymdata, symp->symidx,
 				  &versym);
 
-		  (void) gelf_update_versym (versymdata, idx,
+		  (void) gelf_update_versym (versymdata, symp->outdynsymidx,
 					     &symp->file->verdefused[versym]);
 		}
 	      else
 		{
 		  /* XXX Add support for version definitions.  */
 		  GElf_Versym global = VER_NDX_GLOBAL;
-		  (void) gelf_update_versym (versymdata, idx, &global);
+		  (void) gelf_update_versym (versymdata, nsym_dyn, &global);
 		}
 	    }
-
-	  /* Store the index of the symbol in the dynamic symbol table.  */
-	  ndxtosym[cnt]->outdynsymidx = idx;
-
-	  /* Create a new string table entry.  */
-	  const char *str = ndxtosym[cnt]->name;
-	  symstrent[cnt] = ebl_strtabadd (dynstrtab, str, 0);
-	  hashcodes[idx] = elf_hash (str);
-	  ++nsym_dyn;
-	}
-      assert (nsym_dyn == obj_idx);
-      assert (ld_state.nplt + 1 == plt_idx);
 
       /* Update the information about the symbol section.  */
       if (versymdata != NULL)
@@ -5339,46 +5951,6 @@ section index too large in dynamic symbol table"));
 
   if (ld_state.file_type != relocatable_file_type)
     {
-      size_t nbucket;
-      Elf32_Word *bucket;
-      Elf32_Word *chain;
-      size_t nchain;
-      Elf_Scn *hashscn;
-      Elf_Data *hashdata;
-
-      /* Finalize the dynamic string table.  */
-      ebl_strtabfinalize (dynstrtab, dynstrdata);
-
-      /* Determine the "optimal" bucket size.  */
-      nbucket = optimal_bucket_size (hashcodes, nsym_dyn, ld_state.optlevel);
-
-      /* Create the .hash section data structures.  */
-      assert (ld_state.hashscnidx != 0);
-      hashscn = elf_getscn (ld_state.outelf, ld_state.hashscnidx);
-      xelf_getshdr (hashscn, shdr);
-      hashdata = elf_newdata (hashscn);
-      if (shdr == NULL || hashdata == NULL)
-	error (EXIT_FAILURE, 0, gettext ("\
-cannot create hash table section for output file: %s"),
-	       elf_errmsg (-1));
-
-      shdr->sh_link = ld_state.dynsymscnidx;
-      (void) xelf_update_shdr (hashscn, shdr);
-
-      hashdata->d_size = (2 + nsym_dyn + nbucket) * sizeof (Elf32_Word);
-      hashdata->d_buf = xcalloc (1, hashdata->d_size);
-      hashdata->d_align = sizeof (Elf32_Word);
-      hashdata->d_type = ELF_T_WORD;
-      hashdata->d_off = 0;
-
-      ((Elf32_Word *) hashdata->d_buf)[0] = nbucket;
-      ((Elf32_Word *) hashdata->d_buf)[1] = nsym_dyn;
-      bucket = &((Elf32_Word *) hashdata->d_buf)[2];
-      chain = &((Elf32_Word *) hashdata->d_buf)[2 + nbucket];
-
-      /* Haven't yet filled in any chain value.  */
-      nchain = 0;
-
       /* Now put the names in.  */
       for (cnt = nsym_local; cnt < nsym; ++cnt)
 	if (symstrent[cnt] != NULL)
@@ -5399,26 +5971,9 @@ cannot create hash table section for output file: %s"),
 	    sym->st_name = ebl_strtaboffset (symstrent[cnt]);
 
 	    (void) xelf_update_sym (dynsymdata, dynidx, sym);
-
-	    /* Add to the hash table.  */
-	    size_t hashidx = hashcodes[dynidx] % nbucket;
-	    if (bucket[hashidx] == 0)
-	      bucket[hashidx] = dynidx;
-	    else
-	      {
-		hashidx = bucket[hashidx];
-		while (chain[hashidx] != 0)
-		  hashidx = chain[hashidx];
-
-		chain[hashidx] = dynidx;
-	      }
 	  }
 
       free (hashcodes);
-
-      /* We don't need the map from the symbol table index to the symbol
-	 structure anymore.  */
-      free (ndxtosym);
 
       /* Create the required version section.  */
       if (ld_state.verneedscnidx != 0)
@@ -5492,10 +6047,6 @@ cannot create hash table section for output file: %s"),
       /* Write the updated info back.  */
       (void) xelf_update_shdr (dynsymscn, shdr);
     }
-  else
-    /* We don't need the map from the symbol table index to the symbol
-       structure anymore.  */
-    free (ndxtosym);
 
   /* We don't need the string table anymore.  */
   free (symstrent);
@@ -5665,13 +6216,6 @@ cannot create hash table section for output file: %s"),
 
   if (ld_state.file_type != relocatable_file_type)
     {
-      size_t nphdr;
-      XElf_Addr addr;
-      struct output_segment *segment;
-      Elf_Scn *scn;
-      Elf32_Word nsec;
-      XElf_Phdr_vardef (phdr);
-
       /* Every executable needs a program header.  The number of entries
 	 varies.  One exists for each segment.  Each SHT_NOTE section gets
 	 one, too.  For dynamically linked executables we have to create
@@ -5679,12 +6223,12 @@ cannot create hash table section for output file: %s"),
 	 section.  First count the number of segments.
 
 	 XXX Determine whether the segment is non-empty.  */
-      nphdr = 0;
+      size_t nphdr = 0;
 
       /* We always add a PT_GNU_stack entry.  */
       ++nphdr;
 
-      segment = ld_state.output_segments;
+      struct output_segment *segment = ld_state.output_segments;
       while (segment != NULL)
 	{
 	  ++nphdr;
@@ -5705,7 +6249,12 @@ cannot create hash table section for output file: %s"),
 	    nphdr += 2;
 	}
 
+      /* If we need a TLS segment we need an entry for that.  */
+      if (ld_state.need_tls)
+	++nphdr;
+
       /* Create the program header structure.  */
+      XElf_Phdr_vardef (phdr);
       if (xelf_newphdr (ld_state.outelf, nphdr) == 0)
 	error (EXIT_FAILURE, 0, gettext ("cannot create program header: %s"),
 	       elf_errmsg (-1));
@@ -5721,14 +6270,20 @@ cannot create hash table section for output file: %s"),
 
       /* Now determine the memory addresses of all the sections and
 	 segments.  */
-      nsec = 0;
-      scn = elf_getscn (ld_state.outelf, ld_state.allsections[nsec]->scnidx);
+      Elf32_Word nsec = 0;
+      Elf_Scn *scn = elf_getscn (ld_state.outelf,
+				 ld_state.allsections[nsec]->scnidx);
       xelf_getshdr (scn, shdr);
       assert (shdr != NULL);
 
       /* The address we start with is the offset of the first (not
 	 zeroth) section.  */
-      addr = shdr->sh_offset;
+      XElf_Addr addr = shdr->sh_offset;
+      XElf_Addr tls_offset = 0;
+      XElf_Addr tls_start = ~((XElf_Addr) 0);
+      XElf_Addr tls_end = 0;
+      XElf_Off tls_filesize = 0;
+      XElf_Addr tls_align = 0;
 
       /* The index of the first loadable segment.  */
       nphdr = 0;
@@ -5748,15 +6303,13 @@ cannot create hash table section for output file: %s"),
 	  XElf_Off nobits_size = 0;
 	  XElf_Off memsize = 0;
 
-	  /* the minimum alignment is a page size.  */
+	  /* The minimum alignment is a page size.  */
 	  segment->align = ld_state.pagesize;
 
 	  for (orule = segment->output_rules; orule != NULL;
 	       orule = orule->next)
 	    if (orule->tag == output_section)
 	      {
-		XElf_Off oldoff;
-
 		/* See whether this output rule corresponds to the next
 		   section.  Yes, this is a pointer comparison.  */
 		if (ld_state.allsections[nsec]->name
@@ -5786,6 +6339,22 @@ cannot create hash table section for output file: %s"),
 
 		    /* Remember the address.  */
 		    ld_state.allsections[nsec]->addr = addr;
+
+		    /* Handle TLS sections.  */
+		    if (unlikely (shdr->sh_flags & SHF_TLS))
+		      {
+			if (tls_start > addr)
+			  {
+			    tls_start = addr;
+			    tls_offset = shdr->sh_offset;
+			  }
+			if (tls_end < addr + shdr->sh_size)
+			  tls_end = addr + shdr->sh_size;
+			if (shdr->sh_type != SHT_NOBITS)
+			  tls_filesize += shdr->sh_size;
+			if (shdr->sh_addralign > tls_align)
+			  tls_align = shdr->sh_addralign;
+		      }
 		  }
 
 		if (first_section)
@@ -5808,12 +6377,19 @@ cannot create hash table section for output file: %s"),
 		    first_section = false;
 		  }
 
-		memsize = shdr->sh_offset - segment->offset + shdr->sh_size;
-		if (nobits_size != 0 && shdr->sh_type != SHT_NOTE)
-		  error (EXIT_FAILURE, 0, gettext ("\
-internal error: nobits section follows nobits section"));
-		if (shdr->sh_type == SHT_NOBITS)
-		  nobits_size += shdr->sh_size;
+		/* NOBITS TLS sections are not laid out in address space
+		   along with the other sections.  */
+		if (shdr->sh_type != SHT_NOBITS
+		    || (shdr->sh_flags & SHF_TLS) == 0)
+		  {
+		    memsize = (shdr->sh_offset - segment->offset
+			       + shdr->sh_size);
+		    if (nobits_size != 0 && shdr->sh_type != SHT_NOTE)
+		      error (EXIT_FAILURE, 0, gettext ("\
+internal error: non-nobits section follows nobits section"));
+		    if (shdr->sh_type == SHT_NOBITS)
+		      nobits_size += shdr->sh_size;
+		  }
 
 		/* Determine the new address which is computed using
 		   the difference of the offsets on the sections.  Note
@@ -5821,7 +6397,7 @@ internal error: nobits section follows nobits section"));
 		   other in the section header table are also
 		   consecutive in the file.  This is true here because
 		   libelf constructs files this way.  */
-		oldoff = shdr->sh_offset;
+		XElf_Off oldoff = shdr->sh_offset;
 
 		if (++nsec >= ld_state.nallsections)
 		  break;
@@ -5896,6 +6472,25 @@ internal error: nobits section follows nobits section"));
       xelf_getehdr (ld_state.outelf, ehdr);
       assert (ehdr != NULL);
 
+      /* Add the TLS information.  */
+      if (ld_state.need_tls)
+	{
+	  xelf_getphdr_ptr (ld_state.outelf, nphdr, phdr);
+	  phdr->p_type = PT_TLS;
+	  phdr->p_offset = tls_offset;
+	  phdr->p_vaddr = tls_start;
+	  phdr->p_paddr = tls_start;
+	  phdr->p_filesz = tls_filesize;
+	  phdr->p_memsz = tls_end - tls_start;
+	  phdr->p_flags = PF_R;
+	  phdr->p_align = tls_align;
+	  ld_state.tls_tcb = tls_end;
+	  ld_state.tls_start = tls_start;
+
+	  (void) xelf_update_phdr (ld_state.outelf, nphdr, phdr);
+	  ++nphdr;
+	}
+
       /* Add the stack information.  */
       xelf_getphdr_ptr (ld_state.outelf, nphdr, phdr);
       phdr->p_type = PT_GNU_STACK;
@@ -5904,8 +6499,9 @@ internal error: nobits section follows nobits section"));
       phdr->p_paddr = 0;
       phdr->p_filesz = 0;
       phdr->p_memsz = 0;
-      phdr->p_flags = ld_state.execstack == execstack_true ? PF_X : 0;
-      phdr->p_align = 0;
+      phdr->p_flags = (PF_R | PF_W
+		       | (ld_state.execstack == execstack_true ? PF_X : 0));
+      phdr->p_align = xelf_fsize (ld_state.outelf, ELF_T_ADDR, 1);
 
       (void) xelf_update_phdr (ld_state.outelf, nphdr, phdr);
       ++nphdr;
@@ -5957,7 +6553,6 @@ internal error: nobits section follows nobits section"));
 		(void) xelf_update_sym (dynsymdata, cnt, sym);
 	      }
 	  }
-
 
       /* Now is a good time to determine the values of all the symbols
 	 we encountered.  */
@@ -6169,8 +6764,9 @@ internal error: nobits section follows nobits section"));
 	  /* Add the entries related to the .plt.  */
 	  if (ld_state.nplt > 0)
 	    {
-	      xelf_getshdr (elf_getscn (ld_state.outelf, ld_state.gotscnidx),
-			    shdr);
+	      // XXX Make this work if there is no PLT
+	      xelf_getshdr (elf_getscn (ld_state.outelf,
+					ld_state.gotpltscnidx), shdr);
 	      assert (shdr != NULL);
 	      new_dynamic_entry (dyndata, ld_state.ndynamic_filled++,
 				 // XXX This should probably be machine
@@ -6350,8 +6946,18 @@ internal error: nobits section follows nobits section"));
   free (ld_state.dblindirect);
 
 
-  /* Finalize the .plt section the what belongs to them.  */
-  FINALIZE_PLT (statep, nsym, nsym_dyn);
+  /* Finalize the .plt section and what else belongs to it.  */
+  FINALIZE_PLT (statep, nsym, nsym_local, ndxtosym);
+
+
+  /* Finally, if we have to compute the build ID.  */
+  if (ld_state.build_id != NULL)
+    compute_build_id ();
+
+
+  /* We don't need the map from the symbol table index to the symbol
+     structure anymore.  */
+  free (ndxtosym);
 
   return 0;
 }
@@ -6483,7 +7089,19 @@ ld_generic_initialize_got (struct ld_state *statep, Elf_Scn *scn)
 
 
 static void
-ld_generic_finalize_plt (struct ld_state *statep, size_t nsym, size_t nsym_dyn)
+ld_generic_initialize_gotplt (struct ld_state *statep, Elf_Scn *scn)
+{
+  /* This cannot be implemented generally.  There should have been a
+     machine dependent implementation and we should never have arrived
+     here.  */
+  error (EXIT_FAILURE, 0, gettext ("no machine specific '%s' implementation"),
+	 "initialize_gotplt");
+}
+
+
+static void
+ld_generic_finalize_plt (struct ld_state *statep, size_t nsym, size_t nsym_dyn,
+			 struct symbol **ndxtosymp)
 {
   /* By default we assume that nothing has to be done.  */
 }

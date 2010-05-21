@@ -177,7 +177,68 @@ ELFUTILS_0.130 {
     *;
 } ELFUTILS_0.127;
 
-ELFUTILS_0.131 {
+ELFUTILS_0.136 {
+  global:
+    dwfl_addrsegment;
+    dwfl_report_segment;
+
+  local:
+    *;
+} ELFUTILS_0.130;
+
+ELFUTILS_0.138 {
+  global:
+    # Replaced ELFUTILS_0.130 version, which has bug-compatibility wrapper.
+    dwfl_module_build_id;
+
+  local:
+    *;
+} ELFUTILS_0.136;
+
+ELFUTILS_0.142 {
+  global:
+    dwarf_next_cfi;
+    dwarf_getcfi;
+    dwarf_getcfi_elf;
+    dwarf_cfi_addrframe;
+    dwarf_cfi_end;
+    dwarf_frame_cfa;
+    dwarf_frame_register;
+    dwarf_frame_info;
+
+    dwfl_module_dwarf_cfi;
+    dwfl_module_eh_cfi;
+} ELFUTILS_0.138;
+
+ELFUTILS_0.143 {
+  global:
+    dwarf_getlocation_implicit_value;
+
+    # Replaced ELFUTILS_0.122 versions.  Both versions point to the
+    # same implementation, but users of the new symbol version can
+    # presume that they use dwarf_attr_integrate properly.
+    dwarf_arrayorder;
+    dwarf_bitoffset;
+    dwarf_bitsize;
+    dwarf_bytesize;
+    dwarf_decl_column;
+    dwarf_decl_file;
+    dwarf_decl_line;
+    dwarf_srclang;
+
+} ELFUTILS_0.142;
+
+ELFUTILS_0.144 {
+  global:
+    dwarf_aggregate_size;
+} ELFUTILS_0.143;
+
+ELFUTILS_0.146 {
+  global:
+    dwfl_core_file_report;
+} ELFUTILS_0.144;
+
+ELFUTILS_XXX {
   global:
     dwfl_register_map;
     dwfl_register_map_begin;
@@ -188,7 +249,4 @@ ELFUTILS_0.131 {
     dwfl_core_file_find_elf;
     dwfl_core_file_register_map;
     dwfl_core_file_read_note;
-
-  local:
-    *;
-} ELFUTILS_0.130;
+} ELFUTILS_0.144;

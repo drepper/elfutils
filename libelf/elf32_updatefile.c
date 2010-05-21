@@ -1,5 +1,5 @@
 /* Write changed data structures.
-   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -126,11 +126,10 @@ int
 internal_function
 __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 {
-  ElfW2(LIBELFBITS,Ehdr) *ehdr;
-  char *last_position;
+  bool previous_scn_changed = false;
 
   /* We need the ELF header several times.  */
-  ehdr = elf->state.ELFW(elf,LIBELFBITS).ehdr;
+  ElfW2(LIBELFBITS,Ehdr) *ehdr = elf->state.ELFW(elf,LIBELFBITS).ehdr;
 
   /* Write out the ELF header.  */
   if ((elf->state.ELFW(elf,LIBELFBITS).ehdr_flags | elf->flags) & ELF_F_DIRTY)
@@ -160,7 +159,15 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 		sizeof (ElfW2(LIBELFBITS,Ehdr)));
 
       elf->state.ELFW(elf,LIBELFBITS).ehdr_flags &= ~ELF_F_DIRTY;
+
+      /* We start writing sections after the ELF header only if there is
+	 no program header.  */
+      previous_scn_changed = elf->state.ELFW(elf,LIBELFBITS).phdr == NULL;
     }
+
+  size_t phnum;
+  if (unlikely (__elf_getphdrnum_rdlock (elf, &phnum) != 0))
+    return -1;
 
   /* Write out the program header table.  */
   if (elf->state.ELFW(elf,LIBELFBITS).phdr != NULL
@@ -192,22 +199,26 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 	  /* Do the real work.  */
 	  (*fctp) (elf->map_address + elf->start_offset + ehdr->e_phoff,
 		   elf->state.ELFW(elf,LIBELFBITS).phdr,
-		   sizeof (ElfW2(LIBELFBITS,Phdr)) * ehdr->e_phnum, 1);
+		   sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum, 1);
 	}
       else
 	memcpy (elf->map_address + elf->start_offset + ehdr->e_phoff,
 		elf->state.ELFW(elf,LIBELFBITS).phdr,
-		sizeof (ElfW2(LIBELFBITS,Phdr)) * ehdr->e_phnum);
+		sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum);
 
       elf->state.ELFW(elf,LIBELFBITS).phdr_flags &= ~ELF_F_DIRTY;
+
+      /* We modified the program header.  Maybe this created a gap so
+	 we have to write fill bytes, if necessary.  */
+      previous_scn_changed = true;
     }
 
   /* From now on we have to keep track of the last position to eventually
      fill the gaps with the prescribed fill byte.  */
-  last_position = ((char *) elf->map_address + elf->start_offset
-		   + MAX (elf_typesize (LIBELFBITS, ELF_T_EHDR, 1),
-			  ehdr->e_phoff)
-		   + elf_typesize (LIBELFBITS, ELF_T_PHDR, ehdr->e_phnum));
+  char *last_position = ((char *) elf->map_address + elf->start_offset
+			 + MAX (elf_typesize (LIBELFBITS, ELF_T_EHDR, 1),
+				ehdr->e_phoff)
+			 + elf_typesize (LIBELFBITS, ELF_T_PHDR, phnum));
 
   /* Write all the sections.  Well, only those which are modified.  */
   if (shnum > 0)
@@ -283,45 +294,70 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
       for (size_t cnt = 0; cnt < shnum; ++cnt)
 	{
 	  Elf_Scn *scn = scns[cnt];
+	  if (scn->index == 0)
+	    {
+	      /* The dummy section header entry.  It should not be
+		 possible to mark this "section" as dirty.  */
+	      assert ((scn->flags & ELF_F_DIRTY) == 0);
+	      continue;
+	    }
 
 	  ElfW2(LIBELFBITS,Shdr) *shdr = scn->shdr.ELFW(e,LIBELFBITS);
+	  if (shdr->sh_type == SHT_NOBITS)
+	    goto next;
 
 	  char *scn_start = ((char *) elf->map_address
 			     + elf->start_offset + shdr->sh_offset);
 	  Elf_Data_List *dl = &scn->data_list;
+	  bool scn_changed = false;
 
-	  if (shdr->sh_type != SHT_NOBITS && scn->data_list_rear != NULL)
+	  void fill_mmap (size_t offset)
+	  {
+	    size_t written = 0;
+
+	    if (last_position < shdr_start)
+	      {
+		written = MIN (scn_start + offset - last_position,
+			       shdr_start - last_position);
+
+		memset (last_position, __libelf_fill_byte, written);
+	      }
+
+	    if (last_position + written != scn_start + offset
+		&& shdr_end < scn_start + offset)
+	      {
+		char *fill_start = MAX (shdr_end, scn_start);
+		memset (fill_start, __libelf_fill_byte,
+			scn_start + offset - fill_start);
+	      }
+	  }
+
+	  if (scn->data_list_rear != NULL)
 	    do
 	      {
+		assert (dl->data.d.d_off >= 0);
+		assert ((GElf_Off) dl->data.d.d_off <= shdr->sh_size);
+		assert (dl->data.d.d_size <= (shdr->sh_size
+					      - (GElf_Off) dl->data.d.d_off));
+
+		/* If there is a gap, fill it.  */
+		if (scn_start + dl->data.d.d_off > last_position
+		    && (dl->data.d.d_off == 0
+			|| ((scn->flags | dl->flags | elf->flags)
+			    & ELF_F_DIRTY) != 0))
+		  {
+		    fill_mmap (dl->data.d.d_off);
+		    last_position = scn_start + dl->data.d.d_off;
+		  }
+
 		if ((scn->flags | dl->flags | elf->flags) & ELF_F_DIRTY)
 		  {
-		    if (scn_start + dl->data.d.d_off != last_position)
-		      {
-			if (scn_start + dl->data.d.d_off > last_position)
-			  {
-			    /* This code assumes that the data blocks for
-			       a section are ordered by offset.  */
-			    size_t written = 0;
+		    /* Let it go backward if the sections use a bogus
+		       layout with overlaps.  We'll overwrite the stupid
+		       user's section data with the latest one, rather than
+		       crashing.  */
 
-			    if (last_position < shdr_start)
-			      {
-				written = MIN (scn_start + dl->data.d.d_off
-					       - last_position,
-					       shdr_start - last_position);
-
-				memset (last_position, __libelf_fill_byte,
-					written);
-			      }
-
-			    if (last_position + written
-				!= scn_start + dl->data.d.d_off
-				&& shdr_end < scn_start + dl->data.d.d_off)
-			      memset (shdr_end, __libelf_fill_byte,
-				      scn_start + dl->data.d.d_off - shdr_end);
-
-			    last_position = scn_start + dl->data.d.d_off;
-			  }
-		      }
+		    last_position = scn_start + dl->data.d.d_off;
 
 		    if (unlikely (change_bo))
 		      {
@@ -343,19 +379,34 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 		      last_position = mempcpy (last_position,
 					       dl->data.d.d_buf,
 					       dl->data.d.d_size);
+
+		    scn_changed = true;
 		  }
 		else
 		  last_position += dl->data.d.d_size;
+
+		assert (scn_start + dl->data.d.d_off + dl->data.d.d_size
+			== last_position);
 
 		dl->flags &= ~ELF_F_DIRTY;
 
 		dl = dl->next;
 	      }
 	    while (dl != NULL);
-	  else if (shdr->sh_type != SHT_NOBITS && scn->index != 0)
-	    /* We have to trust the existing section header information.  */
-	    last_position += shdr->sh_size;
+	  else
+	    {
+	      /* If the previous section (or the ELF/program
+		 header) changed we might have to fill the gap.  */
+	      if (scn_start > last_position && previous_scn_changed)
+		fill_mmap (0);
 
+	      /* We have to trust the existing section header information.  */
+	      last_position = scn_start + shdr->sh_size;
+	    }
+
+
+	  previous_scn_changed = scn_changed;
+	next:
 	  scn->flags &= ~ELF_F_DIRTY;
 	}
 
@@ -460,6 +511,7 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 {
   char fillbuf[FILLBUFSIZE];
   size_t filled = 0;
+  bool previous_scn_changed = false;
 
   /* We need the ELF header several times.  */
   ElfW2(LIBELFBITS,Ehdr) *ehdr = elf->state.ELFW(elf,LIBELFBITS).ehdr;
@@ -503,12 +555,20 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 	}
 
       elf->state.ELFW(elf,LIBELFBITS).ehdr_flags &= ~ELF_F_DIRTY;
+
+      /* We start writing sections after the ELF header only if there is
+	 no program header.  */
+      previous_scn_changed = elf->state.ELFW(elf,LIBELFBITS).phdr == NULL;
     }
 
   /* If the type sizes should be different at some time we have to
      rewrite this code.  */
   assert (sizeof (ElfW2(LIBELFBITS,Phdr))
 	  == elf_typesize (LIBELFBITS, ELF_T_PHDR, 1));
+
+  size_t phnum;
+  if (unlikely (__elf_getphdrnum_rdlock (elf, &phnum) != 0))
+    return -1;
 
   /* Write out the program header table.  */
   if (elf->state.ELFW(elf,LIBELFBITS).phdr != NULL
@@ -539,7 +599,7 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 
 	  /* Allocate sufficient memory.  */
 	  tmp_phdr = (ElfW2(LIBELFBITS,Phdr) *)
-	    malloc (sizeof (ElfW2(LIBELFBITS,Phdr)) * ehdr->e_phnum);
+	    malloc (sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum);
 	  if (tmp_phdr == NULL)
 	    {
 	      __libelf_seterrno (ELF_E_NOMEM);
@@ -548,14 +608,14 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 
 	  /* Write the converted ELF header in a temporary buffer.  */
 	  (*fctp) (tmp_phdr, elf->state.ELFW(elf,LIBELFBITS).phdr,
-		   sizeof (ElfW2(LIBELFBITS,Phdr)) * ehdr->e_phnum, 1);
+		   sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum, 1);
 
 	  /* This is the buffer we want to write.  */
 	  out_phdr = tmp_phdr;
 	}
 
       /* Write out the ELF header.  */
-      size_t phdr_size = sizeof (ElfW2(LIBELFBITS,Phdr)) * ehdr->e_phnum;
+      size_t phdr_size = sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum;
       if (unlikely ((size_t) pwrite_retry (elf->fildes, out_phdr,
 					   phdr_size, ehdr->e_phoff)
 		    != phdr_size))
@@ -568,6 +628,10 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
       free (tmp_phdr);
 
       elf->state.ELFW(elf,LIBELFBITS).phdr_flags &= ~ELF_F_DIRTY;
+
+      /* We modified the program header.  Maybe this created a gap so
+	 we have to write fill bytes, if necessary.  */
+      previous_scn_changed = true;
     }
 
   /* From now on we have to keep track of the last position to eventually
@@ -576,8 +640,7 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
   if (elf->state.ELFW(elf,LIBELFBITS).phdr == NULL)
     last_offset = elf_typesize (LIBELFBITS, ELF_T_EHDR, 1);
   else
-    last_offset = (ehdr->e_phoff
-		   + sizeof (ElfW2(LIBELFBITS,Phdr)) * ehdr->e_phnum);
+    last_offset = (ehdr->e_phoff + sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum);
 
   /* Write all the sections.  Well, only those which are modified.  */
   if (shnum > 0)
@@ -606,33 +669,49 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
       for (size_t cnt = 0; cnt < shnum; ++cnt)
 	{
 	  Elf_Scn *scn = scns[cnt];
+	  if (scn->index == 0)
+	    {
+	      /* The dummy section header entry.  It should not be
+		 possible to mark this "section" as dirty.  */
+	      assert ((scn->flags & ELF_F_DIRTY) == 0);
+	      goto next;
+	    }
 
 	  ElfW2(LIBELFBITS,Shdr) *shdr = scn->shdr.ELFW(e,LIBELFBITS);
+	  if (shdr->sh_type == SHT_NOBITS)
+	    goto next;
 
 	  off_t scn_start = elf->start_offset + shdr->sh_offset;
 	  Elf_Data_List *dl = &scn->data_list;
+	  bool scn_changed = false;
 
-	  if (shdr->sh_type != SHT_NOBITS && scn->data_list_rear != NULL
-	      && scn->index != 0)
+	  if (scn->data_list_rear != NULL)
 	    do
 	      {
+		/* If there is a gap, fill it.  */
+		if (scn_start + dl->data.d.d_off > last_offset
+		    && ((previous_scn_changed && dl->data.d.d_off == 0)
+			|| ((scn->flags | dl->flags | elf->flags)
+			    & ELF_F_DIRTY) != 0))
+		  {
+		    if (unlikely (fill (elf->fildes, last_offset,
+					(scn_start + dl->data.d.d_off)
+					- last_offset, fillbuf,
+					&filled) != 0))
+		      return 1;
+		  }
+
 		if ((scn->flags | dl->flags | elf->flags) & ELF_F_DIRTY)
 		  {
 		    char tmpbuf[MAX_TMPBUF];
 		    void *buf = dl->data.d.d_buf;
 
-		    if (scn_start + dl->data.d.d_off != last_offset)
-		      {
-			assert (last_offset < scn_start + dl->data.d.d_off);
+		    /* Let it go backward if the sections use a bogus
+		       layout with overlaps.  We'll overwrite the stupid
+		       user's section data with the latest one, rather than
+		       crashing.  */
 
-			if (unlikely (fill (elf->fildes, last_offset,
-					    (scn_start + dl->data.d.d_off)
-					    - last_offset, fillbuf,
-					    &filled) != 0))
-			  return 1;
-
-			last_offset = scn_start + dl->data.d.d_off;
-		      }
+		    last_offset = scn_start + dl->data.d.d_off;
 
 		    if (unlikely (change_bo))
 		      {
@@ -673,6 +752,8 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 
 		    if (buf != dl->data.d.d_buf && buf != tmpbuf)
 		      free (buf);
+
+		    scn_changed = true;
 		  }
 
 		last_offset += dl->data.d.d_size;
@@ -682,9 +763,23 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 		dl = dl->next;
 	      }
 	    while (dl != NULL);
-	  else if (shdr->sh_type != SHT_NOBITS && scn->index != 0)
-	    last_offset = scn_start + shdr->sh_size;
+	  else
+	    {
+	      /* If the previous section (or the ELF/program
+		 header) changed we might have to fill the gap.  */
+	      if (scn_start > last_offset && previous_scn_changed)
+		{
+		  if (unlikely (fill (elf->fildes, last_offset,
+				      scn_start - last_offset, fillbuf,
+				      &filled) != 0))
+		    return 1;
+		}
 
+	      last_offset = scn_start + shdr->sh_size;
+	    }
+
+	  previous_scn_changed = scn_changed;
+	next:
 	  /* Collect the section header table information.  */
 	  if (unlikely (change_bo))
 	    (*shdr_fctp) (&shdr_data[scn->index],

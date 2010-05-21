@@ -1,5 +1,5 @@
 /* Interfaces for libdwfl.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -119,9 +119,41 @@ extern int dwfl_errno (void);
 extern const char *dwfl_errmsg (int err);
 
 
-/* Start reporting the current set of modules to the library.  No calls but
-   dwfl_report_* can be made on DWFL until dwfl_report_end is called.  */
+/* Start reporting the current set of segments and modules to the library.
+   All existing segments are wiped.  Existing modules are marked to be
+   deleted, and will not be found via dwfl_addrmodule et al if they are not
+   re-reported before dwfl_report_end is called.  */
 extern void dwfl_report_begin (Dwfl *dwfl);
+
+/* Report that segment NDX begins at PHDR->p_vaddr + BIAS.
+   If NDX is < 0, the value succeeding the last call's NDX
+   is used instead (zero on the first call).
+
+   If nonzero, the smallest PHDR->p_align value seen sets the
+   effective page size for the address space DWFL describes.
+   This is the granularity at which reported module boundary
+   addresses will be considered to fall in or out of a segment.
+
+   Returns -1 for errors, or NDX (or its assigned replacement) on success.
+
+   When NDX is the value succeeding the last call's NDX (or is implicitly
+   so as above), IDENT is nonnull and matches the value in the last call,
+   and the PHDR and BIAS values reflect a segment that would be contiguous,
+   in both memory and file, with the last segment reported, then this
+   segment may be coalesced internally with preceding segments.  When given
+   an address inside this segment, dwfl_addrsegment may return the NDX of a
+   preceding contiguous segment.  To prevent coalesced segments, always
+   pass a null pointer for IDENT.
+
+   The values passed are not stored (except to track coalescence).
+   The only information that can be extracted from DWFL later is the
+   mapping of an address to a segment index that starts at or below
+   it.  Reporting segments at all is optional.  Its only benefit to
+   the caller is to offer this quick lookup via dwfl_addrsegment,
+   or use other segment-based calls.  */
+extern int dwfl_report_segment (Dwfl *dwfl, int ndx,
+				const GElf_Phdr *phdr, GElf_Addr bias,
+				const void *ident);
 
 /* Report that a module called NAME spans addresses [START, END).
    Returns the module handle, either existing or newly allocated,
@@ -195,6 +227,13 @@ extern ptrdiff_t dwfl_getmodules (Dwfl *dwfl,
 
 /* Find the module containing the given address.  */
 extern Dwfl_Module *dwfl_addrmodule (Dwfl *dwfl, Dwarf_Addr address);
+
+/* Find the segment, if any, and module, if any, containing ADDRESS.
+   Returns a segment index returned by dwfl_report_segment, or -1
+   if no segment matches the address.  Regardless of the return value,
+   *MOD is always set to the module containing ADDRESS, or to null.  */
+extern int dwfl_addrsegment (Dwfl *dwfl, Dwarf_Addr address, Dwfl_Module **mod);
+
 
 
 /* Report the known build ID bits associated with a module.
@@ -323,6 +362,15 @@ extern int dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
 					     int (*predicate) (const char *,
 							       const char *));
 
+/* Examine an ET_CORE file and report modules based on its contents.
+   This can follow a dwfl_report_offline call to bootstrap the
+   DT_DEBUG method of following the dynamic linker link_map chain, in
+   case the core file does not contain enough of the executable's text
+   segment to locate its PT_DYNAMIC in the dump.  This might call
+   dwfl_report_elf on file names found in the dump if reading some
+   link_map files is the only way to ascertain those modules' addresses.
+   Returns the number of modules reported, or -1 for errors.  */
+extern int dwfl_core_file_report (Dwfl *dwfl, Elf *elf);
 
 /* Call dwfl_report_module for each file mapped into the address space of PID.
    Returns zero on success, -1 if dwfl_report_module failed,
@@ -402,10 +450,11 @@ extern int dwfl_module_getsymtab (Dwfl_Module *mod);
 
 /* Fetch one entry from the module's symbol table.  On errors, returns
    NULL.  If successful, fills in *SYM and returns the string for st_name.
-   This works like gelf_getsym except that st_value is always adjusted
-   to an absolute value based on the module's location.  If SHNDXP is
-   non-null, it's set with the section index (whether from st_shndx or
-   extended index table).  */
+   This works like gelf_getsym except that st_value is always adjusted to
+   an absolute value based on the module's location, when the symbol is in
+   an SHF_ALLOC section.  If SHNDXP is non-null, it's set with the section
+   index (whether from st_shndx or extended index table); in case of a
+   symbol in a non-allocated section, *SHNDXP is instead set to -1.  */
 extern const char *dwfl_module_getsym (Dwfl_Module *mod, int ndx,
 				       GElf_Sym *sym, GElf_Word *shndxp)
   __nonnull_attribute__ (3);
@@ -606,6 +655,18 @@ extern int dwfl_core_file_read_note (Dwfl *dwfl, Dwfl_Register_Map *map,
 				     GElf_Nhdr *next, GElf_Off *desc_offset)
   __nonnull_attribute__ (6, 7, 8, 9, 10, 11, 12, 13);
 
+/* Find the CFI for this module.  Returns NULL if there is no CFI.
+   On success, fills in *BIAS with the difference between addresses
+   within the loaded module and those in the CFI referring to it.
+   The pointer returned can be used until the module is cleaned up.
+   Calling these more than once returns the same pointers.
+
+   dwfl_module_dwarf_cfi gets the '.debug_frame' information found with the
+   rest of the DWARF information.  dwfl_module_eh_cfi gets the '.eh_frame'
+   information found linked into the text.  A module might have either or
+   both.  */
+extern Dwarf_CFI *dwfl_module_dwarf_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
+extern Dwarf_CFI *dwfl_module_eh_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 
 
 #ifdef __cplusplus

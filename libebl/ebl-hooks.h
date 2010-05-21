@@ -1,5 +1,5 @@
 /* Backend hook signatures internal interface for libebl.
-   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -83,6 +83,12 @@ bool EBLHOOK(machine_flag_check) (GElf_Word);
 /* Check whether SHF_MASKPROC flag bits are valid.  */
 bool EBLHOOK(machine_section_flag_check) (GElf_Xword);
 
+/* Check whether the section with the given index, header, and name
+   is a special machine section that is valid despite a combination
+   of flags or other details that are not generically valid.  */
+bool EBLHOOK(check_special_section) (Ebl *, int,
+				     const GElf_Shdr *, const char *);
+
 /* Return symbolic representation of symbol type.  */
 const char *EBLHOOK(symbol_type_name) (int, char *, size_t);
 
@@ -108,12 +114,16 @@ const char *EBLHOOK(core_note_type_name) (uint32_t, char *, size_t);
 const char *EBLHOOK(object_note_type_name) (uint32_t, char *, size_t);
 
 /* Describe core note format.  */
-int EBLHOOK(core_note) (GElf_Word, GElf_Word, GElf_Word *, size_t *,
-			const Ebl_Register_Location **,
+int EBLHOOK(core_note) (const GElf_Nhdr *, const char *,
+			GElf_Word *, size_t *, const Ebl_Register_Location **,
 			size_t *, const Ebl_Core_Item **);
 
 /* Handle object file note.  */
 bool EBLHOOK(object_note) (const char *, uint32_t, uint32_t, const char *);
+
+/* Check object attribute.  */
+bool EBLHOOK(check_object_attribute) (Ebl *, const char *, int, uint64_t,
+				      const char **, const char **);
 
 /* Describe auxv element type.  */
 int EBLHOOK(auxv_info) (GElf_Xword, const char **, const char **);
@@ -148,6 +158,17 @@ ssize_t EBLHOOK(register_info) (Ebl *ebl,
 				const char **prefix, const char **setname,
 				int *bits, int *type);
 
+/* Return system call ABI registers.  */
+int EBLHOOK(syscall_abi) (Ebl *ebl, int *sp, int *pc,
+			  int *callno, int args[6]);
+
+/* Disassembler function.  */
+int EBLHOOK(disasm) (const uint8_t **startp, const uint8_t *end,
+		     GElf_Addr addr, const char *fmt, DisasmOutputCB_t outcb,
+		     DisasmGetSymCB_t symcb, void *outcbarg, void *symcbarg);
+
+/* Supply the machine-specific state of CFI before CIE initial programs.  */
+int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

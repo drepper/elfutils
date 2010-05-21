@@ -1,5 +1,5 @@
 /* Combine stripped files with separate symbols and debug information.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Roland McGrath <roland@redhat.com>, 2007.
 
@@ -52,6 +52,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include <gelf.h>
 #include <libebl.h>
@@ -64,11 +65,10 @@
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *)
-  = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -235,7 +235,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2007");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Roland McGrath");
 }
 
@@ -1219,19 +1219,19 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
 		      const GElf_Ehdr *stripped_ehdr, GElf_Addr bias)
 {
   size_t unstripped_shstrndx;
-  ELF_CHECK (elf_getshstrndx (unstripped, &unstripped_shstrndx) == 0,
+  ELF_CHECK (elf_getshdrstrndx (unstripped, &unstripped_shstrndx) == 0,
 	     _("cannot get section header string table section index: %s"));
 
   size_t stripped_shstrndx;
-  ELF_CHECK (elf_getshstrndx (stripped, &stripped_shstrndx) == 0,
+  ELF_CHECK (elf_getshdrstrndx (stripped, &stripped_shstrndx) == 0,
 	     _("cannot get section header string table section index: %s"));
 
   size_t unstripped_shnum;
-  ELF_CHECK (elf_getshnum (unstripped, &unstripped_shnum) == 0,
+  ELF_CHECK (elf_getshdrnum (unstripped, &unstripped_shnum) == 0,
 	     _("cannot get section count: %s"));
 
   size_t stripped_shnum;
-  ELF_CHECK (elf_getshnum (stripped, &stripped_shnum) == 0,
+  ELF_CHECK (elf_getshdrnum (stripped, &stripped_shnum) == 0,
 	     _("cannot get section count: %s"));
 
   /* Cache the stripped file's section details.  */
@@ -1462,7 +1462,7 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
 					strtab);
 
   /* Get the updated section count.  */
-  ELF_CHECK (elf_getshnum (unstripped, &unstripped_shnum) == 0,
+  ELF_CHECK (elf_getshdrnum (unstripped, &unstripped_shnum) == 0,
 	     _("cannot get section count: %s"));
 
   bool placed[unstripped_shnum - 1];
@@ -2312,3 +2312,6 @@ or - if no debuginfo was found, or . if FILE contains the debug information.\
 
   return 0;
 }
+
+
+#include "debugpred.h"

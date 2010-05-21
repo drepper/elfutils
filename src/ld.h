@@ -1,4 +1,4 @@
-/* Copyright (C) 2001, 2002, 2003, 2005, 2006 Red Hat, Inc.
+/* Copyright (C) 2001, 2002, 2003, 2005, 2006, 2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -146,7 +146,7 @@ struct usedfiles
      separate field and not the e_shstrndx field in the ELF header
      since in case of a file with more than 64000 sections the index
      might be stored in the section header of section zero.  The
-     elf_getshstrndx() function can find the value but it is too
+     elf_getshdrstrndx() function can find the value but it is too
      costly to repeat this call over and over.  */
   size_t shstrndx;
 
@@ -176,11 +176,14 @@ struct usedfiles
     bool used;
     /* True if section is an unused COMDAT section.  */
     bool unused_comdat;
+    /* True if this is a COMDAT group section.  */
+    bool comdat_group;
     /* Section group number.  This is the index of the SHT_GROUP section.  */
     Elf32_Word grpid;
     /* Pointer back to the containing file information structure.  */
     struct usedfiles *fileinfo;
-    /* List of symbols in this section (set only for merge-able sections).  */
+    /* List of symbols in this section (set only for merge-able sections
+       and group sections).  */
     struct symbol *symbols;
     /* Size of relocations in this section.  Only used for relocation
        sections.  */
@@ -397,14 +400,20 @@ struct callbacks
   DL_CALL_FCT ((state)->callbacks.initialize_pltrel, (state, scn))
 
   /* Finalize the .plt section the what belongs to them.  */
-  void (*finalize_plt) (struct ld_state *, size_t, size_t);
-#define FINALIZE_PLT(state, nsym, nsym_dyn) \
-  DL_CALL_FCT ((state)->callbacks.finalize_plt, (state, nsym, nsym_dyn))
+  void (*finalize_plt) (struct ld_state *, size_t, size_t, struct symbol **);
+#define FINALIZE_PLT(state, nsym, nsym_dyn, ndxtosym) \
+  DL_CALL_FCT ((state)->callbacks.finalize_plt, (state, nsym, nsym_dyn, \
+						 ndxtosym))
 
   /* Create the data structures for the .got section and initialize it.  */
   void (*initialize_got) (struct ld_state *, Elf_Scn *scn);
 #define INITIALIZE_GOT(state, scn) \
   DL_CALL_FCT ((state)->callbacks.initialize_got, (state, scn))
+
+  /* Create the data structures for the .got.plt section and initialize it.  */
+  void (*initialize_gotplt) (struct ld_state *, Elf_Scn *scn);
+#define INITIALIZE_GOTPLT(state, scn) \
+  DL_CALL_FCT ((state)->callbacks.initialize_gotplt, (state, scn))
 
   /* Return the tag corresponding to the native relocation type for
      the platform.  */
@@ -670,15 +679,18 @@ struct scnhead
       scn_normal,		/* Section from the input file(s).  */
       scn_dot_interp,		/* Generated .interp section.  */
       scn_dot_got,		/* Generated .got section.  */
+      scn_dot_gotplt,		/* Generated .got.plt section.  */
       scn_dot_dynrel,		/* Generated .rel.dyn section.  */
       scn_dot_dynamic,		/* Generated .dynamic section.  */
       scn_dot_dynsym,		/* Generated .dynsym section.  */
       scn_dot_dynstr,		/* Generated .dynstr section.  */
       scn_dot_hash,		/* Generated .hash section.  */
+      scn_dot_gnu_hash,		/* Generated .gnu.hash section.  */
       scn_dot_plt,		/* Generated .plt section.  */
       scn_dot_pltrel,		/* Generated .rel.plt section.  */
       scn_dot_version,		/* Generated .gnu.version section.  */
-      scn_dot_version_r		/* Generated .gnu.version_r section.  */
+      scn_dot_version_r,	/* Generated .gnu.version_r section.  */
+      scn_dot_note_gnu_build_id	/* Generated .note.gnu.build-id section.  */
     } kind;
 
   /* True is the section is used in the output.  */
@@ -925,8 +937,9 @@ struct ld_state
   Elf32_Word dynsymscnidx;
   /* Dynamic symbol string table section.  */
   Elf32_Word dynstrscnidx;
-  /* Dynamic symbol hash table.  */
+  /* Dynamic symbol hash tables.  */
   size_t hashscnidx;
+  size_t gnuhashscnidx;
 
   /* Procedure linkage table section.  */
   Elf32_Word pltscnidx;
@@ -937,6 +950,8 @@ struct ld_state
 
   /* Global offset table section.  */
   Elf32_Word gotscnidx;
+  /* And the part of the PLT.  */
+  Elf32_Word gotpltscnidx;
 
   /* This section will hole all non-PLT relocations.  */
   Elf32_Word reldynscnidx;
@@ -951,6 +966,11 @@ struct ld_state
   int nverdeffile;
   /* Index of next version.  */
   int nextveridx;
+
+  /* TLS segment.  */
+  bool need_tls;
+  XElf_Addr tls_start;
+  XElf_Addr tls_tcb;
 
   /* Hash table for version symbol strings.  Only strings without
      special characters are hashed here.  */
@@ -1014,10 +1034,25 @@ struct ld_state
   /* True if an .eh_frame_hdr section should be generated.  */
   bool eh_frame_hdr;
 
+  /* What hash style to generate.  */
+  enum
+    {
+      hash_style_none = 0,
+      hash_style_sysv = 1,
+#define GENERATE_SYSV_HASH ((ld_state.hash_style & hash_style_sysv) != 0)
+      hash_style_gnu = 2
+#define GENERATE_GNU_HASH ((ld_state.hash_style & hash_style_gnu) != 0)
+    }
+  hash_style;
+
 
   /* True if in executables all global symbols should be exported in
      the dynamic symbol table.  */
   bool export_all_dynamic;
+
+  /* Build-ID style.  NULL is none.  */
+  const char *build_id;
+  Elf32_Word buildidscnidx;
 
   /* If DSO is generated, this is the SONAME.  */
   const char *soname;
@@ -1087,6 +1122,9 @@ extern bool dynamically_linked_p (void);
 
 /* Checked whether the symbol is undefined and referenced from a DSO.  */
 extern bool linked_from_dso_p (struct scninfo *scninfo, size_t symidx);
+#ifdef __GNUC_STDC_INLINE__
+__attribute__ ((__gnu_inline__))
+#endif
 extern inline bool
 linked_from_dso_p (struct scninfo *scninfo, size_t symidx)
 {

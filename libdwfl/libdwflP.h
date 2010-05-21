@@ -1,5 +1,5 @@
 /* Internal definitions for libdwfl.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -74,6 +74,9 @@
   DWFL_ERROR (LIBELF, N_("See elf_errno"))				      \
   DWFL_ERROR (LIBDW, N_("See dwarf_errno"))				      \
   DWFL_ERROR (LIBEBL, N_("See ebl_errno (XXX missing)"))		      \
+  DWFL_ERROR (ZLIB, N_("gzip decompression failed"))			      \
+  DWFL_ERROR (BZLIB, N_("bzip2 decompression failed"))			      \
+  DWFL_ERROR (LZMA, N_("LZMA decompression failed"))			      \
   DWFL_ERROR (UNKNOWN_MACHINE, N_("no support library found for machine"))    \
   DWFL_ERROR (NOREL, N_("Callbacks missing for ET_REL file"))		      \
   DWFL_ERROR (BADRELTYPE, N_("Unsupported relocation type"))		      \
@@ -90,7 +93,8 @@
   DWFL_ERROR (TRUNCATED, N_("image truncated"))				      \
   DWFL_ERROR (ALREADY_ELF, N_("ELF file opened"))			      \
   DWFL_ERROR (BADELF, N_("not a valid ELF file"))			      \
-  DWFL_ERROR (WEIRD_TYPE, N_("cannot handle DWARF type description"))
+  DWFL_ERROR (WEIRD_TYPE, N_("cannot handle DWARF type description"))	      \
+  DWFL_ERROR (WRONG_ID_ELF, N_("ELF file does not match build ID"))
 
 #define DWFL_ERROR(name, text) DWFL_E_##name,
 typedef enum { DWFL_ERRORS DWFL_E_NUM } Dwfl_Error;
@@ -99,8 +103,8 @@ typedef enum { DWFL_ERRORS DWFL_E_NUM } Dwfl_Error;
 #define OTHER_ERROR(name)	((unsigned int) DWFL_E_##name << 16)
 #define DWFL_E(name, errno)	(OTHER_ERROR (name) | (errno))
 
-extern int __libdwfl_canon_error (Dwfl_Error error) internal_function;
-extern void __libdwfl_seterrno (Dwfl_Error error) internal_function;
+extern int __libdwfl_canon_error (Dwfl_Error) internal_function;
+extern void __libdwfl_seterrno (Dwfl_Error) internal_function;
 
 struct Dwfl
 {
@@ -111,10 +115,22 @@ struct Dwfl
 
   Dwfl_Module *modulelist;    /* List in order used by full traversals.  */
 
-  Dwfl_Module **modules;
-  size_t nmodules;
-
   GElf_Addr offline_next_address;
+
+  GElf_Addr segment_align;	/* Smallest granularity of segments.  */
+
+  /* Binary search table in three parallel malloc'd arrays.  */
+  size_t lookup_elts;		/* Elements in use.  */
+  size_t lookup_alloc;		/* Elements allococated.  */
+  GElf_Addr *lookup_addr;	/* Start address of segment.  */
+  Dwfl_Module **lookup_module;	/* Module associated with segment, or null.  */
+  int *lookup_segndx;		/* User segment index, or -1.  */
+
+  /* Cache from last dwfl_report_segment call.  */
+  const void *lookup_tail_ident;
+  GElf_Off lookup_tail_vaddr;
+  GElf_Off lookup_tail_offset;
+  int lookup_tail_ndx;
 };
 
 #define OFFLINE_REDZONE		0x10000
@@ -141,10 +157,6 @@ struct Dwfl_Module
   char *name;			/* Iterator name for this module.  */
   GElf_Addr low_addr, high_addr;
 
-  void *build_id_bits;		/* malloc'd copy of build ID bits.  */
-  GElf_Addr build_id_vaddr;	/* Address where they reside, 0 if unknown.  */
-  int build_id_len;		/* -1 for prior failure, 0 if unset.  */
-
   struct dwfl_file main, debug;
   Ebl *ebl;
   GElf_Half e_type;		/* GElf_Ehdr.e_type cache.  */
@@ -157,21 +169,31 @@ struct Dwfl_Module
   size_t syments;		/* sh_size / sh_entsize of that section.  */
   Elf_Data *symstrdata;		/* Data for its string table.  */
   Elf_Data *symxndxdata;	/* Data in the extended section index table. */
-  Dwfl_Error symerr;		/* Previous failure to load symbols.  */
 
   Dwarf *dw;			/* libdw handle for its debugging info.  */
-  Dwfl_Error dwerr;		/* Previous failure to load info.  */
+
+  Dwfl_Error symerr;		/* Previous failure to load symbols.  */
+  Dwfl_Error dwerr;		/* Previous failure to load DWARF.  */
 
   /* Known CU's in this module.  */
   struct dwfl_cu *first_cu, **cu;
-  unsigned int ncu;
 
   void *lazy_cu_root;		/* Table indexed by Dwarf_Off of CU.  */
-  unsigned int lazycu;		/* Possible users, deleted when none left.  */
 
   struct dwfl_arange *aranges;	/* Mapping of addresses in module to CUs.  */
+
+  void *build_id_bits;		/* malloc'd copy of build ID bits.  */
+  GElf_Addr build_id_vaddr;	/* Address where they reside, 0 if unknown.  */
+  int build_id_len;		/* -1 for prior failure, 0 if unset.  */
+
+  unsigned int ncu;
+  unsigned int lazycu;		/* Possible users, deleted when none left.  */
   unsigned int naranges;
 
+  Dwarf_CFI *dwarf_cfi;		/* Cached DWARF CFI for this module.  */
+  Dwarf_CFI *eh_cfi;		/* Cached EH CFI for this module.  */
+
+  int segment;			/* Index of first segment table entry.  */
   bool gc;			/* Mark/sweep flag.  */
 };
 
@@ -250,6 +272,8 @@ struct map_register
 
 extern void __libdwfl_module_free (Dwfl_Module *mod) internal_function;
 
+/* Find the main ELF file, update MOD->elferr and/or MOD->main.elf.  */
+extern void __libdwfl_getelf (Dwfl_Module *mod) internal_function;
 
 /* Process relocations in debugging sections in an ET_REL file.
    FILE must be opened with ELF_C_READ_MMAP_PRIVATE or ELF_C_READ,
@@ -280,6 +304,11 @@ extern Dwfl_Error __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf,
 
 /* Ensure that MOD->ebl is set up.  */
 extern Dwfl_Error __libdwfl_module_getebl (Dwfl_Module *mod) internal_function;
+
+/* Install a new Dwarf_CFI in *SLOT (MOD->eh_cfi or MOD->dwarf_cfi).  */
+extern Dwarf_CFI *__libdwfl_set_cfi (Dwfl_Module *mod, Dwarf_CFI **slot,
+				     Dwarf_CFI *cfi)
+  internal_function;
 
 /* Iterate through all the CU's in the module.  Start by passing a null
    LASTCU, and then pass the last *CU returned.  Success return with null
@@ -315,7 +344,7 @@ extern int __libdwfl_crc32_file (int fd, uint32_t *resp) attribute_hidden;
    Consumes ELF on success, not on failure.  */
 extern Dwfl_Module *__libdwfl_report_elf (Dwfl *dwfl, const char *name,
 					  const char *file_name, int fd,
-					  Elf *elf, GElf_Addr base)
+					  Elf *elf, GElf_Addr base, bool sanity)
   internal_function;
 
 /* Meat of dwfl_report_offline.  */
@@ -326,14 +355,89 @@ extern Dwfl_Module *__libdwfl_report_offline (Dwfl *dwfl, const char *name,
 								const char *))
   internal_function;
 
+/* Decompression wrappers: decompress whole file into memory.  */
+extern Dwfl_Error __libdw_gunzip  (int fd, off64_t start_offset,
+				   void *mapped, size_t mapped_size,
+				   void **whole, size_t *whole_size)
+  internal_function;
+extern Dwfl_Error __libdw_bunzip2 (int fd, off64_t start_offset,
+				   void *mapped, size_t mapped_size,
+				   void **whole, size_t *whole_size)
+  internal_function;
+extern Dwfl_Error __libdw_unlzma (int fd, off64_t start_offset,
+				  void *mapped, size_t mapped_size,
+				  void **whole, size_t *whole_size)
+  internal_function;
+
+/* Skip the image header before a file image: updates *START_OFFSET.  */
+extern Dwfl_Error __libdw_image_header (int fd, off64_t *start_offset,
+					void *mapped, size_t mapped_size)
+  internal_function;
+
+/* Open Elf handle on *FDP.  This handles decompression and checks
+   elf_kind.  Succeed only for ELF_K_ELF, or also ELF_K_AR if ARCHIVE_OK.
+   Returns DWFL_E_NOERROR and sets *ELFP on success, resets *FDP to -1 if
+   it's no longer used.  Resets *FDP on failure too iff CLOSE_ON_FAIL.  */
+extern Dwfl_Error __libdw_open_file (int *fdp, Elf **elfp,
+				     bool close_on_fail, bool archive_ok)
+  internal_function;
+
+/* These are working nicely for --core, but are not ready to be
+   exported interfaces quite yet.  */
+
+/* Type of callback function ...
+ */
+typedef bool Dwfl_Memory_Callback (Dwfl *dwfl, int segndx,
+				   void **buffer, size_t *buffer_available,
+				   GElf_Addr vaddr, size_t minread, void *arg);
+
+/* Type of callback function ...
+ */
+typedef bool Dwfl_Module_Callback (Dwfl_Module *mod, void **userdata,
+				   const char *name, Dwarf_Addr base,
+				   void **buffer, size_t *buffer_available,
+				   GElf_Off cost, GElf_Off worthwhile,
+				   GElf_Off whole, GElf_Off contiguous,
+				   void *arg, Elf **elfp);
+
+/* ...
+ */
+extern int dwfl_segment_report_module (Dwfl *dwfl, int ndx, const char *name,
+				       Dwfl_Memory_Callback *memory_callback,
+				       void *memory_callback_arg,
+				       Dwfl_Module_Callback *read_eagerly,
+				       void *read_eagerly_arg);
+
+/* Report a module for entry in the dynamic linker's struct link_map list.
+   For each link_map entry, if an existing module resides at its address,
+   this just modifies that module's name and suggested file name.  If
+   no such module exists, this calls dwfl_report_elf on the l_name string.
+
+   If AUXV is not null, it points to AUXV_SIZE bytes of auxiliary vector
+   data as contained in an NT_AUXV note or read from a /proc/pid/auxv
+   file.  When this is available, it guides the search.  If AUXV is null
+   or the memory it points to is not accessible, then this search can
+   only find where to begin if the correct executable file was
+   previously reported and preloaded as with dwfl_report_elf.
+
+   Returns the number of modules found, or -1 for errors.  */
+extern int dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
+				 Dwfl_Memory_Callback *memory_callback,
+				 void *memory_callback_arg);
+
 
 /* Avoid PLT entries.  */
 INTDECL (dwfl_begin)
 INTDECL (dwfl_errmsg)
+INTDECL (dwfl_errno)
 INTDECL (dwfl_addrmodule)
+INTDECL (dwfl_addrsegment)
 INTDECL (dwfl_addrdwarf)
 INTDECL (dwfl_addrdie)
+INTDECL (dwfl_core_file_report)
+INTDECL (dwfl_getmodules)
 INTDECL (dwfl_module_addrdie)
+INTDECL (dwfl_module_address_section)
 INTDECL (dwfl_module_addrsym)
 INTDECL (dwfl_module_build_id)
 INTDECL (dwfl_module_getdwarf)
@@ -346,11 +450,13 @@ INTDECL (dwfl_report_elf)
 INTDECL (dwfl_report_begin)
 INTDECL (dwfl_report_begin_add)
 INTDECL (dwfl_report_module)
+INTDECL (dwfl_report_segment)
 INTDECL (dwfl_report_offline)
 INTDECL (dwfl_report_end)
 INTDECL (dwfl_build_id_find_elf)
 INTDECL (dwfl_build_id_find_debuginfo)
 INTDECL (dwfl_standard_find_debuginfo)
+INTDECL (dwfl_link_map_report)
 INTDECL (dwfl_linux_kernel_find_elf)
 INTDECL (dwfl_linux_kernel_module_section_address)
 INTDECL (dwfl_linux_proc_report)
@@ -361,8 +467,8 @@ INTDECL (dwfl_linux_kernel_report_modules)
 INTDECL (dwfl_linux_kernel_report_offline)
 INTDECL (dwfl_offline_section_address)
 INTDECL (dwfl_module_relocate_address)
-INTDECL (dwfl_core_file_report)
-INTDECL (dwfl_core_file_find_elf)
+INTDECL (dwfl_module_dwarf_cfi)
+INTDECL (dwfl_module_eh_cfi)
 
 /* Leading arguments standard to callbacks passed a Dwfl_Module.  */
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr

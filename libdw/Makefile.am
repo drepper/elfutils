@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+## Copyright (C) 2002-2010 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -24,21 +24,13 @@
 ## Network licensing program, please visit www.openinventionnetwork.com
 ## <http://www.openinventionnetwork.com>.
 ##
-DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H -DIS_LIBDW
-if MUDFLAP
-AM_CFLAGS = -fmudflap
-else
-AM_CFLAGS =
-endif
+include $(top_srcdir)/config/eu.am
+DEFS += -DIS_LIBDW
 if BUILD_STATIC
 AM_CFLAGS += -fpic
 endif
-AM_CFLAGS += -Wall -Werror -Wshadow -Wunused -Wformat=2 -Wextra -std=gnu99
-INCLUDES = -I. -I$(srcdir) -I$(srcdir)/../libelf -I.. -I$(srcdir)/../lib
+INCLUDES += -I$(srcdir)/../libelf
 VERSION = 1
-
-COMPILE.os = $(filter-out -fprofile-arcs, $(filter-out -ftest-coverage, \
-						       $(COMPILE)))
 
 lib_LIBRARIES = libdw.a
 if !MUDFLAP
@@ -47,8 +39,7 @@ noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
 endif
 
 include_HEADERS = dwarf.h
-euincludedir = ${includedir}/elfutils
-euinclude_HEADERS = libdw.h
+pkginclude_HEADERS = libdw.h
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \
@@ -84,7 +75,21 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_func_inline.c dwarf_getsrc_file.c \
 		  libdw_findcu.c libdw_form.c libdw_alloc.c memory-access.c \
 		  libdw_visit_scopes.c \
-		  dwarf_entry_breakpoints.c
+		  dwarf_entry_breakpoints.c \
+		  dwarf_next_cfi.c \
+		  cie.c fde.c cfi.c frame-cache.c \
+		  dwarf_frame_info.c dwarf_frame_cfa.c dwarf_frame_register.c \
+		  dwarf_cfi_addrframe.c \
+		  dwarf_getcfi.c dwarf_getcfi_elf.c dwarf_cfi_end.c \
+		  dwarf_aggregate_size.c
+
+if MAINTAINER_MODE
+BUILT_SOURCES = $(srcdir)/known-dwarf.h
+MAINTAINERCLEANFILES = $(srcdir)/known-dwarf.h
+$(srcdir)/known-dwarf.h: $(top_srcdir)/config/known-dwarf.awk $(srcdir)/dwarf.h
+	$(AWK) -f $^ > $@.new
+	mv -f $@.new $@
+endif
 
 if !MUDFLAP
 libdw_pic_a_SOURCES =
@@ -94,20 +99,15 @@ libdw_so_SOURCES =
 libdw.so: $(srcdir)/libdw.map libdw_pic.a \
 	  ../libdwfl/libdwfl_pic.a ../libebl/libebl.a \
 	  ../libelf/libelf.so
+# The rpath is necessary for libebl because its $ORIGIN use will
+# not fly in a setuid executable that links in libdw.
 	$(LINK) -shared -o $@ -Wl,--soname,$@.$(VERSION),-z,defs \
+		-Wl,--enable-new-dtags,-rpath,$(pkglibdir) \
 		-Wl,--version-script,$<,--no-undefined \
 		-Wl,--whole-archive $(filter-out $<,$^) -Wl,--no-whole-archive\
-		-ldl
+		-ldl $(zip_LIBS)
 	if readelf -d $@ | fgrep -q TEXTREL; then exit 1; fi
 	ln -fs $@ $@.$(VERSION)
-
-%.os: %.c %.o
-	if $(COMPILE.os) -c -o $@ -fpic -DPIC -DSHARED -MT $@ -MD -MP \
-	   -MF "$(DEPDIR)/$*.Tpo" `test -f '$<' || echo '$(srcdir)/'`$<; \
-	then cat "$(DEPDIR)/$*.Tpo" >> "$(DEPDIR)/$*.Po"; \
-	     rm -f "$(DEPDIR)/$*.Tpo"; \
-	else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; \
-	fi
 
 install: install-am libdw.so
 	$(mkinstalldirs) $(DESTDIR)$(libdir)
@@ -124,8 +124,9 @@ endif
 
 libdw_a_LIBADD = $(addprefix ../libdwfl/,$(shell $(AR) t ../libdwfl/libdwfl.a))
 
-noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h
+noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
+		 cfi.h encoded-value.h
 
 EXTRA_DIST = libdw.map
 
-CLEANFILES = $(am_libdw_pic_a_OBJECTS) *.gcno *.gcda libdw.so.$(VERSION)
+MOSTLYCLEANFILES = $(am_libdw_pic_a_OBJECTS) libdw.so.$(VERSION)

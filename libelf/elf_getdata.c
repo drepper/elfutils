@@ -189,7 +189,7 @@ convert_data (Elf_Scn *scn, int version __attribute__ ((unused)), int eclass,
 /* Store the information for the raw data in the `rawdata' element.  */
 int
 internal_function
-__libelf_set_rawdata (Elf_Scn *scn)
+__libelf_set_rawdata_wrlock (Elf_Scn *scn)
 {
   size_t offset;
   size_t size;
@@ -199,7 +199,8 @@ __libelf_set_rawdata (Elf_Scn *scn)
 
   if (elf->class == ELFCLASS32)
     {
-      Elf32_Shdr *shdr = scn->shdr.e32 ?: INTUSE(elf32_getshdr) (scn);
+      Elf32_Shdr *shdr
+	= scn->shdr.e32 ?: __elf32_getshdr_wrlock (scn);
 
       if (shdr == NULL)
 	/* Something went terribly wrong.  */
@@ -212,7 +213,8 @@ __libelf_set_rawdata (Elf_Scn *scn)
     }
   else
     {
-      Elf64_Shdr *shdr = scn->shdr.e64 ?: INTUSE(elf64_getshdr) (scn);
+      Elf64_Shdr *shdr
+	= scn->shdr.e64 ?: __elf64_getshdr_wrlock (scn);
 
       if (shdr == NULL)
 	/* Something went terribly wrong.  */
@@ -234,8 +236,8 @@ __libelf_set_rawdata (Elf_Scn *scn)
       if (type == SHT_HASH)
 	{
 	  GElf_Ehdr ehdr_mem;
-
-	  entsize = SH_ENTSIZE_HASH (INTUSE(gelf_getehdr) (elf, &ehdr_mem));
+	  GElf_Ehdr *ehdr = __gelf_getehdr_rdlock (elf, &ehdr_mem);
+	  entsize = SH_ENTSIZE_HASH (ehdr);
 	}
       else
 	{
@@ -311,10 +313,9 @@ __libelf_set_rawdata (Elf_Scn *scn)
   if (type == SHT_HASH && elf->class == ELFCLASS64)
     {
       GElf_Ehdr ehdr_mem;
-
+      GElf_Ehdr *ehdr = __gelf_getehdr_rdlock (elf, &ehdr_mem);
       scn->rawdata.d.d_type
-	= (SH_ENTSIZE_HASH (INTUSE(gelf_getehdr) (elf, &ehdr_mem)) == 4
-	   ? ELF_T_WORD : ELF_T_XWORD);
+	= (SH_ENTSIZE_HASH (ehdr) == 4 ? ELF_T_WORD : ELF_T_XWORD);
     }
   else
     scn->rawdata.d.d_type = shtype_map[LIBELF_EV_IDX][TYPEIDX (type)];
@@ -339,14 +340,31 @@ __libelf_set_rawdata (Elf_Scn *scn)
   return 0;
 }
 
+int
+internal_function
+__libelf_set_rawdata (Elf_Scn *scn)
+{
+  int result;
+
+  if (scn == NULL)
+    return 1;
+
+  rwlock_wrlock (scn->elf->lock);
+  result = __libelf_set_rawdata_wrlock (scn);
+  rwlock_unlock (scn->elf->lock);
+
+  return result;
+}
 
 Elf_Data *
-elf_getdata (scn, data)
+internal_function
+__elf_getdata_rdlock (scn, data)
      Elf_Scn *scn;
      Elf_Data *data;
 {
   Elf_Data *result = NULL;
   Elf *elf;
+  int locked = 0;
 
   if (scn == NULL)
     return NULL;
@@ -359,8 +377,6 @@ elf_getdata (scn, data)
 
   /* We will need this multiple times later on.  */
   elf = scn->elf;
-
-  rwlock_rdlock (elf->lock);
 
   /* If `data' is not NULL this means we are not addressing the initial
      data in the file.  But this also means this data is already read
@@ -416,11 +432,12 @@ elf_getdata (scn, data)
          modified, therefore start the tests again.  */
       rwlock_unlock (elf->lock);
       rwlock_wrlock (elf->lock);
+      locked = 1;
 
       /* Read the data from the file.  There is always a file (or
 	 memory region) associated with this descriptor since
 	 otherwise the `data_read' flag would be set.  */
-      if (scn->data_read == 0 && __libelf_set_rawdata (scn) != 0)
+      if (scn->data_read == 0 && __libelf_set_rawdata_wrlock (scn) != 0)
 	/* Something went wrong.  The error value is already set.  */
 	goto out;
     }
@@ -431,29 +448,58 @@ elf_getdata (scn, data)
   if (scn->data_list_rear == NULL)
     {
       if (scn->rawdata.d.d_buf != NULL && scn->rawdata.d.d_size > 0)
-	/* Convert according to the version and the type.   */
-	convert_data (scn, __libelf_version, elf->class,
-		      (elf->class == ELFCLASS32
-		       || (offsetof (struct Elf, state.elf32.ehdr)
-			   == offsetof (struct Elf, state.elf64.ehdr))
-		       ? elf->state.elf32.ehdr->e_ident[EI_DATA]
-		       : elf->state.elf64.ehdr->e_ident[EI_DATA]),
-		      scn->rawdata.d.d_size, scn->rawdata.d.d_type);
+	{
+	  if (!locked)
+	    {
+	      rwlock_unlock (elf->lock);
+	      rwlock_wrlock (elf->lock);
+	      if (scn->data_list_rear != NULL)
+		goto pass;
+	    }
+
+	  /* Convert according to the version and the type.   */
+	  convert_data (scn, __libelf_version, elf->class,
+			(elf->class == ELFCLASS32
+			 || (offsetof (struct Elf, state.elf32.ehdr)
+			     == offsetof (struct Elf, state.elf64.ehdr))
+			 ? elf->state.elf32.ehdr->e_ident[EI_DATA]
+			 : elf->state.elf64.ehdr->e_ident[EI_DATA]),
+			scn->rawdata.d.d_size, scn->rawdata.d.d_type);
+	}
       else
-	/* This is an empty or NOBITS section.  There is no buffer but
-	   the size information etc is important.  */
-	scn->data_list.data.d = scn->rawdata.d;
+	{
+	  /* This is an empty or NOBITS section.  There is no buffer but
+	     the size information etc is important.  */
+	  scn->data_list.data.d = scn->rawdata.d;
+	  scn->data_list.data.s = scn;
+	}
 
       scn->data_list_rear = &scn->data_list;
     }
 
   /* If no data is present we cannot return any.  */
   if (scn->data_list_rear != NULL)
+  pass:
     /* Return the first data element in the list.  */
     result = &scn->data_list.data.d;
 
  out:
-  rwlock_unlock (elf->lock);
+  return result;
+}
+
+Elf_Data *
+elf_getdata (scn, data)
+     Elf_Scn *scn;
+     Elf_Data *data;
+{
+  Elf_Data *result;
+
+  if (scn == NULL)
+    return NULL;
+
+  rwlock_rdlock (scn->elf->lock);
+  result = __elf_getdata_rdlock (scn, data);
+  rwlock_unlock (scn->elf->lock);
 
   return result;
 }

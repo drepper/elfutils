@@ -1,5 +1,5 @@
 /* Find entry breakpoint locations for a function.
-   Copyright (C) 2005 Red Hat, Inc.
+   Copyright (C) 2005-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -87,18 +87,13 @@ dwarf_entry_breakpoints (die, bkpts)
     }
 
   /* Fetch the CU's line records to look for this DIE's addresses.  */
-  Dwarf_Die cudie =
-    {
-      .cu = die->cu,
-      .addr = ((char *) die->cu->dbg->sectiondata[IDX_debug_info]->d_buf
-	       + die->cu->start + 3 * die->cu->offset_size - 4 + 3),
-    };
+  Dwarf_Die cudie = CUDIE (die->cu);
   Dwarf_Lines *lines;
   size_t nlines;
   if (INTUSE(dwarf_getsrclines) (&cudie, &lines, &nlines) < 0)
     {
       int error = INTUSE (dwarf_errno) ();
-      if (error == DWARF_E_NO_DEBUG_LINE)
+      if (error == 0)		/* CU has no DW_AT_stmt_list.  */
 	return entrypc_bkpt ();
       __libdw_seterrno (error);
       return -1;

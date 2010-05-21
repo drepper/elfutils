@@ -1,5 +1,5 @@
 /* Return source language attribute of DIE.
-   Copyright (C) 2003, 2005 Red Hat, Inc.
+   Copyright (C) 2003-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2003.
 
@@ -63,7 +63,10 @@ dwarf_srclang (die)
   Dwarf_Attribute attr_mem;
   Dwarf_Word value;
 
-  return INTUSE(dwarf_formudata) (INTUSE(dwarf_attr) (die, DW_AT_language,
-						      &attr_mem),
+  return INTUSE(dwarf_formudata) (INTUSE(dwarf_attr_integrate)
+				  (die, DW_AT_language, &attr_mem),
 				  &value) == 0 ? (int) value : -1;
 }
+INTDEF (dwarf_srclang)
+OLD_VERSION (dwarf_srclang, ELFUTILS_0.122)
+NEW_VERSION (dwarf_srclang, ELFUTILS_0.143)

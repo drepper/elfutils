@@ -2,7 +2,7 @@
 ##
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+## Copyright (C) 2005-2010 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -26,34 +26,24 @@
 ## Network licensing program, please visit www.openinventionnetwork.com
 ## <http://www.openinventionnetwork.com>.
 ##
-DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H
-if MUDFLAP
-AM_CFLAGS = -fmudflap
-else
-AM_CFLAGS =
-endif
-AM_CFLAGS += -Wall -Werror -Wshadow -Wunused -Wformat=2 -Wextra -std=gnu99
-INCLUDES = -I. -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
-	   -I$(srcdir)/../libdw -I.. -I$(srcdir)/../lib
+include $(top_srcdir)/config/eu.am
+INCLUDES += -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
+	   -I$(srcdir)/../libdw
 VERSION = 1
-
-COMPILE.os = $(filter-out -fprofile-arcs, $(filter-out -ftest-coverage, \
-						       $(COMPILE)))
 
 noinst_LIBRARIES = libdwfl.a
 if !MUDFLAP
 noinst_LIBRARIES += libdwfl_pic.a
 endif
 
-euincludedir = ${includedir}/elfutils
-euinclude_HEADERS = libdwfl.h
+pkginclude_HEADERS = libdwfl.h
 
 libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    dwfl_module.c dwfl_report_elf.c relocate.c \
 		    dwfl_module_build_id.c dwfl_module_report_build_id.c \
-		    derelocate.c offline.c \
-		    dwfl_module_info.c  dwfl_getmodules.c \
-		    dwfl_module_getdwarf.c dwfl_getdwarf.c \
+		    derelocate.c offline.c segment.c \
+		    dwfl_module_info.c dwfl_getmodules.c dwfl_getdwarf.c \
+		    dwfl_module_getdwarf.c dwfl_module_getelf.c \
 		    dwfl_validate_address.c \
 		    argp-std.c find-debuginfo.c \
 		    dwfl_build_id_find_elf.c \
@@ -71,18 +61,29 @@ libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    dwfl_module_getsrc_file.c \
 		    libdwfl_crc32.c libdwfl_crc32_file.c \
 		    elf-from-memory.c \
+		    dwfl_module_dwarf_cfi.c dwfl_module_eh_cfi.c \
 		    dwfl_module_getsym.c \
 		    dwfl_module_addrname.c dwfl_module_addrsym.c \
 		    dwfl_module_return_value_location.c \
 		    dwfl_module_register_names.c \
+		    dwfl_segment_report_module.c \
+		    link_map.c core-file.c open.c image-header.c \
 		    register-map.c core-file-register-map.c
 
+if ZLIB
+libdwfl_a_SOURCES += gzip.c
+endif
+if BZLIB
+libdwfl_a_SOURCES += bzip2.c
+endif
+if LZMA
+libdwfl_a_SOURCES += lzma.c
+endif
 
 if MUDFLAP
 libdwfl = libdwfl.a $(libdw) $(libebl) $(libelf) $(libeu)
 libdw = ../libdw/libdw.a
 libelf = ../libelf/libelf.a
-libmudflap = -lmudflap
 else
 libdwfl = $(libdw)
 libdw = ../libdw/libdw.so
@@ -91,20 +92,11 @@ endif
 libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
 
-
 if !MUDFLAP
 libdwfl_pic_a_SOURCES =
 am_libdwfl_pic_a_OBJECTS = $(libdwfl_a_SOURCES:.c=.os)
-
-%.os: %.c %.o
-	if $(COMPILE.os) -c -o $@ -fpic -DPIC -DSHARED -MT $@ -MD -MP \
-	   -MF "$(DEPDIR)/$*.Tpo" `test -f '$<' || echo '$(srcdir)/'`$<; \
-	then cat "$(DEPDIR)/$*.Tpo" >> "$(DEPDIR)/$*.Po"; \
-	     rm -f "$(DEPDIR)/$*.Tpo"; \
-	else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; \
-	fi
 endif
 
 noinst_HEADERS = libdwflP.h
 
-CLEANFILES = $(am_libdwfl_pic_a_OBJECTS)
+CLEANFILES += $(am_libdwfl_pic_a_OBJECTS)

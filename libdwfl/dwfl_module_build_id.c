@@ -1,5 +1,5 @@
 /* Return build ID information for a module.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -88,7 +88,8 @@ check_notes (Dwfl_Module *mod, bool set, Elf_Data *data, GElf_Addr data_vaddr)
 						     "GNU", sizeof "GNU"))
       return found_build_id (mod, set,
 			     data->d_buf + desc_pos, nhdr.n_descsz,
-			     data_vaddr == NO_VADDR ? 0 : data_vaddr + pos);
+			     data_vaddr == NO_VADDR ? 0
+			     : data_vaddr + desc_pos);
   return 0;
 }
 
@@ -96,6 +97,7 @@ int
 internal_function
 __libdwfl_find_build_id (Dwfl_Module *mod, bool set, Elf *elf)
 {
+  size_t shstrndx = SHN_UNDEF;
   int result = 0;
 
   Elf_Scn *scn = elf_nextscn (elf, NULL);
@@ -105,12 +107,14 @@ __libdwfl_find_build_id (Dwfl_Module *mod, bool set, Elf *elf)
       /* No sections, have to look for phdrs.  */
       GElf_Ehdr ehdr_mem;
       GElf_Ehdr *ehdr = gelf_getehdr (elf, &ehdr_mem);
-      if (unlikely (ehdr == NULL))
+      size_t phnum;
+      if (unlikely (ehdr == NULL)
+	  || unlikely (elf_getphdrnum (elf, &phnum) != 0))
 	{
 	  __libdwfl_seterrno (DWFL_E_LIBELF);
 	  return -1;
 	}
-      for (uint_fast16_t i = 0; result == 0 && i < ehdr_mem.e_phnum; ++i)
+      for (size_t i = 0; result == 0 && i < phnum; ++i)
 	{
 	  GElf_Phdr phdr_mem;
 	  GElf_Phdr *phdr = gelf_getphdr (elf, i, &phdr_mem);
@@ -129,9 +133,18 @@ __libdwfl_find_build_id (Dwfl_Module *mod, bool set, Elf *elf)
 	GElf_Shdr shdr_mem;
 	GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
 	if (likely (shdr != NULL) && shdr->sh_type == SHT_NOTE)
-	  result = check_notes (mod, set, elf_getdata (scn, NULL),
-				(shdr->sh_flags & SHF_ALLOC)
-				? shdr->sh_addr + mod->main.bias : NO_VADDR);
+	  {
+	    /* Determine the right sh_addr in this module.  */
+	    GElf_Addr vaddr = 0;
+	    if (!(shdr->sh_flags & SHF_ALLOC))
+	      vaddr = NO_VADDR;
+	    else if (mod->e_type != ET_REL)
+	      vaddr = shdr->sh_addr + mod->main.bias;
+	    else if (__libdwfl_relocate_value (mod, elf, &shstrndx,
+					       elf_ndxscn (scn), &vaddr))
+	      vaddr = NO_VADDR;
+	    result = check_notes (mod, set, elf_getdata (scn, NULL), vaddr);
+	  }
       }
     while (result == 0 && (scn = elf_nextscn (elf, scn)) != NULL);
 
@@ -164,3 +177,19 @@ dwfl_module_build_id (Dwfl_Module *mod,
   return mod->build_id_len;
 }
 INTDEF (dwfl_module_build_id)
+NEW_VERSION (dwfl_module_build_id, ELFUTILS_0.138)
+
+#ifdef SHARED
+COMPAT_VERSION (dwfl_module_build_id, ELFUTILS_0.130, vaddr_at_end)
+
+int
+_compat_vaddr_at_end_dwfl_module_build_id (Dwfl_Module *mod,
+					   const unsigned char **bits,
+					   GElf_Addr *vaddr)
+{
+  int result = INTUSE(dwfl_module_build_id) (mod, bits, vaddr);
+  if (result > 0)
+    *vaddr += (result + 3) & -4;
+  return result;
+}
+#endif

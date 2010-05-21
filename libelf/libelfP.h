@@ -1,5 +1,5 @@
 /* Internal interfaces for libelf.
-   Copyright (C) 1998,1999,2000,2001,2002,2003,2005,2006,2007 Red Hat, Inc.
+   Copyright (C) 1998-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Contributed by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -51,12 +51,20 @@
 #ifndef _LIBELFP_H
 #define _LIBELFP_H 1
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include <ar.h>
 #include <gelf.h>
+
+#include <errno.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 /* gettext helper macros.  */
-#define _(Str) dgettext ("libelf", Str)
+#define _(Str) dgettext ("elfutils", Str)
 
 
 /* Helper Macros to write 32 bit and 64 bit functions.  */
@@ -224,6 +232,9 @@ struct Elf_Scn
   int data_read;		/* Nonzero if the section was created by the
 				   user or if the data from the file/memory
 				   is read.  */
+  int shndx_index;		/* Index of the extended section index
+				   table for this symbol table (if this
+				   section is a symbol table).  */
 
   size_t index;			/* Index of this section.  */
   struct Elf *elf;		/* The underlying ELF file.  */
@@ -270,6 +281,14 @@ typedef struct Elf_Data_Chunk
 /* The ELF descriptor.  */
 struct Elf
 {
+  /* Address to which the file was mapped.  NULL if not mapped.  */
+  void *map_address;
+
+  /* When created for an archive member this points to the descriptor
+     for the archive. */
+  Elf *parent;
+  Elf *next;             /* Used in list of archive descriptors.  */
+
   /* What kind of file is underneath (ELF file, archive...).  */
   Elf_Kind kind;
 
@@ -289,20 +308,10 @@ struct Elf
      for an (yet) unknown size.  */
   size_t maximum_size;
 
-  /* Address to which the file was mapped.  NULL if not mapped.  */
-  void *map_address;
-
   /* Describes the way the memory was allocated and if the dirty bit is
      signalled it means that the whole file has to be rewritten since
      the layout changed.  */
   int flags;
-
-  /* When created for an archive member this points to the descriptor
-     for the archive. */
-  Elf *parent;
-
-  /* Lock to handle multithreaded programs.  */
-  rwlock_define (,lock);
 
   /* Reference counting for the descriptor.  */
   int ref_count;
@@ -310,14 +319,13 @@ struct Elf
   struct Elf *next;             /* Used in list of archive descriptors.  */
   struct Elf *children;	/* List of all descriptors pointing to this one. */
 
+  /* Lock to handle multithreaded programs.  */
+  rwlock_define (,lock);
+
   union
   {
     struct
     {
-      int ehdr_flags;		/* Flags (dirty) for ELF header.  */
-      int phdr_flags;		/* Flags (dirty|malloc) for program header.  */
-      int shdr_malloced;	/* Nonzero if shdr array was allocated.  */
-
       /* The next fields are only useful when testing for ==/!= NULL.  */
       void *ehdr;
       void *shdr;
@@ -329,16 +337,15 @@ struct Elf
       Elf_Data_Chunk *rawchunks; /* List of elf_getdata_rawchunk results.  */
       unsigned int scnincr;	/* Number of sections allocate the last
 				   time.  */
+      int ehdr_flags;		/* Flags (dirty) for ELF header.  */
+      int phdr_flags;		/* Flags (dirty|malloc) for program header.  */
+      int shdr_malloced;	/* Nonzero if shdr array was allocated.  */
       off64_t sizestr_offset;	/* Offset of the size string in the parent
 				   if this is an archive member.  */
     } elf;
 
     struct
     {
-      int ehdr_flags;		/* Flags (dirty) for ELF header.  */
-      int phdr_flags;		/* Flags (dirty|malloc) for program header.  */
-      int shdr_malloced;	/* Nonzero if shdr array was allocated.  */
-
       Elf32_Ehdr *ehdr;		/* Pointer to the ELF header.  This is
 				   never malloced.  */
       Elf32_Shdr *shdr;		/* Used when reading from a file.  */
@@ -349,6 +356,9 @@ struct Elf
       Elf_Data_Chunk *rawchunks; /* List of elf_getdata_rawchunk results.  */
       unsigned int scnincr;	/* Number of sections allocate the last
 				   time.  */
+      int ehdr_flags;		/* Flags (dirty) for ELF header.  */
+      int phdr_flags;		/* Flags (dirty|malloc) for program header.  */
+      int shdr_malloced;	/* Nonzero if shdr array was allocated.  */
       off64_t sizestr_offset;	/* Offset of the size string in the parent
 				   if this is an archive member.  */
       Elf32_Ehdr ehdr_mem;	/* Memory used for ELF header when not
@@ -361,10 +371,6 @@ struct Elf
 
     struct
     {
-      int ehdr_flags;		/* Flags (dirty) for ELF header.  */
-      int phdr_flags;		/* Flags (dirty|malloc) for program header.  */
-      int shdr_malloced;	/* Nonzero if shdr array was allocated.  */
-
       Elf64_Ehdr *ehdr;		/* Pointer to the ELF header.  This is
 				   never malloced.  */
       Elf64_Shdr *shdr;		/* Used when reading from a file.  */
@@ -375,6 +381,9 @@ struct Elf
       Elf_Data_Chunk *rawchunks; /* List of elf_getdata_rawchunk results.  */
       unsigned int scnincr;	/* Number of sections allocate the last
 				   time.  */
+      int ehdr_flags;		/* Flags (dirty) for ELF header.  */
+      int phdr_flags;		/* Flags (dirty|malloc) for program header.  */
+      int shdr_malloced;	/* Nonzero if shdr array was allocated.  */
       off64_t sizestr_offset;	/* Offset of the size string in the parent
 				   if this is an archive member.  */
       Elf64_Ehdr ehdr_mem;	/* Memory used for ELF header when not
@@ -386,8 +395,7 @@ struct Elf
 
     struct
     {
-      int has_index;		/* Set when file has index.  0 means
-				   undecided, > 0 means it has one.  */
+      Elf *children;		/* List of all descriptors for this archive. */
       Elf_Arsym *ar_sym;	/* Symbol table returned by elf_getarsym.  */
       size_t ar_sym_num;	/* Number of entries in `ar_sym'.  */
       char *long_names;		/* If no index is available but long names
@@ -406,7 +414,6 @@ struct Elf
 
   /* There absolutely never must be anything following the union.  */
 };
-
 
 /* Type of the conversion functions.  These functions will convert the
    byte order.  */
@@ -450,7 +457,7 @@ extern int __libelf_version_initialized attribute_hidden;
    version, binary class, and type. */
 extern const uint_fast8_t __libelf_type_aligns[EV_NUM - 1][ELFCLASSNUM - 1][ELF_T_NUM] attribute_hidden;
 # define __libelf_type_align(class, type)	\
-    (__libelf_type_aligns[LIBELF_EV_IDX][class][type] ?: 1)
+    (__libelf_type_aligns[LIBELF_EV_IDX][class - 1][type] ?: 1)
 #else
 # define __libelf_type_align(class, type)	1
 #endif
@@ -481,7 +488,7 @@ extern Elf *__libelf_read_mmaped_file (int fildes, void *map_address,
 extern void __libelf_seterrno (int value) internal_function;
 
 /* Get the next archive header.  */
-extern int __libelf_next_arhdr (Elf *elf) internal_function;
+extern int __libelf_next_arhdr_wrlock (Elf *elf) internal_function;
 
 /* Read all of the file associated with the descriptor.  */
 extern char *__libelf_readall (Elf *elf) internal_function;
@@ -491,13 +498,14 @@ extern int __libelf_readsections (Elf *elf) internal_function;
 
 /* Store the information for the raw data in the `rawdata_list' element.  */
 extern int __libelf_set_rawdata (Elf_Scn *scn) internal_function;
+extern int __libelf_set_rawdata_wrlock (Elf_Scn *scn) internal_function;
 
 
 /* Helper functions for elf_update.  */
-extern off_t __elf32_updatenull (Elf *elf, int *change_bop, size_t shnum)
-     internal_function;
-extern off_t __elf64_updatenull (Elf *elf, int *change_bop, size_t shnum)
-     internal_function;
+extern off_t __elf32_updatenull_wrlock (Elf *elf, int *change_bop,
+					size_t shnum) internal_function;
+extern off_t __elf64_updatenull_wrlock (Elf *elf, int *change_bop,
+					size_t shnum) internal_function;
 
 extern int __elf32_updatemmap (Elf *elf, int change_bo, size_t shnum)
      internal_function;
@@ -509,36 +517,46 @@ extern int __elf64_updatefile (Elf *elf, int change_bo, size_t shnum)
      internal_function;
 
 
-/* Alias for exported functions to avoid PLT entries.  */
-extern int __elf_end_internal (Elf *__elf);
+/* Alias for exported functions to avoid PLT entries, and
+   rdlock/wrlock variants of these functions.  */
+extern int __elf_end_internal (Elf *__elf) attribute_hidden;
 extern Elf *__elf_begin_internal (int __fildes, Elf_Cmd __cmd, Elf *__ref)
      attribute_hidden;
-extern Elf32_Ehdr *__elf32_getehdr_internal (Elf *__elf) attribute_hidden;
-extern Elf64_Ehdr *__elf64_getehdr_internal (Elf *__elf) attribute_hidden;
+extern Elf32_Ehdr *__elf32_getehdr_wrlock (Elf *__elf) internal_function;
+extern Elf64_Ehdr *__elf64_getehdr_wrlock (Elf *__elf) internal_function;
 extern Elf32_Ehdr *__elf32_newehdr_internal (Elf *__elf) attribute_hidden;
 extern Elf64_Ehdr *__elf64_newehdr_internal (Elf *__elf) attribute_hidden;
 extern Elf32_Phdr *__elf32_getphdr_internal (Elf *__elf) attribute_hidden;
 extern Elf64_Phdr *__elf64_getphdr_internal (Elf *__elf) attribute_hidden;
+extern Elf32_Phdr *__elf32_getphdr_wrlock (Elf *__elf) attribute_hidden;
+extern Elf64_Phdr *__elf64_getphdr_wrlock (Elf *__elf) attribute_hidden;
 extern Elf32_Phdr *__elf32_newphdr_internal (Elf *__elf, size_t __cnt)
      attribute_hidden;
 extern Elf64_Phdr *__elf64_newphdr_internal (Elf *__elf, size_t __cnt)
      attribute_hidden;
 extern Elf_Scn *__elf32_offscn_internal (Elf *__elf, Elf32_Off __offset)
-  attribute_hidden;
+     attribute_hidden;
 extern Elf_Scn *__elf64_offscn_internal (Elf *__elf, Elf64_Off __offset)
-  attribute_hidden;
-extern int __elf_getshnum_internal (Elf *__elf, size_t *__dst)
      attribute_hidden;
-extern int __elf_getshstrndx_internal (Elf *__elf, size_t *__dst)
+extern int __elf_getphdrnum_rdlock (Elf *__elf, size_t *__dst)
+     internal_function;
+extern int __elf_getshdrnum_rdlock (Elf *__elf, size_t *__dst)
+     internal_function;
+extern int __elf_getshdrstrndx_internal (Elf *__elf, size_t *__dst)
      attribute_hidden;
-extern Elf32_Shdr *__elf32_getshdr_internal (Elf_Scn *__scn) attribute_hidden;
-extern Elf64_Shdr *__elf64_getshdr_internal (Elf_Scn *__scn) attribute_hidden;
+extern Elf32_Shdr *__elf32_getshdr_rdlock (Elf_Scn *__scn) internal_function;
+extern Elf64_Shdr *__elf64_getshdr_rdlock (Elf_Scn *__scn) internal_function;
+extern Elf32_Shdr *__elf32_getshdr_wrlock (Elf_Scn *__scn) internal_function;
+extern Elf64_Shdr *__elf64_getshdr_wrlock (Elf_Scn *__scn) internal_function;
 extern Elf_Scn *__elf_getscn_internal (Elf *__elf, size_t __index)
      attribute_hidden;
 extern Elf_Scn *__elf_nextscn_internal (Elf *__elf, Elf_Scn *__scn)
      attribute_hidden;
+extern int __elf_scnshndx_internal (Elf_Scn *__scn) attribute_hidden;
 extern Elf_Data *__elf_getdata_internal (Elf_Scn *__scn, Elf_Data *__data)
      attribute_hidden;
+extern Elf_Data *__elf_getdata_rdlock (Elf_Scn *__scn, Elf_Data *__data)
+     internal_function;
 extern Elf_Data *__elf_rawdata_internal (Elf_Scn *__scn, Elf_Data *__data)
      attribute_hidden;
 extern char *__elf_strptr_internal (Elf *__elf, size_t __index,
@@ -567,7 +585,8 @@ extern long int __elf32_checksum_internal (Elf *__elf) attribute_hidden;
 extern long int __elf64_checksum_internal (Elf *__elf) attribute_hidden;
 
 
-extern GElf_Ehdr *__gelf_getehdr_internal (Elf *__elf, GElf_Ehdr *__dest);
+extern GElf_Ehdr *__gelf_getehdr_rdlock (Elf *__elf, GElf_Ehdr *__dest)
+     internal_function;
 extern size_t __gelf_fsize_internal (Elf *__elf, Elf_Type __type,
 				     size_t __count, unsigned int __version)
      attribute_hidden;

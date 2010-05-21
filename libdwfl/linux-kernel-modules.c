@@ -1,5 +1,5 @@
 /* Standard libdwfl callbacks for debugging the running Linux kernel.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -47,8 +47,12 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+/* We include this before config.h because it can't handle _FILE_OFFSET_BITS.
+   Everything we need here is fine if its declarations just come first.  */
+
+#include <fts.h>
+
 #include <config.h>
-#undef	_FILE_OFFSET_BITS	/* Doesn't jibe with fts.  */
 
 #include "libdwflP.h"
 #include <inttypes.h>
@@ -60,7 +64,6 @@
 #include <sys/utsname.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <fts.h>
 
 
 #define KERNEL_MODNAME	"kernel"
@@ -192,9 +195,9 @@ report_kernel (Dwfl *dwfl, const char **release,
 						      fname, fd, 0);
 	  if (mod == NULL)
 	    result = -1;
-
-	  /* The kernel is ET_EXEC, but always treat it as relocatable.  */
-	  mod->e_type = ET_DYN;
+	  else
+	    /* The kernel is ET_EXEC, but always treat it as relocatable.  */
+	    mod->e_type = ET_DYN;
 	}
 
       if (!report || result < 0)
@@ -251,6 +254,29 @@ report_kernel_archive (Dwfl *dwfl, const char **release,
   return result;
 }
 
+static size_t
+check_suffix (const FTSENT *f, size_t namelen)
+{
+#define TRY(sfx)							\
+  if ((namelen ? f->fts_namelen == namelen + sizeof sfx - 1		\
+       : f->fts_namelen >= sizeof sfx)					\
+      && !memcmp (f->fts_name + f->fts_namelen - (sizeof sfx - 1),	\
+		  sfx, sizeof sfx))					\
+    return sizeof sfx - 1
+
+  TRY (".ko");
+#if USE_ZLIB
+  TRY (".ko.gz");
+#endif
+#if USE_BZLIB
+  TRY (".ko.bz2");
+#endif
+
+  return 0;
+
+#undef	TRY
+}
+
 /* Report a kernel and all its modules found on disk, for offline use.
    If RELEASE starts with '/', it names a directory to look in;
    if not, it names a directory to find under /lib/modules/;
@@ -281,7 +307,7 @@ dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
 	    return errno;
 	}
 
-      FTS *fts = fts_open (modulesdir, FTS_NOSTAT, NULL);
+      FTS *fts = fts_open (modulesdir, FTS_NOSTAT | FTS_LOGICAL, NULL);
       if (modulesdir[0] == (char *) release)
 	modulesdir[0] = NULL;
       if (fts == NULL)
@@ -293,13 +319,23 @@ dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
       FTSENT *f;
       while ((f = fts_read (fts)) != NULL)
 	{
+	  /* Skip a "source" subtree, which tends to be large.
+	     This insane hard-coding of names is what depmod does too.  */
+	  if (f->fts_namelen == sizeof "source" - 1
+	      && !strcmp (f->fts_name, "source"))
+	    {
+	      fts_set (fts, f, FTS_SKIP);
+	      continue;
+	    }
+
 	  switch (f->fts_info)
 	    {
 	    case FTS_F:
-	    case FTS_NSOK:
+	    case FTS_SL:
+	    case FTS_NSOK:;
 	      /* See if this file name matches "*.ko".  */
-	      if (f->fts_namelen > 3
-		  && !memcmp (f->fts_name + f->fts_namelen - 3, ".ko", 4))
+	      const size_t suffix = check_suffix (f, 0);
+	      if (suffix)
 		{
 		  /* We have a .ko file to report.  Following the algorithm
 		     by which the kernel makefiles set KBUILD_MODNAME, we
@@ -309,13 +345,13 @@ dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
 		     names.  To handle that, we would have to look at the
 		     __this_module.name contents in the module's text.  */
 
-		  char name[f->fts_namelen - 3 + 1];
+		  char name[f->fts_namelen - suffix + 1];
 		  for (size_t i = 0; i < f->fts_namelen - 3U; ++i)
 		    if (f->fts_name[i] == '-' || f->fts_name[i] == ',')
 		      name[i] = '_';
 		    else
 		      name[i] = f->fts_name[i];
-		  name[f->fts_namelen - 3] = '\0';
+		  name[f->fts_namelen - suffix] = '\0';
 
 		  if (predicate != NULL)
 		    {
@@ -330,8 +366,7 @@ dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
 			continue;
 		    }
 
-		  if (dwfl_report_offline (dwfl, name,
-					   f->fts_path, -1) == NULL)
+		  if (dwfl_report_offline (dwfl, name, f->fts_path, -1) == NULL)
 		    {
 		      result = -1;
 		      break;
@@ -345,6 +380,7 @@ dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
 	      result = f->fts_errno;
 	      break;
 
+	    case FTS_SLNONE:
 	    default:
 	      continue;
 	    }
@@ -375,41 +411,40 @@ intuit_kernel_bounds (Dwarf_Addr *start, Dwarf_Addr *end, Dwarf_Addr *notes)
 
   char *line = NULL;
   size_t linesz = 0;
-  size_t n = getline (&line, &linesz, f);
-  Dwarf_Addr first;
+  size_t n;
   char *p = NULL;
-  int result = 0;
-  if (n > 0 && (first = strtoull (line, &p, 16)) > 0 && p > line)
-    {
-      Dwarf_Addr last = 0;
-      while ((n = getline (&line, &linesz, f)) > 1 && line[n - 2] != ']')
-	{
-	  p = NULL;
-	  last = strtoull (line, &p, 16);
-	  if (p == NULL || p == line || last == 0)
-	    {
-	      result = -1;
-	      break;
-	    }
+  const char *type;
 
-	  if (*notes == 0)
-	    {
-	      const char *sym = (strsep (&p, " \t\n")
-				 ? strsep (&p, " \t\n") : NULL);
-	      if (sym != NULL && !strcmp (sym, "__start_notes"))
-		*notes = last;
-	    }
-	}
-      if ((n == 0 && feof_unlocked (f)) || (n > 1 && line[n - 2] == ']'))
-	{
-	  Dwarf_Addr round_kernel = sysconf (_SC_PAGE_SIZE);
-	  first &= -(Dwarf_Addr) round_kernel;
-	  last += round_kernel - 1;
-	  last &= -(Dwarf_Addr) round_kernel;
-	  *start = first;
-	  *end = last;
-	  result = 0;
-	}
+  inline bool read_address (Dwarf_Addr *addr)
+  {
+    if ((n = getline (&line, &linesz, f)) < 1 || line[n - 2] == ']')
+      return false;
+    *addr = strtoull (line, &p, 16);
+    p += strspn (p, " \t");
+    type = strsep (&p, " \t\n");
+    if (type == NULL)
+      return false;
+    return p != NULL && p != line;
+  }
+
+  int result;
+  do
+    result = read_address (start) ? 0 : -1;
+  while (result == 0 && strchr ("TtRr", *type) == NULL);
+
+  if (result == 0)
+    {
+      *end = *start;
+      while (read_address (end))
+	if (*notes == 0 && !strcmp (p, "__start_notes\n"))
+	  *notes = *end;
+
+      Dwarf_Addr round_kernel = sysconf (_SC_PAGE_SIZE);
+      *start &= -(Dwarf_Addr) round_kernel;
+      *end += round_kernel - 1;
+      *end &= -(Dwarf_Addr) round_kernel;
+      if (*start >= *end || *end - *start < round_kernel)
+	result = -1;
     }
   free (line);
 
@@ -494,7 +529,7 @@ check_module_notes (Dwfl_Module *mod)
   if (asprintf (&dirs[0], MODNOTESFMT, mod->name) < 0)
     return ENOMEM;
 
-  FTS *fts = fts_open (dirs, FTS_NOSTAT, NULL);
+  FTS *fts = fts_open (dirs, FTS_NOSTAT | FTS_LOGICAL, NULL);
   if (fts == NULL)
     {
       free (dirs[0]);
@@ -508,6 +543,7 @@ check_module_notes (Dwfl_Module *mod)
       switch (f->fts_info)
 	{
 	case FTS_F:
+	case FTS_SL:
 	case FTS_NSOK:
 	  result = check_notes (mod, f->fts_accpath, 0, f->fts_name);
 	  if (result > 0)	/* Nothing found.  */
@@ -523,6 +559,7 @@ check_module_notes (Dwfl_Module *mod)
 	  break;
 
 	case FTS_NS:
+	case FTS_SLNONE:
 	default:
 	  continue;
 	}
@@ -607,7 +644,7 @@ dwfl_linux_kernel_find_elf (Dwfl_Module *mod,
   if (asprintf (&modulesdir[0], MODULEDIRFMT, release) < 0)
     return -1;
 
-  FTS *fts = fts_open (modulesdir, FTS_NOSTAT, NULL);
+  FTS *fts = fts_open (modulesdir, FTS_NOSTAT | FTS_LOGICAL, NULL);
   if (fts == NULL)
     {
       free (modulesdir[0]);
@@ -653,14 +690,23 @@ dwfl_linux_kernel_find_elf (Dwfl_Module *mod,
   int error = ENOENT;
   while ((f = fts_read (fts)) != NULL)
     {
+      /* Skip a "source" subtree, which tends to be large.
+	 This insane hard-coding of names is what depmod does too.  */
+      if (f->fts_namelen == sizeof "source" - 1
+	  && !strcmp (f->fts_name, "source"))
+	{
+	  fts_set (fts, f, FTS_SKIP);
+	  continue;
+	}
+
       error = ENOENT;
       switch (f->fts_info)
 	{
 	case FTS_F:
+	case FTS_SL:
 	case FTS_NSOK:
 	  /* See if this file name is "MODULE_NAME.ko".  */
-	  if (f->fts_namelen == namelen + 3
-	      && !memcmp (f->fts_name + namelen, ".ko", 4)
+	  if (check_suffix (f, namelen)
 	      && (!memcmp (f->fts_name, module_name, namelen)
 		  || !memcmp (f->fts_name, alternate_name, namelen)))
 	    {
@@ -685,6 +731,7 @@ dwfl_linux_kernel_find_elf (Dwfl_Module *mod,
 	  error = f->fts_errno;
 	  break;
 
+	case FTS_SLNONE:
 	default:
 	  break;
 	}

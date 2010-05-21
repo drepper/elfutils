@@ -1,5 +1,5 @@
 /* Return string associated with given attribute.
-   Copyright (C) 2003, 2005 Red Hat, Inc.
+   Copyright (C) 2003, 2005, 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2003.
 
@@ -62,7 +62,7 @@ dwarf_haschildren (die)
 {
   /* Find the abbreviation entry.  */
   Dwarf_Abbrev *abbrevp = die->abbrev;
-  if (abbrevp != (Dwarf_Abbrev *) -1l)
+  if (abbrevp != DWARF_END_ABBREV)
     {
       const unsigned char *readp = (unsigned char *) die->addr;
 
@@ -72,12 +72,12 @@ dwarf_haschildren (die)
       get_uleb128 (abbrev_code, readp);
 
       abbrevp = __libdw_findabbrev (die->cu, abbrev_code);
-      die->abbrev = abbrevp ?: (Dwarf_Abbrev *) -1l;
+      die->abbrev = abbrevp ?: DWARF_END_ABBREV;
     }
-  if (unlikely (die->abbrev == (Dwarf_Abbrev *) -1l))
+  if (unlikely (die->abbrev == DWARF_END_ABBREV))
     {
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
-      return 0;
+      return -1;
     }
 
   return die->abbrev->has_children;

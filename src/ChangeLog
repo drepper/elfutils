@@ -1,3 +1,688 @@
+2010-05-19  Roland McGrath  <roland@redhat.com>
+
+	* addr2line.c (find_symbol): Short-circuit on empty name.
+	(handle_address): Handle SYMBOL with no +OFFSET.
+
+2010-05-08  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_ops): Take new arg OFFSET_SIZE.
+	Use that for DW_OP_call_ref, not ADDRSIZE.
+	(print_cfa_program): Update caller.
+	(struct attrcb_args): Add offset_size field.
+	(attr_callback): Use it for print_ops call.
+	(print_debug_info_section): Initialize it.
+
+2010-04-14  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (handle_core_item): Fix bitmask printing.
+
+2010-04-06  Roland McGrath  <roland@redhat.com>
+
+	* ld.c (options): Fix some typos in messages.
+	* elflint.c (check_scn_group, check_group): Likewise.
+	* ldscript.y (add_id_list): Likewise.
+	* readelf.c (print_hash_info): Add xgettext:no-c-format magic comment
+	before translated string containing a literal %.
+
+2010-02-26  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (process_file): Don't leak an fd in failure case.
+
+2010-02-15  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am: Use config/eu.am for common stuff.
+
+	* readelf.c (print_debug_frame_section): Add a cast to avoid sign
+	mismatch in comparison.
+
+2010-02-02  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_encoding_base): Handle DW_EH_PE_absptr (zero).
+	(read_encoded): Likewise.
+	(print_debug_frame_section): Check for bogus augmentation length.
+	For P augmentation, use read_encoded, print the encoding description,
+	and use hex for unsigned values.
+
+2010-01-15  Roland McGrath  <roland@redhat.com>
+
+	* ar.c: Include <sys/stat.h>.
+	* elflint.c: Likewise.
+	* readelf.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise
+
+2010-01-07  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_ehdr): Handle PN_XNUM.
+	(phnum): New static variable.
+	(process_elf_file): Set it with elf_getphdrnum.
+	(print_phdr): Use phnum instead of EHDR->e_phnum.
+	(print_dynamic, handle_notes): Likewise.
+	(handle_relocs_rel, handle_relocs_rela): Likewise.
+
+	* elfcmp.c (main): Use elf_getshdrnum and elf_getphdrnum.
+
+	* elflint.c (phnum): New static variable.
+	(check_elf_header): Set it, handling PN_XNUM.
+	Use that in place of EHDR->e_phnum throughout.
+	(check_symtab, check_reloc_shdr, check_dynamic): Likewise.
+	(unknown_dependency_p, check_sections, check_program_header): Likewise.
+
+2010-01-05  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (dwarf_attr_string): Match DW_AT_GNU_vector and
+	DW_AT_GNU_template_name.
+
+2010-01-04  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (handle_notes_data): Grab NT_AUXV only for name "CORE".
+	(handle_core_note): Pass NHDR and NAME to ebl_core_note.
+	(handle_core_item): Handle .format of '\n' as \n-separated strings.
+
+	* readelf.c (implicit_debug_sections): New variable.
+	(parse_opt): Set it instead of print_debug_sections for -a.
+	OR them together for print_debug check.
+	(print_debug): OR them together for section check.
+
+	* readelf.c (options): Repartition into set implied by -a and others.
+	Correct -a text to match reality.
+
+	* readelf.c (struct section_argument): Add bool member 'implicit'.
+	(parse_opt): Set it for -a cases, clear it for -x args.
+	(for_each_section_argument): Don't complain about a missing section by
+	name if it's implicit.
+
+2009-11-16  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_string_section): Punt SHT_NOBITS like empty
+	sections, just as dump_data_section already does.
+
+2009-09-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (special_sections): Allow MERGE and STRINGS flags to be
+	set for .comment section.
+	Patch by Mark Wielaard <mjw@redhat.com>.
+
+2009-09-08  Roland McGrath  <roland@redhat.com>
+
+	* ar.c (main): Fix typo in message format.
+
+2009-08-21  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (attr_callback): Use print_block only when we don't use
+	print_ops.
+
+2009-08-14  Roland McGrath  <roland@redhat.com>
+
+	* ar.c (do_oper_extract): Use pathconf instead of statfs.
+
+2009-08-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* debugpred.h: Add two most const.
+
+2009-07-26  Mark Wielaard  <mjw@redhat.com>
+
+	* elflint.c (check_note_data): Recognize NT_GNU_GOLD_VERSION.
+
+2009-07-25  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (addr2line_LDADD): Add $(libelf).
+
+2009-07-24  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_block): New function.
+	(print_ops): Use it.
+	(attr_callback): Use it for DW_FORM_block* forms.
+
+2009-07-20  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_ops): Add handling of DW_OP_implicit_value
+	and DW_OP_stack_value.
+
+2009-07-14  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (check_elf_header): Allow Linux ABI.
+	(check_symtab): Handle STB_GNU_UNIQUE.
+
+2009-07-08  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (attr_callback): Handle DW_Form constants for
+	DW_AT_data_member_location.
+
+2009-07-06  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (register_info): New function.  Handle unknown register #s.
+	(print_cfa_program): Use it.
+	(handle_core_register, handle_core_registers): Likewise.
+
+2009-06-28  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_address_names): New static variable.
+	(options, parse_opt): Grok -N/--numeric-addresses to clear it.
+	(format_dwarf_addr): Don't look up name if !print_address_names.
+
+2009-06-13  Ulrich Drepper  <drepper@redhat.com>
+
+	* ldgeneric.c: Don't use deprecated libelf functions.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* readelf.c: Likewise.
+	* size.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+	* ld.h: Fix up comment.
+
+2009-06-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c (print_relocs): Expect ELF header argument and pass on
+	to handle_relocs_rel* functions. Adjust caller.
+	(handle_relocs_rel): Add ELF header argument.  Add special case for
+	the IRELATIVE relocations in statically linked executables.
+	(handle_relocs_rela): Likewise.
+
+2009-04-29  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (check_symtab): Add tests of st_other field.
+
+2009-04-23  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile [BUILD_STATIC] (libdw): Add $(zip_LIBS).
+
+2009-04-20  Roland McGrath  <roland@redhat.com>
+
+	* addr2line.c (print_dwarf_function): Honor -s and -A for file names
+	of inline call sites.
+
+	* addr2line.c (just_section): New variable.
+	(adjust_to_section): New function, broken out of ...
+	(handle_address): ... here.
+	(options, parse_opt): Add -j/--section=NAME to set it.
+
+2009-04-15  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_debug_frame_section): Check for DW_CIE_ID_64 in
+	64-bit format header, DW_CIE_ID_32 in 32-bit format header.
+
+2009-04-14  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_attributes): Treat SHT_ARM_ATTRIBUTES on EM_ARM
+	like SHT_GNU_ATTRIBUTES.
+
+	* readelf.c (handle_core_registers): Fix error message.
+
+	* strip.c (handle_elf: check_preserved): Don't note any change when
+	.debug_data is already filled from a previous pass.
+
+2009-02-05  Ulrich Drepper  <drepper@redhat.com>
+
+	* objdump.c (show_relocs_x): Minor cleanups.
+
+	* readelf.c (print_cfa_program): Correct a few labels.
+	Print first DW_CFA_expression and DW_CFA_val_expression parameter
+	as register.
+
+2009-02-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* objdump.c (show_relocs_rel, show_relocs_rela): Split common parts
+	into ...
+	(show_relocs_x): ...here.  New function.
+	(show_relocs): Better spacing in output.
+
+	* objdump.c (show_relocs_rela): Show offsets as signed values.
+
+	* ar.c (main): Fix recognition of invalid modes for a, b, i modifiers.
+	Improve some error messages.
+	Use program_invocation_short_name instead of AR macro.
+	* Makefile.am (CFLAGS_ar): Remove.
+	* elflint.c (parse_opt): ARGP_HELP_EXIT_ERR does nothing for argp_help.
+	* objdump.c (parse_opt): Likewise.
+	* readelf.c (parse_opt): Likewise.
+
+2009-01-27  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_ops): Notice short length, don't overrun buffer
+	(still need to fix LEB128).
+
+	* readelf.c (print_ops): Fix DW_OP_call[24] decoding.
+
+	* readelf.c (print_ops): Print (empty)\n when LEN == 0.
+
+2009-01-24  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c (print_debug_frame_section): Fix computation of vma_base
+	for PC-relative mode.
+
+2009-01-23  Ulrich Drepper  <drepper@redhat.com>
+
+	* size.c (process_file): When handling archive, close file descriptor
+	here.  For unknown file format also close file descriptor.
+	(handle_ar): Don't close file descriptor here.
+
+	* readelf.c (parse_opt): Move code to add to dump_data_sections and
+	string_sections list in local function add_dump_section.  Adjust 'x'
+	key handling.  For 'a' key add .strtab, .dynstr, and .comment section
+	to string_sections list.
+
+2009-01-22  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_phdr): Don't print section mapping when no sections.
+
+	* Makefile.am (AM_CFLAGS): Pass -Wno-format for *_no_Wformat.
+
+	* readelf.c (print_debug_frame_section): Initialize IS_SIGNED to false
+	and reset it only for the 'true' cases.
+
+	* Makefile.am (addr2line_no_Wformat): New variable.
+
+	* readelf.c (print_debug_frame_section): Use t instead of j formats
+	for ptrdiff_t OFFSET.
+
+2009-01-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (check_program_header): Fix typo in .eh_frame_hdr section
+	test.  Handle debuginfo files.
+	(check_exception_data): First sanity test.
+
+2009-01-17  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c (print_debug_exception_table): Show target of ar_disp
+	field.
+
+	* elflint.c (check_program_header): Add most consistency checks for
+	PT_GNU_EH_FRAME entry.
+
+	* addr2line.c: Use ARGP_PROGRAM_VERSION_HOOK_DEF and
+	ARGP_PROGRAM_BUG_ADDRESS_DEF.
+	* ar.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* ld.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+
+	* size.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+
+2009-01-16  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (check_program_header): Check that PT_GNU_EH_FRAME entry
+	matches .eh_frame_hdr section, if it is available.  Also check that
+	the segment is allocated, not writable, not executable.
+
+	* readelf.c: Add -e option.  Dump exception and unwind related
+	sections.  Add -e to -a.
+	(print_encoding_base): Handle DW_EH_PE_omit.
+	(print_debug_exception_table): Beginning of support.
+	(print_debug): Hook up print_debug_exception_table for
+	.gcc_except_table sections.
+
+	* readelf.c (print_debug_frame_section): Some fixes for last change.
+
+2009-01-15  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c (print_encoding): Now a toplevel function.
+	(print_relinfo): Likewise.
+	(print_encoding_base): Broken out of print_debug_frame_section.
+	(print_debug_frame_section): Print different header for .eh_frame
+	sections.  Fix recognition of matching CIEs in .debug_frame sections.
+	Print absolute offset for PC-relative FDE locations.  Don't print
+	table header for FDEs if the table is empty.
+	(read_encoded): New function.
+	(print_debug_frame_hdr_section): New function.
+	(print_debug): Hook up print_debug_frame_hdr_section for .eh_frame_hdr
+	sections.
+
+	* readelf.c (handle_relocs_rel): Print section number.
+	(print_debug_abbrev_section): Likewise.
+	(print_debug_aranges_section): Likewise.
+	(print_debug_ranges_section): Likewise.
+	(print_debug_info_section): Likewise.
+	(print_debug_line_section): Likewise.
+	(print_debug_loc_section): Likewise.
+	(print_debug_macinfo_section): Likewise.
+	(print_debug_pubnames_section): Likewise.
+	(print_debug_str_section): Likewise.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* strings.c (read_block): Fix typo in error message string.
+
+2009-01-07  Ulrich Drepper  <drepper@redhat.com>
+
+	* ld.c (ld_new_searchdir): Fix adding to search path list.
+
+2009-01-06  Ulrich Drepper  <drepper@redhat.com>
+
+	* readelf.c: Implement call frame debug section dumping.
+
+2009-01-05  Roland McGrath  <roland@redhat.com>
+
+	* elfcmp.c: Exit with status 2 for errors (like cmp, diff, grep).
+	Status 1 (aka EXIT_FAILURE) is only for completed OK but not equal.
+
+2009-01-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* addr2line.c: Update copyright year.
+	* ar.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* ld.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+	* size.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+
+2008-12-11  Roland McGrath  <roland@redhat.com>
+
+	* nm.c (sym_name): New function.
+	(show_symbols_sysv): Use it in place of elf_strptr.
+	(show_symbols_bsd, show_symbols_posix): Likewise.
+	Fixes RHBZ#476136.
+
+	* nm.c (show_symbols_sysv): Use an alloca'd backup section name when
+	elf_strptr fails.
+
+2008-12-02  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (count_dwflmod, process_file): Don't presume encoding of
+	nonzero OFFSET argument to dwfl_getmodules.
+
+2008-08-07  Roland McGrath  <roland@redhat.com>
+
+	* addr2line.c (main): Pass string to handle_address.
+	(see_one_module): New function, subroutine of handle_address.
+	(find_symbol): Likewise.
+	(handle_address): Take string argument rather than address.
+	Convert plain number, or handle strings like "(section)+offset"
+	or "symbol+offset".
+
+2008-08-01  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (handle_core_item): Handle 'B' type for 1-origin bitset.
+	For 'b' and 'B', print <x-y,z> or ~<x,y-z> rather than 1/0 string.
+
+	* readelf.c (convert): Take new argument SIZE.
+	(handle_core_register, handle_core_item): Update callers.
+	(handle_core_item): Take new arg REPEATED_SIZE.
+	(handle_core_items): Special case for a singleton item,
+	let handle_core_item handle repeats if it wants to.
+
+	* readelf.c (handle_core_items): Give abridged output
+	for identical groups repeated more than twice.
+
+2008-07-04  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (handle_core_items): Handle ELF_T_ADDR.
+
+2008-04-10  Roland McGrath  <roland@redhat.com>
+
+	* strip.c (handle_elf): Don't keep sections that kept symbol tables
+	refer to.  Instead, just be sure to preserve the original symbol
+	table in the debug file so those symbols go with their sections and
+	can be elided from the stripped version of the symbol table.
+
+	* strip.c (handle_elf): When a discarded section kept in the debug
+	file refers to a nondiscard section via sh_link/sh_info, preserve
+	that nondiscarded section unmodified in the debug file as well.
+	Skip adjustment of discarded sections symbol table references when
+	that symbol table is copied in this way.
+
+	* elflint.c (check_symtab): Don't crash from missing symbol names
+	after diagnosing bogus strtab.
+
+	* strip.c (handle_elf): Cosmetic cleanup in special section contents
+	adjustment for symtab changes.
+
+2008-03-31  Roland McGrath  <roland@redhat.com>
+
+	* elflint.c (check_sections): Add checks on SHF_EXECINSTR sections:
+	must be SHT_PROGBITS, must not be SHF_WRITE.  Let backend hook
+	excuse a special section.
+
+2008-03-27  Roland McGrath  <roland@redhat.com>
+
+	* elflint.c (check_sections): Check that executability and writability
+	of sections is reflected in segment p_flags.
+
+2008-03-26  Roland McGrath  <roland@redhat.com>
+
+	* elflint.c (check_program_header): Accept PT_GNU_RELRO p_flags
+	that matches its PT_LOAD's p_flags &~ PF_W.  On sparc, PF_X really
+	is valid in RELRO.
+
+2008-02-29  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_attributes): Add a cast.
+	* elflint.c (check_attributes): Likewise.
+
+	* unaligned.h (add_8ubyte_unaligned): Cast PTR argument for parity
+	with [UNALIGNED_ACCESS_CLASS == BYTE_ORDER] definition.
+	(add_4ubyte_unaligned, add_2ubyte_unaligned): Likewise.
+
+2008-02-03  Ulrich Drepper  <drepper@redhat.com>
+
+	* i386_ld.c (elf_i386_count_relocations): Implement R_386_TLS_GD
+	when linked into executable.
+	(elf_i386_create_relocations): Likewise.
+
+2008-02-20  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_attributes): New function.
+	(process_elf_file): Call it under -A.
+
+	* elflint.c (check_attributes): Implement it for real.
+
+2008-02-19  Roland McGrath  <roland@redhat.com>
+
+	* elflint.c (special_sections): Handle .gnu.attributes section.
+	(check_sections): Likewise.
+	(check_attributes): New function.
+
+2008-02-10  Roland McGrath  <roland@redhat.com>
+
+	* elfcmp.c (main): Ignore sh_offset differences in non-SHF_ALLOC
+	sections and ET_REL files.
+
+2008-02-02  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32-i386.script: Add .eh_frame_hdr, .tdata, and .tbss sections.
+	* i386_ld.c (elf_i386_count_relocations): Handle R_386_TLS_LDO_32
+	and R_386_TLS_LE.
+	(elf_i386_create_relocations): Likewise.
+	* ld.h (struct ld_state): Add need_tls, tls_start, and tls_tcb
+	elements.
+	* ldgeneric.c (add_section): If TLS section is used, set need_tls flag.
+	(ld_generic_create_outfile): Add PT_TLS entry to program  header.
+	Fix generation of PT_GNU_STACK entry.
+
+2008-02-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* ld.c (replace_args): Prevent loop over replacements if the parameter
+	is only two characters long.
+
+	* ld.c: Recognize sha1 argument for --build-id parameter.
+	* ldgeneric.c (create_build_id_section): Handle sha1.
+	(compute_hash_sum): New function.  Broken out of compute_build_id.
+	Take hash function and context as parameters.
+	(compute_build_id): Use compute_hash_sum for md5 and the new sha1
+	implementation.
+
+2008-01-31  Ulrich Drepper  <drepper@redhat.com>
+
+	* elf32-i386.script: Add .note.ABI-tag and .note.gnu.build-id sections.
+	* ld.c: Recognize --build-id command line parameter.
+	* ld.h: Define scn_dot_note_gnu_build_id.
+	(struct ld_state): Add build_id and buildidscnidx elements.
+	* ldgeneric.c: Implement --build-id command line parameter.
+	* ldlex.l (ID): Recognize - as valid character after the first one.
+
+2008-01-29  Ulrich Drepper  <drepper@redhat.com>
+
+	* ld.c (replace_args): New function.
+	(main): Use it to rewrite old-style parameters.
+
+	* elf32-i386.script: Add .gnu.hash section.
+	* ldgeneric.c (optimal_bucket_size): A tiny bit more efficient.
+	(fillin_special_symbol): Initialize st_size.
+	(sortfct_hashval): New function.
+	(create_gnu_hash): New function.
+	(create_hash): New function.
+	(ld_generic_create_outfile): Use the new functions to create the
+	hash tables.
+
+	* elflint.c (check_gnu_hash): Fix index value printed in error message.
+
+2008-01-24  Ulrich Drepper  <drepper@redhat.com>
+
+	* elflint.c (check_group): Check that signature symbol for section
+	group is not an empty string.
+	* ldgeneric.c: Remove magic assignment of indeces in the dynsym
+	section.  Start implementation of --hash-style.
+	* i386_ld.c: Likewise.
+	* ld.c: Recognize --hash-style.
+	* ld.h (struct scninfo): Add comdat_group.
+	Add additional parameter to finalize_plt callback.
+
+2008-01-22  Ulrich Drepper  <drepper@redhat.com>
+
+	* ld.h (struct callbacks): Add initialize_gotplt.
+	(struct scnhead): Add scn_dot_gotplt.
+	(struct ld_state): Add gotpltscnidx.
+	* i386_ld.c (elf_i386_initialize_plt): Minor optimization.
+	(elf_i386_initialize_pltrel): Likewise.
+	(elf_i386_initialize_got): There is now a separate .got.plt, so
+	don't do the PLT-related work here.  Initialize d_type.
+	(elf_i386_initialize_gotplt): New function.
+	(elf_i386_plt0): Use ud2a after indirect jump.
+	(elf_i386_pic_plt0_entry): Likewise.
+	(elf_i386_finalize_plt): Reference now .got.plt.
+	(elf_i386_count_relocations): For GOT entries which need no relocation
+	don't bump nrel_got.
+	(elf_i386_create_relocations): Also get .got.plt.  Rewrite R-386_GOT32
+	handling for split .got/.got.plt.
+	(elf_i386_ld_init): Initialize callbacks.initialize_gotplt.
+	* elf32-i386.script: Sort sections for security.  There are no .got
+	input sections.  Add .got.plt.
+	* ldgeneric.c (ld_generic_generate_sections): Add .got.plt section.
+	(ld_generic_create_outfile): Initialize .got.plt section.
+	Use .got.plt address for _GLOBAL_OFFSET_TABLE_ symbol and DT_PLTGOT.
+
+2008-01-19  Ulrich Drepper  <drepper@redhat.com>
+
+	* i386_ld.c (elf_i386_count_relocations): PLT relocations for undefined
+	symbols are not carried over into statically linked output files.
+	Add dummy entries for more TLS relocations.
+
+	* ld.c (options): Add long names for -( and -).
+
+	* ldgeneric.c (check_definition): For newly found definitions don't
+	mark section as used if symbol is absolute.
+	(extract_from_archive): Only assign archive sequence number the first
+	time the archive is handled.  Update ld_state.last_archive_used
+	if any symbol was used.  Remove nround variable.
+	(file_process2): When using symbol from an archive, update
+	ld_state.group_start_archive, ld_state.archives, and
+	ld_state.tailarchives.
+	(ld_generic_file_process): If group is not handled anymore, after
+	freeing ELF handles for the archives, clear ld_state.archives and
+	*nextp.  Fix wrong logic in recognizing first iteration of group
+	loop.  When clearing flags, also clear ld_state.group_start_archive.
+
+2008-01-11  Ulrich Drepper  <drepper@redhat.com>
+
+	* objdump.c (show_disasm): Adjust disassembler format string for
+	removal of %e.
+
+2008-01-04  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (handle_core_items): Take new arg DESCSZ; if nonzero,
+	a size greater than the items cover means multiple sets of items.
+	(handle_core_note): Update caller.
+
+2008-01-04  Roland McGrath  <roland@redhat.com>
+
+	* strip.c (handle_elf): Move SHDRIDX defn to silence gcc warning.
+
+2008-01-03  Roland McGrath  <roland@redhat.com>
+
+	* ld.h (linked_from_dso_p): Use __attribute__ ((__gnu_inline__)).
+
+	* elflint.c (check_dynamic): Remove duplicate initializer.
+
+2008-01-02  Ulrich Drepper  <drepper@redhat.com>
+
+	* addr2line.c: Update copyright year.
+	* ar.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* ld.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+	* size.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+
+2007-12-30  Ulrich Drepper  <drepper@redhat.com>
+
+	* objdump (show_disasm): Use %e after third parameter.
+
+2007-12-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* strip.c: Fix wrong parenthesis in a few branch predictions.
+	* strings.c: Likewise.
+
+2007-12-20  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am (DEFS): Add DEBUGPRED.
+	* addr2line.c: Include debugpred.h.
+	* ar.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+	* size.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+	* debugpred.h: New file.
+
+	* readelf.c (handle_relocs_rel): Use elf_scnshndx.
+	(handle_relocs_rela): Likewise.
+
+	* readelf.c: Add lots of likely/unlikely.
+
+	* elflint.c: Minor cleanups.
+
+2007-11-19  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_ops): Handle all bad op codes gracefully.
+	Print their numbers instead of just ???.
+
+2007-11-09  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (attr_callback): Handle DW_AT_data_location.
+	Handle block forms to mean a DWARF expression for DW_AT_allocated,
+	DW_AT_associated, DW_AT_bit_size, DW_AT_bit_offset, DW_AT_bit_stride,
+	DW_AT_byte_size, DW_AT_byte_stride, DW_AT_count, DW_AT_lower_bound,
+	DW_AT_upper_bound.
+
 2007-10-20  Roland McGrath  <roland@redhat.com>
 
 	* unstrip.c (options): Update -R description.

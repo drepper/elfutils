@@ -1,5 +1,5 @@
 /* Get section at specific index.
-   Copyright (C) 2005 Red Hat, Inc.
+   Copyright (C) 2005, 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Contributed by Ulrich Drepper <drepper@redhat.com>, 2005.
 
@@ -77,12 +77,20 @@ elfw2(LIBELFBITS,offscn) (elf, offset)
       return NULL;
     }
 
+  Elf_ScnList *runp = &elf->state.ELFW(elf,LIBELFBITS).scns;
+
+  /* If we have not looked at section headers before,
+     we might need to read them in first.  */
+  if (runp->cnt > 0
+      && unlikely (runp->data[0].shdr.ELFW(e,LIBELFBITS) == NULL)
+      && unlikely (elfw2(LIBELFBITS,getshdr) (&runp->data[0]) == NULL))
+    return NULL;
+
   rwlock_rdlock (elf->lock);
 
   Elf_Scn *result = NULL;
 
   /* Find the section in the list.  */
-  Elf_ScnList *runp = &elf->state.ELFW(elf,LIBELFBITS).scns;
   while (1)
     {
       for (unsigned int i = 0; i < runp->cnt; ++i)

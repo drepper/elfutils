@@ -1,5 +1,5 @@
 /* Standard find_debuginfo callback for libdwfl.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -99,16 +99,22 @@ validate (Dwfl_Module *mod, int fd, bool check, GElf_Word debuglink_crc)
       /* We need to open an Elf handle on the file so we can check its
 	 build ID note for validation.  Backdoor the handle into the
 	 module data structure since we had to open it early anyway.  */
-      mod->debug.elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (likely (__libdwfl_find_build_id (mod, false, mod->debug.elf) == 2))
-	/* Also backdoor the gratuitous flag.  */
-	mod->debug.valid = true;
+
+      mod->debug.valid = false;
+      Dwfl_Error error = __libdw_open_file (&fd, &mod->debug.elf, false, false);
+      if (error != DWFL_E_NOERROR)
+	__libdwfl_seterrno (error);
+      else if (likely (__libdwfl_find_build_id (mod, false,
+						mod->debug.elf) == 2))
+	  /* Also backdoor the gratuitous flag.  */
+	  mod->debug.valid = true;
       else
 	{
 	  /* A mismatch!  */
 	  elf_end (mod->debug.elf);
 	  mod->debug.elf = NULL;
-	  mod->debug.valid = false;
+	  close (fd);
+	  fd = -1;
 	}
 
       return mod->debug.valid;
@@ -192,7 +198,7 @@ find_debuginfo_in_path (Dwfl_Module *mod, const char *file_name,
 	  break;
 	}
 
-      char *fname;
+      char *fname = NULL;
       int fd = try_open (dir, subdir, debuglink_file, &fname);
       if (fd < 0)
 	switch (errno)
@@ -242,7 +248,23 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
     }
 
   /* Failing that, search the path by name.  */
-  return find_debuginfo_in_path (mod, file_name, debuglink_file, debuglink_crc,
-				 debuginfo_file_name);
+  int fd = find_debuginfo_in_path (mod, file_name,
+				   debuglink_file, debuglink_crc,
+				   debuginfo_file_name);
+
+  if (fd < 0 && errno == 0)
+    {
+      /* If FILE_NAME is a symlink, the debug file might be associated
+	 with the symlink target name instead.  */
+
+      char *canon = canonicalize_file_name (file_name);
+      if (canon != NULL && strcmp (file_name, canon))
+	fd = find_debuginfo_in_path (mod, canon,
+				     debuglink_file, debuglink_crc,
+				     debuginfo_file_name);
+      free (canon);
+    }
+
+  return fd;
 }
 INTDEF (dwfl_standard_find_debuginfo)

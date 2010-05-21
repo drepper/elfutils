@@ -1,5 +1,5 @@
 /* Recover relocatibility for addresses computed from debug information.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -148,7 +148,7 @@ process_elf (Dwfl *dwfl, const char *name, const char *file_name, int fd,
 	     Elf *elf)
 {
   Dwfl_Module *mod = __libdwfl_report_elf (dwfl, name, file_name, fd, elf,
-					   dwfl->offline_next_address);
+					   dwfl->offline_next_address, false);
   if (mod != NULL)
     {
       /* If this is an ET_EXEC file with fixed addresses, the address range
@@ -259,16 +259,23 @@ process_archive (Dwfl *dwfl, const char *name, const char *file_name, int fd,
 
 {
   Dwfl_Module *mod = NULL;
+  Elf *member = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, archive);
+  if (unlikely (member == NULL)) /* Empty archive.  */
+    {
+      __libdwfl_seterrno (DWFL_E_BADELF);
+      return NULL;
+    }
+
   while (process_archive_member (dwfl, name, file_name, predicate,
-				 fd, elf_begin (fd, ELF_C_READ_MMAP_PRIVATE,
-						archive), &mod) != ELF_C_NULL)
-    ;
+				 fd, member, &mod) != ELF_C_NULL)
+    member = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, archive);
 
   /* We can drop the archive Elf handle even if we're still using members
      in live modules.  When the last module's elf_end on a member returns
      zero, that module will close FD.  If no modules survived the predicate,
      we are all done with the file right here.  */
-  if (elf_end (archive) == 0)
+  if (mod != NULL		/* If no modules, caller will clean up.  */
+      && elf_end (archive) == 0)
     close (fd);
 
   return mod;
@@ -281,7 +288,13 @@ __libdwfl_report_offline (Dwfl *dwfl, const char *name,
 			  int (*predicate) (const char *module,
 					    const char *file))
 {
-  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
+  Elf *elf;
+  Dwfl_Error error = __libdw_open_file (&fd, &elf, closefd, true);
+  if (error != DWFL_E_NOERROR)
+    {
+      __libdwfl_seterrno (error);
+      return NULL;
+    }
   Dwfl_Module *mod = process_file (dwfl, name, file_name, fd, elf, predicate);
   if (mod == NULL)
     {

@@ -1,5 +1,5 @@
 /* Return program header table entry.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002 Red Hat, Inc.
+   Copyright (C) 1998-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -54,6 +54,7 @@
 
 #include <gelf.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "libelfP.h"
 
@@ -90,14 +91,20 @@ gelf_getphdr (elf, ndx, dst)
 
       if (phdr == NULL)
 	{
+	  rwlock_unlock (elf->lock);
 	  phdr = INTUSE(elf32_getphdr) (elf);
 	  if (phdr == NULL)
 	    /* The error number is already set.  */
-	    goto out;
+	    return NULL;
+	  rwlock_rdlock (elf->lock);
 	}
 
       /* Test whether the index is ok.  */
-      if (ndx >= elf->state.elf32.ehdr->e_phnum)
+      size_t phnum;
+      if (ndx >= elf->state.elf32.ehdr->e_phnum
+	  && (elf->state.elf32.ehdr->e_phnum != PN_XNUM
+	      || __elf_getphdrnum_rdlock (elf, &phnum) != 0
+	      || (size_t) ndx >= phnum))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;
@@ -126,14 +133,20 @@ gelf_getphdr (elf, ndx, dst)
 
       if (phdr == NULL)
 	{
+	  rwlock_unlock (elf->lock);
 	  phdr = INTUSE(elf64_getphdr) (elf);
 	  if (phdr == NULL)
 	    /* The error number is already set.  */
-	    goto out;
+	    return NULL;
+	  rwlock_rdlock (elf->lock);
 	}
 
       /* Test whether the index is ok.  */
-      if (ndx >= elf->state.elf64.ehdr->e_phnum)
+      size_t phnum;
+      if (ndx >= elf->state.elf64.ehdr->e_phnum
+	  && (elf->state.elf64.ehdr->e_phnum != PN_XNUM
+	      || __elf_getphdrnum_rdlock (elf, &phnum) != 0
+	      || (size_t) ndx >= phnum))
 	{
 	  __libelf_seterrno (ELF_E_INVALID_INDEX);
 	  goto out;

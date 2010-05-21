@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2000,2001,2002,2003,2004,2005,2006,2007 Red Hat, Inc.
+## Copyright (C) 2000-2010 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -24,17 +24,9 @@
 ## Network licensing program, please visit www.openinventionnetwork.com
 ## <http://www.openinventionnetwork.com>.
 ##
-DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H -DOBJDIR=\"$(shell pwd)\"
-if MUDFLAP
-AM_CFLAGS = -fmudflap
-else
-AM_CFLAGS =
-endif
-AM_CFLAGS += -fpic -Wall -Wshadow -Werror -Wunused -Wextra -Wformat=2 \
-	     -std=gnu99
-INCLUDES = -I$(srcdir) -I$(top_srcdir)/libebl \
-	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw \
-	   -I$(top_srcdir)/lib -I..
+include $(top_srcdir)/config/eu.am
+INCLUDES += -I$(top_srcdir)/libebl -I$(top_srcdir)/libasm \
+	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw
 
 
 modules = i386 sh x86_64 ia64 alpha arm sparc ppc ppc64 s390
@@ -49,37 +41,24 @@ noinst_DATA = $(libebl_pic:_pic.a=.so)
 if MUDFLAP
 libelf = ../libelf/libelf.a
 libdw = ../libdw/libdw.a
-libmudflap = -lmudflap
 else
 libelf = ../libelf/libelf.so
 libdw = ../libdw/libdw.so
-libmudflap =
 endif
 
-
-textrel_check = if readelf -d $@ | fgrep -q TEXTREL; then exit 1; fi
-
-libebl_%.so: libebl_%_pic.a libebl_%.map $(libelf) $(libdw)
-	$(LINK) -shared -o $@ -Wl,--whole-archive,$<,--no-whole-archive \
-		-Wl,--version-script,$(word 2,$^) \
-		-Wl,-z,defs -Wl,--as-needed $(libelf) $(libdw) $(libmudflap)
-	$(textrel_check)
-
-libebl_%.map: Makefile
-	echo 'ELFUTILS_$(PACKAGE_VERSION) { global: $*_init; local: *; };' > $@
-
-
-i386_SRCS = i386_init.c i386_symbol.c i386_corenote.c \
-	    i386_retval.c i386_regs.c i386_auxv.c
+i386_SRCS = i386_init.c i386_symbol.c i386_corenote.c i386_cfi.c \
+	    i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c
+cpu_i386 = ../libcpu/libcpu_i386.a
 libebl_i386_pic_a_SOURCES = $(i386_SRCS)
 am_libebl_i386_pic_a_OBJECTS = $(i386_SRCS:.c=.os)
 
-sh_SRCS = sh_init.c sh_symbol.c
+sh_SRCS = sh_init.c sh_symbol.c sh_corenote.c sh_regs.c sh_retval.c
 libebl_sh_pic_a_SOURCES = $(sh_SRCS)
 am_libebl_sh_pic_a_OBJECTS = $(sh_SRCS:.c=.os)
 
-x86_64_SRCS = x86_64_init.c x86_64_symbol.c x86_64_corenote.c \
-	      x86_64_retval.c x86_64_regs.c i386_auxv.c
+x86_64_SRCS = x86_64_init.c x86_64_symbol.c x86_64_corenote.c x86_64_cfi.c \
+	      x86_64_retval.c x86_64_regs.c i386_auxv.c x86_64_syscall.c
+cpu_x86_64 = ../libcpu/libcpu_x86_64.a
 libebl_x86_64_pic_a_SOURCES = $(x86_64_SRCS)
 am_libebl_x86_64_pic_a_OBJECTS = $(x86_64_SRCS:.c=.os)
 
@@ -88,11 +67,12 @@ libebl_ia64_pic_a_SOURCES = $(ia64_SRCS)
 am_libebl_ia64_pic_a_OBJECTS = $(ia64_SRCS:.c=.os)
 
 alpha_SRCS = alpha_init.c alpha_symbol.c alpha_retval.c alpha_regs.c \
-	     alpha_corenote.c
+	     alpha_corenote.c alpha_auxv.c
 libebl_alpha_pic_a_SOURCES = $(alpha_SRCS)
 am_libebl_alpha_pic_a_OBJECTS = $(alpha_SRCS:.c=.os)
 
-arm_SRCS = arm_init.c arm_symbol.c
+arm_SRCS = arm_init.c arm_symbol.c arm_regs.c arm_corenote.c \
+	   arm_auxv.c arm_attrs.c arm_retval.c
 libebl_arm_pic_a_SOURCES = $(arm_SRCS)
 am_libebl_arm_pic_a_OBJECTS = $(arm_SRCS:.c=.os)
 
@@ -102,12 +82,12 @@ libebl_sparc_pic_a_SOURCES = $(sparc_SRCS)
 am_libebl_sparc_pic_a_OBJECTS = $(sparc_SRCS:.c=.os)
 
 ppc_SRCS = ppc_init.c ppc_symbol.c ppc_retval.c ppc_regs.c \
-	   ppc_corenote.c ppc_auxv.c
+	   ppc_corenote.c ppc_auxv.c ppc_attrs.c ppc_syscall.c
 libebl_ppc_pic_a_SOURCES = $(ppc_SRCS)
 am_libebl_ppc_pic_a_OBJECTS = $(ppc_SRCS:.c=.os)
 
 ppc64_SRCS = ppc64_init.c ppc64_symbol.c ppc64_retval.c \
-	     ppc64_corenote.c ppc_regs.c ppc_auxv.c
+	     ppc64_corenote.c ppc_regs.c ppc_auxv.c ppc_attrs.c ppc_syscall.c
 libebl_ppc64_pic_a_SOURCES = $(ppc64_SRCS)
 am_libebl_ppc64_pic_a_OBJECTS = $(ppc64_SRCS:.c=.os)
 
@@ -116,12 +96,18 @@ libebl_s390_pic_a_SOURCES = $(s390_SRCS)
 am_libebl_s390_pic_a_OBJECTS = $(s390_SRCS:.c=.os)
 
 
-%.os: %.c
-	if $(COMPILE) -c -o $@ -fpic -DPIC -DSHARED -MT $@ -MD -MP \
-	  -MF "$(DEPDIR)/$*.Tpo" `test -f '$<' || echo '$(srcdir)/'`$<; \
-	then mv -f "$(DEPDIR)/$*.Tpo" "$(DEPDIR)/$*.Po"; \
-	else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; \
-	fi
+libebl_%.so libebl_%.map: libebl_%_pic.a $(libelf) $(libdw)
+	@rm -f $(@:.so=.map)
+	echo 'ELFUTILS_$(PACKAGE_VERSION) { global: $*_init; local: *; };' \
+	  > $(@:.so=.map)
+	$(LINK) -shared -o $(@:.map=.so) \
+		-Wl,--whole-archive $< $(cpu_$*) -Wl,--no-whole-archive \
+		-Wl,--version-script,$(@:.so=.map) \
+		-Wl,-z,defs -Wl,--as-needed $(libelf) $(libdw) $(libmudflap)
+	$(textrel_check)
+
+libebl_i386.so: $(cpu_i386)
+libebl_x86_64.so: $(cpu_x86_64)
 
 install: install-am install-ebl-modules
 install-ebl-modules:
@@ -138,9 +124,9 @@ uninstall: uninstall-am
 	done
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(libdir)/$(LIBEBL_SUBDIR)
 
-noinst_HEADERS = libebl_CPU.h common-reloc.c linux-core-note.c
+noinst_HEADERS = libebl_CPU.h common-reloc.c linux-core-note.c x86_corenote.c
 EXTRA_DIST = $(foreach m,$(modules),$($(m)_SRCS)) $(modules:=_reloc.def)
 
-CLEANFILES = *.gcno *.gcda \
-	     $(foreach m,$(modules),\
-		       libebl_$(m).so $(am_libebl_$(m)_pic_a_OBJECTS))
+CLEANFILES += $(foreach m,$(modules),\
+			libebl_$(m).map libebl_$(m).so \
+			$(am_libebl_$(m)_pic_a_OBJECTS))

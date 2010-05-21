@@ -61,7 +61,7 @@
 
 
 GElf_Ehdr *
-gelf_getehdr (elf, dest)
+__gelf_getehdr_rdlock (elf, dest)
      Elf *elf;
      GElf_Ehdr *dest;
 {
@@ -75,8 +75,6 @@ gelf_getehdr (elf, dest)
       __libelf_seterrno (ELF_E_INVALID_HANDLE);
       return NULL;
     }
-
-  rwlock_rdlock (elf->lock);
 
   /* The following is an optimization: the ehdr element is at the same
      position in both the elf32 and elf64 structure.  */
@@ -114,8 +112,21 @@ gelf_getehdr (elf, dest)
   else
     result = memcpy (dest, elf->state.elf64.ehdr, sizeof (*dest));
 
+  return result;
+}
+
+GElf_Ehdr *
+gelf_getehdr (elf, dest)
+     Elf *elf;
+     GElf_Ehdr *dest;
+{
+  GElf_Ehdr *result;
+  if (elf == NULL)
+    return NULL;
+
+  rwlock_rdlock (elf->lock);
+  result = __gelf_getehdr_rdlock (elf, dest);
   rwlock_unlock (elf->lock);
 
   return result;
 }
-INTDEF(gelf_getehdr)

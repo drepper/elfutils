@@ -1,3 +1,79 @@
+2010-04-15  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (LOCALEDIR, DATADIRNAME): Removed.
+
+2009-09-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* configure.ac: Update for more modern autoconf.
+
+2009-08-26  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (zip_LIBS): Check for liblzma too.
+
+2009-04-19  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (eu_version): Round down here, not in version.h macros.
+
+2009-04-17  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (eu_version): Compute number 1000 times larger,
+	let $PACKAGE_VERSION be x.y.z as well as x.y (implied x.y.0).
+
+2009-01-23  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (zlib check): Check for gzdirect, need zlib >= 1.2.2.3.
+
+	* configure.ac (__thread check): Use AC_LINK_IFELSE, in case of
+	building with compiler support but no working runtime support.
+
+2009-01-22  Ulrich Drepper  <drepper@redhat.com>
+
+	* Makefile.am (rpm): The tarball is now bzip2-compressed.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* configure.ac: Require gcc with TLS support.
+	Rename USE_TLS to USE_LOCKS.  The option is renamed to
+	--enable-thread-safety.
+
+2009-01-08  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (eu_ZIPLIB): Moved to m4/zip.am.
+
+2009-01-05  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (eu_ZIPLIB): New macro.
+	Use it to test for -lz, -lbz2, set .am ZLIB, BZLIB, zip_LIBS.
+
+2008-12-30  Ulrich Drepper  <drepper@redhat.com>
+
+	* configure.ac: We need automake 1.8 now.
+
+2008-12-24  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac: Use automake flags dist-bzip2 no-dist-gzip,
+	distribute only in .tar.bz2 form now.
+
+2008-12-16  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (pkginclude_HEADERS): New variable, install version.h.
+	* configure.ac: Create it, substituting @eu_version@ with
+	PACKAGE_VERSION canonicalized to four digits of decimal.
+
+2008-08-25  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (--enable-tls): Set AM_CONDITIONAL USE_TLS too.
+
+2008-08-21  Roland McGrath  <roland@redhat.com>
+
+	* configure.ac (AH_BOTTOM): Emit #include <eu-config.h> and
+	move the contents to lib/eu-config.h instead of keeping them here.
+
+2007-12-20  Ulrich Drepper  <drepper@redhat.com>
+
+	* configure.ac: Add support for --enable-debugpred.
+	Update likely/unlikely macros for it.
+
 2007-06-05  Ulrich Drepper  <drepper@redhat.com>
 
 	* Makefile.am: Remove traces of mini builds.

@@ -1,5 +1,5 @@
 /* Initialization of x86-64 specific backend library.
-   Copyright (C) 2002, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2002-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -53,7 +53,10 @@ x86_64_init (elf, machine, eh, ehlen)
   HOOK (eh, core_note);
   HOOK (eh, return_value_location);
   HOOK (eh, register_info);
+  HOOK (eh, syscall_abi);
   HOOK (eh, auxv_info);
+  HOOK (eh, disasm);
+  HOOK (eh, abi_cfi);
 
   return MODVERSION;
 }

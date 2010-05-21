@@ -1,5 +1,5 @@
 /* Relocate debug information.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -59,6 +59,8 @@ internal_function
 __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf, size_t *shstrndx,
 			  Elf32_Word shndx, GElf_Addr *value)
 {
+  assert (mod->e_type == ET_REL);
+
   Elf_Scn *refscn = elf_getscn (elf, shndx);
   GElf_Shdr refshdr_mem, *refshdr = gelf_getshdr (refscn, &refshdr_mem);
   if (refshdr == NULL)
@@ -70,7 +72,7 @@ __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf, size_t *shstrndx,
 	 address and update the section header.  */
 
       if (*shstrndx == SHN_UNDEF
-	  && unlikely (elf_getshstrndx (elf, shstrndx) < 0))
+	  && unlikely (elf_getshdrstrndx (elf, shstrndx) < 0))
 	return DWFL_E_LIBELF;
 
       const char *name = elf_strptr (elf, *shstrndx, refshdr->sh_name);
@@ -95,8 +97,10 @@ __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf, size_t *shstrndx,
 	return DWFL_E_LIBELF;
     }
 
-  /* Apply the adjustment.  */
-  *value += refshdr->sh_addr;
+  if (refshdr->sh_flags & SHF_ALLOC)
+    /* Apply the adjustment.  */
+    *value += refshdr->sh_addr + mod->main.bias;
+
   return DWFL_E_NOERROR;
 }
 
@@ -183,11 +187,14 @@ relocate_getsym (Dwfl_Module *mod,
   if (sym->st_shndx != SHN_XINDEX)
     *shndx = sym->st_shndx;
 
-  switch (*shndx)
+  switch (sym->st_shndx)
     {
     case SHN_ABS:
     case SHN_UNDEF:
+      return DWFL_E_NOERROR;
+
     case SHN_COMMON:
+      sym->st_value = 0;	/* Value is size, not helpful. */
       return DWFL_E_NOERROR;
     }
 
@@ -263,8 +270,14 @@ resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
 		  continue;
 
 		/* We found it!  */
-		if (shndx == SHN_ABS)
+		if (shndx == SHN_ABS) /* XXX maybe should apply bias? */
 		  return DWFL_E_NOERROR;
+
+		if (m->e_type != ET_REL)
+		  {
+		    sym->st_value += m->symfile->bias;
+		    return DWFL_E_NOERROR;
+		  }
 
 		/* In an ET_REL file, the symbol table values are relative
 		   to the section, not to the module's load base.  */
@@ -292,6 +305,10 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
   if (tname == NULL)
     return DWFL_E_LIBELF;
 
+  if (unlikely (tshdr->sh_type == SHT_NOBITS) || unlikely (tshdr->sh_size == 0))
+    /* No contents to relocate.  */
+    return DWFL_E_NOERROR;
+
   if (debugscn && ! ebl_debugscn_p (mod->ebl, tname))
     /* This relocation section is not for a debugging section.
        Nothing to do here.  */
@@ -306,6 +323,21 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
   Dwfl_Error relocate (GElf_Addr offset, const GElf_Sxword *addend,
 		       int rtype, int symndx)
   {
+    /* First see if this is a reloc we can handle.
+       If we are skipping it, don't bother resolving the symbol.  */
+
+    if (unlikely (rtype == 0))
+      /* In some odd situations, the linker can leave R_*_NONE relocs
+	 behind.  This is probably bogus ld -r behavior, but the only
+	 cases it's known to appear in are harmless: DWARF data
+	 referring to addresses in a section that has been discarded.
+	 So we just pretend it's OK without further relocation.  */
+      return DWFL_E_NOERROR;
+
+    Elf_Type type = ebl_reloc_simple_type (mod->ebl, rtype);
+    if (unlikely (type == ELF_T_NUM))
+      return DWFL_E_BADRELTYPE;
+
     /* First, resolve the symbol to an absolute value.  */
     GElf_Addr value;
 
@@ -330,7 +362,8 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 	  {
 	    /* Maybe we can figure it out anyway.  */
 	    error = resolve_symbol (mod, reloc_symtab, &sym, shndx);
-	    if (error != DWFL_E_NOERROR)
+	    if (error != DWFL_E_NOERROR
+		&& !(error == DWFL_E_RELUNDEF && shndx == SHN_COMMON))
 	      return error;
 	  }
 
@@ -342,7 +375,6 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
     DO_TYPE (WORD, Word); DO_TYPE (SWORD, Sword);			\
     DO_TYPE (XWORD, Xword); DO_TYPE (SXWORD, Sxword)
     size_t size;
-    Elf_Type type = ebl_reloc_simple_type (mod->ebl, rtype);
     switch (type)
       {
 #define DO_TYPE(NAME, Name)			\
@@ -352,10 +384,6 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 	TYPES;
 #undef DO_TYPE
       default:
-	/* This might be because ebl_openbackend failed to find
-	   any libebl_CPU.so library.  Diagnose that clearly.  */
-	if (ebl_get_elfmachine (mod->ebl) == EM_NONE)
-	  return DWFL_E_UNKNOWN_MACHINE;
 	return DWFL_E_BADRELTYPE;
       }
 
@@ -437,6 +465,19 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
     return DWFL_E_LIBELF;
 
   Dwfl_Error result = DWFL_E_NOERROR;
+  bool first_badreltype = true;
+  inline void check_badreltype (void)
+  {
+    if (first_badreltype)
+      {
+	first_badreltype = false;
+	if (ebl_get_elfmachine (mod->ebl) == EM_NONE)
+	  /* This might be because ebl_openbackend failed to find
+	     any libebl_CPU.so library.  Diagnose that clearly.  */
+	  result = DWFL_E_UNKNOWN_MACHINE;
+      }
+  }
+
   size_t nrels = shdr->sh_size / shdr->sh_entsize;
   size_t complete = 0;
   if (shdr->sh_type == SHT_REL)
@@ -448,6 +489,7 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 	result = relocate (r->r_offset, NULL,
 			   GELF_R_TYPE (r->r_info),
 			   GELF_R_SYM (r->r_info));
+	check_badreltype ();
 	if (partial)
 	  switch (result)
 	    {
@@ -476,6 +518,7 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 	result = relocate (r->r_offset, &r->r_addend,
 			   GELF_R_TYPE (r->r_info),
 			   GELF_R_SYM (r->r_info));
+	check_badreltype ();
 	if (partial)
 	  switch (result)
 	    {
@@ -556,7 +599,7 @@ __libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile, bool debug)
     return DWFL_E_LIBELF;
 
   size_t d_shstrndx;
-  if (elf_getshstrndx (debugfile, &d_shstrndx) < 0)
+  if (elf_getshdrstrndx (debugfile, &d_shstrndx) < 0)
     return DWFL_E_LIBELF;
 
   RELOC_SYMTAB_CACHE (reloc_symtab);
@@ -600,7 +643,7 @@ __libdwfl_relocate_section (Dwfl_Module *mod, Elf *relocated,
   RELOC_SYMTAB_CACHE (reloc_symtab);
 
   size_t shstrndx;
-  if (elf_getshstrndx (relocated, &shstrndx) < 0)
+  if (elf_getshdrstrndx (relocated, &shstrndx) < 0)
     return DWFL_E_LIBELF;
 
   return (__libdwfl_module_getebl (mod)

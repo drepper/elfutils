@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2001, 2002, 2004, 2005 Red Hat, Inc.
+## Copyright (C) 1996-2010 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -24,21 +24,17 @@
 ## Network licensing program, please visit www.openinventionnetwork.com
 ## <http://www.openinventionnetwork.com>.
 ##
-DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H
-if MUDFLAP
-AM_CFLAGS = -fmudflap
-else
-AM_CFLAGS =
-endif
-AM_CFLAGS += -fpic -Wall -Wshadow -Werror -Wunused -Wextra $($(*F)_CFLAGS)
-INCLUDES = -I$(srcdir)/../libelf -I..
+include $(top_srcdir)/config/eu.am
+AM_CFLAGS += -fpic
+INCLUDES += -I$(srcdir)/../libelf
 
 noinst_LIBRARIES = libeu.a
 
 libeu_a_SOURCES = xstrndup.c xmalloc.c next_prime.c \
-		  crc32.c crc32_file.c
+		  crc32.c crc32_file.c md5.c sha1.c
 
-noinst_HEADERS = fixedsizehash.h system.h dynamicsizehash.h list.h
+noinst_HEADERS = fixedsizehash.h system.h dynamicsizehash.h list.h md5.h \
+		 sha1.h eu-config.h
 EXTRA_DIST = dynamicsizehash.c
 
 if !GPROF

@@ -1,5 +1,5 @@
 /* Recover relocatibility for addresses computed from debug information.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -94,7 +94,7 @@ cache_sections (Dwfl_Module *mod)
   size_t nrefs = 0;
 
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (mod->main.elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (mod->main.elf, &shstrndx) < 0))
     {
     elf_error:
       __libdwfl_seterrno (DWFL_E_LIBELF);
@@ -110,7 +110,8 @@ cache_sections (Dwfl_Module *mod)
       if (shdr == NULL)
 	goto elf_error;
 
-      if ((shdr->sh_flags & SHF_ALLOC) && shdr->sh_addr == 0)
+      if ((shdr->sh_flags & SHF_ALLOC) && shdr->sh_addr == 0
+	  && mod->e_type == ET_REL)
 	{
 	  /* This section might not yet have been looked at.  */
 	  if (__libdwfl_relocate_value (mod, mod->main.elf, &shstrndx,
@@ -238,6 +239,7 @@ dwfl_module_relocations (Dwfl_Module *mod)
       return 1;
 
     case ET_EXEC:
+      assert (mod->main.bias == 0);
       assert (mod->debug.bias == 0);
       break;
     }
@@ -353,16 +355,26 @@ find_section (Dwfl_Module *mod, Dwarf_Addr *addr)
 int
 dwfl_module_relocate_address (Dwfl_Module *mod, Dwarf_Addr *addr)
 {
-  if (check_module (mod))
+  if (unlikely (check_module (mod)))
     return -1;
 
-  if (mod->e_type != ET_REL)
+  switch (mod->e_type)
     {
-      *addr -= mod->debug.bias;
-      return 0;
+    case ET_REL:
+      return find_section (mod, addr);
+
+    case ET_DYN:
+      /* All relative to first and only relocation base: module start.  */
+      *addr -= mod->low_addr;
+      break;
+
+    default:
+      /* Already absolute, dwfl_module_relocations returned zero.  We
+	 shouldn't really have been called, but it's a harmless no-op.  */
+      break;
     }
 
-  return find_section (mod, addr);
+  return 0;
 }
 INTDEF (dwfl_module_relocate_address)
 
@@ -397,3 +409,4 @@ dwfl_module_address_section (Dwfl_Module *mod, Dwarf_Addr *address,
   *bias = mod->main.bias;
   return mod->reloc_info->refs[idx].scn;
 }
+INTDEF (dwfl_module_address_section)

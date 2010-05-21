@@ -1,5 +1,5 @@
 /* Return line number information of CU.
-   Copyright (C) 2004, 2005, 2007 Red Hat, Inc.
+   Copyright (C) 2004-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -135,19 +135,12 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
       /* Get the offset into the .debug_line section.  NB: this call
 	 also checks whether the previous dwarf_attr call failed.  */
-      Dwarf_Word offset;
-      if (INTUSE(dwarf_formudata) (stmt_list, &offset) != 0)
+      const unsigned char *lineendp;
+      const unsigned char *linep
+	= __libdw_formptr (stmt_list, IDX_debug_line, DWARF_E_NO_DEBUG_LINE,
+			   (unsigned char **) &lineendp, NULL);
+      if (linep == NULL)
 	goto out;
-
-      Dwarf *dbg = cu->dbg;
-      if (dbg->sectiondata[IDX_debug_line] == NULL)
-	{
-	  __libdw_seterrno (DWARF_E_NO_DEBUG_LINE);
-	  goto out;
-	}
-      const uint8_t *linep = dbg->sectiondata[IDX_debug_line]->d_buf + offset;
-      const uint8_t *lineendp = (dbg->sectiondata[IDX_debug_line]->d_buf
-				 + dbg->sectiondata[IDX_debug_line]->d_size);
 
       /* Get the compilation directory.  */
       Dwarf_Attribute compdir_attr_mem;
@@ -162,9 +155,11 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	  __libdw_seterrno (DWARF_E_INVALID_DEBUG_LINE);
 	  goto out;
 	}
+
+      Dwarf *dbg = cu->dbg;
       Dwarf_Word unit_length = read_4ubyte_unaligned_inc (dbg, linep);
       unsigned int length = 4;
-      if (unlikely (unit_length == 0xffffffff))
+      if (unlikely (unit_length == DWARF3_LENGTH_64_BIT))
 	{
 	  if (unlikely (linep + 8 > lineendp))
 	    goto invalid_data;
@@ -180,7 +175,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
       /* The next element of the header is the version identifier.  */
       uint_fast16_t version = read_2ubyte_unaligned_inc (dbg, linep);
-      if (unlikely (version != DWARF_VERSION))
+      if (unlikely (version > DWARF_VERSION))
 	{
 	  __libdw_seterrno (DWARF_E_VERSION);
 	  goto out;
@@ -429,10 +424,9 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  /* The value is an address.  The size is defined as
 		     apporiate for the target machine.  We use the
 		     address size field from the CU header.  */
-		  if (cu->address_size == 4)
-		    address = read_4ubyte_unaligned_inc (dbg, linep);
-		  else
-		    address = read_8ubyte_unaligned_inc (dbg, linep);
+		  if (__libdw_read_address_inc (dbg, IDX_debug_line, &linep,
+						cu->address_size, &address))
+		    goto out;
 		  break;
 
 		case DW_LNE_define_file:
@@ -634,8 +628,8 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	dirs[i] = dirarray[i]->dir;
       dirs[ndirlist] = NULL;
 
-      /* Remember the debugging descriptor.  */
-      files->dbg = dbg;
+      /* Remember the referring CU.  */
+      files->cu = cu;
 
       /* Make the file data structure available through the CU.  */
       cu->files = files;

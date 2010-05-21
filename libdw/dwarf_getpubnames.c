@@ -1,5 +1,5 @@
 /* Get public symbol information.
-   Copyright (C) 2002, 2003, 2004, 2005 Red Hat, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -58,6 +58,7 @@
 #include <sys/param.h>
 
 #include <libdwP.h>
+#include <dwarf.h>
 
 
 static int
@@ -93,10 +94,16 @@ get_offsets (Dwarf *dbg)
       /* Read the set header.  */
       int len_bytes = 4;
       Dwarf_Off len = read_4ubyte_unaligned_inc (dbg, readp);
-      if (len == 0xffffffff)
+      if (len == DWARF3_LENGTH_64_BIT)
 	{
 	  len = read_8ubyte_unaligned_inc (dbg, readp);
 	  len_bytes = 8;
+	}
+      else if (unlikely (len >= DWARF3_LENGTH_MIN_ESCAPE_CODE
+			 && len <= DWARF3_LENGTH_MAX_ESCAPE_CODE))
+	{
+	  __libdw_seterrno (DWARF_E_INVALID_DWARF);
+	  goto err_return;
 	}
 
       /* Now we know the offset of the first offset/name pair.  */
@@ -109,27 +116,23 @@ get_offsets (Dwarf *dbg)
 
       /* Read the version.  It better be two for now.  */
       uint16_t version = read_2ubyte_unaligned (dbg, readp);
-      if (version != 2)
+      if (unlikely (version != 2))
 	{
 	  __libdw_seterrno (DWARF_E_INVALID_VERSION);
 	  goto err_return;
 	}
 
       /* Get the CU offset.  */
-      if (len_bytes == 4)
-	mem[cnt].cu_offset = read_4ubyte_unaligned (dbg, readp + 2);
-      else
-	mem[cnt].cu_offset = read_8ubyte_unaligned (dbg, readp + 2);
+      if (__libdw_read_offset (dbg, IDX_debug_pubnames, readp + 2, len_bytes,
+			       &mem[cnt].cu_offset, IDX_debug_info, 3))
+	/* Error has been already set in reader.  */
+	goto err_return;
 
       /* Determine the size of the CU header.  */
-      assert (dbg->sectiondata[IDX_debug_info] != NULL);
-      assert (dbg->sectiondata[IDX_debug_info]->d_buf != NULL);
-      assert (mem[cnt].cu_offset + 3
-	      < dbg->sectiondata[IDX_debug_info]->d_size);
       unsigned char *infop
 	= ((unsigned char *) dbg->sectiondata[IDX_debug_info]->d_buf
 	   + mem[cnt].cu_offset);
-      if (read_4ubyte_unaligned_noncvt (infop) == 0xffffffff)
+      if (read_4ubyte_unaligned_noncvt (infop) == DWARF3_LENGTH_64_BIT)
 	mem[cnt].cu_header_size = 23;
       else
 	mem[cnt].cu_header_size = 11;
@@ -163,7 +166,7 @@ dwarf_getpubnames (dbg, callback, arg, offset)
   if (dbg == NULL)
     return -1l;
 
-  if (offset < 0)
+  if (unlikely (offset < 0))
     {
       __libdw_seterrno (DWARF_E_INVALID_OFFSET);
       return -1l;
@@ -177,7 +180,7 @@ dwarf_getpubnames (dbg, callback, arg, offset)
     return 0;
 
   /* If necessary read the set information.  */
-  if (dbg->pubnames_nsets == 0 && get_offsets (dbg) != 0)
+  if (dbg->pubnames_nsets == 0 && unlikely (get_offsets (dbg) != 0))
     return -1l;
 
   /* Find the place where to start.  */

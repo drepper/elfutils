@@ -1,5 +1,5 @@
 /* Update data structures for changes.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -133,11 +133,13 @@ ELFW(default_ehdr,LIBELFBITS) (Elf *elf, ElfW2(LIBELFBITS,Ehdr) *ehdr,
 
 off_t
 internal_function
-__elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
+__elfw2(LIBELFBITS,updatenull_wrlock) (Elf *elf, int *change_bop, size_t shnum)
 {
-  ElfW2(LIBELFBITS,Ehdr) *ehdr = INTUSE(elfw2(LIBELFBITS,getehdr)) (elf);
+  ElfW2(LIBELFBITS,Ehdr) *ehdr;
   int changed = 0;
   int ehdr_flags = 0;
+
+  ehdr = __elfw2(LIBELFBITS,getehdr_wrlock) (elf);
 
   /* Set the default values.  */
   if (ELFW(default_ehdr,LIBELFBITS) (elf, ehdr, shnum, change_bop) != 0)
@@ -150,7 +152,7 @@ __elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
   if (elf->state.ELFW(elf,LIBELFBITS).phdr == NULL
       && (ehdr->e_type == ET_EXEC || ehdr->e_type == ET_DYN
 	  || ehdr->e_type == ET_CORE))
-    (void) INTUSE(elfw2(LIBELFBITS,getphdr)) (elf);
+    (void) __elfw2(LIBELFBITS,getphdr_wrlock) (elf);
   if (elf->state.ELFW(elf,LIBELFBITS).phdr != NULL)
     {
       /* Only executables, shared objects, and core files have a program
@@ -162,13 +164,17 @@ __elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
 	  return -1;
 	}
 
+      size_t phnum;
+      if (unlikely (__elf_getphdrnum_rdlock (elf, &phnum) != 0))
+	return -1;
+
       if (elf->flags & ELF_F_LAYOUT)
 	{
 	  /* The user is supposed to fill out e_phoff.  Use it and
 	     e_phnum to determine the maximum extend.  */
 	  size = MAX ((size_t) size,
 		      ehdr->e_phoff
-		      + elf_typesize (LIBELFBITS, ELF_T_PHDR, ehdr->e_phnum));
+		      + elf_typesize (LIBELFBITS, ELF_T_PHDR, phnum));
 	}
       else
 	{
@@ -177,7 +183,7 @@ __elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
 			     ehdr_flags);
 
 	  /* We need no alignment here.  */
-	  size += elf_typesize (LIBELFBITS, ELF_T_PHDR, ehdr->e_phnum);
+	  size += elf_typesize (LIBELFBITS, ELF_T_PHDR, phnum);
 	}
     }
 
@@ -204,7 +210,7 @@ __elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
       /* Load the section headers if necessary.  This loads the
 	 headers for all sections.  */
       if (list->data[1].shdr.ELFW(e,LIBELFBITS) == NULL)
-	(void) INTUSE(elfw2(LIBELFBITS,getshdr)) (&list->data[1]);
+	(void) __elfw2(LIBELFBITS,getshdr_wrlock) (&list->data[1]);
 
       do
 	{
@@ -265,7 +271,8 @@ __elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
 	      update_if_changed (shdr->sh_entsize, sh_entsize,
 				 scn->shdr_flags);
 
-	      if (scn->data_read == 0 && __libelf_set_rawdata (scn) != 0)
+	      if (scn->data_read == 0
+		  && __libelf_set_rawdata_wrlock (scn) != 0)
 		/* Something went wrong.  The error value is already set.  */
 		return -1;
 
@@ -364,7 +371,7 @@ __elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
 		    {
 		      /* The position of the section in the file
 			 changed.  Create the section data list.  */
-		      if (INTUSE(elf_getdata) (scn, NULL) == NULL)
+		      if (__elf_getdata_rdlock (scn, NULL) == NULL)
 			return -1;
 		    }
 
@@ -398,8 +405,9 @@ __elfw2(LIBELFBITS,updatenull) (Elf *elf, int *change_bop, size_t shnum)
       /* Store section information.  */
       if (elf->flags & ELF_F_LAYOUT)
 	{
-	  /* The user is supposed to fill out e_phoff.  Use it and
-	     e_phnum to determine the maximum extend.  */
+	  /* The user is supposed to fill out e_shoff.  Use it and
+	     e_shnum (or sh_size of the dummy, first section header)
+	     to determine the maximum extend.  */
 	  size = MAX ((GElf_Word) size,
 		      (ehdr->e_shoff
 		       + (elf_typesize (LIBELFBITS, ELF_T_SHDR, shnum))));

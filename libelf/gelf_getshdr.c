@@ -79,7 +79,8 @@ gelf_getshdr (scn, dst)
   if (scn->elf->class == ELFCLASS32)
     {
       /* Copy the elements one-by-one.  */
-      Elf32_Shdr *shdr = scn->shdr.e32 ?: INTUSE(elf32_getshdr) (scn);
+      Elf32_Shdr *shdr
+	= scn->shdr.e32 ?: __elf32_getshdr_rdlock (scn);
 
       if (shdr == NULL)
 	{
@@ -104,7 +105,8 @@ gelf_getshdr (scn, dst)
     }
   else
     {
-      Elf64_Shdr *shdr = scn->shdr.e64 ?: INTUSE(elf64_getshdr) (scn);
+      Elf64_Shdr *shdr
+	= scn->shdr.e64 ?: __elf64_getshdr_rdlock (scn);
 
       if (shdr == NULL)
 	{

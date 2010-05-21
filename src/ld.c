@@ -1,4 +1,4 @@
-/* Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+/* Copyright (C) 2001-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -48,10 +48,10 @@
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 
 /* Values for the various options.  */
@@ -73,6 +73,8 @@ enum
     ARGP_as_needed,
     ARGP_no_as_needed,
     ARGP_eh_frame_hdr,
+    ARGP_hash_style,
+    ARGP_build_id,
 #if YYDEBUG
     ARGP_yydebug,
 #endif
@@ -86,10 +88,10 @@ static const struct argp_option options[] =
   { "whole-archive", ARGP_whole_archive, NULL, 0,
     N_("Include whole archives in the output from now on."), 0 },
   { "no-whole-archive", ARGP_no_whole_archive, NULL, 0,
-    N_("Stop including the whole arhives in the output."), 0 },
+    N_("Stop including the whole archives in the output."), 0 },
   { NULL, 'l', N_("FILE"), OPTION_HIDDEN, NULL, 0 },
-  { NULL, '(', NULL, 0, N_("Start a group."), 0 },
-  { NULL, ')', NULL, 0, N_("End a group."), 0 },
+  { "start-group", '(', NULL, 0, N_("Start a group."), 0 },
+  { "end-group", ')', NULL, 0, N_("End a group."), 0 },
   { NULL, 'L', N_("PATH"), 0,
     N_("Add PATH to list of directories files are searched in."), 0 },
   { "as-needed", ARGP_as_needed, NULL, 0,
@@ -163,10 +165,14 @@ Default rules of extracting from archive; weak references are not enough."),
   { "dynamic-linker", 'I', "NAME", 0, N_("Set the dynamic linker name."), 0 },
   { NULL, 'Q', "YN", OPTION_HIDDEN, NULL, 0 },
   { "-Q y | n", 'Q', NULL, OPTION_DOC,
-    N_("Add/suppress addition indentifying link-editor to .comment section"),
+    N_("Add/suppress addition indentifying link-editor to .comment section."),
     0 },
   { "eh-frame-hdr", ARGP_eh_frame_hdr, NULL, 0,
     N_("Create .eh_frame_hdr section"), 0 },
+  { "hash-style", ARGP_hash_style, "STYLE", 0,
+    N_("Set hash style to sysv, gnu or both."), 0 },
+  { "build-id", ARGP_build_id, "STYLE", OPTION_ARG_OPTIONAL,
+    N_("Generate build ID note (md5, sha1 (default), uuid)."), 0 },
 
   { NULL, 0, NULL, 0, N_("Linker Operation Control:"), 0 },
   { "verbose", 'v', NULL, 0, N_("Verbose messages."), 0 },
@@ -194,6 +200,7 @@ static const char doc[] = N_("Combine object and archive files.");
 static const char args_doc[] = N_("[FILE]...");
 
 /* Prototype for option handler.  */
+static void replace_args (int argc, char *argv[]);
 static error_t parse_opt_1st (int key, char *arg, struct argp_state *state);
 static error_t parse_opt_2nd (int key, char *arg, struct argp_state *state);
 
@@ -313,6 +320,9 @@ main (int argc, char *argv[])
 #define obstack_chunk_free free
   obstack_init (&ld_state.smem);
 
+  /* Recognize old-style parameters for compatibility.  */
+  replace_args (argc, argv);
+
   /* One quick pass over the parameters which allows us to scan for options
      with global effect which influence the rest of the processing.  */
   argp_parse (&argp_1st, argc, argv, ARGP_IN_ORDER, &remaining, NULL);
@@ -327,6 +337,11 @@ main (int argc, char *argv[])
 
   /* Determine which ELF backend to use.  */
   determine_output_format ();
+
+  /* If no hash style was specific default to the oldand slow SysV
+     method.  */
+  if (unlikely (ld_state.hash_style == hash_style_none))
+    ld_state.hash_style = hash_style_sysv;
 
   /* Prepare state.  */
   err = ld_prepare_state (emulation);
@@ -482,6 +497,56 @@ main (int argc, char *argv[])
 }
 
 
+static void
+replace_args (int argc, char *argv[])
+{
+  static const struct
+  {
+    const char *from;
+    const char *to;
+  } args[] =
+      {
+	{ "-export-dynamic", "--export-dynamic" },
+	{ "-dynamic-linker", "--dynamic-linker" },
+	{ "-static", "--static" },
+      };
+  const size_t nargs = sizeof (args) / sizeof (args[0]);
+
+  for (int i = 1; i < argc; ++i)
+    if (argv[i][0] == '-' && islower (argv[i][1]) && argv[i][2] != '\0')
+      for (size_t j = 0; j < nargs; ++j)
+	if (strcmp (argv[i], args[j].from) == 0)
+	  {
+	    argv[i] = (char *) args[j].to;
+	    break;
+	  }
+}
+
+
+static int
+valid_hexarg (const char *arg)
+{
+  if (strncasecmp (arg, "0x", 2) != 0)
+    return 0;
+
+  arg += 2;
+  do
+    {
+      if (isxdigit (arg[0]) && isxdigit (arg[1]))
+	{
+	  arg += 2;
+	  if (arg[0] == '-' || arg[0] == ':')
+	    ++arg;
+	}
+      else
+	return 0;
+    }
+  while (*arg != '\0');
+
+  return 1;
+}
+
+
 /* Quick scan of the parameter list for options with global effect.  */
 static error_t
 parse_opt_1st (int key, char *arg,
@@ -609,6 +674,29 @@ parse_opt_1st (int key, char *arg,
 
     case ARGP_eh_frame_hdr:
       ld_state.eh_frame_hdr = true;
+      break;
+
+    case ARGP_hash_style:
+      if (strcmp (arg, "gnu") == 0)
+	ld_state.hash_style = hash_style_gnu;
+      else if (strcmp (arg, "both") == 0)
+	ld_state.hash_style = hash_style_gnu | hash_style_sysv;
+      else if (strcmp (arg, "sysv") == 0)
+	ld_state.hash_style = hash_style_sysv;
+      else
+	error (EXIT_FAILURE, 0, gettext ("invalid hash style '%s'"), arg);
+      break;
+
+    case ARGP_build_id:
+      if (arg == NULL)
+	ld_state.build_id = "sha1";
+      else if (strcmp (arg, "uuid") != 0
+	       && strcmp (arg, "md5") != 0
+	       && strcmp (arg, "sha1") != 0
+	       && !valid_hexarg (arg))
+	error (EXIT_FAILURE, 0, gettext ("invalid build-ID style '%s'"), arg);
+      else
+	ld_state.build_id = arg;
       break;
 
     case 's':
@@ -870,7 +958,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2007");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -1095,11 +1183,12 @@ ld_new_searchdir (const char *dir)
 
   /* Enqueue the file.  */
   if (ld_state.tailpaths == NULL)
-    ld_state.paths = ld_state.tailpaths = newpath;
+    ld_state.paths = ld_state.tailpaths = newpath->next = newpath;
   else
     {
       ld_state.tailpaths->next = newpath;
       ld_state.tailpaths = newpath;
+      newpath->next = ld_state.paths;
     }
 }
 
@@ -1525,3 +1614,6 @@ create_special_section_symbol (struct symbol **symp, const char *name)
 
   ++ld_state.nsymtab;
 }
+
+
+#include "debugpred.h"

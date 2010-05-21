@@ -1,5 +1,5 @@
 /* Get attributes of the DIE.
-   Copyright (C) 2004, 2005 Red Hat, Inc.
+   Copyright (C) 2004, 2005, 2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -62,6 +62,9 @@ dwarf_getattrs (Dwarf_Die *die, int (*callback) (Dwarf_Attribute *, void *),
   if (die == NULL)
     return -1l;
 
+  if (unlikely (offset == 1))
+    return 1;
+
   const unsigned char *die_addr = die->addr;
 
   /* Get the abbreviation code.  */
@@ -72,14 +75,16 @@ dwarf_getattrs (Dwarf_Die *die, int (*callback) (Dwarf_Attribute *, void *),
     /* Find the abbreviation.  */
     die->abbrev = __libdw_findabbrev (die->cu, u128);
 
-  if (die->abbrev == (Dwarf_Abbrev *) -1l)
+  if (unlikely (die->abbrev == DWARF_END_ABBREV))
     {
+    invalid_dwarf:
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
       return -1l;
     }
 
   /* This is where the attributes start.  */
-  const unsigned char *attrp = die->abbrev->attrp + offset;
+  const unsigned char *attrp = die->abbrev->attrp;
+  const unsigned char *const offset_attrp = die->abbrev->attrp + offset;
 
   /* Go over the list of attributes.  */
   Dwarf *dbg = die->cu->dbg;
@@ -89,28 +94,39 @@ dwarf_getattrs (Dwarf_Die *die, int (*callback) (Dwarf_Attribute *, void *),
       if (unlikely (attrp
 		    >= ((unsigned char *) dbg->sectiondata[IDX_debug_abbrev]->d_buf
 			+ dbg->sectiondata[IDX_debug_abbrev]->d_size)))
-	{
-	  __libdw_seterrno (DWARF_E_INVALID_DWARF);
-	  return -1;
-	}
+	goto invalid_dwarf;
 
       /* Get attribute name and form.  */
       Dwarf_Attribute attr;
+      const unsigned char *remembered_attrp = attrp;
+
       // XXX Fix bound checks
       get_uleb128 (attr.code, attrp);
       get_uleb128 (attr.form, attrp);
 
       /* We can stop if we found the attribute with value zero.  */
       if (attr.code == 0 && attr.form == 0)
-        return 0;
+	/* Do not return 0 here - there would be no way to
+	   distinguish this value from the attribute at offset 0.
+	   Instead we return +1 which would never be a valid
+	   offset of an attribute.  */
+        return 1l;
 
-      /* Fill in the rest.  */
-      attr.valp = (unsigned char *) die_addr;
-      attr.cu = die->cu;
+      /* If we are not to OFFSET_ATTRP yet, we just have to skip
+	 the values of the intervening attributes.  */
+      if (remembered_attrp >= offset_attrp)
+	{
+	  /* Fill in the rest.  */
+	  attr.valp = (unsigned char *) die_addr;
+	  attr.cu = die->cu;
 
-      /* Now call the callback function.  */
-      if (callback (&attr, arg) != DWARF_CB_OK)
-	return attrp - die->abbrev->attrp;
+	  /* Now call the callback function.  */
+	  if (callback (&attr, arg) != DWARF_CB_OK)
+	    /* Return the offset of the start of the attribute, so that
+	       dwarf_getattrs() can be restarted from this point if the
+	       caller so desires.  */
+	    return remembered_attrp - die->abbrev->attrp;
+	}
 
       /* Skip over the rest of this attribute (if there is any).  */
       if (attr.form != 0)

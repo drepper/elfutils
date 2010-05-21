@@ -1,5 +1,5 @@
 /* Print size information from ELF file.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2000,2001,2002,2003,2004,2005,2006,2007,2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -50,10 +50,10 @@
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 
 /* Values for the parameters which have no short form.  */
@@ -220,7 +220,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2007");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -319,12 +319,22 @@ process_file (const char *fname)
 	  return 0;
 	}
       else if (likely (elf_kind (elf) == ELF_K_AR))
-	return handle_ar (fd, elf, NULL, fname);
+	{
+	  int result = handle_ar (fd, elf, NULL, fname);
+
+	  if (unlikely  (close (fd) != 0))
+	    error (EXIT_FAILURE, errno, gettext ("while closing '%s'"), fname);
+
+	  return result;
+	}
 
       /* We cannot handle this type.  Close the descriptor anyway.  */
       if (unlikely (elf_end (elf) != 0))
 	INTERNAL_ERROR (fname);
     }
+
+  if (unlikely (close (fd) != 0))
+    error (EXIT_FAILURE, errno, gettext ("while closing '%s'"), fname);
 
   error (0, 0, gettext ("%s: file format not recognized"), fname);
 
@@ -396,9 +406,6 @@ handle_ar (int fd, Elf *elf, const char *prefix, const char *fname)
   if (unlikely (elf_end (elf) != 0))
     INTERNAL_ERROR (fname);
 
-  if (unlikely  (close (fd) != 0))
-    error (EXIT_FAILURE, errno, gettext ("while closing '%s'"), fname);
-
   return result;
 }
 
@@ -413,7 +420,7 @@ show_sysv (Elf *elf, const char *prefix, const char *fname,
 
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -487,7 +494,7 @@ show_sysv_one_line (Elf *elf)
 {
   /* Get the section header string table index.  */
   size_t shstrndx;
-  if (unlikely (elf_getshstrndx (elf, &shstrndx) < 0))
+  if (unlikely (elf_getshdrstrndx (elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
@@ -685,3 +692,6 @@ handle_elf (Elf *elf, const char *prefix, const char *fname)
       show_bsd (elf, prefix, fname, fullname);
     }
 }
+
+
+#include "debugpred.h"

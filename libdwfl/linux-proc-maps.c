@@ -1,5 +1,5 @@
 /* Standard libdwfl callbacks for debugging a live Linux process.
-   Copyright (C) 2005, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -71,7 +71,7 @@
 /* Search /proc/PID/auxv for the AT_SYSINFO_EHDR tag.  */
 
 static int
-find_sysinfo_ehdr (pid_t pid, GElf_Addr *sysinfo_ehdr)
+grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
 {
   char *fname;
   if (asprintf (&fname, PROCAUXVFMT, pid) < 0)
@@ -147,11 +147,17 @@ find_sysinfo_ehdr (pid_t pid, GElf_Addr *sysinfo_ehdr)
 		{
 		  GElf_auxv_t auxv_mem;
 		  GElf_auxv_t *auxv = gelf_getauxv (data, i, &auxv_mem);
-		  if (auxv != NULL && auxv->a_type == AT_SYSINFO_EHDR)
+		  if (unlikely (auxv == NULL))
+		    break;
+		  if (auxv->a_type == AT_SYSINFO_EHDR)
 		    {
 		      *sysinfo_ehdr = auxv->a_un.a_val;
-		      break;
+		      if (dwfl->segment_align > 1)
+			break;
 		    }
+		  else if (auxv->a_type == AT_PAGESZ
+			   && dwfl->segment_align <= 1)
+		    dwfl->segment_align = auxv->a_un.a_val;
 		}
 
 	      //gelf_freedata (data);
@@ -179,12 +185,12 @@ proc_maps_report (Dwfl *dwfl, FILE *f, GElf_Addr sysinfo_ehdr, pid_t pid)
     {
       if (last_file != NULL)
 	{
-	  if (INTUSE(dwfl_report_module) (dwfl, last_file, low, high) == NULL)
-	    {
-	      free (last_file);
-	      return true;
-	    }
+	  Dwfl_Module *mod = INTUSE(dwfl_report_module) (dwfl, last_file,
+							 low, high);
+	  free (last_file);
 	  last_file = NULL;
+	  if (unlikely (mod == NULL))
+	    return true;
 	}
       return false;
     }
@@ -279,7 +285,7 @@ dwfl_linux_proc_report (Dwfl *dwfl, pid_t pid)
 
   /* We'll notice the AT_SYSINFO_EHDR address specially when we hit it.  */
   GElf_Addr sysinfo_ehdr = 0;
-  int result = find_sysinfo_ehdr (pid, &sysinfo_ehdr);
+  int result = grovel_auxv (pid, dwfl, &sysinfo_ehdr);
   if (result != 0)
     return result;
 
@@ -308,6 +314,9 @@ read_proc_memory (void *arg, void *data, GElf_Addr address,
 {
   const int fd = *(const int *) arg;
   ssize_t nread = pread64 (fd, data, maxread, (off64_t) address);
+  /* Some kernels don't actually let us do this read, ignore those errors.  */
+  if (nread < 0 && (errno == EINVAL || errno == EPERM))
+    return 0;
   if (nread > 0 && (size_t) nread < minread)
     nread = 0;
   return nread;

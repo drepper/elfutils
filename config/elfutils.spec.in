@@ -5,18 +5,20 @@ Version: @PACKAGE_VERSION@
 Release: 1
 License: GPLv2 with exceptions
 Group: Development/Tools
-Source: elfutils-%{version}.tar.gz
+Source: elfutils-%{version}.tar.bz2
 Obsoletes: libelf libelf-devel
 Requires: elfutils-libelf = %{version}-%{release}
-Requires: glibc >= 2.3.1-2
+Requires: glibc >= 2.7
 
 # ExcludeArch: xxx
 
 BuildRoot: %{_tmppath}/%{name}-root
-BuildRequires: gcc >= 3.4
+BuildRequires: gcc >= 4.1.2-33
+BuildRequires: glibc >= 2.7
 BuildRequires: bison >= 1.875
 BuildRequires: flex >= 2.5.4a
 BuildRequires: bzip2
+BuildRequires: m4
 
 %define _gnu %{nil}
 %define _programprefix eu-
@@ -104,8 +106,6 @@ chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/elfutils/lib*.so*
 { cd ${RPM_BUILD_ROOT}
   rm -f .%{_bindir}/eu-ld
   rm -f .%{_includedir}/elfutils/libasm.h
-  rm -f .%{_libdir}/libasm-%{version}.so
-  rm -f .%{_libdir}/libasm.so.*
   rm -f .%{_libdir}/libasm.so
   rm -f .%{_libdir}/libasm.a
 }
@@ -140,10 +140,11 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_bindir}/eu-objdump
 %{_bindir}/eu-ar
 %{_bindir}/eu-unstrip
+%{_bindir}/eu-make-debug-archive
 #%{_bindir}/eu-ld
-#%{_libdir}/libasm-%{version}.so
+%{_libdir}/libasm-%{version}.so
 %{_libdir}/libdw-%{version}.so
-#%{_libdir}/libasm.so.*
+%{_libdir}/libasm.so.*
 %{_libdir}/libdw.so.*
 %dir %{_libdir}/elfutils
 %{_libdir}/elfutils/lib*.so
@@ -153,6 +154,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_includedir}/dwarf.h
 %dir %{_includedir}/elfutils
 %{_includedir}/elfutils/elf-knowledge.h
+#%{_includedir}/elfutils/libasm.h
 %{_includedir}/elfutils/libebl.h
 %{_includedir}/elfutils/libdw.h
 %{_includedir}/elfutils/libdwfl.h
@@ -174,12 +176,127 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_includedir}/libelf.h
 %{_includedir}/gelf.h
 %{_includedir}/nlist.h
+%{_includedir}/elfutils/version.h
 %{_libdir}/libelf.so
 
 %files libelf-devel-static
 %{_libdir}/libelf.a
 
 %changelog
+* Mon May  3 2010 Ulrich Drepper <drepper@redhat.com> 0.147-1
+- libdw: Fixes in CFI handling, best possible handling of bogus CFA
+  ops.
+- libdwfl: Ignore R_*_NONE relocs, works around old (binutils) ld -r
+  bugs.
+
+* Wed Apr 21 2010  <drepper@redhat.com> 0.146-1
+- libdwfl: New function dwfl_core_file_report.
+
+* Tue Feb 23 2010 Ulrich Drepper <drepper@redhat.com> 0.145-1
+- Fix build with --disable-dependency-tracking.
+- Fix build with most recent glibc headers.
+- libelf: More robust to bogus section headers.
+- libdw: Fix CFI decoding.
+- libdwfl: Fix address bias returned by CFI accessors. 	 Fix core 
+  file module layout identification.
+- readelf: Fix CFI decoding.
+
+* Thu Jan 14 2010  <drepper@redhat.com> 0.144-1
+- libelf: New function elf_getphdrnum. 	Now support using more than 
+  65536 program headers in a file.
+- libdw: New function dwarf_aggregate_size for computing (constant) 
+  type        sizes, including array_type cases with nontrivial 
+  calculation.
+- readelf: Don't give errors for missing info under -a. 	 
+  Handle Linux "VMCOREINFO" notes under -n.
+
+* Mon Sep 21 2009  <drepper@redhat.com> 0.143-1
+- libdw: Various convenience functions for individual attributes now 
+  use dwarf_attr_integrate to look up indirect inherited 
+  attributes.  Location expression handling now supports 
+  DW_OP_implicit_value.
+- libdwfl: Support automatic decompression of files in XZ format, 
+  and of Linux kernel images made with bzip2 or LZMA (as well 
+  as gzip).
+
+* Mon Jun 29 2009  <drepper@redhat.com> 0.142-1
+- libelf: Add elf_getshdrnum alias for elf_getshnum and elf_getshdrstrndx alias
+  for elf_getshstrndx and deprecate original names.  Sun screwed up
+  their implementation and asked for a solution.
+- libebl: Add support for STB_GNU_UNIQUE.
+- elflint: Add support for STB_GNU_UNIQUE.
+- readelf: Add -N option, speeds up DWARF printing without address->name lookups.
+- libdw: Add support for decoding DWARF CFI into location description form.
+  Handle some new DWARF 3 expression operations previously omitted.
+  Basic handling of some new encodings slated for DWARF 
+
+* Thu Apr 23 2009 Ulrich Drepper <drepper@redhat.com> 0.141-1
+- libebl: sparc backend fixes; 	some more arm backend support
+- libdwfl: fix dwfl_module_build_id for prelinked DSO case; 	 
+  fixes in core file support; 	 dwfl_module_getsym interface 
+  improved for non-address symbols
+- strip: fix infinite loop on strange inputs with -f
+- addr2line: take -j/--section=NAME option for binutils compatibility 
+  	   (same effect as '(NAME)0x123' syntax already supported)
+
+* Mon Feb 16 2009 Ulrich Drepper <drepper@redhat.com> 0.140-1
+- libelf: Fix regression in creation of section header
+- libdwfl: Less strict behavior if DWARF reader ist just used to 
+  display data
+
+* Thu Jan 22 2009 Ulrich Drepper <drepper@redhat.com> 0.139-1
+- libcpu: Add Intel SSE4 disassembler support
+- readelf: Implement call frame information and exception handling 
+  dumping.          Add -e option.  Enable it implicitly for -a.
+- elflint: Check PT_GNU_EH_FRAME program header entry.
+- libdwfl: Support automatic gzip/bzip2 decompression of ELF files.
+
+* Wed Dec 31 2008 Roland McGrath <roland@redhat.com> 0.138-1
+- Install <elfutils/version.h> header file for applications to use in
+  source version compatibility checks.
+- libebl: backend fixes for i386 TLS relocs; backend support for
+  NT_386_IOPERM
+- libcpu: disassembler fixes
+- libdwfl: bug fixes
+- libelf: bug fixes
+- nm: bug fixes for handling corrupt input files
+
+* Tue Aug 26 2008 Ulrich Drepper <drepper@redhat.com> 0.137-1
+- Minor fixes for unreleased 0.136 release.
+
+* Mon Aug 25 2008 Ulrich Drepper <drepper@redhat.com> 0.136-1
+- libdwfl: bug fixes; new segment interfaces;	 all the libdwfl-based
+ tools now support --core=COREFILE option
+
+* Mon May 12 2008 Ulrich Drepper <drepper@redhat.com> 0.135-1
+- libdwfl: bug fixes
+- strip: changed handling of ET_REL files wrt symbol tables and relocs
+
+* Tue Apr  8 2008 Ulrich Drepper <drepper@redhat.com> 0.134-1
+- elflint: backend improvements for sparc, alpha
+- libdwfl, libelf: bug fixes
+
+* Sat Mar  1 2008 Ulrich Drepper <drepper@redhat.com> 0.133-1
+- readelf, elflint, libebl: SHT_GNU_ATTRIBUTE section handling (readelf -A)
+- readelf: core note handling for NT_386_TLS, NT_PPC_SPE, Alpha NT_AUXV
+- libdwfl: bug fixes and optimization in relocation handling
+- elfcmp: bug fix for non-allocated section handling
+- ld: implement newer features of binutils linker.
+
+* Mon Jan 21 2008 Ulrich Drepper <drepper@redhat.com> 0.132-1
+- libcpu: Implement x86 and x86-64 disassembler.
+- libasm: Add interface for disassembler.
+- all programs: add debugging of branch prediction.
+- libelf: new function elf_scnshndx.
+
+* Sun Nov 11 2007 Ulrich Drepper <drepper@redhat.com> 0.131-1
+- libdw: DW_FORM_ref_addr support; dwarf_formref entry point now depreca
+ted;       bug fixes for oddly-formatted DWARF
+- libdwfl: bug fixes in offline archive support, symbol table handling;
+	 apply partial relocations for dwfl_module_address_section on
+ET_REL
+- libebl: powerpc backend support for Altivec registers
+
 * Mon Oct 15 2007 Ulrich Drepper <drepper@redhat.com> 0.130-1
 - readelf: -p option can take an argument like -x for one section,
 	 or no argument (as before) for all SHF_STRINGS sections;

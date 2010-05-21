@@ -1,3 +1,437 @@
+2010-05-08  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c (__libdw_intern_expression): Take new argument
+	REF_SIZE.  Use that to handle DW_OP_call_ref correctly.
+	(getlocation): Update caller.
+	* dwarf_frame_cfa.c (dwarf_frame_cfa): Likewise.
+	* dwarf_frame_register.c (dwarf_frame_register): Likewise.
+	* libdwP.h: Update decl.
+
+2010-04-26  Roland McGrath  <roland@redhat.com>
+
+	* cfi.h (struct Dwarf_Frame_s): Add cfa_invalid alternative in cfa_rule.
+	* cfi.c (execute_cfi): Set that instead of doing cfi_assert for
+	DW_CFA_def_cfa_{offset*,register} when a non-offset rule is in force.
+	* dwarf_frame_cfa.c (dwarf_frame_cfa): Handle cfa_invalid.
+
+	* dwarf_getlocation.c (__libdw_intern_expression): Take new arg CFAP.
+	Prepend DW_OP_call_frame_cfa if true.
+	(getlocation): Update caller.
+	* dwarf_frame_cfa.c (dwarf_frame_cfa): Likewise.
+	* dwarf_frame_register.c (dwarf_frame_register): Likewise.
+	* libdwP.h: Update decl.
+
+2010-04-22  Roland McGrath  <roland@redhat.com>
+
+	* cfi.c (execute_cfi): Never return without cleanup.
+	Free FS on failure.
+	(cie_cache_initial_state): Adjust caller to expect that free.
+	(__libdw_frame_at_address): Likewise.
+
+2010-03-10  Roland McGrath  <roland@redhat.com>
+
+	* libdw.map (ELFUTILS_0.146): New set.  Add dwfl_core_file_report.
+
+2010-02-15  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am: Use config/eu.am for common stuff.
+
+2010-02-02  Mark Wielaard  <mjw@redhat.com>
+
+	* fde.c (intern_fde): Fix length check for sized_augmentation_data.
+
+2010-01-07  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getcfi_elf.c (getcfi_phdr): Use elf_getphdrnum.
+
+2010-01-05  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_aggregate_size.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add it.
+	* libdw.h: Declare it.
+	* libdwP.h: Add INTDECL.
+	* libdw.map (ELFUTILS_0.144): New set.  Add dwarf_aggregate_size.
+
+	* dwarf_srclang.c: Add INTDEF.
+	* libdwP.h: Add INTDECL.
+
+	* dwarf.h: Add some more DW_AT_GNU_* types from gcc.
+
+	* dwarf.h: Add DW_AT_GNU_vector, DW_AT_GNU_template_name.
+
+2009-11-21  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c (check_constant_offset): Return 1 for all
+	non-constant forms.
+
+2009-10-15  Roland McGrath  <roland@redhat.com>
+
+	* libdw_form.c (__libdw_form_val_len): Grok DW_FORM_sec_offset,
+	DW_FORM_exprloc, DW_FORM_flag_present, and DW_FORM_ref_sig8.
+
+2009-09-17  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c (dwarf_getlocation_implicit_value): Make OP
+	argument a pointer to const.
+	* libdw.h: Update decl.
+
+2009-09-10  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c (store_implicit_value): New function.
+	(__libdw_intern_expression): Use it, handle DW_OP_implicit_value.
+	(dwarf_getlocation_implicit_value): New function.
+	* libdw.h: Declare it.
+	* libdw.map (ELFUTILS_0.143): Add it.
+
+2009-09-09  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_getcfi.c (dwarf_getcfi): Clear cfi->ebl.
+
+2009-08-21  Josh Stone  <jistone@redhat.com>
+
+	* dwarf_hasattr_integrate.c: Integrate DW_AT_specification too.
+
+2009-08-10  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getscopevar.c: Use dwarf_diename.
+
+2009-08-09  Roland McGrath  <roland@redhat.com>
+
+	* libdw.map (ELFUTILS_0.143): New version set,
+	inherits from ELFUTILS_0.142.
+	* dwarf_arrayorder.c: Use OLD_VERSION and NEW_VERSION to define an
+	alias in the ELFUTILS_0.122 version set and the default in the new set.
+	* dwarf_srclang.c: Likewise.
+	* dwarf_decl_file.c: Likewise.
+	* dwarf_decl_line.c: Likewise.
+	* dwarf_decl_column.c: Likewise.
+	* dwarf_bytesize.c: Likewise.
+	* dwarf_bitsize.c: Likewise.
+	* dwarf_bitoffset.c: Likewise.
+
+2009-08-07  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_arrayorder.c: Use dwarf_attr_integrate.
+	* dwarf_srclang.c: Likewise.
+	* dwarf_decl_file.c: Likewise.
+	* dwarf_decl_line.c (__libdw_attr_intval): Likewise.
+	* dwarf_bytesize.c: Likewise.
+	* dwarf_bitsize.c: Likewise.
+	* dwarf_bitoffset.c: Likewise.
+
+2009-07-22  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_frame_cfa.c: Change calling convention.
+	* libdw.h: Update decl.
+
+	* dwarf_frame_register.c: Change calling/return-value convention for
+	value-only results and undefined/same_value.
+	* libdw.h: Update decl.
+
+	* dwarf_getlocation.c (__libdw_intern_expression): Take new bool
+	argument, append DW_OP_stack_value if set.  Don't take NOPS argument,
+	return that value instead.
+	(getlocation): Update caller.
+	* dwarf_frame_cfa.c: Likewise.
+	* libdwP.h: Update decl.
+
+2009-07-21  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getsrc_file.c: Ignore a CU that just has no DW_AT_stmt_list.
+	Fix loop iteration after skipping a bogus or useless CU.
+
+	* dwarf_entry_breakpoints.c: Handle 0 dwarf_errno () as harmless
+	absence, not DWARF_E_NO_DEBUG_LINE.
+
+2009-07-20  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c (__libdw_intern_expression):
+	Handle DW_OP_stack_value.
+
+2009-07-16  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_formudata.c (__libdw_formptr): Handle DW_FORM_sec_offset,
+	reject others when CU's version > 3.
+
+	* dwarf_formflag.c: Handle DW_FORM_flag_present.
+
+	* dwarf.h: Add DW_OP_{implicit,stack}_value from DWARF 4 draft.
+	Also DW_TAG_type_unit and DW_TAG_rvalue_reference_type.
+	Also DW_AT_signature, DW_AT_main_subprogram, DW_AT_data_bit_offset,
+	and DW_AT_const_expr.
+	Also DW_FORM_sec_offset, DW_FORM_exprloc, DW_FORM_flag_present,
+	and DW_FORM_ref_sig8.
+
+2009-07-15  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c: Grok DW_OP_form_tls_address,
+	DW_OP_GNU_push_tls_address, and DW_OP_bit_piece.
+
+2009-07-13  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c: Grok DW_OP_call_frame_cfa.
+
+2009-07-08  Roland McGrath  <roland@redhat.com>
+
+	* libdw.map (ELFUTILS_0.142): Add dwfl_module_dwarf_cfi,
+	dwfl_module_eh_cfi.
+
+	* libdwP.h (struct Dwarf): Add member `cfi'.
+	* dwarf_end.c (dwarf_end): Call __libdw_destroy_frame_cache on it.
+	* dwarf_getcfi.c: New file.
+	* dwarf_getcfi_elf.c: New file.
+	* dwarf_cfi_end.c: New file.
+	* dwarf_cfi_addrframe.c: New file.
+	* dwarf_frame_cfa.c: New file.
+	* dwarf_frame_register.c: New file.
+	* dwarf_frame_return_address_register.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add them.
+	* unwind.h: Declare those functions.
+	* libdw.map (ELFUTILS_0.142): Export them.
+
+	* dwarf_getlocation.c (__libdw_intern_expression): New function,
+	broken out of ...
+	(getlocation): ... here, call it.
+	* libdwP.h: Declare it.
+
+	* cie.c: New file.
+	* fde.c: New file.
+	* frame-cache.c: New file.
+	* cfi.c: New file.
+	* cfi.h: New file.
+	* encoded-value.h: New file.
+	* Makefile.am (libdw_a_SOURCES, noinst_HEADERS): Add them.
+	* libdwP.h: Add DWARF_E_INVALID_CFI to errors enum.
+	* dwarf_error.c (errmsgs): Add element for it.
+
+	* dwarf_next_cfi.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add it.
+	* libdw.h (Dwarf_CIE, Dwarf_FDE, Dwarf_CIE_Entry): New types.
+	Declare dwarf_next_cfi.
+	* libdw.map (ELFUTILS_0.142): New set, inherits from ELFUTILS_0.136.
+	Add dwarf_next_cfi.
+
+	* memory-access.h [! ALLOW_UNALIGNED]
+	(read_2ubyte_unaligned): Renamed to ...
+	(read_2ubyte_unaligned_1): ... this.  Take bool rather than Dwarf *.
+	(read_2ubyte_unaligned): Define as macro passing dbg->other_byte_order.
+	(read_2sbyte_unaligned): Likewise.
+	(read_4ubyte_unaligned): Likewise.
+	(read_4sbyte_unaligned): Likewise.
+	(read_8ubyte_unaligned): Likewise.
+	(read_8sbyte_unaligned): Likewise.
+
+	* libdwP.h (IDX_eh_frame): Remove it.
+	* dwarf_begin_elf.c (dwarf_scnnames): Remove its element.
+
+2009-07-08  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf_Line_s): Reorder members to pack better.
+
+	* dwarf_getlocation.c (check_constant_offset): New function.
+	(dwarf_getlocation, dwarf_getlocation_addr): Call it to
+	handle DW_AT_data_member_location of data[48] as constant offset.
+
+2009-06-18  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (__libdw_read_address_inc): Constify.
+	(__libdw_read_offset_inc): Likewise.
+	* dwarf_getaranges.c: Likewise.
+	* dwarf_getlocation.c: Likewise.
+	* dwarf_getsrclines.c: Likewise.
+	* dwarf_nextcu.c: Likewise.
+
+2009-05-05  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (__libdw_formptr): Declare new function.
+	* dwarf_formudata.c: Implement it here.
+	* dwarf_getlocation.c (dwarf_getlocation_addr):
+	Call it instead of hand-rolled offset handling code.
+	* dwarf_getsrclines.c (dwarf_getsrclines): Likewise.
+	* dwarf_ranges.c (dwarf_ranges): Likewise.
+
+2009-05-04  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (__libdw_read_begin_end_pair_inc): Declare new function.
+	* dwarf_ranges.c: Implement it here.
+	(dwarf_ranges): Call it.
+	* dwarf_getlocation.c (dwarf_getlocation_addr): Call it also here.
+
+2009-04-23  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_formaddr.c (dwarf_formaddr): Call __libdw_read_* instead
+	of read_*ubyte_unaligned.
+	* dwarf_formref_die.c (dwarf_formref_die): Likewise.
+	* dwarf_formstring.c (dwarf_formstring): Likewise.
+	* dwarf_formudate.c (dwarf_formudata): Likewise.
+	* dwarf_getaranges.c (dwarf_getaranges): Likewise.
+	* dwarf_getlocation.c (dwarf_getlocation_addr): Likewise.
+	* dwarf_getpubnames.c (get_offsets): Likewise.
+	* dwarf_nextcu.c (dwarf_nextcu): Likewise.
+
+2009-04-23  Petr Machata  <pmachata@redhat.com>
+
+	* libdwP.h (__libdw_read_addr_inc, __libdw_read_off_inc,
+	__libdw_read_addr, __libdw_read_off): Add four new internal
+	functions.
+
+2009-05-07  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getmacros.c (dwarf_getmacros): Use absolute section offset in
+	return value and OFFSET argument, not CU-relative.  Only fetch the
+	attribute data when called with OFFSET of 0.
+
+2009-05-07  Petr Machata  <pmachata@redhat.com>
+
+	* dwarf_getmacros.c (dwarf_getmacros): Take into account offset in
+	DW_AT_macro_info attribute of CU DIE.
+
+2009-04-15  Roland McGrath  <roland@redhat.com>
+
+	* dwarf.h (DW_CIE_ID): Removed.
+	(DW_CIE_ID_32, DW_CIE_ID_64): New constants replace it.
+
+2009-04-01  Roland McGrath  <roland@redhat.com>
+
+	* dwarf.h: Add DW_CFA_GNU_negative_offset_extended.
+
+2009-01-28  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf_Line_s): Move out of struct Dwarf_Lines_s
+	defn so C++ doesn't scope the name to not match the Dwarf_Line typedef.
+
+	* libdwP.h (struct Dwarf_Files_s): Replace dbg field with cu field.
+
+2009-01-26  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_ranges.c: Return 0 when no ranges or *_pc attrs at all.
+
+2009-01-25  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getattrs.c: Correctly skip attribute values when restarting.
+
+2009-01-23  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am ($(srcdir)/known-dwarf.h): Target renamed back.
+	Put these rules under if MAINTAINER_MODE.
+
+2009-01-22  Roland McGrath  <roland@redhat.com>
+
+	* dwarf.h: Add DW_OP_GNU_encoded_addr.
+
+2009-01-21  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (CLEANFILES): Renamed to ...
+	(MOSTLYCLEANFILES): ... here.
+	(CLEANFILES): New variable, add known-dwarf.h.
+
+2009-01-17  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (known-dwarf.h): Target renamed, not in $(srcdir).
+	Make it unconditional.
+	(BUILT_SOURCES): Updated.
+
+	* dwarf.h: Add description comments for DW_LANG_* values.
+
+	* Makefile.am [MAINTAINER_MODE]
+	($(srcdir)/known-dwarf.h): New target.
+	(BUILT_SOURCES): Add it.
+
+	* dwarf.h: Add DW_OP_GNU_push_tls_address, DW_OP_GNU_uninit.
+
+2009-01-10  Ulrich Drepper  <drepper@redhat.com>
+
+	* dwarf_error.c: Always use __thread.  Remove all !USE_TLS code.
+
+2009-01-08  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (libdw.so): Don't depend on $(zip_LIBS), just link it in.
+
+2008-01-06  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf_Abbrev): Change type of 'has_children' to bool.
+	Reorder members.
+	* dwarf_haschildren.c: Return -1 for error case, not 0.
+
+	* Makefile.am (libdw.so): Link in $(zip_LIBS).
+
+2009-01-06  Ulrich Drepper  <drepper@redhat.com>
+
+	* dwarf.h: Add definition for unwind and call frame information.
+
+	* memory-access.h: Define read_ubyte_unaligned, read_sbyte_unaligned,
+	read_ubyte_unaligned_inc, and read_sbyte_unaligned_inc.
+
+2008-08-15  Roland McGrath  <roland@redhat.com>
+
+	* libdw.map (ELFUTILS_0.136): New version set, inherits from
+	ELFUTILS_0.130.  Add dwfl_addrsegment, dwfl_report_segment.
+
+2008-01-21  Ulrich Drepper  <drepper@redhat.com>
+
+	* dwarf_child.c: Minor optimizations.
+	* dwarf_getattrs.c: Likewise.
+	* dwarf_getpubnames.c: Likewise.
+	* dwarf_siblingof.c: Likewise.
+	* dwarf_tag.c: Likewise.
+
+2008-01-18  Ulrich Drepper  <drepper@redhat.com>
+
+	* dwarf_getsrclines.c (dwarf_getsrclines): Don't require exact match
+	of DWARF_VERSION comparison, just fail if the file's version is newer.
+
+2008-01-17  Nick Clifton  <nickc@redhat.com>
+
+	* dwarf.h (DWARF3_LENGTH_MIN_ESCAPE_CODE): New define.
+	(DWARF3_LENGTH_MAX_ESCAPE_CODE): New define.
+	(DWARF3_LENGTH_64_BIT): New define.
+	* dwarf_getaranges (dwarf_getaranges): Use the new definitions.
+	* dwarf_getpubnames: Include dwarf.h.
+	(get_offsets): Use the new definitions.
+	* dwarf_getsrclines.c (dwarf_getsrclines): Use the new defintions.
+	* dwarf_nextcu.c: Include dwarf.h.  Correct comment.
+	(dwarf_nextcu): Use the new definitions.
+
+	* libdwP.h (DIE_OFFSET_FROM_CU_OFFSET): New macro.
+	* dwarf_diecu.c (dwarf_diecu): Use the new macro.
+	* dwarf_getaranges (dwarf_getaranges): Use the new macro.
+	* dwarf_nextcu.c (dwarf_nextcu): Use the new macro.
+
+	* dwarf_getpubnames (get_offsets): Replace assertion with test and
+	error return.
+
+	* dwarf_entry_breakpoints.c (dwarf_entry_breakpoints): Use CUDIE.
+
+	* dwarf_siblingof (dwarf_siblingof): Detect a NULL return pointer.
+	Set the address in the return structure to the address of the next
+	non-sibling die, if there is no sibling and the return pointer is
+	not the same as the die pointer.
+	* libdw.h: Expand the description of the dwarf_siblingof prototype.
+
+	* dwarf_child.c: Fix typo in comment.
+
+	* libdwP.h (DWARF_VERSION): Change to 3.
+
+	* dwarf_formref.c (__libdw_formref.c): Handle attributes which do
+	not have a initialised valp pointer.
+
+	* dwarf_getattrs.c (dwarf_getattrs): Return 1 rather than 0 when
+	the end of the attributes is reached.  When the callback fails,
+	return the address of the failing attribute, not the address of
+	its successor.
+	* libdw.h: Expand the description of the dwarf_getattrs prototype.
+
+	* dwarf_child.c (__libdw_find_attr): Use the new definition.
+	(dwarf_child): Likewise.
+	* dwarf_tag.c (__libdw_findabbrev): Likewise.
+	(dwarf_tag): Likewise.
+
+2008-01-08  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am (euinclude): Variable removed.
+	(pkginclude_HEADERS): Set this instead of euinclude_HEADERS.
+	(libdw.so): Pass -Wl,--enable-new-dtags,-rpath,$(pkglibdir).
+
 2007-08-04  Roland McGrath  <roland@redhat.com>
 
 	* libdw.map (ELFUTILS_0.131): Add dwfl_module_build_id,

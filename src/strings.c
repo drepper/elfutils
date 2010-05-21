@@ -1,5 +1,5 @@
 /* Print the strings of printable characters in files.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005, 2006, 2007, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2005.
 
@@ -59,10 +59,10 @@ static int read_elf (Elf *elf, int fd, const char *fname, off64_t fdlen);
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
-void (*argp_program_version_hook) (FILE *, struct argp_state *) = print_version;
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 
 /* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -228,7 +228,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2007");
+"), "2009");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -422,13 +422,13 @@ process_chunk (const char *fname, const unsigned char *buf, off64_t to,
 	  if (curlen >= min_len)
 	    {
 	      /* We found a match.  */
-	      if (unlikely (fname != NULL))
+	      if (likely (fname != NULL))
 		{
 		  fputs_unlocked (fname, stdout);
 		  fputs_unlocked (": ", stdout);
 		}
 
-	      if (unlikely (locfmt != NULL))
+	      if (likely (locfmt != NULL))
 		printf (locfmt, (int64_t) to - len - (buf - start));
 
 	      if (unlikely (*unprinted != NULL))
@@ -677,7 +677,7 @@ read_block (int fd, const char *fname, off64_t fdlen, off64_t from, off64_t to)
 	  if (mmap64 (remap_base, read_now, PROT_READ,
 		      MAP_PRIVATE | MAP_POPULATE | MAP_FIXED, fd, handled_to)
 	      == MAP_FAILED)
-	    error (EXIT_FAILURE, errno, gettext ("re=mmap failed"));
+	    error (EXIT_FAILURE, errno, gettext ("re-mmap failed"));
 	  elfmap_off = handled_to;
 
 	  process_chunk (fname, remap_base - to_keep,
@@ -739,3 +739,6 @@ read_elf (Elf *elf, int fd, const char *fname, off64_t fdlen)
 
   return result;
 }
+
+
+#include "debugpred.h"

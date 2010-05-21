@@ -1,5 +1,5 @@
 /* Return note type name.
-   Copyright (C) 2002, 2007 Red Hat, Inc.
+   Copyright (C) 2002, 2007, 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -56,7 +56,6 @@
 #include <stdio.h>
 #include <libeblP.h>
 
-
 const char *
 ebl_core_note_type_name (ebl, type, buf, len)
      Ebl *ebl;
@@ -99,6 +98,9 @@ ebl_core_note_type_name (ebl, type, buf, len)
 #define KNOWNSTYPE(name) case NT_##name: res = #name; break
 	    KNOWNSTYPE (PRXFPREG);
 	    KNOWNSTYPE (PPC_VMX);
+	    KNOWNSTYPE (PPC_SPE);
+	    KNOWNSTYPE (386_TLS);
+	    KNOWNSTYPE (386_IOPERM);
 #undef KNOWNSTYPE
 
 	  default:

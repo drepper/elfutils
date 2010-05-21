@@ -1,5 +1,5 @@
 /* Advance in archive to next element.
-   Copyright (C) 1998, 1999, 2000, 2002 Red Hat, Inc.
+   Copyright (C) 1998-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Contributed by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -64,6 +64,7 @@ elf_next (elf)
      Elf *elf;
 {
   Elf *parent;
+  Elf_Cmd ret;
 
   /* Be gratious, the specs demand it.  */
   if (elf == NULL || elf->parent == NULL)
@@ -73,14 +74,21 @@ elf_next (elf)
   parent = elf->parent;
   assert (parent->kind == ELF_K_AR);
 
+  rwlock_wrlock (parent->lock);
+
   /* Now advance the offset.  */
   parent->state.ar.offset += (sizeof (struct ar_hdr)
 			      + ((parent->state.ar.elf_ar_hdr.ar_size + 1)
 				 & ~1l));
 
   /* Get the next archive header.  */
-  if (__libelf_next_arhdr (parent) != 0)
-    return ELF_C_NULL;
+  ret = __libelf_next_arhdr_wrlock (parent) != 0 ? ELF_C_NULL : elf->cmd;
 
-  return elf->cmd;
+  /* If necessary, mark the archive header as unusable.  */
+  if (ret == ELF_C_NULL)
+    parent->state.ar.elf_ar_hdr.ar_name = NULL;
+
+  rwlock_unlock (parent->lock);
+
+  return ret;
 }

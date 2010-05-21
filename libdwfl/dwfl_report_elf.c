@@ -1,5 +1,5 @@
 /* Report a module to libdwfl based on ELF program headers.
-   Copyright (C) 2005, 2007 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -62,7 +62,7 @@
 Dwfl_Module *
 internal_function
 __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
-		      int fd, Elf *elf, GElf_Addr base)
+		      int fd, Elf *elf, GElf_Addr base, bool sanity)
 {
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
   if (ehdr == NULL)
@@ -187,8 +187,11 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
       base = 0;
 
     case ET_DYN:
-    default:
-      for (uint_fast16_t i = 0; i < ehdr->e_phnum; ++i)
+    default:;
+      size_t phnum;
+      if (unlikely (elf_getphdrnum (elf, &phnum) != 0))
+	goto elf_error;
+      for (size_t i = 0; i < phnum; ++i)
 	{
 	  GElf_Phdr phdr_mem, *ph = gelf_getphdr (elf, i, &phdr_mem);
 	  if (unlikely (ph == NULL))
@@ -203,19 +206,20 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 	}
       bias = base;
 
-      for (uint_fast16_t i = ehdr->e_phnum; i-- > 0;)
+      for (size_t i = phnum; i-- > 0;)
 	{
 	  GElf_Phdr phdr_mem, *ph = gelf_getphdr (elf, i, &phdr_mem);
 	  if (unlikely (ph == NULL))
 	    goto elf_error;
-	  if (ph->p_type == PT_LOAD)
+	  if (ph->p_type == PT_LOAD
+	      && ph->p_vaddr + ph->p_memsz > 0)
 	    {
 	      end = base + (ph->p_vaddr + ph->p_memsz);
 	      break;
 	    }
 	}
 
-      if (end == 0)
+      if (end == 0 && sanity)
 	{
 	  __libdwfl_seterrno (DWFL_E_NO_PHDR);
 	  return NULL;
@@ -234,11 +238,10 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
       else if ((fd >= 0 && m->main.fd != fd)
 	       || strcmp (m->main.name, file_name))
 	{
-	  elf_end (elf);
 	overlap:
 	  m->gc = true;
 	  __libdwfl_seterrno (DWFL_E_OVERLAP);
-	  m = NULL;
+	  return NULL;
 	}
 
       /* Preinstall the open ELF handle for the module.  */
@@ -274,9 +277,16 @@ dwfl_report_elf (Dwfl *dwfl, const char *name,
 	}
     }
 
-  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
+  Elf *elf;
+  Dwfl_Error error = __libdw_open_file (&fd, &elf, closefd, false);
+  if (error != DWFL_E_NOERROR)
+    {
+      __libdwfl_seterrno (error);
+      return NULL;
+    }
+
   Dwfl_Module *mod = __libdwfl_report_elf (dwfl, name, file_name,
-					   fd, elf, base);
+					   fd, elf, base, true);
   if (mod == NULL)
     {
       elf_end (elf);

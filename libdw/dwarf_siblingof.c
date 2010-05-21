@@ -1,5 +1,5 @@
 /* Return sibling of given DIE.
-   Copyright (C) 2003, 2004, 2005, 2007 Red Hat, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2003.
 
@@ -66,6 +66,12 @@ dwarf_siblingof (die, result)
   if (die == NULL)
     return -1;
 
+  if (result == NULL)
+    return -1;
+
+  if (result != die)
+    result->addr = NULL;
+
   unsigned int level = 0;
 
   /* Copy of the current DIE.  */
@@ -92,7 +98,7 @@ dwarf_siblingof (die, result)
 	{
 	  Dwarf_Off offset;
 	  sibattr.valp = addr;
-	  if (__libdw_formref (&sibattr, &offset) != 0)
+	  if (unlikely (__libdw_formref (&sibattr, &offset) != 0))
 	    /* Something went wrong.  */
 	    return -1;
 
@@ -102,7 +108,7 @@ dwarf_siblingof (die, result)
 		  + sibattr.cu->start + offset);
 	}
       else if (unlikely (addr == NULL)
-	       || unlikely (this_die.abbrev == (Dwarf_Abbrev *) -1l))
+	       || unlikely (this_die.abbrev == DWARF_END_ABBREV))
 	return -1;
       else if (this_die.abbrev->has_children)
 	/* This abbreviation has children.  */
@@ -120,8 +126,12 @@ dwarf_siblingof (die, result)
 	    break;
 
 	  if (level-- == 0)
-	    /* No more sibling at all.  */
-	    return 1;
+	    {
+	      if (result != die)
+		result->addr = addr;
+	      /* No more sibling at all.  */
+	      return 1;
+	    }
 
 	  ++addr;
 	}

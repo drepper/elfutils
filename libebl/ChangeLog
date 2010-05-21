@@ -1,3 +1,122 @@
+2010-02-15  Roland McGrath  <roland@redhat.com>
+
+	* Makefile.am: Use config/eu.am for common stuff.
+
+2010-01-04  Roland McGrath  <roland@redhat.com>
+
+	* eblcorenote.c (ebl_core_note): Take GElf_Nhdr * and name data
+	pointer instead of only n_type and n_descsz.
+	* libebl.h: Update declaration.
+	* ebl-hooks.h: Update core_note hook signature.
+	* eblopenbackend.c (default_core_note): Likewise.
+
+2009-10-14  Roland McGrath  <roland@redhat.com>
+
+	* eblobjnote.c (ebl_object_note): Clean up NT_GNU_GOLD_VERSION printing.
+
+2009-10-05  Roland McGrath  <roland@redhat.com>
+
+	* eblopenbackend.c (default_debugscn_p): Match .debug_pubtypes and
+	.debug_types too.
+
+2009-09-02  Petr Machata  <pmachata@redhat.com>
+
+	* libebl/eblstrtab.c (morememory): Allocate memory in multiples of
+	pagesize.
+
+2009-08-06  Petr Machata  <pmachata@redhat.com>
+
+	* libebl/eblstrtab.c (ebl_strtabfinalize): Only call copystrings
+	if we have any strings to copy.
+
+2009-07-26  Mark Wielaard  <mjw@redhat.com>
+
+	* eblobjnote.c (ebl_object_note): Handle NT_GNU_GOLD_VERSION.
+
+	* eblobjnotetypename.c (ebl_object_note_type_name): Recognize
+	NT_GNU_GOLD_VERSION.
+
+2009-07-08  Roland McGrath  <roland@redhat.com>
+
+	* ebl-hooks.h: Add abi_cfi hook.
+	* eblopenbackend.c (default_abi_cfi): New function.
+	(fill_defaults): Add initializer.
+	* eblabicfi.c: New file.
+	* Makefile.am (gen_SOURCES): Add it.
+	* libebl.h: Declare ebl_abi_cfi.
+
+2009-07-08  Ulrich Drepper  <drepper@redhat.com>
+
+	* eblsymbolbindingname.c (ebl_symbol_binding_name): Handle
+	STB_GNU_UNIQUE.
+
+	* eblsymboltypename.c (ebl_symbol_type_name): Only handle STT_GNU_IFUNC
+	if the binary is marked as being for Linux.
+
+2009-04-01  Roland McGrath  <roland@redhat.com>
+
+	* eblsymboltypename.c (ebl_symbol_type_name): Add STT_GNU_IFUNC.
+
+	* eblauxvinfo.c (AUXV_TYPES): Add RANDOM and BASE_PLATFORM.
+
+2009-02-01  Ulrich Drepper  <drepper@redhat.com>
+
+	* eblreloctypename.c (ebl_reloc_type_name): Return "<INVALID RELOC>"
+	instead of "???" for invalid relocations.
+
+2008-08-01  Roland McGrath  <roland@redhat.com>
+
+	* eblcorenotetypename.c: Handle NT_386_IOPERM.
+
+2008-07-28  Roland McGrath  <roland@redhat.com>
+
+	* eblauxvinfo.c (AUXV_TYPES): Add EXECFN.
+
+	* eblauxvinfo.c (ebl_auxv_info): Handle missing elements of standard
+	table.
+
+2008-07-04  Roland McGrath  <roland@redhat.com>
+
+	* libebl.h: Declare ebl_syscall_abi.
+	* ebl_syscall_abi.c: New file.
+	* Makefile.am (gen_SOURCES): Add it.
+	* ebl-hooks.h: New hook syscall_abi.
+	* eblopenbackend.c (default_syscall_abi): New function.
+	(fill_defaults): Use it.
+
+2008-03-31  Roland McGrath  <roland@redhat.com>
+
+	* ebldynamictagname.c (ebl_dynamic_tag_name): Use hex for unknown tag.
+
+	* ebl-hooks.h: Add check_special_section hook.
+	* eblopenbackend.c (fill_defaults): Set new hook to ...
+	(default_check_special_section): ... this, new function.
+	* ebl_check_special_section.c: New file.
+	* Makefile.am (gen_SOURCES): Add it.
+	* libebl.h: Declare it.
+
+2008-02-20  Roland McGrath  <roland@redhat.com>
+
+	* libebl.h: Declare ebl_check_object_attribute.
+	* eblcheckobjattr.c: New file.
+	* Makefile.am (gen_SOURCES): Add it.
+	* ebl-hooks.h: Add check_object_attribute hook.
+	* eblopenbackend.c (default_check_object_attribute): New function.
+	(fill_defaults): Initialize pointer to it.
+
+2008-02-19  Roland McGrath  <roland@redhat.com>
+
+	* eblsectiontypename.c (ebl_section_type_name):
+	Handle SHT_GNU_ATTRIBUTES.
+
+2008-02-08  Roland McGrath  <roland@redhat.com>
+
+	* eblcorenotetypename.c (ebl_core_note_type_name): Handle NT_PPC_SPE.
+
+2008-01-30  Roland McGrath  <roland@redhat.com>
+
+	* eblcorenotetypename.c (ebl_core_note_type_name): Handle NT_386_TLS.
+
 2007-10-18  Roland McGrath  <roland@redhat.com>
 
 	* eblcorenotetypename.c (ebl_core_note_type_name): Handle NT_PPC_VMX.

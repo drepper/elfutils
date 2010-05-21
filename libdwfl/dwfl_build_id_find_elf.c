@@ -1,5 +1,5 @@
 /* Find an ELF file for a module from its build ID.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -57,7 +57,8 @@ int
 internal_function
 __libdwfl_open_by_build_id (Dwfl_Module *mod, bool debug, char **file_name)
 {
-  *file_name = NULL;
+  /* If *FILE_NAME was primed into the module, leave it there
+     as the fallback when we have nothing to offer.  */
   errno = 0;
   if (mod->build_id_len <= 0)
     return -1;
@@ -118,6 +119,13 @@ __libdwfl_open_by_build_id (Dwfl_Module *mod, bool debug, char **file_name)
       free (name);
     }
 
+  /* If we simply found nothing, clear errno.  If we had some other error
+     with the file, report that.  Possibly this should treat other errors
+     like ENOENT too.  But ignoring all errors could mask some that should
+     be reported.  */
+  if (fd < 0 && errno == ENOENT)
+    errno = 0;
+
   return fd;
 }
 
@@ -132,10 +140,15 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
   int fd = __libdwfl_open_by_build_id (mod, false, file_name);
   if (fd >= 0)
     {
-      *elfp = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
-      if (__libdwfl_find_build_id (mod, false, *elfp) == 2)
-	/* This is a backdoor signal to short-circuit the ID refresh.  */
-	mod->main.valid = true;
+      Dwfl_Error error = __libdw_open_file (&fd, elfp, true, false);
+      if (error != DWFL_E_NOERROR)
+	__libdwfl_seterrno (error);
+      else if (__libdwfl_find_build_id (mod, false, *elfp) == 2)
+	{
+	  /* This is a backdoor signal to short-circuit the ID refresh.  */
+	  mod->main.valid = true;
+	  return fd;
+	}
       else
 	{
 	  /* This file does not contain the ID it should!  */
@@ -143,10 +156,16 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
 	  *elfp = NULL;
 	  close (fd);
 	  fd = -1;
-	  free (*file_name);
-	  *file_name = NULL;
 	}
+      free (*file_name);
+      *file_name = NULL;
     }
+  else if (errno == 0 && mod->build_id_len > 0)
+    /* Setting this with no file yet loaded is a marker that
+       the build ID is authoritative even if we also know a
+       putative *FILE_NAME.  */
+    mod->main.valid = true;
+
   return fd;
 }
 INTDEF (dwfl_build_id_find_elf)

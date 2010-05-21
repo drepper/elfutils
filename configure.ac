@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl Configure input file for elfutils.                     -*-autoconf-*-
 dnl
-dnl Copyright (C) 1996-2002, 2003, 2004, 2005, 2006, 2007 Red Hat, Inc.
+dnl Copyright (C) 1996-2010 Red Hat, Inc.
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -16,17 +16,16 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; if not, write to the Free Software Foundation,
 dnl Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 dnl
-AC_INIT([Red Hat elfutils],[0.130],[http://bugzilla.redhat.com/bugzilla/],
-	[elfutils])
+AC_INIT([Red Hat elfutils],[0.147],[http://bugzilla.redhat.com/bugzilla/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
 
-AC_COPYRIGHT([Copyright (C) 1996-2003, 2004, 2005, 2006, 2007 Red Hat, Inc.])
-AC_PREREQ(2.59)			dnl Minimum Autoconf version required.
+AC_COPYRIGHT([Copyright (C) 1996-2010 Red Hat, Inc.])
+AC_PREREQ(2.63)			dnl Minimum Autoconf version required.
 
 dnl We use GNU make extensions; automake 1.10 defaults to -Wportability.
-AM_INIT_AUTOMAKE([gnits 1.7 -Wno-portability])
+AM_INIT_AUTOMAKE([gnits 1.8 -Wno-portability dist-bzip2 no-dist-gzip])
 AM_MAINTAINER_MODE
 
 dnl Unique ID for this build.
@@ -48,10 +47,13 @@ AC_CONFIG_FILES([elfutils.spec:config/elfutils.spec.in])
 
 AC_CANONICAL_HOST
 
-AC_ARG_ENABLE([tls],
-AS_HELP_STRING([--enable-tls], [enable use of thread local storage]),
-AC_DEFINE(USE_TLS))
-AH_TEMPLATE([USE_TLS], [Defined if thread local storage should be used.])
+AC_ARG_ENABLE([thread-safety],
+AS_HELP_STRING([--enable-thread-safety], [enable thread safety of libraries]),
+use_tls=locks, use_locks=no)
+AM_CONDITIONAL(USE_LOCKS, test "$use_locks" = yes)
+AS_IF([test "$use_locks" = yes], [AC_DEFINE(USE_LOCKS)])
+
+AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
 
 dnl Add all the languages for which translations are available.
 ALL_LINGUAS=
@@ -71,13 +73,22 @@ CFLAGS="$old_CFLAGS"])
 AS_IF([test "x$ac_cv_c99" != xyes],
       AC_MSG_ERROR([gcc with C99 support required]))
 
-LOCALEDIR=$datadir
-AC_SUBST(LOCALEDIR)
-AC_DEFINE_UNQUOTED(LOCALEDIR, "$LOCALEDIR")
-AH_TEMPLATE([LOCALEDIR], [Directory to place translation files in.])
-
-DATADIRNAME=$datadir
-AC_SUBST(DATADIRNAME)
+AC_CACHE_CHECK([for __thread support], ac_cv_tls, [dnl
+# Use the same flags that we use for our DSOs, so the test is representative.
+# Some old compiler/linker/libc combinations fail some ways and not others.
+save_CFLAGS="$CFLAGS"
+save_LDFLAGS="$LDFLAGS"
+CFLAGS="-fpic $CFLAGS"
+LDFLAGS="-shared -Wl,-z,defs,-z,relro $LDFLAGS"
+AC_LINK_IFELSE([dnl
+AC_LANG_PROGRAM([[#undef __thread
+static __thread int a; int foo (int b) { return a + b; }]],
+		[[exit (foo (0));]])],
+	       ac_cv_tls=yes, ac_cv_tls=no)
+CFLAGS="$save_CFLAGS"
+LDFLAGS="$save_LDFLAGS"])
+AS_IF([test "x$ac_cv_tls" != xyes],
+      AC_MSG_ERROR([__thread support required]))
 
 dnl This test must come as early as possible after the compiler configuration
 dnl tests, because the choice of the file model can (in principle) affect
@@ -126,7 +137,7 @@ if test "x$enable_mudflap" = xyes; then
   # Check whether the compiler support -fmudflap.
   old_CFLAGS="$CFLAGS"
   CFLAGS="$CFLAGS -fmudflap"
-  AC_TRY_COMPILE([], [], use_mudflap=yes, use_mudflap=fail)
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],[use_mudflap=yes],[use_mudflap=fail])
   CFLAGS="$old_CFLAGS"
 fi])
 if test "$use_mudflap" = fail; then
@@ -134,10 +145,16 @@ if test "$use_mudflap" = fail; then
 fi
 AM_CONDITIONAL(MUDFLAP, test "$use_mudflap" = yes)
 
-# Enable gprof suport.
+dnl enable debugging of branch prediction.
+use_debugpred=0
+AC_ARG_ENABLE([debugpred],
+AS_HELP_STRING([--enable-debugpred],[build binaries with support to debug branch prediction]),
+[use_debugpred=1], [use_debugpred=0])
+AC_SUBST([DEBUGPRED], $use_debugpred)
+
+dnl Enable gprof suport.
 AC_ARG_ENABLE([gprof],
-AC_HELP_STRING([--enable-gprof],
-[build binaries with gprof support]), [use_gprof=yes], [use_gprof=no])
+AS_HELP_STRING([--enable-gprof],[build binaries with gprof support]), [use_gprof=yes], [use_gprof=no])
 if test "$use_gprof" = yes; then
   CFLAGS="$CFLAGS -pg"
   LDFLAGS="$LDFLAGS -pg"
@@ -146,8 +163,7 @@ AM_CONDITIONAL(GPROF, test "$use_gprof" = yes)
 
 # Enable gcov suport.
 AC_ARG_ENABLE([gcov],
-AC_HELP_STRING([--enable-gcov],
-[build binaries with gcov support]), [use_gcov=yes], [use_gcov=no])
+AS_HELP_STRING([--enable-gcov],[build binaries with gcov support]), [use_gcov=yes], [use_gcov=no])
 if test "$use_gcov" = yes; then
   CFLAGS="$CFLAGS -fprofile-arcs -ftest-coverage"
   LDFLAGS="$LDFLAGS -fprofile-arcs"
@@ -158,7 +174,7 @@ AM_CONDITIONAL(BUILD_STATIC, [dnl
 test "$use_mudflap" = yes -o "$use_gprof" = yes -o "$use_gcov" = yes])
 
 AC_ARG_ENABLE([tests-rpath],
-AC_HELP_STRING([--enable-tests-rpath], [build $ORIGIN-using rpath into tests]),
+AS_HELP_STRING([--enable-tests-rpath],[build $ORIGIN-using rpath into tests]),
  	       [tests_use_rpath=yes], [tests_use_rpath=no])
 AM_CONDITIONAL(TESTS_RPATH, test "$tests_use_rpath" = yes)
 
@@ -170,6 +186,17 @@ LIBEBL_SUBDIR="$enable_libebl_subdir"])
 AC_SUBST([LIBEBL_SUBDIR])
 AC_DEFINE_UNQUOTED(LIBEBL_SUBDIR, "$LIBEBL_SUBDIR")
 AH_TEMPLATE([LIBEBL_SUBDIR], [$libdir subdirectory containing libebl modules.])
+
+dnl Test for zlib and bzlib, gives ZLIB/BZLIB .am
+dnl conditional and config.h USE_ZLIB/USE_BZLIB #define.
+save_LIBS="$LIBS"
+LIBS=
+eu_ZIPLIB(zlib,ZLIB,z,gzdirect,gzip)
+eu_ZIPLIB(bzlib,BZLIB,bz2,BZ2_bzdopen,bzip2)
+eu_ZIPLIB(lzma,LZMA,lzma,lzma_auto_decoder,[LZMA (xz)])
+zip_LIBS="$LIBS"
+LIBS="$save_LIBS"
+AC_SUBST([zip_LIBS])
 
 dnl The directories with content.
 
@@ -214,102 +241,45 @@ AC_CONFIG_FILES([tests/Makefile])
 AC_SUBST(USE_NLS, yes)
 AM_PO_SUBDIRS
 
+dnl Appended to the config.h file.
+dnl We hide all kinds of configuration magic in lib/eu-config.h.
+AH_BOTTOM([#include <eu-config.h>])
 
-dnl Test of the config.h file.  We hide all kinds of configuration magic
-dnl in there.
-AH_BOTTOM([
-/* Eventually we will allow multi-threaded applications to use the
-   libraries.  Therefore we will add the necessary locking although
-   the macros used expand to nothing for now.  */
-#define lock_lock(lock) ((void) (lock))
-#define rwlock_define(class,name) class int name
-#define rwlock_init(lock) ((void) (lock))
-#define rwlock_fini(lock) ((void) (lock))
-#define rwlock_rdlock(lock) ((void) (lock))
-#define rwlock_wrlock(lock) ((void) (lock))
-#define rwlock_unlock(lock) ((void) (lock))
-#define tls_key_t void *
-#define key_create(keyp, freefct) (1)
-#define getspecific(key) key
-#define setspecific(key,val) key = val
-#define once_define(class,name) class int name
-#define once_execute(name,fct) \
-  do {									      \
-    if (name == 0)							      \
-      fct ();								      \
-    name = 1;								      \
-  } while (0)
+dnl Version compatibility header.
+AC_CONFIG_FILES([version.h:config/version.h.in])
+AC_SUBST([eu_version])
 
-/* gettext helper macro.  */
-#define N_(Str) Str
+# 1.234<whatever> -> 1234<whatever>
+case "$PACKAGE_VERSION" in
+[[0-9]].*) eu_version="${PACKAGE_VERSION/./}" ;;
+*)     	   AC_MSG_ERROR([confused by version number '$PACKAGE_VERSION']) ;;
+esac
+case "$eu_version" in
+*.*)
+  # 1234.567 -> "1234", "567"
+  eu_extra_version="${eu_version#*.}"
+  eu_version="${eu_version%%.*}"
+  case "$eu_extra_version" in
+  [[0-9]][[0-9]][[0-9]]) ;;
+  [[0-9]][[0-9]])	eu_extra_version="${eu_extra_version}0" ;;
+  [[0-9]])	   	eu_extra_version="${eu_extra_version}00" ;;
+  *) AC_MSG_ERROR([confused by version number '$PACKAGE_VERSION']) ;;
+  esac
+  ;;
+*)
+  eu_extra_version=000
+  ;;
+esac
 
-/* Compiler-specific definitions.  */
-#define strong_alias(name, aliasname) \
-  extern __typeof (name) aliasname __attribute__ ((alias (#name)));
+case "$eu_version" in
+      0[[0-9]][[0-9]][[0-9]]) eu_version="${eu_version#0}$eu_extra_version" ;;
+[[0-9]][[0-9]][[0-9]][[0-9]]) eu_version="${eu_version}$eu_extra_version" ;;
+[[0-9]][[0-9]][[0-9]])	      eu_version="${eu_version}0$eu_extra_version" ;;
+[[0-9]][[0-9]])   	      eu_version="${eu_version}00$eu_extra_version";;
+*) AC_MSG_ERROR([confused by version number '$PACKAGE_VERSION']) ;;
+esac
 
-#ifdef __i386__
-# define internal_function __attribute__ ((regparm (3), stdcall))
-#else
-# define internal_function /* nothing */
-#endif
-
-#define internal_strong_alias(name, aliasname) \
-  extern __typeof (name) aliasname __attribute__ ((alias (#name))) internal_function;
-
-#define attribute_hidden \
-  __attribute__ ((visibility ("hidden")))
-
-/* Define ALLOW_UNALIGNED if the architecture allows operations on
-   unaligned memory locations.  */
-#if defined __i386__ || defined __x86_64__
-# define ALLOW_UNALIGNED	1
-#else
-# define ALLOW_UNALIGNED	0
-#endif
-
-#define unlikely(expr) __builtin_expect (expr, 0)
-#define likely(expr) __builtin_expect (expr, 1)
-
-#define obstack_calloc(ob, size) \
-  ({ size_t _s = (size); memset (obstack_alloc (ob, _s), '\0', _s); })
-#define obstack_strdup(ob, str) \
-  ({ const char *_s = (str); obstack_copy0 (ob, _s, strlen (_s)); })
-#define obstack_strndup(ob, str, n) \
-  ({ const char *_s = (str); obstack_copy0 (ob, _s, strnlen (_s, n)); })
-
-#if __STDC_VERSION__ >= 199901L
-# define flexarr_size /* empty */
-#else
-# define flexarr_size 0
-#endif
-
-/* Calling conventions.  */
-#ifdef __i386__
-# define CALLING_CONVENTION regparm (3), stdcall
-# define AND_CALLING_CONVENTION , regparm (3), stdcall
-#else
-# define CALLING_CONVENTION
-# define AND_CALLING_CONVENTION
-#endif
-
-/* Avoid PLT entries.  */
-#ifdef PIC
-# define INTUSE(name) _INTUSE(name)
-# define _INTUSE(name) __##name##_internal
-# define INTDEF(name) _INTDEF(name)
-# define _INTDEF(name) \
-  extern __typeof__ (name) __##name##_internal __attribute__ ((alias (#name)));
-# define INTDECL(name) _INTDECL(name)
-# define _INTDECL(name) \
-  extern __typeof__ (name) __##name##_internal attribute_hidden;
-#else
-# define INTUSE(name) name
-# define INTDEF(name) /* empty */
-# define INTDECL(name) /* empty */
-#endif
-
-/* This macro is used by the tests conditionalize for standalone building.  */
-#define ELFUTILS_HEADER(name) <lib##name.h>
-])
+# Round up to the next release API (x.y) version.
+[eu_version=$[($eu_version + 999) / 1000]]
 
 AC_OUTPUT

@@ -1,5 +1,5 @@
 /* Describe known auxv types.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007, 2008, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -63,6 +63,7 @@
   TYPE (NULL, "")							      \
   TYPE (IGNORE, "")							      \
   TYPE (EXECFD, "d")							      \
+  TYPE (EXECFN, "s")							      \
   TYPE (PHDR, "p")							      \
   TYPE (PHENT, "u")							      \
   TYPE (PHNUM, "u")							      \
@@ -77,6 +78,7 @@
   TYPE (EGID, "u")							      \
   TYPE (CLKTCK, "u")							      \
   TYPE (PLATFORM, "s")							      \
+  TYPE (BASE_PLATFORM, "s")						      \
   TYPE (HWCAP, "x")							      \
   TYPE (FPUCW, "x")							      \
   TYPE (DCACHEBSIZE, "d")						      \
@@ -89,7 +91,8 @@
   TYPE (L1I_CACHESHAPE, "d")						      \
   TYPE (L1D_CACHESHAPE, "d")						      \
   TYPE (L2_CACHESHAPE, "d")						      \
-  TYPE (L3_CACHESHAPE, "d")
+  TYPE (L3_CACHESHAPE, "d")						      \
+  TYPE (RANDOM, "p")
 
 static const struct
 {
@@ -110,7 +113,7 @@ ebl_auxv_info (ebl, a_type, name, format)
      const char **format;
 {
   int result = ebl->auxv_info (a_type, name, format);
-  if (result == 0 && a_type < nauxv_types)
+  if (result == 0 && a_type < nauxv_types && auxv_types[a_type].name != NULL)
     {
       /* The machine specific function did not know this type.  */
       *name = auxv_types[a_type].name;
