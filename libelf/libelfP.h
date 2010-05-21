@@ -288,6 +288,7 @@ struct Elf
      for the archive. */
   Elf *parent;
   Elf *next;             /* Used in list of archive descriptors.  */
+  Elf *children;	/* List of all descriptors pointing to this one. */
 
   /* What kind of file is underneath (ELF file, archive...).  */
   Elf_Kind kind;
@@ -315,9 +316,6 @@ struct Elf
 
   /* Reference counting for the descriptor.  */
   int ref_count;
-
-  struct Elf *next;             /* Used in list of archive descriptors.  */
-  struct Elf *children;	/* List of all descriptors pointing to this one. */
 
   /* Lock to handle multithreaded programs.  */
   rwlock_define (,lock);
@@ -599,8 +597,6 @@ extern GElf_Sym *__gelf_getsym_internal (Elf_Data *__data, int __ndx,
 extern uint32_t __libelf_crc32 (uint32_t crc, unsigned char *buf, size_t len)
      attribute_hidden;
 
-INTDECL (gelf_rawchunk);
-INTDECL (gelf_freechunk);
 INTDECL (gelf_getdata_memory);
 
 

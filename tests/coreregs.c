@@ -1,5 +1,5 @@
 /* Test program for libdwfl core file handling.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -173,7 +173,7 @@ handle_thread (Dwfl *dwfl, Elf *core, Dwfl_Register_Map *map,
 	       int nsets, GElf_Off offsets[], GElf_Word sizes[],
 	       int idset, GElf_Word idpos, Elf_Type idtype)
 {
-  void *sets[nsets];
+  Elf_Data *sets[nsets];
   memset (sets, 0, sizeof sets);
   inline int establish (int setno)
     {
@@ -181,7 +181,9 @@ handle_thread (Dwfl *dwfl, Elf *core, Dwfl_Register_Map *map,
 	{
 	  if (sizes[setno] == 0)
 	    return 1;
-	  sets[setno] = gelf_rawchunk (core, offsets[setno], sizes[setno]);
+	  sets[setno] = elf_getdata_rawchunk (core,
+					      offsets[setno], sizes[setno],
+					      ELF_T_BYTE);
 	  if (sets[setno] == NULL)
 	    return -1;
 	}
@@ -201,7 +203,7 @@ handle_thread (Dwfl *dwfl, Elf *core, Dwfl_Register_Map *map,
 	  int result = establish (setno);
 	  if (result == 0)
 	    handle_register_data (dwfl, core, regno, regname, bits, type,
-				  sets[setno] + offset);
+				  sets[setno]->d_buf + offset);
 	  else if (result < 0)
 	    error (2, 0, "gelf_rawchunk: %s", elf_errmsg (-1));
 	}
@@ -217,7 +219,7 @@ handle_thread (Dwfl *dwfl, Elf *core, Dwfl_Register_Map *map,
 	error (2, 0, "gelf_rawchunk: %s", elf_errmsg (-1));
       assert (result == 0);
 
-      handle_thread_identifier (core, idtype, sets[idset] + idpos);
+      handle_thread_identifier (core, idtype, sets[idset]->d_buf + idpos);
     }
 
   Dwfl_Module *mod = dwfl->modulelist; /* XXX */
@@ -226,10 +228,6 @@ handle_thread (Dwfl *dwfl, Elf *core, Dwfl_Register_Map *map,
     mod = mod->next;
   int result = dwfl_module_register_names (mod, &handle_register, NULL);
   assert (result == 0);
-
-  for (int i = 0; i < nsets; ++i)
-    if (sets[i] != NULL)
-      gelf_freechunk (core, sets[i]);
 }
 
 static void
@@ -282,7 +280,7 @@ find_registers (Dwfl *dwfl, Elf *core)
 static const Dwfl_Callbacks corefile_callbacks =
   {
     .find_debuginfo = INTUSE(dwfl_standard_find_debuginfo),
-    .find_elf = INTUSE(dwfl_core_file_find_elf),
+    .find_elf = INTUSE(dwfl_build_id_find_elf),
   };
 
 static void

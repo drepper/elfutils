@@ -1,5 +1,5 @@
 /* Examine a core file for notes describing register data.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -83,8 +83,8 @@ handle_note (Dwfl *dwfl, Elf *core, const GElf_Phdr *phdr,
 	     Dwfl_Register_Map *map, int *setno,
 	     GElf_Off *start, GElf_Off *end)
 {
-  Elf_Data *data = gelf_getdata_rawchunk (core, phdr->p_offset, phdr->p_filesz,
-					  ELF_T_NHDR);
+  Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset, phdr->p_filesz,
+					 ELF_T_NHDR);
   if (data == NULL)
     return -1;
 
@@ -111,7 +111,7 @@ handle_note (Dwfl *dwfl, Elf *core, const GElf_Phdr *phdr,
 	}
 
       result = dwfl_register_map_populate (map, dwfl, *setno,
-					   nhdr.n_type, 0, nhdr.n_descsz);
+					   &nhdr, data->d_buf + name_offset);
       if (result < 0)
 	break;
       if (result > 0)
@@ -202,8 +202,8 @@ dwfl_core_file_read_note (dwfl, map, offset, limit,
   *ident_pos = 0;
   *ident_type = ELF_T_NUM;
 
-  Elf_Data *data = gelf_getdata_rawchunk (core, offset, limit - offset,
-					  ELF_T_NHDR);
+  Elf_Data *data = elf_getdata_rawchunk (core, offset, limit - offset,
+					 ELF_T_NHDR);
   if (data == NULL)
     return -1;
 

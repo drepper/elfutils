@@ -602,9 +602,8 @@ extern void dwfl_register_map_end (Dwfl_Register_Map *);
 
 extern int dwfl_register_map_populate (Dwfl_Register_Map *map, Dwfl *ref,
 				       int setno,
-				       GElf_Word n_type,
-				       GElf_Word offset,
-				       GElf_Word size);
+				       const GElf_Nhdr *nhdr,
+				       const char *n_name);
 
 /* Look up a DWARF register number in the given register map.
 

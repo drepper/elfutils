@@ -81,7 +81,7 @@ libelf_a_SOURCES = elf_version.c elf_hash.c elf_error.c elf_fill.c \
 		   gelf_update_verdaux.c \
 		   elf_getphdrnum.c elf_getshdrnum.c elf_getshdrstrndx.c \
 		   gelf_checksum.c elf32_checksum.c elf64_checksum.c \
-		   gelf_getdata_memory.c gelf_getdata_rawchunk.c \
+		   gelf_getdata_memory.c \
 		   libelf_crc32.c libelf_next_prime.c \
 		   elf_clone.c \
 		   gelf_begin_embedded.c \

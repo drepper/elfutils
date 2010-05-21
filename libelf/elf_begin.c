@@ -1045,7 +1045,7 @@ elf_begin (fildes, cmd, ref)
       }
 
     /* Duplicate the descriptor.  */
-    return dup_elf (fildes, cmd, ref);
+    return __libelf_dup_elf (fildes, cmd, ref, 0, 0);
   }
 
   switch (cmd)

@@ -1,5 +1,5 @@
 /* Handle register maps.
-   Copyright (C) 2007 Red Hat, Inc.
+   Copyright (C) 2007-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -110,14 +110,15 @@ expand_map (Dwfl_Register_Map *map, int first, int limit)
 }
 
 int
-dwfl_register_map_populate (map, ref, setno, type, offset, size)
+dwfl_register_map_populate (map, ref, setno, nhdr, n_name)
      Dwfl_Register_Map *map;
      Dwfl *ref;
      int setno;
-     GElf_Word type;
-     GElf_Word offset;
-     GElf_Word size;
+     const GElf_Nhdr *nhdr;
+     const char *n_name;
 {
+  size_t offset = 0; // XXX &pr_reg for non-core caller? get from backend?
+
   if (map == NULL || ref == NULL)
     return -1;
 
@@ -138,8 +139,8 @@ dwfl_register_map_populate (map, ref, setno, type, offset, size)
   const Ebl_Register_Location *reglocs;
   const Ebl_Core_Item *items;
   GElf_Word regs_offset;
-  int result = ebl_core_note (ebl, type, offset + size, &regs_offset,
-			      &nregloc, &reglocs, &nitem, &items);
+  int result = ebl_core_note (ebl, nhdr, n_name,
+			      &regs_offset, &nregloc, &reglocs, &nitem, &items);
   if (result < 0)
     {
       __libdwfl_seterrno (DWFL_E_LIBEBL);
@@ -244,7 +245,7 @@ dwfl_register_map_populate (map, ref, setno, type, offset, size)
 	  map->types = memset (types, 0xff, setno * sizeof types[0]);
 	}
 
-      map->types[setno] = type;
+      map->types[setno] = nhdr->n_type;
     }
 
   return result;
