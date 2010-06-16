@@ -57,6 +57,39 @@ static const Ebl_Register_Location fpregset_regs[] =
   };
 #define FPREGSET_SIZE	140
 
+static const Ebl_Register_Location vfp_regs[] =
+  {
+    { .offset = 0, .regno = 256, .count = 32, .bits = 64 }, /* d0-d31 */
+    /* { .offset = 32 * 8, .regno = ??? , .count = 1, .bits = 32 }, fpscr */
+  };
+
+static const Ebl_Core_Item tp_items[] =
+  {
+    { .type = ELF_T_ADDR, .offset = 0, .format = 'x', .name = "tp" },
+  };
+
+static int
+tp_info (GElf_Word descsz, GElf_Word *regs_offset,
+	 size_t *nregloc, const Ebl_Register_Location **reglocs,
+	 size_t *nitems, const Ebl_Core_Item **items)
+{
+  if (descsz != 4)
+    return 0;
+
+  *regs_offset = 0;
+  *nregloc = 0;
+  *reglocs = NULL;
+  *nitems = sizeof tp_items / sizeof tp_items[0];
+  *items = tp_items;
+  return 1;
+}
+
+#define NT_ARM_TP	0x302		/* ARM thread pointer */
+#define	EXTRA_NOTES \
+  EXTRA_REGSET (NT_PRXFPREG, 264, vfp_regs) \
+  case NT_ARM_TP: \
+    return tp_info (descsz, regs_offset, nregloc, reglocs, nitems, items);
+
 #define	ULONG			uint32_t
 #define PID_T			int32_t
 #define	UID_T			uint16_t
