@@ -1,5 +1,5 @@
 /* Find debugging and symbol information for a module in libdwfl.
-   Copyright (C) 2005, 2006, 2007, 2008 Red Hat, Inc.
+   Copyright (C) 2005-2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -49,12 +49,31 @@
 
 #include "libdwflP.h"
 
+static inline bool
+want_symbol (GElf_Sym *sym, bool tls, GElf_Addr addr)
+{
+  if (tls)
+    {
+      if (GELF_ST_TYPE (sym->st_info) != STT_TLS)
+	return false;
+
+      // XXX ...
+      return sym->st_value <= addr;
+    }
+
+  return (sym->st_value <= addr
+	  && GELF_ST_TYPE (sym->st_info) != STT_SECTION
+	  && GELF_ST_TYPE (sym->st_info) != STT_FILE
+	  && GELF_ST_TYPE (sym->st_info) != STT_TLS);
+}
+
 /* Returns the name of the symbol "closest" to ADDR.
    Never returns symbols at addresses above ADDR.  */
 
-const char *
-dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
-		     GElf_Sym *closest_sym, GElf_Word *shndxp)
+static const char *
+find_symbol (Dwfl_Module *mod, GElf_Addr addr,
+	     GElf_Sym *closest_sym, GElf_Word *shndxp,
+	     bool tls)
 {
   int syments = INTUSE(dwfl_module_getsymtab) (mod);
   if (syments < 0)
@@ -112,10 +131,7 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
       const char *name = INTUSE(dwfl_module_getsym) (mod, i, &sym, &shndx);
       if (name != NULL && name[0] != '\0'
 	  && sym.st_shndx != SHN_UNDEF
-	  && sym.st_value <= addr
-	  && GELF_ST_TYPE (sym.st_info) != STT_SECTION
-	  && GELF_ST_TYPE (sym.st_info) != STT_FILE
-	  && GELF_ST_TYPE (sym.st_info) != STT_TLS)
+	  && want_symbol (&sym, tls, addr))
 	{
 	  /* Even if we don't choose this symbol, its existence excludes
 	     any sizeless symbol (assembly label) that is below its upper
@@ -180,4 +196,18 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
     *shndxp = closest_shndx;
   return closest_name;
 }
+
+const char *
+dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
+		     GElf_Sym *closest_sym, GElf_Word *shndxp)
+{
+  return find_symbol (mod, addr, closest_sym, shndxp, false);
+}
 INTDEF (dwfl_module_addrsym)
+
+const char *
+dwfl_module_addrsym_tls (Dwfl_Module *mod, GElf_Addr addr,
+			 GElf_Sym *closest_sym, GElf_Word *shndxp)
+{
+  return find_symbol (mod, addr, closest_sym, shndxp, true);
+}

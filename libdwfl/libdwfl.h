@@ -450,6 +450,11 @@ extern const char *dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr address,
 					GElf_Sym *sym, GElf_Word *shndxp)
   __nonnull_attribute__ (3);
 
+/* Like dwfl_module_addrsym, but ADDRESS is relative to MOD's TLS segment.  */
+extern const char *dwfl_module_addrsym_tls (Dwfl_Module *mod, GElf_Addr address,
+					    GElf_Sym *sym, GElf_Word *shndxp)
+  __nonnull_attribute__ (3);
+
 /* Find the ELF section that *ADDRESS lies inside and return it.
    On success, adjusts *ADDRESS to be relative to the section,
    and sets *BIAS to the difference between addresses used in

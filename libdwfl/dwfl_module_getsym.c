@@ -98,6 +98,9 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
       break;
 
     default:
+      if (GELF_ST_TYPE (sym->st_info) == STT_TLS) /* XXX */
+	break;
+
       if (mod->e_type == ET_REL)
 	{
 	  /* In an ET_REL file, the symbol table values are relative
