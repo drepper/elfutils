@@ -50,14 +50,14 @@ static const Ebl_Register_Location prstatus_regs[] =
     { .offset = 42 * 4, .regno = 60, .count = 2, .bits = BITS },/* iasq[01] */
     { .offset = 44 * 4, .regno = 32, .count = 1, .bits = BITS },/* sar */
     { .offset = 45 * 4, .regno = 119, .count = 4, .bits = BITS },/* cr19-cr22 */
-    { .offset = 49 * 4, .regno = 100, .count = 4, .bits = BITS },/* cr0 */
+    { .offset = 49 * 4, .regno = 100, .count = 1, .bits = BITS },/* cr0 */
     { .offset = 50 * 4, .regno = 124, .count = 8, .bits = BITS },/* cr24-cr31 */
     { .offset = 58 * 4, .regno = 108, .count = 2, .bits = BITS },/* cr8-cr9 */
     { .offset = 60 * 4, .regno = 112, .count = 2, .bits = BITS },/* cr12-cr13 */
     { .offset = 62 * 4, .regno = 110, .count = 1, .bits = BITS },/* cr10 */
     { .offset = 63 * 4, .regno = 115, .count = 1, .bits = BITS },/* cr15 */
   };
-#define PRSTATUS_REGS_SIZE	(64 * 4)
+#define PRSTATUS_REGS_SIZE	(BITS / 8 * 80) /* Only first 64 filled.  */
 
 static const Ebl_Register_Location fpregset_regs[] =
   {
