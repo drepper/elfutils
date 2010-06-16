@@ -2132,7 +2132,12 @@ list_module (Dwfl_Module *mod)
 	printf ("%02" PRIx8, *id++);
       while (--id_len > 0);
       if (id_vaddr != 0)
-	printf ("@%#" PRIx64, id_vaddr);
+	{
+	  if (id_vaddr > start && id_vaddr < end)
+	    printf ("@+%#" PRIx64, id_vaddr - start);
+	  else
+	    printf ("@%#" PRIx64, id_vaddr);
+	}
     }
   else
     putchar ('-');
