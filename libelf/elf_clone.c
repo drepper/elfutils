@@ -1,5 +1,5 @@
 /* Create clone of a given descriptor.
-   Copyright (C) 2003, 2004 Red Hat, Inc.
+   Copyright (C) 2003, 2004, 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2003.
 
@@ -92,6 +92,14 @@ elf_clone (Elf *elf, Elf_Cmd cmd)
       retval->state.elf32.scns.max = elf->state.elf32.scns.max;
 
       retval->class = elf->class;
+
+      if (retval->parent != NULL)
+	{
+	  /* Enlist this new descriptor in the list of children.  */
+	  assert (retval->parent->kind == ELF_K_AR);
+	  retval->next = retval->parent->state.ar.children;
+	  retval->parent->state.ar.children = retval;
+	}
     }
 
   /* Release the lock.  */

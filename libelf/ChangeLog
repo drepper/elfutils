@@ -1,3 +1,7 @@
+2009-08-05  Roland McGrath  <roland@redhat.com>
+
+	* elf_clone.c: Chain onto the ELF->parent->state.ar.children list.
+
 2010-06-14  Ulrich Drepper  <drepper@redhat.com>
 
 	* gelf_update_shdr.c: Implicitly set ELF_F_DIRTY bit.
