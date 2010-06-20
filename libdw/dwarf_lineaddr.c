@@ -1,5 +1,5 @@
 /* Return line address.
-   Copyright (C) 2004 Red Hat, Inc.
+   Copyright (C) 2004-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -61,7 +61,22 @@ dwarf_lineaddr (Dwarf_Line *line, Dwarf_Addr *addrp)
   if (line == NULL)
     return -1;
 
-  *addrp =  line->addr;
+  if (line->cu->lines->reloc == NULL
+      || line->cu->lines->reloc[line - line->cu->lines->info] == NULL)
+    {
+      *addrp = line->addr;
+      return 0;
+    }
 
-  return 0;
+  /* We have to relocate an address and then adjust it for this line record.  */
+
+  int result = __libdw_read_address
+    (line->cu->dbg, IDX_debug_line,
+     line->cu->lines->reloc[line - line->cu->lines->info],
+     line->cu->address_size, addrp);
+
+  if (result >= 0)
+    *addrp += line->addr;
+
+  return result;
 }

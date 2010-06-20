@@ -1,4 +1,36 @@
+2010-06-21  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf_Line_s): Replace files with cu.
+	(struct Dwarf_Lines_s): New member reloc.
+	* dwarf_linesrc.c: Update usage.
+	* dwarf_getsrc_file.c: Likewise.
+	* dwarf_getsrclines.c: Record relocatable address locations in
+	parallel array, with Dwarf_Line.addr becoming a relative offset.
+	* dwarf_lineaddr.c: Use __libdw_read_address on demand for a
+	relocatable line address.
+
 2010-06-20  Roland McGrath  <roland@redhat.com>
+
+	* relocate.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add it.
+	* libdwP.h (struct dwarf_file_reloc): New type.
+	(struct Dwarf): New member relocate.
+	(__libdw_relocate_address, __libdw_relocate_offset): Replace inlines
+	with extern decls.
+	(READ_AND_RELOCATE): Call RELOC_HOOK if DBG->relocate,
+	else read directly.
+	(__libdw_read_address, __libdw_read_offset): Just call *_inc variant.
+	(__libdw_relocate_begin, __libdw_relocate_end): Declare them.
+	* dwarf_begin_elf.c (check_section): Take new args to track reloc
+	sections.
+	(global_read, scngrp_read): Pass new args through to check_section.
+	(dwarf_begin_elf): Track reloc sections in an ET_REL file,
+	call __libdw_relocate_begin.
+
+	* libdwP.h (DWARF_E_RELOC, DWARF_E_RELBADTYPE): New enum constants.
+	(DWARF_E_RELBADADDEND, DWARF_E_RELBADOFF): Likewise.
+	(DWARF_E_RELBADSYM, DWARF_E_RELUNDEF, DWARF_E_RELWRONGSEC): Likewise.
+	* dwarf_error.c (errmsgs): Add them.
 
 	* cfi.h (BYTE_ORDER_DUMMY): Macro moved ...
 	* memory-access.h: ... here.
@@ -7,6 +39,7 @@
 	to search TUs instead of CUs.
 	* libdwP.h: Update decl.
 	(struct Dwarf): New member tu_tree.
+
 	* dwarf_end.c (dwarf_end): Clean up tu_tree.
 	* dwarf_offdie.c (do_offdie): New function, broken out of ...
 	(dwarf_offdie): ... here.

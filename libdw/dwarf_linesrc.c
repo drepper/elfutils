@@ -1,5 +1,5 @@
 /* Find line information for address.
-   Copyright (C) 2004 Red Hat, Inc.
+   Copyright (C) 2004-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -61,17 +61,17 @@ dwarf_linesrc (Dwarf_Line *line, Dwarf_Word *mtime, Dwarf_Word *length)
   if (line == NULL)
     return NULL;
 
-  if (line->file >= line->files->nfiles)
+  if (line->file >= line->cu->files->nfiles)
     {
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
       return NULL;
     }
 
   if (mtime != NULL)
-    *mtime = line->files->info[line->file].mtime;
+    *mtime = line->cu->files->info[line->file].mtime;
 
   if (length != NULL)
-    *length = line->files->info[line->file].length;
+    *length = line->cu->files->info[line->file].length;
 
-  return line->files->info[line->file].name;
+  return line->cu->files->info[line->file].name;
 }

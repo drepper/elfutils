@@ -136,6 +136,13 @@ enum
   DWARF_E_INVALID_OFFSET,
   DWARF_E_NO_DEBUG_RANGES,
   DWARF_E_INVALID_CFI,
+  DWARF_E_RELOC,
+  DWARF_E_RELBADTYPE,
+  DWARF_E_RELBADADDEND,
+  DWARF_E_RELBADOFF,
+  DWARF_E_RELBADSYM,
+  DWARF_E_RELUNDEF,
+  DWARF_E_RELWRONGSEC,
 };
 
 
@@ -149,6 +156,9 @@ struct Dwarf
 
   /* The section data.  */
   Elf_Data *sectiondata[IDX_last];
+
+  /* Information for relocating an ET_REL file, or null.  */
+  struct dwarf_file_reloc *relocate;
 
   /* True if the file has a byte order different from the host.  */
   bool other_byte_order;
@@ -201,6 +211,19 @@ struct Dwarf
 };
 
 
+/* Hook for relocation information (handled in relocate.c).  */
+struct dwarf_file_reloc
+{
+  struct dwarf_section_reloc *sectionrel[IDX_last];
+
+  struct ebl *ebl;
+
+  int (*resolve_symbol) (bool undef, Dwarf *dbg,
+			 GElf_Sym *sym, GElf_Word shndx)
+    internal_function;
+};
+
+
 /* Abbreviation representation.  */
 struct Dwarf_Abbrev
 {
@@ -236,7 +259,7 @@ typedef struct Dwarf_Fileinfo_s Dwarf_Fileinfo;
 
 struct Dwarf_Line_s
 {
-  Dwarf_Files *files;
+  struct Dwarf_CU *cu;
 
   Dwarf_Addr addr;
   unsigned int file;
@@ -257,6 +280,7 @@ struct Dwarf_Line_s
 
 struct Dwarf_Lines_s
 {
+  const unsigned char **reloc;
   size_t nlines;
   struct Dwarf_Line_s info[0];
 };
@@ -464,29 +488,27 @@ extern int __dwarf_errno_internal (void);
 
 /* Reader hooks.  */
 
+extern void __libdw_relocate_begin (Dwarf *dbg, Elf_Scn *relscn[IDX_last],
+				    bool incomplete)
+  __nonnull_attribute__ (1, 2) internal_function;
+
+extern void __libdw_relocate_end (Dwarf *dbg)
+  __nonnull_attribute__ (1) internal_function;
+
+
 /* Relocation hooks return -1 on error (in that case the error code
    must already have been set), 0 if there is no relocation and 1 if a
-   relocation was present.*/
+   relocation was present.  */
 
-static inline int
-__libdw_relocate_address (Dwarf *dbg __attribute__ ((unused)),
-			  int sec_index __attribute__ ((unused)),
-			  const void *addr __attribute__ ((unused)),
-			  int width __attribute__ ((unused)),
-			  Dwarf_Addr *val __attribute__ ((unused)))
-{
-  return 0;
-}
+extern int __libdw_relocate_address (Dwarf *dbg, int sec_index,
+				     const void *addr, int width,
+				     Dwarf_Addr *val)
+  __nonnull_attribute__ (1, 3, 5) internal_function;
 
-static inline int
-__libdw_relocate_offset (Dwarf *dbg __attribute__ ((unused)),
-			 int sec_index __attribute__ ((unused)),
-			 const void *addr __attribute__ ((unused)),
-			 int width __attribute__ ((unused)),
-			 Dwarf_Off *val __attribute__ ((unused)))
-{
-  return 0;
-}
+extern int __libdw_relocate_offset (Dwarf *dbg, int sec_index,
+				    const void *addr, int width,
+				    Dwarf_Off *val)
+  __nonnull_attribute__ (1, 3, 5) internal_function;
 
 static inline Elf_Data *
 __libdw_checked_get_data (Dwarf *dbg, int sec_index)
@@ -540,15 +562,19 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
     if (!__libdw_in_section (dbg, sec_index, addr, width))		\
       return -1;							\
 									\
-    const unsigned char *orig_addr = addr;				\
-    if (width == 4)							\
+    int status = 0;							\
+    if (dbg->relocate != NULL)						\
+      {									\
+	status = RELOC_HOOK (dbg, sec_index, addr, width, &VAL);	\
+	if (status < 0)							\
+	  return status;						\
+	addr += width;							\
+      }									\
+    else if (width == 4)						\
       VAL = read_4ubyte_unaligned_inc (dbg, addr);			\
     else								\
       VAL = read_8ubyte_unaligned_inc (dbg, addr);			\
 									\
-    int status = RELOC_HOOK (dbg, sec_index, orig_addr, width, &VAL);	\
-    if (status < 0)							\
-      return status;							\
     status > 0;								\
    })
 
@@ -568,8 +594,7 @@ __libdw_read_address (Dwarf *dbg,
 		      int sec_index, const unsigned char *addr,
 		      int width, Dwarf_Addr *ret)
 {
-  READ_AND_RELOCATE (__libdw_relocate_address, (*ret));
-  return 0;
+  return __libdw_read_address_inc (dbg, sec_index, &addr, width, ret);
 }
 
 static inline int
@@ -590,8 +615,8 @@ __libdw_read_offset (Dwarf *dbg,
 		     int width, Dwarf_Off *ret, int sec_ret,
 		     size_t size)
 {
-  READ_AND_RELOCATE (__libdw_relocate_offset, (*ret));
-  return __libdw_offset_in_section (dbg, sec_ret, *ret, size);
+  return __libdw_read_offset_inc (dbg, sec_index, &addr, width,
+				  ret, sec_ret, size);
 }
 
 static inline size_t

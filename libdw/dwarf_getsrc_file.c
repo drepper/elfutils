@@ -1,5 +1,5 @@
 /* Find line information for given file/line/column triple.
-   Copyright (C) 2005-2009 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2005.
 
@@ -110,14 +110,14 @@ dwarf_getsrc_file (Dwarf *dbg, const char *fname, int lineno, int column,
 	  if (lastfile != line->file)
 	    {
 	      lastfile = line->file;
-	      if (lastfile >= line->files->nfiles)
+	      if (lastfile >= line->cu->files->nfiles)
 		{
 		  __libdw_seterrno (DWARF_E_INVALID_DWARF);
 		  return -1;
 		}
 
 	      /* Match the name with the name the user provided.  */
-	      const char *fname2 = line->files->info[lastfile].name;
+	      const char *fname2 = line->cu->files->info[lastfile].name;
 	      if (is_basename)
 		lastmatch = strcmp (basename (fname2), fname) == 0;
 	      else
@@ -136,7 +136,7 @@ dwarf_getsrc_file (Dwarf *dbg, const char *fname, int lineno, int column,
 	  /* Determine whether this is the best match so far.  */
 	  size_t inner;
 	  for (inner = 0; inner < cur_match; ++inner)
-	    if (match[inner]->files == line->files
+	    if (match[inner]->cu->files == line->cu->files
 		&& match[inner]->file == line->file)
 	      break;
 	  if (inner < cur_match

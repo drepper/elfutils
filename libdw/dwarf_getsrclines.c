@@ -68,6 +68,7 @@ struct filelist
 struct linelist
 {
   Dwarf_Line line;
+  const unsigned char *reloc;
   struct linelist *next;
 };
 
@@ -323,6 +324,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
         /* We are about to process the statement program.  Initialize the
 	   state machine registers (see 6.2.2 in the v2.1 specification).  */
+      const unsigned char *addr_reloc = NULL;
       Dwarf_Word addr = 0;
       unsigned int op_index = 0;
       unsigned int file = 1;
@@ -385,6 +387,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
 #undef SET
 
+	new_line->reloc = addr_reloc;
 	new_line->next = linelist;
 	linelist = new_line;
 	++nlinelist;
@@ -450,6 +453,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
 		  /* Reset the registers.  */
 		  addr = 0;
+		  addr_reloc = NULL;
 		  op_index = 0;
 		  file = 1;
 		  line = 1;
@@ -469,8 +473,19 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  op_index = 0;
 		  if (unlikely (lineendp - linep < cu->address_size))
 		    goto invalid_data;
-		  if (__libdw_read_address_inc (dbg, IDX_debug_line, &linep,
-						cu->address_size, &addr))
+		  if (dbg->relocate != NULL
+		      && dbg->relocate->sectionrel[IDX_debug_line] != NULL)
+		    {
+		      /* We're just recording a relocatable address
+			 and offsets from it.  We'll do the relocation
+			 only lazily in dwarf_lineaddr.  */
+		      addr = 0;
+		      addr_reloc = linep;
+		      linep += cu->address_size;
+		    }
+		  else if (__libdw_read_address_inc (dbg, IDX_debug_line,
+						     &linep, cu->address_size,
+						     &addr))
 		    goto out;
 		  break;
 
@@ -703,9 +718,9 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	 We'll write the pointers in the end of the buffer, and then
 	 copy into the buffer from the beginning so the overlap works.  */
       assert (sizeof (Dwarf_Line) >= sizeof (Dwarf_Line *));
-      Dwarf_Line **sortlines = (buf + sizeof (Dwarf_Lines)
-				+ ((sizeof (Dwarf_Line)
-				    - sizeof (Dwarf_Line *)) * nlinelist));
+      struct linelist **sortlines = (buf + sizeof (Dwarf_Lines)
+				     + ((sizeof (Dwarf_Line)
+					 - sizeof (Dwarf_Line *)) * nlinelist));
 
       /* The list is in LIFO order and usually they come in clumps with
 	 ascending addresses.  So fill from the back to probably start with
@@ -713,7 +728,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
       unsigned int i = nlinelist;
       while (i-- > 0)
 	{
-	  sortlines[i] = &linelist->line;
+	  sortlines[i] = linelist;
 	  linelist = linelist->next;
 	}
       assert (linelist == NULL);
@@ -726,10 +741,24 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	 of SORTLINES by the time we're reading the later ones.  */
       cu->lines = buf;
       cu->lines->nlines = nlinelist;
+
+      if (cu->dbg->relocate != NULL
+	  && cu->dbg->relocate->sectionrel[IDX_debug_line] != NULL)
+	{
+	  /* Add a parallel table of relocation pointers.  */
+	  cu->lines->reloc = libdw_alloc (cu->dbg, const unsigned char *,
+					  sizeof (const unsigned char *),
+					  nlinelist);
+	  for (i = 0; i < nlinelist; ++i)
+	    cu->lines->reloc[i] = sortlines[i]->reloc;
+	}
+      else
+	cu->lines->reloc = NULL;
+
       for (i = 0; i < nlinelist; ++i)
 	{
-	  cu->lines->info[i] = *sortlines[i];
-	  cu->lines->info[i].files = files;
+	  cu->lines->info[i] = sortlines[i]->line;
+	  cu->lines->info[i].cu = cu;
 	}
 
       /* Success.  */

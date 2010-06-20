@@ -52,6 +52,7 @@
 # include <config.h>
 #endif
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -81,7 +82,9 @@ static const char dwarf_scnnames[IDX_last][17] =
 
 
 static Dwarf *
-check_section (Dwarf *result, GElf_Ehdr *ehdr, Elf_Scn *scn, bool inscngrp)
+check_section (Dwarf *result, GElf_Ehdr *ehdr,
+	       uint8_t scn_debug[], size_t shnum, Elf_Scn *relscn[IDX_last],
+	       Elf_Scn *scn, bool inscngrp)
 {
   GElf_Shdr shdr_mem;
   GElf_Shdr *shdr;
@@ -123,9 +126,40 @@ check_section (Dwarf *result, GElf_Ehdr *ehdr, Elf_Scn *scn, bool inscngrp)
     }
 
 
+  /* This might be a relocation section.  */
+  if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
+    {
+      if (scn_debug != NULL
+	  && likely (shdr->sh_info != 0)
+	  && likely (shdr->sh_info < shnum))
+	{
+	  if (scn_debug[shdr->sh_info] < IDX_last)
+	    {
+	      /* This section has relocations for a debug section
+		 we have already noticed.  */
+	      relscn[scn_debug[shdr->sh_info]] = scn;
+	      if (scn_debug[0] != IDX_debug_info)
+		scn_debug[0] = IDX_debug_abbrev;
+	    }
+	  else if (unlikely (shdr->sh_info > elf_ndxscn (scn)))
+	    {
+	      /* A relocation section usually follows its target section.
+		 But there is no guarantee.  */
+	      GElf_Shdr tshdr_mem;
+	      GElf_Shdr *tshdr = gelf_getshdr (elf_getscn (result->elf,
+							   shdr->sh_info),
+					       &tshdr_mem);
+	      if (likely (tshdr != NULL))
+		/* Mark that we need a second pass.  */
+		scn_debug[0] = IDX_debug_info;
+	    }
+	}
+      return result;
+    }
+
+
   /* Recognize the various sections.  Most names start with .debug_.  */
-  size_t cnt;
-  for (cnt = 0; cnt < ndwarf_scnnames; ++cnt)
+  for (uint_fast8_t cnt = 0; cnt < ndwarf_scnnames; ++cnt)
     if (strcmp (scnname, dwarf_scnnames[cnt]) == 0)
       {
 	/* Found it.  Remember where the data is.  */
@@ -136,8 +170,12 @@ check_section (Dwarf *result, GElf_Ehdr *ehdr, Elf_Scn *scn, bool inscngrp)
 	/* Get the section data.  */
 	Elf_Data *data = elf_getdata (scn, NULL);
 	if (data != NULL && data->d_size != 0)
-	  /* Yep, there is actually data available.  */
-	  result->sectiondata[cnt] = data;
+	  {
+	    /* Yep, there is actually data available.  */
+	    result->sectiondata[cnt] = data;
+	    if (scn_debug != NULL)
+	      scn_debug[elf_ndxscn (scn)] = cnt;
+	  }
 
 	break;
       }
@@ -169,19 +207,22 @@ valid_p (Dwarf *result)
 
 
 static Dwarf *
-global_read (Dwarf *result, Elf *elf, GElf_Ehdr *ehdr)
+global_read (Dwarf *result, Elf *elf, GElf_Ehdr *ehdr,
+	     uint8_t scn_debug[], size_t shnum, Elf_Scn *relscn[IDX_last])
 {
   Elf_Scn *scn = NULL;
 
   while (result != NULL && (scn = elf_nextscn (elf, scn)) != NULL)
-    result = check_section (result, ehdr, scn, false);
+    result = check_section (result, ehdr, scn_debug, shnum, relscn, scn, false);
 
   return valid_p (result);
 }
 
 
 static Dwarf *
-scngrp_read (Dwarf *result, Elf *elf, GElf_Ehdr *ehdr, Elf_Scn *scngrp)
+scngrp_read (Dwarf *result, Elf *elf, GElf_Ehdr *ehdr,
+	     uint8_t scn_debug[], size_t shnum, Elf_Scn *relscn[IDX_last],
+	     Elf_Scn *scngrp)
 {
   /* SCNGRP is the section descriptor for a section group which might
      contain debug sections.  */
@@ -209,7 +250,8 @@ scngrp_read (Dwarf *result, Elf *elf, GElf_Ehdr *ehdr, Elf_Scn *scngrp)
 	  return NULL;
 	}
 
-      result = check_section (result, ehdr, scn, true);
+      result = check_section (result, ehdr, scn_debug, shnum, relscn,
+			      scn, true);
       if (result == NULL)
 	break;
     }
@@ -272,15 +314,38 @@ dwarf_begin_elf (elf, cmd, scngrp)
 
   if (cmd == DWARF_C_READ || cmd == DWARF_C_RDWR)
     {
-      /* If the caller provides a section group we get the DWARF
-	 sections only from this setion group.  Otherwise we search
-	 for the first section with the required name.  Further
-	 sections with the name are ignored.  The DWARF specification
-	 does not really say this is allowed.  */
-      if (scngrp == NULL)
-	return global_read (result, elf, ehdr);
+      inline void read_it (uint8_t scn_debug[], size_t shnum,
+			   Elf_Scn *relscn[IDX_last])
+      {
+	/* If the caller provides a section group we get the DWARF
+	   sections only from this setion group.  Otherwise we search
+	   for the first section with the required name.  Further
+	   sections with the name are ignored.  The DWARF specification
+	   does not really say this is allowed.  */
+	if (scngrp == NULL)
+	  result = global_read (result, elf, ehdr, scn_debug, shnum, relscn);
+	else
+	  result = scngrp_read (result, elf, ehdr, scn_debug, shnum, relscn,
+				scngrp);
+      }
+
+      if (ehdr->e_type == ET_REL)
+	{
+	  Elf_Scn *relscn[IDX_last] = {};
+	  size_t shnum;
+	  int ret = elf_getshdrnum (elf, &shnum);
+	  assert (ret == 0);
+	  uint8_t scn_debug[shnum];
+	  memset (scn_debug, IDX_last, shnum);
+	  read_it (scn_debug, shnum, relscn);
+	  if (result != NULL && scn_debug[0] != IDX_last)
+	    /* We saw some relocation sections.  */
+	    __libdw_relocate_begin (result, relscn,
+				    scn_debug[0] == IDX_debug_info);
+	}
       else
-	return scngrp_read (result, elf, ehdr, scngrp);
+	read_it (NULL, 0, NULL);
+      return result;
     }
   else if (cmd == DWARF_C_WRITE)
     {

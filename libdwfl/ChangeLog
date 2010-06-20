@@ -1,3 +1,8 @@
+2010-06-21  Roland McGrath  <roland@redhat.com>
+
+	* dwfl_module_getsrc_file.: Update for Dwarf_Line member change.
+	* dwfl_lineinfo.c: Likewise.  Use dwarf_lineaddr.
+
 2010-06-20  Roland McGrath  <roland@redhat.com>
 
 	* relocate.c (struct reloc_symtab_cache): New members

@@ -1,5 +1,5 @@
 /* Find matching source locations in a module.
-   Copyright (C) 2005 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -81,7 +81,7 @@ dwfl_module_getsrc_file (Dwfl_Module *mod,
     {
       inline const char *INTUSE(dwarf_line_file) (const Dwarf_Line *line)
 	{
-	  return line->files->info[line->file].name;
+	  return line->cu->files->info[line->file].name;
 	}
       inline Dwarf_Line *dwfl_line (const Dwfl_Line *line)
 	{
@@ -101,7 +101,7 @@ dwfl_module_getsrc_file (Dwfl_Module *mod,
 	{
 	  Dwarf_Line *line = &cu->die.cu->lines->info[cnt];
 
-	  if (unlikely (line->file >= line->files->nfiles))
+	  if (unlikely (line->file >= line->cu->files->nfiles))
 	    {
 	      __libdwfl_seterrno (DWFL_E (LIBDW, DWARF_E_INVALID_DWARF));
 	      return -1;

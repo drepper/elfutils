@@ -94,6 +94,10 @@ dwarf_end (dwarf)
       tdestroy (dwarf->cu_tree, cu_free);
       tdestroy (dwarf->tu_tree, cu_free);
 
+      if (dwarf->relocate != NULL)
+	/* Clean up relocation tracking.  */
+	__libdw_relocate_end (dwarf);
+
       struct libdw_memblock *memp = dwarf->mem_tail;
       /* The first block is allocated together with the Dwarf object.  */
       while (memp->prev != NULL)

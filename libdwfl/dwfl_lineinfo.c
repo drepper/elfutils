@@ -1,5 +1,5 @@
 /* Get information from a source line record returned by libdwfl.
-   Copyright (C) 2005, 2006 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -67,7 +67,7 @@ dwfl_lineinfo (Dwfl_Line *line, Dwarf_Addr *addr, int *linep, int *colp,
   if (colp != NULL)
     *colp = info->column;
 
-  struct Dwarf_Fileinfo_s *file = &info->files->info[info->file];
+  struct Dwarf_Fileinfo_s *file = &info->cu->files->info[info->file];
   if (mtime != NULL)
     *mtime = file->mtime;
   if (length != NULL)

@@ -1,5 +1,5 @@
 /* Retrieve ELF descriptor used for DWARF access.
-   Copyright (C) 2002, 2003, 2004, 2005, 2009 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -112,6 +112,13 @@ static const char *errmsgs[] =
     [DWARF_E_INVALID_OFFSET] = N_("invalid offset"),
     [DWARF_E_NO_DEBUG_RANGES] = N_(".debug_ranges section missing"),
     [DWARF_E_INVALID_CFI] = N_("invalid CFI section"),
+    [DWARF_E_RELOC] = N_("value requires relocation"),
+    [DWARF_E_RELBADTYPE] = N_("unsupported relocation type"),
+    [DWARF_E_RELBADADDEND] = N_("relocation addend overflow"),
+    [DWARF_E_RELBADOFF] = N_("relocation at invalid offset"),
+    [DWARF_E_RELBADSYM] = N_("relocation refers to invalid symbol"),
+    [DWARF_E_RELUNDEF] = N_("relocation refers to undefined symbol"),
+    [DWARF_E_RELWRONGSEC] = N_("relocation refers to wrong DWARF section"),
   };
 #define nerrmsgs (sizeof (errmsgs) / sizeof (errmsgs[0]))
 
