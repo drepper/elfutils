@@ -550,7 +550,7 @@ internal_function
 __libdw_relocatable (Dwarf *dbg, int sec_idx,
 		     const unsigned char *valp, unsigned int width,
 		     GElf_Sym *sym, const char **name, GElf_Sxword *addend,
-		     GElf_Sxword offset)
+		     GElf_Sxword offset, const char **secname)
 {
   struct dwarf_section_reloc *const r = dbg->relocate->sectionrel[sec_idx];
   int symndx;
@@ -566,6 +566,8 @@ __libdw_relocatable (Dwarf *dbg, int sec_idx,
 	*addend = offset + (width == 8
 			    ? read_8ubyte_unaligned (dbg, valp)
 			    : read_4ubyte_unaligned (dbg, valp));
+      if (secname != NULL)
+	*secname = NULL;
     }
   else if (likely (result > 0))
     {
@@ -592,6 +594,18 @@ __libdw_relocatable (Dwarf *dbg, int sec_idx,
 	    *addend += offset;
 	  result = (sym->st_shndx < SHN_LORESERVE ? sym->st_shndx
 		    : sym->st_shndx == SHN_XINDEX ? shndx : SHN_UNDEF);
+	  if (secname != NULL)
+	    {
+	      Elf *symelf = ((Elf_Data_Scn *) r->symdata)->s->elf;
+	      size_t shstrndx;
+	      GElf_Shdr shdr;
+	      if (result == 0
+		  || elf_getshdrstrndx (symelf, &shstrndx) < 0
+		  || gelf_getshdr (elf_getscn (symelf, result), &shdr) == NULL)
+		*secname = NULL;
+	      else
+		*secname = elf_strptr (symelf, shstrndx, shdr.sh_name);
+	    }
 	}
     }
 

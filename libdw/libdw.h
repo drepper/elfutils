@@ -515,26 +515,34 @@ extern int dwarf_srclang (Dwarf_Die *die);
 /* Relocatable address access functions.
 
    These retrieve an address that might require relocation in an ET_REL
-   file.  They return -1 for errors.  If successful, they fill in SYM (if
-   not null) with the ELF symbol describing the address fetched.  If NAME
-   is not null, it is filled with the symbol name, or with NULL if there is
-   no named symbol involved.  If ADDEND is not null, it is filled with the
-   offset relative to that symbol.  If the symbol refers to a normal
-   section, the return value is that section index (which might be above
-   SHN_LORESERVE).  If the symbol does not refer to a normal section,
-   the return value is zero and SYM->st_shndx has a special SHN_* value.
+   file.  They return -1 for errors.  If successful, they fill in SYM
+   (if not null) with the ELF symbol describing the address fetched.
+
+   If the symbol refers to a normal section, the return value is that
+   section index (which might be above SHN_LORESERVE).  If the symbol
+   does not refer to a normal section, the return value is zero and
+   SYM->st_shndx has a special SHN_* value.  If SECNAME is not null, it
+   is filled with the name of the symbol's section if available, or NULL
+   if not available (or for a special st_shndx).
+
+   If NAME is not null, it is filled with the symbol name, or with NULL
+   if there is no named symbol involved.  If ADDEND is not null, it is
+   filled with the offset relative to that symbol.
+
    An address that required no relocation appears as a SHN_ABS symbol
    with st_value 0 and the whole address in the addend.  */
 
 /* Like dwarf_formaddr, but as described above.  */
 extern int dwarf_form_relocatable (Dwarf_Attribute *attr,
 				   GElf_Sym *sym, const char **name,
-				   GElf_Sxword *addend);
+				   GElf_Sxword *addend,
+				   const char **secname);
 
 /* Like dwarf_lineaddr, but as described above.  */
 extern int dwarf_lineaddr_relocatable (Dwarf_Line *line,
 				       GElf_Sym *sym, const char **name,
-				       GElf_Sxword *addend);
+				       GElf_Sxword *addend,
+				       const char **secname);
 
 
 /* Get abbreviation at given offset for given DIE.  */

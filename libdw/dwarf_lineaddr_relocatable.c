@@ -55,11 +55,12 @@
 
 
 int
-dwarf_lineaddr_relocatable (line, sym, name, addend)
+dwarf_lineaddr_relocatable (line, sym, name, addend, secname)
      Dwarf_Line *line;
      GElf_Sym *sym;
      const char **name;
      GElf_Sxword *addend;
+     const char **secname;
 {
   if (line == NULL)
     return -1;
@@ -69,5 +70,5 @@ dwarf_lineaddr_relocatable (line, sym, name, addend)
 			      : line->cu->lines->reloc[line
 						       - line->cu->lines->info],
 			      line->cu->address_size, sym, name, addend,
-			      line->addr);
+			      line->addr, secname);
 }

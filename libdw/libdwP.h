@@ -622,7 +622,8 @@ __libdw_read_offset (Dwarf *dbg,
 extern int __libdw_relocatable (Dwarf *dbg, int sec_idx,
 				const unsigned char *valp, unsigned int width,
 				GElf_Sym *sym, const char **name,
-				GElf_Sxword *addend, GElf_Sxword offset)
+				GElf_Sxword *addend, GElf_Sxword offset,
+				const char **secname)
   __nonnull_attribute__ (1) internal_function;
 
 

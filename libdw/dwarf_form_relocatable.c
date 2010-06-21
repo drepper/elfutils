@@ -56,11 +56,12 @@
 
 
 int
-dwarf_form_relocatable (attr, sym, name, addend)
+dwarf_form_relocatable (attr, sym, name, addend, secname)
      Dwarf_Attribute *attr;
      GElf_Sym *sym;
      const char **name;
      GElf_Sxword *addend;
+     const char **secname;
 {
   if (attr == NULL)
     return -1;
@@ -71,7 +72,7 @@ dwarf_form_relocatable (attr, sym, name, addend)
     default:
       return ((addend != NULL && INTUSE(dwarf_formsdata) (attr, addend)) ? -1
 	      : __libdw_relocatable (attr->cu->dbg, IDX_last, NULL, 0,
-				     sym, name, addend, 0));
+				     sym, name, addend, 0, secname));
 
     case DW_FORM_addr:
       width = attr->cu->address_size;
@@ -87,5 +88,5 @@ dwarf_form_relocatable (attr, sym, name, addend)
     }
 
   return __libdw_relocatable (attr->cu->dbg, cu_sec_idx (attr->cu),
-			      attr->valp, width, sym, name, addend, 0);
+			      attr->valp, width, sym, name, addend, 0, secname);
 }
