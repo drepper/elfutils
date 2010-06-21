@@ -190,9 +190,13 @@ __libdw_open_file (int *fdp, Elf **elfp, bool close_on_fail, bool archive_ok)
     {
       elf_end (elf);
       elf = NULL;
+      close_fd = close_on_fail;
     }
 
-  if (error == DWFL_E_NOERROR ? close_fd : close_on_fail)
+  if (*fdp != -1
+      && (close_fd || (close_on_fail
+		       && elf->map_address != NULL
+		       && elf_cntl (elf, ELF_C_FDREAD) == 0)))
     {
       close (*fdp);
       *fdp = -1;

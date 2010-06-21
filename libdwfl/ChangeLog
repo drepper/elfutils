@@ -1,5 +1,7 @@
 2010-06-21  Roland McGrath  <roland@redhat.com>
 
+	* open.c (__libdw_open_file): Close the fd when it's already mapped.
+
 	* dwfl_module_getsrc_file.: Update for Dwarf_Line member change.
 	* dwfl_lineinfo.c: Likewise.  Use dwarf_lineaddr.
 
