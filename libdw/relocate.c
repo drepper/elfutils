@@ -544,3 +544,56 @@ __libdw_relocate_offset (Dwarf *dbg, int sec_index,
     *val = addend;
   return result;
 }
+
+int
+internal_function
+__libdw_relocatable (Dwarf *dbg, int sec_idx,
+		     const unsigned char *valp, unsigned int width,
+		     GElf_Sym *sym, const char **name, GElf_Sxword *addend,
+		     GElf_Sxword offset)
+{
+  struct dwarf_section_reloc *const r = dbg->relocate->sectionrel[sec_idx];
+  int symndx;
+  int result = relocatable_datum (dbg, sec_idx, r, valp, width,
+				  &symndx, addend);
+  if (result == 0)
+    {
+      if (sym != NULL)
+	*sym = (GElf_Sym) { .st_shndx = SHN_ABS };
+      if (name != NULL)
+	*name = NULL;
+      if (addend != NULL)
+	*addend = offset + (width == 8
+			    ? read_8ubyte_unaligned (dbg, valp)
+			    : read_4ubyte_unaligned (dbg, valp));
+    }
+  else if (likely (result > 0))
+    {
+      GElf_Sym sym_mem;
+      GElf_Word shndx;
+      if (sym == NULL)
+	sym = &sym_mem;
+      result = reloc_getsym (r, symndx, sym, &shndx);
+      if (likely (result > 0))
+	{
+	  if (name != NULL)
+	    {
+	      if (sym->st_name == 0)
+		*name = NULL;
+	      else if (unlikely (sym->st_name >= r->symstrdata->d_size))
+		{
+		  __libdw_seterrno (DWARF_E_RELBADSYM);
+		  return -1;
+		}
+	      else
+		*name = (const char *) r->symstrdata->d_buf + sym->st_name;
+	    }
+	  if (addend != NULL)
+	    *addend += offset;
+	  result = (sym->st_shndx < SHN_LORESERVE ? sym->st_shndx
+		    : sym->st_shndx == SHN_XINDEX ? shndx : SHN_UNDEF);
+	}
+    }
+
+  return result;
+}

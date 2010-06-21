@@ -619,6 +619,13 @@ __libdw_read_offset (Dwarf *dbg,
 				  ret, sec_ret, size);
 }
 
+extern int __libdw_relocatable (Dwarf *dbg, int sec_idx,
+				const unsigned char *valp, unsigned int width,
+				GElf_Sym *sym, const char **name,
+				GElf_Sxword *addend, GElf_Sxword offset)
+  __nonnull_attribute__ (1) internal_function;
+
+
 static inline size_t
 cu_sec_idx (struct Dwarf_CU *cu)
 {

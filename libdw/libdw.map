@@ -249,3 +249,9 @@ ELFUTILS_0.148 {
     dwarf_next_unit;
     dwarf_offdie_types;
 } ELFUTILS_0.146;
+
+ELFUTILS_0.149 {
+  global:
+    dwarf_form_relocatable;
+    dwarf_lineaddr_relocatable;
+} ELFUTILS_0.148;

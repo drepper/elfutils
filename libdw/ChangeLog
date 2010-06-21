@@ -1,5 +1,13 @@
 2010-06-21  Roland McGrath  <roland@redhat.com>
 
+	* relocate.c (__libdw_relocatable): New function.
+	* libdwP.h: Declare it.
+	* dwarf_form_relocatable.c: New file.
+	* dwarf_lineaddr_relocatable.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add them.
+	* libdw.map (ELFUTILS_0.149): New set; add those.
+	* libdw.h: Declare them.
+
 	* libdwP.h (struct Dwarf_Line_s): Replace files with cu.
 	(struct Dwarf_Lines_s): New member reloc.
 	* dwarf_linesrc.c: Update usage.
