@@ -42,7 +42,7 @@ gen_SOURCES = eblopenbackend.c eblclosebackend.c eblstrtab.c \
 	      eblbackendname.c eblshflagscombine.c eblwstrtab.c \
 	      eblgstrtab.c eblosabiname.c \
 	      eblmachineflagcheck.c eblmachinesectionflagcheck.c \
-	      eblreloctypecheck.c eblrelocvaliduse.c eblrelocsimpletype.c \
+	      eblreloctypecheck.c eblrelocvaliduse.c eblrelocsimpletypes.c \
 	      ebldynamictagcheck.c eblcorenotetypename.c eblobjnotetypename.c \
 	      eblcorenote.c eblobjnote.c ebldebugscnp.c \
 	      eblgotpcreloccheck.c eblcopyrelocp.c eblsectionstripp.c \

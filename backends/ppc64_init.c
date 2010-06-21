@@ -50,7 +50,7 @@ ppc64_init (elf, machine, eh, ehlen)
   /* We handle it.  */
   eh->name = "PowerPC 64-bit";
   ppc64_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, dynamic_tag_name);
   HOOK (eh, dynamic_tag_check);
   HOOK (eh, copy_reloc_p);

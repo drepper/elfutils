@@ -1,5 +1,5 @@
 /* Check relocation type for simple types.
-   Copyright (C) 2005 Red Hat, Inc.
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -54,10 +54,12 @@
 #include <libeblP.h>
 
 
-Elf_Type
-ebl_reloc_simple_type (ebl, reloc)
+int
+ebl_reloc_simple_types (ebl, rel8_types, rel4_types)
      Ebl *ebl;
-     int reloc;
+     const int **rel8_types;
+     const int **rel4_types;
 {
-  return ebl != NULL ? ebl->reloc_simple_type (ebl, reloc) : ELF_T_NUM;
+  return ebl == NULL ? -1
+    : ebl->reloc_simple_types (ebl, rel8_types, rel4_types);
 }

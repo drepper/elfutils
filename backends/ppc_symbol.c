@@ -1,5 +1,5 @@
 /* PPC specific symbolic name handling.
-   Copyright (C) 2004, 2005, 2007 Red Hat, Inc.
+   Copyright (C) 2004-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -38,20 +38,17 @@
 
 
 /* Check for the simple reloc types.  */
-Elf_Type
-ppc_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+ppc_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_PPC_ADDR32:
-    case R_PPC_UADDR32:
-      return ELF_T_WORD;
-    case R_PPC_UADDR16:
-      return ELF_T_HALF;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { 0 };
+  static const int rel4[] = { R_PPC_ADDR32, R_PPC_UADDR32, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }
+
 
 
 const char *

@@ -1,5 +1,5 @@
 /* Alpha specific symbolic name handling.
-   Copyright (C) 2002,2005,2007,2008 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -56,18 +56,15 @@ alpha_dynamic_tag_check (int64_t tag)
 }
 
 /* Check for the simple reloc types.  */
-Elf_Type
-alpha_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+alpha_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			  const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_ALPHA_REFLONG:
-      return ELF_T_WORD;
-    case R_ALPHA_REFQUAD:
-      return ELF_T_XWORD;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { R_ALPHA_REFQUAD, 0 };
+  static const int rel4[] = { R_ALPHA_REFLONG, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }
 
 

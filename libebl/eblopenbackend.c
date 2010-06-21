@@ -161,7 +161,9 @@ static const char *default_object_type_name (int ignore, char *buf,
 static const char *default_reloc_type_name (int ignore, char *buf, size_t len);
 static bool default_reloc_type_check (int ignore);
 static bool default_reloc_valid_use (Elf *elf, int ignore);
-static Elf_Type default_reloc_simple_type (Ebl *ebl, int ignore);
+static int default_reloc_simple_types (Ebl *ebl,
+				       const int **rel8_types,
+				       const int **rel4_types);
 static bool default_gotpc_reloc_check (Elf *elf, int ignore);
 static const char *default_segment_type_name (int ignore, char *buf,
 					      size_t len);
@@ -228,7 +230,7 @@ fill_defaults (Ebl *result)
   result->reloc_type_name = default_reloc_type_name;
   result->reloc_type_check = default_reloc_type_check;
   result->reloc_valid_use = default_reloc_valid_use;
-  result->reloc_simple_type = default_reloc_simple_type;
+  result->reloc_simple_types = default_reloc_simple_types;
   result->gotpc_reloc_check = default_gotpc_reloc_check;
   result->segment_type_name = default_segment_type_name;
   result->section_type_name = default_section_type_name;
@@ -472,11 +474,13 @@ default_reloc_valid_use (Elf *elf __attribute__ ((unused)),
   return false;
 }
 
-static Elf_Type
-default_reloc_simple_type (Ebl *eh __attribute__ ((unused)),
-			   int ignore __attribute__ ((unused)))
+static int
+default_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			    const int **rel8_types, const int **rel4_types)
 {
-  return ELF_T_NUM;
+  static const int norel[] = { 0 };
+  *rel8_types = *rel4_types = norel;
+  return 0;
 }
 
 static bool

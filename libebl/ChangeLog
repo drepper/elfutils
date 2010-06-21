@@ -1,3 +1,14 @@
+2010-06-20  Roland McGrath  <roland@redhat.com>
+
+	* ebl-hooks.h: Replace reloc_simple_type with reloc_simple_types.
+	* libebl.h: Likewise.
+	* eblrelocsimpletypes.c: New file.
+	* eblrelocsimpletype.c: File removed.
+	* Makefile.am (gen_SOURCES): Updated.
+	* eblopenbackend.c (default_reloc_simple_types): New function.
+	(default_reloc_simple_type): Removed.
+	(fill_defaults): Update initializer.
+
 2010-02-15  Roland McGrath  <roland@redhat.com>
 
 	* Makefile.am: Use config/eu.am for common stuff.

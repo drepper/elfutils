@@ -1,7 +1,6 @@
 /* x86_64 specific symbolic name handling.
-   Copyright (C) 2002, 2005 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -35,23 +34,15 @@
 #define BACKEND		x86_64_
 #include "libebl_CPU.h"
 
+
 /* Check for the simple reloc types.  */
-Elf_Type
-x86_64_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+x86_64_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			   const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_X86_64_64:
-      return ELF_T_XWORD;
-    case R_X86_64_32:
-      return ELF_T_WORD;
-    case R_X86_64_32S:
-      return ELF_T_SWORD;
-    case R_X86_64_16:
-      return ELF_T_HALF;
-    case R_X86_64_8:
-      return ELF_T_BYTE;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { R_X86_64_64, 0 };
+  static const int rel4[] = { R_X86_64_32, R_X86_64_32S, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }

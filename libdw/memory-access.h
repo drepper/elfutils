@@ -1,5 +1,5 @@
 /* Unaligned memory access functionality.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2009 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -307,5 +307,11 @@ read_8sbyte_unaligned_1 (bool other_byte_order, const void *p)
   ((Nbytes) == 2 ? read_2sbyte_unaligned_inc (Dbg, Addr)		      \
    : (Nbytes) == 4 ? read_4sbyte_unaligned_inc (Dbg, Addr)		      \
    : read_8sbyte_unaligned_inc (Dbg, Addr))
+
+/* Dummy struct for memory-access.h macros.  */
+#define BYTE_ORDER_DUMMY(var, e_ident)					      \
+  const struct { bool other_byte_order; } var =				      \
+    { ((BYTE_ORDER == LITTLE_ENDIAN && e_ident[EI_DATA] == ELFDATA2MSB)       \
+       || (BYTE_ORDER == BIG_ENDIAN && e_ident[EI_DATA] == ELFDATA2LSB)) }
 
 #endif	/* memory-access.h */

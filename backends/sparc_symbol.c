@@ -1,5 +1,5 @@
 /* SPARC specific symbolic name handling.
-   Copyright (C) 2002, 2003, 2005, 2007, 2008 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Jakub Jelinek <jakub@redhat.com>, 2002.
 
@@ -35,25 +35,15 @@
 #include "libebl_CPU.h"
 
 /* Check for the simple reloc types.  */
-Elf_Type
-sparc_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+sparc_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			  const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_SPARC_8:
-      return ELF_T_BYTE;
-    case R_SPARC_16:
-    case R_SPARC_UA16:
-      return ELF_T_HALF;
-    case R_SPARC_32:
-    case R_SPARC_UA32:
-      return ELF_T_WORD;
-    case R_SPARC_64:
-    case R_SPARC_UA64:
-      return ELF_T_XWORD;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { R_SPARC_64, R_SPARC_UA64, 0 };
+  static const int rel4[] = { R_SPARC_32, R_SPARC_UA32, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }
 
 /* Check whether machine flags are valid.  */

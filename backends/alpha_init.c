@@ -52,7 +52,7 @@ alpha_init (elf, machine, eh, ehlen)
   alpha_init_reloc (eh);
   HOOK (eh, dynamic_tag_name);
   HOOK (eh, dynamic_tag_check);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, return_value_location);
   HOOK (eh, machine_section_flag_check);
   HOOK (eh, check_special_section);

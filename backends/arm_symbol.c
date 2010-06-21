@@ -1,5 +1,5 @@
 /* Arm specific symbolic name handling.
-   Copyright (C) 2002-2009 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -104,18 +104,13 @@ arm_machine_flag_check (GElf_Word flags)
 }
 
 /* Check for the simple reloc types.  */
-Elf_Type
-arm_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+arm_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_ARM_ABS32:
-      return ELF_T_WORD;
-    case R_ARM_ABS16:
-      return ELF_T_HALF;
-    case R_ARM_ABS8:
-      return ELF_T_BYTE;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { 0 };
+  static const int rel4[] = { R_ARM_ABS32, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }

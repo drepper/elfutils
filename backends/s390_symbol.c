@@ -1,5 +1,5 @@
 /* S/390-specific symbolic name handling.
-   Copyright (C) 2005 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -34,20 +34,13 @@
 #include "libebl_CPU.h"
 
 /* Check for the simple reloc types.  */
-Elf_Type
-s390_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+s390_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			 const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_390_64:
-      return ELF_T_SXWORD;
-    case R_390_32:
-      return ELF_T_SWORD;
-    case R_390_16:
-      return ELF_T_HALF;
-    case R_390_8:
-      return ELF_T_BYTE;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { R_390_64, 0 };
+  static const int rel4[] = { R_390_32, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }

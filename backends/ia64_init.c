@@ -49,7 +49,7 @@ ia64_init (elf, machine, eh, ehlen)
   /* We handle it.  */
   eh->name = "Intel IA-64";
   ia64_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, segment_type_name);
   HOOK (eh, section_type_name);
   HOOK (eh, dynamic_tag_name);

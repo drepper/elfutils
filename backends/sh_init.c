@@ -50,7 +50,7 @@ sh_init (elf, machine, eh, ehlen)
   /* We handle it.  */
   eh->name = "Hitachi SH";
   sh_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, gotpc_reloc_check);
   HOOK (eh, machine_flag_check);
   HOOK (eh, core_note);

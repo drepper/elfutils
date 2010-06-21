@@ -108,6 +108,8 @@ __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf, size_t *shstrndx,
 /* Cache used by relocate_getsym.  */
 struct reloc_symtab_cache
 {
+  const int *rel8_types;
+  const int *rel4_types;
   Elf *symelf;
   Elf_Data *symdata;
   Elf_Data *symxndxdata;
@@ -117,7 +119,7 @@ struct reloc_symtab_cache
 };
 #define RELOC_SYMTAB_CACHE(cache)	\
   struct reloc_symtab_cache cache =	\
-    { NULL, NULL, NULL, NULL, SHN_UNDEF, SHN_UNDEF }
+    { NULL, NULL, NULL, NULL, NULL, NULL, SHN_UNDEF, SHN_UNDEF }
 
 /* This is just doing dwfl_module_getsym, except that we must always use
    the symbol table in RELOCATED itself when it has one, not MOD->symfile.  */
@@ -319,6 +321,15 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
   if (tdata == NULL)
     return DWFL_E_LIBELF;
 
+  if (reloc_symtab->rel8_types == NULL)
+    {
+      ebl_reloc_simple_types (mod->ebl,
+			      &reloc_symtab->rel8_types,
+			      &reloc_symtab->rel4_types);
+      assert (reloc_symtab->rel8_types != NULL);
+      assert (reloc_symtab->rel4_types != NULL);
+    }
+
   /* Apply one relocation.  Returns true for any invalid data.  */
   Dwfl_Error relocate (GElf_Addr offset, const GElf_Sxword *addend,
 		       int rtype, int symndx)
@@ -333,10 +344,6 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 	 referring to addresses in a section that has been discarded.
 	 So we just pretend it's OK without further relocation.  */
       return DWFL_E_NOERROR;
-
-    Elf_Type type = ebl_reloc_simple_type (mod->ebl, rtype);
-    if (unlikely (type == ELF_T_NUM))
-      return DWFL_E_BADRELTYPE;
 
     /* First, resolve the symbol to an absolute value.  */
     GElf_Addr value;
@@ -371,89 +378,46 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
       }
 
     /* These are the types we can relocate.  */
-#define TYPES		DO_TYPE (BYTE, Byte); DO_TYPE (HALF, Half);	\
-    DO_TYPE (WORD, Word); DO_TYPE (SWORD, Sword);			\
-    DO_TYPE (XWORD, Xword); DO_TYPE (SXWORD, Sxword)
-    size_t size;
-    switch (type)
+    size_t size = 4;
+    for (const int *tp = reloc_symtab->rel8_types; *tp != 0; ++tp)
+      if (*tp == rtype)
+	{
+	  size = 8;
+	  break;
+	}
+    if (size == 4)
       {
-#define DO_TYPE(NAME, Name)			\
-	case ELF_T_##NAME:			\
-	  size = sizeof (GElf_##Name);		\
-	break
-	TYPES;
-#undef DO_TYPE
-      default:
-	return DWFL_E_BADRELTYPE;
+	const int *tp = reloc_symtab->rel4_types;
+	while (*tp != 0 && *tp != rtype)
+	  ++tp;
+	if (unlikely (*tp == 0))
+	  return DWFL_E_BADRELTYPE;
       }
 
     if (offset + size > tdata->d_size)
       return DWFL_E_BADRELOFF;
 
-#define DO_TYPE(NAME, Name) GElf_##Name Name;
-    union { TYPES; } tmpbuf;
-#undef DO_TYPE
-    Elf_Data tmpdata =
-      {
-	.d_type = type,
-	.d_buf = &tmpbuf,
-	.d_size = size,
-	.d_version = EV_CURRENT,
-      };
-    Elf_Data rdata =
-      {
-	.d_type = type,
-	.d_buf = tdata->d_buf + offset,
-	.d_size = size,
-	.d_version = EV_CURRENT,
-      };
+    BYTE_ORDER_DUMMY (bo, ehdr->e_ident);
 
     /* XXX check for overflow? */
     if (addend)
+      /* For the addend form, we have the value already.  */
+      value += *addend;
+    else if (size == 8)
+      value += read_8ubyte_unaligned (&bo, tdata->d_buf + offset);
+    else
+      value += read_4ubyte_unaligned (&bo, tdata->d_buf + offset);
+
+    if (size == 8)
       {
-	/* For the addend form, we have the value already.  */
-	value += *addend;
-	switch (type)
-	  {
-#define DO_TYPE(NAME, Name)			\
-	    case ELF_T_##NAME:			\
-	      tmpbuf.Name = value;		\
-	    break
-	    TYPES;
-#undef DO_TYPE
-	  default:
-	    abort ();
-	  }
+	uint64_t v = bo.other_byte_order ?  bswap_64 (value) : value;
+	memcpy (tdata->d_buf + offset, &v, sizeof v);
       }
     else
       {
-	/* Extract the original value and apply the reloc.  */
-	Elf_Data *d = gelf_xlatetom (relocated, &tmpdata, &rdata,
-				     ehdr->e_ident[EI_DATA]);
-	if (d == NULL)
-	  return DWFL_E_LIBELF;
-	assert (d == &tmpdata);
-	switch (type)
-	  {
-#define DO_TYPE(NAME, Name)				\
-	    case ELF_T_##NAME:				\
-	      tmpbuf.Name += (GElf_##Name) value;	\
-	    break
-	    TYPES;
-#undef DO_TYPE
-	  default:
-	    abort ();
-	  }
+	uint32_t v = bo.other_byte_order ?  bswap_32 (value) : value;
+	memcpy (tdata->d_buf + offset, &v, sizeof v);
       }
-
-    /* Now convert the relocated datum back to the target
-       format.  This will write into rdata.d_buf, which
-       points into the raw section data being relocated.  */
-    Elf_Data *s = gelf_xlatetof (relocated, &rdata, &tmpdata,
-				 ehdr->e_ident[EI_DATA]);
-    if (s == NULL)
-      return DWFL_E_LIBELF;
-    assert (s == &rdata);
 
     /* We have applied this relocation!  */
     return DWFL_E_NOERROR;

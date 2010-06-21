@@ -1,5 +1,5 @@
 /* i386 specific symbolic name handling.
-   Copyright (C) 2000, 2001, 2002, 2005 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -45,20 +45,15 @@ i386_gotpc_reloc_check (Elf *elf __attribute__ ((unused)), int type)
 }
 
 /* Check for the simple reloc types.  */
-Elf_Type
-i386_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+i386_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+			 const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_386_32:
-      return ELF_T_SWORD;
-    case R_386_16:
-      return ELF_T_HALF;
-    case R_386_8:
-      return ELF_T_BYTE;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { 0 };
+  static const int rel4[] = { R_386_32, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }
 
 /* Check section name for being that of a debug information section.  */

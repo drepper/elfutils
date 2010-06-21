@@ -56,8 +56,9 @@ const char *EBLHOOK(reloc_type_name) (int, char *, size_t);
 /* Check relocation type.  */
 bool EBLHOOK(reloc_type_check) (int);
 
-/* Check if relocation type is for simple absolute relocations.  */
-Elf_Type EBLHOOK(reloc_simple_type) (Ebl *, int);
+/* Return list of relocation types for simple absolute relocations.  */
+int EBLHOOK(reloc_simple_types) (Ebl *, const int **rel8_types,
+				 const int **rel4_types);
 
 /* Check relocation type use.  */
 bool EBLHOOK(reloc_valid_use) (Elf *, int);

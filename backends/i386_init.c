@@ -49,7 +49,7 @@ i386_init (elf, machine, eh, ehlen)
   /* We handle it.  */
   eh->name = "Intel 80386";
   i386_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, gotpc_reloc_check);
   HOOK (eh, core_note);
   generic_debugscn_p = eh->debugscn_p;

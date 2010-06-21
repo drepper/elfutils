@@ -1,5 +1,5 @@
 /* IA-64 specific symbolic name handling.
-   Copyright (C) 2002-2009 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -110,38 +110,30 @@ ia64_section_type_name (int type,
   return NULL;
 }
 
+
 /* Check for the simple reloc types.  */
-Elf_Type
-ia64_reloc_simple_type (Ebl *ebl, int type)
+int
+ia64_reloc_simple_types (Ebl *ebl,
+			 const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
+  /* The SECREL types when used with non-allocated sections
+     like .debug_* are the same as direct absolute relocs
+     applied to those sections, since a 0 section address is assumed.
+     So we treat them the same here.  */
+
+  if (ebl->data == ELFDATA2MSB)
     {
-      /* The SECREL types when used with non-allocated sections
-	 like .debug_* are the same as direct absolute relocs
-	 applied to those sections, since a 0 section address is assumed.
-	 So we treat them the same here.  */
-
-    case R_IA64_SECREL32MSB:
-    case R_IA64_DIR32MSB:
-      if (ebl->data == ELFDATA2MSB)
-	return ELF_T_WORD;
-      break;
-    case R_IA64_SECREL32LSB:
-    case R_IA64_DIR32LSB:
-      if (ebl->data == ELFDATA2LSB)
-	return ELF_T_WORD;
-      break;
-    case R_IA64_DIR64MSB:
-    case R_IA64_SECREL64MSB:
-      if (ebl->data == ELFDATA2MSB)
-	return ELF_T_XWORD;
-      break;
-    case R_IA64_SECREL64LSB:
-    case R_IA64_DIR64LSB:
-      if (ebl->data == ELFDATA2LSB)
-	return ELF_T_XWORD;
-      break;
+      static const int rel8msb[] = { R_IA64_DIR64MSB, R_IA64_SECREL64MSB, 0 };
+      static const int rel4msb[] = { R_IA64_DIR32MSB, R_IA64_SECREL32MSB, 0 };
+      *rel8_types = rel8msb;
+      *rel4_types = rel4msb;
     }
-
-  return ELF_T_NUM;
+  else
+    {
+      static const int rel8lsb[] = { R_IA64_DIR64LSB, R_IA64_SECREL64LSB, 0 };
+      static const int rel4lsb[] = { R_IA64_DIR32LSB, R_IA64_SECREL32LSB, 0 };
+      *rel8_types = rel8lsb;
+      *rel4_types = rel4lsb;
+    }
+  return 0;
 }

@@ -1,3 +1,26 @@
+2010-06-20  Roland McGrath  <roland@redhat.com>
+
+	* alpha_init.c: Replace reloc_simple_type with reloc_simple_types.
+	* arm_init.c: Likewise.
+	* i386_init.c: Likewise.
+	* ia64_init.c: Likewise.
+	* PPC64_init.c: Likewise.
+	* ppc_init.c: Likewise.
+	* s390_init.c: Likewise.
+	* sh_init.c: Likewise.
+	* sparc_init.c: Likewise.
+	* x86_64_init.c: Likewise.
+	* alpha_symbol.c: Likewise.
+	* arm_symbol.c: Likewise.
+	* i386_symbol.c: Likewise.
+	* ia64_symbol.c: Likewise.
+	* ppc64_symbol.c: Likewise.
+	* ppc_symbol.c: Likewise.
+	* s390_symbol.c: Likewise.
+	* sh_symbol.c: Likewise.
+	* sparc_symbol.c: Likewise.
+	* x86_64_symbol.c: Likewise.
+
 2010-04-10  Matt Fleming  <matt@console-pimps.org>
 
 	* sh_corenote.c: New file.

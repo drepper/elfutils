@@ -53,7 +53,7 @@ arm_init (elf, machine, eh, ehlen)
   HOOK (eh, segment_type_name);
   HOOK (eh, section_type_name);
   HOOK (eh, machine_flag_check);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, register_info);
   HOOK (eh, core_note);
   HOOK (eh, auxv_info);

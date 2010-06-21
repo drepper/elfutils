@@ -1,5 +1,5 @@
 /* SH specific relocation handling.
-   Copyright (C) 2000, 2001, 2002, 2005 Red Hat, Inc.
+   Copyright (C) 2000-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -43,16 +43,15 @@ sh_gotpc_reloc_check (Elf *elf __attribute__ ((unused)), int type)
 }
 
 /* Check for the simple reloc types.  */
-Elf_Type
-sh_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
+int
+sh_reloc_simple_types (Ebl *ebl __attribute__ ((unused)),
+		       const int **rel8_types, const int **rel4_types)
 {
-  switch (type)
-    {
-    case R_SH_DIR32:
-      return ELF_T_WORD;
-    default:
-      return ELF_T_NUM;
-    }
+  static const int rel8[] = { 0 };
+  static const int rel4[] = { R_SH_DIR32, 0 };
+  *rel8_types = rel8;
+  *rel4_types = rel4;
+  return 0;
 }
 
 /* Check whether machine flags are valid.  */

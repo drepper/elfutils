@@ -240,13 +240,6 @@ extern int __libdw_frame_at_address (Dwarf_CFI *cache, struct dwarf_fde *fde,
   __nonnull_attribute__ (1, 2, 4) internal_function;
 
 
-/* Dummy struct for memory-access.h macros.  */
-#define BYTE_ORDER_DUMMY(var, e_ident)					      \
-  const struct { bool other_byte_order; } var =				      \
-    { ((BYTE_ORDER == LITTLE_ENDIAN && e_ident[EI_DATA] == ELFDATA2MSB)       \
-       || (BYTE_ORDER == BIG_ENDIAN && e_ident[EI_DATA] == ELFDATA2LSB)) }
-
-
 INTDECL (dwarf_next_cfi)
 INTDECL (dwarf_getcfi)
 INTDECL (dwarf_getcfi_elf)

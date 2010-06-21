@@ -49,7 +49,7 @@ x86_64_init (elf, machine, eh, ehlen)
   /* We handle it.  */
   eh->name = "AMD x86-64";
   x86_64_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, core_note);
   HOOK (eh, return_value_location);
   HOOK (eh, register_info);

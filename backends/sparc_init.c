@@ -55,7 +55,7 @@ sparc_init (elf, machine, eh, ehlen)
   else
     eh->name = "SPARC";
   sparc_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
+  HOOK (eh, reloc_simple_types);
   HOOK (eh, machine_flag_check);
   HOOK (eh, check_special_section);
   HOOK (eh, symbol_type_name);
