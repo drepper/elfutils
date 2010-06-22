@@ -1,5 +1,15 @@
 2010-06-22  Roland McGrath  <roland@redhat.com>
 
+	* libdw.h (Dwarf_Relocatable): New type.  Declare three new functions.
+	* dwarf_relocatable_info.c: New file.
+	* dwarf_form_relocatable.c: New file.
+	* dwarf_line_relocatable.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add them.
+	* libdw.map (ELFUTILS_0.149): New set; add those.
+
+	* relocate.c (__libdw_relocatable): New function.
+	* libdwP.h: Declare it.
+
 	* dwarf_getsrclines.c: Fix signed comparison warning in extended
 	opcode parsing.
 
@@ -11,14 +21,6 @@
 	10-byte case.
 
 2010-06-21  Roland McGrath  <roland@redhat.com>
-
-	* relocate.c (__libdw_relocatable): New function.
-	* libdwP.h: Declare it.
-	* dwarf_form_relocatable.c: New file.
-	* dwarf_lineaddr_relocatable.c: New file.
-	* Makefile.am (libdw_a_SOURCES): Add them.
-	* libdw.map (ELFUTILS_0.149): New set; add those.
-	* libdw.h: Declare them.
 
 	* libdwP.h (struct Dwarf_Line_s): Replace files with cu.
 	(struct Dwarf_Lines_s): New member reloc.

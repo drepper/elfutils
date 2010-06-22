@@ -1,6 +1,6 @@
-/* Return relocatable address from attribute.
+/* Return relocatable line address.
    Copyright (C) 2010 Red Hat, Inc.
-   This file is part of Red Hat elfutils.
+   Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -56,17 +56,20 @@
 
 
 int
-dwarf_form_relocatable (attr, reloc)
-     Dwarf_Attribute *attr;
+dwarf_line_relocatable (line, reloc)
+     Dwarf_Line *line;
      Dwarf_Relocatable *reloc;
 {
-  if (attr == NULL)
+  if (line == NULL)
     return -1;
 
   *reloc = (Dwarf_Relocatable)
     {
-      .sec = cu_sec_idx (attr->cu), .form = attr->form,
-      .cu = attr->cu, .valp = attr->valp,
+      .sec = IDX_debug_line, .form = DW_FORM_addr,
+      .cu = line->cu,
+      .valp = (line->cu->lines->reloc == NULL ? NULL
+	       : line->cu->lines->reloc[line - line->cu->lines->info]),
+      .adjust = line->addr
     };
 
   return 0;

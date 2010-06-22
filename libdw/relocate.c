@@ -552,8 +552,9 @@ __libdw_relocatable (Dwarf *dbg, int sec_idx,
 		     GElf_Sym *sym, const char **name, GElf_Sxword *addend,
 		     GElf_Sxword offset, const char **secname)
 {
-  struct dwarf_section_reloc *const r
-    = dbg->relocate != NULL ? dbg->relocate->sectionrel[sec_idx] : NULL;
+  struct dwarf_section_reloc *const r = ((valp != NULL && dbg->relocate != NULL)
+					 ? dbg->relocate->sectionrel[sec_idx]
+					 : NULL);
   int symndx;
   int result = relocatable_datum (dbg, sec_idx, r, valp, width,
 				  &symndx, addend);

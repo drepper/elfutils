@@ -1,6 +1,6 @@
-/* Return relocatable line address.
+/* Return relocatable address from attribute.
    Copyright (C) 2010 Red Hat, Inc.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2004.
+   This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,23 +52,89 @@
 #endif
 
 #include "libdwP.h"
+#include <dwarf.h>
 
+static int
+relocatable_form (struct Dwarf_CU *cu,
+		  unsigned int sec_idx,
+		  unsigned int form,
+		  const unsigned char *valp,
+		  Dwarf_Addr adjust,
+		  GElf_Sym *sym, const char **name,
+		  GElf_Sxword *addend, const char **secname)
+{
+  int width;
+  switch (form)
+    {
+    default:
+      /* This can't be relocatable.  We'll let __libdw_relocatable
+	 fill in the SHN_ABS indicator for the constant 0 base.  */
+      if (addend != NULL)
+	{
+	  Dwarf_Attribute attr =
+	    {
+	      .cu = cu,
+	      .form = form,
+	      .valp = (unsigned char *) valp
+	    };
+	  if (INTUSE(dwarf_formsdata) (&attr, addend))
+	    return -1;
+	  *addend += adjust;
+	  addend = NULL;
+	}
+      width = 0;
+      valp = NULL;
+      break;
+
+    case DW_FORM_addr:
+      width = cu->address_size;
+      break;
+
+    case DW_FORM_data4:
+      width = 4;
+      break;
+
+    case DW_FORM_data8:
+      width = 8;
+      break;
+    }
+
+  return __libdw_relocatable (cu->dbg, sec_idx, valp, width,
+			      sym, name, addend, adjust, secname);
+}
 
 int
-dwarf_lineaddr_relocatable (line, sym, name, addend, secname)
-     Dwarf_Line *line;
+dwarf_relocatable_info (reloc, sym, name, addend, secname)
+     Dwarf_Relocatable *reloc;
      GElf_Sym *sym;
      const char **name;
      GElf_Sxword *addend;
      const char **secname;
 {
-  if (line == NULL)
+  if (reloc == NULL)
     return -1;
 
-  return __libdw_relocatable (line->cu->dbg, IDX_debug_line,
-			      line->cu->lines->reloc == NULL ? NULL
-			      : line->cu->lines->reloc[line
-						       - line->cu->lines->info],
-			      line->cu->address_size, sym, name, addend,
-			      line->addr, secname);
+  return relocatable_form (reloc->cu, reloc->sec,
+			   reloc->form, reloc->valp, reloc->adjust,
+			   sym, name, addend, secname);
 }
+
+#if 0
+/* Shorthand for dwarf_relocatable_info(dwarf_form_relocatable).  */
+
+int
+dwarf_form_relocatable_info (attr, sym, name, addend, secname)
+     Dwarf_Attribute *attr;
+     GElf_Sym *sym;
+     const char **name;
+     GElf_Sxword *addend;
+     const char **secname;
+{
+  if (attr == NULL)
+    return -1;
+
+  return relocatable_form (attr->cu, cu_sec_idx (attr->cu),
+			   attr->form, attr->valp, 0,
+			   sym, name, addend, secname);
+}
+#endif
