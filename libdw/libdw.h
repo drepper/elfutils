@@ -501,6 +501,9 @@ extern int dwarf_entrypc (Dwarf_Die *die, Dwarf_Addr *return_addr)
    0 if not, or -1 for errors.  */
 extern int dwarf_haspc (Dwarf_Die *die, Dwarf_Addr pc);
 
+/* Like dwarf_haspc, but for a relocatable address.  */
+extern int dwarf_haspc_relocatable (Dwarf_Die *die, Dwarf_Relocatable *pc);
+
 /* Enumerate the PC address ranges covered by this DIE, covering all
    addresses where dwarf_haspc returns true.  In the first call OFFSET
    should be zero and *BASEP need not be initialized.  Returns -1 for
@@ -510,7 +513,16 @@ extern int dwarf_haspc (Dwarf_Die *die, Dwarf_Addr pc);
    *STARTP and *ENDP with a contiguous address range.  */
 extern ptrdiff_t dwarf_ranges (Dwarf_Die *die,
 			       ptrdiff_t offset, Dwarf_Addr *basep,
-			       Dwarf_Addr *startp, Dwarf_Addr *endp);
+			       Dwarf_Addr *startp, Dwarf_Addr *endp)
+  __nonnull_attribute__ (3, 4, 5);
+
+/* Like dwarf_ranges, but with relocatable addresses.  */
+extern ptrdiff_t dwarf_ranges_relocatable (Dwarf_Die *die,
+					   ptrdiff_t offset,
+					   Dwarf_Relocatable *basep,
+					   Dwarf_Relocatable *startp,
+					   Dwarf_Relocatable *endp)
+  __nonnull_attribute__ (3, 4, 5);
 
 
 /* Return byte size attribute of DIE.  */
@@ -697,6 +709,19 @@ extern int dwarf_getlocation (Dwarf_Attribute *attr, Dwarf_Op **expr,
 extern int dwarf_getlocation_addr (Dwarf_Attribute *attr, Dwarf_Addr address,
 				   Dwarf_Op **exprs, size_t *exprlens,
 				   size_t nlocs);
+
+/* Enumerate the locations in a location list.
+   The interface is as for dwarf_ranges_relocatable, above,
+   but also fills in *EXPR and *EXPRLEN as for dwarf_getlocation.  */
+extern ptrdiff_t dwarf_getlocation_relocatable (Dwarf_Attribute *attr,
+						ptrdiff_t offset,
+						Dwarf_Relocatable *basep,
+						Dwarf_Relocatable *startp,
+						Dwarf_Relocatable *endp,
+						Dwarf_Op **expr,
+						size_t *exprlen)
+  __nonnull_attribute__ (3, 4, 5, 6, 7);
+
 
 /* Return the block associated with a DW_OP_implicit_value operation.
    The OP pointer must point into an expression that dwarf_getlocation

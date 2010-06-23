@@ -1,4 +1,4 @@
-/* Return relocatable address from attribute.
+/* Enumerate the PC ranges covered by a location list.
    Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -51,24 +51,62 @@
 # include <config.h>
 #endif
 
-#include "libdwP.h"
+#include "relocate.h"
 #include <dwarf.h>
+#include <assert.h>
 
 
-int
-dwarf_form_relocatable (attr, reloc)
-     Dwarf_Attribute *attr;
-     Dwarf_Relocatable *reloc;
+ptrdiff_t
+dwarf_getlocation_relocatable (Dwarf_Attribute *attr, ptrdiff_t offset,
+			       Dwarf_Relocatable *basep,
+			       Dwarf_Relocatable *startp,
+			       Dwarf_Relocatable *endp,
+			       Dwarf_Op **expr, size_t *exprlen)
 {
   if (attr == NULL)
     return -1;
 
-  *reloc = (Dwarf_Relocatable)
-    {
-      .sec = cu_sec_idx (attr->cu), .form = attr->form,
-      .cu = attr->cu, .valp = attr->valp,
-    };
+  unsigned int sec_idx = IDX_debug_loc;
+  Dwarf_Block block;
+  if (offset == 0)
+    switch (attr->form)
+      {
+      case DW_FORM_block:
+      case DW_FORM_block1:
+      case DW_FORM_block2:
+      case DW_FORM_block4:
+	if (unlikely (attr->cu->version >= 4))
+	  {
+	    __libdw_seterrno (DWARF_E_NO_LOCLIST);
+	    return -1;
+	  }
 
-  return 0;
+      case DW_FORM_exprloc:
+	if (unlikely (INTUSE(dwarf_formblock) (attr, &block) < 0))
+	  return -1;
+
+	sec_idx = cu_sec_idx (attr->cu);
+	*startp = (Dwarf_Relocatable) { .adjust = 0 };
+	*endp = (Dwarf_Relocatable) { .adjust = (Dwarf_Addr) -1 };
+
+	/* A offset into .debug_loc will never be 1, it must be at least a
+	   multiple of 4.  So we can return 1 as a special case value to
+	   mark there are no ranges to look for on the next call.  */
+	offset = 1;
+	break;
+      }
+  else if (offset == 1)
+    return 0;
+
+  if (offset != 1)
+    /* Iterate from last position.  */
+    offset = __libdw_ranges_relocatable (attr->cu, attr, offset,
+					 basep, startp, endp, &block);
+
+  /* Parse the block into internal form.  */
+  if (offset > 0 && expr != NULL
+      && __libdw_getlocation (attr, &block, expr, exprlen, sec_idx) < 0)
+    offset = -1;
+
+  return offset;
 }
-INTDEF (dwarf_form_relocatable)

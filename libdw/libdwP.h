@@ -480,6 +480,10 @@ extern int __libdw_intern_expression (Dwarf *dbg,
 				      int sec_index)
   __nonnull_attribute__ (5, 6, 9, 10) internal_function;
 
+extern int __libdw_getlocation (Dwarf_Attribute *attr, const Dwarf_Block *block,
+				Dwarf_Op **llbuf, size_t *listlen, int sec_idx)
+  __nonnull_attribute__ (2, 3, 4) internal_function;
+
 
 /* Return error code of last failing function call.  This value is kept
    separately for each thread.  */
@@ -619,13 +623,6 @@ __libdw_read_offset (Dwarf *dbg,
 				  ret, sec_ret, size);
 }
 
-extern int __libdw_relocatable (Dwarf *dbg, int sec_idx,
-				const unsigned char *valp, unsigned int width,
-				GElf_Sym *sym, const char **name,
-				GElf_Sxword *addend, GElf_Sxword offset,
-				const char **secname)
-  __nonnull_attribute__ (1) internal_function;
-
 
 static inline size_t
 cu_sec_idx (struct Dwarf_CU *cu)
@@ -674,6 +671,7 @@ INTDECL (dwarf_formref_die)
 INTDECL (dwarf_formsdata)
 INTDECL (dwarf_formstring)
 INTDECL (dwarf_formudata)
+INTDECL (dwarf_form_relocatable)
 INTDECL (dwarf_getarange_addr)
 INTDECL (dwarf_getarangeinfo)
 INTDECL (dwarf_getaranges)
@@ -688,6 +686,8 @@ INTDECL (dwarf_nextcu)
 INTDECL (dwarf_next_unit)
 INTDECL (dwarf_offdie)
 INTDECL (dwarf_ranges)
+INTDECL (dwarf_ranges_relocatable)
+INTDECL (dwarf_relocatable_info)
 INTDECL (dwarf_siblingof)
 INTDECL (dwarf_srclang)
 INTDECL (dwarf_tag)

@@ -1,4 +1,4 @@
-/* Return relocatable address from attribute.
+/* Determine whether a DIE covers a PC address.
    Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -56,19 +56,56 @@
 
 
 int
-dwarf_form_relocatable (attr, reloc)
-     Dwarf_Attribute *attr;
-     Dwarf_Relocatable *reloc;
+dwarf_haspc_relocatable (Dwarf_Die *die, Dwarf_Relocatable *pc)
 {
-  if (attr == NULL)
+  if (die == NULL)
     return -1;
 
-  *reloc = (Dwarf_Relocatable)
-    {
-      .sec = cu_sec_idx (attr->cu), .form = attr->form,
-      .cu = attr->cu, .valp = attr->valp,
-    };
+  GElf_Sym pc_sym;
+  GElf_Sxword pc_addend;
+  int pc_shndx = INTUSE(dwarf_relocatable_info) (pc, &pc_sym, NULL,
+						 &pc_addend, NULL);
+  if (pc_shndx < 0)
+    return pc_shndx;
+  pc_sym.st_value += pc_addend;
 
-  return 0;
+  Dwarf_Relocatable base;
+  Dwarf_Relocatable begin;
+  Dwarf_Relocatable end;
+  ptrdiff_t offset = 0;
+  while ((offset = INTUSE(dwarf_ranges_relocatable) (die, offset, &base,
+						     &begin, &end)) > 0)
+    if (begin.valp == NULL && end.valp == NULL && pc->valp == NULL)
+      {
+	if (pc->adjust >= begin.adjust && pc->adjust < end.adjust)
+	  return 1;
+      }
+    else
+      {
+	/* A relocatable address matches if it's in the same section
+	   and the section-relative offsets match.  */
+
+	GElf_Sym sym;
+	GElf_Sxword addend;
+	int shndx = INTUSE(dwarf_relocatable_info) (&begin, &sym, NULL,
+						    &addend, NULL);
+	if (shndx < 0)
+	  return -1;
+	if (shndx == pc_shndx && sym.st_shndx == pc_sym.st_shndx
+	    && pc_sym.st_value >= sym.st_value + addend)
+	  {
+	    if (pc_sym.st_value == sym.st_value + addend)
+	      return 1;
+	    shndx = INTUSE(dwarf_relocatable_info) (&end, &sym, NULL,
+						    &addend, NULL);
+	    if (shndx < 0)
+	      return -1;
+	    if (shndx == pc_shndx && sym.st_shndx == pc_sym.st_shndx
+		&& pc_sym.st_value < sym.st_value + addend)
+	      return 1;
+	  }
+      }
+
+  return offset;
 }
-INTDEF (dwarf_form_relocatable)
+INTDEF (dwarf_haspc_relocatable)

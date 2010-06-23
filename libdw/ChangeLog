@@ -1,14 +1,31 @@
 2010-06-22  Roland McGrath  <roland@redhat.com>
 
+	* dwarf_ranges_relocatable.c: New file.
+	* dwarf_getlocation_relocatable.c: New file.
+	* dwarf_haspc_relocatable.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add them.
+	* libdw.map (ELFUTILS_0.149): Add them.
+	* libdw.h: Declare them.
+	* libdwP.h: Add INTDECLs.
+
+	* dwarf_getlocation.c (getlocation): Renamed to ...
+	(__libdw_getlocation): ... this; made global.
+	(dwarf_getlocation, dwarf_getlocation_addr): Update callers.
+	* libdwP.h: Declare it.
+
+	* relocate.h: New file.
+	* relocate.c: Move structs there.
+	(relocatable_datum): Renamed to ...
+	 (__libdw_relocatable): ... here, made global.
 	* libdw.h (Dwarf_Relocatable): New type.  Declare three new functions.
 	* dwarf_relocatable_info.c: New file.
 	* dwarf_form_relocatable.c: New file.
 	* dwarf_line_relocatable.c: New file.
 	* Makefile.am (libdw_a_SOURCES): Add them.
 	* libdw.map (ELFUTILS_0.149): New set; add those.
+	* libdwP.h: Add an INTDECL.
 
-	* relocate.c (__libdw_relocatable): New function.
-	* libdwP.h: Declare it.
+	* memory-access.h (read_8ubyte_unaligned_noncvt): New function/macro.
 
 	* dwarf_getlocation.c (check_constant_offset): data[48] are constant.
 

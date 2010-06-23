@@ -1,4 +1,4 @@
-/* Return relocatable address from attribute.
+/* Internal definitions for libdw relocation handling.
    Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -47,28 +47,50 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
 #include "libdwP.h"
-#include <dwarf.h>
+#include "libelfP.h"
 
 
-int
-dwarf_form_relocatable (attr, reloc)
-     Dwarf_Attribute *attr;
-     Dwarf_Relocatable *reloc;
+struct dwarf_reloc_table
 {
-  if (attr == NULL)
-    return -1;
+  size_t n;			/* Number of elements in this table.  */
+  const unsigned char **datum;	/* Sorted pointers into section data.  */
+  int *symndx;			/* Corresponding symtab indices.  */
+  size_t hint;			/* Index of last search.  */
+};
 
-  *reloc = (Dwarf_Relocatable)
-    {
-      .sec = cu_sec_idx (attr->cu), .form = attr->form,
-      .cu = attr->cu, .valp = attr->valp,
-    };
+struct dwarf_section_reloc
+{
+  /* This is set only in the laziest state from startup: the reloc
+     section needs to be examined, and the rest is uninitialized.
+     When this is cleared, the rest is initialized and safe to use.  */
+  Elf_Scn *scn;
 
-  return 0;
-}
-INTDEF (dwarf_form_relocatable)
+  Elf_Data *symdata;
+  Elf_Data *symstrdata;
+  Elf_Data *symxndxdata;
+
+  /* Two tables of predigested relocations, segregated by size.  */
+  struct dwarf_reloc_table rel4;
+  struct dwarf_reloc_table rel8;
+
+  /* For SHT_RELA, a parallel table of addends.
+     For SHT_REL, these are null.  */
+  Elf32_Sword *rela4;
+  Elf64_Sxword *rela8;
+};
+
+
+extern int __libdw_relocatable (Dwarf *dbg, int sec_index,
+				const unsigned char *datum, int width,
+				int *symndx, GElf_Sxword *addend)
+  __nonnull_attribute__ (1) internal_function;
+
+extern ptrdiff_t __libdw_ranges_relocatable (struct Dwarf_CU *cu,
+					     Dwarf_Attribute *attr,
+					     ptrdiff_t offset,
+					     Dwarf_Relocatable *basep,
+					     Dwarf_Relocatable *startp,
+					     Dwarf_Relocatable *endp,
+					     Dwarf_Block *exprloc)
+  __nonnull_attribute__ (1, 4, 5, 6) internal_function;

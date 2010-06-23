@@ -51,42 +51,12 @@
 # include <config.h>
 #endif
 
-#include "libdwP.h"
-#include "../libelf/libelfP.h"
+#include "relocate.h"
 #include "../libebl/libebl.h"
 #include <dwarf.h>
 #include <assert.h>
 #include <stdlib.h>
 
-
-struct dwarf_reloc_table
-{
-  size_t n;			/* Number of elements in this table.  */
-  const unsigned char **datum;	/* Sorted pointers into section data.  */
-  int *symndx;			/* Corresponding symtab indices.  */
-  size_t hint;			/* Index of last search.  */
-};
-
-struct dwarf_section_reloc
-{
-  /* This is set only in the laziest state from startup: the reloc
-     section needs to be examined, and the rest is uninitialized.
-     When this is cleared, the rest is initialized and safe to use.  */
-  Elf_Scn *scn;
-
-  Elf_Data *symdata;
-  Elf_Data *symstrdata;
-  Elf_Data *symxndxdata;
-
-  /* Two tables of predigested relocations, segregated by size.  */
-  struct dwarf_reloc_table rel4;
-  struct dwarf_reloc_table rel8;
-
-  /* For SHT_RELA, a parallel table of addends.
-     For SHT_REL, these are null.  */
-  Elf32_Sword *rela4;
-  Elf64_Sxword *rela8;
-};
 
 static int
 internal_function
@@ -424,13 +394,25 @@ find_reloc (struct dwarf_reloc_table *table, const unsigned char *datum)
   return -1;
 }
 
-static int
-relocatable_datum (Dwarf *dbg, int sec_index, struct dwarf_section_reloc *r,
-		   const unsigned char *datum, int width,
-		   int *symndx, GElf_Sxword *addend)
+int
+internal_function
+__libdw_relocatable (Dwarf *dbg, int sec_index,
+		     const unsigned char *datum, int width,
+		     int *symndx, GElf_Sxword *addend)
 {
+  if (dbg->relocate == NULL)
+    {
+    noreloc:
+      if (addend != NULL)
+	*addend = (width == 8
+		   ? read_8ubyte_unaligned (dbg, datum)
+		   : read_4ubyte_unaligned (dbg, datum));
+      return 0;
+    }
+
+  struct dwarf_section_reloc *const r = dbg->relocate->sectionrel[sec_index];
   if (r == NULL)
-    return 0;
+    goto noreloc;
 
   if (r->scn != NULL)
     {
@@ -446,7 +428,8 @@ relocatable_datum (Dwarf *dbg, int sec_index, struct dwarf_section_reloc *r,
   if (width == 4)
     {
       i = find_reloc (&r->rel4, datum);
-      *symndx = i < 0 ? STN_UNDEF : r->rel4.symndx[i];
+      if (symndx != NULL)
+	*symndx = i < 0 ? STN_UNDEF : r->rel4.symndx[i];
       if (addend != NULL)
 	*addend = ((i < 0 || r->rela4 == NULL)
 		   ? read_4sbyte_unaligned (dbg, datum) : r->rela4[i]);
@@ -456,7 +439,8 @@ relocatable_datum (Dwarf *dbg, int sec_index, struct dwarf_section_reloc *r,
       assert (width == 8);
 
       i = find_reloc (&r->rel8, datum);
-      *symndx = i < 0 ? STN_UNDEF : r->rel8.symndx[i];
+      if (symndx != NULL)
+	*symndx = i < 0 ? STN_UNDEF : r->rel8.symndx[i];
       if (addend != NULL)
 	*addend = ((i < 0 || r->rela8 == NULL)
 		   ? read_8sbyte_unaligned (dbg, datum) : r->rela8[i]);
@@ -483,16 +467,16 @@ internal_function
 __libdw_relocate_address (Dwarf *dbg, int sec_index,
 			  const void *datum, int width, Dwarf_Addr *val)
 {
-  struct dwarf_section_reloc *const r = dbg->relocate->sectionrel[sec_index];
   int symndx;
   GElf_Sxword addend;
-  int result = relocatable_datum (dbg, sec_index, r, datum, width,
-				  &symndx, &addend);
+  int result = __libdw_relocatable (dbg, sec_index, datum, width,
+				    &symndx, &addend);
   if (result > 0 && symndx != STN_UNDEF)
     {
       GElf_Sym sym;
       GElf_Word shndx;
-      result = reloc_getsym (r, symndx, &sym, &shndx);
+      result = reloc_getsym (dbg->relocate->sectionrel[sec_index],
+			     symndx, &sym, &shndx);
       if (result > 0)
 	{
 	  result = (*dbg->relocate->resolve_symbol)
@@ -512,16 +496,16 @@ internal_function
 __libdw_relocate_offset (Dwarf *dbg, int sec_index,
 			 const void *datum, int width, Dwarf_Off *val)
 {
-  struct dwarf_section_reloc *const r = dbg->relocate->sectionrel[sec_index];
   int symndx;
   GElf_Sxword addend;
-  int result = relocatable_datum (dbg, sec_index, r, datum, width,
-				  &symndx, &addend);
+  int result = __libdw_relocatable (dbg, sec_index, datum, width,
+				    &symndx, &addend);
   if (result > 0 && symndx != STN_UNDEF)
     {
       GElf_Sym sym;
       GElf_Word shndx;
-      result = reloc_getsym (r, symndx, &sym, &shndx);
+      result = reloc_getsym (dbg->relocate->sectionrel[sec_index],
+			     symndx, &sym, &shndx);
       if (result > 0)
 	{
 	  if (unlikely (sym.st_shndx == SHN_UNDEF)
@@ -542,74 +526,5 @@ __libdw_relocate_offset (Dwarf *dbg, int sec_index,
     }
   if (result >= 0)
     *val = addend;
-  return result;
-}
-
-int
-internal_function
-__libdw_relocatable (Dwarf *dbg, int sec_idx,
-		     const unsigned char *valp, unsigned int width,
-		     GElf_Sym *sym, const char **name, GElf_Sxword *addend,
-		     GElf_Sxword offset, const char **secname)
-{
-  struct dwarf_section_reloc *const r = ((valp != NULL && dbg->relocate != NULL)
-					 ? dbg->relocate->sectionrel[sec_idx]
-					 : NULL);
-  int symndx;
-  int result = relocatable_datum (dbg, sec_idx, r, valp, width,
-				  &symndx, addend);
-  if (result == 0)
-    {
-      if (sym != NULL)
-	*sym = (GElf_Sym) { .st_shndx = SHN_ABS };
-      if (name != NULL)
-	*name = NULL;
-      if (addend != NULL)
-	*addend = offset + (width == 8
-			    ? read_8ubyte_unaligned (dbg, valp)
-			    : read_4ubyte_unaligned (dbg, valp));
-      if (secname != NULL)
-	*secname = NULL;
-    }
-  else if (likely (result > 0))
-    {
-      GElf_Sym sym_mem;
-      GElf_Word shndx;
-      if (sym == NULL)
-	sym = &sym_mem;
-      result = reloc_getsym (r, symndx, sym, &shndx);
-      if (likely (result > 0))
-	{
-	  if (name != NULL)
-	    {
-	      if (sym->st_name == 0)
-		*name = NULL;
-	      else if (unlikely (sym->st_name >= r->symstrdata->d_size))
-		{
-		  __libdw_seterrno (DWARF_E_RELBADSYM);
-		  return -1;
-		}
-	      else
-		*name = (const char *) r->symstrdata->d_buf + sym->st_name;
-	    }
-	  if (addend != NULL)
-	    *addend += offset;
-	  result = (sym->st_shndx < SHN_LORESERVE ? sym->st_shndx
-		    : sym->st_shndx == SHN_XINDEX ? shndx : SHN_UNDEF);
-	  if (secname != NULL)
-	    {
-	      Elf *symelf = ((Elf_Data_Scn *) r->symdata)->s->elf;
-	      size_t shstrndx;
-	      GElf_Shdr shdr;
-	      if (result == 0
-		  || elf_getshdrstrndx (symelf, &shstrndx) < 0
-		  || gelf_getshdr (elf_getscn (symelf, result), &shdr) == NULL)
-		*secname = NULL;
-	      else
-		*secname = elf_strptr (symelf, shstrndx, shdr.sh_name);
-	    }
-	}
-    }
-
   return result;
 }

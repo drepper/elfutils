@@ -168,6 +168,8 @@ __libdw_get_sleb128 (int64_t acc, unsigned int i, const unsigned char **addrp)
    ? (int32_t) bswap_32 (*((const int32_t *) (Addr)))			      \
    : *((const int32_t *) (Addr)))
 
+# define read_8ubyte_unaligned_noncvt(Addr) \
+   *((const uint64_t *) (Addr))
 # define read_8ubyte_unaligned(Dbg, Addr) \
   (unlikely ((Dbg)->other_byte_order)					      \
    ? bswap_64 (*((const uint64_t *) (Addr)))				      \
@@ -243,6 +245,12 @@ read_4sbyte_unaligned_1 (bool other_byte_order, const void *p)
   return up->s4;
 }
 
+static inline uint64_t
+read_8ubyte_unaligned_noncvt (const void *p)
+{
+  const union unaligned *up = p;
+  return up->u8;
+}
 static inline uint64_t
 read_8ubyte_unaligned_1 (bool other_byte_order, const void *p)
 {

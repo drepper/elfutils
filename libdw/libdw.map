@@ -254,5 +254,8 @@ ELFUTILS_0.149 {
   global:
     dwarf_form_relocatable;
     dwarf_line_relocatable;
+    dwarf_getlocation_relocatable;
+    dwarf_haspc_relocatable;
+    dwarf_ranges_relocatable;
     dwarf_relocatable_info;
 } ELFUTILS_0.148;

@@ -517,10 +517,12 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
   return 0;
 }
 
-static int
-getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
-	     Dwarf_Op **llbuf, size_t *listlen, int sec_index)
+int
+internal_function
+__libdw_getlocation (Dwarf_Attribute *attr, const Dwarf_Block *block,
+		     Dwarf_Op **llbuf, size_t *listlen, int sec_index)
 {
+  struct Dwarf_CU *cu = attr->cu;
   return __libdw_intern_expression (cu->dbg, cu->dbg->other_byte_order,
 				    cu->address_size, (cu->version == 2
 						       ? cu->address_size
@@ -548,7 +550,8 @@ dwarf_getlocation (attr, llbuf, listlen)
   if (INTUSE(dwarf_formblock) (attr, &block) != 0)
     return -1;
 
-  return getlocation (attr->cu, &block, llbuf, listlen, cu_sec_idx (attr->cu));
+  return __libdw_getlocation (attr, &block, llbuf, listlen,
+			      cu_sec_idx (attr->cu));
 }
 
 int
@@ -567,22 +570,25 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 
   /* If it has a block form, it's a single location expression.  */
   Dwarf_Block block;
-  if (INTUSE(dwarf_formblock) (attr, &block) == 0)
+  if (attr->cu->version < 4 || attr->form == DW_FORM_exprloc)
     {
-      if (maxlocs == 0)
-	return 0;
-      if (llbufs != NULL &&
-	  getlocation (attr->cu, &block, &llbufs[0], &listlens[0],
-		       cu_sec_idx (attr->cu)) != 0)
-	return -1;
-      return listlens[0] == 0 ? 0 : 1;
-    }
+      if (INTUSE(dwarf_formblock) (attr, &block) == 0)
+	{
+	  if (maxlocs == 0)
+	    return 0;
+	  if (llbufs != NULL &&
+	      __libdw_getlocation (attr, &block, &llbufs[0], &listlens[0],
+				   cu_sec_idx (attr->cu)) != 0)
+	    return -1;
+	  return listlens[0] == 0 ? 0 : 1;
+	}
 
-  int error = INTUSE(dwarf_errno) ();
-  if (unlikely (error != DWARF_E_NO_BLOCK))
-    {
-      __libdw_seterrno (error);
-      return -1;
+      int error = INTUSE(dwarf_errno) ();
+      if (unlikely (error != DWARF_E_NO_BLOCK))
+	{
+	  __libdw_seterrno (error);
+	  return -1;
+	}
     }
 
   int result = check_constant_offset (attr, &llbufs[0], &listlens[0]);
@@ -661,9 +667,9 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 	{
 	  /* This one matches the address.  */
 	  if (llbufs != NULL
-	      && unlikely (getlocation (attr->cu, &block,
-					&llbufs[got], &listlens[got],
-					IDX_debug_loc) != 0))
+	      && unlikely (__libdw_getlocation (attr, &block,
+						&llbufs[got], &listlens[got],
+						IDX_debug_loc) != 0))
 	    return -1;
 	  ++got;
 	}
