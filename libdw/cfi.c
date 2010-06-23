@@ -76,12 +76,23 @@ duplicate_frame_state (const Dwarf_Frame *original,
   return copy;
 }
 
+static void
+clear_prev (Dwarf_Frame *fs)
+{
+  while (fs->prev != NULL)
+    {
+      Dwarf_Frame *prev = fs->prev;
+      fs->prev = prev->prev;
+      free (prev);
+    }
+}
+
 /* Returns a DWARF_E_* error code, usually NOERROR or INVALID_CFI.
    Frees *STATE on failure.  */
 static int
 execute_cfi (Dwarf_CFI *cache,
 	     const struct dwarf_cie *cie,
-	     Dwarf_Frame **state,
+	     Dwarf_Frame **state, bool searching,
 	     const uint8_t *program, const uint8_t *const end, bool abi_cfi,
 	     Dwarf_Addr loc, Dwarf_Addr find_pc)
 {
@@ -370,7 +381,7 @@ execute_cfi (Dwarf_CFI *cache,
 
       /* We get here only for the cases that have just moved LOC.  */
       cfi_assert (cie->initial_state != NULL);
-      if (find_pc >= loc)
+      if (searching && find_pc >= loc)
 	/* This advance has not yet reached FIND_PC.  */
 	fs->start = loc;
       else
@@ -378,6 +389,7 @@ execute_cfi (Dwarf_CFI *cache,
 	  /* We have just advanced past the address we're looking for.
 	     The state currently described is what we want to see.  */
 	  fs->end = loc;
+	  fs->fde_pc = program;
 	  break;
 	}
     }
@@ -396,13 +408,9 @@ execute_cfi (Dwarf_CFI *cache,
 
  out:
 
-  /* Pop any remembered states left on the stack.  */
-  while (fs->prev != NULL)
-    {
-      Dwarf_Frame *prev = fs->prev;
-      fs->prev = prev->prev;
-      free (prev);
-    }
+  if (searching || unlikely (result != DWARF_E_NOERROR))
+    /* Pop any remembered states left on the stack.  */
+    clear_prev (fs);
 
   if (likely (result == DWARF_E_NOERROR))
     *state = fs;
@@ -455,7 +463,7 @@ cie_cache_initial_state (Dwarf_CFI *cache, struct dwarf_cie *cie)
 	  .code_alignment_factor = abi_info.code_alignment_factor,
 	  .data_alignment_factor = abi_info.data_alignment_factor,
 	};
-      result = execute_cfi (cache, &abi_cie, &cie_fs,
+      result = execute_cfi (cache, &abi_cie, &cie_fs, true,
 			    abi_info.initial_instructions,
 			    abi_info.initial_instructions_end, true,
 			    0, (Dwarf_Addr) -1l);
@@ -464,7 +472,7 @@ cie_cache_initial_state (Dwarf_CFI *cache, struct dwarf_cie *cie)
   /* Now run the CIE's initial instructions.  */
   if (cie->initial_instructions_end > cie->initial_instructions
       && likely (result == DWARF_E_NOERROR))
-    result = execute_cfi (cache, cie, &cie_fs,
+    result = execute_cfi (cache, cie, &cie_fs, true,
 			  cie->initial_instructions,
 			  cie->initial_instructions_end, false,
 			  0, (Dwarf_Addr) -1l);
@@ -496,13 +504,119 @@ __libdw_frame_at_address (Dwarf_CFI *cache, struct dwarf_fde *fde,
       fs->start = fde->start;
       fs->end = fde->end;
 
-      result = execute_cfi (cache, fde->cie, &fs,
+      result = execute_cfi (cache, fde->cie, &fs, true,
 			    fde->instructions, fde->instructions_end, false,
 			    fde->start, address);
       if (likely (result == DWARF_E_NOERROR))
 	*frame = fs;
     }
   return result;
+}
+
+ptrdiff_t
+dwarf_cfi_frames (Dwarf_CFI *cache, ptrdiff_t offset,
+		  void **state, Dwarf_Frame **framep)
+{
+  if (cache == NULL)
+    return -1;
+
+  if (offset < 0)
+    {
+      /* Special case call for cleanup.  */
+
+      if (*state != NULL)
+	{
+	  clear_prev (*state);
+	  free (*state);
+	  *state = NULL;
+	}
+      return 0;
+    }
+
+  Dwarf_Frame *fs = *state;
+
+  struct dwarf_fde *fde;
+  if (offset == 0)
+    {
+      /* Start at the beginning.  */
+      assert (fs == NULL);
+      fde = cache->first_fde ?: (void *) -1l;
+    }
+  else
+    {
+      /* Resume from the last iteration.  */
+      assert (fs != NULL);
+      fde = fs->fde;
+      if (fs->fde_pc == fde->instructions_end)
+	{
+	  /* We've hit the end of this FDE.  Move to the next one.  */
+	  clear_prev (fs);
+	  free (fs);
+	  *state = fs = NULL;
+	  fde = fde->next;
+	}
+    }
+
+  if (fs == NULL)
+    {
+      /* We're starting fresh on a new FDE.  */
+
+      if (fde == (void *) -1l)
+	{
+	  /* No cached next FDE.  We have to intern the next one.  */
+
+	  fde = __libdw_fde_by_offset (cache, offset, &offset);
+	  if (fde == (void *) -1l)
+	    /* End of the line.  */
+	    return 0;
+	}
+
+      /* Start from this FDE's CIE's initial state.  */
+      int result = cie_cache_initial_state (cache, fde->cie);
+      if (likely (result == DWARF_E_NOERROR))
+	{
+	  fs = duplicate_frame_state (fde->cie->initial_state, NULL);
+	  if (unlikely (fs == NULL))
+	    result = DWARF_E_NOMEM;
+	}
+      if (unlikely (result != DWARF_E_NOERROR))
+	{
+	  __libdw_seterrno (result);
+	  return -1;
+	}
+
+      fs->fde_pc = fde->instructions;
+      *state = fs;
+    }
+
+  /* Now play forward from the last position in the FDE.  */
+
+  assert (fs->fde == fde);
+  assert (fs->fde_pc < fde->instructions_end);
+  int result = execute_cfi (cache, fde->cie, &fs, false,
+			    fs->fde_pc, fde->instructions_end, false,
+			    fs->end, 0);
+  if (likely (result == DWARF_E_NOERROR))
+    {
+      *framep = duplicate_frame_state (fs, NULL);
+      if (unlikely (*framep == NULL))
+	{
+	  clear_prev (fs);
+	  free (fs);
+	  fs = NULL;
+	  result = DWARF_E_NOMEM;
+	}
+    }
+
+  *state = fs;
+
+  if (unlikely (result != DWARF_E_NOERROR))
+    {
+      __libdw_seterrno (result);
+      offset = -1;
+    }
+
+  return offset;
 }
 
 int
@@ -517,7 +631,7 @@ dwarf_cfi_validate_fde (cache, offset, start, end, signalp, encoding)
   if (cache == NULL)
     return -1;
 
-  struct dwarf_fde *fde = __libdw_fde_by_offset (cache, offset);
+  struct dwarf_fde *fde = __libdw_fde_by_offset (cache, offset, NULL);
   if (unlikely (fde == NULL))
     return -1;
 
