@@ -87,6 +87,8 @@ allocate_cfi (Elf *elf, GElf_Addr vaddr)
   cfi->textrel = 0;		/* XXX ? */
   cfi->datarel = 0;		/* XXX ? */
 
+  cfi->fde_tailp = &cfi->first_fde;
+
   return cfi;
 }
 

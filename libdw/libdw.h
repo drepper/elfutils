@@ -852,6 +852,20 @@ extern int dwarf_cfi_addrframe (Dwarf_CFI *cache,
 				Dwarf_Addr address, Dwarf_Frame **frame)
   __nonnull_attribute__ (3);
 
+/* Iterate through the distinct CFI states.  In the first call, OFFSET
+   is zero and *STATE is null.  Each subsequent call gets the previous
+   call's return value as OFFSET and *STATE as the previous call left
+   it.  Returns -1 for errors, or 0 when there are no more states to
+   fetch; these cases clean up *STATE and leave it null.  A positive
+   return value leaves some iteration state in *STATE and fills *FRAME
+   with the malloc'd pointer for one distinct CFI state.  To abort
+   iteration before getting a nonpositive return value, pass -1 as
+   OFFSET to clean up *STATE and leave it null.  */
+extern ptrdiff_t dwarf_cfi_frames (Dwarf_CFI *cache, ptrdiff_t offset,
+				   void **state, Dwarf_Frame **frame)
+  __nonnull_attribute__ (3, 4);
+
+
 /* Return the DWARF register number used in FRAME to denote
    the return address in FRAME's caller frame.  The remaining
    arguments can be non-null to fill in more information.

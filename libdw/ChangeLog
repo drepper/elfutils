@@ -1,3 +1,27 @@
+2010-06-23  Roland McGrath  <roland@redhat.com>
+
+	* cfi.c (dwarf_cfi_frames): New function.
+	* libdw.h: Declare it.
+
+	* fde.c (__libdw_fde_by_offset): Take new argument NEXTOFF.
+	If non-null, return -1 marker without error at end of section,
+	skip CIEs, and store next offset.  Maintain fde_tailp and next.
+	* cfi.h: Update decl.
+
+	* cfi.h (struct dwarf_fde): New member next.
+	(struct Dwarf_CFI_s): New members first_fde, fde_tailp.
+	* dwarf_getcfi.c (dwarf_getcfi): Initialize them.
+	* dwarf_getcfi_elf.c (allocate_cfi): Likewise.
+	* fde.c (intern_fde): Initialize next.
+
+	* cfi.c (clear_prev): New function, broken out of ...
+	(execute_cfi): ... here.  Call it.  Take new flag argument; when
+	false, stop at the first PC change and don't clear_prev.
+	(cie_cache_initial_state, __libdw_frame_at_address): Update callers.
+
+	* cfi.h (struct Dwarf_Frame_s): New member fde_pc.
+	* cfi.c (execute_cfi): Set it to pending PROGRAM pointer at return.
+
 2010-06-22  Roland McGrath  <roland@redhat.com>
 
 	* dwarf_ranges_relocatable.c: New file.

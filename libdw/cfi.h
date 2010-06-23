@@ -82,6 +82,7 @@ struct dwarf_cie
 struct dwarf_fde
 {
   struct dwarf_cie *cie;
+  struct dwarf_fde *next;	/* Chain from cie->first_fde.  */
 
   /* This FDE describes PC values in [start, end).  */
   Dwarf_Addr start;
@@ -115,6 +116,11 @@ struct Dwarf_CFI_s
 
   /* Search tree for the FDEs, indexed by PC address.  */
   void *fde_tree;
+
+  /* Linked list of FDEs read so far, in file order.
+     fde_tailp will get the FDE at or after next_offset.  */
+  struct dwarf_fde *first_fde;
+  struct dwarf_fde **fde_tailp;
 
   /* Search tree for parsed DWARF expressions, indexed by raw pointer.  */
   void *expr_tree;
@@ -189,6 +195,9 @@ struct Dwarf_Frame_s
      which has the return_address_register and signal_frame flag.  */
   struct dwarf_fde *fde;
 
+  /* Next instruction in that FDE to execute after this state.  */
+  const uint8_t *fde_pc;
+
   /* The CFA is unknown, is R+N, or is computed by a DWARF expression.
      A bogon in the CFI can indicate an invalid/incalculable rule.
      We store that as cfa_invalid rather than barfing when processing it,
@@ -229,7 +238,8 @@ extern struct dwarf_fde *__libdw_find_fde (Dwarf_CFI *cache,
 
 /* Look for an FDE by its offset in the section.  */
 extern struct dwarf_fde *__libdw_fde_by_offset (Dwarf_CFI *cache,
-						Dwarf_Off offset)
+						Dwarf_Off offset,
+						ptrdiff_t *next_offset)
   __nonnull_attribute__ (1) internal_function;
 
 /* Process the FDE that contains the given PC address,
