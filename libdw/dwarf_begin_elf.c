@@ -1,5 +1,5 @@
 /* Create descriptor from ELF descriptor for processing file.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2009 Red Hat, Inc.
+   Copyright (C) 2002-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -66,6 +66,7 @@
 static const char dwarf_scnnames[IDX_last][17] =
 {
   [IDX_debug_info] = ".debug_info",
+  [IDX_debug_types] = ".debug_types",
   [IDX_debug_abbrev] = ".debug_abbrev",
   [IDX_debug_aranges] = ".debug_aranges",
   [IDX_debug_line] = ".debug_line",
@@ -73,10 +74,6 @@ static const char dwarf_scnnames[IDX_last][17] =
   [IDX_debug_loc] = ".debug_loc",
   [IDX_debug_pubnames] = ".debug_pubnames",
   [IDX_debug_str] = ".debug_str",
-  [IDX_debug_funcnames] = ".debug_funcnames",
-  [IDX_debug_typenames] = ".debug_typenames",
-  [IDX_debug_varnames] = ".debug_varnames",
-  [IDX_debug_weaknames] = ".debug_weaknames",
   [IDX_debug_macinfo] = ".debug_macinfo",
   [IDX_debug_ranges] = ".debug_ranges"
 };
@@ -249,8 +246,10 @@ dwarf_begin_elf (elf, cmd, scngrp)
 
   /* Allocate the data structure.  */
   Dwarf *result = (Dwarf *) calloc (1, sizeof (Dwarf) + mem_default_size);
-  if (result == NULL)
+  if (unlikely (result == NULL)
+      || unlikely (Dwarf_Sig8_Hash_init (&result->sig8_hash, 11) < 0))
     {
+      free (result);
       __libdw_seterrno (DWARF_E_NOMEM);
       return NULL;
     }
@@ -270,7 +269,6 @@ dwarf_begin_elf (elf, cmd, scngrp)
 			    - offsetof (struct libdw_memblock, mem));
   result->mem_tail->remaining = result->mem_tail->size;
   result->mem_tail->prev = NULL;
-
 
   if (cmd == DWARF_C_READ || cmd == DWARF_C_RDWR)
     {

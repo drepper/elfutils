@@ -165,16 +165,11 @@ check_constant_offset (Dwarf_Attribute *attr,
 
     case DW_FORM_data1:
     case DW_FORM_data2:
+    case DW_FORM_data4:
+    case DW_FORM_data8:
     case DW_FORM_sdata:
     case DW_FORM_udata:
       break;
-
-    case DW_FORM_data4:
-    case DW_FORM_data8:
-      /* These are loclistptr, not constants.
-	 XXX check cu->version > 3???
-      */
-      return 1;
     }
 
   /* Check whether we already cached this location.  */
@@ -219,8 +214,8 @@ check_constant_offset (Dwarf_Attribute *attr,
 
 int
 internal_function
-__libdw_intern_expression (Dwarf *dbg,
-			   bool other_byte_order, unsigned int address_size,
+__libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
+			   unsigned int address_size, unsigned int ref_size,
 			   void **cache, const Dwarf_Block *block,
 			   bool cfap, bool valuep,
 			   Dwarf_Op **llbuf, size_t *listlen, int sec_index)
@@ -272,6 +267,13 @@ __libdw_intern_expression (Dwarf *dbg,
 	    return -1;
 	  break;
 
+	case DW_OP_call_ref:
+	  /* DW_FORM_ref_addr, depends on offset size of CU.  */
+	  if (__libdw_read_offset_inc (dbg, sec_index, &data, ref_size,
+				       &newloc->number, IDX_debug_info, 0))
+	    return -1;
+	  break;
+
 	case DW_OP_deref:
 	case DW_OP_dup:
 	case DW_OP_drop:
@@ -303,7 +305,6 @@ __libdw_intern_expression (Dwarf *dbg,
 	case DW_OP_reg0 ... DW_OP_reg31:
 	case DW_OP_nop:
 	case DW_OP_push_object_address:
-	case DW_OP_call_ref:
 	case DW_OP_call_frame_cfa:
 	case DW_OP_form_tls_address:
 	case DW_OP_GNU_push_tls_address:
@@ -521,7 +522,10 @@ getlocation (struct Dwarf_CU *cu, const Dwarf_Block *block,
 	     Dwarf_Op **llbuf, size_t *listlen, int sec_index)
 {
   return __libdw_intern_expression (cu->dbg, cu->dbg->other_byte_order,
-				    cu->address_size, &cu->locs, block,
+				    cu->address_size, (cu->version == 2
+						       ? cu->address_size
+						       : cu->offset_size),
+				    &cu->locs, block,
 				    false, false,
 				    llbuf, listlen, sec_index);
 }
@@ -532,19 +536,19 @@ dwarf_getlocation (attr, llbuf, listlen)
      Dwarf_Op **llbuf;
      size_t *listlen;
 {
+  if (! attr_ok (attr))
+    return -1;
+
   int result = check_constant_offset (attr, llbuf, listlen);
   if (result != 1)
     return result;
-
-  if (! attr_ok (attr))
-    return -1;
 
   /* If it has a block form, it's a single location expression.  */
   Dwarf_Block block;
   if (INTUSE(dwarf_formblock) (attr, &block) != 0)
     return -1;
 
-  return getlocation (attr->cu, &block, llbuf, listlen, IDX_debug_info);
+  return getlocation (attr->cu, &block, llbuf, listlen, cu_sec_idx (attr->cu));
 }
 
 int
@@ -569,7 +573,7 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 	return 0;
       if (llbufs != NULL &&
 	  getlocation (attr->cu, &block, &llbufs[0], &listlens[0],
-		       IDX_debug_info) != 0)
+		       cu_sec_idx (attr->cu)) != 0)
 	return -1;
       return listlens[0] == 0 ? 0 : 1;
     }

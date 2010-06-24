@@ -54,8 +54,6 @@
 #include "libelfP.h"
 struct ebl;
 
-#define dwarf_cfi_cie_p(entry)	((entry)->cie.CIE_id == DW_CIE_ID_64)
-
 /* Cached CIE representation.  */
 struct dwarf_cie
 {
@@ -227,6 +225,11 @@ extern struct dwarf_cie *__libdw_find_cie (Dwarf_CFI *cache, Dwarf_Off offset)
 /* Look for an FDE covering the given PC address.  */
 extern struct dwarf_fde *__libdw_find_fde (Dwarf_CFI *cache,
 					   Dwarf_Addr address)
+  __nonnull_attribute__ (1) internal_function;
+
+/* Look for an FDE by its offset in the section.  */
+extern struct dwarf_fde *__libdw_fde_by_offset (Dwarf_CFI *cache,
+						Dwarf_Off offset)
   __nonnull_attribute__ (1) internal_function;
 
 /* Process the FDE that contains the given PC address,

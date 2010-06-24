@@ -1,5 +1,5 @@
 /* Return block represented by attribute.
-   Copyright (C) 2004, 2005 Red Hat, Inc.
+   Copyright (C) 2004-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -84,6 +84,7 @@ dwarf_formblock (attr, return_block)
       break;
 
     case DW_FORM_block:
+    case DW_FORM_exprloc:
       datap = attr->valp;
       get_uleb128 (return_block->length, datap);
       return_block->data = (unsigned char *) datap;
@@ -94,9 +95,10 @@ dwarf_formblock (attr, return_block)
       return -1;
     }
 
-  if (return_block->data + return_block->length
-      > ((unsigned char *) attr->cu->dbg->sectiondata[IDX_debug_info]->d_buf
-	 + attr->cu->dbg->sectiondata[IDX_debug_info]->d_size))
+  if (unlikely (cu_data (attr->cu)->d_size
+		- (return_block->data
+		   - (unsigned char *) cu_data (attr->cu)->d_buf)
+		< return_block->length))
     {
       /* Block does not fit.  */
       __libdw_seterrno (DWARF_E_INVALID_DWARF);

@@ -1,7 +1,6 @@
-/* Return string associated with given attribute.
-   Copyright (C) 2003-2010 Red Hat, Inc.
+/* Return code path discriminator in line record.
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2003.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,37 +51,16 @@
 # include <config.h>
 #endif
 
-#include <dwarf.h>
 #include "libdwP.h"
 
 
-const char *
-dwarf_formstring (attrp)
-     Dwarf_Attribute *attrp;
+int
+dwarf_linediscriminator (Dwarf_Line *line, unsigned int *discp)
 {
-  /* Ignore earlier errors.  */
-  if (attrp == NULL)
-    return NULL;
+  if (line == NULL)
+    return -1;
 
-  /* We found it.  Now determine where the string is stored.  */
-  if (attrp->form == DW_FORM_string)
-    /* A simple inlined string.  */
-    return (const char *) attrp->valp;
+  *discp = line->discriminator;
 
-  Dwarf *dbg = attrp->cu->dbg;
-
-  if (unlikely (attrp->form != DW_FORM_strp)
-      || dbg->sectiondata[IDX_debug_str] == NULL)
-    {
-      __libdw_seterrno (DWARF_E_NO_STRING);
-      return NULL;
-    }
-
-  uint64_t off;
-  if (__libdw_read_offset (dbg, cu_sec_idx (attrp->cu), attrp->valp,
-			   attrp->cu->offset_size, &off, IDX_debug_str, 1))
-    return NULL;
-
-  return (const char *) dbg->sectiondata[IDX_debug_str]->d_buf + off;
+  return 0;
 }
-INTDEF(dwarf_formstring)
