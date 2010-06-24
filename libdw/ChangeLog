@@ -1,3 +1,16 @@
+2010-06-24  Roland McGrath  <roland@redhat.com>
+
+	* encoded-value.h (encoded_value_size): Replace E_IDENT parameter
+	with ADDRESS_SIZE.
+	(read_encoded_value): Update caller.
+	* fde.c (binary_search_fde): Likewise.
+	* dwarf_next_cfi.c: Likewise.
+	* cfi.h (struct dwarf_cie): New member address_size.
+	(CFI_ADDRSIZE): New macro.
+	* cie.c (intern_new_cie): Initialize and use CIE->address_size.
+	(canonicalize_encoding): New function.
+	(intern_new_cie): Call it, do both FDE and LSDA encodings.
+
 2010-06-23  Roland McGrath  <roland@redhat.com>
 
 	* cfi.c (dwarf_cfi_validate_fde): Function removed.

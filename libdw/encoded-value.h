@@ -56,7 +56,7 @@
 
 
 static size_t __attribute__ ((unused))
-encoded_value_size (const Elf_Data *data, const unsigned char e_ident[],
+encoded_value_size (const Elf_Data *data, uint8_t address_size,
 		    uint8_t encoding, const uint8_t *p)
 {
   if (encoding == DW_EH_PE_omit)
@@ -72,7 +72,7 @@ encoded_value_size (const Elf_Data *data, const unsigned char e_ident[],
       return 8;
 
     case DW_EH_PE_absptr:
-      return e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
+      return address_size;
 
     case DW_EH_PE_uleb128:
       if (p != NULL)
@@ -84,7 +84,6 @@ encoded_value_size (const Elf_Data *data, const unsigned char e_ident[],
 	}
 
     default:
-      abort ();
       return 0;
     }
 }
@@ -136,7 +135,8 @@ read_encoded_value (const Dwarf_CFI *cache, uint8_t encoding, const uint8_t **p,
       break;
     case DW_EH_PE_aligned:
       {
-	const size_t size = encoded_value_size (&cache->data->d, cache->e_ident,
+	const size_t size = encoded_value_size (&cache->data->d,
+						CFI_ADDRSIZE (cache),
 						encoding, *p);
 	size_t align = ((cache->frame_vaddr
 			 + (*p - (const uint8_t *) cache->data->d.d_buf))
@@ -203,7 +203,7 @@ read_encoded_value (const Dwarf_CFI *cache, uint8_t encoding, const uint8_t **p,
 	return true;
       *result -= cache->frame_vaddr;
       if (unlikely (*result > (cache->data->d.d_size
-			       - encoded_value_size (NULL, cache->e_ident,
+			       - encoded_value_size (NULL, CFI_ADDRSIZE (cache),
 						     DW_EH_PE_absptr, NULL))))
 	return true;
       const uint8_t *ptr = cache->data->d.d_buf + *result;

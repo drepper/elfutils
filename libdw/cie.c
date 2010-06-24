@@ -70,6 +70,29 @@ compare_cie (const void *a, const void *b)
   return 0;
 }
 
+/* Canonicalize encoding to a specific size.  */
+static bool
+canonicalize_encoding (uint8_t *encoding, uint8_t address_size)
+{
+  if ((*encoding & 0x07) == DW_EH_PE_absptr)
+    {
+      assert (DW_EH_PE_absptr == 0);
+
+      switch (address_size)
+	{
+	case 8:
+	  *encoding |= DW_EH_PE_udata8;
+	  break;
+	case 4:
+	  *encoding |= DW_EH_PE_udata4;
+	  break;
+	default:
+	  return true;
+	}
+    }
+  return false;
+}
+
 /* There is no CIE at OFFSET in the tree.  Add it.  */
 static struct dwarf_cie *
 intern_new_cie (Dwarf_CFI *cache, Dwarf_Off offset, const Dwarf_CIE *info)
@@ -89,6 +112,9 @@ intern_new_cie (Dwarf_CFI *cache, Dwarf_Off offset, const Dwarf_CIE *info)
   cie->fde_augmentation_data_size = 0;
   cie->sized_augmentation_data = false;
   cie->signal_frame = false;
+
+  /* XXX should get from dwarf_next_cfi with v4 header.  */
+  cie->address_size = CFI_ADDRSIZE (cache);
 
   cie->fde_encoding = DW_EH_PE_absptr;
   cie->lsda_encoding = DW_EH_PE_omit;
@@ -112,7 +138,7 @@ intern_new_cie (Dwarf_CFI *cache, Dwarf_Off offset, const Dwarf_CIE *info)
 	  cie->lsda_encoding = *data++;
 	  if (!cie->sized_augmentation_data)
 	    cie->fde_augmentation_data_size
-	      += encoded_value_size (&cache->data->d, cache->e_ident,
+	      += encoded_value_size (&cache->data->d, cie->address_size,
 				     cie->lsda_encoding, NULL);
 	  continue;
 
@@ -122,7 +148,7 @@ intern_new_cie (Dwarf_CFI *cache, Dwarf_Off offset, const Dwarf_CIE *info)
 
 	case 'P':		/* Skip personality routine.  */
 	  encoding = *data++;
-	  data += encoded_value_size (&cache->data->d, cache->e_ident,
+	  data += encoded_value_size (&cache->data->d, cie->address_size,
 				      encoding, data);
 	  continue;
 
@@ -136,27 +162,12 @@ intern_new_cie (Dwarf_CFI *cache, Dwarf_Off offset, const Dwarf_CIE *info)
       break;
     }
 
-  if ((cie->fde_encoding & 0x0f) == DW_EH_PE_absptr)
+  if (canonicalize_encoding (&cie->fde_encoding, cie->address_size)
+      || canonicalize_encoding (&cie->lsda_encoding, cie->address_size))
     {
-      /* Canonicalize encoding to a specific size.  */
-      assert (DW_EH_PE_absptr == 0);
-
-      /* XXX should get from dwarf_next_cfi with v4 header.  */
-      uint_fast8_t address_size
-	= cache->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
-      switch (address_size)
-	{
-	case 8:
-	  cie->fde_encoding |= DW_EH_PE_udata8;
-	  break;
-	case 4:
-	  cie->fde_encoding |= DW_EH_PE_udata4;
-	  break;
-	default:
-	  free (cie);
-	  __libdw_seterrno (DWARF_E_INVALID_DWARF);
-	  return NULL;
-	}
+      free (cie);
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return NULL;
     }
 
   /* Save the initial instructions to be played out into initial state.  */

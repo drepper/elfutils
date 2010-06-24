@@ -71,7 +71,11 @@ struct dwarf_cie
 
   const Dwarf_Frame *initial_state;
 
-  uint8_t fde_encoding;		/* DW_EH_PE_* for addresses in FDEs.  */
+  uint8_t address_size;	    /* Address size used here.  */
+
+  /* These encodings are canonicalized from DW_EH_PE_absptr
+     to a particular size DW_EH_PE_udata[48].  */
+  uint8_t fde_encoding;	    /* DW_EH_PE_* for addresses in FDEs.  */
   uint8_t lsda_encoding;    /* DW_EH_PE_* for LSDA in FDE augmentation.  */
 
   bool sized_augmentation_data;	/* Saw 'z': FDEs have self-sized data.  */
@@ -141,6 +145,8 @@ struct Dwarf_CFI_s
      is same_value, not undefined.  */
   bool default_same_value;
 };
+
+#define CFI_ADDRSIZE(cache)	(cache->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8)
 
 
 enum dwarf_frame_rule
