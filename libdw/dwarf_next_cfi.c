@@ -224,11 +224,12 @@ dwarf_next_cfi (e_ident, data, eh_frame_p, off, next_off, entry)
 		case 'R':		/* Skip FDE address encoding byte.  */
 		  encoding = *bytes++;
 		  entry->cie.fde_augmentation_data_size
-		    += encoded_value_size (data, e_ident, encoding, NULL);
+		    += encoded_value_size (data, address_size, encoding, NULL);
 		  continue;
 		case 'P':   /* Skip encoded personality routine pointer. */
 		  encoding = *bytes++;
-		  bytes += encoded_value_size (data, e_ident, encoding, bytes);
+		  bytes += encoded_value_size (data, address_size,
+					       encoding, bytes);
 		  continue;
 		case 'S':		/* Skip signal-frame flag.  */
 		  continue;

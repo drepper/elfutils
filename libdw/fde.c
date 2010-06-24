@@ -199,7 +199,8 @@ __libdw_fde_by_offset (Dwarf_CFI *cache, Dwarf_Off offset, ptrdiff_t *nextoff)
 static Dwarf_Off
 binary_search_fde (Dwarf_CFI *cache, Dwarf_Addr address)
 {
-  const size_t size = 2 * encoded_value_size (&cache->data->d, cache->e_ident,
+  const size_t size = 2 * encoded_value_size (&cache->data->d,
+					      CFI_ADDRSIZE (cache),
 					      cache->search_table_encoding,
 					      NULL);
 
