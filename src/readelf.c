@@ -180,7 +180,8 @@ static enum section_e
   section_abbrev = 1,		/* .debug_abbrev  */
   section_aranges = 2,		/* .debug_aranges  */
   section_frame = 4,		/* .debug_frame or .eh_frame & al.  */
-  section_info = 8,		/* .debug_info  */
+  section_info = 8,		/* .debug_info, .debug_types  */
+  section_types = section_info,
   section_line = 16,		/* .debug_line  */
   section_loc = 32,		/* .debug_loc  */
   section_pubnames = 64,	/* .debug_pubnames  */
@@ -2167,7 +2168,7 @@ get_ver_flags (unsigned int flags)
   if (flags & VER_FLG_WEAK)
     {
       if (endp != buf)
-        endp = stpcpy (endp, "| ");
+	endp = stpcpy (endp, "| ");
 
       endp = stpcpy (endp, "WEAK ");
     }
@@ -2657,7 +2658,7 @@ print_hash_info (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr, size_t shstrndx,
 
       printf (gettext ("\
  Average number of tests:   successful lookup: %f\n\
-                          unsuccessful lookup: %f\n"),
+			  unsuccessful lookup: %f\n"),
 	      (double) success / (double) nzero_counts,
 	      (double) nzero_counts / (double) nbucket);
     }
@@ -3226,6 +3227,9 @@ dwarf_tag_string (unsigned int tag)
       [DW_TAG_mutable_type] = "mutable_type",
       [DW_TAG_condition] = "condition",
       [DW_TAG_shared_type] = "shared_type",
+      [DW_TAG_type_unit] = "type_unit",
+      [DW_TAG_rvalue_reference_type] = "rvalue_reference_type",
+      [DW_TAG_template_alias] = "template_alias",
     };
   const unsigned int nknown_tags = (sizeof (known_tags)
 				    / sizeof (known_tags[0]));
@@ -3253,6 +3257,26 @@ dwarf_tag_string (unsigned int tag)
 
       case DW_TAG_class_template:
 	result = "class_template";
+	break;
+
+      case DW_TAG_GNU_BINCL:
+	result = "GNU_BINCL";
+	break;
+
+      case DW_TAG_GNU_EINCL:
+	result = "GNU_EINCL";
+	break;
+
+      case DW_TAG_GNU_template_template_param:
+	result = "GNU_template_template_param";
+	break;
+
+      case DW_TAG_GNU_template_parameter_pack:
+	result = "GNU_template_parameter_pack";
+	break;
+
+      case DW_TAG_GNU_formal_parameter_pack:
+	result = "GNU_formal_parameter_pack";
 	break;
 
       default:
@@ -3362,6 +3386,12 @@ dwarf_attr_string (unsigned int attrnum)
       [DW_AT_elemental] = "elemental",
       [DW_AT_pure] = "pure",
       [DW_AT_recursive] = "recursive",
+      [DW_AT_signature] = "signature",
+      [DW_AT_main_subprogram] = "main_subprogram",
+      [DW_AT_data_bit_offset] = "data_bit_offset",
+      [DW_AT_const_expr] = "const_expr",
+      [DW_AT_enum_class] = "enum_class",
+      [DW_AT_linkage_name] = "linkage_name",
     };
   const unsigned int nknown_attrs = (sizeof (known_attrs)
 				     / sizeof (known_attrs[0]));
@@ -3515,7 +3545,11 @@ dwarf_form_string (unsigned int form)
       [DW_FORM_ref4] = "ref4",
       [DW_FORM_ref8] = "ref8",
       [DW_FORM_ref_udata] = "ref_udata",
-      [DW_FORM_indirect] = "indirect"
+      [DW_FORM_indirect] = "indirect",
+      [DW_FORM_sec_offset] = "sec_offset",
+      [DW_FORM_exprloc] = "exprloc",
+      [DW_FORM_flag_present] = "flag_present",
+      [DW_FORM_ref_sig8] = "ref_sig8"
     };
   const unsigned int nknown_forms = (sizeof (known_forms)
 				     / sizeof (known_forms[0]));
@@ -3774,7 +3808,8 @@ print_block (size_t n, const void *block)
 
 static void
 print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
-	   unsigned int addrsize, Dwarf_Word len, const unsigned char *data)
+	   unsigned int addrsize, unsigned int offset_size,
+	   Dwarf_Word len, const unsigned char *data)
 {
   static const char *const known[] =
     {
@@ -3949,7 +3984,6 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 
       switch (op)
 	{
-	case DW_OP_call_ref:
 	case DW_OP_addr:;
 	  /* Address operand.  */
 	  Dwarf_Word addr;
@@ -3964,18 +3998,31 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	  data += addrsize;
 	  len -= addrsize;
 
-	  if (op == DW_OP_addr)
-	    {
-	      char *a = format_dwarf_addr (dwflmod, 0, addr);
-	      printf ("%*s[%4" PRIuMAX "] %s %s\n",
-		      indent, "", (uintmax_t) offset, known[op], a);
-	      free (a);
-	    }
-	  else
-	    printf ("%*s[%4" PRIuMAX "] %s %#" PRIxMAX "\n",
-		    indent, "", (uintmax_t) offset,
-		    known[op], (uintmax_t) addr);
+	  char *a = format_dwarf_addr (dwflmod, 0, addr);
+	  printf ("%*s[%4" PRIuMAX "] %s %s\n",
+		  indent, "", (uintmax_t) offset, known[op], a);
+	  free (a);
+
 	  offset += 1 + addrsize;
+	  break;
+
+	case DW_OP_call_ref:
+	  /* Offset operand.  */
+	  NEED (offset_size);
+	  if (offset_size == 4)
+	    addr = read_4ubyte_unaligned (dbg, data);
+	  else
+	    {
+	      assert (offset_size == 8);
+	      addr = read_8ubyte_unaligned (dbg, data);
+	    }
+	  data += offset_size;
+	  len -= offset_size;
+
+	  printf ("%*s[%4" PRIuMAX "] %s %#" PRIxMAX "\n",
+		  indent, "", (uintmax_t) offset,
+		  known[op], (uintmax_t) addr);
+	  offset += 1 + offset_size;
 	  break;
 
 	case DW_OP_deref_size:
@@ -4074,9 +4121,9 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	case DW_OP_plus_uconst:
 	case DW_OP_constu:;
 	  const unsigned char *start = data;
-	  unsigned int uleb;
+	  uint64_t uleb;
 	  get_uleb128 (uleb, data); /* XXX check overrun */
-	  printf ("%*s[%4" PRIuMAX "] %s %u\n",
+	  printf ("%*s[%4" PRIuMAX "] %s %" PRIu64 "\n",
 		  indent, "", (uintmax_t) offset, known[op], uleb);
 	  len -= data - start;
 	  offset += 1 + (data - start);
@@ -4084,10 +4131,10 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 
 	case DW_OP_bit_piece:
 	  start = data;
-	  unsigned int uleb2;
+	  uint64_t uleb2;
 	  get_uleb128 (uleb, data); /* XXX check overrun */
 	  get_uleb128 (uleb2, data); /* XXX check overrun */
-	  printf ("%*s[%4" PRIuMAX "] %s %u, %u\n",
+	  printf ("%*s[%4" PRIuMAX "] %s %" PRIu64 ", %" PRIu64 "\n",
 		  indent, "", (uintmax_t) offset, known[op], uleb, uleb2);
 	  len -= data - start;
 	  offset += 1 + (data - start);
@@ -4097,9 +4144,9 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	case DW_OP_breg0 ... DW_OP_breg31:
 	case DW_OP_consts:
 	  start = data;
-	  unsigned int sleb;
+	  int64_t sleb;
 	  get_sleb128 (sleb, data); /* XXX check overrun */
-	  printf ("%*s[%4" PRIuMAX "] %s %d\n",
+	  printf ("%*s[%4" PRIuMAX "] %s %" PRId64 "\n",
 		  indent, "", (uintmax_t) offset, known[op], sleb);
 	  len -= data - start;
 	  offset += 1 + (data - start);
@@ -4109,7 +4156,7 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	  start = data;
 	  get_uleb128 (uleb, data); /* XXX check overrun */
 	  get_sleb128 (sleb, data); /* XXX check overrun */
-	  printf ("%*s[%4" PRIuMAX "] %s %u %d\n",
+	  printf ("%*s[%4" PRIuMAX "] %s %" PRIu64 " %" PRId64 "\n",
 		  indent, "", (uintmax_t) offset, known[op], uleb, sleb);
 	  len -= data - start;
 	  offset += 1 + (data - start);
@@ -4520,7 +4567,7 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	    // XXX overflow check
 	    get_uleb128 (op1, readp);	/* Length of DW_FORM_block.  */
 	    printf ("     def_cfa_expression %" PRIu64 "\n", op1);
-	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op1, readp);
+	    print_ops (dwflmod, dbg, 10, 10, ptr_size, 0, op1, readp);
 	    readp += op1;
 	    break;
 	  case DW_CFA_expression:
@@ -4529,7 +4576,7 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	    get_uleb128 (op2, readp);	/* Length of DW_FORM_block.  */
 	    printf ("     expression r%" PRIu64 " (%s) \n",
 		    op1, regname (op1));
-	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op2, readp);
+	    print_ops (dwflmod, dbg, 10, 10, ptr_size, 0, op2, readp);
 	    readp += op2;
 	    break;
 	  case DW_CFA_offset_extended_sf:
@@ -4572,7 +4619,7 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 	    get_uleb128 (op2, readp);	/* Length of DW_FORM_block.  */
 	    printf ("     val_expression r%" PRIu64 " (%s)\n",
 		    op1, regname (op1));
-	    print_ops (dwflmod, dbg, 10, 10, ptr_size, op2, readp);
+	    print_ops (dwflmod, dbg, 10, 10, ptr_size, 0, op2, readp);
 	    readp += op2;
 	    break;
 	  case DW_CFA_MIPS_advance_loc8:
@@ -4597,10 +4644,10 @@ print_cfa_program (const unsigned char *readp, const unsigned char *const endp,
 		opcode & 0x3f, pc += (opcode & 0x3f) * code_align);
       else if (opcode < DW_CFA_restore)
 	{
-	  unsigned int offset;
+	  uint64_t offset;
 	  // XXX overflow check
 	  get_uleb128 (offset, readp);
-	  printf ("     offset r%u (%s) at cfa%+d\n",
+	  printf ("     offset r%u (%s) at cfa%+" PRId64 "\n",
 		  opcode & 0x3f, regname (opcode & 0x3f), offset * data_align);
 	}
       else
@@ -4817,8 +4864,9 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
     const char *augmentation;
     unsigned int code_alignment_factor;
     unsigned int data_alignment_factor;
-    unsigned int fde_encoding;
-    unsigned int lsda_encoding;
+    uint8_t address_size;
+    uint8_t fde_encoding;
+    uint8_t lsda_encoding;
     struct cieinfo *next;
   } *cies = NULL;
 
@@ -4888,6 +4936,16 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	  if (unlikely (readp == NULL))
 	    goto invalid_data;
 	  ++readp;
+
+	  uint_fast8_t segment_size = 0;
+	  if (version >= 4)
+	    {
+	      if (cieend - readp < 5)
+		goto invalid_data;
+	      ptr_size = *readp++;
+	      segment_size = *readp++;
+	    }
+
 	  // XXX Check overflow
 	  get_uleb128 (code_alignment_factor, readp);
 	  // XXX Check overflow
@@ -4907,12 +4965,17 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	  printf ("\n [%6tx] CIE length=%" PRIu64 "\n"
 		  "   CIE_id:                   %" PRIu64 "\n"
 		  "   version:                  %u\n"
-		  "   augmentation:             \"%s\"\n"
-		  "   code_alignment_factor:    %u\n"
+		  "   augmentation:             \"%s\"\n",
+		  offset, (uint64_t) unit_length, (uint64_t) cie_id,
+		  version, augmentation);
+	  if (version >= 4)
+	    printf ("   address_size:             %u\n"
+		    "   segment_size:             %u\n",
+		    ptr_size, segment_size);
+	  printf ("   code_alignment_factor:    %u\n"
 		  "   data_alignment_factor:    %d\n"
 		  "   return_address_register:  %u\n",
-		  offset, (uint64_t) unit_length, (uint64_t) cie_id,
-		  version, augmentation, code_alignment_factor,
+		  code_alignment_factor,
 		  data_alignment_factor, return_address_register);
 
 	  if (augmentation[0] == 'z')
@@ -4978,15 +5041,19 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 		}
 	    }
 
-	  struct cieinfo *newp = alloca (sizeof (*newp));
-	  newp->cie_offset = offset;
-	  newp->augmentation = augmentation;
-	  newp->fde_encoding = fde_encoding;
-	  newp->lsda_encoding = lsda_encoding;
-	  newp->code_alignment_factor = code_alignment_factor;
-	  newp->data_alignment_factor = data_alignment_factor;
-	  newp->next = cies;
-	  cies = newp;
+	  if (likely (ptr_size == 4 || ptr_size == 8))
+	    {
+	      struct cieinfo *newp = alloca (sizeof (*newp));
+	      newp->cie_offset = offset;
+	      newp->augmentation = augmentation;
+	      newp->fde_encoding = fde_encoding;
+	      newp->lsda_encoding = lsda_encoding;
+	      newp->address_size = ptr_size;
+	      newp->code_alignment_factor = code_alignment_factor;
+	      newp->data_alignment_factor = data_alignment_factor;
+	      newp->next = cies;
+	      cies = newp;
+	    }
 	}
       else
 	{
@@ -5007,7 +5074,7 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	  /* Initialize from CIE data.  */
 	  fde_encoding = cie->fde_encoding;
 	  lsda_encoding = cie->lsda_encoding;
-	  ptr_size = encoded_ptr_size (fde_encoding, ptr_size);
+	  ptr_size = encoded_ptr_size (fde_encoding, cie->address_size);
 	  code_alignment_factor = cie->code_alignment_factor;
 	  data_alignment_factor = cie->data_alignment_factor;
 
@@ -5098,6 +5165,7 @@ struct attrcb_args
   Dwarf *dbg;
   int level;
   unsigned int addrsize;
+  unsigned int offset_size;
   Dwarf_Off cu_offset;
 };
 
@@ -5137,8 +5205,9 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	    return DWARF_CB_ABORT;
 	  }
 	char *a = format_dwarf_addr (cbargs->dwflmod, cbargs->addrsize, addr);
-	printf ("           %*s%-20s %s\n",
-		(int) (level * 2), "", dwarf_attr_string (attr), a);
+	printf ("           %*s%-20s (%s) %s\n",
+		(int) (level * 2), "", dwarf_attr_string (attr),
+		dwarf_form_string (form), a);
 	free (a);
       }
       break;
@@ -5149,8 +5218,9 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
       const char *str = dwarf_formstring (attrp);
       if (unlikely (str == NULL))
 	goto attrval_out;
-      printf ("           %*s%-20s \"%s\"\n",
-	      (int) (level * 2), "", dwarf_attr_string (attr), str);
+      printf ("           %*s%-20s (%s) \"%s\"\n",
+	      (int) (level * 2), "", dwarf_attr_string (attr),
+	      dwarf_form_string (form), str);
       break;
 
     case DW_FORM_ref_addr:
@@ -5163,10 +5233,21 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
       if (unlikely (dwarf_formref_die (attrp, &ref) == NULL))
 	goto attrval_out;
 
-      printf ("           %*s%-20s [%6" PRIxMAX "]\n",
+      printf ("           %*s%-20s (%s) [%6" PRIxMAX "]\n",
 	      (int) (level * 2), "", dwarf_attr_string (attr),
-	      (uintmax_t) dwarf_dieoffset (&ref));
+	      dwarf_form_string (form), (uintmax_t) dwarf_dieoffset (&ref));
       break;
+
+    case DW_FORM_ref_sig8:
+      printf ("           %*s%-20s (%s) {%6" PRIx64 "}\n",
+	      (int) (level * 2), "", dwarf_attr_string (attr),
+	      dwarf_form_string (form),
+	      read_8ubyte_unaligned (attrp->cu->dbg, attrp->valp));
+      break;
+
+    case DW_FORM_sec_offset:
+      attrp->form = cbargs->offset_size == 8 ? DW_FORM_data8 : DW_FORM_data4;
+      /* Fall through.  */
 
     case DW_FORM_udata:
     case DW_FORM_sdata:
@@ -5183,11 +5264,12 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	{
 	/* This case can take either a constant or a loclistptr. */
 	case DW_AT_data_member_location:
-	  if (form != DW_FORM_data4 && form != DW_FORM_data8)
+	  if (form != DW_FORM_data4 && form != DW_FORM_data8
+	      && form != DW_FORM_sec_offset) /* XXX not data[48] if CU v4! */
 	    {
-	      printf ("           %*s%-20s %" PRIxMAX "\n",
+	      printf ("           %*s%-20s (%s) %" PRIxMAX "\n",
 		      (int) (level * 2), "", dwarf_attr_string (attr),
-		      (uintmax_t) num);
+		      dwarf_form_string (form), (uintmax_t) num);
 	      return DWARF_CB_OK;
 	    }
 	  /* else fallthrough */
@@ -5201,15 +5283,15 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	case DW_AT_frame_base:
 	case DW_AT_return_addr:
 	case DW_AT_static_link:
-	  printf ("           %*s%-20s location list [%6" PRIxMAX "]\n",
+	  printf ("           %*s%-20s (%s) location list [%6" PRIxMAX "]\n",
 		  (int) (level * 2), "", dwarf_attr_string (attr),
-		  (uintmax_t) num);
+		  dwarf_form_string (form), (uintmax_t) num);
 	  return DWARF_CB_OK;
 
 	case DW_AT_ranges:
-	  printf ("           %*s%-20s range list [%6" PRIxMAX "]\n",
+	  printf ("           %*s%-20s (%s) range list [%6" PRIxMAX "]\n",
 		  (int) (level * 2), "", dwarf_attr_string (attr),
-		  (uintmax_t) num);
+		  dwarf_form_string (form), (uintmax_t) num);
 	  return DWARF_CB_OK;
 
 	case DW_AT_language:
@@ -5248,13 +5330,13 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	}
 
       if (valuestr == NULL)
-	printf ("           %*s%-20s %" PRIuMAX "\n",
+	printf ("           %*s%-20s (%s) %" PRIuMAX "\n",
 		(int) (level * 2), "", dwarf_attr_string (attr),
-		(uintmax_t) num);
+		dwarf_form_string (form), (uintmax_t) num);
       else
-	printf ("           %*s%-20s %s (%" PRIuMAX ")\n",
+	printf ("           %*s%-20s (%s) %s (%" PRIuMAX ")\n",
 		(int) (level * 2), "", dwarf_attr_string (attr),
-		valuestr, (uintmax_t) num);
+		dwarf_form_string (form), valuestr, (uintmax_t) num);
       break;
 
     case DW_FORM_flag:;
@@ -5262,11 +5344,18 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
       if (unlikely (dwarf_formflag (attrp, &flag) != 0))
 	goto attrval_out;
 
-      printf ("           %*s%-20s %s\n",
+      printf ("           %*s%-20s (%s) %s\n",
 	      (int) (level * 2), "", dwarf_attr_string (attr),
-	      nl_langinfo (flag ? YESSTR : NOSTR));
+	      dwarf_form_string (form), nl_langinfo (flag ? YESSTR : NOSTR));
       break;
 
+    case DW_FORM_flag_present:
+      printf ("           %*s%-20s (%s) %s\n",
+	      (int) (level * 2), "", dwarf_attr_string (attr),
+	      dwarf_form_string (form), nl_langinfo (YESSTR));
+      break;
+
+    case DW_FORM_exprloc:
     case DW_FORM_block4:
     case DW_FORM_block2:
     case DW_FORM_block1:
@@ -5275,11 +5364,20 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
       if (unlikely (dwarf_formblock (attrp, &block) != 0))
 	goto attrval_out;
 
-      printf ("           %*s%-20s ",
-	      (int) (level * 2), "", dwarf_attr_string (attr));
+      printf ("           %*s%-20s (%s) ",
+	      (int) (level * 2), "", dwarf_attr_string (attr),
+	      dwarf_form_string (form));
 
       switch (attr)
 	{
+	default:
+	  if (form != DW_FORM_exprloc)
+	    {
+	      print_block (block.length, block.data);
+	      break;
+	    }
+	  /* Fall through.  */
+
 	case DW_AT_location:
 	case DW_AT_data_location:
 	case DW_AT_data_member_location:
@@ -5301,17 +5399,14 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	case DW_AT_upper_bound:
 	  print_ops (cbargs->dwflmod, cbargs->dbg,
 		     12 + level * 2, 12 + level * 2,
-		     cbargs->addrsize, block.length, block.data);
-	  break;
-
-	default:
-	  print_block (block.length, block.data);
+		     cbargs->addrsize, cbargs->offset_size,
+		     block.length, block.data);
 	  break;
 	}
       break;
 
     default:
-      printf ("           %*s%-20s [form: %d] ???\n",
+      printf ("           %*s%-20s (form: %#x) ???\n",
 	      (int) (level * 2), "", dwarf_attr_string (attr),
 	      (int) form);
       break;
@@ -5320,17 +5415,19 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
   return DWARF_CB_OK;
 }
 
-
 static void
-print_debug_info_section (Dwfl_Module *dwflmod,
-			  Ebl *ebl __attribute__ ((unused)),
-			  GElf_Ehdr *ehdr __attribute__ ((unused)),
-			  Elf_Scn *scn,
-			  GElf_Shdr *shdr, Dwarf *dbg)
+print_debug_units (Dwfl_Module *dwflmod,
+		   Ebl *ebl __attribute__ ((unused)),
+		   GElf_Ehdr *ehdr __attribute__ ((unused)),
+		   Elf_Scn *scn,
+		   GElf_Shdr *shdr, Dwarf *dbg,
+		   bool debug_types)
 {
+  const char *secname = debug_types ? ".debug_types" : ".debug_info";
+
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n [Offset]\n"),
-	  elf_ndxscn (scn), ".debug_info", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), secname, (uint64_t) shdr->sh_offset);
 
   /* If the section is empty we don't have to do anything.  */
   if (shdr->sh_size == 0)
@@ -5343,37 +5440,55 @@ print_debug_info_section (Dwfl_Module *dwflmod,
 
   /* New compilation unit.  */
   size_t cuhl;
-  //Dwarf_Half version;
+  Dwarf_Half version;
   Dwarf_Off abbroffset;
   uint8_t addrsize;
   uint8_t offsize;
   Dwarf_Off nextcu;
+  uint64_t typesig;
+  Dwarf_Off typeoff;
  next_cu:
-  if (dwarf_nextcu (dbg, offset, &nextcu, &cuhl, &abbroffset, &addrsize,
-		    &offsize) != 0)
+  if (dwarf_next_unit (dbg, offset, &nextcu, &cuhl, &version,
+		       &abbroffset, &addrsize, &offsize,
+		       debug_types ? &typesig : NULL,
+		       debug_types ? &typeoff : NULL) != 0)
     goto do_return;
 
-  printf (gettext (" Compilation unit at offset %" PRIu64 ":\n"
-		   " Version: %" PRIu16 ", Abbreviation section offset: %"
-		   PRIu64 ", Address size: %" PRIu8 ", Offset size: %" PRIu8 "\n"),
-	  (uint64_t) offset, /*version*/2, abbroffset, addrsize, offsize);
+  if (debug_types)
+    printf (gettext (" Type unit at offset %" PRIu64 ":\n"
+		     " Version: %" PRIu16 ", Abbreviation section offset: %"
+		     PRIu64 ", Address size: %" PRIu8 ", Offset size: %" PRIu8
+		     "\n Type signature: %#" PRIx64
+		     ", Type offset: %#" PRIx64 "\n"),
+	    (uint64_t) offset, version, abbroffset, addrsize, offsize,
+	    typesig, (uint64_t) typeoff);
+  else
+    printf (gettext (" Compilation unit at offset %" PRIu64 ":\n"
+		     " Version: %" PRIu16 ", Abbreviation section offset: %"
+		     PRIu64 ", Address size: %" PRIu8 ", Offset size: %" PRIu8
+		     "\n"),
+	    (uint64_t) offset, version, abbroffset, addrsize, offsize);
 
 
-  struct attrcb_args args;
-  args.dwflmod = dwflmod;
-  args.dbg = dbg;
-  args.addrsize = addrsize;
-  args.cu_offset = offset;
+  struct attrcb_args args =
+    {
+      .dwflmod = dwflmod,
+      .dbg = dbg,
+      .addrsize = addrsize,
+      .offset_size = offsize,
+      .cu_offset = offset
+    };
 
   offset += cuhl;
 
   int level = 0;
 
-  if (unlikely (dwarf_offdie (dbg, offset, &dies[level]) == NULL))
+  if (unlikely ((debug_types ? dwarf_offdie_types : dwarf_offdie)
+		(dbg, offset, &dies[level]) == NULL))
     {
       error (0, 0, gettext ("cannot get DIE at offset %" PRIu64
 			    " in section '%s': %s"),
-	     (uint64_t) offset, ".debug_info", dwarf_errmsg (-1));
+	     (uint64_t) offset, secname, dwarf_errmsg (-1));
       goto do_return;
     }
 
@@ -5392,7 +5507,7 @@ print_debug_info_section (Dwfl_Module *dwflmod,
 	{
 	  error (0, 0, gettext ("cannot get tag of DIE at offset %" PRIu64
 				" in section '%s': %s"),
-		 (uint64_t) offset, ".debug_info", dwarf_errmsg (-1));
+		 (uint64_t) offset, secname, dwarf_errmsg (-1));
 	  goto do_return;
 	}
 
@@ -5441,6 +5556,20 @@ print_debug_info_section (Dwfl_Module *dwflmod,
 
  do_return:
   free (dies);
+}
+
+static void
+print_debug_info_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
+			  Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
+{
+  print_debug_units (dwflmod, ebl, ehdr, scn, shdr, dbg, false);
+}
+
+static void
+print_debug_types_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
+			   Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
+{
+  print_debug_units (dwflmod, ebl, ehdr, scn, shdr, dbg, true);
 }
 
 
@@ -5511,7 +5640,10 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
       /* Next the minimum instruction length.  */
       uint_fast8_t minimum_instr_len = *linep++;
 
-        /* Then the flag determining the default value of the is_stmt
+      /* Next the maximum operations per instruction, in version 4 format.  */
+      uint_fast8_t max_ops_per_instr = version < 4 ? 1 : *linep++;
+
+	/* Then the flag determining the default value of the is_stmt
 	   register.  */
       uint_fast8_t default_is_stmt = *linep++;
 
@@ -5531,6 +5663,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 		       " DWARF version:              %" PRIuFAST16 "\n"
 		       " Prologue length:            %" PRIu64 "\n"
 		       " Minimum instruction length: %" PRIuFAST8 "\n"
+		       " Maximum operations per instruction: %" PRIuFAST8 "\n"
 		       " Initial value if '%s': %" PRIuFAST8 "\n"
 		       " Line base:                  %" PRIdFAST8 "\n"
 		       " Line range:                 %" PRIuFAST8 "\n"
@@ -5538,7 +5671,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 		       "\n"
 		       "Opcodes:\n"),
 	      (uint64_t) unit_length, version, (uint64_t) header_length,
-	      minimum_instr_len, "is_stmt", default_is_stmt, line_base,
+	      minimum_instr_len, max_ops_per_instr,
+	      "is_stmt", default_is_stmt, line_base,
 	      line_range, opcode_base);
 
       if (unlikely (linep + opcode_base - 1 >= lineendp))
@@ -5615,6 +5749,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 
       puts (gettext ("\nLine number statements:"));
       Dwarf_Word address = 0;
+      unsigned int op_index = 0;
       size_t line = 1;
       uint_fast8_t is_stmt = default_is_stmt;
 
@@ -5646,6 +5781,20 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 	    }
 	}
 
+      /* Apply the "operation advance" from a special opcode
+	 or DW_LNS_advance_pc (as per DWARF4 6.2.5.1).  */
+      unsigned int op_addr_advance;
+      bool show_op_index;
+      inline void advance_pc (unsigned int op_advance)
+      {
+	op_addr_advance = minimum_instr_len * ((op_index + op_advance)
+					       / max_ops_per_instr);
+	address += op_advance;
+	show_op_index = (op_index > 0 ||
+			 (op_index + op_advance) % max_ops_per_instr > 0);
+	op_index = (op_index + op_advance) % max_ops_per_instr;
+      }
+
       while (linep < lineendp)
 	{
 	  unsigned int u128;
@@ -5661,22 +5810,25 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 		 is computed with
 
 		 opcode = (desired line increment - line_base)
-		           + (line_range * address advance) + opcode_base
+			   + (line_range * address advance) + opcode_base
 	      */
 	      int line_increment = (line_base
 				    + (opcode - opcode_base) % line_range);
-	      unsigned int address_increment = (minimum_instr_len
-						* ((opcode - opcode_base)
-						   / line_range));
 
 	      /* Perform the increments.  */
 	      line += line_increment;
-	      address += address_increment;
+	      advance_pc ((opcode - opcode_base) / line_range);
 
 	      char *a = format_dwarf_addr (dwflmod, 0, address);
-	      printf (gettext ("\
+	      if (show_op_index)
+		printf (gettext ("\
+ special opcode %u: address+%u = %s, op_index = %u, line%+d = %zu\n"),
+			opcode, op_addr_advance, a, op_index,
+			line_increment, line);
+	      else
+		printf (gettext ("\
  special opcode %u: address+%u = %s, line%+d = %zu\n"),
-		      opcode, address_increment, a, line_increment, line);
+			opcode, op_addr_advance, a, line_increment, line);
 	      free (a);
 	    }
 	  else if (opcode == 0)
@@ -5703,11 +5855,13 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 
 		  /* Reset the registers we care about.  */
 		  address = 0;
+		  op_index = 0;
 		  line = 1;
 		  is_stmt = default_is_stmt;
 		  break;
 
 		case DW_LNE_set_address:
+		  op_index = 0;
 		  if (address_size == 4)
 		    address = read_4ubyte_unaligned_inc (dbg, linep);
 		  else
@@ -5742,6 +5896,15 @@ define new file: dir=%u, mtime=%" PRIu64 ", length=%" PRIu64 ", name=%s\n"),
 		  }
 		  break;
 
+		case DW_LNE_set_discriminator:
+		  /* Takes one ULEB128 parameter, the discriminator.  */
+		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		    goto invalid_unit;
+
+		  get_uleb128 (u128, linep);
+		  printf (gettext (" set discriminator to %u\n"), u128);
+		  break;
+
 		default:
 		  /* Unknown, ignore it.  */
 		  puts (gettext ("unknown opcode"));
@@ -5749,7 +5912,7 @@ define new file: dir=%u, mtime=%" PRIu64 ", length=%" PRIu64 ", name=%s\n"),
 		  break;
 		}
 	    }
-	  else if (opcode <= DW_LNS_set_epilogue_begin)
+	  else if (opcode <= DW_LNS_set_isa)
 	    {
 	      /* This is a known standard opcode.  */
 	      switch (opcode)
@@ -5763,11 +5926,16 @@ define new file: dir=%u, mtime=%" PRIu64 ", length=%" PRIu64 ", name=%s\n"),
 		  /* Takes one uleb128 parameter which is added to the
 		     address.  */
 		  get_uleb128 (u128, linep);
-		  address += minimum_instr_len * u128;
+		  advance_pc (u128);
 		  {
 		    char *a = format_dwarf_addr (dwflmod, 0, address);
-		    printf (gettext ("advance address by %u to %s\n"),
-			    u128, a);
+		    if (show_op_index)
+		      printf (gettext ("\
+advance address by %u to %s, op_index to %u\n"),
+			      op_addr_advance, a, op_index);
+		    else
+		      printf (gettext ("advance address by %u to %s\n"),
+			      op_addr_advance, a);
 		    free (a);
 		  }
 		  break;
@@ -5813,13 +5981,17 @@ define new file: dir=%u, mtime=%" PRIu64 ", length=%" PRIu64 ", name=%s\n"),
 
 		case DW_LNS_const_add_pc:
 		  /* Takes no argument.  */
-		  u128 = (minimum_instr_len
-			  * ((255 - opcode_base) / line_range));
-		  address += u128;
+		  advance_pc ((255 - opcode_base) / line_range);
 		  {
 		    char *a = format_dwarf_addr (dwflmod, 0, address);
-		    printf (gettext ("advance address by constant %u to %s\n"),
-			    u128, a);
+		    if (show_op_index)
+		      printf (gettext ("\
+advance address by constant %u to %s, op_index to %u\n"),
+			      op_addr_advance, a, op_index);
+		    else
+		      printf (gettext ("\
+advance address by constant %u to %s\n"),
+			      op_addr_advance, a);
 		    free (a);
 		  }
 		  break;
@@ -5832,6 +6004,7 @@ define new file: dir=%u, mtime=%" PRIu64 ", length=%" PRIu64 ", name=%s\n"),
 
 		  u128 = read_2ubyte_unaligned_inc (dbg, linep);
 		  address += u128;
+		  op_index = 0;
 		  {
 		    char *a = format_dwarf_addr (dwflmod, 0, address);
 		    printf (gettext ("\
@@ -5849,6 +6022,15 @@ advance address by fixed value %u to %s\n"),
 		case DW_LNS_set_epilogue_begin:
 		  /* Takes no argument.  */
 		  puts (gettext (" set epilogue begin flag"));
+		  break;
+
+		case DW_LNS_set_isa:
+		  /* Takes one uleb128 parameter which is stored in isa.  */
+		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		    goto invalid_unit;
+
+		  get_uleb128 (u128, linep);
+		  printf (gettext (" set isa to %u\n"), u128);
 		  break;
 		}
 	    }
@@ -5899,6 +6081,10 @@ print_debug_loc_section (Dwfl_Module *dwflmod,
 	  elf_ndxscn (scn), ".debug_loc", (uint64_t) shdr->sh_offset);
 
   size_t address_size = ehdr->e_ident[EI_CLASS] == ELFCLASS32 ? 4 : 8;
+
+  /* XXX This is wrong!  We can only know the right size given the CU that
+     points to this location list.  */
+  size_t offset_size = 4;
 
   bool first = true;
   unsigned char *readp = data->d_buf;
@@ -5952,7 +6138,7 @@ print_debug_loc_section (Dwfl_Module *dwflmod,
 	  free (e);
 
 	  print_ops (dwflmod, dbg, 1, 18 + (address_size * 4),
-		     address_size, len, readp);
+		     address_size, offset_size, len, readp);
 
 	  first = false;
 	  readp += len;
@@ -6069,9 +6255,9 @@ print_debug_macinfo_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 	case DW_MACINFO_undef:
 	case DW_MACINFO_vendor_ext:
 	  /*  For the first two opcodes the parameters are
-	        line, string
+		line, string
 	      For the latter
-	        number, string.
+		number, string.
 	      We can treat these cases together.  */
 	  get_uleb128 (u128, readp);
 
@@ -6478,12 +6664,15 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
   /* Before we start the real work get a debug context descriptor.  */
   Dwarf_Addr dwbias;
   Dwarf *dbg = dwfl_module_getdwarf (dwflmod, &dwbias);
+  Dwarf dummy_dbg = { .other_byte_order = MY_ELFDATA != ehdr->e_ident[EI_DATA] };
   if (dbg == NULL)
     {
-      if (print_debug_sections != 0)
+      if ((print_debug_sections & ~section_exception) != 0)
 	error (0, 0, gettext ("cannot get debug context descriptor: %s"),
 	       dwfl_errmsg (-1));
-      return;
+      if ((print_debug_sections & section_exception) == 0)
+	return;
+      dbg = &dummy_dbg;
     }
 
   /* Get the section header string table index.  */
@@ -6515,6 +6704,7 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 	      NEW_SECTION (aranges),
 	      NEW_SECTION (frame),
 	      NEW_SECTION (info),
+	      NEW_SECTION (types),
 	      NEW_SECTION (line),
 	      NEW_SECTION (loc),
 	      NEW_SECTION (pubnames),

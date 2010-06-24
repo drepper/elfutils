@@ -247,6 +247,8 @@ typedef union
   Dwarf_FDE fde;
 } Dwarf_CFI_Entry;
 
+#define dwarf_cfi_cie_p(entry)	((entry)->cie.CIE_id == DW_CIE_ID_64)
+
 /* Opaque type representing a frame state described by CFI.  */
 typedef struct Dwarf_Frame_s Dwarf_Frame;
 
@@ -286,10 +288,20 @@ extern int dwarf_end (Dwarf *dwarf);
 /* Get the data block for the .debug_info section.  */
 extern Elf_Data *dwarf_getscn_info (Dwarf *dwarf);
 
-/* Read the header for the DWARF CU header.  */
+/* Read the header for the DWARF CU.  */
 extern int dwarf_nextcu (Dwarf *dwarf, Dwarf_Off off, Dwarf_Off *next_off,
 			 size_t *header_sizep, Dwarf_Off *abbrev_offsetp,
 			 uint8_t *address_sizep, uint8_t *offset_sizep)
+     __nonnull_attribute__ (3);
+
+/* Read the header of a DWARF CU or type unit.  If TYPE_SIGNATUREP is not
+   null, this reads a type unit from the .debug_types section; otherwise
+   this reads a CU from the .debug_info section.  */
+extern int dwarf_next_unit (Dwarf *dwarf, Dwarf_Off off, Dwarf_Off *next_off,
+			    size_t *header_sizep, Dwarf_Half *versionp,
+			    Dwarf_Off *abbrev_offsetp,
+			    uint8_t *address_sizep, uint8_t *offset_sizep,
+			    uint64_t *type_signaturep, Dwarf_Off *type_offsetp)
      __nonnull_attribute__ (3);
 
 
@@ -334,9 +346,14 @@ extern Dwarf_CFI *dwarf_getcfi_elf (Elf *elf);
 extern int dwarf_cfi_end (Dwarf_CFI *cache);
 
 
-/* Return DIE at given offset.  */
+/* Return DIE at given offset in .debug_types section.  */
 extern Dwarf_Die *dwarf_offdie (Dwarf *dbg, Dwarf_Off offset,
 				Dwarf_Die *result) __nonnull_attribute__ (3);
+
+/* Return DIE at given offset in .debug_types section.  */
+extern Dwarf_Die *dwarf_offdie_types (Dwarf *dbg, Dwarf_Off offset,
+				      Dwarf_Die *result)
+     __nonnull_attribute__ (3);
 
 /* Return offset of DIE.  */
 extern Dwarf_Off dwarf_dieoffset (Dwarf_Die *die);
@@ -561,6 +578,9 @@ extern int dwarf_getsrc_file (Dwarf *dbg, const char *fname, int line, int col,
 /* Return line address.  */
 extern int dwarf_lineaddr (Dwarf_Line *line, Dwarf_Addr *addrp);
 
+/* Return line VLIW operation index.  */
+extern int dwarf_lineop_index (Dwarf_Line *line, unsigned int *op_indexp);
+
 /* Return line number.  */
 extern int dwarf_lineno (Dwarf_Line *line, int *linep)
      __nonnull_attribute__ (2);
@@ -587,6 +607,14 @@ extern int dwarf_lineprologueend (Dwarf_Line *line, bool *flagp)
 
 /* Return true if record is for beginning of epilogue.  */
 extern int dwarf_lineepiloguebegin (Dwarf_Line *line, bool *flagp)
+     __nonnull_attribute__ (2);
+
+/* Return instruction-set architecture in this record.  */
+extern int dwarf_lineisa (Dwarf_Line *line, unsigned int *isap)
+     __nonnull_attribute__ (2);
+
+/* Return code path discriminator in this record.  */
+extern int dwarf_linediscriminator (Dwarf_Line *line, unsigned int *discp)
      __nonnull_attribute__ (2);
 
 

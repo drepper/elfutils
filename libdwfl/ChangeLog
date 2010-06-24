@@ -1,3 +1,61 @@
+2010-06-16  Roland McGrath  <roland@redhat.com>
+
+	* cu.c (cudie_offset): Use DIE_OFFSET_FROM_CU_OFFSET macro.
+
+2010-06-14  Roland McGrath  <roland@redhat.com>
+
+	* find-debuginfo.c (try_open): Take new arg MAIN_STAT.  Compare
+	candidate file to that st_dev/st_ino and pretend it didn't exist
+	if they match.
+	(find_debuginfo_in_path): Update caller, pass main file's info.
+
+2010-05-20  Roland McGrath  <roland@redhat.com>
+
+	* linux-proc-maps.c (find_sysinfo_ehdr): Renamed to ...
+	(grovel_auxv): ... this.  Take DWFL argument.
+	(dwfl_linux_proc_report): Update caller.
+
+	* dwfl_module_getdwarf.c (open_elf): Calculate alignment for bias
+	based on dwfl->segment_align or manifest alignment of MOD->low_addr.
+
+2010-05-19  Roland McGrath  <roland@redhat.com>
+
+	* linux-kernel-modules.c (intuit_kernel_bounds): Rewritten.
+
+2010-05-06  Roland McGrath  <roland@redhat.com>
+
+	* segment.c (insert): Clear inserted elements of DWFL->lookup_module.
+
+	* libdwflP.h (DWFL_ERRORS): Add WRONG_ID_ELF.
+	* dwfl_build_id_find_elf.c: Set MOD->main.valid when there is a build
+	ID but we didn't find a file.
+	* dwfl_module_getdwarf.c (__libdwfl_getelf): When that's set, check
+	and refuse any fallback file-by-name if it lacks the matching ID.
+
+	* dwfl_error.c (dwfl_errno): Add INTDEF.
+	* libdwflP.h: Add INTDECL.
+
+	* dwfl_module_getdwarf.c (open_elf): Do elf_end and clear FILE->elf in
+	failure cases.
+
+2010-05-04  Roland McGrath  <roland@redhat.com>
+
+	* dwfl_segment_report_module.c: Use "[pie]" rather than "[dso]" for an
+	ET_DYN that has a DT_DEBUG.
+
+	* dwfl_segment_report_module.c: Fix jump-start of NDX-finding loop.
+
+	* segment.c (insert): Fix moving of values following insertion.
+	(reify_segments): Fix up MOD->segment backpointer indices after
+	later insertions in the main loop invalidate them.
+
+	* link_map.c (dwfl_link_map_report): Detect bias of embedded phdrs and
+	apply it to PT_DYNAMIC p_vaddr so we handle a PIE correctly.
+
+	* core-file.c (dwfl_core_file_report): Return any nonzero count of
+	modules reported, even if link_map grovelling failed and only sniffing
+	found anything.
+
 2010-04-26  Roland McGrath  <roland@redhat.com>
 
 	* relocate.c (relocate_section): Treat R_*_NONE reloc as no reloc.

@@ -1,3 +1,197 @@
+2010-06-23  Roland McGrath  <roland@redhat.com>
+
+	* cfi.c (dwarf_cfi_validate_fde): Function removed.
+	* libdw.h: Remove it.
+	* libdw.map: Likewise.
+
+2010-06-22  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c (check_constant_offset): data[48] are constant.
+
+	* dwarf_getsrclines.c: Fix signed comparison warning in extended
+	opcode parsing.
+
+2010-06-21  Roland McGrath  <roland@redhat.com>
+
+	* dwarf.h: Add DW_TAG_GNU_* constants.
+
+	* memory-access.h (get_sleb128_rest_return): Fix sign extension for
+	10-byte case.
+
+2010-06-20  Roland McGrath  <roland@redhat.com>
+
+	* libdw_findcu.c (__libdw_findcu): Take new flag argument,
+	to search TUs instead of CUs.
+	* libdwP.h: Update decl.
+	(struct Dwarf): New member tu_tree.
+	* dwarf_end.c (dwarf_end): Clean up tu_tree.
+	* dwarf_offdie.c (do_offdie): New function, broken out of ...
+	(dwarf_offdie): ... here.
+	(dwarf_offdie_types): New function.
+	* libdw.h: Declare it.
+	* libdw.map (ELFUTILS_0.148): Add it.
+
+	* libdwP.h (CUDIE): Use cu_data.
+	* dwarf_formblock.c: Likewise.
+	* dwarf_formref_die.c: Likewise.
+	* dwarf_diecu.c: Use CUDIE macro.
+	* dwarf_formaddr.c: Use cu_sec_idx.
+
+2010-06-16  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_formref_die.c: Use dwarf_offdie only for DW_FORM_ref_addr, so
+	we don't repeat a CU lookup we've already done.  Handle
+	DW_FORM_ref_sig8 using sig8_hash table and __libdw_intern_next_unit.
+
+	* libdw_findcu.c (__libdw_intern_next_unit): New function,
+	broken out of ...
+	(__libdw_findcu): ... here.  Call it.
+	* libdwP.h: Declare it.
+	(struct Dwarf): New member next_tu_offset.
+
+	* dwarf_sig8_hash.c: New file.
+	* dwarf_sig8_hash.h: New file.
+	* Makefile.am (libdw_a_SOURCES, noinst_HEADERS): Add them.
+	* dwarf_abbrev_hash.c: Include dwarf_sig8_hash.h before
+	defining NO_UNDEF.
+	* libdwP.h (struct Dwarf): New member sig8_hash.
+	* dwarf_begin_elf.c: Call Dwarf_Sig8_Hash_init on it.
+	* dwarf_end.c: Call Dwarf_Sig8_Hash_free on it.
+
+	* dwarf_nextcu.c (dwarf_next_unit): New function, broken out of ...
+	(dwarf_nextcu): ... here.  Call it.
+	* libdw.h: Declare it.
+	* libdwP.h: Add INTDECL.
+	* libdw_findcu.c (__libdw_findcu): Use it instead of dwarf_nextcu.
+	* libdw.map (ELFUTILS_0.148): New set, add dwarf_next_unit.
+
+	* libdwP.h (cu_sec_idx, cu_data): New functions.
+	Use .debug_types when CU is a TU.
+	* dwarf_cuoffset.c: Use that instead of assuming IDX_debug_info.
+	* dwarf_siblingof.c: Likewise.
+	* dwarf_formstring.c: Likewise.
+	* dwarf_formudata.c (__libdw_formptr, dwarf_formudata): Likewise.
+	* dwarf_getlocation.c (dwarf_getlocation): Likewise.
+	(dwarf_getlocation_addr): Likewise.
+
+	* libdwP.h (struct Dwarf_CU): Add new members type_offset, type_sig8.
+	(DIE_OFFSET_FROM_CU_OFFSET): Take flag argument; if true, compute
+	.debug_types header size instead of .debug_info header size.
+	(CUDIE): Use it.
+	* dwarf_diecu.c: Update caller.
+	* dwarf_getaranges.c: Likewise.
+	* dwarf_nextcu.c: Likewise.
+	* libdw_findcu.c (__libdw_findcu): Initialize new members.
+
+	* fde.c (fde_by_offset): Renamed to ...
+	(__libdw_fde_by_offset): ... this, made global and internal_function.
+	Don't take ADDRESS argument.
+	(__libdw_find_fde): Update caller.  Do address sanity check here.
+	* cfi.h: Declare __libdw_fde_by_offset.
+	* cfi.c (dwarf_cfi_validate_fde): New function.
+	* libdw.h: Declare it.
+	* libdw.map (ELFUTILS_0.148): Add it.
+
+	* cie.c (intern_new_cie): Canonicalize DW_EH_PE_absptr FDE encoding to
+	either DW_EH_PE_udata8 or DW_EH_PE_udata4.
+
+	* encoded-value.h (read_encoded_value): Handle DW_EH_PE_indirect.
+	Don't assume DW_EH_PE_aligned refers to native address size.
+
+	* cfi.c (execute_cfi): Barf on CIE initial instructions changing the
+	address.
+
+2010-06-17  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf_Line_s): Add members isa, discriminator, and
+	op_index.
+	* dwarf_getsrclines.c (dwarf_getsrclines): Move NEW_FILE macro guts
+	into an inner inline function.  Set new fields.  Check all fields for
+	overflow when setting.
+	* dwarf_lineisa.c: New file.
+	* dwarf_linediscriminator.c: New file.
+	* dwarf_lineop_index.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add them.
+	* libdw.map (ELFUTILS_0.148): Add them.
+	* libdw.h: Declare them.
+
+2010-06-16  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_next_cfi.c: Fix version 4 return_address_register decoding.
+
+	* fde.c (fde_by_offset): Renamed to ...
+	(__libdw_fde_by_offset): ... this, made global and internal_function.
+	Don't take ADDRESS argument.
+	(__libdw_find_fde): Update caller.  Do address sanity check here.
+	* cfi.h: Declare __libdw_fde_by_offset.
+	* cfi.c (dwarf_cfi_validate_fde): New function.
+	* libdw.h: Declare it.
+	* libdw.map (ELFUTILS_0.148): Add it.
+
+	* cie.c (intern_new_cie): Canonicalize DW_EH_PE_absptr FDE encoding to
+	either DW_EH_PE_udata8 or DW_EH_PE_udata4.
+
+	* encoded-value.h (read_encoded_value): Handle DW_EH_PE_indirect.
+	Don't assume DW_EH_PE_aligned refers to native address size.
+
+	* cfi.c (execute_cfi): Barf on CIE initial instructions changing the
+	address.
+
+2010-06-15  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_formref.c (__libdw_formref): Diagnose DW_FORM_ref_sig8 like
+	DW_FORM_ref_addr.
+	* dwarf_formref_die.c (dwarf_formref_die): Diagnose it the same way
+	here, since we don't support it yet.
+
+	* dwarf_next_cfi.c: Handle version 4 format.
+
+	* dwarf_getsrclines.c: Handle version 4 format.
+
+2010-06-01  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h: Remove unused IDX_debug_*names, add IDX_debug_types.
+	* dwarf_begin_elf.c (dwarf_scnnames): Likewise.
+
+	* libdwP.h (CIE_VERSION): Remove unused macro.
+
+	* dwarf_getsrclines.c: Fix version field test.
+	* libdwP.h (DWARF_VERSION): Remove useless macro.
+
+	* dwarf_formudata.c (__libdw_formptr): Fix DW_FORM_sec_offset handling.
+
+	* dwarf_formblock.c (dwarf_formblock): Handle DW_FORM_exprloc.
+
+	* libdw_findcu.c (__libdw_findcu): Accept version 4.
+
+2010-05-31  Mark Wielaard  <mjw@redhat.com>
+
+	* cfi.h (dwarf_cfi_cie_p): Move definition from here, to ..
+	* libdw.h (dwarf_cfi_cie_p): ... here.
+
+2010-05-31  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Fix DW_LANG_Python constant.
+
+2010-05-28  Eduardo Santiago  <santiago@redhat.com>
+
+	* dwarf_getlocation.c (dwarf_getlocation): Do attr_ok check first
+	thing.
+
+2010-05-27  Roland McGrath  <roland@redhat.com>
+
+	* dwarf.h: Add DW_AT_enum_class, DW_AT_linkage_name,
+	DW_TAG_template_alias, DW_LANG_Python, DW_LNE_set_discriminator.
+
+2010-05-08  Roland McGrath  <roland@redhat.com>
+
+	* dwarf_getlocation.c (__libdw_intern_expression): Take new argument
+	REF_SIZE.  Use that to handle DW_OP_call_ref correctly.
+	(getlocation): Update caller.
+	* dwarf_frame_cfa.c (dwarf_frame_cfa): Likewise.
+	* dwarf_frame_register.c (dwarf_frame_register): Likewise.
+	* libdwP.h: Update decl.
+
 2010-04-26  Roland McGrath  <roland@redhat.com>
 
 	* cfi.h (struct Dwarf_Frame_s): Add cfa_invalid alternative in cfa_rule.
@@ -1324,4 +1518,4 @@
 
 2003-08-11  Ulrich Drepper  <drepper@redhat.com>
 
-        * Moved to CVS archive.
+	* Moved to CVS archive.

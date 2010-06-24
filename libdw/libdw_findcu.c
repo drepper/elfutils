@@ -1,5 +1,5 @@
 /* Find CU for given offset.
-   Copyright (C) 2003, 2004, 2005, 2007 Red Hat, Inc.
+   Copyright (C) 2003-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2003.
 
@@ -57,6 +57,58 @@
 #include "libdwP.h"
 
 
+struct Dwarf_CU *
+internal_function
+__libdw_intern_next_unit (dbg, debug_types)
+     Dwarf *dbg;
+     bool debug_types;
+{
+  Dwarf_Off *const offsetp
+    = debug_types ? &dbg->next_tu_offset : &dbg->next_cu_offset;
+
+  Dwarf_Off oldoff = *offsetp;
+  uint16_t version;
+  uint8_t address_size;
+  uint8_t offset_size;
+  Dwarf_Off abbrev_offset;
+  uint64_t type_sig8 = 0;
+  Dwarf_Off type_offset = 0;
+
+  if (INTUSE(dwarf_next_unit) (dbg, oldoff, offsetp, NULL,
+			       &version, &abbrev_offset,
+			       &address_size, &offset_size,
+			       debug_types ? &type_sig8 : NULL,
+			       debug_types ? &type_offset : NULL) != 0)
+    /* No more entries.  */
+    return NULL;
+
+  /* We only know how to handle the DWARF version 2 through 4 formats.  */
+  if (unlikely (version < 2) || unlikely (version > 4))
+    {
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return NULL;
+    }
+
+  /* Create an entry for this CU.  */
+  struct Dwarf_CU *newp = libdw_typed_alloc (dbg, struct Dwarf_CU);
+
+  newp->dbg = dbg;
+  newp->start = oldoff;
+  newp->end = *offsetp;
+  newp->address_size = address_size;
+  newp->offset_size = offset_size;
+  newp->version = version;
+  newp->type_sig8 = type_sig8;
+  newp->type_offset = type_offset;
+  Dwarf_Abbrev_Hash_init (&newp->abbrev_hash, 41);
+  newp->orig_abbrev_offset = newp->last_abbrev_offset = abbrev_offset;
+  newp->lines = NULL;
+  newp->locs = NULL;
+
+  return newp;
+}
+
+
 static int
 findcu_cb (const void *arg1, const void *arg2)
 {
@@ -83,21 +135,24 @@ findcu_cb (const void *arg1, const void *arg2)
   return 0;
 }
 
-
 struct Dwarf_CU *
-__libdw_findcu (dbg, start)
+__libdw_findcu (dbg, start, debug_types)
      Dwarf *dbg;
      Dwarf_Off start;
+     bool debug_types;
 {
+  void **tree = debug_types ? &dbg->tu_tree : &dbg->cu_tree;
+  Dwarf_Off *next_offset
+    = debug_types ? &dbg->next_tu_offset : &dbg->next_cu_offset;
+
   /* Maybe we already know that CU.  */
   struct Dwarf_CU fake = { .start = start, .end = 0 };
-  struct Dwarf_CU **found = tfind (&fake, &dbg->cu_tree, findcu_cb);
+  struct Dwarf_CU **found = tfind (&fake, tree, findcu_cb);
   if (found != NULL)
     return *found;
 
-  if (start < dbg->next_cu_offset)
+  if (start < *next_offset)
     {
-    invalid:
       __libdw_seterrno (DWARF_E_INVALID_DWARF);
       return NULL;
     }
@@ -105,51 +160,22 @@ __libdw_findcu (dbg, start)
   /* No.  Then read more CUs.  */
   while (1)
     {
-      Dwarf_Off oldoff = dbg->next_cu_offset;
-      uint8_t address_size;
-      uint8_t offset_size;
-      Dwarf_Off abbrev_offset;
-
-      if (INTUSE(dwarf_nextcu) (dbg, oldoff, &dbg->next_cu_offset, NULL,
-				&abbrev_offset, &address_size, &offset_size)
-	  != 0)
-	/* No more entries.  */
+      Dwarf_Off oldoff = *next_offset;
+      struct Dwarf_CU *newp = __libdw_intern_next_unit (dbg, debug_types);
+      if (newp == NULL)
 	return NULL;
 
-      /* XXX We need the version number but dwarf_nextcu swallows it.  */
-      const char *bytes = (dbg->sectiondata[IDX_debug_info]->d_buf + oldoff
-			   + (2 * offset_size - 4));
-      uint16_t version = read_2ubyte_unaligned (dbg, bytes);
-
-      /* We only know how to handle the DWARF version 2 and 3 formats.  */
-      if (unlikely (version != 2) && unlikely (version != 3))
-	goto invalid;
-
-      /* Create an entry for this CU.  */
-      struct Dwarf_CU *newp = libdw_typed_alloc (dbg, struct Dwarf_CU);
-
-      newp->dbg = dbg;
-      newp->start = oldoff;
-      newp->end = dbg->next_cu_offset;
-      newp->address_size = address_size;
-      newp->offset_size = offset_size;
-      newp->version = version;
-      Dwarf_Abbrev_Hash_init (&newp->abbrev_hash, 41);
-      newp->orig_abbrev_offset = newp->last_abbrev_offset = abbrev_offset;
-      newp->lines = NULL;
-      newp->locs = NULL;
-
       /* Add the new entry to the search tree.  */
-      if (tsearch (newp, &dbg->cu_tree, findcu_cb) == NULL)
+      if (tsearch (newp, tree, findcu_cb) == NULL)
 	{
-	  /* Something went wrong.  Unfo the operation.  */
-	  dbg->next_cu_offset = oldoff;
+	  /* Something went wrong.  Undo the operation.  */
+	  *next_offset = oldoff;
 	  __libdw_seterrno (DWARF_E_NOMEM);
 	  return NULL;
 	}
 
       /* Is this the one we are looking for?  */
-      if (start < dbg->next_cu_offset)
+      if (start < *next_offset)
 	// XXX Match exact offset.
 	return newp;
     }
