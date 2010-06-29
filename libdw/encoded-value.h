@@ -50,9 +50,9 @@
 #ifndef _ENCODED_VALUE_H
 #define _ENCODED_VALUE_H 1
 
+#include "cfi.h"
 #include <dwarf.h>
 #include <stdlib.h>
-#include "libdwP.h"
 
 
 static size_t __attribute__ ((unused))

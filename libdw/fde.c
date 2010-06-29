@@ -57,34 +57,52 @@
 
 #include "encoded-value.h"
 
+struct fde_search
+{
+  struct dwarf_cie *cie;	/* Always NULL, a marker. */
+
+
+}
+
+static int
+compare_fde_1 (const struct dwarf_fde *fde, const struct fde_search *search)
+{
+  if (unlikely (search->initial_location == NULL))
+    ;
+
+  const uint8_t **p = fde->initial_location;
+  Dwarf_Addr start;
+
+  if (unlikely (read_encoded_value (cache, cie->fde_encoding & 0x0f,
+				    p, &start)))
+      ;
+
+  if (search->start < fde->start)
+    return 1;
+  if (search->start >= fde1->end)
+    return -1;
+
+  return 0;
+}
+
 static int
 compare_fde (const void *a, const void *b)
 {
   const struct dwarf_fde *fde1 = a;
   const struct dwarf_fde *fde2 = b;
 
-  /* Find out which of the two arguments is the search value.
-     It has end offset 0.  */
-  if (fde1->end == 0)
-    {
-      if (fde1->start < fde2->start)
-	return -1;
-      if (fde1->start >= fde2->end)
-	return 1;
-    }
-  else
-    {
-      if (fde2->start < fde1->start)
-	return 1;
-      if (fde2->start >= fde1->end)
-	return -1;
-    }
+  /* Find out which of the two arguments is the search value.  */
 
-  return 0;
+  if (fde1->cie == NULL)
+    return compare_fde_1 (fde2, a);
+  else if (fde2->cie == NULL)
+    return compare_fde_1 (fde1, b);
+
+
 }
 
 static struct dwarf_fde *
-intern_fde (Dwarf_CFI *cache, const Dwarf_FDE *entry)
+intern_fde (Dwarf_CFI *cache, const Dwarf_FDE *entry, Dwarf_address *start)
 {
   /* Look up the new entry's CIE.  */
   struct dwarf_cie *cie = __libdw_find_cie (cache, entry->CIE_pointer);
@@ -102,12 +120,18 @@ intern_fde (Dwarf_CFI *cache, const Dwarf_FDE *entry)
 
   fde->instructions = entry->start;
   fde->instructions_end = entry->end;
-  if (unlikely (read_encoded_value (cache, cie->fde_encoding,
-				    &fde->instructions, &fde->start))
-      || unlikely (read_encoded_value (cache, cie->fde_encoding & 0x0f,
-				       &fde->instructions, &fde->end)))
-    return NULL;
-  fde->end += fde->start;
+  fde->initial_location = fde->instructions;
+  fde->instructions += encoded_value_size (&cache->data->d, cie->address_size,
+					   cie->fde_encoding,
+					   fde->instructions);
+  if (unlikely (read_encoded_value (cache, cie->fde_encoding & 0x0f,
+				    &fde->instructions, &fde->address_range))
+      || unlikely (fde->address_range == 0))
+    {
+      free (fde);
+      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+      return NULL;
+    }
 
   fde->cie = cie;
 
@@ -130,11 +154,24 @@ intern_fde (Dwarf_CFI *cache, const Dwarf_FDE *entry)
        We've recorded the number of data bytes in FDEs.  */
     fde->instructions += cie->fde_augmentation_data_size;
 
+  int result = __libdw_relocatable (cu->dbg, sec_idx, valp, width,
+				    &symndx, addend);
+  if (unlikely (result < 0))
+    {
+      free (fde);
+      return NULL;
+    }
+  if (result == 0)
+    {
+      /* No relocation here.  */
+
+    }
+
   /* Add the new entry to the search tree.  */
   if (tsearch (fde, &cache->fde_tree, &compare_fde) == NULL)
     {
-      free (fde);
       __libdw_seterrno (DWARF_E_NOMEM);
+      free (fde);
       return NULL;
     }
 
@@ -168,17 +205,22 @@ __libdw_fde_by_offset (Dwarf_CFI *cache, Dwarf_Off offset, ptrdiff_t *nextoff)
       if (cache->next_offset == offset)
 	cache->next_offset = next_offset;
 
-      offset = next_offset;
-
       if (!dwarf_cfi_cie_p (&entry))
 	{
+	  offset = next_offset;
 	  if (nextoff != NULL)
-	    *nextoff = next_offset;
+	    *nextoff = offset;
 	  break;
 	}
 
       if (nextoff == NULL)
 	goto invalid;
+
+      /* This is a CIE, not an FDE.  We eagerly intern these
+	 because the next FDE will usually refer to this CIE.  */
+      __libdw_intern_cie (cache, offset, &entry.cie);
+
+      offset = next_offset;
     }
 
   /* We have a new FDE to consider.  */
@@ -276,15 +318,7 @@ __libdw_find_fde (Dwarf_CFI *cache, Dwarf_Addr address)
       Dwarf_Off offset = binary_search_fde (cache, address);
       if (offset == (Dwarf_Off) -1l)
 	goto no_match;
-      struct dwarf_fde *fde = __libdw_fde_by_offset (cache, offset, NULL);
-      if (unlikely (fde != NULL)
-	  /* Sanity check the address range.  */
-	  && unlikely (address < fde->start || address >= fde->end))
-	{
-	  __libdw_seterrno (DWARF_E_INVALID_DWARF);
-	  return NULL;
-	}
-      return fde;
+      return __libdw_fde_by_offset (cache, offset, NULL);
     }
 
   /* It's not there.  Read more CFI entries until we find it.  */
@@ -316,7 +350,8 @@ __libdw_find_fde (Dwarf_CFI *cache, Dwarf_Addr address)
 	}
 
       /* We have a new FDE to consider.  */
-      struct dwarf_fde *fde = intern_fde (cache, &entry.fde);
+      Dwarf_Addr start;
+      struct dwarf_fde *fde = intern_fde (cache, &entry.fde, &start);
 
       if (fde == (void *) -1l)	/* Bad FDE, but we can keep looking.  */
 	continue;
@@ -324,8 +359,10 @@ __libdw_find_fde (Dwarf_CFI *cache, Dwarf_Addr address)
       if (fde == NULL)		/* Bad data.  */
 	return NULL;
 
+      if (read_encoded_value (cache, fde->cie->fde_encoding,
+
       /* Is this the one we're looking for?  */
-      if (fde->start <= address && fde->end > address)
+      if (start <= address && address - start < fde->address_range)
 	return fde;
     }
 

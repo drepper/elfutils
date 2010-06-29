@@ -55,7 +55,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "libdwP.h"
+#include "relocate.h"
 #include "cfi.h"
 #include "encoded-value.h"
 #include <dwarf.h>
@@ -231,7 +231,8 @@ getcfi_phdr (Elf *elf, const GElf_Ehdr *ehdr)
 static Dwarf_CFI *
 getcfi_scn_eh_frame (Elf *elf, const GElf_Ehdr *ehdr,
 		     Elf_Scn *scn, GElf_Shdr *shdr,
-		     Elf_Scn *hdr_scn, GElf_Addr hdr_vaddr)
+		     Elf_Scn *hdr_scn, GElf_Addr hdr_vaddr,
+		     Elf_Scn *relscn)
 {
   Elf_Data *data = elf_rawdata (scn, NULL);
   if (data == NULL)
@@ -243,7 +244,18 @@ getcfi_scn_eh_frame (Elf *elf, const GElf_Ehdr *ehdr,
   if (cfi != NULL)
     {
       cfi->data = (Elf_Data_Scn *) data;
-      if (hdr_scn != NULL)
+      if (relscn != NULL)
+	{
+	  cfi->relocate = malloc (sizeof *cfi->relocate);
+	  if (unlikely (cfi->relocate == NULL))
+	    {
+	      free (cfi);
+	      __libdw_seterrno (DWARF_E_NOMEM);
+	      return NULL;
+	    }
+	  cfi->relocate->scn = relscn;
+	}
+      else if (hdr_scn != NULL)
 	{
 	  Elf_Data *hdr_data = elf_rawdata (hdr_scn, NULL);
 	  if (hdr_data != NULL)
@@ -303,8 +315,31 @@ getcfi_shdr (Elf *elf, const GElf_Ehdr *ehdr)
 	      hdr_vaddr = shdr->sh_addr;
 	    }
 	  else if (!strcmp (name, ".eh_frame"))
-	    return getcfi_scn_eh_frame (elf, ehdr, scn, shdr,
-					hdr_scn, hdr_vaddr);
+	    break;
+	}
+
+      if (scn != NULL)
+	{
+	  Elf_Scn *relscn = NULL;
+
+	  if (ehdr->e_type == ET_REL)
+	    {
+	      relscn = scn;
+	      for (int i = 0; i < 2; ++i)
+		while ((relscn = elf_nextscn (elf, relscn)) != NULL)
+		  {
+		    GElf_Shdr shdr_mem;
+		    GElf_Shdr *shdr = gelf_getshdr (relscn, &shdr_mem);
+		    if (shdr != NULL
+			&& (shdr->sh_type == SHT_REL
+			    || shdr->sh_type == SHT_RELA)
+			&& shdr->sh_link == elf_ndxscn (scn))
+		      break;
+		  }
+	    }
+
+	  return getcfi_scn_eh_frame (elf, ehdr, scn, shdr,
+				      hdr_scn, hdr_vaddr, relscn);
 	}
     }
 

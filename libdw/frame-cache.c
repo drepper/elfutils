@@ -1,5 +1,5 @@
 /* Frame cache handling.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -54,6 +54,7 @@
 #include "cfi.h"
 #include <search.h>
 #include <stdlib.h>
+#include <libebl.h>
 
 
 static void
@@ -84,4 +85,8 @@ __libdw_destroy_frame_cache (Dwarf_CFI *cache)
   tdestroy (cache->fde_tree, free_fde);
   tdestroy (cache->cie_tree, free_cie);
   tdestroy (cache->expr_tree, free_expr);
+
+  if (cache->dbg == NULL || cache->dbg->relocate == NULL
+      || cache->dbg->relocate->ebl != cache->ebl)
+    ebl_closebackend (cache->ebl);
 }

@@ -68,6 +68,8 @@ dwarf_getcfi (dbg)
 
       cfi->dbg = dbg;
       cfi->data = (Elf_Data_Scn *) dbg->sectiondata[IDX_debug_frame];
+      if (dbg->relocate != NULL)
+	cfi->relocate = dbg->relocate->sectionrel[IDX_debug_frame];
 
       cfi->search_table = NULL;
       cfi->search_table_vaddr = 0;

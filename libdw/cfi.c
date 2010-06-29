@@ -170,11 +170,11 @@ execute_cfi (Dwarf_CFI *cache,
 	  goto advance_loc;
 
 	case DW_CFA_set_loc:
-	  if (likely (!read_encoded_value (cache, cie->fde_encoding,
-					   &program, &loc)))
-	    break;
-	  result = INTUSE(dwarf_errno) ();
-	  goto out;
+	  loc = 0;
+	  fs->base_address = program;
+	  program += encoded_value_size (&cache->data->d, cie->address_size,
+					 cie->fde_encoding, program);
+	  break;
 
 	  /* Now all following cases affect this row, but do not touch LOC.
 	     These cases end with 'continue'.  We only get out of the
@@ -438,9 +438,14 @@ cie_cache_initial_state (Dwarf_CFI *cache, struct dwarf_cie *cie)
   /* Make sure we have a backend handle cached.  */
   if (unlikely (cache->ebl == NULL))
     {
-      cache->ebl = ebl_openbackend (cache->data->s->elf);
-      if (unlikely (cache->ebl == NULL))
-	cache->ebl = (void *) -1l;
+      if (cache->dbg != NULL && cache->dbg->relocate != NULL)
+	cache->ebl = cache->dbg->relocate->ebl;
+      if (cache->ebl == NULL)
+	{
+	  cache->ebl = ebl_openbackend (cache->data->s->elf);
+	  if (unlikely (cache->ebl == NULL))
+	    cache->ebl = (void *) -1l;
+	}
     }
 
   /* Fetch the ABI's default CFI program.  */
@@ -501,8 +506,9 @@ __libdw_frame_at_address (Dwarf_CFI *cache, struct dwarf_fde *fde,
 	return DWARF_E_NOMEM;
 
       fs->fde = fde;
-      fs->start = fde->start;
-      fs->end = fde->end;
+      fs->base_address = fde->initial_location;
+      fs->start = 0;
+      fs->end = fde->address_range;
 
       result = execute_cfi (cache, fde->cie, &fs, true,
 			    fde->instructions, fde->instructions_end, false,

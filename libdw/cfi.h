@@ -88,9 +88,10 @@ struct dwarf_fde
   struct dwarf_cie *cie;
   struct dwarf_fde *next;	/* Chain from cie->first_fde.  */
 
-  /* This FDE describes PC values in [start, end).  */
-  Dwarf_Addr start;
-  Dwarf_Addr end;
+  /* This is a pointer into the CFI data, which might be relocatable.
+     The length of the range is not allowed to be relocatable.  */
+  const uint8_t *initial_location;
+  Dwarf_Word address_range;
 
   const uint8_t *instructions;
   const uint8_t *instructions_end;
@@ -107,6 +108,9 @@ struct Dwarf_CFI_s
   /* Data of the .debug_frame or .eh_frame section.  */
   Elf_Data_Scn *data;
   const unsigned char *e_ident;	/* For EI_DATA and EI_CLASS.  */
+
+  /* Relocation hook for the data.  */
+  struct dwarf_section_reloc *relocate;
 
   Dwarf_Addr frame_vaddr;  /* DW_EH_PE_pcrel, address of frame section.  */
   Dwarf_Addr textrel;		/* DW_EH_PE_textrel base address.  */
@@ -187,7 +191,12 @@ struct dwarf_frame_register
    at a particular PC location described by an FDE.  */
 struct Dwarf_Frame_s
 {
-  /* This frame description covers PC values in [start, end).  */
+  /* This frame description covers PC values in [start, end).
+     We track these as offsets relative to the a position
+     indicated by pointer into the CFI data where there might be
+     a relocation, either at fde->initial_location, or at the
+     position of a DW_CFA_set_loc operand.  */
+  const uint8_t *base_address;
   Dwarf_Addr start;
   Dwarf_Addr end;
 
