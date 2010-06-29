@@ -1,3 +1,24 @@
+2010-06-28  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf_Lines_s): Change reloc member to int pointer.
+	* dwarf_getsrclines.c (struct linelist): Add reloc/symndx/shndx members.
+	(compare_lines): Sort by shndx before line.addr.
+	(dwarf_getsrclines): Resolve relocatable addresses to a symndx and
+	section-relative address.
+	* dwarf_line_relocatable.c: Initialize symndx instead of valp.
+	* dwarf_lineaddr.c: Use __libdw_relocate_shndx
+
+	* relocate.c (__libdw_relocatable_getsym): New function.
+	(__libdw_relocate_address, __libdw_relocate_offset): Call it.
+	(__libdw_relocate_shndx): New function.
+	* relocate.h: Declare them.
+
+	* libdw.h (Dwarf_Relocatable): Use uint8_t for sec and form members.
+	Add symndx member.
+	* dwarf_relocatable_info.c (relocatable_form): Take new arg SYMNDX.
+	If VALP is null, use SYMNDX instead of looking for a reloc.
+	(dwarf_relocatable_info): Update caller.
+
 2010-06-24  Roland McGrath  <roland@redhat.com>
 
 	* encoded-value.h (encoded_value_size): Replace E_IDENT parameter

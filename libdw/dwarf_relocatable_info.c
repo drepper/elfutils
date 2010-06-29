@@ -57,9 +57,10 @@
 
 static int
 relocatable_form (struct Dwarf_CU *cu,
-		  unsigned int sec_idx,
-		  unsigned int form,
+		  uint_fast8_t sec_idx,
+		  uint_fast8_t form,
 		  const unsigned char *valp,
+		  int symndx,
 		  Dwarf_Addr adjust,
 		  GElf_Sym *sym, const char **name,
 		  GElf_Sxword *addend, const char **secname)
@@ -109,57 +110,66 @@ relocatable_form (struct Dwarf_CU *cu,
       break;
     }
 
-  int symndx;
-  int result = __libdw_relocatable (cu->dbg, sec_idx, valp, width,
-				    &symndx, addend);
-  if (result == 0)
-    goto noreloc;
-  else if (likely (result > 0))
+  if (valp != NULL)
     {
-      struct dwarf_section_reloc *r = cu->dbg->relocate->sectionrel[sec_idx];
-      GElf_Sym sym_mem;
-      GElf_Word shndx;
-      if (sym == NULL)
-	sym = &sym_mem;
+      int result = __libdw_relocatable (cu->dbg, sec_idx, valp, width,
+					&symndx, addend);
+      if (unlikely (result < 0))
+	return result;
+      if (result == 0)
+	goto noreloc;
+    }
 
-      if (unlikely (gelf_getsymshndx (r->symdata, r->symxndxdata,
-				      symndx, sym, &shndx) == NULL))
+  struct dwarf_section_reloc *r = cu->dbg->relocate->sectionrel[sec_idx];
+  GElf_Sym sym_mem;
+  GElf_Word shndx;
+  if (sym == NULL)
+    sym = &sym_mem;
+
+  if (unlikely (gelf_getsymshndx (r->symdata, r->symxndxdata,
+				  symndx, sym, &shndx) == NULL))
+    {
+      __libdw_seterrno (DWARF_E_RELBADSYM);
+      return -1;
+    }
+
+  if (name != NULL)
+    {
+      if (sym->st_name == 0)
+	*name = NULL;
+      else if (unlikely (sym->st_name >= r->symstrdata->d_size))
 	{
 	  __libdw_seterrno (DWARF_E_RELBADSYM);
 	  return -1;
 	}
+      else
+	*name = (const char *) r->symstrdata->d_buf + sym->st_name;
+    }
 
-      if (name != NULL)
-	{
-	  if (sym->st_name == 0)
-	    *name = NULL;
-	  else if (unlikely (sym->st_name >= r->symstrdata->d_size))
-	    {
-	      __libdw_seterrno (DWARF_E_RELBADSYM);
-	      return -1;
-	    }
-	  else
-	    *name = (const char *) r->symstrdata->d_buf + sym->st_name;
-	}
-
-      if (addend != NULL)
+  if (addend != NULL)
+    {
+      if (valp == NULL)
+	/* The ADJUST value was already section-relative, so we have to
+	   remove the st_value portion of it.  */
+	*addend = adjust - sym->st_value;
+      else
 	*addend += adjust;
+    }
 
-      result = (sym->st_shndx < SHN_LORESERVE ? sym->st_shndx
+  int result = (sym->st_shndx < SHN_LORESERVE ? sym->st_shndx
 		: sym->st_shndx == SHN_XINDEX ? shndx : SHN_UNDEF);
 
-      if (secname != NULL)
-	{
-	  Elf *symelf = ((Elf_Data_Scn *) r->symdata)->s->elf;
-	  size_t shstrndx;
-	  GElf_Shdr shdr;
-	  if (result == 0
-	      || elf_getshdrstrndx (symelf, &shstrndx) < 0
-	      || gelf_getshdr (elf_getscn (symelf, result), &shdr) == NULL)
-	    *secname = NULL;
-	  else
-	    *secname = elf_strptr (symelf, shstrndx, shdr.sh_name);
-	}
+  if (secname != NULL)
+    {
+      Elf *symelf = ((Elf_Data_Scn *) r->symdata)->s->elf;
+      size_t shstrndx;
+      GElf_Shdr shdr;
+      if (result == 0
+	  || elf_getshdrstrndx (symelf, &shstrndx) < 0
+	  || gelf_getshdr (elf_getscn (symelf, result), &shdr) == NULL)
+	*secname = NULL;
+      else
+	*secname = elf_strptr (symelf, shstrndx, shdr.sh_name);
     }
 
   return result;
@@ -177,8 +187,8 @@ dwarf_relocatable_info (reloc, sym, name, addend, secname)
   if (reloc == NULL)
     return -1;
 
-  return relocatable_form (reloc->cu, reloc->sec,
-			   reloc->form, reloc->valp, reloc->adjust,
+  return relocatable_form (reloc->cu, reloc->sec, reloc->form,
+			   reloc->valp, reloc->symndx, reloc->adjust,
 			   sym, name, addend, secname);
 }
 INTDEF (dwarf_relocatable_info)

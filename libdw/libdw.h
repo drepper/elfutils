@@ -151,8 +151,9 @@ typedef struct
 /* Relocatable address representation.  */
 typedef struct
 {
-  unsigned int sec;
-  unsigned int form;
+  int symndx;
+  uint8_t sec;
+  uint8_t form;
   const unsigned char *valp;
   struct Dwarf_CU *cu;
   Dwarf_Addr adjust;

@@ -86,6 +86,17 @@ extern int __libdw_relocatable (Dwarf *dbg, int sec_index,
 				int *symndx, GElf_Sxword *addend)
   __nonnull_attribute__ (1) internal_function;
 
+extern int __libdw_relocatable_getsym (Dwarf *dbg, int sec_index,
+				       const unsigned char *datum, int width,
+				       int *symndx, GElf_Sym *sym,
+				       GElf_Word *shndx, GElf_Sxword *addend)
+  __nonnull_attribute__ (1, 3, 5, 6, 7, 8) internal_function;
+
+extern int __libdw_relocate_shndx (Dwarf *dbg,
+				   GElf_Word shndx, GElf_Sxword addend,
+				   Dwarf_Addr *val)
+  __nonnull_attribute__ (1, 4) internal_function;
+
 extern ptrdiff_t __libdw_ranges_relocatable (struct Dwarf_CU *cu,
 					     Dwarf_Attribute *attr,
 					     ptrdiff_t offset,

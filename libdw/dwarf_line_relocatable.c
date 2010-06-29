@@ -63,12 +63,14 @@ dwarf_line_relocatable (line, reloc)
   if (line == NULL)
     return -1;
 
+  const int *const linerel = line->cu->lines->reloc;
+  const size_t idx = line - line->cu->lines->info;
+
   *reloc = (Dwarf_Relocatable)
     {
       .sec = IDX_debug_line, .form = DW_FORM_addr,
       .cu = line->cu,
-      .valp = (line->cu->lines->reloc == NULL ? NULL
-	       : line->cu->lines->reloc[line - line->cu->lines->info]),
+      .symndx = linerel == NULL ? STN_UNDEF : linerel[idx * 2],
       .adjust = line->addr
     };
 

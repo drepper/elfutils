@@ -280,7 +280,9 @@ struct Dwarf_Line_s
 
 struct Dwarf_Lines_s
 {
-  const unsigned char **reloc;
+  /* If non-null, reloc[i * 2], reloc[i * 2 + 1] are symndx, shndx
+     corresponding to info[i], and info[i].addr is section-relative.  */
+  int *reloc;
   size_t nlines;
   struct Dwarf_Line_s info[0];
 };

@@ -52,11 +52,11 @@
 # include <config.h>
 #endif
 
+#include "relocate.h"
+#include <dwarf.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include "dwarf.h"
-#include "libdwP.h"
 
 
 struct filelist
@@ -68,7 +68,15 @@ struct filelist
 struct linelist
 {
   Dwarf_Line line;
-  const unsigned char *reloc;
+  union
+  {
+    const unsigned char *reloc;
+    struct
+    {
+      int symndx;
+      int shndx;
+    };
+  };
   struct linelist *next;
 };
 
@@ -77,14 +85,23 @@ struct linelist
 static int
 compare_lines (const void *a, const void *b)
 {
-  Dwarf_Line *const *p1 = a;
-  Dwarf_Line *const *p2 = b;
+  struct linelist *const *p1 = a;
+  struct linelist *const *p2 = b;
 
-  if ((*p1)->addr == (*p2)->addr)
+  int result = (*p1)->shndx - (*p2)->shndx;
+  if (result != 0)
+    return result;
+
+  if ((*p1)->line.addr == (*p2)->line.addr)
     /* An end_sequence marker precedes a normal record at the same address.  */
-    return (*p2)->end_sequence - (*p1)->end_sequence;
+    return (*p2)->line.end_sequence - (*p1)->line.end_sequence;
 
-  return (*p1)->addr - (*p2)->addr;
+  if ((*p1)->line.addr > (*p2)->line.addr)
+    return 1;
+  if ((*p1)->line.addr < (*p2)->line.addr)
+    return -1;
+
+  return 0;
 }
 
 int
@@ -726,8 +743,69 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	 ascending addresses.  So fill from the back to probably start with
 	 runs already in order before we sort.  */
       unsigned int i = nlinelist;
+      addr_reloc = NULL;
+      int reloc_symndx = STN_UNDEF;
+      int reloc_shndx = 0;
+      GElf_Sxword reloc_value = 0;
       while (i-- > 0)
 	{
+	  if (linelist->reloc == NULL)
+	    {
+	      assert (linelist->symndx == STN_UNDEF);
+	      assert (linelist->shndx == 0);
+	    }
+	  else
+	    {
+	      /* A relocatable address in line information must be
+		 a defined symbol.  So we can reduce it immediately
+		 to a section index.  */
+
+	      if (linelist->reloc != addr_reloc)
+		{
+		  addr_reloc = linelist->reloc;
+
+		  GElf_Sym sym;
+		  GElf_Word shndx;
+		  int result = __libdw_relocatable_getsym (cu->dbg,
+							   IDX_debug_line,
+							   addr_reloc,
+							   cu->address_size,
+							   &reloc_symndx,
+							   &sym, &shndx,
+							   &reloc_value);
+		  if (unlikely (result < 0))
+		    {
+		      res = -1;
+		      goto out;
+		    }
+		  if (result == 0)
+		    reloc_symndx = STN_UNDEF;
+		  if (reloc_symndx == STN_UNDEF)
+		    reloc_shndx = 0;
+		  else
+		    {
+		      reloc_value += sym.st_value;
+		      if (likely (sym.st_shndx < SHN_LORESERVE)
+			  && likely (sym.st_shndx != SHN_UNDEF))
+			reloc_shndx = sym.st_shndx;
+		      else if (sym.st_shndx == SHN_ABS)
+			reloc_shndx = 0;
+		      else if (sym.st_shndx == SHN_XINDEX)
+			reloc_shndx = shndx;
+		      else
+			{
+			  __libdw_seterrno (DWARF_E_RELOC);
+			  res = -1;
+			  goto out;
+			}
+		    }
+		}
+
+	      linelist->symndx = reloc_symndx;
+	      linelist->shndx = reloc_shndx;
+	      linelist->line.addr += reloc_value;
+	    }
+
 	  sortlines[i] = linelist;
 	  linelist = linelist->next;
 	}
@@ -746,11 +824,13 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	  && cu->dbg->relocate->sectionrel[IDX_debug_line] != NULL)
 	{
 	  /* Add a parallel table of relocation pointers.  */
-	  cu->lines->reloc = libdw_alloc (cu->dbg, const unsigned char *,
-					  sizeof (const unsigned char *),
-					  nlinelist);
+	  cu->lines->reloc = libdw_alloc (cu->dbg, int, sizeof (int),
+					  2 * nlinelist);
 	  for (i = 0; i < nlinelist; ++i)
-	    cu->lines->reloc[i] = sortlines[i]->reloc;
+	    {
+	      cu->lines->reloc[i * 2] = sortlines[i]->symndx;
+	      cu->lines->reloc[i * 2 + 1] = sortlines[i]->shndx;
+	    }
 	}
       else
 	cu->lines->reloc = NULL;

@@ -53,6 +53,7 @@
 #endif
 
 #include "libdwP.h"
+#include "relocate.h"
 
 
 int
@@ -61,22 +62,18 @@ dwarf_lineaddr (Dwarf_Line *line, Dwarf_Addr *addrp)
   if (line == NULL)
     return -1;
 
-  if (line->cu->lines->reloc == NULL
-      || line->cu->lines->reloc[line - line->cu->lines->info] == NULL)
+  const int *const reloc = line->cu->lines->reloc;
+  const size_t idx = line - line->cu->lines->info;
+
+  if (reloc == NULL || reloc[idx * 2] == STN_UNDEF)
     {
       *addrp = line->addr;
       return 0;
     }
 
-  /* We have to relocate an address and then adjust it for this line record.  */
+  /* We have already reduced this relocatable address to a section offset.
+     We just have to resolve the section address.  */
 
-  int result = __libdw_read_address
-    (line->cu->dbg, IDX_debug_line,
-     line->cu->lines->reloc[line - line->cu->lines->info],
-     line->cu->address_size, addrp);
-
-  if (result >= 0)
-    *addrp += line->addr;
-
-  return result;
+  return __libdw_relocate_shndx (line->cu->dbg,
+				 reloc[idx * 2 + 1], line->addr, addrp);
 }
