@@ -626,6 +626,11 @@ extern int dwarf_getsrcfiles (Dwarf_Die *cudie, Dwarf_Files **files,
 /* Get source for address in CU.  */
 extern Dwarf_Line *dwarf_getsrc_die (Dwarf_Die *cudie, Dwarf_Addr addr);
 
+/* Get source for relocatable address in CU.  */
+extern Dwarf_Line *dwarf_getsrc_relocatable (Dwarf_Die *cudie,
+					     Dwarf_Relocatable *reloc)
+     __nonnull_attribute__ (2);
+
 /* Get source for file and line number.  */
 extern int dwarf_getsrc_file (Dwarf *dbg, const char *fname, int line, int col,
 			      Dwarf_Line ***srcsp, size_t *nsrcs)

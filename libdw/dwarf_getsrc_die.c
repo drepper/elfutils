@@ -1,5 +1,5 @@
 /* Find line information for address.
-   Copyright (C) 2004, 2005 Red Hat, Inc.
+   Copyright (C) 2004-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -97,3 +97,4 @@ dwarf_getsrc_die (Dwarf_Die *cudie, Dwarf_Addr addr)
   __libdw_seterrno (DWARF_E_ADDR_OUTOFRANGE);
   return NULL;
 }
+INTDEF (dwarf_getsrc_die)

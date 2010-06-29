@@ -55,32 +55,33 @@
 #include <dwarf.h>
 
 
-static int
-relocatable_form (struct Dwarf_CU *cu,
-		  uint_fast8_t sec_idx,
-		  uint_fast8_t form,
-		  const unsigned char *valp,
-		  int symndx,
-		  Dwarf_Addr adjust,
-		  GElf_Sym *sym, const char **name,
-		  GElf_Sxword *addend, const char **secname)
+int
+dwarf_relocatable_info (reloc, sym, name, addend, secname)
+     Dwarf_Relocatable *reloc;
+     GElf_Sym *sym;
+     const char **name;
+     GElf_Sxword *addend;
+     const char **secname;
 {
+  if (reloc == NULL)
+    return -1;
+
   int width;
-  switch (form)
+  switch (reloc->form)
     {
     default:
       /* This can't be relocatable.  */
       if (addend != NULL)
 	{
-	  if (valp == NULL)
+	  if (reloc->valp == NULL)
 	    *addend = 0;
 	  else
 	    {
 	      Dwarf_Attribute attr =
 		{
-		  .cu = cu,
-		  .form = form,
-		  .valp = (unsigned char *) valp
+		  .cu = reloc->cu,
+		  .form = reloc->form,
+		  .valp = (unsigned char *) reloc->valp
 		};
 	      if (INTUSE(dwarf_formsdata) (&attr, addend))
 		return -1;
@@ -88,7 +89,7 @@ relocatable_form (struct Dwarf_CU *cu,
 	}
     noreloc:
       if (addend != NULL)
-	*addend += adjust;
+	*addend += reloc->adjust;
       if (sym != NULL)
 	*sym = (GElf_Sym) { .st_shndx = SHN_ABS };
       if (name != NULL)
@@ -98,7 +99,7 @@ relocatable_form (struct Dwarf_CU *cu,
       return 0;
 
     case DW_FORM_addr:
-      width = cu->address_size;
+      width = reloc->cu->address_size;
       break;
 
     case DW_FORM_data4:
@@ -110,27 +111,41 @@ relocatable_form (struct Dwarf_CU *cu,
       break;
     }
 
-  if (valp != NULL)
+  GElf_Sxword adjust = 0;
+  if (reloc->valp != NULL)
     {
-      int result = __libdw_relocatable (cu->dbg, sec_idx, valp, width,
-					&symndx, addend);
+      int result = __libdw_relocatable (reloc->cu->dbg, reloc->sec,
+					reloc->valp, width,
+					&reloc->symndx, &adjust);
       if (unlikely (result < 0))
 	return result;
       if (result == 0)
-	goto noreloc;
+	{
+	  reloc->valp = NULL;
+	  reloc->adjust += adjust;
+	  goto noreloc;
+	}
     }
 
-  struct dwarf_section_reloc *r = cu->dbg->relocate->sectionrel[sec_idx];
+  struct dwarf_section_reloc *const r
+    = reloc->cu->dbg->relocate->sectionrel[reloc->sec];
   GElf_Sym sym_mem;
   GElf_Word shndx;
   if (sym == NULL)
     sym = &sym_mem;
 
   if (unlikely (gelf_getsymshndx (r->symdata, r->symxndxdata,
-				  symndx, sym, &shndx) == NULL))
+				  reloc->symndx, sym, &shndx) == NULL))
     {
       __libdw_seterrno (DWARF_E_RELBADSYM);
       return -1;
+    }
+
+  if (reloc->valp != NULL)
+    {
+      /* Turn the adjustment into a section-relative address.  */
+      reloc->valp = NULL;
+      reloc->adjust += sym->st_value + adjust;
     }
 
   if (name != NULL)
@@ -147,14 +162,9 @@ relocatable_form (struct Dwarf_CU *cu,
     }
 
   if (addend != NULL)
-    {
-      if (valp == NULL)
-	/* The ADJUST value was already section-relative, so we have to
-	   remove the st_value portion of it.  */
-	*addend = adjust - sym->st_value;
-      else
-	*addend += adjust;
-    }
+    /* The adjustment is already section-relative, so we have to
+       remove the st_value portion of it.  */
+    *addend = reloc->adjust - sym->st_value;
 
   int result = (sym->st_shndx < SHN_LORESERVE ? sym->st_shndx
 		: sym->st_shndx == SHN_XINDEX ? shndx : SHN_UNDEF);
@@ -174,41 +184,4 @@ relocatable_form (struct Dwarf_CU *cu,
 
   return result;
 }
-
-
-int
-dwarf_relocatable_info (reloc, sym, name, addend, secname)
-     Dwarf_Relocatable *reloc;
-     GElf_Sym *sym;
-     const char **name;
-     GElf_Sxword *addend;
-     const char **secname;
-{
-  if (reloc == NULL)
-    return -1;
-
-  return relocatable_form (reloc->cu, reloc->sec, reloc->form,
-			   reloc->valp, reloc->symndx, reloc->adjust,
-			   sym, name, addend, secname);
-}
 INTDEF (dwarf_relocatable_info)
-
-#if 0
-/* Shorthand for dwarf_relocatable_info(dwarf_form_relocatable).  */
-
-int
-dwarf_form_relocatable_info (attr, sym, name, addend, secname)
-     Dwarf_Attribute *attr;
-     GElf_Sym *sym;
-     const char **name;
-     GElf_Sxword *addend;
-     const char **secname;
-{
-  if (attr == NULL)
-    return -1;
-
-  return relocatable_form (attr->cu, cu_sec_idx (attr->cu),
-			   attr->form, attr->valp, 0,
-			   sym, name, addend, secname);
-}
-#endif

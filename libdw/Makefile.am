@@ -88,7 +88,7 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  relocate.c dwarf_relocatable_info.c \
 		  dwarf_form_relocatable.c dwarf_line_relocatable.c \
 		  dwarf_ranges_relocatable.c dwarf_getlocation_relocatable.c \
-		  dwarf_haspc_relocatable.c
+		  dwarf_haspc_relocatable.c dwarf_getsrc_relocatable.c
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
