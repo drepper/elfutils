@@ -77,3 +77,4 @@ dwarf_lineaddr (Dwarf_Line *line, Dwarf_Addr *addrp)
   return __libdw_relocate_shndx (line->cu->dbg,
 				 reloc[idx * 2 + 1], line->addr, addrp);
 }
+INTDEF (dwarf_lineaddr)

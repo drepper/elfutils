@@ -298,7 +298,7 @@ static Dwfl_Error
 relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 		  size_t shstrndx, struct reloc_symtab_cache *reloc_symtab,
 		  Elf_Scn *scn, GElf_Shdr *shdr,
-		  Elf_Scn *tscn, bool debugscn, bool partial)
+		  Elf_Scn *tscn, bool check_debugscn)
 {
   /* First, fetch the name of the section these relocations apply to.  */
   GElf_Shdr tshdr_mem;
@@ -311,9 +311,9 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
     /* No contents to relocate.  */
     return DWFL_E_NOERROR;
 
-  if (debugscn && ! ebl_debugscn_p (mod->ebl, tname))
-    /* This relocation section is not for a debugging section.
-       Nothing to do here.  */
+  if (check_debugscn && ebl_debugscn_p (mod->ebl, tname))
+    /* This relocation section is for a debugging section.  We don't touch
+       these here, since libdw proper already handles them lazily.  */
     return DWFL_E_NOERROR;
 
   /* Fetch the section data that needs the relocations applied.  */
@@ -454,23 +454,22 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 			   GELF_R_TYPE (r->r_info),
 			   GELF_R_SYM (r->r_info));
 	check_badreltype ();
-	if (partial)
-	  switch (result)
-	    {
-	    case DWFL_E_NOERROR:
-	      /* We applied the relocation.  Elide it.  */
-	      memset (&rel_mem, 0, sizeof rel_mem);
-	      gelf_update_rel (reldata, relidx, &rel_mem);
-	      ++complete;
-	      break;
-	    case DWFL_E_BADRELTYPE:
-	    case DWFL_E_RELUNDEF:
-	      /* We couldn't handle this relocation.  Skip it.  */
-	      result = DWFL_E_NOERROR;
-	      break;
-	    default:
-	      break;
-	    }
+	switch (result)
+	  {
+	  case DWFL_E_NOERROR:
+	    /* We applied the relocation.  Elide it.  */
+	    memset (&rel_mem, 0, sizeof rel_mem);
+	    gelf_update_rel (reldata, relidx, &rel_mem);
+	    ++complete;
+	    break;
+	  case DWFL_E_BADRELTYPE:
+	  case DWFL_E_RELUNDEF:
+	    /* We couldn't handle this relocation.  Skip it.  */
+	    result = DWFL_E_NOERROR;
+	    break;
+	  default:
+	    break;
+	  }
       }
   else
     for (size_t relidx = 0; !result && relidx < nrels; ++relidx)
@@ -483,28 +482,27 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 			   GELF_R_TYPE (r->r_info),
 			   GELF_R_SYM (r->r_info));
 	check_badreltype ();
-	if (partial)
-	  switch (result)
-	    {
-	    case DWFL_E_NOERROR:
-	      /* We applied the relocation.  Elide it.  */
-	      memset (&rela_mem, 0, sizeof rela_mem);
-	      gelf_update_rela (reldata, relidx, &rela_mem);
-	      ++complete;
-	      break;
-	    case DWFL_E_BADRELTYPE:
-	    case DWFL_E_RELUNDEF:
-	      /* We couldn't handle this relocation.  Skip it.  */
-	      result = DWFL_E_NOERROR;
-	      break;
-	    default:
-	      break;
-	    }
+	switch (result)
+	  {
+	  case DWFL_E_NOERROR:
+	    /* We applied the relocation.  Elide it.  */
+	    memset (&rela_mem, 0, sizeof rela_mem);
+	    gelf_update_rela (reldata, relidx, &rela_mem);
+	    ++complete;
+	    break;
+	  case DWFL_E_BADRELTYPE:
+	  case DWFL_E_RELUNDEF:
+	    /* We couldn't handle this relocation.  Skip it.  */
+	    result = DWFL_E_NOERROR;
+	    break;
+	  default:
+	    break;
+	  }
       }
 
   if (likely (result == DWFL_E_NOERROR))
     {
-      if (!partial || complete == nrels)
+      if (complete == nrels)
 	/* Mark this relocation section as being empty now that we have
 	   done its work.  This affects unstrip -R, so e.g. it emits an
 	   empty .rela.debug_info along with a .debug_info that has
@@ -553,7 +551,7 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 
 Dwfl_Error
 internal_function
-__libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile, bool debug)
+__libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile)
 {
   assert (mod->e_type == ET_REL);
 
@@ -589,7 +587,7 @@ __libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile, bool debug)
 	  else
 	    result = relocate_section (mod, debugfile, ehdr, d_shstrndx,
 				       &reloc_symtab, scn, shdr, tscn,
-				       debug, !debug);
+				       true);
 	}
     }
 
@@ -599,7 +597,7 @@ __libdwfl_relocate (Dwfl_Module *mod, Elf *debugfile, bool debug)
 Dwfl_Error
 internal_function
 __libdwfl_relocate_section (Dwfl_Module *mod, Elf *relocated,
-			    Elf_Scn *relocscn, Elf_Scn *tscn, bool partial)
+			    Elf_Scn *relocscn, Elf_Scn *tscn)
 {
   GElf_Ehdr ehdr_mem;
   GElf_Shdr shdr_mem;
@@ -615,5 +613,5 @@ __libdwfl_relocate_section (Dwfl_Module *mod, Elf *relocated,
 			       gelf_getehdr (relocated, &ehdr_mem), shstrndx,
 			       &reloc_symtab,
 			       relocscn, gelf_getshdr (relocscn, &shdr_mem),
-			       tscn, false, partial));
+			       tscn, false));
 }

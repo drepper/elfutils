@@ -1,4 +1,5 @@
-/* Copyright (C) 2005 Red Hat, Inc.
+/* Test program translating source lines into addresses.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -92,7 +93,9 @@ handle_module (Dwfl_Module *mod __attribute__ ((unused)),
 	  int line = a->line, col = 0;
 	  const char *file = dwfl_lineinfo (lines[inner], &addr, &line, &col,
 					    NULL, NULL);
-	  if (file != NULL)
+	  if (file == NULL)
+	    printf ("%s => dwfl_lineinfo: %s\n", a->arg, dwfl_errmsg (-1));
+	  else
 	    {
 	      printf ("%s -> ", a->arg);
 	      print_address (mod, addr);

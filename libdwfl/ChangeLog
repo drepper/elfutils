@@ -1,3 +1,19 @@
+2010-06-29  Roland McGrath  <roland@redhat.com>
+
+	* dwfl_lineinfo.c: Use dwarf_lineaddr.
+
+	* relocate.c (relocate_section): Remove PARTIAL flag argument.
+	Reverse sense of DEBUGSCN flag: if set, skip if target section
+	is a debugging section.
+	(__libdwfl_relocate): Update caller.  Remove flag argument.
+	(__libdwfl_relocate_section): Likewise.
+	* libdwflP.h: Update decls.
+	* dwfl_module_getelf.c: Update caller.
+	* dwfl_module_getdwarf.c: Likewise.
+
+	* dwfl_module_getdwarf.c (load_dw): Don't relocate here.
+	Instead, hook into MOD->dw->relocate after dwarf_begin_elf.
+
 2010-06-21  Roland McGrath  <roland@redhat.com>
 
 	* open.c (__libdw_open_file): Close the fd when it's already mapped.

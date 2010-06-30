@@ -1,5 +1,5 @@
 /* Recover relocatibility for addresses computed from debug information.
-   Copyright (C) 2005-2009 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -396,7 +396,7 @@ dwfl_module_address_section (Dwfl_Module *mod, Dwarf_Addr *address,
       Elf_Scn *tscn = mod->reloc_info->refs[idx].scn;
       Elf_Scn *relocscn = mod->reloc_info->refs[idx].relocs;
       Dwfl_Error result = __libdwfl_relocate_section (mod, mod->main.elf,
-						      relocscn, tscn, true);
+						      relocscn, tscn);
       if (likely (result == DWFL_E_NOERROR))
 	mod->reloc_info->refs[idx].relocs = NULL;
       else

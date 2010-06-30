@@ -1,5 +1,8 @@
 2010-06-29  Roland McGrath  <roland@redhat.com>
 
+	* dwarf_lineaddr.c: Add INTDEF.
+	* libdwP.h: Add INTDECL.
+
 	* dwarf_getsrc_relocatable.c: New file.
 	* Makefile.am (libdw_a_SOURCES): Add it.
 	* libdw.h: Declare it.

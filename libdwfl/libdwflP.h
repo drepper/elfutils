@@ -251,21 +251,18 @@ extern void __libdwfl_module_free (Dwfl_Module *mod) internal_function;
 /* Find the main ELF file, update MOD->elferr and/or MOD->main.elf.  */
 extern void __libdwfl_getelf (Dwfl_Module *mod) internal_function;
 
-/* Process relocations in debugging sections in an ET_REL file.
+/* Process relocations in non-debugging sections in an ET_REL file.
    FILE must be opened with ELF_C_READ_MMAP_PRIVATE or ELF_C_READ,
    to make it possible to relocate the data in place (or ELF_C_RDWR or
    ELF_C_RDWR_MMAP if you intend to modify the Elf file on disk).  After
-   this, dwarf_begin_elf on FILE will read the relocated data.
-
-   When DEBUG is false, apply partial relocation to all sections.  */
-extern Dwfl_Error __libdwfl_relocate (Dwfl_Module *mod, Elf *file, bool debug)
+   this, libelf calls on FILE will read the relocated data.  */
+extern Dwfl_Error __libdwfl_relocate (Dwfl_Module *mod, Elf *file)
   internal_function;
 
 /* Process (simple) relocations in arbitrary section TSCN of an ET_REL file.
    RELOCSCN is SHT_REL or SHT_RELA and TSCN is its sh_info target section.  */
 extern Dwfl_Error __libdwfl_relocate_section (Dwfl_Module *mod, Elf *relocated,
-					      Elf_Scn *relocscn, Elf_Scn *tscn,
-					      bool partial)
+					      Elf_Scn *relocscn, Elf_Scn *tscn);
   internal_function;
 
 /* Adjust *VALUE from section-relative to absolute.

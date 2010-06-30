@@ -84,7 +84,8 @@ __libdw_relocate_begin (Dwarf *dbg, Elf_Scn *relscn[IDX_last], bool incomplete)
 	  GElf_Shdr *shdr;
 	  shdr = gelf_getshdr (scn, &shdr_mem);
 	  assert (shdr == &shdr_mem);
-	  if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
+	  if ((shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
+	      && shdr->sh_size != 0)
 	    for (size_t i = 0; i < IDX_last; ++i)
 	      if (relscn[i] == NULL && dbg->sectiondata[i] != NULL
 		  && (((Elf_Data_Scn * ) dbg->sectiondata[i])->s->index

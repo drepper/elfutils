@@ -58,10 +58,17 @@ dwfl_lineinfo (Dwfl_Line *line, Dwarf_Addr *addr, int *linep, int *colp,
     return NULL;
 
   struct dwfl_cu *cu = dwfl_linecu (line);
-  const Dwarf_Line *info = &cu->die.cu->lines->info[line->idx];
+  Dwarf_Line *info = &cu->die.cu->lines->info[line->idx];
 
   if (addr != NULL)
-    *addr = info->addr + cu->mod->debug.bias;
+    {
+      if (INTUSE(dwarf_lineaddr) (info, addr))
+	{
+	  __libdwfl_seterrno (DWFL_E_LIBDW);
+	  return NULL;
+	}
+      *addr += cu->mod->debug.bias;
+    }
   if (linep != NULL)
     *linep = info->line;
   if (colp != NULL)

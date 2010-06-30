@@ -669,43 +669,17 @@ __libdwfl_module_getebl (Dwfl_Module *mod)
 static Dwfl_Error
 load_dw (Dwfl_Module *mod, struct dwfl_file *debugfile)
 {
-  if (mod->e_type == ET_REL && !debugfile->relocated)
-    {
-      const Dwfl_Callbacks *const cb = mod->dwfl->callbacks;
-
-      /* The debugging sections have to be relocated.  */
-      if (cb->section_address == NULL)
-	return DWFL_E_NOREL;
-
-      Dwfl_Error error = __libdwfl_module_getebl (mod);
-      if (error != DWFL_E_NOERROR)
-	return error;
-
-      find_symtab (mod);
-      Dwfl_Error result = mod->symerr;
-      if (result == DWFL_E_NOERROR)
-	result = __libdwfl_relocate (mod, debugfile->elf, true);
-      if (result != DWFL_E_NOERROR)
-	return result;
-
-      /* Don't keep the file descriptors around.  */
-      if (mod->main.fd != -1 && elf_cntl (mod->main.elf, ELF_C_FDREAD) == 0)
-	{
-	  close (mod->main.fd);
-	  mod->main.fd = -1;
-	}
-      if (debugfile->fd != -1 && elf_cntl (debugfile->elf, ELF_C_FDREAD) == 0)
-	{
-	  close (debugfile->fd);
-	  debugfile->fd = -1;
-	}
-    }
-
   mod->dw = INTUSE(dwarf_begin_elf) (debugfile->elf, DWARF_C_READ, NULL);
   if (mod->dw == NULL)
     {
       int err = INTUSE(dwarf_errno) ();
       return err == DWARF_E_NO_DWARF ? DWFL_E_NO_DWARF : DWFL_E (LIBDW, err);
+    }
+
+  if (mod->dw->relocate != NULL)
+    {
+      assert (mod->e_type == ET_REL);
+      // mod->dw->relocate->dwflmod = mod;
     }
 
   /* Until we have iterated through all CU's, we might do lazy lookups.  */
@@ -779,7 +753,7 @@ dwfl_module_getdwarf (Dwfl_Module *mod, Dwarf_Addr *bias)
 	{
 	  mod->debug.relocated = true;
 	  if (mod->debug.elf != mod->main.elf)
-	    (void) __libdwfl_relocate (mod, mod->debug.elf, false);
+	    (void) __libdwfl_relocate (mod, mod->debug.elf);
 	}
 
       *bias = mod->debug.bias;
