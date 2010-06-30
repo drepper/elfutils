@@ -105,3 +105,11 @@ extern ptrdiff_t __libdw_ranges_relocatable (struct Dwarf_CU *cu,
 					     Dwarf_Relocatable *endp,
 					     Dwarf_Block *exprloc)
   __nonnull_attribute__ (1, 4, 5, 6) internal_function;
+
+extern void __libdwfl_relocate_setup (Dwarf *dbg, struct dwarf_section_reloc *r)
+  __nonnull_attribute__ (1, 2) internal_function;
+
+extern int __libdwfl_relocate_symbol (struct dwarf_section_reloc *r, bool undef,
+				      Dwarf *dbg, GElf_Sym *sym,
+				      GElf_Word shndx, GElf_Sxword *addend)
+  __nonnull_attribute__ (1, 3, 4) internal_function;

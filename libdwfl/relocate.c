@@ -48,6 +48,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "libdwflP.h"
+#include "../libdw/relocate.h"
 
 typedef uint8_t GElf_Byte;
 
@@ -614,4 +615,103 @@ __libdwfl_relocate_section (Dwfl_Module *mod, Elf *relocated,
 			       &reloc_symtab,
 			       relocscn, gelf_getshdr (relocscn, &shdr_mem),
 			       tscn, false));
+}
+
+int
+internal_function
+__libdw_relocate_shndx (Dwarf *dbg, GElf_Word shndx, GElf_Sxword addend,
+			Dwarf_Addr *val)
+{
+  Dwfl_Module *const mod = dbg->relocate->dwflmod;
+
+  if (unlikely (mod == NULL)
+      || unlikely (mod->dwfl->callbacks->section_address == NULL))
+    {
+      __libdw_seterrno (DWARF_E_RELOC);
+      return -1;
+    }
+
+  assert (mod->dw == dbg);
+  assert (dbg->elf == mod->debug.elf);
+
+  *val = addend;
+  switch (__libdwfl_relocate_value (mod, mod->debug.elf, &mod->debug.shstrndx,
+				    shndx, val))
+    {
+    case DWFL_E_NOERROR:
+      return 0;
+
+    case DWFL_E_LIBELF:
+      __libdw_seterrno (DWARF_E_RELBADSYM);
+      break;
+
+    default:
+      __libdw_seterrno (DWARF_E_RELUNDEF);
+      break;
+    }
+
+  return -1;
+}
+
+int
+internal_function
+__libdwfl_relocate_symbol (struct dwarf_section_reloc *r, bool undef,
+			   Dwarf *dbg, GElf_Sym *sym, GElf_Word shndx,
+			   GElf_Sxword *addend)
+{
+  if (!undef)
+    {
+      if (likely (__libdw_relocate_shndx (dbg, shndx, sym->st_value,
+					  &sym->st_value) == 0))
+	{
+	  *addend += sym->st_value;
+	  return 1;
+	}
+    }
+  else
+    {
+      Dwfl_Module *const mod = dbg->relocate->dwflmod;
+
+      if (unlikely (mod == NULL)
+	  || unlikely (mod->dwfl->callbacks->section_address == NULL))
+	{
+	  __libdw_seterrno (DWARF_E_RELOC);
+	  return -1;
+	}
+
+      assert (mod->dw == dbg);
+      assert (dbg->elf == mod->debug.elf);
+
+      assert (r->symdata != NULL);
+      assert (r->symstrdata != NULL);
+
+      Elf *symelf = ((Elf_Data_Scn *) r->symdata)->s->elf;
+      assert (symelf == mod->debug.elf || symelf == mod->main.elf);
+      struct reloc_symtab_cache symtab =
+	{
+	  .symelf = symelf,
+	  .symdata = r->symdata,
+	  .symstrdata = r->symstrdata,
+	  .symxndxdata = r->symxndxdata,
+	  .symshstrndx = (symelf == mod->main.elf ? mod->main.shstrndx
+			  : mod->debug.shstrndx),
+	};
+
+      switch (resolve_symbol (mod, &symtab, sym, shndx))
+	{
+	case DWFL_E_NOERROR:
+	  return 0;
+
+	case DWFL_E_LIBELF:
+	case DWFL_E_BADSTROFF:
+	  __libdw_seterrno (DWARF_E_RELBADSYM);
+	  break;
+
+	default:
+	  __libdw_seterrno (DWARF_E_RELUNDEF);
+	  break;
+	}
+    }
+
+  return -1;
 }

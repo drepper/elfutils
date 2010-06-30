@@ -1,5 +1,20 @@
 2010-06-29  Roland McGrath  <roland@redhat.com>
 
+	* derelocate.c (check_module): Don't call dwfl_module_getdwarf.
+
+	* dwfl_module_getdwarf.c (__libdwfl_relocate_setup): New function.
+	(load_dw): Set MOD->dw->relocate->dwflmod.
+	* dwfl_module.c (__libdwfl_module_free): Clear MOD->dw->relocate->ebl
+	if we set it.
+	* relocate.c (__libdw_relocate_shndx): New function.
+	(__libdwfl_relocate_symbol): New function.
+
+	* libdwflP.h (struct dwfl_file): Add member shstrndx.
+	* dwfl_module_getdwarf.c (open_elf): Set it.
+	* dwfl_report_elf.c (__libdwfl_report_elf): Likewise.
+	* derelocate.c (cache_sections): Use it.
+	* dwfl_module_getsym.c: Likewise.
+
 	* dwfl_lineinfo.c: Use dwarf_lineaddr.
 
 	* relocate.c (relocate_section): Remove PARTIAL flag argument.

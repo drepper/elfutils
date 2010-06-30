@@ -93,14 +93,6 @@ cache_sections (Dwfl_Module *mod)
   struct secref *refs = NULL;
   size_t nrefs = 0;
 
-  size_t shstrndx;
-  if (unlikely (elf_getshdrstrndx (mod->main.elf, &shstrndx) < 0))
-    {
-    elf_error:
-      __libdwfl_seterrno (DWFL_E_LIBELF);
-      return -1;
-    }
-
   bool check_reloc_sections = false;
   Elf_Scn *scn = NULL;
   while ((scn = elf_nextscn (mod->main.elf, scn)) != NULL)
@@ -108,13 +100,17 @@ cache_sections (Dwfl_Module *mod)
       GElf_Shdr shdr_mem;
       GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
       if (shdr == NULL)
-	goto elf_error;
+	{
+	elf_error:
+	  __libdwfl_seterrno (DWFL_E_LIBELF);
+	  return -1;
+	}
 
       if ((shdr->sh_flags & SHF_ALLOC) && shdr->sh_addr == 0
 	  && mod->e_type == ET_REL)
 	{
 	  /* This section might not yet have been looked at.  */
-	  if (__libdwfl_relocate_value (mod, mod->main.elf, &shstrndx,
+	  if (__libdwfl_relocate_value (mod, mod->main.elf, &mod->main.shstrndx,
 					elf_ndxscn (scn),
 					&shdr->sh_addr) != DWFL_E_NOERROR)
 	    continue;
@@ -125,7 +121,7 @@ cache_sections (Dwfl_Module *mod)
 
       if (shdr->sh_flags & SHF_ALLOC)
 	{
-	  const char *name = elf_strptr (mod->main.elf, shstrndx,
+	  const char *name = elf_strptr (mod->main.elf, mod->main.shstrndx,
 					 shdr->sh_name);
 	  if (unlikely (name == NULL))
 	    goto elf_error;
@@ -295,20 +291,6 @@ check_module (Dwfl_Module *mod)
 	{
 	  __libdwfl_seterrno (error);
 	  return true;
-	}
-    }
-
-  if (mod->dw == NULL)
-    {
-      Dwarf_Addr bias;
-      if (INTUSE(dwfl_module_getdwarf) (mod, &bias) == NULL)
-	{
-	  Dwfl_Error error = dwfl_errno ();
-	  if (error != DWFL_E_NO_DWARF)
-	    {
-	      __libdwfl_seterrno (error);
-	      return true;
-	    }
 	}
     }
 

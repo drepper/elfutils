@@ -140,6 +140,7 @@ struct dwfl_file
   bool relocated;		/* Partial relocation of all sections done.  */
 
   Elf *elf;
+  size_t shstrndx;		/* Cache of elf_getshdrstrndx on elf.  */
   GElf_Addr bias;		/* Actual load address - p_vaddr.  */
 };
 

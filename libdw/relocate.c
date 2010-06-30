@@ -58,17 +58,6 @@
 #include <stdlib.h>
 
 
-static int
-internal_function
-noresolve_symbol (bool undef,
-		  Dwarf *dbg __attribute__ ((unused)),
-		  GElf_Sym *sym __attribute__ ((unused)),
-		  GElf_Word shndx __attribute__ ((unused)))
-{
-  __libdw_seterrno (undef ? DWARF_E_RELUNDEF : DWARF_E_RELOC);
-  return -1;
-}
-
 void
 internal_function
 __libdw_relocate_begin (Dwarf *dbg, Elf_Scn *relscn[IDX_last], bool incomplete)
@@ -96,7 +85,7 @@ __libdw_relocate_begin (Dwarf *dbg, Elf_Scn *relscn[IDX_last], bool incomplete)
 
   dbg->relocate = libdw_typed_alloc (dbg, struct dwarf_file_reloc);
   dbg->relocate->ebl = NULL;
-  dbg->relocate->resolve_symbol = &noresolve_symbol;
+  dbg->relocate->dwflmod = NULL;
 
   /* All we do to start with is cache the section pointers.
      We'll do the rest on demand in digest_relocs, below.  */
@@ -112,7 +101,6 @@ void
 internal_function
 __libdw_relocate_end (Dwarf *dbg)
 {
-  // XXX let dwfl preinstall, don't close here
   ebl_closebackend (dbg->relocate->ebl);
 }
 
@@ -240,27 +228,24 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
   if (unlikely (gelf_getshdr (r->scn, &shdr) == NULL))
     assert (!"impossible gelf_getshdr failure");
 
-  /* XXX let dwfl supply defaults from main file for separate debug
-     with relocs pointing to SHT_NOBITS symtab
-  r->symdata = dbg->relocate->symdata;
-  r->symstrdata = dbg->relocate->symstrdata;
-  */
-  {
-    GElf_Shdr symshdr;
-    Elf_Scn *const symscn = elf_getscn (r->scn->elf, shdr.sh_link);
-    if (unlikely (gelf_getshdr (symscn, &symshdr) == NULL))
-      return DWARF_E_RELBADSYM;
-    if (symshdr.sh_type != SHT_NOBITS)
-      {
-	r->symdata = elf_getdata (symscn, NULL);
-	if (unlikely (r->symdata == NULL))
-	  return DWARF_E_RELBADSYM;
-	r->symstrdata = elf_getdata (elf_getscn (r->scn->elf, symshdr.sh_link),
-				     NULL);
-	if (unlikely (r->symstrdata == NULL))
-	  return DWARF_E_RELBADSYM;
-      }
-  }
+  /* Look for the symtab section this reloc section refers to.  */
+  GElf_Shdr symshdr;
+  Elf_Scn *const symscn = elf_getscn (r->scn->elf, shdr.sh_link);
+  if (likely (gelf_getshdr (symscn, &symshdr) != NULL)
+      && symshdr.sh_type != SHT_NOBITS)
+    {
+      r->symdata = elf_getdata (symscn, NULL);
+      r->symstrdata = elf_getdata (elf_getscn (r->scn->elf, symshdr.sh_link),
+				   NULL);
+    }
+
+  /* Let libdwfl set up ebl and symtab pointers if it can.  */
+  if (dbg->relocate->dwflmod != NULL)
+    __libdwfl_relocate_setup (dbg, r);
+
+  /* Fail if neither direct pointers nor libdwfl backup found a symtab.  */
+  if (unlikely (r->symdata == NULL) || unlikely (r->symstrdata == NULL))
+    return DWARF_E_RELBADSYM;
 
   if (dbg->relocate->ebl == NULL)
     {
@@ -480,22 +465,6 @@ __libdw_relocatable_getsym (Dwarf *dbg, int sec_index,
 
 int
 internal_function
-__libdw_relocate_shndx (Dwarf *dbg, GElf_Word shndx, GElf_Sxword addend,
-			Dwarf_Addr *val)
-{
-  GElf_Sym sym =
-    {
-      .st_shndx = shndx < SHN_LORESERVE ? shndx : SHN_XINDEX,
-      .st_info = GELF_ST_INFO (STB_LOCAL, STT_SECTION),
-    };
-  int result = (*dbg->relocate->resolve_symbol) (false, dbg, &sym, shndx);
-  if (result == 0)
-    *val = sym.st_value + addend;
-  return result;
-}
-
-int
-internal_function
 __libdw_relocate_address (Dwarf *dbg, int sec_index,
 			  const void *datum, int width, Dwarf_Addr *val)
 {
@@ -506,13 +475,11 @@ __libdw_relocate_address (Dwarf *dbg, int sec_index,
   int result = __libdw_relocatable_getsym (dbg, sec_index, datum, width,
 					   &symndx, &sym, &shndx, &addend);
   if (result > 0 && symndx != STN_UNDEF)
-    {
-      result = (*dbg->relocate->resolve_symbol)
-	(sym.st_shndx == SHN_UNDEF || sym.st_shndx == SHN_COMMON
-	 || GELF_ST_BIND (sym.st_info) > STB_WEAK,
-	 dbg, &sym, sym.st_shndx == SHN_XINDEX ? shndx : sym.st_shndx);
-      addend += sym.st_value;
-    }
+    result = __libdwfl_relocate_symbol
+      (dbg->relocate->sectionrel[sec_index],
+       sym.st_shndx == SHN_UNDEF || sym.st_shndx == SHN_COMMON
+       || GELF_ST_BIND (sym.st_info) > STB_WEAK,
+       dbg, &sym, sym.st_shndx == SHN_XINDEX ? shndx : sym.st_shndx, &addend);
   if (result >= 0)
     *val = addend;
   return result;

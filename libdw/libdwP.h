@@ -218,9 +218,7 @@ struct dwarf_file_reloc
 
   struct ebl *ebl;
 
-  int (*resolve_symbol) (bool undef, Dwarf *dbg,
-			 GElf_Sym *sym, GElf_Word shndx)
-    internal_function;
+  struct Dwfl_Module *dwflmod;
 };
 
 

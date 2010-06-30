@@ -51,7 +51,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
-#include "../libdw/libdwP.h"	/* DWARF_E_* values are here.  */
+#include "../libdw/relocate.h"
 
 
 /* Open libelf FILE->fd and compute the load base of ELF as loaded in MOD.
@@ -92,6 +92,9 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
       file->fd = -1;
       return DWFL_E (LIBELF, elf_errno ());
     }
+
+  if (unlikely (elf_getshdrstrndx (file->elf, &file->shstrndx)))
+    file->shstrndx = SHN_UNDEF;
 
   /* The addresses in an ET_EXEC file are absolute.  The lowest p_vaddr of
      the main file can differ from that of the debug file due to prelink.
@@ -679,13 +682,37 @@ load_dw (Dwfl_Module *mod, struct dwfl_file *debugfile)
   if (mod->dw->relocate != NULL)
     {
       assert (mod->e_type == ET_REL);
-      // mod->dw->relocate->dwflmod = mod;
+      mod->dw->relocate->dwflmod = mod;
     }
 
   /* Until we have iterated through all CU's, we might do lazy lookups.  */
   mod->lazycu = 1;
 
   return DWFL_E_NOERROR;
+}
+
+/* This is called from libdw/relocate.c when we need to digest relocs.  */
+void
+internal_function
+__libdwfl_relocate_setup (Dwarf *dbg, struct dwarf_section_reloc *r)
+{
+  Dwfl_Module *const mod = dbg->relocate->dwflmod;
+
+  assert (mod->dw == dbg);
+
+  if (dbg->relocate->ebl == NULL)
+    {
+      (void) __libdwfl_module_getebl (mod);
+      dbg->relocate->ebl = mod->ebl;
+    }
+
+  if (r->symdata == NULL)
+    {
+      find_symtab (mod);
+      r->symdata = mod->symdata;
+      r->symstrdata = mod->symstrdata;
+      r->symxndxdata = mod->symxndxdata;
+    }
 }
 
 /* Try to start up libdw on either the main file or the debuginfo file.  */

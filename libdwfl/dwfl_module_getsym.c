@@ -1,5 +1,5 @@
 /* Find debugging and symbol information for a module in libdwfl.
-   Copyright (C) 2006,2007,2009 Red Hat, Inc.
+   Copyright (C) 2006-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -102,9 +102,8 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
 	{
 	  /* In an ET_REL file, the symbol table values are relative
 	     to the section, not to the module's load base.  */
-	  size_t symshstrndx = SHN_UNDEF;
 	  Dwfl_Error result = __libdwfl_relocate_value (mod, mod->symfile->elf,
-							&symshstrndx,
+							&mod->symfile->shstrndx,
 							shndx, &sym->st_value);
 	  if (unlikely (result != DWFL_E_NOERROR))
 	    {

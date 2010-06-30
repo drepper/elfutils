@@ -1,5 +1,15 @@
 2010-06-29  Roland McGrath  <roland@redhat.com>
 
+	* libdwP.h (dwarf_file_reloc): Remove resolve_symbol member,
+	add dwflmod member instead.
+	* relocate.h: Declare __libdwfl_relocate_setup and
+	__libdwfl_relocate_symbol.
+	* relocate.c (noresolve_symbol): Removed.
+	(__libdw_relocate_begin): Initialize dwflmod instead of resolve_symbol.
+	(__libdw_relocate_shndx): Removed, now in libdwfl.
+	(digest_relocs): Call __libdwfl_relocate_setup.
+	(__libdw_relocate_address): Call __libdwfl_relocate_symbol.
+
 	* dwarf_lineaddr.c: Add INTDEF.
 	* libdwP.h: Add INTDECL.
 

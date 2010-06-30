@@ -250,6 +250,8 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 	  m->main.elf = elf;
 	  m->main.bias = bias;
 	  m->e_type = ehdr->e_type;
+	  if (unlikely (elf_getshdrstrndx (elf, &m->main.shstrndx)))
+	    m->main.shstrndx = SHN_UNDEF;
 	}
       else
 	{

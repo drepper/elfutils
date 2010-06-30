@@ -1,5 +1,5 @@
 /* Maintenance of module list in libdwfl.
-   Copyright (C) 2005, 2006, 2007, 2008 Red Hat, Inc.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -92,7 +92,15 @@ __libdwfl_module_free (Dwfl_Module *mod)
     }
 
   if (mod->dw != NULL)
-    INTUSE(dwarf_end) (mod->dw);
+    {
+      if (mod->dw->relocate != NULL)
+	{
+	  if (mod->dw->relocate->ebl == mod->ebl)
+	    mod->dw->relocate->ebl = NULL;
+	}
+
+      INTUSE(dwarf_end) (mod->dw);
+    }
 
   if (mod->ebl != NULL)
     ebl_closebackend (mod->ebl);
