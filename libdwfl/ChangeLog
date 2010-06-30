@@ -44,6 +44,12 @@
 	ebl_reloc_simple_type.  Handle only 4 and 8 byte quantities,
 	and don't use gelf_xlatetom.
 
+2010-06-30  Roland McGrath  <roland@redhat.com>
+
+	* linux-kernel-modules.c (dwfl_linux_kernel_find_elf): Don't be
+	confused by -1 return from dwfl_build_id_find_elf after it opened
+	the Elf handle.
+
 2010-06-16  Roland McGrath  <roland@redhat.com>
 
 	* cu.c (cudie_offset): Use DIE_OFFSET_FROM_CU_OFFSET macro.
