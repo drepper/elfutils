@@ -346,6 +346,26 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 	 So we just pretend it's OK without further relocation.  */
       return DWFL_E_NOERROR;
 
+    /* These are the types we can relocate.  */
+    size_t size = 4;
+    for (const int *tp = reloc_symtab->rel8_types; *tp != 0; ++tp)
+      if (*tp == rtype)
+	{
+	  size = 8;
+	  break;
+	}
+    if (size == 4)
+      {
+	const int *tp = reloc_symtab->rel4_types;
+	while (*tp != 0 && *tp != rtype)
+	  ++tp;
+	if (unlikely (*tp == 0))
+	  return DWFL_E_BADRELTYPE;
+      }
+
+    if (offset + size > tdata->d_size)
+      return DWFL_E_BADRELOFF;
+
     /* First, resolve the symbol to an absolute value.  */
     GElf_Addr value;
 
@@ -377,26 +397,6 @@ relocate_section (Dwfl_Module *mod, Elf *relocated, const GElf_Ehdr *ehdr,
 
 	value = sym.st_value;
       }
-
-    /* These are the types we can relocate.  */
-    size_t size = 4;
-    for (const int *tp = reloc_symtab->rel8_types; *tp != 0; ++tp)
-      if (*tp == rtype)
-	{
-	  size = 8;
-	  break;
-	}
-    if (size == 4)
-      {
-	const int *tp = reloc_symtab->rel4_types;
-	while (*tp != 0 && *tp != rtype)
-	  ++tp;
-	if (unlikely (*tp == 0))
-	  return DWFL_E_BADRELTYPE;
-      }
-
-    if (offset + size > tdata->d_size)
-      return DWFL_E_BADRELOFF;
 
     BYTE_ORDER_DUMMY (bo, ehdr->e_ident);
 
