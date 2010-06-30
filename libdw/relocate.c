@@ -216,9 +216,9 @@ digest_one_reloc (const int *rel8_types, const int *rel4_types,
 static int
 compare_digested_reloc (const void *a, const void *b)
 {
-  const struct digested_reloc *r1 = a;
-  const struct digested_reloc *r2 = b;
-  return r1->datum > r2->datum ? 1 : r1->datum < r2->datum ? -1 : 0;
+  const struct digested_reloc *const *r1 = a;
+  const struct digested_reloc *const *r2 = b;
+  return (*r1)->datum > (*r2)->datum ? 1 : (*r1)->datum < (*r2)->datum ? -1 : 0;
 }
 
 static int
@@ -291,8 +291,16 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
   if (ret)
     return ret;
 
+  /* qsort is much faster when it only copies pointers.
+     So make another array of pointers for the sorting.  */
+
+  struct digested_reloc *sort_digest[d - digest];
+  for (size_t i = 0; i < (size_t) (d - digest); ++i)
+    sort_digest[i] = &digest[i];
+
   /* Sort by datum address.  */
-  qsort (digest, d - digest, sizeof digest[0], &compare_digested_reloc);
+  qsort (sort_digest, d - digest, sizeof sort_digest[0],
+	 &compare_digested_reloc);
 
   if (r->rel8.n > 0)
     {
@@ -322,23 +330,27 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
 
   size_t n8 = 0;
   size_t n4 = 0;
-  for (struct digested_reloc *dr = digest; dr < d; ++dr)
-    if (dr->rel8)
-      {
-	r->rel8.datum[n8] = dr->datum;
-	r->rel8.symndx[n8] = dr->symndx;
-	if (shdr.sh_type == SHT_RELA)
-	  r->rela8[n8] = dr->addend;
-	++n8;
-      }
-    else
-      {
-	r->rel4.datum[n4] = dr->datum;
-	r->rel4.symndx[n4] = dr->symndx;
-	if (shdr.sh_type == SHT_RELA)
-	  r->rela4[n4] = dr->addend;
-	++n4;
-      }
+
+  for (size_t i = 0; i < (size_t) (d - digest); ++i)
+    {
+      struct digested_reloc *dr = sort_digest[i];
+      if (dr->rel8)
+	{
+	  r->rel8.datum[n8] = dr->datum;
+	  r->rel8.symndx[n8] = dr->symndx;
+	  if (shdr.sh_type == SHT_RELA)
+	    r->rela8[n8] = dr->addend;
+	  ++n8;
+	}
+      else
+	{
+	  r->rel4.datum[n4] = dr->datum;
+	  r->rel4.symndx[n4] = dr->symndx;
+	  if (shdr.sh_type == SHT_RELA)
+	    r->rela4[n4] = dr->addend;
+	  ++n4;
+	}
+    }
   assert (n8 == r->rel8.n);
   assert (n4 == r->rel4.n);
 
