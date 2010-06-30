@@ -124,7 +124,7 @@ match_r_type (const int *types, int r_type)
 static inline int
 digest_one_reloc (const int *rel8_types, const int *rel4_types,
 		  struct dwarf_section_reloc *r, Elf_Data *data,
-		  struct digested_reloc **digest,
+		  GElf_Addr *sorted, struct digested_reloc **digest,
 		  GElf_Addr r_offset, GElf_Xword r_info, GElf_Sxword r_addend)
 {
   const int r_type = GELF_R_TYPE (r_info);
@@ -208,6 +208,12 @@ digest_one_reloc (const int *rel8_types, const int *rel4_types,
       (*digest)->addend = r_addend;
       ++*digest;
       ++*nrel;
+
+      /* Record the largest offset yet seen, or -1 if we moved backwards.  */
+      if (r_offset < *sorted)
+	*sorted = -1;
+      else
+	*sorted = r_offset;
     }
 
   return 0;
@@ -266,6 +272,8 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
 
   r->rel4.n = r->rel8.n = 0;
 
+  GElf_Addr sorted = 0;
+
   int ret = 0;
   if (shdr.sh_type == SHT_RELA)
     for (size_t i = 0; i < nrel && !ret; ++i)
@@ -273,7 +281,7 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
 	GElf_Rela rela;
 	if (unlikely (gelf_getrela (reldata, i, &rela) == NULL))
 	  assert (!"impossible gelf_getrela failure");
-	ret = digest_one_reloc (rel8_types, rel4_types, r, data, &d,
+	ret = digest_one_reloc (rel8_types, rel4_types, r, data, &sorted, &d,
 				rela.r_offset, rela.r_info, rela.r_addend);
       }
   else
@@ -282,7 +290,7 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
 	GElf_Rel rel;
 	if (unlikely (gelf_getrel (reldata, i, &rel) == NULL))
 	  assert (!"impossible gelf_getrel failure");
-	ret = digest_one_reloc (rel8_types, rel4_types, r, data, &d,
+	ret = digest_one_reloc (rel8_types, rel4_types, r, data, &sorted, &d,
 				rel.r_offset, rel.r_info, 0);
       }
 
@@ -290,17 +298,6 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
 
   if (ret)
     return ret;
-
-  /* qsort is much faster when it only copies pointers.
-     So make another array of pointers for the sorting.  */
-
-  struct digested_reloc *sort_digest[d - digest];
-  for (size_t i = 0; i < (size_t) (d - digest); ++i)
-    sort_digest[i] = &digest[i];
-
-  /* Sort by datum address.  */
-  qsort (sort_digest, d - digest, sizeof sort_digest[0],
-	 &compare_digested_reloc);
 
   if (r->rel8.n > 0)
     {
@@ -331,26 +328,49 @@ digest_relocs (Dwarf *dbg, Elf_Data *data, struct dwarf_section_reloc *r)
   size_t n8 = 0;
   size_t n4 = 0;
 
-  for (size_t i = 0; i < (size_t) (d - digest); ++i)
+  inline void reify_reloc (struct digested_reloc *dr)
+  {
+    if (dr->rel8)
+      {
+	r->rel8.datum[n8] = dr->datum;
+	r->rel8.symndx[n8] = dr->symndx;
+	if (shdr.sh_type == SHT_RELA)
+	  r->rela8[n8] = dr->addend;
+	++n8;
+      }
+    else
+      {
+	r->rel4.datum[n4] = dr->datum;
+	r->rel4.symndx[n4] = dr->symndx;
+	if (shdr.sh_type == SHT_RELA)
+	  r->rela4[n4] = dr->addend;
+	++n4;
+      }
+  }
+
+  if (sorted != (GElf_Addr) -1)
     {
-      struct digested_reloc *dr = sort_digest[i];
-      if (dr->rel8)
-	{
-	  r->rel8.datum[n8] = dr->datum;
-	  r->rel8.symndx[n8] = dr->symndx;
-	  if (shdr.sh_type == SHT_RELA)
-	    r->rela8[n8] = dr->addend;
-	  ++n8;
-	}
-      else
-	{
-	  r->rel4.datum[n4] = dr->datum;
-	  r->rel4.symndx[n4] = dr->symndx;
-	  if (shdr.sh_type == SHT_RELA)
-	    r->rela4[n4] = dr->addend;
-	  ++n4;
-	}
+      /* The records were already sorted in the file.  */
+      for (struct digested_reloc *dr = digest; dr < d; ++dr)
+	reify_reloc (dr);
     }
+  else
+    {
+      /* qsort is much faster when it only copies pointers.
+	 So make another array of pointers for the sorting.  */
+
+      struct digested_reloc *sort_digest[d - digest];
+      for (size_t i = 0; i < (size_t) (d - digest); ++i)
+	sort_digest[i] = &digest[i];
+
+      /* Sort by datum address.  */
+      qsort (sort_digest, d - digest, sizeof sort_digest[0],
+	     &compare_digested_reloc);
+
+      for (size_t i = 0; i < (size_t) (d - digest); ++i)
+	reify_reloc (sort_digest[i]);
+    }
+
   assert (n8 == r->rel8.n);
   assert (n4 == r->rel4.n);
 

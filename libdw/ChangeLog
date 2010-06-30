@@ -1,5 +1,8 @@
 2010-06-30  Roland McGrath  <roland@redhat.com>
 
+	* relocate.c (digest_one_reloc, digest_relocs): Track r_offset values
+	and don't bother sorting if they were already sorted.
+
 	* relocate.c (digest_relocs, compare_digested_reloc): Use qsort on an
 	array of pointers, not structs.
 
