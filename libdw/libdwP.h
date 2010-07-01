@@ -475,14 +475,15 @@ extern int __libdw_intern_expression (Dwarf *dbg,
 				      unsigned int address_size,
 				      unsigned int ref_size,
 				      void **cache, const Dwarf_Block *block,
-				      bool cfap, bool valuep,
+				      bool reloc, bool cfap, bool valuep,
 				      Dwarf_Op **llbuf, size_t *listlen,
 				      int sec_index)
-  __nonnull_attribute__ (5, 6, 9, 10) internal_function;
+  __nonnull_attribute__ (5, 6, 10, 11) internal_function;
 
 extern int __libdw_getlocation (Dwarf_Attribute *attr, const Dwarf_Block *block,
+				bool reloc,
 				Dwarf_Op **llbuf, size_t *listlen, int sec_idx)
-  __nonnull_attribute__ (2, 3, 4) internal_function;
+  __nonnull_attribute__ (2, 4, 5) internal_function;
 
 
 /* Return error code of last failing function call.  This value is kept

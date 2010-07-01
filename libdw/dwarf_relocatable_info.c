@@ -112,7 +112,7 @@ dwarf_relocatable_info (reloc, sym, name, addend, secname)
     }
 
   GElf_Sxword adjust = 0;
-  if (reloc->valp != NULL)
+  if (reloc->valp != NULL && reloc->symndx == STN_UNDEF)
     {
       int result = __libdw_relocatable (reloc->cu->dbg, reloc->sec,
 					reloc->valp, width,

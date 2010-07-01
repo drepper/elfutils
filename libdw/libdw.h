@@ -728,13 +728,20 @@ extern ptrdiff_t dwarf_getlocation_relocatable (Dwarf_Attribute *attr,
 						size_t *exprlen)
   __nonnull_attribute__ (3, 4, 5, 6, 7);
 
-
 /* Return the block associated with a DW_OP_implicit_value operation.
    The OP pointer must point into an expression that dwarf_getlocation
    or dwarf_getlocation_addr has returned given the same ATTR.  */
 extern int dwarf_getlocation_implicit_value (Dwarf_Attribute *attr,
 					     const Dwarf_Op *op,
 					     Dwarf_Block *return_block)
+  __nonnull_attribute__ (2, 3);
+
+/* Return the relocatable form of a DW_OP_addr operation.  The OP pointer
+   must point into an expression that dwarf_getlocation_relocatable has
+   returned given the same ATTR.  */
+extern int dwarf_getlocation_relocatable_addr (Dwarf_Attribute *attr,
+					       const Dwarf_Op *op,
+					       Dwarf_Relocatable *reloc)
   __nonnull_attribute__ (2, 3);
 
 

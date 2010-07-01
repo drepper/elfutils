@@ -254,6 +254,7 @@ ELFUTILS_0.149 {
     dwarf_getsrc_relocatable;
     dwarf_line_relocatable;
     dwarf_getlocation_relocatable;
+    dwarf_getlocation_relocatable_addr;
     dwarf_haspc_relocatable;
     dwarf_ranges_relocatable;
     dwarf_relocatable_info;

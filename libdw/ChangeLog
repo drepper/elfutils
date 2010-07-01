@@ -1,5 +1,19 @@
 2010-06-30  Roland McGrath  <roland@redhat.com>
 
+	* dwarf_getlocation_relocatable_addr.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add it.
+	* libdw.map (ELFUTILS_0.149): Add it.
+	* libdw.h: Declare it.
+
+	* dwarf_getlocation.c (__libdw_intern_expression): New flag argument.
+	When set, handle relocatable DW_OP_addr.
+	(__libdw_getlocation): Likewise, pass it through.
+	(dwarf_getlocation, dwarf_getlocation_addr): Update callers.
+	* dwarf_frame_register.c: Likewise.
+	* dwarf_frame_cfa.c: Likewise.
+	* dwarf_getlocation_relocatable.c: Likewise.
+	* libdwP.h: Update decls.
+
 	* relocate.c (digest_one_reloc, digest_relocs): Track r_offset values
 	and don't bother sorting if they were already sorted.
 

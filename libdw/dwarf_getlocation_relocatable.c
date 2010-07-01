@@ -105,7 +105,7 @@ dwarf_getlocation_relocatable (Dwarf_Attribute *attr, ptrdiff_t offset,
 
   /* Parse the block into internal form.  */
   if (offset > 0 && expr != NULL
-      && __libdw_getlocation (attr, &block, expr, exprlen, sec_idx) < 0)
+      && __libdw_getlocation (attr, &block, true, expr, exprlen, sec_idx) < 0)
     offset = -1;
 
   return offset;

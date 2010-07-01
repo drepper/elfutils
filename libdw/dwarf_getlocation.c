@@ -57,7 +57,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include <libdwP.h>
+#include "relocate.h"
 
 
 static bool
@@ -137,7 +137,7 @@ dwarf_getlocation_implicit_value (attr, op, return_block)
 
   struct loc_block_s fake = { .addr = (void *) op };
   struct loc_block_s **found = tfind (&fake, &attr->cu->locs, loc_compare);
-  if (unlikely (found == NULL))
+  if (unlikely (found == NULL) || unlikely (op->atom != DW_OP_implicit_value))
     {
       __libdw_seterrno (DWARF_E_NO_BLOCK);
       return -1;
@@ -216,7 +216,7 @@ int
 internal_function
 __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 			   unsigned int address_size, unsigned int ref_size,
-			   void **cache, const Dwarf_Block *block,
+			   void **cache, const Dwarf_Block *block, bool reloc,
 			   bool cfap, bool valuep,
 			   Dwarf_Op **llbuf, size_t *listlen, int sec_index)
 {
@@ -237,6 +237,9 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 
       return 0;
     }
+
+  reloc = reloc && (dbg->relocate != NULL
+		    && dbg->relocate->sectionrel[sec_index] != NULL);
 
   const unsigned char *data = block->data;
   const unsigned char *const end_data = data + block->length;
@@ -262,9 +265,30 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 	{
 	case DW_OP_addr:
 	  /* Address, depends on address size of CU.  */
-	  if (__libdw_read_address_inc (dbg, sec_index, &data,
-					address_size, &newloc->number))
-	    return -1;
+	  if (reloc)
+	    {
+	      /* When taking relocatable addresses, we resolve to the
+		 symndx and store that in the Dwarf_Op for later use
+		 with dwarf_getlocation_relocatable_addr.  */
+	      int symndx;
+	      GElf_Sxword addend;
+	      int shndx = __libdw_relocatable (dbg, sec_index,
+					       data, address_size,
+					       &symndx, &addend);
+	      if (unlikely (shndx < 0))
+		return -1;
+	      data += address_size;
+	      newloc->number = addend;
+	      if (shndx > 0)
+		newloc->number2 = symndx;
+	    }
+	  else
+	    {
+	      /* The address has to be resolved now.  */
+	      if (__libdw_read_address_inc (dbg, sec_index, &data,
+					    address_size, &newloc->number))
+		return -1;
+	    }
 	  break;
 
 	case DW_OP_call_ref:
@@ -520,6 +544,7 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 int
 internal_function
 __libdw_getlocation (Dwarf_Attribute *attr, const Dwarf_Block *block,
+		     bool reloc,
 		     Dwarf_Op **llbuf, size_t *listlen, int sec_index)
 {
   struct Dwarf_CU *cu = attr->cu;
@@ -527,7 +552,7 @@ __libdw_getlocation (Dwarf_Attribute *attr, const Dwarf_Block *block,
 				    cu->address_size, (cu->version == 2
 						       ? cu->address_size
 						       : cu->offset_size),
-				    &cu->locs, block,
+				    &cu->locs, block, reloc,
 				    false, false,
 				    llbuf, listlen, sec_index);
 }
@@ -550,7 +575,7 @@ dwarf_getlocation (attr, llbuf, listlen)
   if (INTUSE(dwarf_formblock) (attr, &block) != 0)
     return -1;
 
-  return __libdw_getlocation (attr, &block, llbuf, listlen,
+  return __libdw_getlocation (attr, &block, false, llbuf, listlen,
 			      cu_sec_idx (attr->cu));
 }
 
@@ -577,7 +602,8 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 	  if (maxlocs == 0)
 	    return 0;
 	  if (llbufs != NULL &&
-	      __libdw_getlocation (attr, &block, &llbufs[0], &listlens[0],
+	      __libdw_getlocation (attr, &block, false,
+				   &llbufs[0], &listlens[0],
 				   cu_sec_idx (attr->cu)) != 0)
 	    return -1;
 	  return listlens[0] == 0 ? 0 : 1;
@@ -667,7 +693,7 @@ dwarf_getlocation_addr (attr, address, llbufs, listlens, maxlocs)
 	{
 	  /* This one matches the address.  */
 	  if (llbufs != NULL
-	      && unlikely (__libdw_getlocation (attr, &block,
+	      && unlikely (__libdw_getlocation (attr, &block, false,
 						&llbufs[got], &listlens[got],
 						IDX_debug_loc) != 0))
 	    return -1;
