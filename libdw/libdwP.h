@@ -61,13 +61,6 @@
 #define _(Str) dgettext ("elfutils", Str)
 
 
-/* Version of the DWARF specification we support.  */
-#define DWARF_VERSION 3
-
-/* Version of the CIE format.  */
-#define CIE_VERSION 1
-
-
 /* Known location expressions already decoded.  */
 struct loc_s
 {
@@ -90,6 +83,7 @@ struct loc_block_s
 enum
   {
     IDX_debug_info = 0,
+    IDX_debug_types,
     IDX_debug_abbrev,
     IDX_debug_aranges,
     IDX_debug_line,
@@ -97,10 +91,6 @@ enum
     IDX_debug_loc,
     IDX_debug_pubnames,
     IDX_debug_str,
-    IDX_debug_funcnames,
-    IDX_debug_typenames,
-    IDX_debug_varnames,
-    IDX_debug_weaknames,
     IDX_debug_macinfo,
     IDX_debug_ranges,
     IDX_last
@@ -149,6 +139,8 @@ enum
 };
 
 
+#include "dwarf_sig8_hash.h"
+
 /* This is the structure representing the debugging state.  */
 struct Dwarf
 {
@@ -178,6 +170,11 @@ struct Dwarf
   /* Search tree for the CUs.  */
   void *cu_tree;
   Dwarf_Off next_cu_offset;
+
+  /* Search tree and sig8 hash table for .debug_types type units.  */
+  void *tu_tree;
+  Dwarf_Off next_tu_offset;
+  Dwarf_Sig8_Hash sig8_hash;
 
   /* Address ranges.  */
   Dwarf_Aranges *aranges;
@@ -250,6 +247,12 @@ struct Dwarf_Line_s
   unsigned int end_sequence:1;
   unsigned int prologue_end:1;
   unsigned int epilogue_begin:1;
+  /* The remaining bit fields are not flags, but hold values presumed to be
+     small.  All the flags and other bit fields should add up to 48 bits
+     to give the whole struct a nice round size.  */
+  unsigned int op_index:8;
+  unsigned int isa:8;
+  unsigned int discriminator:24;
 };
 
 struct Dwarf_Lines_s
@@ -283,6 +286,10 @@ struct Dwarf_CU
   uint8_t offset_size;
   uint16_t version;
 
+  /* Zero if this is a normal CU.  Nonzero if it is a type unit.  */
+  size_t type_offset;
+  uint64_t type_sig8;
+
   /* Hash table for the abbreviations.  */
   Dwarf_Abbrev_Hash abbrev_hash;
   /* Offset of the first abbreviation.  */
@@ -305,28 +312,32 @@ struct Dwarf_CU
         LEN       VER     OFFSET    ADDR
       4-bytes + 2-bytes + 4-bytes + 1-byte  for 32-bit dwarf
      12-bytes + 2-bytes + 8-bytes + 1-byte  for 64-bit dwarf
+   or in .debug_types, 			     SIGNATURE TYPE-OFFSET
+      4-bytes + 2-bytes + 4-bytes + 1-byte + 8-bytes + 4-bytes  for 32-bit
+     12-bytes + 2-bytes + 8-bytes + 1-byte + 8-bytes + 8-bytes  for 64-bit
 
    Note the trick in the computation.  If the offset_size is 4
    the '- 4' term changes the '3 *' into a '2 *'.  If the
    offset_size is 8 it accounts for the 4-byte escape value
    used at the start of the length.  */
-#define DIE_OFFSET_FROM_CU_OFFSET(cu_offset, offset_size) \
-  ((cu_offset) + 3 * (offset_size) - 4 + 3)
+#define DIE_OFFSET_FROM_CU_OFFSET(cu_offset, offset_size, type_unit)	\
+  ((type_unit) ? ((cu_offset) + 4 * (offset_size) - 4 + 3 + 8)		\
+   : ((cu_offset) + 3 * (offset_size) - 4 + 3))
 
-#define CUDIE_ADDR(fromcu)						\
-  ((char *) (fromcu)->dbg->sectiondata[IDX_debug_info]->d_buf		\
-   + DIE_OFFSET_FROM_CU_OFFSET ((fromcu)->start, (fromcu)->offset_size))
+#define CUDIE_INIT(fromcu)						      \
+  {									      \
+    ((char *) cu_data (fromcu)->d_buf					      \
+     + DIE_OFFSET_FROM_CU_OFFSET ((fromcu)->start,			      \
+				  (fromcu)->offset_size,		      \
+				  (fromcu)->type_offset != 0)),		      \
+    (fromcu),								      \
+    NULL, 0l								      \
+  }
 
 #ifdef __cplusplus
-# define CUDIE(name, fromcu)			\
-  Dwarf_Die name = { CUDIE_ADDR (fromcu), (fromcu), NULL, 0l }
+# define CUDIE(name, fromcu)	Dwarf_Die name = CUDIE_INIT (fromcu)
 #else
-# define CUDIE(fromcu)				\
-  ((Dwarf_Die)					\
-   {						\
-    .cu = (fromcu),				\
-    .addr = CUDIE_ADDR (fromcu),		\
-   })
+# define CUDIE(fromcu)		((Dwarf_Die) CUDIE_INIT (fromcu))
 #endif
 
 /* Macro information.  */
@@ -379,8 +390,12 @@ extern void *__libdw_allocate (Dwarf *dbg, size_t minsize, size_t align)
 /* Default OOM handler.  */
 extern void __libdw_oom (void) __attribute ((noreturn, visibility ("hidden")));
 
+/* Allocate the internal data for a unit not seen before.  */
+extern struct Dwarf_CU *__libdw_intern_next_unit (Dwarf *dbg, bool debug_types)
+     __nonnull_attribute__ (1) internal_function;
+
 /* Find CU for given offset.  */
-extern struct Dwarf_CU *__libdw_findcu (Dwarf *dbg, Dwarf_Off offset)
+extern struct Dwarf_CU *__libdw_findcu (Dwarf *dbg, Dwarf_Off offset, bool tu)
      __nonnull_attribute__ (1) internal_function;
 
 /* Return tag of given DIE.  */
@@ -439,11 +454,12 @@ extern int __libdw_visit_scopes (unsigned int depth,
 extern int __libdw_intern_expression (Dwarf *dbg,
 				      bool other_byte_order,
 				      unsigned int address_size,
+				      unsigned int ref_size,
 				      void **cache, const Dwarf_Block *block,
 				      bool cfap, bool valuep,
 				      Dwarf_Op **llbuf, size_t *listlen,
 				      int sec_index)
-  __nonnull_attribute__ (4, 5, 8, 9) internal_function;
+  __nonnull_attribute__ (5, 6, 9, 10) internal_function;
 
 
 /* Return error code of last failing function call.  This value is kept
@@ -601,6 +617,18 @@ unsigned char * __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
   internal_function;
 #endif	/* Not C++ */
 
+static inline size_t
+cu_sec_idx (struct Dwarf_CU *cu)
+{
+  return cu->type_offset == 0 ? IDX_debug_info : IDX_debug_types;
+}
+
+static inline Elf_Data *
+cu_data (struct Dwarf_CU *cu)
+{
+  return cu->dbg->sectiondata[cu_sec_idx (cu)];
+}
+
 
 /* Aliases to avoid PLTs.  */
 INTDECL (dwarf_aggregate_size)
@@ -630,6 +658,7 @@ INTDECL (dwarf_haspc)
 INTDECL (dwarf_highpc)
 INTDECL (dwarf_lowpc)
 INTDECL (dwarf_nextcu)
+INTDECL (dwarf_next_unit)
 INTDECL (dwarf_offdie)
 INTDECL (dwarf_ranges)
 INTDECL (dwarf_siblingof)

@@ -46,13 +46,14 @@ pkginclude_HEADERS = libdw.h \
 		     c++/dwarf_comparator
 
 noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
-		 cfi.h encoded-value.h \
+		 dwarf_sig8_hash.h cfi.h encoded-value.h \
 		 known-dwarf.h c++/dwarf-knowledge.cc c++/data-values.hh
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \
 		  dwarf_error.c dwarf_nextcu.c dwarf_diename.c dwarf_offdie.c \
-		  dwarf_attr.c dwarf_formstring.c dwarf_abbrev_hash.c \
+		  dwarf_attr.c dwarf_formstring.c \
+		  dwarf_abbrev_hash.c dwarf_sig8_hash.c \
 		  dwarf_attr_integrate.c dwarf_hasattr_integrate.c \
 		  dwarf_child.c dwarf_haschildren.c dwarf_formaddr.c \
 		  dwarf_formudata.c dwarf_formsdata.c dwarf_lowpc.c \
@@ -71,6 +72,8 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_linecol.c dwarf_linebeginstatement.c \
 		  dwarf_lineendsequence.c dwarf_lineblock.c \
 		  dwarf_lineprologueend.c dwarf_lineepiloguebegin.c \
+		  dwarf_lineisa.c dwarf_linediscriminator.c \
+		  dwarf_lineop_index.c \
 		  dwarf_onesrcline.c dwarf_formblock.c \
 		  dwarf_getsrcfiles.c dwarf_filesrc.c dwarf_getsrcdirs.c \
 		  dwarf_getlocation.c dwarf_getstring.c dwarf_offabbrev.c \

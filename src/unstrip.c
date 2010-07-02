@@ -368,6 +368,13 @@ symtab_count_leading_section_symbols (Elf *elf, Elf_Scn *scn, size_t shnum,
   return shnum;
 }
 
+static void
+update_shdr (Elf_Scn *outscn, GElf_Shdr *newshdr)
+{
+  ELF_CHECK (gelf_update_shdr (outscn, newshdr),
+	     _("cannot update section header: %s"));
+}
+
 /* We expanded the output section, so update its header.  */
 static void
 update_sh_size (Elf_Scn *outscn, const Elf_Data *data)
@@ -378,8 +385,7 @@ update_sh_size (Elf_Scn *outscn, const Elf_Data *data)
 
   newshdr->sh_size = data->d_size;
 
-  ELF_CHECK (gelf_update_shdr (outscn, newshdr),
-	     _("cannot update section header: %s"));
+  update_shdr (outscn, newshdr);
 }
 
 /* Update relocation sections using the symbol table.  */
@@ -428,8 +434,7 @@ adjust_relocs (Elf_Scn *outscn, Elf_Scn *inscn, const GElf_Shdr *shdr,
 	if (newshdr->sh_info != STN_UNDEF)
 	  {
 	    newshdr->sh_info = map[newshdr->sh_info - 1];
-	    ELF_CHECK (gelf_update_shdr (outscn, newshdr),
-		       _("cannot update section header: %s"));
+	    update_shdr (outscn, newshdr);
 	  }
 	break;
       }
@@ -557,9 +562,7 @@ add_new_section_symbols (Elf_Scn *old_symscn, size_t old_shnum,
 
   shdr->sh_info += added;
   shdr->sh_size += added * shdr->sh_entsize;
-
-  ELF_CHECK (gelf_update_shdr (symscn, shdr),
-	     _("cannot update section header: %s"));
+  update_shdr (symscn, shdr);
 
   Elf_Data *symdata = elf_getdata (symscn, NULL);
   Elf_Data *shndxdata = NULL;	/* XXX */
@@ -1205,8 +1208,7 @@ new_shstrtab (Elf *unstripped, size_t unstripped_shnum,
 	shdr->sh_name = ebl_strtaboffset (unstripped_strent[i]);
 	if (i + 1 == unstripped_shstrndx)
 	  shdr->sh_size = strtab_data->d_size;
-	ELF_CHECK (gelf_update_shdr (scn, shdr),
-		   _("cannot update section header: %s"));
+	update_shdr (scn, shdr);
       }
 
   return strtab_data;
@@ -1233,6 +1235,10 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
   size_t stripped_shnum;
   ELF_CHECK (elf_getshdrnum (stripped, &stripped_shnum) == 0,
 	     _("cannot get section count: %s"));
+
+  if (unlikely (stripped_shnum > unstripped_shnum))
+    error (EXIT_FAILURE, 0, _("\
+more sections in stripped file than debug file -- arguments reversed?"));
 
   /* Cache the stripped file's section details.  */
   struct section sections[stripped_shnum - 1];
@@ -1521,8 +1527,7 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
 	      offset = end_offset;
 	  }
 
-	ELF_CHECK (gelf_update_shdr (sec->outscn, &shdr_mem),
-		   _("cannot update section header: %s"));
+	update_shdr (sec->outscn, &shdr_mem);
 
 	if (shdr_mem.sh_type == SHT_SYMTAB || shdr_mem.sh_type == SHT_DYNSYM)
 	  {
@@ -1716,8 +1721,7 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
 
 	}
       elf_flagdata (symdata, ELF_C_SET, ELF_F_DIRTY);
-      ELF_CHECK (gelf_update_shdr (unstripped_symtab, shdr),
-		 _("cannot update section header: %s"));
+      update_shdr (unstripped_symtab, shdr);
 
       if (stripped_symtab != NULL)
 	{
@@ -1777,6 +1781,15 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
 	    GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
 	    ELF_CHECK (shdr != NULL, _("cannot get section header: %s"));
 
+	    /* We must make sure we have read in the data of all sections
+	       beforehand and marked them to be written out.  When we're
+	       modifying the existing file in place, we might overwrite
+	       this part of the file before we get to handling the section.  */
+
+	    ELF_CHECK (elf_flagdata (elf_getdata (scn, NULL),
+				     ELF_C_SET, ELF_F_DIRTY),
+		       _("cannot read section data: %s"));
+
 	    if (skip_reloc
 		&& (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA))
 	      continue;
@@ -1787,8 +1800,7 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
 	    if (shdr->sh_type != SHT_NOBITS)
 	      offset += shdr->sh_size;
 
-	    ELF_CHECK (gelf_update_shdr (scn, shdr),
-		       _("cannot update section header: %s"));
+	    update_shdr (scn, shdr);
 
 	    if (unstripped_shstrndx == 1 + i)
 	      {
@@ -1810,7 +1822,8 @@ copy_elided_sections (Elf *unstripped, Elf *stripped,
 
 	    placed[i] = true;
 	  }
-    } while (skip_reloc);
+    }
+  while (skip_reloc);
 
   if (stripped_ehdr->e_phnum > 0)
     ELF_CHECK (gelf_newphdr (unstripped, stripped_ehdr->e_phnum),

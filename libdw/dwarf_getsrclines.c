@@ -1,5 +1,5 @@
 /* Return line number information of CU.
-   Copyright (C) 2004-2009 Red Hat, Inc.
+   Copyright (C) 2004-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2004.
 
@@ -86,31 +86,6 @@ compare_lines (const void *a, const void *b)
   return (*p1)->addr - (*p2)->addr;
 }
 
-
-/* Adds a new line to the matrix.  We cannot define a function because
-   we want to use alloca.  */
-#define NEW_LINE(end_seq) \
-  do {									      \
-    /* Add the new line.  */						      \
-    new_line = (struct linelist *) alloca (sizeof (struct linelist));	      \
-									      \
-    /* Set the line information.  */					      \
-    new_line->line.addr = address;					      \
-    new_line->line.file = file;						      \
-    new_line->line.line = line;						      \
-    new_line->line.column = column;					      \
-    new_line->line.is_stmt = is_stmt;					      \
-    new_line->line.basic_block = basic_block;				      \
-    new_line->line.end_sequence = end_seq;				      \
-    new_line->line.prologue_end = prologue_end;				      \
-    new_line->line.epilogue_begin = epilogue_begin;			      \
-									      \
-    new_line->next = linelist;						      \
-    linelist = new_line;						      \
-    ++nlinelist;							      \
-  } while (0)
-
-
 int
 dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 {
@@ -175,7 +150,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
       /* The next element of the header is the version identifier.  */
       uint_fast16_t version = read_2ubyte_unaligned_inc (dbg, linep);
-      if (unlikely (version > DWARF_VERSION))
+      if (unlikely (version < 2) || unlikely (version > 4))
 	{
 	  __libdw_seterrno (DWARF_E_VERSION);
 	  goto out;
@@ -192,13 +167,23 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
       /* Next the minimum instruction length.  */
       uint_fast8_t minimum_instr_len = *linep++;
 
-        /* Then the flag determining the default value of the is_stmt
-	   register.  */
+      /* Next the maximum operations per instruction, in version 4 format.  */
+      uint_fast8_t max_ops_per_instr = 1;
+      if (version >= 4)
+	{
+	  if (unlikely (lineendp - linep < 5))
+	    goto invalid_data;
+	  max_ops_per_instr = *linep++;
+	  if (unlikely (max_ops_per_instr == 0))
+	    goto invalid_data;
+	}
+
+      /* Then the flag determining the default value of the is_stmt
+	 register.  */
       uint_fast8_t default_is_stmt = *linep++;
 
       /* Now the line base.  */
-      int_fast8_t line_base = *((int_fast8_t *) linep);
-      ++linep;
+      int_fast8_t line_base = (int8_t) *linep++;
 
       /* And the line range.  */
       uint_fast8_t line_range = *linep++;
@@ -209,9 +194,9 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
       /* Remember array with the standard opcode length (-1 to account for
 	 the opcode with value zero not being mentioned).  */
       const uint8_t *standard_opcode_lengths = linep - 1;
-      linep += opcode_base - 1;
-      if (unlikely (linep >= lineendp))
+      if (unlikely (lineendp - linep < opcode_base - 1))
 	goto invalid_data;
+      linep += opcode_base - 1;
 
       /* First comes the list of directories.  Add the compilation
 	 directory first since the index zero is used for it.  */
@@ -338,21 +323,77 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 
         /* We are about to process the statement program.  Initialize the
 	   state machine registers (see 6.2.2 in the v2.1 specification).  */
-      Dwarf_Word address = 0;
-      size_t file = 1;
-      size_t line = 1;
-      size_t column = 0;
+      Dwarf_Word addr = 0;
+      unsigned int op_index = 0;
+      unsigned int file = 1;
+      int line = 1;
+      unsigned int column = 0;
       uint_fast8_t is_stmt = default_is_stmt;
-      int basic_block = 0;
-      int prologue_end = 0;
-      int epilogue_begin = 0;
+      bool basic_block = false;
+      bool prologue_end = false;
+      bool epilogue_begin = false;
+      unsigned int isa = 0;
+      unsigned int discriminator = 0;
 
-        /* Process the instructions.  */
+      /* Apply the "operation advance" from a special opcode
+	 or DW_LNS_advance_pc (as per DWARF4 6.2.5.1).  */
+      inline void advance_pc (unsigned int op_advance)
+      {
+	addr += minimum_instr_len * ((op_index + op_advance)
+				     / max_ops_per_instr);
+	op_index = (op_index + op_advance) % max_ops_per_instr;
+      }
+
+      /* Process the instructions.  */
       struct linelist *linelist = NULL;
       unsigned int nlinelist = 0;
+
+      /* Adds a new line to the matrix.
+	 We cannot simply define a function because we want to use alloca.  */
+#define NEW_LINE(end_seq)						\
+      do {								\
+	if (unlikely (add_new_line (alloca (sizeof (struct linelist)),	\
+				    end_seq)))				\
+	  goto invalid_data;						\
+      } while (0)
+
+      inline bool add_new_line (struct linelist *new_line, bool end_sequence)
+      {
+	/* Set the line information.  For some fields we use bitfields,
+	   so we would lose information if the encoded values are too large.
+	   Check just for paranoia, and call the data "invalid" if it
+	   violates our assumptions on reasonable limits for the values.  */
+#define SET(field)							      \
+	do {								      \
+	  new_line->line.field = field;					      \
+	  if (unlikely (new_line->line.field != field))			      \
+	    return true;						      \
+        } while (0)
+
+	SET (addr);
+	SET (op_index);
+	SET (file);
+	SET (line);
+	SET (column);
+	SET (is_stmt);
+	SET (basic_block);
+	SET (end_sequence);
+	SET (prologue_end);
+	SET (epilogue_begin);
+	SET (isa);
+	SET (discriminator);
+
+#undef SET
+
+	new_line->next = linelist;
+	linelist = new_line;
+	++nlinelist;
+
+	return false;
+      }
+
       while (linep < lineendp)
 	{
-	  struct linelist *new_line;
 	  unsigned int opcode;
 	  unsigned int u128;
 	  int s128;
@@ -371,32 +412,30 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 	      */
 	      int line_increment = (line_base
 				    + (opcode - opcode_base) % line_range);
-	      unsigned int address_increment = (minimum_instr_len
-						* ((opcode - opcode_base)
-						   / line_range));
 
 	      /* Perform the increments.  */
 	      line += line_increment;
-	      address += address_increment;
+	      advance_pc ((opcode - opcode_base) / line_range);
 
 	      /* Add a new line with the current state machine values.  */
 	      NEW_LINE (0);
 
 	      /* Reset the flags.  */
-	      basic_block = 0;
-	      prologue_end = 0;
-	      epilogue_begin = 0;
+	      basic_block = false;
+	      prologue_end = false;
+	      epilogue_begin = false;
+	      discriminator = 0;
 	    }
 	  else if (opcode == 0)
 	    {
 	      /* This an extended opcode.  */
-	      if (unlikely (linep + 2 > lineendp))
+	      if (unlikely (lineendp - linep < 2))
 		goto invalid_data;
 
 	      /* The length.  */
-	      unsigned int len = *linep++;
+	      uint_fast8_t len = *linep++;
 
-	      if (unlikely (linep + len > lineendp))
+	      if (unlikely ((size_t) (lineendp - linep) < len))
 		goto invalid_data;
 
 	      /* The sub-opcode.  */
@@ -410,22 +449,28 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  NEW_LINE (1);
 
 		  /* Reset the registers.  */
-		  address = 0;
+		  addr = 0;
+		  op_index = 0;
 		  file = 1;
 		  line = 1;
 		  column = 0;
 		  is_stmt = default_is_stmt;
-		  basic_block = 0;
-		  prologue_end = 0;
-		  epilogue_begin = 0;
+		  basic_block = false;
+		  prologue_end = false;
+		  epilogue_begin = false;
+		  isa = 0;
+		  discriminator = 0;
 		  break;
 
 		case DW_LNE_set_address:
 		  /* The value is an address.  The size is defined as
 		     apporiate for the target machine.  We use the
 		     address size field from the CU header.  */
+		  op_index = 0;
+		  if (unlikely (lineendp - linep < cu->address_size))
+		    goto invalid_data;
 		  if (__libdw_read_address_inc (dbg, IDX_debug_line, &linep,
-						cu->address_size, &address))
+						cu->address_size, &addr))
 		    goto out;
 		  break;
 
@@ -475,13 +520,23 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  }
 		  break;
 
+		case DW_LNE_set_discriminator:
+		  /* Takes one ULEB128 parameter, the discriminator.  */
+		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		    goto invalid_data;
+
+		  get_uleb128 (discriminator, linep);
+		  break;
+
 		default:
 		  /* Unknown, ignore it.  */
+		  if (unlikely ((size_t) (lineendp - (linep - 1)) < len))
+		    goto invalid_data;
 		  linep += len - 1;
 		  break;
 		}
 	    }
-	  else if (opcode <= DW_LNS_set_epilogue_begin)
+	  else if (opcode <= DW_LNS_set_isa)
 	    {
 	      /* This is a known standard opcode.  */
 	      switch (opcode)
@@ -495,13 +550,10 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  NEW_LINE (0);
 
 		  /* Reset the flags.  */
-		  basic_block = 0;
-		  /* XXX Whether the following two lines are necessary is
-		     unclear.  I guess the current v2.1 specification has
-		     a bug in that it says clearing these two registers is
-		     not necessary.  */
-		  prologue_end = 0;
-		  epilogue_begin = 0;
+		  basic_block = false;
+		  prologue_end = false;
+		  epilogue_begin = false;
+		  discriminator = 0;
 		  break;
 
 		case DW_LNS_advance_pc:
@@ -511,7 +563,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		    goto invalid_data;
 
 		  get_uleb128 (u128, linep);
-		  address += minimum_instr_len * u128;
+		  advance_pc (u128);
 		  break;
 
 		case DW_LNS_advance_line:
@@ -555,7 +607,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  if (unlikely (standard_opcode_lengths[opcode] != 0))
 		    goto invalid_data;
 
-		  basic_block = 1;
+		  basic_block = true;
 		  break;
 
 		case DW_LNS_const_add_pc:
@@ -563,17 +615,18 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  if (unlikely (standard_opcode_lengths[opcode] != 0))
 		    goto invalid_data;
 
-		  address += (minimum_instr_len
-			      * ((255 - opcode_base) / line_range));
+		  advance_pc ((255 - opcode_base) / line_range);
 		  break;
 
 		case DW_LNS_fixed_advance_pc:
 		  /* Takes one 16 bit parameter which is added to the
 		     address.  */
-		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		  if (unlikely (standard_opcode_lengths[opcode] != 1)
+		      || unlikely (lineendp - linep < 2))
 		    goto invalid_data;
 
-		  address += read_2ubyte_unaligned_inc (dbg, linep);
+		  addr += read_2ubyte_unaligned_inc (dbg, linep);
+		  op_index = 0;
 		  break;
 
 		case DW_LNS_set_prologue_end:
@@ -581,7 +634,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  if (unlikely (standard_opcode_lengths[opcode] != 0))
 		    goto invalid_data;
 
-		  prologue_end = 1;
+		  prologue_end = true;
 		  break;
 
 		case DW_LNS_set_epilogue_begin:
@@ -589,7 +642,15 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 		  if (unlikely (standard_opcode_lengths[opcode] != 0))
 		    goto invalid_data;
 
-		  epilogue_begin = 1;
+		  epilogue_begin = true;
+		  break;
+
+		case DW_LNS_set_isa:
+		  /* Takes one uleb128 parameter which is stored in isa.  */
+		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		    goto invalid_data;
+
+		  get_uleb128 (isa, linep);
 		  break;
 		}
 	    }
