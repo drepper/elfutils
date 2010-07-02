@@ -1,3 +1,7 @@
+2010-07-01  Roland McGrath  <roland@redhat.com>
+
+	* c++/values.cc (is_list, what_space): Handle v4 CU rules.
+
 2010-06-23  Roland McGrath  <roland@redhat.com>
 
 	* cfi.c (dwarf_cfi_validate_fde): Function removed.

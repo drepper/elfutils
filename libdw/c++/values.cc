@@ -1,5 +1,5 @@
 /* -*- C++ -*- interfaces for libdw.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -72,6 +72,7 @@ using namespace std;
 dwarf::value_space
 dwarf::attr_value::what_space () const
 {
+  const uint_fast16_t version = _m_attr.cu->version;
   unsigned int expected = expected_value_space (dwarf_whatattr (thisattr ()),
 						_m_tag);
   unsigned int possible = 0;
@@ -88,8 +89,11 @@ dwarf::attr_value::what_space () const
     case DW_FORM_block1:
     case DW_FORM_block2:
     case DW_FORM_block4:
-      /* Location expression or target constant.  */
-      possible = VS(location) | VS(constant);
+      /* Location expression in DWARF 3, or target constant.  */
+      possible = VS(constant);
+      if (version >= 4)
+	break;
+      possible |= VS(location);
       if ((expected & possible) != possible)
 	/* When both are expected, a block is a location expression.  */
 	break;
@@ -109,10 +113,10 @@ dwarf::attr_value::what_space () const
 
     case DW_FORM_data4:
     case DW_FORM_data8:
-      // If a constant is not expected, these can be *ptr instead.
+      // If a constant is not expected, these can be *ptr instead in DWARF 3.
       possible = (VS(dwarf_constant) | VS(constant)
 		  | VS(source_file) | VS(source_line) | VS(source_column));
-      if (expected & possible)
+      if (version >= 4 || (expected & possible))
 	break;
 
     case DW_FORM_sec_offset:
@@ -559,6 +563,9 @@ dwarf::attr_value::location () const
 bool
 dwarf::location_attr::is_list () const
 {
+  if (_m_attr.thisattr ()->cu->version >= 4)
+    return dwarf_whatform (_m_attr.thisattr ()) == DW_FORM_sec_offset;
+
   switch (dwarf_whatform (_m_attr.thisattr ()))
     {
     case DW_FORM_block:
