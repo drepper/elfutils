@@ -1,5 +1,5 @@
 /* Compare semantic content of two DWARF files.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -82,7 +82,7 @@ static const struct argp_option options[] =
 static const char doc[] = N_("\
 Compare two DWARF files for semantic equality.\n\
 In the second form, compare specific entries chosen by hexadecimal file offset,\
-\n\the entry at OFFSET1 in FILE1 against each of OFFSET2... in FILE2.");
+\nthe entry at OFFSET1 in FILE1 against each of OFFSET2... in FILE2.");
 
 /* Strings for arguments in help texts.  */
 static const char args_doc[] = N_("FILE1 FILE2\n\
