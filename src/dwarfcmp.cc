@@ -208,18 +208,31 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 		<< ": ";
   }
 
-  inline void visit (const typename dwarf1::debug_info_entry &a,
-		     const typename dwarf2::debug_info_entry &b)
+  struct visitor
   {
-    a_ = &a;
-    b_ = &b;
-    visiting_result_ = a.tag () == b.tag ();
-    if (!visiting_result_)
-      location () << dwarf::tags::name (a.tag ())
-		  << " vs "
-		  << dwarf::tags::name (b.tag ())
-		  << endl;
-  }
+    talker *t_;
+    const typename dwarf1::debug_info_entry *const save_a_;
+    const typename dwarf2::debug_info_entry *const save_b_;
+    inline visitor (talker *t,
+		    const typename dwarf1::debug_info_entry &a,
+		    const typename dwarf2::debug_info_entry &b)
+      : t_ (t), save_a_ (t->a_), save_b_ (t->b_)
+    {
+      t_->a_ = &a;
+      t_->b_ = &b;
+      t_->visiting_result_ = a.tag () == b.tag ();
+      if (!t_->visiting_result_)
+	t_->location () << dwarf::tags::name (a.tag ())
+		       << " vs "
+		       << dwarf::tags::name (b.tag ())
+		       << endl;
+    }
+    inline ~visitor ()
+    {
+      t_->a_ = save_a_;
+      t_->b_ = save_b_;
+    }
+  };
 
   inline bool keep_going ()
   {
@@ -436,7 +449,7 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 	  }
 
 	// This prints the differences if it finds some.
-	visit (*path_top (left), *path_top (right));
+	visitor visit (this, *path_top (left), *path_top (right));
 	if (!visiting_result_)
 	  {
 	    cout << endl;
@@ -625,7 +638,8 @@ noisy_compare (const dwarf &file1, const dwarf &file2,
 
       if (cmp (file1, file2, a, b))
 	{
-	  cmp._m_tracker.visit (a, b);
+	  typename noisy_cmp<dwarf, dwarf, print_all>::my_tracker::visitor
+	    visit (&cmp._m_tracker, a, b);
 	  cmp._m_tracker.location () << "match" << endl;
 	}
       else

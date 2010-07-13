@@ -1,5 +1,5 @@
 /* elfutils::dwarf_comparator -- -*- C++ -*- templates for comparing DWARF data
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -90,10 +90,19 @@ namespace elfutils
       }
     };
 
-    inline void visit (const typename dwarf1::debug_info_entry &,
-		       const typename dwarf2::debug_info_entry &)
+    /* This is enough like step that they should probably be merged.
+       But it's separate.  */
+    struct visitor
     {
-    }
+      inline visitor (dwarf_tracker_base *,
+		      const typename dwarf1::debug_info_entry &,
+		      const typename dwarf2::debug_info_entry &)
+      {
+      }
+      inline ~visitor ()
+      {
+      }
+    };
 
     inline bool mismatch (cu1 &, const cu1 &, // at, end
 			  cu2 &, const cu2 &)
@@ -250,7 +259,7 @@ namespace elfutils
 
     inline bool match (const die1 &a, const die2 &b)
     {
-      _m_tracker.visit (a, b);
+      typename tracker::visitor visit (&_m_tracker, a, b);
       if (a.tag () != b.tag ())
 	return nomatch (a, b, "DIE tag");
       if (!equals (a.attributes (), b.attributes ()))

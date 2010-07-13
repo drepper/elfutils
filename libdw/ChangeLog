@@ -1,3 +1,9 @@
+2010-07-13  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_comparator (dwarf_tracker_base): Replace visit method with
+	visitor type.
+	(dwarf_comparator): Update caller.
+
 2010-07-01  Roland McGrath  <roland@redhat.com>
 
 	* c++/values.cc (is_list, what_space): Handle v4 CU rules.
