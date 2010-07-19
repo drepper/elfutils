@@ -422,7 +422,7 @@ check_aranges_structural (struct elf_file *file,
 
       /* Address size.  */
       int address_size;
-      if (!read_address_size (file, &sub_ctx, &address_size, &where))
+      if (!read_address_size (file->addr_64, &sub_ctx, &address_size, &where))
 	{
 	  retval = false;
 	  goto next;

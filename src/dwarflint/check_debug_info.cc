@@ -206,7 +206,8 @@ namespace
 	    << pri::lacks_relocation ("abbrev table offset") << std::endl;
 
 	/* Address size.  */
-	if (!read_address_size (file, &ctx, &head.address_size, &head.where))
+	if (!read_address_size (file->addr_64, &ctx, &head.address_size,
+				&head.where))
 	  throw check_base::failed ();
 
 	head.head_size = ctx.ptr - cu_begin; // Length of the headers itself.
