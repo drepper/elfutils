@@ -1,3 +1,8 @@
+2010-07-21  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf_ref_maker (dwarf_ref_maker::seen): Add copy constructor
+	to avoid default copying of uninitialized iterator.
+
 2010-07-13  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_comparator (dwarf_tracker_base): Replace visit method with

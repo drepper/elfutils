@@ -1,5 +1,5 @@
 /* elfutils::dwarf_ref_maker -- -*- C++ -*- template type specification
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -108,6 +108,15 @@ namespace elfutils
       inline seen ()
 	: _m_known (false), _m_out (), _m_refs ()
       {}
+
+      // Copy construction only valid for initial state.
+      inline seen (const seen &other)
+	: _m_known (false), _m_out (), _m_refs ()
+      {
+	if (unlikely (other._m_known) || unlikely (!other._m_refs.empty ()))
+	  throw std::logic_error
+	    ("seen copy constructs only from default-constructed");
+      }
 
       inline void resolve ()
       {
