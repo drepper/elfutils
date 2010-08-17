@@ -232,7 +232,7 @@ dnl CPU-specific backend libraries.
 AC_CONFIG_FILES([backends/Makefile])
 
 dnl Tools.
-AC_CONFIG_FILES([src/Makefile po/Makefile.in])
+AC_CONFIG_FILES([src/Makefile po/Makefile.in dwarflint/Makefile])
 
 dnl Test suite.
 AM_CONDITIONAL(STANDALONE, false)dnl Used in tests/Makefile.am, which see.

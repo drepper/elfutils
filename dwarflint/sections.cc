@@ -35,7 +35,7 @@
 #include "sections.hh"
 #include "messages.h"
 #include "pri.hh"
-#include "config.h"
+#include "options.h"
 
 namespace
 {

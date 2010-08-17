@@ -1,5 +1,5 @@
-/* Pedantic checking of DWARF files.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2008,2009,2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,54 +23,53 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECKS_HIGH_HH
-#define DWARFLINT_CHECKS_HIGH_HH
+#include "../src/dwarfstrings.h"
+#include "pri.hh"
+#include <sstream>
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#include "checks.hh"
-#include "config.h"
-#include "c++/dwarf"
-#include "../libdwfl/libdwfl.h"
-
-class open_highlevel_dwarf
-  : public check<open_highlevel_dwarf>
+std::ostream &
+pri::operator << (std::ostream &os, pri::pribase const &obj)
 {
-  Dwfl *const _m_dwfl;
-  Dwarf *const _m_dw;
-public:
-  elfutils::dwarf const dw;
-  explicit open_highlevel_dwarf (dwarflint &lint);
-  ~open_highlevel_dwarf ();
-};
-
-template<class T>
-class highlevel_check
-  : public check<highlevel_check<T> >
-{
-  open_highlevel_dwarf *_m_loader;
-public:
-  elfutils::dwarf const &dw;
-
-  explicit highlevel_check (dwarflint &lint)
-    : _m_loader (lint.check (_m_loader))
-    , dw (_m_loader->dw)
-  {
-    if (!do_high_level)
-      throw check_base::unscheduled ();
-  }
-};
-
-template <class T>
-inline where
-to_where (T const &die)
-{
-  where ret = WHERE (sec_info, NULL);
-  where_reset_1 (&ret, 0);
-  where_reset_2 (&ret, die.offset ());
-  return ret;
+  return os << obj.m_s;
 }
 
-#endif//DWARFLINT_CHECKS_HIGH_HH
+pri::attr::attr (int attr_name)
+  : pribase (dwarf_attr_string (attr_name))
+{}
+
+pri::form::form (int attr_form)
+  : pribase (dwarf_form_string (attr_form))
+{}
+
+pri::tag::tag (int die_tag)
+  : pribase (dwarf_tag_string (die_tag))
+{}
+
+pri::locexpr_opcode::locexpr_opcode (int opcode)
+  : pribase (dwarf_locexpr_opcode_string (opcode))
+{}
+
+std::ostream &
+pri::operator << (std::ostream &os, pri::ref const &obj)
+{
+  std::stringstream ss;
+  ss << std::hex << "DIE " << obj.off;
+  return os << ss.str ();
+}
+
+std::ostream &
+pri::operator << (std::ostream &os, pri::hex const &obj)
+{
+  std::stringstream ss;
+  if (obj.pre)
+    ss << obj.pre << " ";
+  ss << std::hex << "0x" << obj.value;
+  return os << ss.str ();
+}
+
+std::ostream &
+pri::operator << (std::ostream &os, pri::range const &obj)
+{
+  return os << "[" << pri::addr (obj.start)
+	    << ", " << pri::addr (obj.end) << ")";
+}

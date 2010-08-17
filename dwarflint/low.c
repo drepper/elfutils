@@ -43,10 +43,10 @@
 
 #include "../libdw/dwarf.h"
 #include "../libebl/libebl.h"
-#include "dwarfstrings.h"
+#include "../src/dwarfstrings.h"
 #include "low.h"
 #include "readctx.h"
-#include "config.h"
+#include "options.h"
 #include "tables.h"
 
 #define PRI_CU "CU 0x%" PRIx64

@@ -37,11 +37,11 @@
 #include "../libdw/dwarf.h"
 
 #include "low.h"
-#include "config.h"
+#include "options.h"
 #include "check_debug_loc_range.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
-#include "dwarf-opcodes.h"
+#include "../src/dwarf-opcodes.h"
 #include "pri.hh"
 
 namespace

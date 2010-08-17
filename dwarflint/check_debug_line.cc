@@ -29,7 +29,7 @@
 
 #include <dwarf.h>
 #include "../libdw/known-dwarf.h"
-#include "dwarfstrings.h"
+#include "../src/dwarfstrings.h"
 
 #include <sstream>
 

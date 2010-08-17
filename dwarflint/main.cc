@@ -34,7 +34,7 @@
 #include <iostream>
 
 #include "low.h"
-#include "config.h"
+#include "options.h"
 #include "dwarflint.hh"
 #include "readctx.h"
 #include "checks.hh"

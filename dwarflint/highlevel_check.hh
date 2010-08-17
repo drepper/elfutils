@@ -1,5 +1,5 @@
-/*
-   Copyright (C) 2008,2009 Red Hat, Inc.
+/* Pedantic checking of DWARF files.
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,21 +23,54 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "config.h"
+#ifndef DWARFLINT_CHECKS_HIGH_HH
+#define DWARFLINT_CHECKS_HIGH_HH
 
-/* If true, we accept silently files without debuginfo.  */
-bool tolerate_nodebug = false;
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
-/* True if no message is to be printed if the run is succesful.  */
-bool be_quiet = false; /* -q */
-bool be_verbose = false; /* -v */
-bool be_strict = false; /* --strict */
-bool be_gnu = false; /* --gnu */
-bool be_tolerant = false; /* --tolerant */
-bool show_refs = false; /* --ref */
-bool do_high_level = true; /* ! --nohl */
-bool dump_die_offsets = false; /* --dump-offsets */
+#include "checks.hh"
+#include "options.h"
+#include "c++/dwarf"
+#include "../libdwfl/libdwfl.h"
 
-/* True if coverage analysis of .debug_ranges vs. ELF sections should
-   be done.  */
-bool do_range_coverage = false; // currently no option
+class open_highlevel_dwarf
+  : public check<open_highlevel_dwarf>
+{
+  Dwfl *const _m_dwfl;
+  Dwarf *const _m_dw;
+public:
+  elfutils::dwarf const dw;
+  explicit open_highlevel_dwarf (dwarflint &lint);
+  ~open_highlevel_dwarf ();
+};
+
+template<class T>
+class highlevel_check
+  : public check<highlevel_check<T> >
+{
+  open_highlevel_dwarf *_m_loader;
+public:
+  elfutils::dwarf const &dw;
+
+  explicit highlevel_check (dwarflint &lint)
+    : _m_loader (lint.check (_m_loader))
+    , dw (_m_loader->dw)
+  {
+    if (!do_high_level)
+      throw check_base::unscheduled ();
+  }
+};
+
+template <class T>
+inline where
+to_where (T const &die)
+{
+  where ret = WHERE (sec_info, NULL);
+  where_reset_1 (&ret, 0);
+  where_reset_2 (&ret, die.offset ());
+  return ret;
+}
+
+#endif//DWARFLINT_CHECKS_HIGH_HH
