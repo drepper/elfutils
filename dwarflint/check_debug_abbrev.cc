@@ -295,18 +295,20 @@ namespace
 	cur->has_children = has_children == DW_CHILDREN_yes;
 
 	bool null_attrib;
-	uint64_t sibling_attr = 0;
 	bool low_pc = false;
 	bool high_pc = false;
 	bool ranges = false;
+	std::map<unsigned, uint64_t> seen;
 	do
 	  {
 	    uint64_t attr_off = read_ctx_get_offset (&ctx);
 	    uint64_t attrib_name, attrib_form;
 	    if (first_attr_off == 0)
 	      first_attr_off = attr_off;
+
 	    /* Shift to match elfutils reporting.  */
-	    where_reset_3 (&where, attr_off - first_attr_off);
+	    attr_off -= first_attr_off;
+	    where_reset_3 (&where, attr_off);
 
 	    /* Load attribute name and form.  */
 	    if (!checked_read_uleb128 (&ctx, &attrib_name, &where,
@@ -337,6 +339,19 @@ namespace
 		      << "invalid form " << pri::hex (attrib_form)
 		      << '.' << std::endl;
 		    throw check_base::failed ();
+		std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
+		  = seen.insert (std::make_pair (attrib_name, attr_off));
+		if (!inserted.second)
+		  {
+		    wr_error (where)
+		      << "duplicate attribute " << pri::attr (attrib_name)
+		      << " (first was at " << pri::hex (inserted.first->second)
+		      << ")." << std::endl;
+		    // I think we may allow such files for high-level
+		    // consumption, so don't fail the check...
+		    if (attrib_name == DW_AT_sibling)
+		      // ... unless it's DW_AT_sibling.
+		      failed = true;
 		  }
 	      }
 
@@ -347,27 +362,15 @@ namespace
 
 	    /* We do structural checking of sibling attribute, so make
 	       sure our assumptions in actual DIE-loading code are
-	       right.  We expect at most one DW_AT_sibling attribute,
-	       with form from reference class, but only CU-local, not
-	       DW_FORM_ref_addr.  */
+	       right.  We expect form from reference class, but only
+	       CU-local, not DW_FORM_ref_addr.  */
 	    if (attrib_name == DW_AT_sibling)
 	      {
-		if (sibling_attr != 0)
-		  wr_error (where)
-		    << "another DW_AT_sibling attribute in one abbreviation "
-		    << "(first was " << pri::hex (sibling_attr) << ")."
+		if (!cur->has_children)
+		  wr_message (where,
+			      cat (mc_die_rel, mc_acc_bloat, mc_impact_1))
+		    << "excessive DW_AT_sibling attribute at childless abbrev."
 		    << std::endl;
-		else
-		  {
-		    assert (attr_off > 0);
-		    sibling_attr = attr_off;
-
-		    if (!cur->has_children)
-		      wr_message (where,
-				  cat (mc_die_rel, mc_acc_bloat, mc_impact_1))
-			<< "excessive DW_AT_sibling attribute at childless abbrev."
-			<< std::endl;
-		  }
 
 		switch (check_sibling_form (ver, attrib_form))
 		  {
@@ -383,6 +386,7 @@ namespace
 		      << pri::form (attrib_form) << '.' << std::endl;
 		  };
 	      }
+
 	    /* Similar for DW_AT_location and friends.  */
 	    else if (is_location_attrib (attrib_name))
 	      {
@@ -390,6 +394,7 @@ namespace
 		  complain_invalid_form (where, attrib_name, attrib_form,
 					 "location attribute");
 	      }
+
 	    /* Similar for DW_AT_ranges.  */
 	    else if (attrib_name == DW_AT_ranges
 		     || attrib_name == DW_AT_stmt_list)
@@ -402,6 +407,7 @@ namespace
 		if (attrib_name == DW_AT_ranges)
 		  ranges = true;
 	      }
+
 	    /* Similar for DW_AT_{low,high}_pc, plus also make sure we
 	       don't see high_pc without low_pc.  */
 	    else if (attrib_name == DW_AT_low_pc
