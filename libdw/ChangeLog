@@ -1,3 +1,9 @@
+2010-08-18  Roland McGrath  <roland@redhat.com>
+
+	* c++/subr.hh (subr::container_tail_equal): New function.
+	* c++/dwarf_data (dwarf_data::directory_table::operator==): Use it
+	to ignore the compilation directory (first table element).
+
 2010-07-21  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf_ref_maker (dwarf_ref_maker::seen): Add copy constructor

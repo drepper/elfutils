@@ -282,12 +282,22 @@ namespace elfutils
     }
 
     template<typename t1, typename t2, typename pred_type>
-    inline bool container_equal (const t1 &a, const t2 &b, pred_type pred)
+    inline bool container_equal (const t1 &a, const t2 &b, pred_type pred,
+				 typename t1::size_type skip = 0)
     {
       typename t1::const_iterator first1 = a.begin ();
       typename t1::const_iterator last1 = a.end ();
       typename t2::const_iterator first2 = b.begin ();
       typename t2::const_iterator last2 = b.end ();
+      while (skip-- > 0)
+	{
+	  if (first1 == last1)
+	    return first2 == last2;
+	  if (first2 == last2)
+	    return first1 == last1;
+	  ++first1;
+	  ++first2;
+	}
       return container_equal (first1, last1, first2, last2, pred);
     }
 
@@ -295,6 +305,13 @@ namespace elfutils
     inline bool container_equal (const t1 &a, const t2 &b)
     {
       return container_equal (a, b, deref_equal_to<t1, t2> ());
+    }
+
+    template<typename t1, typename t2>
+    inline bool container_tail_equal (const t1 &a, const t2 &b,
+				      typename t1::size_type skip = 0)
+    {
+      return container_equal (a, b, deref_equal_to<t1, t2> (), skip);
     }
 
     template<typename iter>

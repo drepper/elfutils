@@ -1,5 +1,5 @@
 /* elfutils::dwarf_data -- internal DWARF data representations in -*- C++ -*-
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -318,7 +318,11 @@ namespace elfutils
       template<typename table>
       inline bool operator== (const table &other) const
       {
-	return size () == other.size () && subr::container_equal (*this, other);
+	/* We ignore the first element, the compilation directory.
+	   This is actually part of the CU, not part of the line info.
+	   The directory table itself matches regardless.  */
+	return (size () == other.size ()
+		&& subr::container_tail_equal (*this, other, 1));
       }
       template<typename table>
       inline bool operator!= (const table &other) const
