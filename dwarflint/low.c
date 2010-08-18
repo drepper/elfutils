@@ -50,8 +50,6 @@
 #include "tables.h"
 
 #define PRI_CU "CU 0x%" PRIx64
-#define PRI_DIE "DIE 0x%" PRIx64
-
 
 static struct cu *cu_find_cu (struct cu *cu_chain, uint64_t offset);
 
