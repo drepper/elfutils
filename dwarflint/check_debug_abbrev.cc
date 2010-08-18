@@ -298,7 +298,9 @@ namespace
 	bool low_pc = false;
 	bool high_pc = false;
 	bool ranges = false;
+	bool failed = false;
 	std::map<unsigned, uint64_t> seen;
+
 	do
 	  {
 	    uint64_t attr_off = read_ctx_get_offset (&ctx);
@@ -330,7 +332,8 @@ namespace
 		    wr_error (where)
 		      << "invalid name " << pri::hex (attrib_name)
 		      << '.' << std::endl;
-		    throw check_base::failed ();
+		    failed = true;
+		    continue;
 		  }
 
 		if (!ver->form_allowed (attrib_form))
@@ -338,7 +341,10 @@ namespace
 		    wr_error (where)
 		      << "invalid form " << pri::hex (attrib_form)
 		      << '.' << std::endl;
-		    throw check_base::failed ();
+		    failed = true;
+		    continue;
+		  }
+
 		std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
 		  = seen.insert (std::make_pair (attrib_name, attr_off));
 		if (!inserted.second)
@@ -438,6 +444,9 @@ namespace
 	  wr_error (where)
 	    << "the abbrev has DW_AT_high_pc & DW_AT_low_pc, "
 	    << "but also has DW_AT_ranges." << std::endl;
+
+	if (failed)
+	  throw check_base::failed ();
       }
 
     abbrev_table *last = NULL;
