@@ -66,6 +66,26 @@ dwarflint_SOURCES = main.cc \
 		    check_dups_abstract_origin.cc \
 		    ../src/dwarfstrings.c
 
+TESTS = tests/run-debug_abbrev-duplicate-attribute.sh
+
+EXTRA_DIST = tests/run-debug_abbrev-duplicate-attribute.sh tests/run-debug_abbrev-duplicate-attribute.bz2
+
+installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
+			      bindir=$(DESTDIR)$(bindir) \
+			      $(top_srcdir)/tests/test-wrapper.sh \
+			      installed $(tests_rpath) \
+			      $(program_transform_name)
+if STANDALONE
+TESTS_ENVIRONMENT = $(installed_TESTS_ENVIRONMENT)
+else !STANDALONE
+TESTS_ENVIRONMENT = $(top_srcdir)/tests/test-wrapper.sh \
+		    ../libdw:../backends:../libelf:../libasm
+
+installcheck-local:
+	$(MAKE) $(AM_MAKEFLAGS) \
+		TESTS_ENVIRONMENT='$(installed_TESTS_ENVIRONMENT)' check-TESTS
+endif !STANDALONE
+
 if BUILD_STATIC
 libasm = ../libasm/libasm.a
 libdw = ../libdw/libdw.a $(zip_LIBS) $(libelf) $(libebl) -ldl
