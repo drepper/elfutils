@@ -1,3 +1,8 @@
+2010-08-19  Mark Wielaard  <mjw@redhat.com>
+
+	* c++/dwarf_data (dwarf_data::directory_table::directory_table):
+	Treat first entry "special", can be NULL/empty.
+
 2010-08-18  Roland McGrath  <roland@redhat.com>
 
 	* c++/subr.hh (subr::container_tail_equal): New function.
