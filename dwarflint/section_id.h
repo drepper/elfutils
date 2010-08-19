@@ -1,0 +1,52 @@
+#ifndef DWARFLINT_SECTION_ID_H
+#define DWARFLINT_SECTION_ID_H
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#define DEBUGINFO_SECTIONS \
+  SEC (info)		   \
+  SEC (abbrev)		   \
+  SEC (aranges)		   \
+  SEC (pubnames)	   \
+  SEC (pubtypes)	   \
+  SEC (str)		   \
+  SEC (line)		   \
+  SEC (loc)		   \
+  SEC (mac)		   \
+  SEC (ranges)
+
+  enum section_id
+  {
+    sec_invalid = 0,
+
+    /* Debuginfo sections:  */
+#define SEC(n) sec_##n,
+    DEBUGINFO_SECTIONS
+    count_debuginfo_sections,
+#undef SEC
+
+    /* Non-debuginfo sections:  */
+    sec_rel = count_debuginfo_sections,
+    sec_rela,
+
+    // XXX the following should really be split out to different enum
+    /* Non-sections:  */
+    sec_locexpr,	/* Not a section, but a portion of file that
+			   contains a location expression.  */
+    rel_value,		/* For relocations, this denotes that the
+			   relocation is applied to taget value, not a
+			   section offset.  */
+    rel_address,	/* Same as above, but for addresses.  */
+    rel_exec,		/* Some as above, but we expect EXEC bit.  */
+  };
+
+  extern char const *section_name[];
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif//DWARFLINT_SECTION_ID_H

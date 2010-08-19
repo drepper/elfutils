@@ -1,1 +1,2 @@
-template<unsigned> class section;
+#include "section_id.h"
+template<enum section_id> class section;

@@ -1,5 +1,5 @@
-/* Low-level section handling.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,45 +23,14 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_SECTIONS_HH
-#define DWARFLINT_SECTIONS_HH
+#include "section_id.h"
 
-#include "checks.hh"
-#include "low.h"
+#include <stdlib.h>
 
-class load_sections
-  : public check<load_sections>
-{
-public:
-  elf_file file;
-  explicit load_sections (dwarflint &lint);
-  ~load_sections ();
+char const *section_name[] = {
+  "<invalid>",
+#define SEC(n) ".debug_"#n,
+  DEBUGINFO_SECTIONS
+  NULL
+#undef SEC
 };
-
-class section_base
-{
-  load_sections *sections;
-  sec &get_sec_or_throw (section_id secid);
-public:
-  sec &sect;
-  elf_file &file;
-  section_base (dwarflint &lint, section_id secid);
-
-  relocation_data *reldata () const
-  {
-    return sect.rel.size > 0 ? &sect.rel : NULL;
-  }
-};
-
-template<section_id sec_id>
-class section
-  : public section_base
-  , public check<section<sec_id> >
-{
-public:
-  explicit section (dwarflint &lint)
-    : section_base (lint, static_cast <enum section_id> (sec_id))
-  {}
-};
-
-#endif//DWARFLINT_SECTIONS_HH

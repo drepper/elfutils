@@ -45,6 +45,7 @@ dwarflint_SOURCES = main.cc \
 		    readctx.c  readctx.h \
 		    pri.cc pri.hh \
 		    messages.cc messages.h \
+		    section_id.cc section_id.h \
 		    where.c where.h \
 		    options.cc options.h \
 		    addr-record.cc addr-record.h \
