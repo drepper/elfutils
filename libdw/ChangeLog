@@ -1,3 +1,8 @@
+2010-08-20  Mark Wielaard  <mjw@redhat.com>
+
+	* c++/dwarf_data (dwarf_data::directory_table::directory_table):
+	Cleaner way of handling first push_back.
+
 2010-08-19  Mark Wielaard  <mjw@redhat.com>
 
 	* c++/dwarf_data (dwarf_data::directory_table::directory_table):

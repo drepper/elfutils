@@ -316,7 +316,7 @@ namespace elfutils
 	   This is not encoded in the .debug_line table, but in
 	   the DW_AT_comp_dir attribute of the referring CU.  */
 	typename table::const_iterator first = other.begin ();
-	_base::push_back (*first != NULL ? std::string (*first) : "");
+	_base::push_back (*first ?: "");
 	_base::insert (_base::end (), ++first, other.end ());
       }
 
