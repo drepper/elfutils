@@ -667,9 +667,9 @@ namespace
   }
 }
 
-check_debug_ranges::check_debug_ranges (dwarflint &lint)
-  : _m_sec_ranges (lint.check (_m_sec_ranges))
-  , _m_cus (lint.check (_m_cus))
+check_debug_ranges::check_debug_ranges (checkstack &stack, dwarflint &lint)
+  : _m_sec_ranges (lint.check (stack, _m_sec_ranges))
+  , _m_cus (lint.check (stack, _m_cus))
 {
   if (!::check_loc_or_range_structural (&_m_sec_ranges->file,
 					&_m_sec_ranges->sect,
@@ -678,9 +678,9 @@ check_debug_ranges::check_debug_ranges (dwarflint &lint)
     throw check_base::failed ();
 }
 
-check_debug_loc::check_debug_loc (dwarflint &lint)
-  : _m_sec_loc (lint.check (_m_sec_loc))
-  , _m_cus (lint.check (_m_cus))
+check_debug_loc::check_debug_loc (checkstack &stack, dwarflint &lint)
+  : _m_sec_loc (lint.check (stack, _m_sec_loc))
+  , _m_cus (lint.check (stack, _m_cus))
 {
   if (!::check_loc_or_range_structural (&_m_sec_loc->file,
 					&_m_sec_loc->sect,

@@ -95,7 +95,8 @@ namespace
   }
 
   check_debug_abbrev::abbrev_map
-  load_debug_abbrev (dwarflint &lint,
+  load_debug_abbrev (checkstack &stack,
+		     dwarflint &lint,
 		     struct sec &sect,
 		     elf_file &file)
   {
@@ -109,7 +110,7 @@ namespace
     struct where where = WHERE (sec_abbrev, NULL);
 
     // Tolerate failure here.
-    read_cu_headers *cu_headers = lint.toplev_check<read_cu_headers> ();
+    read_cu_headers *cu_headers = lint.toplev_check<read_cu_headers> (stack);
     dwarf_version_h ver = NULL;
     if (cu_headers == NULL)
       {
@@ -464,9 +465,10 @@ namespace
   }
 }
 
-check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
-  : _m_sec_abbr (lint.check (_m_sec_abbr))
-  , abbrevs (load_debug_abbrev (lint, _m_sec_abbr->sect, _m_sec_abbr->file))
+check_debug_abbrev::check_debug_abbrev (checkstack &stack, dwarflint &lint)
+  : _m_sec_abbr (lint.check (stack, _m_sec_abbr))
+  , abbrevs (load_debug_abbrev (stack, lint,
+				_m_sec_abbr->sect, _m_sec_abbr->file))
 {
 }
 

@@ -17,7 +17,12 @@ namespace
     : public highlevel_check<check_expected_trees>
   {
   public:
-    explicit check_expected_trees (dwarflint &lint);
+    static checkdescriptor descriptor () {
+      static checkdescriptor cd ("check_expected_trees");
+      return cd;
+    }
+
+    check_expected_trees (checkstack &stack, dwarflint &lint);
   };
 
   reg<check_expected_trees> reg_check_expected_trees;
@@ -57,10 +62,10 @@ namespace
   }
 }
 
-check_expected_trees::check_expected_trees (dwarflint &lint)
-  : highlevel_check<check_expected_trees> (lint)
+check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
+  : highlevel_check<check_expected_trees> (stack, lint)
 {
-  lint.check <check_debug_info> ();
+  lint.check <check_debug_info> (stack);
 
   try
     {

@@ -33,10 +33,10 @@
 #include "check_debug_info.hh"
 #include "check_debug_loc_range.hh"
 
-check_debug_aranges::check_debug_aranges (dwarflint &lint)
-  : _m_sec_aranges (lint.check (_m_sec_aranges))
+check_debug_aranges::check_debug_aranges (checkstack &stack, dwarflint &lint)
+  : _m_sec_aranges (lint.check (stack, _m_sec_aranges))
 {
-  check_debug_info *info = lint.toplev_check<check_debug_info> ();
+  check_debug_info *info = lint.toplev_check<check_debug_info> (stack);
   coverage *cov = NULL;
   if (info != NULL)
     {
@@ -45,7 +45,7 @@ check_debug_aranges::check_debug_aranges (dwarflint &lint)
       // stored in check_ranges, and that should have been requested
       // explicitly.  But for the time being...
       if (info->cu_cov.need_ranges)
-	lint.toplev_check<check_debug_ranges> ();
+	lint.toplev_check<check_debug_ranges> (stack);
       if (!info->cu_cov.need_ranges)
 	cov = &info->cu_cov.cov;
     }

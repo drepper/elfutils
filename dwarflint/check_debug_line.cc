@@ -56,7 +56,12 @@ namespace
     typedef std::vector<file_t> files_t;
 
   public:
-    explicit check_debug_line (dwarflint &lint);
+    static checkdescriptor descriptor () {
+      static checkdescriptor cd ("check_debug_line @low");
+      return cd;
+    }
+
+    explicit check_debug_line (checkstack &stack, dwarflint &lint);
 
     /* Directory index.  */
     bool read_directory_index (include_directories_t &include_directories,
@@ -111,10 +116,10 @@ namespace
   reg<check_debug_line> reg_debug_line;
 }
 
-check_debug_line::check_debug_line (dwarflint &lint)
-  : _m_sec (lint.check (_m_sec))
+check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
+  : _m_sec (lint.check (stack, _m_sec))
 {
-  check_debug_info *cus = lint.toplev_check<check_debug_info> ();
+  check_debug_info *cus = lint.toplev_check<check_debug_info> (stack);
 
   addr_record line_tables;
   WIPE (line_tables);
@@ -597,7 +602,7 @@ check_debug_line::check_debug_line (dwarflint &lint)
     throw check_base::failed ();
 
   check_debug_info *info = NULL;
-  info = lint.toplev_check (info);
+  info = lint.toplev_check (stack, info);
   if (info != NULL)
     for (std::vector<cu>::iterator it = info->cus.begin ();
 	 it != info->cus.end (); ++it)

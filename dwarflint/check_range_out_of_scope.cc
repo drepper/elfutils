@@ -48,17 +48,22 @@ namespace
 				      where const &wh_parent);
 
   public:
-    explicit check_range_out_of_scope (dwarflint &lint);
+    static checkdescriptor descriptor () {
+      static checkdescriptor cd ("check_range_out_of_scope");
+      return cd;
+    }
+
+    check_range_out_of_scope (checkstack &stack, dwarflint &lint);
   };
 
   // Register the check.
   reg<check_range_out_of_scope> reg_range_out_of_scope;
 }
 
-check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
-  : highlevel_check<check_range_out_of_scope> (lint)
+check_range_out_of_scope::check_range_out_of_scope (checkstack &stack, dwarflint &lint)
+  : highlevel_check<check_range_out_of_scope> (stack, lint)
 {
-  lint.check <check_debug_loc> ();
+  lint.check <check_debug_loc> (stack);
 
   try
     {

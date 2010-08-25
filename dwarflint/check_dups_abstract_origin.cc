@@ -49,8 +49,13 @@ namespace
     : public highlevel_check<check_dups_abstract_origin>
   {
   public:
-    explicit check_dups_abstract_origin (dwarflint &lint)
-      : highlevel_check<check_dups_abstract_origin> (lint)
+    static checkdescriptor descriptor () {
+      static checkdescriptor cd ("check_dups_abstract_origin");
+      return cd;
+    }
+
+    explicit check_dups_abstract_origin (checkstack &stack, dwarflint &lint)
+      : highlevel_check<check_dups_abstract_origin> (stack, lint)
     {
       struct {
 	void operator () (dwarf::debug_info_entry const &die,

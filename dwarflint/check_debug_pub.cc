@@ -33,17 +33,26 @@ namespace
   class check_debug_pub
     : public check<check_debug_pub<sec_id> >
   {
-    section<sec_id> *_m_sec;
+    typedef section<sec_id> section_t;
+    section_t *_m_sec;
     elf_file const &_m_file;
 
     bool check_pub_structural (check_debug_info *cus);
 
   public:
-    explicit check_debug_pub (dwarflint &lint)
-      : _m_sec (lint.check (_m_sec))
+    static checkdescriptor const &descriptor () {
+      static std::string name
+	= (std::string)"check_"
+	+ section_t::descriptor ().name.substr (1);
+      static checkdescriptor cd (name.c_str ());
+      return cd;
+    }
+
+    check_debug_pub (checkstack &stack, dwarflint &lint)
+      : _m_sec (lint.check (stack, _m_sec))
       , _m_file (_m_sec->file)
     {
-      check_pub_structural (lint.toplev_check<check_debug_info> ());
+      check_pub_structural (lint.toplev_check<check_debug_info> (stack));
     }
   };
 

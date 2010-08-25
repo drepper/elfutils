@@ -53,7 +53,7 @@ dwarflint_SOURCES = \
 	reloc.cc reloc.h \
 	tables.cc tables.hh tables.h \
 	all-dies-it.hh \
-	checks.hh \
+	checks.cc checks.hh checks.ii \
 	sections.cc sections.hh sections.ii \
 	highlevel_check.cc highlevel_check.hh \
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \

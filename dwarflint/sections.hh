@@ -33,8 +33,13 @@ class load_sections
   : public check<load_sections>
 {
 public:
+  static checkdescriptor descriptor () {
+    static checkdescriptor cd ("load_sections");
+    return cd;
+  }
+
   elf_file file;
-  explicit load_sections (dwarflint &lint);
+  load_sections (checkstack &stack, dwarflint &lint);
   ~load_sections ();
 };
 
@@ -45,7 +50,8 @@ class section_base
 public:
   sec &sect;
   elf_file &file;
-  section_base (dwarflint &lint, section_id secid);
+  section_base (checkstack &stack,
+		dwarflint &lint, section_id secid);
 
   relocation_data *reldata () const
   {
@@ -59,8 +65,13 @@ class section
   , public check<section<sec_id> >
 {
 public:
-  explicit section (dwarflint &lint)
-    : section_base (lint, static_cast <enum section_id> (sec_id))
+  static checkdescriptor const &descriptor () {
+    static checkdescriptor cd(section_name[sec_id]);
+    return cd;
+  }
+
+  explicit section (checkstack &stack, dwarflint &lint)
+    : section_base (stack, lint, sec_id)
   {}
 };
 

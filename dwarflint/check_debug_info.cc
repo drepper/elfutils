@@ -974,8 +974,8 @@ namespace
   }
 }
 
-read_cu_headers::read_cu_headers (dwarflint &lint)
-  : _m_sec_info (lint.check (_m_sec_info))
+read_cu_headers::read_cu_headers (checkstack &stack, dwarflint &lint)
+  : _m_sec_info (lint.check (stack, _m_sec_info))
   , cu_headers (read_info_headers (&_m_sec_info->file,
 				   &_m_sec_info->sect,
 				   _m_sec_info->reldata ()))
@@ -1162,13 +1162,13 @@ check_debug_info::check_info_structural ()
     }
 }
 
-check_debug_info::check_debug_info (dwarflint &lint)
-  : _m_sec_info (lint.check (_m_sec_info))
-  , _m_sec_abbrev (lint.check (_m_sec_abbrev))
-  , _m_sec_str (lint.check (_m_sec_str))
+check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
+  : _m_sec_info (lint.check (stack, _m_sec_info))
+  , _m_sec_abbrev (lint.check (stack, _m_sec_abbrev))
+  , _m_sec_str (lint.check (stack, _m_sec_str))
   , _m_file (_m_sec_info->file)
-  , _m_abbrevs (lint.check (_m_abbrevs))
-  , _m_cu_headers (lint.check (_m_cu_headers))
+  , _m_abbrevs (lint.check (stack, _m_abbrevs))
+  , _m_cu_headers (lint.check (stack, _m_cu_headers))
 {
   memset (&cu_cov, 0, sizeof (cu_cov));
   check_info_structural ();

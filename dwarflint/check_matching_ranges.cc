@@ -14,20 +14,26 @@ namespace
     : public highlevel_check<check_matching_ranges>
   {
   public:
-    explicit check_matching_ranges (dwarflint &lint);
+    static checkdescriptor descriptor () {
+      static checkdescriptor cd ("check_matching_ranges");
+      return cd;
+    }
+
+    check_matching_ranges (checkstack &stack, dwarflint &lint);
   };
 
   reg<check_matching_ranges> reg_matching_ranges;
 }
 
-check_matching_ranges::check_matching_ranges (dwarflint &lint)
-  : highlevel_check<check_matching_ranges> (lint)
+check_matching_ranges::check_matching_ranges (checkstack &stack,
+					      dwarflint &lint)
+  : highlevel_check<check_matching_ranges> (stack, lint)
 {
   if (be_tolerant || be_gnu)
     throw check_base::unscheduled ();
 
-  lint.check<check_debug_ranges> ();
-  lint.check<check_debug_aranges> ();
+  lint.check<check_debug_ranges> (stack);
+  lint.check<check_debug_aranges> (stack);
 
   try
     {

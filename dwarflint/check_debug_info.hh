@@ -39,8 +39,13 @@ class read_cu_headers
   section<sec_info> *_m_sec_info;
 
 public:
+  static checkdescriptor descriptor () {
+    static checkdescriptor cd ("read_cu_headers @low");
+    return cd;
+  }
+
   std::vector<cu_head> const cu_headers;
-  explicit read_cu_headers (dwarflint &lint);
+  read_cu_headers (checkstack &stack, dwarflint &lint);
 };
 
 class check_debug_info
@@ -66,13 +71,18 @@ class check_debug_info
   void check_info_structural ();
 
 public:
+  static checkdescriptor descriptor () {
+    static checkdescriptor cd ("check_debug_info");
+    return cd;
+  }
+
   // The check pass adds all low_pc/high_pc ranges loaded from DIE
   // tree into this following cu_cov structure.  If it finds any
   // rangeptr-class attributes, it sets cu_cov.need_ranges to true.
   cu_coverage cu_cov;
   std::vector<cu> cus;
 
-  explicit check_debug_info (dwarflint &lint);
+  check_debug_info (checkstack &stack, dwarflint &lint);
   ~check_debug_info ();
 
   cu *find_cu (::Dwarf_Off offset);

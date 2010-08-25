@@ -36,7 +36,12 @@ class check_debug_aranges
   section<sec_aranges> *_m_sec_aranges;
 
 public:
-  explicit check_debug_aranges (dwarflint &lint);
+  static checkdescriptor descriptor () {
+    static checkdescriptor cd ("check_debug_aranges @low");
+    return cd;
+  }
+
+  check_debug_aranges (checkstack &stack, dwarflint &lint);
 };
 static reg<check_debug_aranges> reg_debug_aranges;
 

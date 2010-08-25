@@ -32,11 +32,16 @@ class check_debug_abbrev
   section<sec_abbrev> *_m_sec_abbr;
 
 public:
+  static checkdescriptor descriptor () {
+    static checkdescriptor cd ("check_debug_abbrev @low");
+    return cd;
+  }
+
   // offset -> abbreviations
   typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
   abbrev_map const abbrevs;
 
-  explicit check_debug_abbrev (dwarflint &lint);
+  check_debug_abbrev (checkstack &stack, dwarflint &lint);
   ~check_debug_abbrev ();
 };
 static reg<check_debug_abbrev> reg_debug_abbrev;

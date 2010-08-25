@@ -36,7 +36,12 @@ class check_debug_ranges
   check_debug_info *_m_cus;
 
 public:
-  explicit check_debug_ranges (dwarflint &lint);
+  static checkdescriptor descriptor () {
+    static checkdescriptor cd ("check_debug_ranges @low");
+    return cd;
+  }
+
+  check_debug_ranges (checkstack &stack, dwarflint &lint);
 };
 
 class check_debug_loc
@@ -46,7 +51,12 @@ class check_debug_loc
   check_debug_info *_m_cus;
 
 public:
-  explicit check_debug_loc (dwarflint &lint);
+  static checkdescriptor descriptor () {
+    static checkdescriptor cd ("check_debug_loc @low");
+    return cd;
+  }
+
+  check_debug_loc (checkstack &stack, dwarflint &lint);
 };
 
 struct hole_info

@@ -32,6 +32,7 @@
 #include <sys/types.h>
 
 #include <iostream>
+#include <sstream>
 
 #include "low.h"
 #include "options.h"
@@ -48,6 +49,7 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_ref        303
 #define ARGP_nohl       304
 #define ARGP_dump_off   305
+#define ARGP_check      306
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -71,6 +73,8 @@ the DIE referring to the entry in consideration"), 0 },
     N_("Be verbose"), 0 },
   { "dump-offsets", ARGP_dump_off, NULL, 0,
     N_("Dump DIE offsets to stderr as the tree is iterated."), 0 },
+  { "check", ARGP_check, "[+-][@]name,...", 0,
+    N_("Only run selected checks."), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -95,6 +99,15 @@ static struct argp argp =
 {
   options, parse_opt, args_doc, doc, NULL, NULL, NULL
 };
+
+struct initial_check_rules
+  : public check_rules
+{
+  initial_check_rules () {
+    push_back (check_rule ("@all", check_rule::request));
+    push_back (check_rule ("@nodefault", check_rule::forbid));
+  }
+} rules;
 
 /* Handle program arguments.  */
 static error_t
@@ -125,6 +138,57 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case ARGP_dump_off:
       dump_die_offsets = true;
+      break;
+
+    case ARGP_check:
+      {
+	static bool first = true;
+	std::stringstream ss (arg);
+	std::string item;
+
+    	while (std::getline (ss, item, ','))
+	  {
+	    if (item.empty ())
+	      continue;
+
+	    enum {
+	      forbid,
+	      request,
+	      replace
+	    } act;
+
+	    // If the first rule has no operator, we assume the user
+	    // wants to replace the implicit set of checks.
+	    if (first)
+	      {
+		act = replace;
+		first = false;
+	      }
+	    else
+	      // Otherwise the rules are implicitly requesting, even
+	      // without the '+' operator.
+	      act = request;
+
+	    bool minus = item[0] == '-';
+	    bool plus = item[0] == '+';
+	    if (plus || minus)
+	      item = item.substr (1);
+	    if (plus)
+	      act = request;
+	    if (minus)
+	      act = forbid;
+
+	    if (act == replace)
+	      {
+		rules.clear ();
+		act = request;
+	      }
+
+	    check_rule::action_t action
+	      = act == request ? check_rule::request : check_rule::forbid;
+	    rules.push_back (check_rule (item, action));
+	  }
+      }
       break;
 
     case 'i':
@@ -213,7 +277,7 @@ main (int argc, char *argv[])
 	  unsigned int prev_error_count = error_count;
 	  if (!only_one)
 	    std::cout << std::endl << fname << ":" << std::endl;
-	  dwarflint lint (fname);
+	  dwarflint lint (fname, rules);
 
 	  if (prev_error_count == error_count && !be_quiet)
 	    puts (gettext ("No errors"));
