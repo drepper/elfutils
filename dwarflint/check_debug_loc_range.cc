@@ -34,6 +34,7 @@
 
 #include <cassert>
 #include <sstream>
+#include <algorithm>
 #include "../libdw/dwarf.h"
 
 #include "low.h"
@@ -339,7 +340,7 @@ namespace
 			  struct coverage_map *coverage_map,
 			  struct cu_coverage *cu_coverage,
 			  uint64_t addr,
-			  struct where *wh,
+			  struct where const *wh,
 			  enum message_category cat)
   {
     char buf[128]; // messages
@@ -540,21 +541,10 @@ namespace
   {
     struct ref ref;
     struct cu *cu;
+    bool operator < (ref_cu const& other) const {
+      return ref.addr < other.ref.addr;
+    }
   };
-
-  int
-  compare_refs (const void *a, const void *b)
-  {
-    const struct ref_cu *ref_a = (const struct ref_cu *)a;
-    const struct ref_cu *ref_b = (const struct ref_cu *)b;
-
-    if (ref_a->ref.addr > ref_b->ref.addr)
-      return 1;
-    else if (ref_a->ref.addr < ref_b->ref.addr)
-      return -1;
-    else
-      return 0;
-  }
 
   bool
   check_loc_or_range_structural (struct elf_file *file,
@@ -592,29 +582,26 @@ namespace
        references are organized in monotonously increasing order.  That
        doesn't have to be the case.  So merge all the references into
        one sorted array.  */
-    size_t size = 0;
-    for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
-      {
-	struct ref_record *rec
-	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
-	size += rec->size;
-      }
-    struct ref_cu *refs = (ref_cu *)alloca (sizeof (*refs) * size);
-    struct ref_cu *refptr = refs;
+    typedef std::vector<ref_cu> ref_cu_vect;
+    ref_cu_vect refs;
     for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
       {
 	struct ref_record *rec
 	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
 	for (size_t i = 0; i < rec->size; ++i)
-	  *refptr++ = {rec->refs[i], cu};
+	  {
+	    ref_cu ref = {rec->refs[i], cu};
+	    refs.push_back (ref);
+	  }
       }
-    qsort (refs, size, sizeof (*refs), compare_refs);
+    std::sort (refs.begin (), refs.end ());
 
     uint64_t last_off = 0;
-    for (size_t i = 0; i < size; ++i)
+    for (ref_cu_vect::const_iterator it = refs.begin ();
+	 it != refs.end (); ++it)
       {
-	uint64_t off = refs[i].ref.addr;
-	if (i > 0)
+	uint64_t off = it->ref.addr;
+	if (it != refs.begin ())
 	  {
 	    if (off == last_off)
 	      continue;
@@ -625,10 +612,10 @@ namespace
 	/* XXX We pass cu_coverage down for all ranges.  That means all
 	   ranges get recorded, not only those belonging to CUs.
 	   Perhaps that's undesirable.  */
-	if (!check_loc_or_range_ref (file, &ctx, refs[i].cu, sec,
+	if (!check_loc_or_range_ref (file, &ctx, it->cu, sec,
 				     &coverage, coverage_map,
 				     sec->id == sec_ranges ? cu_coverage : NULL,
-				     off, &refs[i].ref.who, cat))
+				     off, &it->ref.who, cat))
 	  retval = false;
 	last_off = off;
       }
