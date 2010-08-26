@@ -55,7 +55,7 @@ reporter::reporter (checkstack const &s, checkdescriptor const &a_cd)
   : stack (s)
   , cd (a_cd)
 {
-  //(*this) ("run", true);
+  (*this) ("...", true);
 }
 
 void
