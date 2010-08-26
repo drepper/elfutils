@@ -31,7 +31,13 @@ namespace
   {
     cat_to_str ()
     {
-#define MC(CAT, ID)  {reserve (ID); (*this)[ID] = #CAT;}
+      int count = 0;
+#define MC(CAT, ID) if (ID > count) count = ID;
+      MESSAGE_CATEGORIES
+#undef MC
+
+      resize (count + 1);
+#define MC(CAT, ID) (*this)[ID] = #CAT;
       MESSAGE_CATEGORIES
 #undef MC
     }
