@@ -66,9 +66,11 @@ dwarflint_SOURCES = \
 	check_range_out_of_scope.cc \
 	check_expected_trees.cc \
 	check_dups_abstract_origin.cc \
+	check_duplicate_DW_tag_variable.cc \
 	../src/dwarfstrings.c
 
-TESTS = tests/run-debug_abbrev-duplicate-attribute.sh
+TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
+	tests/run-check_duplicate_DW_tag_variable.sh
 
 EXTRA_DIST = tests/run-debug_abbrev-duplicate-attribute.sh tests/run-debug_abbrev-duplicate-attribute.bz2
 
