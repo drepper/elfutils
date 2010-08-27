@@ -50,6 +50,7 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_nohl       304
 #define ARGP_dump_off   305
 #define ARGP_check      306
+#define ARGP_list_checks 307
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -75,6 +76,8 @@ the DIE referring to the entry in consideration"), 0 },
     N_("Dump DIE offsets to stderr as the tree is iterated."), 0 },
   { "check", ARGP_check, "[+-][@]name,...", 0,
     N_("Only run selected checks."), 0 },
+  { "list-checks", ARGP_list_checks, NULL, 0,
+    N_("List all the available checks."), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -190,6 +193,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 	  }
       }
       break;
+
+    case ARGP_list_checks:
+      dwarflint::check_registrar::inst ()->list_checks ();
+      std::exit (0);
 
     case 'i':
       tolerate_nodebug = true;

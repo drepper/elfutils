@@ -147,6 +147,11 @@ struct reg
   {
     lint.toplev_check <T> (stack);
   }
+
+  virtual void list () const
+  {
+    dwarflint::list_check (T::descriptor ());
+  }
 };
 
 #endif//DWARFLINT_CHECKS_HH

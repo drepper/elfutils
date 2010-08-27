@@ -81,6 +81,20 @@ dwarflint::check_registrar::enroll (dwarflint &lint)
     }
 }
 
+void
+dwarflint::check_registrar::list_checks () const
+{
+  for (std::vector <item *>::const_iterator it = _m_items.begin ();
+       it != _m_items.end (); ++it)
+    (*it)->list ();
+}
+
+void
+dwarflint::list_check (checkdescriptor const &cd)
+{
+  std::cout << cd.name << std::endl;
+}
+
 namespace
 {
   bool
