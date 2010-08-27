@@ -148,9 +148,9 @@ struct reg
     lint.toplev_check <T> (stack);
   }
 
-  virtual void list () const
+  virtual checkdescriptor descriptor () const
   {
-    dwarflint::list_check (T::descriptor ());
+    return T::descriptor ();
   }
 };
 

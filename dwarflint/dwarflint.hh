@@ -86,7 +86,7 @@ public:
     struct item
     {
       virtual void run (checkstack &stack, dwarflint &lint) = 0;
-      virtual void list () const = 0;
+      virtual checkdescriptor descriptor () const = 0;
     };
 
     static check_registrar *inst ()
@@ -126,8 +126,6 @@ public:
 
   template <class T>
   T *toplev_check (checkstack &stack, T *tag = NULL);
-
-  static void list_check (checkdescriptor const &cd);
 };
 
 #endif//DWARFLINT_HH

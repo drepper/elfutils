@@ -101,13 +101,10 @@ dwarflint::check_registrar::list_checks () const
 {
   for (std::vector <item *>::const_iterator it = _m_items.begin ();
        it != _m_items.end (); ++it)
-    (*it)->list ();
-}
-
-void
-dwarflint::list_check (checkdescriptor const &cd)
-{
-  std::cout << cd.name << std::endl;
+    {
+      checkdescriptor const &cd = (*it)->descriptor ();
+      std::cout << cd.name << ' ' << cd.groups << std::endl;
+    }
 }
 
 namespace
