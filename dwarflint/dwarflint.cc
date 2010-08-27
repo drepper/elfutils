@@ -26,6 +26,7 @@
 #include "dwarflint.hh"
 #include "messages.h"
 #include "checks.hh"
+#include "options.h"
 
 #include <fcntl.h>
 #include <cstring>
@@ -42,7 +43,7 @@ operator << (std::ostream &o, checkstack const &stack)
     {
       if (it != stack.begin ())
 	o << ',';
-      o << (*it)->name;
+      o << (*it)->name ();
     }
   o << "}";
   return o;
@@ -103,27 +104,33 @@ dwarflint::check_registrar::list_checks () const
        it != _m_items.end (); ++it)
     {
       checkdescriptor const &cd = (*it)->descriptor ();
-      std::cout << cd.name << ' ' << cd.groups << std::endl;
+      std::cout << cd.name () << ' ' << cd.groups () << std::endl;
+      if (be_verbose)
+	{
+	  char const *desc = cd.description ();
+	  if (desc != NULL)
+	    std::cout << desc;
+	  std::cout << std::endl;
+	}
     }
+  if (!be_verbose)
+    std::cout << "Use --list-checks --verbose "
+      "to get detailed description of each check." << std::endl;
 }
 
 namespace
 {
   bool
   rule_matches (std::string const &name,
-		checkdescriptor const &d)
+		checkdescriptor const &cd)
   {
     if (name == "@all")
       return true;
     if (name == "@none")
       return false;
-    if (name == d.name)
+    if (name == cd.name ())
       return true;
-    for (std::vector<std::string>::const_iterator it = d.groups.begin ();
-	 it != d.groups.end (); ++it)
-      if (name == *it)
-	return true;
-    return false;
+    return cd.in_group (name);
   }
 }
 

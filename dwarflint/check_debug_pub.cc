@@ -43,7 +43,7 @@ namespace
     static checkdescriptor const &descriptor () {
       static std::string name
 	= (std::string)"check_"
-	+ section_t::descriptor ().name.substr (1);
+	+ (section_t::descriptor ().name () + 1);
       static checkdescriptor cd (name.c_str ());
       return cd;
     }

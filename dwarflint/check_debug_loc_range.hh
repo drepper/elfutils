@@ -37,7 +37,9 @@ class check_debug_ranges
 
 public:
   static checkdescriptor descriptor () {
-    static checkdescriptor cd ("check_debug_ranges @low");
+    static checkdescriptor cd
+      (checkdescriptor::create ("check_debug_ranges")
+       .groups ("@low"));
     return cd;
   }
 
@@ -52,7 +54,9 @@ class check_debug_loc
 
 public:
   static checkdescriptor descriptor () {
-    static checkdescriptor cd ("check_debug_loc @low");
+    static checkdescriptor cd
+      (checkdescriptor::create ("check_debug_loc")
+       .groups ("@low"));
     return cd;
   }
 

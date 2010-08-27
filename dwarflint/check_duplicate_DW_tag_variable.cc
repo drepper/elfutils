@@ -23,13 +23,6 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-// Implements a check for:
-//  http://gcc.gnu.org/bugzilla/show_bug.cgi?id=39524
-//  (duplicate variable declaration)
-// And for:
-//  https://fedorahosted.org/pipermail/elfutils-devel/2010-July/001497.html
-//  (variable having both decl and defn in one scope)
-
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
@@ -65,7 +58,14 @@ namespace
 
   public:
     static checkdescriptor descriptor () {
-      static checkdescriptor cd ("check_duplicate_DW_tag_variable");
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_duplicate_DW_tag_variable")
+	 .description (
+"Implements a check for two full DW_TAG_variable DIEs with the same\n"
+"DW_AT_name value.  This covers duplicate declaration, duplicate\n"
+"definition and declaration with definition.\n"
+" https://fedorahosted.org/pipermail/elfutils-devel/2010-July/001497.html\n"
+" http://gcc.gnu.org/bugzilla/show_bug.cgi?id=39524\n"));
       return cd;
     }
 

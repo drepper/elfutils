@@ -57,7 +57,9 @@ namespace
 
   public:
     static checkdescriptor descriptor () {
-      static checkdescriptor cd ("check_debug_line @low");
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_debug_line")
+	 .groups ("@low"));
       return cd;
     }
 

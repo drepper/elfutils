@@ -94,6 +94,9 @@ struct message_criteria warning_criteria;
 /* Accepted (warning) messages, that are turned into errors.  */
 struct message_criteria error_criteria;
 
+/* Whether to list available checks and exit.  */
+static bool just_list_checks = false;
+
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state);
 
@@ -195,8 +198,8 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       break;
 
     case ARGP_list_checks:
-      dwarflint::check_registrar::inst ()->list_checks ();
-      std::exit (0);
+      just_list_checks = true;
+      break;
 
     case 'i':
       tolerate_nodebug = true;
@@ -213,10 +216,14 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       break;
 
     case ARGP_KEY_NO_ARGS:
-      fputs (gettext ("Missing file name.\n"), stderr);
-      argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
-		 program_invocation_short_name);
-      exit (1);
+      if (!just_list_checks)
+	{
+	  fputs (gettext ("Missing file name.\n"), stderr);
+	  argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
+		     program_invocation_short_name);
+	  exit (1);
+	}
+      break;
 
     default:
       return ARGP_ERR_UNKNOWN;
@@ -236,6 +243,12 @@ main (int argc, char *argv[])
   /* Parse and process arguments.  */
   int remaining;
   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
+
+  if (just_list_checks)
+    {
+      dwarflint::check_registrar::inst ()->list_checks ();
+      std::exit (0);
+    }
 
   /* Initialize warning & error criteria.  */
   warning_criteria |= message_term (mc_none, mc_none);

@@ -33,7 +33,9 @@ class check_debug_abbrev
 
 public:
   static checkdescriptor descriptor () {
-    static checkdescriptor cd ("check_debug_abbrev @low");
+    static checkdescriptor cd
+      (checkdescriptor::create ("check_debug_abbrev")
+       .groups ("@low"));
     return cd;
   }
 

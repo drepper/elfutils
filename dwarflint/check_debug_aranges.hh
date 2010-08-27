@@ -37,7 +37,9 @@ class check_debug_aranges
 
 public:
   static checkdescriptor descriptor () {
-    static checkdescriptor cd ("check_debug_aranges @low");
+    static checkdescriptor cd
+      (checkdescriptor::create ("check_debug_aranges")
+       .groups ("@low"));
     return cd;
   }
 

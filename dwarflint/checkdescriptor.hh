@@ -26,25 +26,41 @@
 #ifndef DWARFLINT_CHECKDESCRIPTOR_HH
 #define DWARFLINT_CHECKDESCRIPTOR_HH
 
-#include <vector>
+#include <set>
 #include <string>
 #include <iosfwd>
 
 struct checkgroups
-  : public std::vector<std::string>
-{
-  checkgroups (std::vector<std::string> const &v)
-    : std::vector<std::string> (v)
-  {}
-};
+  : public std::set<std::string>
+{};
 std::ostream &operator << (std::ostream &o, checkgroups const &groups);
 
 struct checkdescriptor
 {
-  checkgroups groups;
-  std::string const name;
+  struct create
+  {
+    checkgroups g;
+    char const *const name;
+    char const *desc;
+    create (char const *name);
+    create &groups (char const *name);
 
-  checkdescriptor (std::string const &desc);
+    create &description (char const *d)
+    { desc = d; return *this; }
+  };
+
+  checkdescriptor (create const &c);
+
+  char const *name () const { return _m_name; }
+  char const *description () const { return _m_description; }
+
+  checkgroups const &groups () const { return _m_groups; }
+  bool in_group (std::string const &group) const;
+
+private:
+  char const *const _m_name;
+  char const *const _m_description;
+  checkgroups const _m_groups;
 };
 
 #endif//DWARFLINT_CHECKDESCRIPTOR_HH

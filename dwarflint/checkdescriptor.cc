@@ -25,35 +25,13 @@
 
 #include "checkdescriptor.hh"
 #include <sstream>
-
-namespace
-{
-  std::vector<std::string>
-  split_groups (std::string const &str)
-  {
-    std::stringstream ss (str);
-    std::string item;
-    std::vector<std::string> ret;
-
-    while (ss >> item)
-      ret.push_back (item);
-
-    return ret;
-  }
-}
-
-checkdescriptor::checkdescriptor (std::string const &desc)
-  : groups (::split_groups (desc))
-  , name (groups[0])
-{
-  groups.erase (groups.begin ());
-}
+#include <cassert>
 
 std::ostream &
 operator << (std::ostream &o, checkgroups const &groups)
 {
   o << '[';
-  for (std::vector<std::string>::const_iterator it = groups.begin ();
+  for (checkgroups::const_iterator it = groups.begin ();
        it != groups.end (); ++it)
     {
       if (it != groups.begin ())
@@ -62,4 +40,31 @@ operator << (std::ostream &o, checkgroups const &groups)
     }
   o << ']';
   return o;
+}
+
+checkdescriptor::create::create (char const *a_name)
+  : name (a_name)
+  , desc (NULL)
+{}
+
+checkdescriptor::create &
+checkdescriptor::create::groups (char const *a_groups)
+{
+  std::stringstream ss (a_groups);
+  std::string group;
+  while (ss >> group)
+    g.insert (group);
+  return *this;
+}
+
+checkdescriptor::checkdescriptor (create const &c)
+  : _m_name (c.name)
+  , _m_description (c.desc)
+  , _m_groups (c.g)
+{}
+
+bool
+checkdescriptor::in_group (std::string const &group) const
+{
+  return _m_groups.find (group) != _m_groups.end ();
 }

@@ -43,8 +43,8 @@ reporter::operator () (char const *what, bool ext)
     for (size_t i = 0; i < stack.size (); ++i)
       std::cout << ' ';
 
-  std::cout << cd.name << ' ' << what;
+  std::cout << cd.name () << ' ' << what;
   if (ext)
-    std::cout << ' ' << cd.groups << ' ' << stack;
+    std::cout << ' ' << cd.groups () << ' ' << stack;
   std::cout << std::endl;
 }
