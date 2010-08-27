@@ -33,6 +33,8 @@
 #include "check_debug_info.hh"
 #include "check_debug_loc_range.hh"
 
+static reg<check_debug_aranges> reg_debug_aranges;
+
 check_debug_aranges::check_debug_aranges (checkstack &stack, dwarflint &lint)
   : _m_sec_aranges (lint.check (stack, _m_sec_aranges))
 {

@@ -38,6 +38,8 @@
 #include <cassert>
 #include <algorithm>
 
+static reg<check_debug_abbrev> reg_debug_abbrev;
+
 struct abbrev *
 abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
 			  uint64_t abbrev_code)

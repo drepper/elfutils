@@ -43,6 +43,5 @@ public:
 
   check_debug_aranges (checkstack &stack, dwarflint &lint);
 };
-static reg<check_debug_aranges> reg_debug_aranges;
 
 #endif//DWARFLINT_CHECKS_LOW_HH

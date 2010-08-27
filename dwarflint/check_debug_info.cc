@@ -40,6 +40,8 @@
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"
 
+static reg<check_debug_info> reg_debug_info;
+
 namespace
 {
   bool

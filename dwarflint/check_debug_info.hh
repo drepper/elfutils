@@ -87,6 +87,5 @@ public:
 
   cu *find_cu (::Dwarf_Off offset);
 };
-static reg<check_debug_info> reg_debug_info;
 
 #endif//DWARFLINT_CHECK_DEBUG_INFO_HH

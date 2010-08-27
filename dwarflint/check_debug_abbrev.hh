@@ -44,6 +44,5 @@ public:
   check_debug_abbrev (checkstack &stack, dwarflint &lint);
   ~check_debug_abbrev ();
 };
-static reg<check_debug_abbrev> reg_debug_abbrev;
 
 #endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH
