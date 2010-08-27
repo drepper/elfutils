@@ -23,46 +23,18 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "checks.hh"
-#include "options.h"
+#ifndef DWARFLINT_CHECKDESCRIPTOR_HH
+#define DWARFLINT_CHECKDESCRIPTOR_HH
 
-reporter::reporter (checkstack const &s, checkdescriptor const &a_cd)
-  : stack (s)
-  , cd (a_cd)
+#include <vector>
+#include <string>
+
+struct checkdescriptor
 {
-  (*this) ("...", true);
-}
+  std::vector<std::string> groups;
+  std::string const name;
 
-void
-reporter::operator () (char const *what, bool ext)
-{
-  if (!be_verbose)
-    return;
+  checkdescriptor (std::string const &desc);
+};
 
-  if (false)
-    for (size_t i = 0; i < stack.size (); ++i)
-      std::cout << ' ';
-
-  std::cout << cd.name << ' ' << what;
-  if (ext)
-    {
-      std::cout << " [";
-      for (std::vector<std::string>::const_iterator it = cd.groups.begin ();
-	   it != cd.groups.end (); ++it)
-	{
-	  if (it != cd.groups.begin ())
-	    std::cout << ',';
-	  std::cout << *it;
-	}
-      std::cout << "] {";
-      for (checkstack::const_iterator it = stack.begin ();
-	   it != stack.end (); ++it)
-	{
-	  if (it != stack.begin ())
-	    std::cout << ',';
-	  std::cout << (*it)->name;
-	}
-      std::cout << "}";
-    }
-  std::cout << std::endl;
-}
+#endif//DWARFLINT_CHECKDESCRIPTOR_HH

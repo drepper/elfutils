@@ -28,16 +28,9 @@
 
 #include "where.h"
 #include "dwarflint.hh"
+#include "checkdescriptor.hh"
 #include <string>
 #include <cassert>
-
-struct checkdescriptor
-{
-  std::vector<std::string> groups;
-  std::string const name;
-
-  checkdescriptor (std::string const &desc);
-};
 
 struct check_base
 {

@@ -23,46 +23,30 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "checks.hh"
-#include "options.h"
+#include "checkdescriptor.hh"
+#include <sstream>
 
-reporter::reporter (checkstack const &s, checkdescriptor const &a_cd)
-  : stack (s)
-  , cd (a_cd)
+namespace
 {
-  (*this) ("...", true);
+  std::vector<std::string>
+  split_groups (std::string const &str)
+  {
+    std::stringstream ss (str);
+    std::string item;
+    std::vector<std::string> ret;
+
+    while (ss >> item)
+      ret.push_back (item);
+
+    return ret;
+  }
 }
 
-void
-reporter::operator () (char const *what, bool ext)
+checkdescriptor::checkdescriptor (std::string const &desc)
+  : groups (::split_groups (desc))
+  , name (groups[0])
 {
-  if (!be_verbose)
-    return;
-
-  if (false)
-    for (size_t i = 0; i < stack.size (); ++i)
-      std::cout << ' ';
-
-  std::cout << cd.name << ' ' << what;
-  if (ext)
-    {
-      std::cout << " [";
-      for (std::vector<std::string>::const_iterator it = cd.groups.begin ();
-	   it != cd.groups.end (); ++it)
-	{
-	  if (it != cd.groups.begin ())
-	    std::cout << ',';
-	  std::cout << *it;
-	}
-      std::cout << "] {";
-      for (checkstack::const_iterator it = stack.begin ();
-	   it != stack.end (); ++it)
-	{
-	  if (it != stack.begin ())
-	    std::cout << ',';
-	  std::cout << (*it)->name;
-	}
-      std::cout << "}";
-    }
-  std::cout << std::endl;
+  groups.erase (groups.begin ());
 }
+
+

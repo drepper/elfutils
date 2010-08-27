@@ -39,6 +39,7 @@ bin_PROGRAMS = dwarflint
 
 dwarflint_SOURCES = \
 	main.cc \
+	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
 	dwarflint.cc dwarflint.hh misc.h \
 	low.c low.h \
 	expected-at.cc expected.hh \

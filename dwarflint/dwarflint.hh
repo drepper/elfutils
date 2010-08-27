@@ -31,6 +31,7 @@
 #include <stdexcept>
 #include "../libelf/libelf.h"
 #include "checks.ii"
+#include "checkdescriptor.ii"
 
 class checkstack
   : public std::vector <checkdescriptor const *>
