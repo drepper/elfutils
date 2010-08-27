@@ -49,4 +49,17 @@ checkdescriptor::checkdescriptor (std::string const &desc)
   groups.erase (groups.begin ());
 }
 
-
+std::ostream &
+operator << (std::ostream &o, checkgroups const &groups)
+{
+  o << '[';
+  for (std::vector<std::string>::const_iterator it = groups.begin ();
+       it != groups.end (); ++it)
+    {
+      if (it != groups.begin ())
+	o << ',';
+      o << *it;
+    }
+  o << ']';
+  return o;
+}

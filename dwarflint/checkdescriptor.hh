@@ -28,10 +28,20 @@
 
 #include <vector>
 #include <string>
+#include <iosfwd>
+
+struct checkgroups
+  : public std::vector<std::string>
+{
+  checkgroups (std::vector<std::string> const &v)
+    : std::vector<std::string> (v)
+  {}
+};
+std::ostream &operator << (std::ostream &o, checkgroups const &groups);
 
 struct checkdescriptor
 {
-  std::vector<std::string> groups;
+  checkgroups groups;
   std::string const name;
 
   checkdescriptor (std::string const &desc);

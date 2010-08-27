@@ -29,14 +29,17 @@
 #include <map>
 #include <vector>
 #include <stdexcept>
+#include <string>
+#include <iosfwd>
+
 #include "../libelf/libelf.h"
 #include "checks.ii"
 #include "checkdescriptor.ii"
 
 class checkstack
   : public std::vector <checkdescriptor const *>
-{
-};
+{};
+std::ostream &operator << (std::ostream &o, checkstack const &stack);
 
 struct check_rule
 {

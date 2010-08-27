@@ -45,24 +45,6 @@ reporter::operator () (char const *what, bool ext)
 
   std::cout << cd.name << ' ' << what;
   if (ext)
-    {
-      std::cout << " [";
-      for (std::vector<std::string>::const_iterator it = cd.groups.begin ();
-	   it != cd.groups.end (); ++it)
-	{
-	  if (it != cd.groups.begin ())
-	    std::cout << ',';
-	  std::cout << *it;
-	}
-      std::cout << "] {";
-      for (checkstack::const_iterator it = stack.begin ();
-	   it != stack.end (); ++it)
-	{
-	  if (it != stack.begin ())
-	    std::cout << ',';
-	  std::cout << (*it)->name;
-	}
-      std::cout << "}";
-    }
+    std::cout << ' ' << cd.groups << ' ' << stack;
   std::cout << std::endl;
 }

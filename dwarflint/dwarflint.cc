@@ -33,6 +33,21 @@
 #include <stdexcept>
 #include <sstream>
 
+std::ostream &
+operator << (std::ostream &o, checkstack const &stack)
+{
+  o << "{";
+  for (checkstack::const_iterator it = stack.begin ();
+       it != stack.end (); ++it)
+    {
+      if (it != stack.begin ())
+	o << ',';
+      o << (*it)->name;
+    }
+  o << "}";
+  return o;
+}
+
 namespace
 {
   int
