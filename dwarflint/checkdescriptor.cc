@@ -61,6 +61,7 @@ checkdescriptor::checkdescriptor (create const &c)
   : _m_name (c.name)
   , _m_description (c.desc)
   , _m_groups (c.g)
+  , _m_prereq (c.p)
 {}
 
 bool

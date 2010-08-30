@@ -59,7 +59,8 @@ namespace
     static checkdescriptor descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_debug_line")
-	 .groups ("@low"));
+	 .groups ("@low")
+	 .prereq<typeof (*_m_sec)> ());
       return cd;
     }
 

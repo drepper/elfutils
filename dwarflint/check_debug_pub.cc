@@ -44,7 +44,9 @@ namespace
       static std::string name
 	= (std::string)"check_"
 	+ (section_t::descriptor ().name () + 1);
-      static checkdescriptor cd (name.c_str ());
+      static checkdescriptor cd
+	(checkdescriptor::create (name.c_str ())
+	 .prereq<typeof (*_m_sec)> ());
       return cd;
     }
 

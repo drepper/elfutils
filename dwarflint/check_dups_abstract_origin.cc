@@ -45,6 +45,7 @@ namespace
     static checkdescriptor descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_dups_abstract_origin")
+	 .inherit<highlevel_check<check_dups_abstract_origin> > ()
 	 .description (
 "If a given attribute name is present on a DIE, it is\n"
 "suspicious if that attribute name appears on the DIE that's the\n"

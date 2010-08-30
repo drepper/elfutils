@@ -37,6 +37,22 @@
 #include "pri.hh"
 #include "options.h"
 
+checkdescriptor const &
+load_sections::descriptor ()
+{
+  static checkdescriptor cd ("load_sections");
+  return cd;
+}
+
+checkdescriptor const &
+section_base::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ()
+     .prereq<typeof (*sections)> ());
+  return cd;
+}
+
 namespace
 {
   int

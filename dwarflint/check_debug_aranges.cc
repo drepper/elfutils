@@ -35,6 +35,16 @@
 
 static reg<check_debug_aranges> reg_debug_aranges;
 
+checkdescriptor
+check_debug_aranges::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_aranges")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_aranges)> ());
+  return cd;
+}
+
 check_debug_aranges::check_debug_aranges (checkstack &stack, dwarflint &lint)
   : _m_sec_aranges (lint.check (stack, _m_sec_aranges))
 {

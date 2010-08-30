@@ -49,7 +49,11 @@ namespace
 
   public:
     static checkdescriptor descriptor () {
-      static checkdescriptor cd ("check_range_out_of_scope");
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_range_out_of_scope")
+	 .inherit<highlevel_check<check_range_out_of_scope> > ()
+	 .description (
+"Check whether PC ranges reported at DIEs fall into the containing scope.\n"));
       return cd;
     }
 

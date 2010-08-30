@@ -40,6 +40,16 @@
 
 static reg<check_debug_abbrev> reg_debug_abbrev;
 
+checkdescriptor &
+check_debug_abbrev::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_abbrev")
+     .groups ("@low")
+     .prereq <typeof (*_m_sec_abbr)> ());
+  return cd;
+}
+
 struct abbrev *
 abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
 			  uint64_t abbrev_code)

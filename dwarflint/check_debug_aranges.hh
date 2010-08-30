@@ -23,8 +23,8 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECKS_LOW_HH
-#define DWARFLINT_CHECKS_LOW_HH
+#ifndef DWARFLINT_CHECK_DEBUG_ARANGES_HH
+#define DWARFLINT_CHECK_DEBUG_ARANGES_HH
 
 #include "low.h"
 #include "checks.hh"
@@ -36,14 +36,8 @@ class check_debug_aranges
   section<sec_aranges> *_m_sec_aranges;
 
 public:
-  static checkdescriptor descriptor () {
-    static checkdescriptor cd
-      (checkdescriptor::create ("check_debug_aranges")
-       .groups ("@low"));
-    return cd;
-  }
-
+  static checkdescriptor descriptor ();
   check_debug_aranges (checkstack &stack, dwarflint &lint);
 };
 
-#endif//DWARFLINT_CHECKS_LOW_HH
+#endif//DWARFLINT_CHECK_DEBUG_ARANGES_HH

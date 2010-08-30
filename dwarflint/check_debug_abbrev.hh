@@ -26,18 +26,17 @@
 #ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
 #define DWARFLINT_CHECK_DEBUG_ABBREV_HH
 
+#include "low.h"
+#include "checks.hh"
+#include "sections.ii"
+
 class check_debug_abbrev
   : public check<check_debug_abbrev>
 {
   section<sec_abbrev> *_m_sec_abbr;
 
 public:
-  static checkdescriptor descriptor () {
-    static checkdescriptor cd
-      (checkdescriptor::create ("check_debug_abbrev")
-       .groups ("@low"));
-    return cd;
-  }
+  static checkdescriptor &descriptor ();
 
   // offset -> abbreviations
   typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;

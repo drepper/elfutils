@@ -60,6 +60,7 @@ namespace
     static checkdescriptor descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_duplicate_DW_tag_variable")
+	 .inherit<highlevel_check<check_duplicate_DW_tag_variable> > ()
 	 .description (
 "Implements a check for two full DW_TAG_variable DIEs with the same\n"
 "DW_AT_name value.  This covers duplicate declaration, duplicate\n"

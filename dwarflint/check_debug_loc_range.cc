@@ -45,6 +45,32 @@
 #include "../src/dwarf-opcodes.h"
 #include "pri.hh"
 
+static reg<check_debug_ranges> reg_debug_ranges;
+
+checkdescriptor const &
+check_debug_ranges::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_ranges")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_ranges)> ()
+     .prereq<typeof (*_m_cus)> ());
+  return cd;
+}
+
+static reg<check_debug_loc> reg_debug_loc;
+
+checkdescriptor const &
+check_debug_loc::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_loc")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_loc)> ()
+     .prereq<typeof (*_m_cus)> ());
+  return cd;
+}
+
 namespace
 {
   void
@@ -1018,10 +1044,4 @@ found_hole (uint64_t start, uint64_t length, void *data)
     }
 
   return true;
-}
-
-namespace
-{
-  reg<check_debug_ranges> reg_debug_ranges;
-  reg<check_debug_loc> reg_debug_loc;
 }

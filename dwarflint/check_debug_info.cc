@@ -40,7 +40,31 @@
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"
 
+checkdescriptor
+read_cu_headers::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("read_cu_headers")
+     .prereq<typeof (*_m_sec_info)> ());
+  return cd;
+}
+
 static reg<check_debug_info> reg_debug_info;
+
+checkdescriptor
+check_debug_info::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_info")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_info)> ()
+     .prereq<typeof (*_m_sec_abbrev)> ()
+     .prereq<typeof (*_m_sec_str)> ()
+     .prereq<typeof (*_m_abbrevs)> ()
+     .prereq<typeof (*_m_cu_headers)> ()
+     );
+  return cd;
+}
 
 namespace
 {

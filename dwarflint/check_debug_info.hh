@@ -26,10 +26,10 @@
 #ifndef DWARFLINT_CHECK_DEBUG_INFO_HH
 #define DWARFLINT_CHECK_DEBUG_INFO_HH
 
+#include "low.h"
+#include "checks.hh"
 #include "check_debug_abbrev.ii"
 #include "sections.ii"
-#include "checks.hh"
-#include "low.h"
 
 /** The pass for reading basic .debug_info data -- the layout of
     sections and their headers.  */
@@ -39,11 +39,7 @@ class read_cu_headers
   section<sec_info> *_m_sec_info;
 
 public:
-  static checkdescriptor descriptor () {
-    static checkdescriptor cd ("read_cu_headers @low");
-    return cd;
-  }
-
+  static checkdescriptor descriptor ();
   std::vector<cu_head> const cu_headers;
   read_cu_headers (checkstack &stack, dwarflint &lint);
 };
@@ -71,10 +67,7 @@ class check_debug_info
   void check_info_structural ();
 
 public:
-  static checkdescriptor descriptor () {
-    static checkdescriptor cd ("check_debug_info");
-    return cd;
-  }
+  static checkdescriptor descriptor ();
 
   // The check pass adds all low_pc/high_pc ranges loaded from DIE
   // tree into this following cu_cov structure.  If it finds any

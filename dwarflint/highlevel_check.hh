@@ -57,6 +57,13 @@ class highlevel_check
 {
   open_highlevel_dwarf *_m_loader;
 public:
+  static checkdescriptor const &descriptor () {
+    static checkdescriptor cd
+      (checkdescriptor::create ("open_highlevel_dwarf")
+       .prereq<typeof (*_m_loader)> ());
+    return cd;
+  }
+
   elfutils::dwarf const &dw;
 
   explicit highlevel_check (checkstack &stack, dwarflint &lint)

@@ -33,10 +33,7 @@ class load_sections
   : public check<load_sections>
 {
 public:
-  static checkdescriptor descriptor () {
-    static checkdescriptor cd ("load_sections");
-    return cd;
-  }
+  static checkdescriptor const &descriptor ();
 
   elf_file file;
   load_sections (checkstack &stack, dwarflint &lint);
@@ -47,7 +44,10 @@ class section_base
 {
   load_sections *sections;
   sec &get_sec_or_throw (section_id secid);
+
 public:
+  static checkdescriptor const &descriptor ();
+
   sec &sect;
   elf_file &file;
   section_base (checkstack &stack,
@@ -66,7 +66,9 @@ class section
 {
 public:
   static checkdescriptor const &descriptor () {
-    static checkdescriptor cd(section_name[sec_id]);
+    static checkdescriptor cd
+      (checkdescriptor::create (section_name[sec_id])
+       .inherit<section_base> ());
     return cd;
   }
 

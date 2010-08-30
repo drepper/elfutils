@@ -40,19 +40,25 @@ struct checkdescriptor
   struct create
   {
     checkgroups g;
+    checkgroups p;
     char const *const name;
     char const *desc;
-    create (char const *name);
+    create (char const *name = NULL);
     create &groups (char const *name);
 
     create &description (char const *d)
     { desc = d; return *this; }
+
+    template <class T> create &prereq ();
+
+    template <class T> create &inherit ();
   };
 
   checkdescriptor (create const &c);
 
   char const *name () const { return _m_name; }
   char const *description () const { return _m_description; }
+  checkgroups const &prereq () const { return _m_prereq; }
 
   checkgroups const &groups () const { return _m_groups; }
   bool in_group (std::string const &group) const;
@@ -61,6 +67,26 @@ private:
   char const *const _m_name;
   char const *const _m_description;
   checkgroups const _m_groups;
+  checkgroups const _m_prereq;
 };
+
+template <class T>
+checkdescriptor::create &
+checkdescriptor::create::prereq ()
+{
+  p.insert (T::descriptor ().name ());
+  return *this;
+}
+
+template <class T>
+checkdescriptor::create &
+checkdescriptor::create::inherit ()
+{
+  checkdescriptor const &cd = T::descriptor ();
+  for (checkgroups::const_iterator it = cd.prereq ().begin ();
+       it != cd.prereq ().end (); ++it)
+    p.insert (*it);
+  return *this;
+}
 
 #endif//DWARFLINT_CHECKDESCRIPTOR_HH

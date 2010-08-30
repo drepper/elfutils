@@ -40,7 +40,9 @@ namespace
   {
   public:
     static checkdescriptor descriptor () {
-      static checkdescriptor cd ("check_matching_ranges");
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_matching_ranges")
+	 .inherit<highlevel_check<check_matching_ranges> > ());
       return cd;
     }
 

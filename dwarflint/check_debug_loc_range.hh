@@ -23,11 +23,11 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#include "low.h"
+#include "checks.hh"
 #include "sections.ii"
 #include "check_debug_info.ii"
-#include "checks.hh"
 #include "messages.h"
-#include "low.h"
 
 class check_debug_ranges
   : public check<check_debug_ranges>
@@ -36,13 +36,7 @@ class check_debug_ranges
   check_debug_info *_m_cus;
 
 public:
-  static checkdescriptor descriptor () {
-    static checkdescriptor cd
-      (checkdescriptor::create ("check_debug_ranges")
-       .groups ("@low"));
-    return cd;
-  }
-
+  static checkdescriptor const &descriptor ();
   check_debug_ranges (checkstack &stack, dwarflint &lint);
 };
 
@@ -53,13 +47,7 @@ class check_debug_loc
   check_debug_info *_m_cus;
 
 public:
-  static checkdescriptor descriptor () {
-    static checkdescriptor cd
-      (checkdescriptor::create ("check_debug_loc")
-       .groups ("@low"));
-    return cd;
-  }
-
+  static checkdescriptor const &descriptor ();
   check_debug_loc (checkstack &stack, dwarflint &lint);
 };
 
