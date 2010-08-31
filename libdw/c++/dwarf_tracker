@@ -706,15 +706,15 @@ namespace elfutils
       return matched._m_lhs == NULL && matched._m_rhs == NULL;
     }
 
-    inline bool notice_match (reference_match &/*matched*/,
-			      const die1 &, const die2 &/*b*/, bool matches)
+    inline bool notice_match (reference_match &matched,
+			      const die1 &, const die2 &b, bool matches)
     {
       /* XXX not reliable!
 	 This match could be predicated on a tentative match of a
 	 circular ref inside.  We can't cache that!
+      */
       if (matches && matched._m_lhs != NULL)
 	matched._m_lhs->second.insert (b);
-      */
       return matches;
     }
 
