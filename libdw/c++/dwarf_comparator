@@ -304,6 +304,10 @@ namespace elfutils
 
       inline bool operator () (const ait1 &it1, const ait2 &it2)
       {
+	if (!_m_cmp.equals ((*it1).second, (*it2).second))
+	  {
+	    asm("nop");
+	  }
 	return _m_cmp.equals ((*it1).second, (*it2).second);
       }
     };

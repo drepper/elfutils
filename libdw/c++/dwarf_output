@@ -1,5 +1,5 @@
 /* elfutils::dwarf_output -- DWARF file generation in -*- C++ -*-
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -152,6 +152,12 @@ namespace elfutils
     {
       friend class dwarf_output;
       friend class dwarf_output_collector;
+
+      __attribute__((used)) die_info_pair *info () const
+      {
+	return reinterpret_cast<die_info_pair *>
+	  (const_cast<debug_info_entry *> (this));
+      }
 
     public:
       class attributes_type
@@ -1632,7 +1638,7 @@ namespace elfutils
 	/* XXX disabled! tentative circularity matches taint this record!
 	   must record taint to avoid caching, or punt caching.
 	 */
-	//_m_pending->_m_matched = doppleganger;
+	_m_pending->_m_matched = doppleganger;
       }
 
       /* This is called by finalize_children.  In case of imported_unit
