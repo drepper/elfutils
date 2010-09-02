@@ -39,6 +39,7 @@ namespace
     : public check<check_debug_line>
   {
     section<sec_line> *_m_sec;
+    check_debug_info *_m_info;
 
     struct include_directory_t
     {
@@ -60,7 +61,33 @@ namespace
       static checkdescriptor cd
 	(checkdescriptor::create ("check_debug_line")
 	 .groups ("@low")
-	 .prereq<typeof (*_m_sec)> ());
+	 .prereq<typeof (*_m_sec)> ()
+	 .description (
+" - for normalized values of certain attributes (such as that\n"
+"   default_is_stmt is 0 or 1, even though technically any non-zero\n"
+"   value is allowed).\n"
+" - for valid setting of opcode base (i.e. non-zero) and any file\n"
+"   indices\n"
+" - that all include directories and all files are used\n"
+" - that files with absolute paths don't refer to include directories,\n"
+"   and otherwise that the directory reference is valid\n"
+" - that each used standard or extended opcode is known (note that this\n"
+"   assumes that elfutils know about all opcodes used in practice.  Be\n"
+"   sure to build against recent-enough version).\n"
+" - that the line number program is properly terminated with the\n"
+"   DW_LNE_end_sequence instruction and that it contains at least one\n"
+"   other instruction\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+"Furthermore, if .debug_info is valid, it checks:\n"
+" - that each line table is used by some CU\n"
+" - that the line table references at CUs point to actual line tables\n"
+"TODOs:\n"
+" - overlaps in defined addresses are probably OK, one instruction can\n"
+"   be derived from several statements.  But certain flags in table\n"
+"   should be consistent in that case, namely is_stmt, basic_block,\n"
+"   end_sequence, prologue_end, epilogue_begin, isa.\n"
+		       ));
       return cd;
     }
 
@@ -121,6 +148,7 @@ namespace
 
 check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
   : _m_sec (lint.check (stack, _m_sec))
+  , _m_info (lint.toplev_check (stack, _m_info))
 {
   check_debug_info *cus = lint.toplev_check<check_debug_info> (stack);
 
@@ -588,12 +616,6 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 			       /*end*/sub_ctx.end - sub_ctx.begin);
       }
 
-      /* XXX overlaps in defined addresses are probably OK, one
-	 instruction can be derived from several statements.  But
-	 certain flags in table should be consistent in that case,
-	 namely is_stmt, basic_block, end_sequence, prologue_end,
-	 epilogue_begin, isa.  */
-
     next:
       if (!read_ctx_skip (&ctx, size))
 	goto not_enough;
@@ -604,11 +626,9 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
   else
     throw check_base::failed ();
 
-  check_debug_info *info = NULL;
-  info = lint.toplev_check (stack, info);
-  if (info != NULL)
-    for (std::vector<cu>::iterator it = info->cus.begin ();
-	 it != info->cus.end (); ++it)
+  if (_m_info != NULL)
+    for (std::vector<cu>::iterator it = _m_info->cus.begin ();
+	 it != _m_info->cus.end (); ++it)
       if (it->stmt_list.addr != (uint64_t)-1
 	  && !addr_record_has_addr (&line_tables, it->stmt_list.addr))
 	wr_error (it->stmt_list.who)
