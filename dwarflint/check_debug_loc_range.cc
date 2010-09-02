@@ -54,7 +54,19 @@ check_debug_ranges::descriptor ()
     (checkdescriptor::create ("check_debug_ranges")
      .groups ("@low")
      .prereq<typeof (*_m_sec_ranges)> ()
-     .prereq<typeof (*_m_cus)> ());
+     .prereq<typeof (*_m_cus)> ()
+     .description (
+"Checks for low-level structure of .debug_ranges.  In addition it\n"
+"checks:\n"
+" - for overlapping and dangling references from .debug_info\n"
+" - that base address is set and that it actually changes the address\n"
+" - that ranges have a positive size\n"
+" - that there are no unreferenced holes in the section\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+" - neither or both of range start and range end are expected to be\n"
+"   relocated.  It's expected that they are both relocated against the\n"
+"   same section.\n"));
   return cd;
 }
 
@@ -67,7 +79,19 @@ check_debug_loc::descriptor ()
     (checkdescriptor::create ("check_debug_loc")
      .groups ("@low")
      .prereq<typeof (*_m_sec_loc)> ()
-     .prereq<typeof (*_m_cus)> ());
+     .prereq<typeof (*_m_cus)> ()
+     .description (
+"Checks for low-level structure of .debug_loc.  In addition it\n"
+"makes the same checks as .debug_ranges.  For location expressions\n"
+"it further checks:\n"
+" - that DW_OP_bra and DW_OP_skip argument is non-zero and doesn't\n"
+"   escape the expression.  In addition it is required that the jump\n"
+"   ends on another instruction, not arbitrarily in the middle of the\n"
+"   byte stream, even if that position happened to be interpretable as\n"
+"   another well-defined instruction stream.\n"
+" - on 32-bit machines it rejects DW_OP_const8u and DW_OP_const8s\n"
+" - on 32-bit machines it checks that ULEB128-encoded arguments aren't\n"
+"   quantities that don't fit into 32 bits\n"));
   return cd;
 }
 
@@ -446,7 +470,8 @@ namespace
 	    && coverage_is_overlap (coverage, end_off, cu->head->address_size))
 	  HAVE_OVERLAP;
 
-	if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8, &end_addr))
+	if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8,
+				   &end_addr))
 	  {
 	    wr_error (&where, ": can't read address range ending.\n");
 	    return false;
@@ -488,7 +513,7 @@ namespace
 	      }
 
 	    if (end_addr < begin_addr)
-	      wr_message (cat | mc_error, &where,	": has negative range %s.\n",
+	      wr_message (cat | mc_error, &where, ": has negative range %s.\n",
 			  range_fmt (buf, sizeof buf, begin_addr, end_addr));
 	    else if (begin_addr == end_addr)
 	      /* 2.6.6: A location list entry [...] whose beginning
@@ -588,6 +613,7 @@ namespace
 
     /* For .debug_ranges, we optionally do ranges vs. ELF sections
        coverage analysis.  */
+    // xxx this is a candidate for a separate check
     struct coverage_map *coverage_map = NULL;
     if (do_range_coverage && sec->id == sec_ranges
 	&& (coverage_map
@@ -608,6 +634,7 @@ namespace
        references are organized in monotonously increasing order.  That
        doesn't have to be the case.  So merge all the references into
        one sorted array.  */
+    {
     typedef std::vector<ref_cu> ref_cu_vect;
     ref_cu_vect refs;
     for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
@@ -645,6 +672,7 @@ namespace
 	  retval = false;
 	last_off = off;
       }
+    }
 
     if (retval)
       {

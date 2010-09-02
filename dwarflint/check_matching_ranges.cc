@@ -42,7 +42,10 @@ namespace
     static checkdescriptor descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_matching_ranges")
-	 .inherit<highlevel_check<check_matching_ranges> > ());
+	 .inherit<highlevel_check<check_matching_ranges> > ()
+	 .description (
+"Check that the ranges in .debug_aranges and .debug_ranges match.\n"
+));
       return cd;
     }
 

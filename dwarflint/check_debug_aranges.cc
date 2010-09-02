@@ -41,7 +41,17 @@ check_debug_aranges::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_aranges")
      .groups ("@low")
-     .prereq<typeof (*_m_sec_aranges)> ());
+     .prereq<typeof (*_m_sec_aranges)> ()
+     .description (
+"Checks for low-level structure of .debug_aranges.  In addition it\n"
+"checks:\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+" - for dangling and duplicate CU references\n"
+" - for garbage inside padding\n"
+" - for zero-length ranges\n"
+" - that the ranges cover all the address range covered by CUs\n"
+		   ));
   return cd;
 }
 
