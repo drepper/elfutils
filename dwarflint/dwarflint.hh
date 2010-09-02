@@ -125,7 +125,8 @@ public:
   }
 
   template <class T>
-  T *toplev_check (checkstack &stack, T *tag = NULL);
+  T *toplev_check (checkstack &stack,
+		   __attribute__ ((unused)) T *fake = NULL);
 };
 
 #endif//DWARFLINT_HH
