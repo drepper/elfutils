@@ -62,7 +62,37 @@ check_debug_info::descriptor ()
      .prereq<typeof (*_m_sec_str)> ()
      .prereq<typeof (*_m_abbrevs)> ()
      .prereq<typeof (*_m_cu_headers)> ()
-     );
+     .description (
+
+"Checks for low-level structure of .debug_info.  In addition it\n"
+"checks:\n"
+" - for dangling reference to .debug_abbrev section\n"
+" - that reported CU address sizes are consistent\n"
+" - that rangeptr values are aligned to CU address size\n"
+" - it is checked that DW_AT_low_pc and DW_AT_high_pc are relocated\n"
+"   consistently\n"
+" - that DIE references are well formed (both intra-CU and inter-CU)\n"
+"   and that local reference isn't needlessly formed as global\n"
+" - that .debug_string references are well formed and referred strings\n"
+"   are properly NUL-terminated\n"
+" - that referenced abbreviations actually exist\n"
+" - that DIEs with children have the DW_AT_sibling attribute and that\n"
+"   the sibling actually is at the address reported at that attribute\n"
+" - that the DIE chain is terminated\n"
+" - that the last sibling in chain has no DW_AT_sibling attribute\n"
+" - that the DIE with children actually has children (i.e. that the\n"
+"   chain is not empty)\n"
+" - for format constraints (such as that there are no 64-bit CUs inside\n"
+"   DWARF 2 file)\n"
+" - in 32-bit CUs, that location attributes are not formed with\n"
+"   DW_FORM_data8\n"
+" - all the attribute checks done by check_debug_abbrev are done here\n"
+"   for attributes with DW_FORM_indirect.  Indirect form is forbidden\n"
+"   to be again indirect\n"
+" - that all abbreviations are used\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+		   ));
   return cd;
 }
 

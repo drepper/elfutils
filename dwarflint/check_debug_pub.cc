@@ -70,7 +70,7 @@ namespace
 " - for garbage inside padding\n"
 " - that relocations are valid.  In ET_REL files that certain fields\n"
 "   are relocated\n"
-"Furthermore, if .debug_info is valid, it checks:\n"
+"Furthermore, if .debug_info is valid, it is checked:\n"
 " - that references point to actual CUs and DIEs\n"
 " - that there's only one pub section per CU\n"));
       return cd;

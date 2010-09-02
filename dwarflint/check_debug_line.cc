@@ -63,6 +63,8 @@ namespace
 	 .groups ("@low")
 	 .prereq<typeof (*_m_sec)> ()
 	 .description (
+"Checks for low-level structure of .debug_line.  In addition it\n"
+"checks:\n"
 " - for normalized values of certain attributes (such as that\n"
 "   default_is_stmt is 0 or 1, even though technically any non-zero\n"
 "   value is allowed).\n"
@@ -79,7 +81,7 @@ namespace
 "   other instruction\n"
 " - that relocations are valid.  In ET_REL files that certain fields\n"
 "   are relocated\n"
-"Furthermore, if .debug_info is valid, it checks:\n"
+"Furthermore, if .debug_info is valid, it is checked:\n"
 " - that each line table is used by some CU\n"
 " - that the line table references at CUs point to actual line tables\n"
 "TODOs:\n"
