@@ -6,14 +6,14 @@
    access any of the low-level variables, these dependencies are not
    visible in the source.  So right now high-level checks will happily
    run even when no low-level checks passed, and can ever run before
-   any of the low-level checks, since the dependecy resolver has no
+   any of the low-level checks, since the dependency resolver has no
    idea that there is a dependency in the first place.
 
 * DWARF 4 support
   This to-do item is actually to go through the DWARF 4 standard and
   add TODO items for individual tasks.
 
-  roland: i.e., block* forms can be constant-block or location in
+  Roland: i.e., block* forms can be constant-block or location in
   DWARF<=3, but only exprloc is a location in DWARF>=4; data* forms
   can be either constant or *ptr in DWARF<=3 but only sec_offset is
   *ptr in DWARF>=4.
@@ -38,7 +38,7 @@
    Also the approach we are taking now is no good.  It ignores changes
    in DWARF revisions and doesn't tackle the expected children case at
    all.  It seems that what we need is some sort of XPath-like
-   approach to matching subgraphs.  Each time one of the queries
+   approach to matching sub-graphs.  Each time one of the queries
    triggered, a check would be done for expected "neighborhood" of the
    node.  Such a query might reach far from the original node,
    spanning layers of parent/child or die/neighbor relationship.
@@ -60,3 +60,45 @@
 <mjw> OK, so you also think that is strange. good. I might not be crazy after
       all :) [2010-09-06 17:01]
 <machatap> well, it's certainly not per the standard
+
+** DW_AT_location missing vs. optimized-out check
+   a variable/formal_parameter DIE should have some
+   location/declaration/const_value attr
+   https://fedorahosted.org/pipermail/elfutils-devel/2009-March/000179.html
+
+** DW_FORM_* basic sanity checks on attribute values
+   - cache min/max aggregate size per abbrev
+   - when variable-size, check .debug_info data sanity
+
+   This is taken from wiki where it was put way back from some e-mail.
+   I don't even remember what that means anymore but perhaps that's to
+   checks stuff like -1s encoded as signed 0xffffffff etc.
+
+** .debug_frame/.eh_frame (CFI)
+   This wasn't even started yet.
+
+** .debug_loc opcodes
+*** DW_OP_xderef, DW_OP_xderef_size
+    probably flag as unsupported.
+*** DW_OP_call_{2,4}
+    check the operand matches DIE (put off till later)
+*** DW_OP_call_ref
+    this deals with inter-DSO relationships, dwarflint in its current
+    one-file mode can't handle it. Put off till later
+*** DW_OP_nop
+    are these even useful?
+
+* quirks
+
+  Some compilers produce files broken in various ways.  Not to be
+  swamped with irrelevant known-broken stuff, we'd like dwarflint to
+  know about these "quirks" and be able to suppress them.  I expect
+  there to be frequent additions to this "quirks table", so it should
+  be fairly easy to extend this.
+
+* multi-file mode
+
+  While dwarflint manages checking several files (meaning you can put
+  several file names to a command line), it treats each of them in
+  isolation.  In theory these files can link to each other and form
+  graphs, and dwarflint should be able to handle this.
