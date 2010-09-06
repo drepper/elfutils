@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_abbrev.
-   Copyright (C) 2009 Red Hat, Inc.
+/*
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,28 +23,28 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
-#define DWARFLINT_CHECK_DEBUG_ABBREV_HH
-
-#include "low.h"
 #include "checks.hh"
-#include "sections.ii"
+#include "options.h"
 
-class check_debug_abbrev
-  : public check<check_debug_abbrev>
+reporter::reporter (checkstack const &s, checkdescriptor const &a_cd)
+  : stack (s)
+  , cd (a_cd)
 {
-  section<sec_abbrev> *_m_sec_abbr;
-  read_cu_headers *_m_cu_headers;
+  (*this) ("...", true);
+}
 
-public:
-  static checkdescriptor &descriptor ();
+void
+reporter::operator () (char const *what, bool ext)
+{
+  if (!be_verbose)
+    return;
 
-  // offset -> abbreviations
-  typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
-  abbrev_map const abbrevs;
+  if (false)
+    for (size_t i = 0; i < stack.size (); ++i)
+      std::cout << ' ';
 
-  check_debug_abbrev (checkstack &stack, dwarflint &lint);
-  ~check_debug_abbrev ();
-};
-
-#endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH
+  std::cout << cd.name () << ' ' << what;
+  if (ext)
+    std::cout << ' ' << cd.groups () << ' ' << stack;
+  std::cout << std::endl;
+}

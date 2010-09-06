@@ -34,6 +34,7 @@
 
 #include <cassert>
 #include <sstream>
+#include <algorithm>
 #include "../libdw/dwarf.h"
 
 #include "low.h"
@@ -43,6 +44,56 @@
 #include "sections.hh"
 #include "../src/dwarf-opcodes.h"
 #include "pri.hh"
+
+static reg<check_debug_ranges> reg_debug_ranges;
+
+checkdescriptor const &
+check_debug_ranges::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_ranges")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_ranges)> ()
+     .prereq<typeof (*_m_info)> ()
+     .description (
+"Checks for low-level structure of .debug_ranges.  In addition it\n"
+"checks:\n"
+" - for overlapping and dangling references from .debug_info\n"
+" - that base address is set and that it actually changes the address\n"
+" - that ranges have a positive size\n"
+" - that there are no unreferenced holes in the section\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+" - neither or both of range start and range end are expected to be\n"
+"   relocated.  It's expected that they are both relocated against the\n"
+"   same section.\n"));
+  return cd;
+}
+
+static reg<check_debug_loc> reg_debug_loc;
+
+checkdescriptor const &
+check_debug_loc::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_loc")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_loc)> ()
+     .prereq<typeof (*_m_info)> ()
+     .description (
+"Checks for low-level structure of .debug_loc.  In addition it\n"
+"makes the same checks as .debug_ranges.  For location expressions\n"
+"it further checks:\n"
+" - that DW_OP_bra and DW_OP_skip argument is non-zero and doesn't\n"
+"   escape the expression.  In addition it is required that the jump\n"
+"   ends on another instruction, not arbitrarily in the middle of the\n"
+"   byte stream, even if that position happened to be interpretable as\n"
+"   another well-defined instruction stream.\n"
+" - on 32-bit machines it rejects DW_OP_const8u and DW_OP_const8s\n"
+" - on 32-bit machines it checks that ULEB128-encoded arguments aren't\n"
+"   quantities that don't fit into 32 bits\n"));
+  return cd;
+}
 
 namespace
 {
@@ -337,9 +388,9 @@ namespace
 			  struct sec *sec,
 			  struct coverage *coverage,
 			  struct coverage_map *coverage_map,
-			  struct cu_coverage *cu_coverage,
+			  struct coverage *pc_coverage,
 			  uint64_t addr,
-			  struct where *wh,
+			  struct where const *wh,
 			  enum message_category cat)
   {
     char buf[128]; // messages
@@ -419,7 +470,8 @@ namespace
 	    && coverage_is_overlap (coverage, end_off, cu->head->address_size))
 	  HAVE_OVERLAP;
 
-	if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8, &end_addr))
+	if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8,
+				   &end_addr))
 	  {
 	    wr_error (&where, ": can't read address range ending.\n");
 	    return false;
@@ -461,7 +513,7 @@ namespace
 	      }
 
 	    if (end_addr < begin_addr)
-	      wr_message (cat | mc_error, &where,	": has negative range %s.\n",
+	      wr_message (cat | mc_error, &where, ": has negative range %s.\n",
 			  range_fmt (buf, sizeof buf, begin_addr, end_addr));
 	    else if (begin_addr == end_addr)
 	      /* 2.6.6: A location list entry [...] whose beginning
@@ -471,14 +523,14 @@ namespace
 	    /* Skip coverage analysis if we have errors or have no base
 	       (or just don't do coverage analysis at all).  */
 	    else if (base < (uint64_t)-2 && retval
-		     && (coverage_map != NULL || cu_coverage != NULL))
+		     && (coverage_map != NULL || pc_coverage != NULL))
 	      {
 		uint64_t address = begin_addr + base;
 		uint64_t length = end_addr - begin_addr;
 		if (coverage_map != NULL)
 		  coverage_map_add (coverage_map, address, length, &where, cat);
-		if (cu_coverage != NULL)
-		  coverage_add (&cu_coverage->cov, address, length);
+		if (pc_coverage != NULL)
+		  coverage_add (pc_coverage, address, length);
 	      }
 
 	    if (contains_locations)
@@ -540,27 +592,16 @@ namespace
   {
     struct ref ref;
     struct cu *cu;
+    bool operator < (ref_cu const& other) const {
+      return ref.addr < other.ref.addr;
+    }
   };
-
-  int
-  compare_refs (const void *a, const void *b)
-  {
-    const struct ref_cu *ref_a = (const struct ref_cu *)a;
-    const struct ref_cu *ref_b = (const struct ref_cu *)b;
-
-    if (ref_a->ref.addr > ref_b->ref.addr)
-      return 1;
-    else if (ref_a->ref.addr < ref_b->ref.addr)
-      return -1;
-    else
-      return 0;
-  }
 
   bool
   check_loc_or_range_structural (struct elf_file *file,
 				 struct sec *sec,
 				 struct cu *cu_chain,
-				 struct cu_coverage *cu_coverage)
+				 struct coverage *pc_coverage)
   {
     assert (sec->id == sec_loc || sec->id == sec_ranges);
     assert (cu_chain != NULL);
@@ -572,6 +613,7 @@ namespace
 
     /* For .debug_ranges, we optionally do ranges vs. ELF sections
        coverage analysis.  */
+    // xxx this is a candidate for a separate check
     struct coverage_map *coverage_map = NULL;
     if (do_range_coverage && sec->id == sec_ranges
 	&& (coverage_map
@@ -592,29 +634,27 @@ namespace
        references are organized in monotonously increasing order.  That
        doesn't have to be the case.  So merge all the references into
        one sorted array.  */
-    size_t size = 0;
-    for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
-      {
-	struct ref_record *rec
-	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
-	size += rec->size;
-      }
-    struct ref_cu *refs = (ref_cu *)alloca (sizeof (*refs) * size);
-    struct ref_cu *refptr = refs;
+    {
+    typedef std::vector<ref_cu> ref_cu_vect;
+    ref_cu_vect refs;
     for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
       {
 	struct ref_record *rec
 	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
 	for (size_t i = 0; i < rec->size; ++i)
-	  *refptr++ = {rec->refs[i], cu};
+	  {
+	    ref_cu ref = {rec->refs[i], cu};
+	    refs.push_back (ref);
+	  }
       }
-    qsort (refs, size, sizeof (*refs), compare_refs);
+    std::sort (refs.begin (), refs.end ());
 
     uint64_t last_off = 0;
-    for (size_t i = 0; i < size; ++i)
+    for (ref_cu_vect::const_iterator it = refs.begin ();
+	 it != refs.end (); ++it)
       {
-	uint64_t off = refs[i].ref.addr;
-	if (i > 0)
+	uint64_t off = it->ref.addr;
+	if (it != refs.begin ())
 	  {
 	    if (off == last_off)
 	      continue;
@@ -625,13 +665,13 @@ namespace
 	/* XXX We pass cu_coverage down for all ranges.  That means all
 	   ranges get recorded, not only those belonging to CUs.
 	   Perhaps that's undesirable.  */
-	if (!check_loc_or_range_ref (file, &ctx, refs[i].cu, sec,
-				     &coverage, coverage_map,
-				     sec->id == sec_ranges ? cu_coverage : NULL,
-				     off, &refs[i].ref.who, cat))
+	if (!check_loc_or_range_ref (file, &ctx, it->cu, sec,
+				     &coverage, coverage_map, pc_coverage,
+				     off, &it->ref.who, cat))
 	  retval = false;
 	last_off = off;
       }
+    }
 
     if (retval)
       {
@@ -658,33 +698,34 @@ namespace
     coverage_free (&coverage);
     coverage_map_free_XA (coverage_map);
 
-    if (retval && cu_coverage != NULL)
-      /* Only drop the flag if we were successful, so that the coverage
-	 analysis isn't later done against incomplete data.  */
-      cu_coverage->need_ranges = false;
-
     return retval;
   }
 }
 
-check_debug_ranges::check_debug_ranges (dwarflint &lint)
-  : _m_sec_ranges (lint.check (_m_sec_ranges))
-  , _m_cus (lint.check (_m_cus))
+check_debug_ranges::check_debug_ranges (checkstack &stack, dwarflint &lint)
+  : _m_sec_ranges (lint.check (stack, _m_sec_ranges))
+  , _m_info (lint.check (stack, _m_info))
 {
+  memset (&_m_cov, 0, sizeof (_m_cov));
   if (!::check_loc_or_range_structural (&_m_sec_ranges->file,
 					&_m_sec_ranges->sect,
-					&_m_cus->cus.front (),
-					&_m_cus->cu_cov))
+					&_m_info->cus.front (),
+					&_m_cov))
     throw check_base::failed ();
 }
 
-check_debug_loc::check_debug_loc (dwarflint &lint)
-  : _m_sec_loc (lint.check (_m_sec_loc))
-  , _m_cus (lint.check (_m_cus))
+check_debug_ranges::~check_debug_ranges ()
+{
+  coverage_free (&_m_cov);
+}
+
+check_debug_loc::check_debug_loc (checkstack &stack, dwarflint &lint)
+  : _m_sec_loc (lint.check (stack, _m_sec_loc))
+  , _m_info (lint.check (stack, _m_info))
 {
   if (!::check_loc_or_range_structural (&_m_sec_loc->file,
 					&_m_sec_loc->sect,
-					&_m_cus->cus.front (),
+					&_m_info->cus.front (),
 					NULL))
     throw check_base::failed ();
 }
@@ -1031,10 +1072,4 @@ found_hole (uint64_t start, uint64_t length, void *data)
     }
 
   return true;
-}
-
-namespace
-{
-  reg<check_debug_ranges> reg_debug_ranges;
-  reg<check_debug_loc> reg_debug_loc;
 }

@@ -32,27 +32,43 @@
 #include "check_debug_aranges.hh"
 #include "check_debug_info.hh"
 #include "check_debug_loc_range.hh"
+#include "cu_coverage.hh"
 
-check_debug_aranges::check_debug_aranges (dwarflint &lint)
-  : _m_sec_aranges (lint.check (_m_sec_aranges))
+static reg<check_debug_aranges> reg_debug_aranges;
+
+checkdescriptor
+check_debug_aranges::descriptor ()
 {
-  check_debug_info *info = lint.toplev_check<check_debug_info> ();
-  coverage *cov = NULL;
-  if (info != NULL)
-    {
-      // xxx If need_ranges is true, we have to load ranges first.
-      // That's a flaw in design of checks, that data should have been
-      // stored in check_ranges, and that should have been requested
-      // explicitly.  But for the time being...
-      if (info->cu_cov.need_ranges)
-	lint.toplev_check<check_debug_ranges> ();
-      if (!info->cu_cov.need_ranges)
-	cov = &info->cu_cov.cov;
-    }
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_aranges")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_aranges)> ()
+     .prereq<typeof (*_m_info)> ()
+     .prereq<typeof (*_m_cu_coverage)> ()
+     .description (
+"Checks for low-level structure of .debug_aranges.  In addition it\n"
+"checks:\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+" - for dangling and duplicate CU references\n"
+" - for garbage inside padding\n"
+" - for zero-length ranges\n"
+" - that the ranges cover all the address range covered by CUs\n"
+		   ));
+  return cd;
+}
+
+check_debug_aranges::check_debug_aranges (checkstack &stack, dwarflint &lint)
+  : _m_sec_aranges (lint.check (stack, _m_sec_aranges))
+  , _m_info (lint.toplev_check (stack, _m_info))
+  , _m_cu_coverage (lint.toplev_check (stack, _m_cu_coverage))
+{
+  coverage *cov = _m_cu_coverage != NULL ? &_m_cu_coverage->cov : NULL;
 
   if (!check_aranges_structural (&_m_sec_aranges->file,
 				 &_m_sec_aranges->sect,
-				 info != NULL ? &info->cus.front () : NULL,
+				 _m_info != NULL
+				   ? &_m_info->cus.front () : NULL,
 				 cov))
     throw check_base::failed ();
 }

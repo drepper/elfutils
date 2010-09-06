@@ -23,21 +23,25 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECKS_LOW_HH
-#define DWARFLINT_CHECKS_LOW_HH
+#ifndef DWARFLINT_CHECK_DEBUG_ARANGES_HH
+#define DWARFLINT_CHECK_DEBUG_ARANGES_HH
 
 #include "low.h"
 #include "checks.hh"
 #include "sections.ii"
+#include "check_debug_info.ii"
+#include "cu_coverage.ii"
 
 class check_debug_aranges
   : public check<check_debug_aranges>
 {
   section<sec_aranges> *_m_sec_aranges;
+  check_debug_info *_m_info;
+  cu_coverage *_m_cu_coverage;
 
 public:
-  explicit check_debug_aranges (dwarflint &lint);
+  static checkdescriptor descriptor ();
+  check_debug_aranges (checkstack &stack, dwarflint &lint);
 };
-static reg<check_debug_aranges> reg_debug_aranges;
 
-#endif//DWARFLINT_CHECKS_LOW_HH
+#endif//DWARFLINT_CHECK_DEBUG_ARANGES_HH

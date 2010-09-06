@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_abbrev.
-   Copyright (C) 2009 Red Hat, Inc.
+/*
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,28 +23,49 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
-#define DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#include "checkdescriptor.hh"
+#include <sstream>
+#include <cassert>
 
-#include "low.h"
-#include "checks.hh"
-#include "sections.ii"
-
-class check_debug_abbrev
-  : public check<check_debug_abbrev>
+std::ostream &
+operator << (std::ostream &o, checkgroups const &groups)
 {
-  section<sec_abbrev> *_m_sec_abbr;
-  read_cu_headers *_m_cu_headers;
+  o << '[';
+  for (checkgroups::const_iterator it = groups.begin ();
+       it != groups.end (); ++it)
+    {
+      if (it != groups.begin ())
+	o << ',';
+      o << *it;
+    }
+  o << ']';
+  return o;
+}
 
-public:
-  static checkdescriptor &descriptor ();
+checkdescriptor::create::create (char const *a_name)
+  : name (a_name)
+  , desc (NULL)
+{}
 
-  // offset -> abbreviations
-  typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
-  abbrev_map const abbrevs;
+checkdescriptor::create &
+checkdescriptor::create::groups (char const *a_groups)
+{
+  std::stringstream ss (a_groups);
+  std::string group;
+  while (ss >> group)
+    g.insert (group);
+  return *this;
+}
 
-  check_debug_abbrev (checkstack &stack, dwarflint &lint);
-  ~check_debug_abbrev ();
-};
+checkdescriptor::checkdescriptor (create const &c)
+  : _m_name (c.name)
+  , _m_description (c.desc)
+  , _m_groups (c.g)
+  , _m_prereq (c.p)
+{}
 
-#endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH
+bool
+checkdescriptor::in_group (std::string const &group) const
+{
+  return _m_groups.find (group) != _m_groups.end ();
+}

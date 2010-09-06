@@ -26,10 +26,10 @@
 #ifndef DWARFLINT_CHECK_DEBUG_INFO_HH
 #define DWARFLINT_CHECK_DEBUG_INFO_HH
 
+#include "low.h"
+#include "checks.hh"
 #include "check_debug_abbrev.ii"
 #include "sections.ii"
-#include "checks.hh"
-#include "low.h"
 
 /** The pass for reading basic .debug_info data -- the layout of
     sections and their headers.  */
@@ -39,10 +39,12 @@ class read_cu_headers
   section<sec_info> *_m_sec_info;
 
 public:
+  static checkdescriptor descriptor ();
   std::vector<cu_head> const cu_headers;
-  explicit read_cu_headers (dwarflint &lint);
+  read_cu_headers (checkstack &stack, dwarflint &lint);
 };
 
+/** The pass for in-depth structural analysis of .debug_info.  */
 class check_debug_info
   : public check<check_debug_info>
 {
@@ -57,6 +59,15 @@ class check_debug_info
   // validation.  Check for unused abbrevs should be skipped.
   std::vector< ::Dwarf_Off> _m_abbr_skip;
 
+  // The check pass adds all low_pc/high_pc ranges loaded from DIE
+  // tree into this coverage structure.
+  coverage _m_cov;
+
+  // If, during the check, we find any rangeptr-class attributes, we
+  // set need_ranges to true.  cu_ranges pass then uses this as a hint
+  // whether to request .debug_ranges or not.
+  bool _m_need_ranges;
+
   bool check_cu_structural (struct read_ctx *ctx,
 			    struct cu *const cu,
 			    Elf_Data *strings,
@@ -66,17 +77,18 @@ class check_debug_info
   void check_info_structural ();
 
 public:
-  // The check pass adds all low_pc/high_pc ranges loaded from DIE
-  // tree into this following cu_cov structure.  If it finds any
-  // rangeptr-class attributes, it sets cu_cov.need_ranges to true.
-  cu_coverage cu_cov;
+  static checkdescriptor descriptor ();
+
+  coverage const &cov () const { return _m_cov; }
+  bool need_ranges () const { return _m_need_ranges; }
+
+  // This is where the loaded CUs are stored.
   std::vector<cu> cus;
 
-  explicit check_debug_info (dwarflint &lint);
+  check_debug_info (checkstack &stack, dwarflint &lint);
   ~check_debug_info ();
 
   cu *find_cu (::Dwarf_Off offset);
 };
-static reg<check_debug_info> reg_debug_info;
 
 #endif//DWARFLINT_CHECK_DEBUG_INFO_HH

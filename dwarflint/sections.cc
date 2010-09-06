@@ -37,6 +37,22 @@
 #include "pri.hh"
 #include "options.h"
 
+checkdescriptor const &
+load_sections::descriptor ()
+{
+  static checkdescriptor cd ("load_sections");
+  return cd;
+}
+
+checkdescriptor const &
+section_base::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ()
+     .prereq<typeof (*sections)> ());
+  return cd;
+}
+
 namespace
 {
   int
@@ -390,7 +406,8 @@ namespace
   }
 }
 
-load_sections::load_sections (dwarflint &lint)
+load_sections::load_sections (checkstack &stack __attribute__ ((unused)),
+			      dwarflint &lint)
 {
   if (!elf_file_init (&file, lint.fd ()))
     throw check_base::failed ();
@@ -458,8 +475,9 @@ section_base::get_sec_or_throw (section_id secid)
   throw check_base::failed ();
 }
 
-section_base::section_base (dwarflint &lint, section_id secid)
-  : sections (lint.check (sections))
+section_base::section_base (checkstack &stack,
+			    dwarflint &lint, section_id secid)
+  : sections (lint.check (stack, sections))
   , sect (get_sec_or_throw (secid))
   , file (sections->file)
 {

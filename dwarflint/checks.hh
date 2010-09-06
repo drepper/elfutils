@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009,2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -26,10 +26,11 @@
 #ifndef DWARFLINT_CHECKS_HH
 #define DWARFLINT_CHECKS_HH
 
-#include <string>
-#include <cassert>
 #include "where.h"
 #include "dwarflint.hh"
+#include "checkdescriptor.hh"
+#include <string>
+#include <cassert>
 
 struct check_base
 {
@@ -44,50 +45,72 @@ class check
 {
 private:
   template <class X>
-  friend X *dwarflint::check ();
+  friend X *dwarflint::check (checkstack &stack);
   static void const *key ()
   {
     return reinterpret_cast <void const *> (&key);
   }
 };
 
+struct reporter
+{
+  checkstack const &stack;
+  checkdescriptor const &cd;
+
+  reporter (checkstack const &s, checkdescriptor const &a_cd);
+  void operator () (char const *what, bool ext = false);
+};
+
 template <class T>
 T *
-dwarflint::check ()
+dwarflint::check (checkstack &stack)
 {
   void const *key = T::key ();
-  check_map::iterator it = _m_checks.find (key);
+  T *c = static_cast <T *> (find_check (key));
 
-  T *c;
-  if (it != _m_checks.end ())
+  if (c == NULL)
     {
-      c = static_cast <T *> (it->second);
+      checkdescriptor const &cd = T::descriptor ();
 
-      // We already tried to do the check, but failed.
-      if (c == NULL)
-	throw check_base::failed ();
-      else
-	// Recursive dependency!
-	assert (c != (T *)-1);
-    }
-  else
-    {
-      // Put a marker there saying that we are trying to satisfy that
-      // dependency.
-      if (!_m_checks.insert (std::make_pair (key, (T *)-1)).second)
-	throw std::runtime_error ("duplicate key");
+      struct popper {
+	checkstack &guard_stack;
+	popper (checkstack &a_guard_stack) : guard_stack (a_guard_stack) {}
+	~popper () { guard_stack.pop_back (); }
+      };
 
-      // Now do the check.
+      // Put a marker there indicating that we are trying to satisfy
+      // that dependency.
+      bool inserted
+	= _m_checks.insert (std::make_pair (key, (T *)marker)).second;
+      assert (inserted || !"duplicate key");
+
+      reporter report (stack, cd);
       try
 	{
-	  c = new T (*this);
+	  stack.push_back (&cd);
+	  popper p (stack);
+
+	  if (!_m_rules.should_check (stack))
+	    throw check_base::unscheduled ();
+
+	  // Now do the check.
+	  c = new T (stack, *this);
+	}
+      catch (check_base::unscheduled &e)
+	{
+	  report ("skipped");
+	  _m_checks.erase (key);
+	  throw;
 	}
       catch (...)
 	{
 	  // Nope, we failed.  Put the anchor there.
 	  _m_checks[key] = NULL;
+	  report ("FAIL");
 	  throw;
 	}
+
+      report ("done");
 
       // On success, put the actual check object there instead of the
       // marker.
@@ -98,11 +121,12 @@ dwarflint::check ()
 
 template <class T>
 inline T *
-dwarflint::toplev_check (__attribute__ ((unused)) T *tag)
+dwarflint::toplev_check (checkstack &stack,
+			 __attribute__ ((unused)) T *tag)
 {
   try
     {
-      return check<T> ();
+      return check<T> (stack);
     }
   catch (check_base::failed const &f)
     {
@@ -119,9 +143,14 @@ struct reg
     dwarflint::check_registrar::inst ()->add (this);
   }
 
-  virtual void run (dwarflint &lint)
+  virtual void run (checkstack &stack, dwarflint &lint)
   {
-    lint.toplev_check <T> ();
+    lint.toplev_check <T> (stack);
+  }
+
+  virtual checkdescriptor descriptor () const
+  {
+    return T::descriptor ();
   }
 };
 

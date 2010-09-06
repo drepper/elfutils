@@ -128,7 +128,9 @@ namespace
   }
 }
 
-open_highlevel_dwarf::open_highlevel_dwarf (dwarflint &lint)
+open_highlevel_dwarf::open_highlevel_dwarf (checkstack &stack
+					      __attribute__ ((unused)),
+					    dwarflint &lint)
   : _m_dwfl (open_dwfl ())
   , _m_dw (open_dwarf (_m_dwfl, lint.fname (), lint.fd ()))
   , dw (open_hl_dwarf (_m_dw))

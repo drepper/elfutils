@@ -26,12 +26,28 @@
 #include "dwarflint.hh"
 #include "messages.h"
 #include "checks.hh"
+#include "options.h"
 
 #include <fcntl.h>
 #include <cstring>
 #include <cerrno>
 #include <stdexcept>
 #include <sstream>
+
+std::ostream &
+operator << (std::ostream &o, checkstack const &stack)
+{
+  o << "{";
+  for (checkstack::const_iterator it = stack.begin ();
+       it != stack.end (); ++it)
+    {
+      if (it != stack.begin ())
+	o << ',';
+      o << (*it)->name ();
+    }
+  o << "}";
+  return o;
+}
 
 namespace
 {
@@ -51,9 +67,10 @@ namespace
   }
 }
 
-dwarflint::dwarflint (char const *a_fname)
+dwarflint::dwarflint (char const *a_fname, check_rules const &rules)
   : _m_fname (a_fname)
   , _m_fd (get_fd (_m_fname))
+  , _m_rules (rules)
 {
   check_registrar::inst ()->enroll (*this);
 }
@@ -67,4 +84,124 @@ dwarflint::~dwarflint ()
   for (check_map::const_iterator it = _m_checks.begin ();
        it != _m_checks.end (); ++it)
     delete it->second;
+}
+
+void
+dwarflint::check_registrar::enroll (dwarflint &lint)
+{
+  for (std::vector <item *>::iterator it = _m_items.begin ();
+       it != _m_items.end (); ++it)
+    {
+      checkstack stack;
+      (*it)->run (stack, lint);
+    }
+}
+
+void
+dwarflint::check_registrar::list_checks () const
+{
+  for (std::vector <item *>::const_iterator it = _m_items.begin ();
+       it != _m_items.end (); ++it)
+    {
+      checkdescriptor const &cd = (*it)->descriptor ();
+      std::cout << cd.name ();
+
+      checkgroups const &groups = cd.groups ();
+      if (!groups.empty ())
+	{
+	  if (be_verbose)
+	    std::cout << std::endl << "groups: ";
+	  else
+	    std::cout << ' ';
+	  std::cout << groups;
+	}
+      std::cout << std::endl;
+
+      if (be_verbose)
+	{
+	  checkgroups const &prereq = cd.prereq ();
+	  if (!prereq.empty ())
+	    std::cout << "prerequisites: " << prereq << std::endl;
+	  char const *desc = cd.description ();
+	  if (desc != NULL)
+	    std::cout << desc;
+	  std::cout << std::endl;
+	}
+    }
+  if (!be_verbose)
+    std::cout << "Use --list-checks --verbose "
+      "to get detailed description of each check." << std::endl;
+}
+
+namespace
+{
+  bool
+  rule_matches (std::string const &name,
+		checkdescriptor const &cd)
+  {
+    if (name == "@all")
+      return true;
+    if (name == "@none")
+      return false;
+    if (name == cd.name ())
+      return true;
+    return cd.in_group (name);
+  }
+}
+
+bool
+check_rules::should_check (checkstack const &stack) const
+{
+#if 0
+  std::cout << "---\nstack" << std::endl;
+  for (checkstack::const_iterator jt = stack.begin ();
+       jt != stack.end (); ++jt)
+    std::cout << (*jt)->name << std::flush << "  ";
+  std::cout << std::endl;
+#endif
+
+  bool should = false;
+  for (const_iterator it = begin (); it != end (); ++it)
+    {
+      std::string const &rule_name = it->name;
+      bool nflag = it->action == check_rule::request;
+      if (nflag == should)
+	continue;
+
+      for (checkstack::const_iterator jt = stack.begin ();
+	   jt != stack.end (); ++jt)
+	if (rule_matches (rule_name, **jt))
+	  {
+	    //std::cout << " rule: " << rule_name << " " << nflag << std::endl;
+	    should = nflag;
+	    break;
+	  }
+    }
+
+  return should;
+}
+
+
+void *const dwarflint::marker = (void *)-1;
+
+void *
+dwarflint::find_check (void const *key)
+{
+  check_map::const_iterator it = _m_checks.find (key);
+
+  if (it != _m_checks.end ())
+    {
+      void *c = it->second;
+
+      // We already tried to do the check, but failed.
+      if (c == NULL)
+	throw check_base::failed ();
+      else
+	// Recursive dependency!
+	assert (c != marker);
+
+      return c;
+    }
+
+  return NULL;
 }

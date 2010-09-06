@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_abbrev.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,28 +23,28 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
-#define DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#ifndef DWARFLINT_CU_COVERAGE_HH
+#define DWARFLINT_CU_COVERAGE_HH
 
-#include "low.h"
+#include "check_debug_info.ii"
+#include "check_debug_loc_range.ii"
+#include "coverage.hh"
 #include "checks.hh"
-#include "sections.ii"
 
-class check_debug_abbrev
-  : public check<check_debug_abbrev>
+/** The pass for finalizing cu_coverage.  */
+class cu_coverage
+  : public check<cu_coverage>
 {
-  section<sec_abbrev> *_m_sec_abbr;
-  read_cu_headers *_m_cu_headers;
+  check_debug_info *_m_info;
+  check_debug_ranges *_m_ranges;
 
 public:
-  static checkdescriptor &descriptor ();
+  static checkdescriptor const &descriptor ();
 
-  // offset -> abbreviations
-  typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
-  abbrev_map const abbrevs;
+  coverage cov;
 
-  check_debug_abbrev (checkstack &stack, dwarflint &lint);
-  ~check_debug_abbrev ();
+  cu_coverage (checkstack &stack, dwarflint &lint);
+  ~cu_coverage ();
 };
 
-#endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#endif//DWARFLINT_CU_COVERAGE_HH

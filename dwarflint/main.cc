@@ -32,6 +32,7 @@
 #include <sys/types.h>
 
 #include <iostream>
+#include <sstream>
 
 #include "low.h"
 #include "options.h"
@@ -48,6 +49,8 @@ const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 #define ARGP_ref        303
 #define ARGP_nohl       304
 #define ARGP_dump_off   305
+#define ARGP_check      306
+#define ARGP_list_checks 307
 
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
@@ -71,6 +74,10 @@ the DIE referring to the entry in consideration"), 0 },
     N_("Be verbose"), 0 },
   { "dump-offsets", ARGP_dump_off, NULL, 0,
     N_("Dump DIE offsets to stderr as the tree is iterated."), 0 },
+  { "check", ARGP_check, "[+-][@]name,...", 0,
+    N_("Only run selected checks."), 0 },
+  { "list-checks", ARGP_list_checks, NULL, 0,
+    N_("List all the available checks."), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -87,6 +94,9 @@ struct message_criteria warning_criteria;
 /* Accepted (warning) messages, that are turned into errors.  */
 struct message_criteria error_criteria;
 
+/* Whether to list available checks and exit.  */
+static bool just_list_checks = false;
+
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state);
 
@@ -95,6 +105,15 @@ static struct argp argp =
 {
   options, parse_opt, args_doc, doc, NULL, NULL, NULL
 };
+
+struct initial_check_rules
+  : public check_rules
+{
+  initial_check_rules () {
+    push_back (check_rule ("@all", check_rule::request));
+    push_back (check_rule ("@nodefault", check_rule::forbid));
+  }
+} rules;
 
 /* Handle program arguments.  */
 static error_t
@@ -127,6 +146,61 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       dump_die_offsets = true;
       break;
 
+    case ARGP_check:
+      {
+	static bool first = true;
+	std::stringstream ss (arg);
+	std::string item;
+
+    	while (std::getline (ss, item, ','))
+	  {
+	    if (item.empty ())
+	      continue;
+
+	    enum {
+	      forbid,
+	      request,
+	      replace
+	    } act;
+
+	    // If the first rule has no operator, we assume the user
+	    // wants to replace the implicit set of checks.
+	    if (first)
+	      {
+		act = replace;
+		first = false;
+	      }
+	    else
+	      // Otherwise the rules are implicitly requesting, even
+	      // without the '+' operator.
+	      act = request;
+
+	    bool minus = item[0] == '-';
+	    bool plus = item[0] == '+';
+	    if (plus || minus)
+	      item = item.substr (1);
+	    if (plus)
+	      act = request;
+	    if (minus)
+	      act = forbid;
+
+	    if (act == replace)
+	      {
+		rules.clear ();
+		act = request;
+	      }
+
+	    check_rule::action_t action
+	      = act == request ? check_rule::request : check_rule::forbid;
+	    rules.push_back (check_rule (item, action));
+	  }
+      }
+      break;
+
+    case ARGP_list_checks:
+      just_list_checks = true;
+      break;
+
     case 'i':
       tolerate_nodebug = true;
       break;
@@ -142,10 +216,14 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       break;
 
     case ARGP_KEY_NO_ARGS:
-      fputs (gettext ("Missing file name.\n"), stderr);
-      argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
-		 program_invocation_short_name);
-      exit (1);
+      if (!just_list_checks)
+	{
+	  fputs (gettext ("Missing file name.\n"), stderr);
+	  argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
+		     program_invocation_short_name);
+	  exit (1);
+	}
+      break;
 
     default:
       return ARGP_ERR_UNKNOWN;
@@ -165,6 +243,12 @@ main (int argc, char *argv[])
   /* Parse and process arguments.  */
   int remaining;
   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
+
+  if (just_list_checks)
+    {
+      dwarflint::check_registrar::inst ()->list_checks ();
+      std::exit (0);
+    }
 
   /* Initialize warning & error criteria.  */
   warning_criteria |= message_term (mc_none, mc_none);
@@ -213,7 +297,7 @@ main (int argc, char *argv[])
 	  unsigned int prev_error_count = error_count;
 	  if (!only_one)
 	    std::cout << std::endl << fname << ":" << std::endl;
-	  dwarflint lint (fname);
+	  dwarflint lint (fname, rules);
 
 	  if (prev_error_count == error_count && !be_quiet)
 	    puts (gettext ("No errors"));

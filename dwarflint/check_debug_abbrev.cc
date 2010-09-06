@@ -38,6 +38,44 @@
 #include <cassert>
 #include <algorithm>
 
+static reg<check_debug_abbrev> reg_debug_abbrev;
+
+checkdescriptor &
+check_debug_abbrev::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_abbrev")
+     .groups ("@low")
+     .prereq <typeof (*_m_sec_abbr)> ()
+     .prereq <typeof (*_m_cu_headers)> ()
+     .description (
+"Checks for low-level structure of .debug_abbrev.  In addition it\n"
+"checks:\n"
+" - that all abbreviation tables are non-empty\n"
+" - that certain attribute forms match expectations (mainly those that\n"
+"   we have to work with in subsequent check passes.  For example we\n"
+"   check that DW_AT_low_pc has a form of DW_FORM_{,ref_}addr)\n"
+" - that all CUs that share an abbrev table are of the same DWARF\n"
+"   version\n"
+" - that each abbrev table is used\n"
+" - that abbrevs don't share abbrev codes\n"
+" - that abbrev tags, attribute names and attribute forms are all known\n"
+"   (note that this assumes that elfutils know about all tags used in\n"
+"   practice.  Be sure to build against recent-enough version)\n"
+" - that the value of has_children is either 0 or 1\n"
+" - that DW_AT_sibling isn't formed as DW_FORM_ref_addr, and that it\n"
+"   isn't present at childless abbrevs\n"
+" - that attributes are not duplicated at abbrev\n"
+" - that DW_AT_high_pc is never used without DW_AT_low_pc.  If both are\n"
+"   used, that DW_AT_ranges isn't also used\n"
+"This check generally requires CU headers to be readable, i.e. that the\n"
+".debug_info section is roughly well-defined.  If that isn't the case,\n"
+"many checks will still be done, operating under assumption that what\n"
+"we see is the latest DWARF format.  This may render some checks\n"
+"inaccurate.\n"));
+  return cd;
+}
+
 struct abbrev *
 abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
 			  uint64_t abbrev_code)
@@ -77,7 +115,7 @@ namespace
 			 std::string const &specification = "")
   {
     wr_error (where)
-      << specification << (" "[specification == ""])
+      << specification << (" "[specification.length () == 0])
       << pri::attr (name) << " with invalid form "
       << pri::form (form) << '.' << std::endl;
   }
@@ -95,9 +133,8 @@ namespace
   }
 
   check_debug_abbrev::abbrev_map
-  load_debug_abbrev (dwarflint &lint,
-		     struct sec &sect,
-		     elf_file &file)
+  load_debug_abbrev (sec &sect, elf_file &file,
+		     read_cu_headers *cu_headers)
   {
     check_debug_abbrev::abbrev_map abbrevs;
 
@@ -109,7 +146,6 @@ namespace
     struct where where = WHERE (sec_abbrev, NULL);
 
     // Tolerate failure here.
-    read_cu_headers *cu_headers = lint.toplev_check<read_cu_headers> ();
     dwarf_version_h ver = NULL;
     if (cu_headers == NULL)
       {
@@ -181,7 +217,7 @@ namespace
 
 	if (read_ctx_eof (&ctx))
 	  {
-	    /* It still may have been empty.  */
+	    /* It still could have been empty.  */
 	    check_no_abbreviations (abbrevs);
 	    break;
 	  }
@@ -464,9 +500,12 @@ namespace
   }
 }
 
-check_debug_abbrev::check_debug_abbrev (dwarflint &lint)
-  : _m_sec_abbr (lint.check (_m_sec_abbr))
-  , abbrevs (load_debug_abbrev (lint, _m_sec_abbr->sect, _m_sec_abbr->file))
+check_debug_abbrev::check_debug_abbrev (checkstack &stack, dwarflint &lint)
+  : _m_sec_abbr (lint.check (stack, _m_sec_abbr))
+  , _m_cu_headers (lint.toplev_check (stack, _m_cu_headers))
+  , abbrevs (load_debug_abbrev (_m_sec_abbr->sect,
+				_m_sec_abbr->file,
+				_m_cu_headers))
 {
 }
 

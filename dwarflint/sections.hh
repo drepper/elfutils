@@ -33,8 +33,10 @@ class load_sections
   : public check<load_sections>
 {
 public:
+  static checkdescriptor const &descriptor ();
+
   elf_file file;
-  explicit load_sections (dwarflint &lint);
+  load_sections (checkstack &stack, dwarflint &lint);
   ~load_sections ();
 };
 
@@ -42,10 +44,14 @@ class section_base
 {
   load_sections *sections;
   sec &get_sec_or_throw (section_id secid);
+
 public:
+  static checkdescriptor const &descriptor ();
+
   sec &sect;
   elf_file &file;
-  section_base (dwarflint &lint, section_id secid);
+  section_base (checkstack &stack,
+		dwarflint &lint, section_id secid);
 
   relocation_data *reldata () const
   {
@@ -53,14 +59,21 @@ public:
   }
 };
 
-template<unsigned sec_id>
+template<section_id sec_id>
 class section
   : public section_base
   , public check<section<sec_id> >
 {
 public:
-  explicit section (dwarflint &lint)
-    : section_base (lint, static_cast <enum section_id> (sec_id))
+  static checkdescriptor const &descriptor () {
+    static checkdescriptor cd
+      (checkdescriptor::create (section_name[sec_id])
+       .inherit<section_base> ());
+    return cd;
+  }
+
+  explicit section (checkstack &stack, dwarflint &lint)
+    : section_base (stack, lint, sec_id)
   {}
 };
 

@@ -130,16 +130,6 @@ extern "C"
     bool allow_overlap;
   };
 
-  struct cu_coverage
-  {
-    struct coverage cov;
-    bool need_ranges;	/* If all CU DIEs have high_pc/low_pc
-			   attribute pair, we don't need separate
-			   range pass.  Otherwise we do.  As soon as
-			   ranges are projected into cov, the flag
-			   is set to false again.  */
-  };
-
   // xxx low-level check entry points, will go away
   struct cu;
   extern bool check_aranges_structural (struct elf_file *file,

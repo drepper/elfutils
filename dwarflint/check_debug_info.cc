@@ -40,6 +40,62 @@
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"
 
+checkdescriptor
+read_cu_headers::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("read_cu_headers")
+     .prereq<typeof (*_m_sec_info)> ());
+  return cd;
+}
+
+static reg<check_debug_info> reg_debug_info;
+
+checkdescriptor
+check_debug_info::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_info")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec_info)> ()
+     .prereq<typeof (*_m_sec_abbrev)> ()
+     .prereq<typeof (*_m_sec_str)> ()
+     .prereq<typeof (*_m_abbrevs)> ()
+     .prereq<typeof (*_m_cu_headers)> ()
+     .description (
+
+"Checks for low-level structure of .debug_info.  In addition it\n"
+"checks:\n"
+" - for dangling reference to .debug_abbrev section\n"
+" - that reported CU address sizes are consistent\n"
+" - that rangeptr values are aligned to CU address size\n"
+" - it is checked that DW_AT_low_pc and DW_AT_high_pc are relocated\n"
+"   consistently\n"
+" - that DIE references are well formed (both intra-CU and inter-CU)\n"
+"   and that local reference isn't needlessly formed as global\n"
+" - that .debug_string references are well formed and referred strings\n"
+"   are properly NUL-terminated\n"
+" - that referenced abbreviations actually exist\n"
+" - that DIEs with children have the DW_AT_sibling attribute and that\n"
+"   the sibling actually is at the address reported at that attribute\n"
+" - that the DIE chain is terminated\n"
+" - that the last sibling in chain has no DW_AT_sibling attribute\n"
+" - that the DIE with children actually has children (i.e. that the\n"
+"   chain is not empty)\n"
+" - for format constraints (such as that there are no 64-bit CUs inside\n"
+"   DWARF 2 file)\n"
+" - in 32-bit CUs, that location attributes are not formed with\n"
+"   DW_FORM_data8\n"
+" - all the attribute checks done by check_debug_abbrev are done here\n"
+"   for attributes with DW_FORM_indirect.  Indirect form is forbidden\n"
+"   to be again indirect\n"
+" - that all abbreviations are used\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+		   ));
+  return cd;
+}
+
 namespace
 {
   bool
@@ -324,7 +380,8 @@ namespace
     struct ref_record *local_die_refs;
     Elf_Data *strings;
     struct coverage *strings_coverage;
-    struct cu_coverage *cu_coverage;
+    struct coverage *pc_coverage;
+    bool *need_rangesp;
   };
 
   typedef void (*value_check_cb_t) (uint64_t addr,
@@ -395,7 +452,7 @@ namespace
       wr_message (*ctx->where, cat (mc_ranges, mc_impact_2))
 	<< "rangeptr value " << pri::hex (value)
 	<< " not aligned to CU address size." << std::endl;
-    ctx->cu_coverage->need_ranges = true;
+    *ctx->need_rangesp = true;
     ref_record_add (&ctx->cu->range_refs, value, ctx->where);
   }
 
@@ -440,7 +497,8 @@ namespace
 		  struct ref_record *local_die_refs,
 		  struct coverage *strings_coverage,
 		  struct relocation_data *reloc,
-		  struct cu_coverage *cu_coverage)
+		  struct coverage *pc_coverage,
+		  bool *need_rangesp)
   {
     bool got_die = false;
     uint64_t sibling_addr = 0;
@@ -453,7 +511,8 @@ namespace
       ctx, &where, cu,
       local_die_refs,
       strings, strings_coverage,
-      cu_coverage
+      pc_coverage,
+      need_rangesp
     };
 
     while (!read_ctx_eof (ctx))
@@ -930,7 +989,7 @@ namespace
 		  cu->low_pc = value;
 
 		if (low_pc != (uint64_t)-1 && high_pc != (uint64_t)-1)
-		  coverage_add (&cu_coverage->cov, low_pc, high_pc - low_pc);
+		  coverage_add (pc_coverage, low_pc, high_pc - low_pc);
 	      }
 	  }
 	where.ref = NULL;
@@ -955,7 +1014,7 @@ namespace
 	    int st = read_die_chain (ver, file, ctx, cu, abbrevs, strings,
 				     local_die_refs,
 				     strings_coverage, reloc,
-				     cu_coverage);
+				     pc_coverage, need_rangesp);
 	    if (st == -1)
 	      return -1;
 	    else if (st == 0)
@@ -974,8 +1033,8 @@ namespace
   }
 }
 
-read_cu_headers::read_cu_headers (dwarflint &lint)
-  : _m_sec_info (lint.check (_m_sec_info))
+read_cu_headers::read_cu_headers (checkstack &stack, dwarflint &lint)
+  : _m_sec_info (lint.check (stack, _m_sec_info))
   , cu_headers (read_info_headers (&_m_sec_info->file,
 				   &_m_sec_info->sect,
 				   _m_sec_info->reldata ()))
@@ -1018,7 +1077,7 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   if (read_die_chain (ver, _m_file, ctx, cu, &abbrevs, strings,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      &cu_cov) < 0)
+		      &_m_cov, &_m_need_ranges) < 0)
     {
       _m_abbr_skip.push_back (abbrevs.offset);
       retval = false;
@@ -1162,15 +1221,15 @@ check_debug_info::check_info_structural ()
     }
 }
 
-check_debug_info::check_debug_info (dwarflint &lint)
-  : _m_sec_info (lint.check (_m_sec_info))
-  , _m_sec_abbrev (lint.check (_m_sec_abbrev))
-  , _m_sec_str (lint.check (_m_sec_str))
+check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
+  : _m_sec_info (lint.check (stack, _m_sec_info))
+  , _m_sec_abbrev (lint.check (stack, _m_sec_abbrev))
+  , _m_sec_str (lint.check (stack, _m_sec_str))
   , _m_file (_m_sec_info->file)
-  , _m_abbrevs (lint.check (_m_abbrevs))
-  , _m_cu_headers (lint.check (_m_cu_headers))
+  , _m_abbrevs (lint.check (stack, _m_abbrevs))
+  , _m_cu_headers (lint.check (stack, _m_cu_headers))
 {
-  memset (&cu_cov, 0, sizeof (cu_cov));
+  memset (&_m_cov, 0, sizeof (_m_cov));
   check_info_structural ();
 
   // re-link CUs so that they form a chain again.  This is to
@@ -1201,7 +1260,7 @@ check_debug_info::~check_debug_info ()
       ref_record_free (&it->loc_refs);
       ref_record_free (&it->decl_file_refs);
     }
-  coverage_free (&cu_cov.cov);
+  coverage_free (&_m_cov);
 }
 
 cu *

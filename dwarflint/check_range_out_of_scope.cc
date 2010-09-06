@@ -48,17 +48,26 @@ namespace
 				      where const &wh_parent);
 
   public:
-    explicit check_range_out_of_scope (dwarflint &lint);
+    static checkdescriptor descriptor () {
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_range_out_of_scope")
+	 .inherit<highlevel_check<check_range_out_of_scope> > ()
+	 .description (
+"Check whether PC ranges reported at DIEs fall into the containing scope.\n"));
+      return cd;
+    }
+
+    check_range_out_of_scope (checkstack &stack, dwarflint &lint);
   };
 
   // Register the check.
   reg<check_range_out_of_scope> reg_range_out_of_scope;
 }
 
-check_range_out_of_scope::check_range_out_of_scope (dwarflint &lint)
-  : highlevel_check<check_range_out_of_scope> (lint)
+check_range_out_of_scope::check_range_out_of_scope (checkstack &stack, dwarflint &lint)
+  : highlevel_check<check_range_out_of_scope> (stack, lint)
 {
-  lint.check <check_debug_loc> ();
+  lint.check <check_debug_loc> (stack);
 
   try
     {

@@ -23,13 +23,6 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-// Implements a check for
-//  https://bugzilla.redhat.com/show_bug.cgi?id=527430
-//
-// Roland: If a given attribute name is present on a DIE, it is
-// suspicious if that attribute name appears on the DIE that's the
-// first DIE's DW_AT_abstract_origin or DW_AT_specification.
-
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
@@ -49,8 +42,20 @@ namespace
     : public highlevel_check<check_dups_abstract_origin>
   {
   public:
-    explicit check_dups_abstract_origin (dwarflint &lint)
-      : highlevel_check<check_dups_abstract_origin> (lint)
+    static checkdescriptor descriptor () {
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_dups_abstract_origin")
+	 .inherit<highlevel_check<check_dups_abstract_origin> > ()
+	 .description (
+"If a given attribute name is present on a DIE, it is\n"
+"suspicious if that attribute name appears on the DIE that's the\n"
+"first DIE's DW_AT_abstract_origin or DW_AT_specification.\n"
+" https://bugzilla.redhat.com/show_bug.cgi?id=527430\n"));
+      return cd;
+    }
+
+    explicit check_dups_abstract_origin (checkstack &stack, dwarflint &lint)
+      : highlevel_check<check_dups_abstract_origin> (stack, lint)
     {
       struct {
 	void operator () (dwarf::debug_info_entry const &die,

@@ -23,30 +23,37 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#include "low.h"
+#include "checks.hh"
 #include "sections.ii"
 #include "check_debug_info.ii"
-#include "checks.hh"
 #include "messages.h"
-#include "low.h"
+#include "coverage.hh"
 
 class check_debug_ranges
   : public check<check_debug_ranges>
 {
   section<sec_ranges> *_m_sec_ranges;
-  check_debug_info *_m_cus;
+  check_debug_info *_m_info;
+  coverage _m_cov;
 
 public:
-  explicit check_debug_ranges (dwarflint &lint);
+  static checkdescriptor const &descriptor ();
+
+  coverage const &cov () const { return _m_cov; }
+  check_debug_ranges (checkstack &stack, dwarflint &lint);
+  ~check_debug_ranges ();
 };
 
 class check_debug_loc
   : public check<check_debug_loc>
 {
   section<sec_loc> *_m_sec_loc;
-  check_debug_info *_m_cus;
+  check_debug_info *_m_info;
 
 public:
-  explicit check_debug_loc (dwarflint &lint);
+  static checkdescriptor const &descriptor ();
+  check_debug_loc (checkstack &stack, dwarflint &lint);
 };
 
 struct hole_info

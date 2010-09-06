@@ -37,36 +37,42 @@ no_mudflap.os = -fmudflap
 
 bin_PROGRAMS = dwarflint
 
-dwarflint_SOURCES = main.cc \
-		    dwarflint.cc dwarflint.hh misc.h \
-		    low.c low.h \
-		    expected-at.cc expected.hh \
-		    coverage.cc coverage.h \
-		    readctx.c  readctx.h \
-		    pri.cc pri.hh \
-		    messages.cc messages.h \
-		    where.c where.h \
-		    options.cc options.h \
-		    addr-record.cc addr-record.h \
-		    reloc.cc reloc.h \
-		    tables.cc tables.hh tables.h \
-		    all-dies-it.hh \
-		    checks.hh \
-		    sections.cc sections.hh sections.ii \
-		    highlevel_check.cc highlevel_check.hh \
-		    check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \
-		    check_debug_info.cc check_debug_info.hh check_debug_info.ii \
-		    check_debug_line.cc \
-		    check_debug_pub.cc \
-		    check_debug_loc_range.cc check_debug_loc_range.hh \
-		    check_debug_aranges.cc check_debug_aranges.hh \
-		    check_matching_ranges.cc \
-		    check_range_out_of_scope.cc \
-		    check_expected_trees.cc \
-		    check_dups_abstract_origin.cc \
-		    ../src/dwarfstrings.c
+dwarflint_SOURCES = \
+	main.cc \
+	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
+	dwarflint.cc dwarflint.hh misc.h \
+	low.c low.h \
+	expected-at.cc expected.hh \
+	coverage.cc coverage.h \
+	readctx.c  readctx.h \
+	pri.cc pri.hh \
+	messages.cc messages.h \
+	section_id.cc section_id.h \
+	where.c where.h \
+	options.cc options.h \
+	addr-record.cc addr-record.h \
+	reloc.cc reloc.h \
+	tables.cc tables.hh tables.h \
+	all-dies-it.hh \
+	checks.cc checks.hh checks.ii \
+	sections.cc sections.hh sections.ii \
+	highlevel_check.cc highlevel_check.hh \
+	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
+	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \
+	check_debug_info.cc check_debug_info.hh check_debug_info.ii \
+	check_debug_line.cc \
+	check_debug_pub.cc \
+	check_debug_loc_range.cc check_debug_loc_range.hh check_debug_loc_range.ii \
+	check_debug_aranges.cc check_debug_aranges.hh \
+	check_matching_ranges.cc \
+	check_range_out_of_scope.cc \
+	check_expected_trees.cc \
+	check_dups_abstract_origin.cc \
+	check_duplicate_DW_tag_variable.cc \
+	../src/dwarfstrings.c
 
-TESTS = tests/run-debug_abbrev-duplicate-attribute.sh
+TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
+	tests/run-check_duplicate_DW_tag_variable.sh
 
 EXTRA_DIST = tests/run-debug_abbrev-duplicate-attribute.sh tests/run-debug_abbrev-duplicate-attribute.bz2
 

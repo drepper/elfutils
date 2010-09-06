@@ -33,19 +33,71 @@ namespace
   class check_debug_pub
     : public check<check_debug_pub<sec_id> >
   {
-    section<sec_id> *_m_sec;
+  protected:
+    typedef section<sec_id> section_t;
+    section_t *_m_sec;
     elf_file const &_m_file;
+    check_debug_info *_m_cus;
 
-    bool check_pub_structural (check_debug_info *cus);
+    bool check_pub_structural ();
 
   public:
-    explicit check_debug_pub (dwarflint &lint)
-      : _m_sec (lint.check (_m_sec))
+    check_debug_pub (checkstack &stack, dwarflint &lint)
+      : _m_sec (lint.check (stack, _m_sec))
       , _m_file (_m_sec->file)
+      , _m_cus (lint.toplev_check (stack, _m_cus))
     {
-      check_pub_structural (lint.toplev_check<check_debug_info> ());
+      check_pub_structural ();
     }
   };
+
+  class check_debug_pubnames
+    : public check_debug_pub<sec_pubnames>
+  {
+  public:
+    check_debug_pubnames (checkstack &stack, dwarflint &lint)
+      : check_debug_pub<sec_pubnames> (stack, lint)
+    {}
+
+    static checkdescriptor const &descriptor () {
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_debug_pubnames")
+	 .prereq<typeof (*_m_sec)> ()
+	 .prereq<check_debug_info> ()
+	 .description (
+"Checks for low-level structure of .debug_pubnames.  In addition it\n"
+"checks:\n"
+" - for garbage inside padding\n"
+" - that relocations are valid.  In ET_REL files that certain fields\n"
+"   are relocated\n"
+"Furthermore, if .debug_info is valid, it is checked:\n"
+" - that references point to actual CUs and DIEs\n"
+" - that there's only one pub section per CU\n"));
+      return cd;
+    }
+  };
+  reg<check_debug_pubnames> reg_debug_pubnames;
+
+  class check_debug_pubtypes
+    : public check_debug_pub<sec_pubtypes>
+  {
+  public:
+    check_debug_pubtypes (checkstack &stack, dwarflint &lint)
+      : check_debug_pub<sec_pubtypes> (stack, lint)
+    {}
+
+    static checkdescriptor const &descriptor () {
+      static checkdescriptor cd
+	(checkdescriptor::create ("check_debug_pubtypes")
+	 .prereq<typeof (*_m_sec)> ()
+	 .prereq<check_debug_info> ()
+	 .description (
+"Checks for low-level structure of .debug_pubtypes.  In addition it\n"
+"makes the same checks as check_debug_pubnames.\n"));
+      return cd;
+    }
+  };
+  reg<check_debug_pubtypes> reg_debug_pubtypes;
 
   template <class A, class B>
   struct where xwhere (A a, B b)
@@ -56,7 +108,7 @@ namespace
 
 template <section_id sec_id>
 bool
-check_debug_pub<sec_id>::check_pub_structural (check_debug_info *cus)
+check_debug_pub<sec_id>::check_pub_structural ()
 {
   struct read_ctx ctx;
   read_ctx_init (&ctx, _m_sec->sect.data, _m_file.other_byte_order);
@@ -121,10 +173,11 @@ check_debug_pub<sec_id>::check_pub_structural (check_debug_info *cus)
 		    PRI_LACK_RELOCATION, "debug info offset");
 
       struct cu *cu = NULL;
-      if (cus != NULL && (cu = cus->find_cu (cu_offset)) == NULL)
+      if (_m_cus != NULL && (cu = _m_cus->find_cu (cu_offset)) == NULL)
 	wr_error (where)
 	  << "unresolved reference to " << pri::CU (cu_offset)
 	  << '.' << std::endl;
+      // xxx this can be checked even without CU
       if (cu != NULL)
 	{
 	  where.ref = &cu->head->where;
@@ -181,6 +234,7 @@ check_debug_pub<sec_id>::check_pub_structural (check_debug_info *cus)
 	      goto next;
 	    }
 
+	  // xxx read_ctx_read_str???
 	  uint8_t c;
 	  do
 	    if (!read_ctx_read_ubyte (&sub_ctx, &c))
@@ -217,10 +271,4 @@ check_debug_pub<sec_id>::check_pub_structural (check_debug_info *cus)
     relocation_skip_rest (&_m_sec->sect.rel, _m_sec->sect.id);
 
   return retval;
-}
-
-namespace
-{
-  reg<check_debug_pub<sec_pubnames> > reg_debug_pubnames;
-  reg<check_debug_pub<sec_pubtypes> > reg_debug_pubtypes;
 }
