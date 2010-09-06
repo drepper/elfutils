@@ -46,7 +46,8 @@ check_debug_abbrev::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_abbrev")
      .groups ("@low")
-     .prereq <typeof (*_m_sec_abbr)> ());
+     .prereq <typeof (*_m_sec_abbr)> ()
+     .prereq <typeof (*_m_cu_headers)> ());
   return cd;
 }
 
@@ -89,7 +90,7 @@ namespace
 			 std::string const &specification = "")
   {
     wr_error (where)
-      << specification << (" "[specification == ""])
+      << specification << (" "[specification.length () == 0])
       << pri::attr (name) << " with invalid form "
       << pri::form (form) << '.' << std::endl;
   }
@@ -107,10 +108,8 @@ namespace
   }
 
   check_debug_abbrev::abbrev_map
-  load_debug_abbrev (checkstack &stack,
-		     dwarflint &lint,
-		     struct sec &sect,
-		     elf_file &file)
+  load_debug_abbrev (sec &sect, elf_file &file,
+		     read_cu_headers *cu_headers)
   {
     check_debug_abbrev::abbrev_map abbrevs;
 
@@ -122,7 +121,6 @@ namespace
     struct where where = WHERE (sec_abbrev, NULL);
 
     // Tolerate failure here.
-    read_cu_headers *cu_headers = lint.toplev_check<read_cu_headers> (stack);
     dwarf_version_h ver = NULL;
     if (cu_headers == NULL)
       {
@@ -194,7 +192,7 @@ namespace
 
 	if (read_ctx_eof (&ctx))
 	  {
-	    /* It still may have been empty.  */
+	    /* It still could have been empty.  */
 	    check_no_abbreviations (abbrevs);
 	    break;
 	  }
@@ -479,8 +477,10 @@ namespace
 
 check_debug_abbrev::check_debug_abbrev (checkstack &stack, dwarflint &lint)
   : _m_sec_abbr (lint.check (stack, _m_sec_abbr))
-  , abbrevs (load_debug_abbrev (stack, lint,
-				_m_sec_abbr->sect, _m_sec_abbr->file))
+  , _m_cu_headers (lint.toplev_check (stack, _m_cu_headers))
+  , abbrevs (load_debug_abbrev (_m_sec_abbr->sect,
+				_m_sec_abbr->file,
+				_m_cu_headers))
 {
 }
 

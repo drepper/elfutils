@@ -34,6 +34,7 @@ class check_debug_abbrev
   : public check<check_debug_abbrev>
 {
   section<sec_abbrev> *_m_sec_abbr;
+  read_cu_headers *_m_cu_headers;
 
 public:
   static checkdescriptor &descriptor ();
