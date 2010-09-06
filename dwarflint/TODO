@@ -20,7 +20,32 @@
 
 * high-level checks
 
-** DW_AT_byte_size at DW_TAG_pointer_type
+** DW_OP_GNU_implicit_pointer
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00869.html
+
+** const values vs. addresses
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00816.html
+
+** dwarflint --stats
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00849.html
+
+** expected trees/attributes
+   This is about the check_expected_trees check.  All attributes are
+   marked optional. In future, we need to go through the standard, or
+   employ some other source of knowledge, and adjust the optionality
+   level.
+
+   Also the approach we are taking now is no good.  It ignores changes
+   in DWARF revisions and doesn't tackle the expected children case at
+   all.  It seems that what we need is some sort of XPath-like
+   approach to matching subgraphs.  Each time one of the queries
+   triggered, a check would be done for expected "neighborhood" of the
+   node.  Such a query might reach far from the original node,
+   spanning layers of parent/child or die/neighbor relationship.
+
+*** DW_AT_byte_size at DW_TAG_pointer_type
+
+    That's from my conversation with Mark:
 
 <mjw> machatap: I was surprised to see all these DW_TAG_pointer_type and
       DW_TAG_reference_type having an explicit DW_AT_byte_size
@@ -35,12 +60,3 @@
 <mjw> OK, so you also think that is strange. good. I might not be crazy after
       all :) [2010-09-06 17:01]
 <machatap> well, it's certainly not per the standard
-
-** DW_OP_GNU_implicit_pointer
-   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00869.html
-
-** const values vs. addresses
-   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00816.html
-
-** dwarflint --stats
-   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00849.html
