@@ -88,6 +88,30 @@
 *** DW_OP_nop
     are these even useful?
 
+* messages
+
+** streams vs fmtstring
+   We now use C++ streams in most places (there are remnants of C
+   printfs in places).  But we would like to be able to localize it
+   all, and I'm afraid that means moving back to some sort of
+   formatting strings.
+
+** filtering
+
+   The current way of filtering is lacking.  We want to filter
+   messages based on:
+   - severity (low, medium, high)
+   - category (e.g. unresolved reference)
+   - area (e.g. .debug_info)
+   - check in question (e.g. check_debug_info)
+   - the message in question (aka I don't want to see this particular
+     message at all)
+
+   What's now there basically works, but it's not configurable from
+   command line, and it's awkward to use.  Plus it stops about halfway
+   through, the bottom part of the stack needs to be implemented via
+   grepping, and that turns our messages into API.
+
 * quirks
 
   Some compilers produce files broken in various ways.  Not to be
