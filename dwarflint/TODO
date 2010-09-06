@@ -10,7 +10,7 @@
    idea that there is a dependency in the first place.
 
 * DWARF 4 support
-  This to-do item is actually to go through the DWARF 4 standard and
+  This TODO item is actually to go through the DWARF 4 standard and
   add TODO items for individual tasks.
 
   Roland: i.e., block* forms can be constant-block or location in

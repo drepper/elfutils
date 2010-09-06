@@ -104,7 +104,10 @@ dwarflint::check_registrar::list_checks () const
        it != _m_items.end (); ++it)
     {
       checkdescriptor const &cd = (*it)->descriptor ();
-      std::cout << cd.name ();
+      if (be_verbose)
+	std::cout << "=== " << cd.name () << " ===";
+      else
+	std::cout << cd.name ();
 
       checkgroups const &groups = cd.groups ();
       if (!groups.empty ())
