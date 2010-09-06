@@ -62,6 +62,7 @@ namespace
     static checkdescriptor const &descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_debug_pubnames")
+	 .groups ("@low")
 	 .prereq<typeof (*_m_sec)> ()
 	 .prereq<check_debug_info> ()
 	 .description (
@@ -89,6 +90,7 @@ namespace
     static checkdescriptor const &descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_debug_pubtypes")
+	 .groups ("@low")
 	 .prereq<typeof (*_m_sec)> ()
 	 .prereq<check_debug_info> ()
 	 .description (
