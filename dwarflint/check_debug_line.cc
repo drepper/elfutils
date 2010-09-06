@@ -152,8 +152,6 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
   : _m_sec (lint.check (stack, _m_sec))
   , _m_info (lint.toplev_check (stack, _m_info))
 {
-  check_debug_info *cus = lint.toplev_check<check_debug_info> (stack);
-
   addr_record line_tables;
   WIPE (line_tables);
 
@@ -342,11 +340,11 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	 references.  We don't include filenames defined through
 	 DW_LNE_define_file in consideration.  */
 
-      if (cus != NULL)
+      if (_m_info != NULL)
 	{
 	  bool found = false;
-	  for (std::vector<cu>::const_iterator it = cus->cus.begin ();
-	       it != cus->cus.end (); ++it)
+	  for (std::vector<cu>::const_iterator it = _m_info->cus.begin ();
+	       it != _m_info->cus.end (); ++it)
 	    if (it->stmt_list.addr == set_offset)
 	      {
 		found = true;
@@ -592,7 +590,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    << " `" << include_directories[i].name
 	    << "' is not used." << std::endl;
 
-      if (cus != NULL)
+      if (_m_info != NULL)
 	// We can't do full analysis unless we know which DIEs refer
 	// to files.
 	for (size_t i = 0; i < files.size (); ++i)
