@@ -127,6 +127,17 @@ public:
   template <class T>
   T *toplev_check (checkstack &stack,
 		   __attribute__ ((unused)) T *fake = NULL);
+
+  template <class T>
+  T *
+  check_if (bool whether, checkstack &stack,
+	    __attribute__ ((unused)) T *fake = NULL)
+  {
+    if (whether)
+      return check<T> (stack);
+    else
+      return NULL;
+  }
 };
 
 #endif//DWARFLINT_HH

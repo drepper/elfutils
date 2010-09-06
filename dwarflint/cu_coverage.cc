@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_aranges.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,25 +23,31 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_ARANGES_HH
-#define DWARFLINT_CHECK_DEBUG_ARANGES_HH
+#include "cu_coverage.hh"
+#include "check_debug_info.hh"
+#include "check_debug_loc_range.hh"
 
-#include "low.h"
-#include "checks.hh"
-#include "sections.ii"
-#include "check_debug_info.ii"
-#include "cu_coverage.ii"
-
-class check_debug_aranges
-  : public check<check_debug_aranges>
+checkdescriptor const &
+cu_coverage::descriptor ()
 {
-  section<sec_aranges> *_m_sec_aranges;
-  check_debug_info *_m_info;
-  cu_coverage *_m_cu_coverage;
+  static checkdescriptor cd
+    (checkdescriptor::create ("cu_coverage")
+     .prereq<typeof (*_m_info)> ()
+     .prereq<typeof (*_m_ranges)> ());
+  return cd;
+}
 
-public:
-  static checkdescriptor descriptor ();
-  check_debug_aranges (checkstack &stack, dwarflint &lint);
-};
+cu_coverage::cu_coverage (checkstack &stack, dwarflint &lint)
+  : _m_info (lint.check (stack, _m_info))
+  , _m_ranges (lint.check_if (_m_info->need_ranges (), stack, _m_ranges))
+{
+  memset (&cov, 0, sizeof (cov));
+  coverage_add_all (&cov, &_m_info->cov ());
+  if (_m_ranges)
+    coverage_add_all (&cov, &_m_ranges->cov ());
+}
 
-#endif//DWARFLINT_CHECK_DEBUG_ARANGES_HH
+cu_coverage::~cu_coverage ()
+{
+  coverage_free (&cov);
+}

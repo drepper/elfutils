@@ -57,11 +57,12 @@ dwarflint_SOURCES = \
 	checks.cc checks.hh checks.ii \
 	sections.cc sections.hh sections.ii \
 	highlevel_check.cc highlevel_check.hh \
+	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \
 	check_debug_info.cc check_debug_info.hh check_debug_info.ii \
 	check_debug_line.cc \
 	check_debug_pub.cc \
-	check_debug_loc_range.cc check_debug_loc_range.hh \
+	check_debug_loc_range.cc check_debug_loc_range.hh check_debug_loc_range.ii \
 	check_debug_aranges.cc check_debug_aranges.hh \
 	check_matching_ranges.cc \
 	check_range_out_of_scope.cc \

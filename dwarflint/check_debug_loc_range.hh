@@ -28,23 +28,28 @@
 #include "sections.ii"
 #include "check_debug_info.ii"
 #include "messages.h"
+#include "coverage.hh"
 
 class check_debug_ranges
   : public check<check_debug_ranges>
 {
   section<sec_ranges> *_m_sec_ranges;
-  check_debug_info *_m_cus;
+  check_debug_info *_m_info;
+  coverage _m_cov;
 
 public:
   static checkdescriptor const &descriptor ();
+
+  coverage const &cov () const { return _m_cov; }
   check_debug_ranges (checkstack &stack, dwarflint &lint);
+  ~check_debug_ranges ();
 };
 
 class check_debug_loc
   : public check<check_debug_loc>
 {
   section<sec_loc> *_m_sec_loc;
-  check_debug_info *_m_cus;
+  check_debug_info *_m_info;
 
 public:
   static checkdescriptor const &descriptor ();

@@ -44,6 +44,7 @@ public:
   read_cu_headers (checkstack &stack, dwarflint &lint);
 };
 
+/** The pass for in-depth structural analysis of .debug_info.  */
 class check_debug_info
   : public check<check_debug_info>
 {
@@ -58,6 +59,15 @@ class check_debug_info
   // validation.  Check for unused abbrevs should be skipped.
   std::vector< ::Dwarf_Off> _m_abbr_skip;
 
+  // The check pass adds all low_pc/high_pc ranges loaded from DIE
+  // tree into this coverage structure.
+  coverage _m_cov;
+
+  // If, during the check, we find any rangeptr-class attributes, we
+  // set need_ranges to true.  cu_ranges pass then uses this as a hint
+  // whether to request .debug_ranges or not.
+  bool _m_need_ranges;
+
   bool check_cu_structural (struct read_ctx *ctx,
 			    struct cu *const cu,
 			    Elf_Data *strings,
@@ -69,10 +79,10 @@ class check_debug_info
 public:
   static checkdescriptor descriptor ();
 
-  // The check pass adds all low_pc/high_pc ranges loaded from DIE
-  // tree into this following cu_cov structure.  If it finds any
-  // rangeptr-class attributes, it sets cu_cov.need_ranges to true.
-  cu_coverage cu_cov;
+  coverage const &cov () const { return _m_cov; }
+  bool need_ranges () const { return _m_need_ranges; }
+
+  // This is where the loaded CUs are stored.
   std::vector<cu> cus;
 
   check_debug_info (checkstack &stack, dwarflint &lint);

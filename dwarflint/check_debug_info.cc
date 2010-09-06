@@ -380,7 +380,8 @@ namespace
     struct ref_record *local_die_refs;
     Elf_Data *strings;
     struct coverage *strings_coverage;
-    struct cu_coverage *cu_coverage;
+    struct coverage *pc_coverage;
+    bool *need_rangesp;
   };
 
   typedef void (*value_check_cb_t) (uint64_t addr,
@@ -451,7 +452,7 @@ namespace
       wr_message (*ctx->where, cat (mc_ranges, mc_impact_2))
 	<< "rangeptr value " << pri::hex (value)
 	<< " not aligned to CU address size." << std::endl;
-    ctx->cu_coverage->need_ranges = true;
+    *ctx->need_rangesp = true;
     ref_record_add (&ctx->cu->range_refs, value, ctx->where);
   }
 
@@ -496,7 +497,8 @@ namespace
 		  struct ref_record *local_die_refs,
 		  struct coverage *strings_coverage,
 		  struct relocation_data *reloc,
-		  struct cu_coverage *cu_coverage)
+		  struct coverage *pc_coverage,
+		  bool *need_rangesp)
   {
     bool got_die = false;
     uint64_t sibling_addr = 0;
@@ -509,7 +511,8 @@ namespace
       ctx, &where, cu,
       local_die_refs,
       strings, strings_coverage,
-      cu_coverage
+      pc_coverage,
+      need_rangesp
     };
 
     while (!read_ctx_eof (ctx))
@@ -986,7 +989,7 @@ namespace
 		  cu->low_pc = value;
 
 		if (low_pc != (uint64_t)-1 && high_pc != (uint64_t)-1)
-		  coverage_add (&cu_coverage->cov, low_pc, high_pc - low_pc);
+		  coverage_add (pc_coverage, low_pc, high_pc - low_pc);
 	      }
 	  }
 	where.ref = NULL;
@@ -1011,7 +1014,7 @@ namespace
 	    int st = read_die_chain (ver, file, ctx, cu, abbrevs, strings,
 				     local_die_refs,
 				     strings_coverage, reloc,
-				     cu_coverage);
+				     pc_coverage, need_rangesp);
 	    if (st == -1)
 	      return -1;
 	    else if (st == 0)
@@ -1074,7 +1077,7 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   if (read_die_chain (ver, _m_file, ctx, cu, &abbrevs, strings,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      &cu_cov) < 0)
+		      &_m_cov, &_m_need_ranges) < 0)
     {
       _m_abbr_skip.push_back (abbrevs.offset);
       retval = false;
@@ -1226,7 +1229,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
   , _m_abbrevs (lint.check (stack, _m_abbrevs))
   , _m_cu_headers (lint.check (stack, _m_cu_headers))
 {
-  memset (&cu_cov, 0, sizeof (cu_cov));
+  memset (&_m_cov, 0, sizeof (_m_cov));
   check_info_structural ();
 
   // re-link CUs so that they form a chain again.  This is to
@@ -1257,7 +1260,7 @@ check_debug_info::~check_debug_info ()
       ref_record_free (&it->loc_refs);
       ref_record_free (&it->decl_file_refs);
     }
-  coverage_free (&cu_cov.cov);
+  coverage_free (&_m_cov);
 }
 
 cu *

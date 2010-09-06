@@ -54,7 +54,7 @@ check_debug_ranges::descriptor ()
     (checkdescriptor::create ("check_debug_ranges")
      .groups ("@low")
      .prereq<typeof (*_m_sec_ranges)> ()
-     .prereq<typeof (*_m_cus)> ()
+     .prereq<typeof (*_m_info)> ()
      .description (
 "Checks for low-level structure of .debug_ranges.  In addition it\n"
 "checks:\n"
@@ -79,7 +79,7 @@ check_debug_loc::descriptor ()
     (checkdescriptor::create ("check_debug_loc")
      .groups ("@low")
      .prereq<typeof (*_m_sec_loc)> ()
-     .prereq<typeof (*_m_cus)> ()
+     .prereq<typeof (*_m_info)> ()
      .description (
 "Checks for low-level structure of .debug_loc.  In addition it\n"
 "makes the same checks as .debug_ranges.  For location expressions\n"
@@ -388,7 +388,7 @@ namespace
 			  struct sec *sec,
 			  struct coverage *coverage,
 			  struct coverage_map *coverage_map,
-			  struct cu_coverage *cu_coverage,
+			  struct coverage *pc_coverage,
 			  uint64_t addr,
 			  struct where const *wh,
 			  enum message_category cat)
@@ -523,14 +523,14 @@ namespace
 	    /* Skip coverage analysis if we have errors or have no base
 	       (or just don't do coverage analysis at all).  */
 	    else if (base < (uint64_t)-2 && retval
-		     && (coverage_map != NULL || cu_coverage != NULL))
+		     && (coverage_map != NULL || pc_coverage != NULL))
 	      {
 		uint64_t address = begin_addr + base;
 		uint64_t length = end_addr - begin_addr;
 		if (coverage_map != NULL)
 		  coverage_map_add (coverage_map, address, length, &where, cat);
-		if (cu_coverage != NULL)
-		  coverage_add (&cu_coverage->cov, address, length);
+		if (pc_coverage != NULL)
+		  coverage_add (pc_coverage, address, length);
 	      }
 
 	    if (contains_locations)
@@ -601,7 +601,7 @@ namespace
   check_loc_or_range_structural (struct elf_file *file,
 				 struct sec *sec,
 				 struct cu *cu_chain,
-				 struct cu_coverage *cu_coverage)
+				 struct coverage *pc_coverage)
   {
     assert (sec->id == sec_loc || sec->id == sec_ranges);
     assert (cu_chain != NULL);
@@ -666,8 +666,7 @@ namespace
 	   ranges get recorded, not only those belonging to CUs.
 	   Perhaps that's undesirable.  */
 	if (!check_loc_or_range_ref (file, &ctx, it->cu, sec,
-				     &coverage, coverage_map,
-				     sec->id == sec_ranges ? cu_coverage : NULL,
+				     &coverage, coverage_map, pc_coverage,
 				     off, &it->ref.who, cat))
 	  retval = false;
 	last_off = off;
@@ -699,33 +698,34 @@ namespace
     coverage_free (&coverage);
     coverage_map_free_XA (coverage_map);
 
-    if (retval && cu_coverage != NULL)
-      /* Only drop the flag if we were successful, so that the coverage
-	 analysis isn't later done against incomplete data.  */
-      cu_coverage->need_ranges = false;
-
     return retval;
   }
 }
 
 check_debug_ranges::check_debug_ranges (checkstack &stack, dwarflint &lint)
   : _m_sec_ranges (lint.check (stack, _m_sec_ranges))
-  , _m_cus (lint.check (stack, _m_cus))
+  , _m_info (lint.check (stack, _m_info))
 {
+  memset (&_m_cov, 0, sizeof (_m_cov));
   if (!::check_loc_or_range_structural (&_m_sec_ranges->file,
 					&_m_sec_ranges->sect,
-					&_m_cus->cus.front (),
-					&_m_cus->cu_cov))
+					&_m_info->cus.front (),
+					&_m_cov))
     throw check_base::failed ();
+}
+
+check_debug_ranges::~check_debug_ranges ()
+{
+  coverage_free (&_m_cov);
 }
 
 check_debug_loc::check_debug_loc (checkstack &stack, dwarflint &lint)
   : _m_sec_loc (lint.check (stack, _m_sec_loc))
-  , _m_cus (lint.check (stack, _m_cus))
+  , _m_info (lint.check (stack, _m_info))
 {
   if (!::check_loc_or_range_structural (&_m_sec_loc->file,
 					&_m_sec_loc->sect,
-					&_m_cus->cus.front (),
+					&_m_info->cus.front (),
 					NULL))
     throw check_base::failed ();
 }

@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_aranges.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,25 +23,28 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_ARANGES_HH
-#define DWARFLINT_CHECK_DEBUG_ARANGES_HH
+#ifndef DWARFLINT_CU_COVERAGE_HH
+#define DWARFLINT_CU_COVERAGE_HH
 
-#include "low.h"
-#include "checks.hh"
-#include "sections.ii"
 #include "check_debug_info.ii"
-#include "cu_coverage.ii"
+#include "check_debug_loc_range.ii"
+#include "coverage.hh"
+#include "checks.hh"
 
-class check_debug_aranges
-  : public check<check_debug_aranges>
+/** The pass for finalizing cu_coverage.  */
+class cu_coverage
+  : public check<cu_coverage>
 {
-  section<sec_aranges> *_m_sec_aranges;
   check_debug_info *_m_info;
-  cu_coverage *_m_cu_coverage;
+  check_debug_ranges *_m_ranges;
 
 public:
-  static checkdescriptor descriptor ();
-  check_debug_aranges (checkstack &stack, dwarflint &lint);
+  static checkdescriptor const &descriptor ();
+
+  coverage cov;
+
+  cu_coverage (checkstack &stack, dwarflint &lint);
+  ~cu_coverage ();
 };
 
-#endif//DWARFLINT_CHECK_DEBUG_ARANGES_HH
+#endif//DWARFLINT_CU_COVERAGE_HH
