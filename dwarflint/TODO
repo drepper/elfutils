@@ -1,0 +1,46 @@
+-*-org-*-
+* resolver
+** ordering
+   High-level checks implicitly depend on low-level checks of the
+   sections that they use, but since there is no explicit need to
+   access any of the low-level variables, these dependencies are not
+   visible in the source.  So right now high-level checks will happily
+   run even when no low-level checks passed, and can ever run before
+   any of the low-level checks, since the dependecy resolver has no
+   idea that there is a dependency in the first place.
+
+* DWARF 4 support
+  This to-do item is actually to go through the DWARF 4 standard and
+  add TODO items for individual tasks.
+
+  roland: i.e., block* forms can be constant-block or location in
+  DWARF<=3, but only exprloc is a location in DWARF>=4; data* forms
+  can be either constant or *ptr in DWARF<=3 but only sec_offset is
+  *ptr in DWARF>=4.
+
+* high-level checks
+
+** DW_AT_byte_size at DW_TAG_pointer_type
+
+<mjw> machatap: I was surprised to see all these DW_TAG_pointer_type and
+      DW_TAG_reference_type having an explicit DW_AT_byte_size
+							     [2010-09-06 16:59]
+<mjw> machatap: I see that you added the following note in dwarflint:
+							     [2010-09-06 17:00]
+<mjw>     .optional (DW_AT_byte_size) // XXX added to reflect reality
+<mjw> Any idea why reality is like that?
+<machatap> mjw: yeah, the XXX meaning "we need to look into that"
+<machatap> I'm afraid I added it there during the mass checks without also
+	   putting it on the wiki or somewhere
+<mjw> OK, so you also think that is strange. good. I might not be crazy after
+      all :) [2010-09-06 17:01]
+<machatap> well, it's certainly not per the standard
+
+** DW_OP_GNU_implicit_pointer
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00869.html
+
+** const values vs. addresses
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00816.html
+
+** dwarflint --stats
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00849.html
