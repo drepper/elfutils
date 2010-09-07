@@ -45,9 +45,7 @@
 #include "../src/dwarf-opcodes.h"
 #include "pri.hh"
 
-static reg<check_debug_ranges> reg_debug_ranges;
-
-checkdescriptor const &
+checkdescriptor const *
 check_debug_ranges::descriptor ()
 {
   static checkdescriptor cd
@@ -67,12 +65,10 @@ check_debug_ranges::descriptor ()
 " - neither or both of range start and range end are expected to be\n"
 "   relocated.  It's expected that they are both relocated against the\n"
 "   same section.\n"));
-  return cd;
+  return &cd;
 }
 
-static reg<check_debug_loc> reg_debug_loc;
-
-checkdescriptor const &
+checkdescriptor const *
 check_debug_loc::descriptor ()
 {
   static checkdescriptor cd
@@ -92,7 +88,7 @@ check_debug_loc::descriptor ()
 " - on 32-bit machines it rejects DW_OP_const8u and DW_OP_const8s\n"
 " - on 32-bit machines it checks that ULEB128-encoded arguments aren't\n"
 "   quantities that don't fit into 32 bits\n"));
-  return cd;
+  return &cd;
 }
 
 namespace

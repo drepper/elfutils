@@ -40,7 +40,7 @@ class check_debug_line
   std::set<Dwarf_Off> _m_line_tables;
 
 public:
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
   check_debug_line (checkstack &stack, dwarflint &lint);
 
   std::set<Dwarf_Off> const &line_tables () const { return _m_line_tables; }

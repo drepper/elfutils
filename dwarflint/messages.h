@@ -66,6 +66,7 @@ extern "C"
   MC (line,      19) /* messages related to .debug_line */		\
   MC (reloc,     20) /* messages related to relocation handling */	\
   MC (header,    21) /* messages related to header portions in general */ \
+  MC (mac,       22) /* messages related to .debug_mac */ \
   MC (other,     31) /* messages unrelated to any of the above */
 
   enum message_category

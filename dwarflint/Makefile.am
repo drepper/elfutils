@@ -64,6 +64,7 @@ dwarflint_SOURCES = \
 	check_debug_pub.cc check_debug_pub.hh \
 	check_debug_loc_range.cc check_debug_loc_range.hh check_debug_loc_range.ii \
 	check_debug_aranges.cc check_debug_aranges.hh \
+	lowlevel_checks.cc lowlevel_checks.hh \
 	check_matching_ranges.cc \
 	check_range_out_of_scope.cc \
 	check_expected_trees.cc \

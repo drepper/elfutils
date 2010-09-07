@@ -42,9 +42,24 @@ operator << (std::ostream &o, checkgroups const &groups)
   return o;
 }
 
-checkdescriptor::create::create (char const *a_name)
-  : name (a_name)
-  , desc (NULL)
+std::ostream &
+operator << (std::ostream &o, prereqs const &p)
+{
+  o << "(";
+  for (prereqs::const_iterator it = p.begin (); it != p.end (); ++it)
+    {
+      if (it != p.begin ())
+	o << ',';
+      o << (*it)->name ();
+    }
+  o << ")";
+  return o;
+}
+
+checkdescriptor::create::create (char const *name)
+  : _m_name (name)
+  , _m_description (NULL)
+  , _m_hidden (false)
 {}
 
 checkdescriptor::create &
@@ -53,15 +68,16 @@ checkdescriptor::create::groups (char const *a_groups)
   std::stringstream ss (a_groups);
   std::string group;
   while (ss >> group)
-    g.insert (group);
+    _m_groups.insert (group);
   return *this;
 }
 
 checkdescriptor::checkdescriptor (create const &c)
-  : _m_name (c.name)
-  , _m_description (c.desc)
-  , _m_groups (c.g)
-  , _m_prereq (c.p)
+  : _m_name (c._m_name)
+  , _m_description (c._m_description)
+  , _m_groups (c._m_groups)
+  , _m_prereq (c._m_prereq)
+  , _m_hidden (c._m_hidden)
 {}
 
 bool

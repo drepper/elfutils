@@ -41,9 +41,9 @@ class open_highlevel_dwarf
   Dwfl *const _m_dwfl;
   Dwarf *const _m_dw;
 public:
-  static checkdescriptor descriptor () {
+  static checkdescriptor const *descriptor () {
     static checkdescriptor cd ("open_highlevel_dwarf");
-    return cd;
+    return &cd;
   }
 
   elfutils::dwarf const dw;
@@ -57,11 +57,11 @@ class highlevel_check
 {
   open_highlevel_dwarf *_m_loader;
 public:
-  static checkdescriptor const &descriptor () {
+  static checkdescriptor const *descriptor () {
     static checkdescriptor cd
       (checkdescriptor::create ("open_highlevel_dwarf")
        .prereq<typeof (*_m_loader)> ());
-    return cd;
+    return &cd;
   }
 
   elfutils::dwarf const &dw;

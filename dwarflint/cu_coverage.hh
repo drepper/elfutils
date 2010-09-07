@@ -39,7 +39,7 @@ class cu_coverage
   check_debug_ranges *_m_ranges;
 
 public:
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
 
   coverage cov;
 

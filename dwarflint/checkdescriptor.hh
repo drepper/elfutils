@@ -35,46 +35,69 @@ struct checkgroups
 {};
 std::ostream &operator << (std::ostream &o, checkgroups const &groups);
 
+struct checkdescriptor;
+
+struct prereqs
+  : public std::set<checkdescriptor const *>
+{};
+std::ostream &operator << (std::ostream &o, prereqs const &p);
+
 struct checkdescriptor
 {
-  struct create
+  class create
   {
-    checkgroups g;
-    checkgroups p;
-    char const *const name;
-    char const *desc;
+    friend class checkdescriptor;
+    checkgroups _m_groups;
+    prereqs _m_prereq;
+    char const *const _m_name;
+    char const *_m_description;
+    bool _m_hidden;
+
+  public:
     create (char const *name = NULL);
     create &groups (char const *name);
 
     create &description (char const *d)
-    { desc = d; return *this; }
+    {
+      _m_description = d;
+      return *this;
+    }
 
     template <class T> create &prereq ();
 
     template <class T> create &inherit ();
+
+    create hidden ()
+    {
+      _m_hidden = true;
+      return *this;
+    }
   };
 
   checkdescriptor (create const &c);
 
   char const *name () const { return _m_name; }
   char const *description () const { return _m_description; }
-  checkgroups const &prereq () const { return _m_prereq; }
+  prereqs const &prereq () const { return _m_prereq; }
 
   checkgroups const &groups () const { return _m_groups; }
   bool in_group (std::string const &group) const;
+
+  bool hidden () const { return _m_hidden; }
 
 private:
   char const *const _m_name;
   char const *const _m_description;
   checkgroups const _m_groups;
-  checkgroups const _m_prereq;
+  prereqs const _m_prereq;
+  bool _m_hidden;
 };
 
 template <class T>
 checkdescriptor::create &
 checkdescriptor::create::prereq ()
 {
-  p.insert (T::descriptor ().name ());
+  _m_prereq.insert (T::descriptor ());
   return *this;
 }
 
@@ -82,10 +105,10 @@ template <class T>
 checkdescriptor::create &
 checkdescriptor::create::inherit ()
 {
-  checkdescriptor const &cd = T::descriptor ();
-  for (checkgroups::const_iterator it = cd.prereq ().begin ();
+  checkdescriptor const &cd = *T::descriptor ();
+  for (prereqs::const_iterator it = cd.prereq ().begin ();
        it != cd.prereq ().end (); ++it)
-    p.insert (*it);
+    _m_prereq.insert (*it);
   return *this;
 }
 

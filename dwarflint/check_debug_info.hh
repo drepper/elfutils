@@ -40,7 +40,7 @@ class read_cu_headers
   section<sec_info> *_m_sec_info;
 
 public:
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
   std::vector<cu_head> const cu_headers;
   read_cu_headers (checkstack &stack, dwarflint &lint);
 };
@@ -50,7 +50,6 @@ class check_debug_info
   : public check<check_debug_info>
 {
   section<sec_info> *_m_sec_info;
-  section<sec_abbrev> *_m_sec_abbrev;
   section<sec_str> *_m_sec_str;
   elf_file const &_m_file;
   check_debug_abbrev *_m_abbrevs;
@@ -78,7 +77,7 @@ class check_debug_info
   void check_info_structural ();
 
 public:
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
 
   coverage const &cov () const { return _m_cov; }
   bool need_ranges () const { return _m_need_ranges; }
@@ -101,7 +100,7 @@ class check_debug_info_refs
   check_debug_line *_m_line;
 
 public:
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
   check_debug_info_refs (checkstack &stack, dwarflint &lint);
 };
 

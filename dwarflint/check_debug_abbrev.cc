@@ -38,9 +38,7 @@
 #include <cassert>
 #include <algorithm>
 
-static reg<check_debug_abbrev> reg_debug_abbrev;
-
-checkdescriptor &
+checkdescriptor const *
 check_debug_abbrev::descriptor ()
 {
   static checkdescriptor cd
@@ -73,7 +71,7 @@ check_debug_abbrev::descriptor ()
 "many checks will still be done, operating under assumption that what\n"
 "we see is the latest DWARF format.  This may render some checks\n"
 "inaccurate.\n"));
-  return cd;
+  return &cd;
 }
 
 struct abbrev *

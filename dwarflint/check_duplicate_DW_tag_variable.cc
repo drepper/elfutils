@@ -57,7 +57,7 @@ namespace
     };
 
   public:
-    static checkdescriptor descriptor () {
+    static checkdescriptor const *descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_duplicate_DW_tag_variable")
 	 .inherit<highlevel_check<check_duplicate_DW_tag_variable> > ()
@@ -67,7 +67,7 @@ namespace
 "definition and declaration with definition.\n"
 " https://fedorahosted.org/pipermail/elfutils-devel/2010-July/001497.html\n"
 " http://gcc.gnu.org/bugzilla/show_bug.cgi?id=39524\n"));
-      return cd;
+      return &cd;
     }
 
     check_duplicate_DW_tag_variable (checkstack &stack, dwarflint &lint);

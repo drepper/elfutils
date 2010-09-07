@@ -86,7 +86,7 @@ public:
     struct item
     {
       virtual void run (checkstack &stack, dwarflint &lint) = 0;
-      virtual checkdescriptor descriptor () const = 0;
+      virtual checkdescriptor const *descriptor () const = 0;
     };
 
     static check_registrar *inst ()

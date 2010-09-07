@@ -1,14 +1,4 @@
 -*-org-*-
-* resolver
-** ordering
-   High-level checks implicitly depend on low-level checks of the
-   sections that they use, but since there is no explicit need to
-   access any of the low-level variables, these dependencies are not
-   visible in the source.  So right now high-level checks will happily
-   run even when no low-level checks passed, and can ever run before
-   any of the low-level checks, since the dependency resolver has no
-   idea that there is a dependency in the first place.
-
 * DWARF 4 support
   This TODO item is actually to go through the DWARF 4 standard and
   add TODO items for individual tasks.
@@ -17,6 +7,13 @@
   DWARF<=3, but only exprloc is a location in DWARF>=4; data* forms
   can be either constant or *ptr in DWARF<=3 but only sec_offset is
   *ptr in DWARF>=4.
+
+* low-level checks
+** error out on incomplete debuginfo
+   Right now, without --strict, running dwarflint on a binary compiled
+   without debuginfo gives no errors.  On the other hand, with
+   --strict, dwarflint errors out on any debug section that's not
+   there, which is also wrong.  Fix it.
 
 * high-level checks
 

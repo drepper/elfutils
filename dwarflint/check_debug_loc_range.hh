@@ -38,7 +38,7 @@ class check_debug_ranges
   coverage _m_cov;
 
 public:
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
 
   coverage const &cov () const { return _m_cov; }
   check_debug_ranges (checkstack &stack, dwarflint &lint);
@@ -52,7 +52,7 @@ class check_debug_loc
   check_debug_info *_m_info;
 
 public:
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
   check_debug_loc (checkstack &stack, dwarflint &lint);
 };
 

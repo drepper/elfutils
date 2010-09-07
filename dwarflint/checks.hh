@@ -70,7 +70,7 @@ dwarflint::check (checkstack &stack)
 
   if (c == NULL)
     {
-      checkdescriptor const &cd = T::descriptor ();
+      checkdescriptor const &cd = *T::descriptor ();
 
       struct popper {
 	checkstack &guard_stack;
@@ -148,7 +148,7 @@ struct reg
     lint.toplev_check <T> (stack);
   }
 
-  virtual checkdescriptor descriptor () const
+  virtual checkdescriptor const *descriptor () const
   {
     return T::descriptor ();
   }

@@ -26,6 +26,9 @@
 #include "highlevel_check.hh"
 #include "messages.h"
 
+#include "sections.hh"
+#include "lowlevel_checks.hh"
+
 namespace
 {
   inline bool failed (void *ptr) { return ptr == NULL; }
@@ -128,10 +131,9 @@ namespace
   }
 }
 
-open_highlevel_dwarf::open_highlevel_dwarf (checkstack &stack
-					      __attribute__ ((unused)),
-					    dwarflint &lint)
-  : _m_dwfl (open_dwfl ())
+open_highlevel_dwarf::open_highlevel_dwarf (checkstack &stack, dwarflint &lint)
+  : _m_dwfl ((lint.check<lowlevel_checks> (stack),
+	      open_dwfl ()))
   , _m_dw (open_dwarf (_m_dwfl, lint.fname (), lint.fd ()))
   , dw (open_hl_dwarf (_m_dw))
 {}

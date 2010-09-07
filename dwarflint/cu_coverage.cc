@@ -27,14 +27,14 @@
 #include "check_debug_info.hh"
 #include "check_debug_loc_range.hh"
 
-checkdescriptor const &
+checkdescriptor const *
 cu_coverage::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("cu_coverage")
      .prereq<typeof (*_m_info)> ()
      .prereq<typeof (*_m_ranges)> ());
-  return cd;
+  return &cd;
 }
 
 cu_coverage::cu_coverage (checkstack &stack, dwarflint &lint)

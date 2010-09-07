@@ -37,20 +37,20 @@
 #include "pri.hh"
 #include "options.h"
 
-checkdescriptor const &
+checkdescriptor const *
 load_sections::descriptor ()
 {
   static checkdescriptor cd ("load_sections");
-  return cd;
+  return &cd;
 }
 
-checkdescriptor const &
+checkdescriptor const *
 section_base::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ()
      .prereq<typeof (*sections)> ());
-  return cd;
+  return &cd;
 }
 
 namespace
@@ -435,6 +435,7 @@ namespace
       case sec_line: return mc_line;
       case sec_loc: return mc_loc;
       case sec_ranges: return mc_ranges;
+      case sec_mac: return mc_mac;
 
       case sec_pubnames:
       case sec_pubtypes:
@@ -445,7 +446,6 @@ namespace
 	return mc_reloc;
 
 	// xxx don't have one
-      case sec_mac:
       case sec_invalid:
       case sec_locexpr:
       case rel_value:

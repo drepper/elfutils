@@ -97,13 +97,41 @@ dwarflint::check_registrar::enroll (dwarflint &lint)
     }
 }
 
+namespace
+{
+  template <class T> void include (T &to, checkdescriptor const *cd);
+
+  template <class T>
+  void add_deps (T &to, checkdescriptor const *cd)
+  {
+    for (typename T::const_iterator it = cd->prereq ().begin ();
+	 it != cd->prereq ().end (); ++it)
+      include (to, *it);
+  }
+
+  template <class T>
+  void include (T &to, checkdescriptor const *cd)
+  {
+    if (cd->hidden ())
+      add_deps (to, cd);
+    else
+      to.insert (cd);
+  }
+}
+
 void
 dwarflint::check_registrar::list_checks () const
 {
+  typedef std::set<checkdescriptor const *> descset;
+  descset descriptors;
   for (std::vector <item *>::const_iterator it = _m_items.begin ();
        it != _m_items.end (); ++it)
+    include (descriptors, (*it)->descriptor ());
+
+  for (descset::const_iterator it = descriptors.begin ();
+       it != descriptors.end (); ++it)
     {
-      checkdescriptor const &cd = (*it)->descriptor ();
+      checkdescriptor const &cd = **it;
       if (be_verbose)
 	std::cout << "=== " << cd.name () << " ===";
       else
@@ -122,7 +150,7 @@ dwarflint::check_registrar::list_checks () const
 
       if (be_verbose)
 	{
-	  checkgroups const &prereq = cd.prereq ();
+	  prereqs const &prereq = cd.prereq ();
 	  if (!prereq.empty ())
 	    std::cout << "prerequisites: " << prereq << std::endl;
 	  char const *desc = cd.description ();

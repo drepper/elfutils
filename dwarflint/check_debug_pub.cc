@@ -47,7 +47,7 @@ check_debug_pub<sec_id>::check_debug_pub (checkstack &stack, dwarflint &lint)
 }
 
 
-checkdescriptor const &
+checkdescriptor const *
 check_debug_pubnames::descriptor ()
 {
   static checkdescriptor cd
@@ -64,13 +64,12 @@ check_debug_pubnames::descriptor ()
 "Furthermore, if .debug_info is valid, it is checked:\n"
 " - that references point to actual CUs and DIEs\n"
 " - that there's only one pub section per CU\n"));
-  return cd;
+  return &cd;
 }
-static reg<check_debug_pubnames> reg_debug_pubnames;
 template check_debug_pub<sec_pubnames>::check_debug_pub (checkstack &stack,
 							 dwarflint &lint);
 
-checkdescriptor const &
+checkdescriptor const *
 check_debug_pubtypes::descriptor ()
 {
   static checkdescriptor cd
@@ -81,9 +80,8 @@ check_debug_pubtypes::descriptor ()
      .description (
 "Checks for low-level structure of .debug_pubtypes.  In addition it\n"
 "makes the same checks as check_debug_pubnames.\n"));
-  return cd;
+  return &cd;
 }
-static reg<check_debug_pubtypes> reg_debug_pubtypes;
 template check_debug_pub<sec_pubtypes>::check_debug_pub (checkstack &stack,
 							 dwarflint &lint);
 

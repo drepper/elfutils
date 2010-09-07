@@ -41,25 +41,22 @@
 #include "check_debug_info.hh"
 #include "check_debug_line.hh"
 
-checkdescriptor const &
+checkdescriptor const *
 read_cu_headers::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("read_cu_headers")
      .prereq<typeof (*_m_sec_info)> ());
-  return cd;
+  return &cd;
 }
 
-static reg<check_debug_info> reg_debug_info;
-
-checkdescriptor const &
+checkdescriptor const *
 check_debug_info::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_info")
      .groups ("@low")
      .prereq<typeof (*_m_sec_info)> ()
-     .prereq<typeof (*_m_sec_abbrev)> ()
      .prereq<typeof (*_m_sec_str)> ()
      .prereq<typeof (*_m_abbrevs)> ()
      .prereq<typeof (*_m_cu_headers)> ()
@@ -93,7 +90,7 @@ check_debug_info::descriptor ()
 " - that relocations are valid.  In ET_REL files that certain fields\n"
 "   are relocated\n"
 		   ));
-  return cd;
+  return &cd;
 }
 
 namespace
@@ -1223,7 +1220,6 @@ check_debug_info::check_info_structural ()
 
 check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
   : _m_sec_info (lint.check (stack, _m_sec_info))
-  , _m_sec_abbrev (lint.check (stack, _m_sec_abbrev))
   , _m_sec_str (lint.check (stack, _m_sec_str))
   , _m_file (_m_sec_info->file)
   , _m_abbrevs (lint.check (stack, _m_abbrevs))
@@ -1274,7 +1270,7 @@ check_debug_info::find_cu (::Dwarf_Off offset)
   return NULL;
 }
 
-checkdescriptor const &
+checkdescriptor const *
 check_debug_info_refs::descriptor ()
 {
   static checkdescriptor cd
@@ -1286,7 +1282,7 @@ check_debug_info_refs::descriptor ()
 "This pass checks for outstanding unresolved references from\n"
 ".debug_info to .debug_line (and perhaps others as they are\n"
 "identified).\n"));
-  return cd;
+  return &cd;
 }
 
 check_debug_info_refs::check_debug_info_refs (checkstack &stack,
@@ -1303,4 +1299,3 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
 	<< "unresolved reference to .debug_line table "
 	<< pri::hex (it->stmt_list.addr) << '.' << std::endl;
 }
-static reg<check_debug_info_refs> reg_debug_info_refs;

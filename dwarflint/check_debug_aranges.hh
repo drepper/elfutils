@@ -40,7 +40,7 @@ class check_debug_aranges
   cu_coverage *_m_cu_coverage;
 
 public:
-  static checkdescriptor descriptor ();
+  static checkdescriptor const *descriptor ();
   check_debug_aranges (checkstack &stack, dwarflint &lint);
 };
 

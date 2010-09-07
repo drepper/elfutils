@@ -42,7 +42,8 @@ namespace
     : public highlevel_check<check_dups_abstract_origin>
   {
   public:
-    static checkdescriptor descriptor () {
+    static checkdescriptor const *descriptor ()
+    {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_dups_abstract_origin")
 	 .inherit<highlevel_check<check_dups_abstract_origin> > ()
@@ -51,7 +52,7 @@ namespace
 "suspicious if that attribute name appears on the DIE that's the\n"
 "first DIE's DW_AT_abstract_origin or DW_AT_specification.\n"
 " https://bugzilla.redhat.com/show_bug.cgi?id=527430\n"));
-      return cd;
+      return &cd;
     }
 
     explicit check_dups_abstract_origin (checkstack &stack, dwarflint &lint)

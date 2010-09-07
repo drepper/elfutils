@@ -34,9 +34,7 @@
 #include "check_debug_loc_range.hh"
 #include "cu_coverage.hh"
 
-static reg<check_debug_aranges> reg_debug_aranges;
-
-checkdescriptor
+checkdescriptor const *
 check_debug_aranges::descriptor ()
 {
   static checkdescriptor cd
@@ -55,7 +53,7 @@ check_debug_aranges::descriptor ()
 " - for zero-length ranges\n"
 " - that the ranges cover all the address range covered by CUs\n"
 		   ));
-  return cd;
+  return &cd;
 }
 
 check_debug_aranges::check_debug_aranges (checkstack &stack, dwarflint &lint)

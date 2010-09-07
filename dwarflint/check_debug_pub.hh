@@ -51,7 +51,7 @@ public:
 struct check_debug_pubnames
   : public check_debug_pub<sec_pubnames>
 {
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
 
   check_debug_pubnames (checkstack &stack, dwarflint &lint)
     : check_debug_pub<sec_pubnames> (stack, lint)
@@ -61,7 +61,7 @@ struct check_debug_pubnames
 struct check_debug_pubtypes
   : public check_debug_pub<sec_pubtypes>
 {
-  static checkdescriptor const &descriptor ();
+  static checkdescriptor const *descriptor ();
 
   check_debug_pubtypes (checkstack &stack, dwarflint &lint)
     : check_debug_pub<sec_pubtypes> (stack, lint)

@@ -34,7 +34,7 @@
 
 #include <sstream>
 
-checkdescriptor const &
+checkdescriptor const *
 check_debug_line::descriptor ()
 {
   static checkdescriptor cd
@@ -68,9 +68,8 @@ check_debug_line::descriptor ()
 "   should be consistent in that case, namely is_stmt, basic_block,\n"
 "   end_sequence, prologue_end, epilogue_begin, isa.\n"
 		   ));
-  return cd;
+  return &cd;
 }
-static reg<check_debug_line> reg_debug_line;
 
 namespace
 {

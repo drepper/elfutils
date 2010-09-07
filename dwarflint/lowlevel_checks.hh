@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_abbrev.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Scheduler for low_level checks
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,29 +23,17 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
-#define DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#ifndef DWARFLINT_LOWLEVEL_CHECKS_HH
+#define DWARFLINT_LOWLEVEL_CHECKS_HH
 
-#include "low.h"
 #include "checks.hh"
-#include "sections.ii"
-#include "check_debug_info.ii"
 
-class check_debug_abbrev
-  : public check<check_debug_abbrev>
+class lowlevel_checks
+  : public check<lowlevel_checks>
 {
-  section<sec_abbrev> *_m_sec_abbr;
-  read_cu_headers *_m_cu_headers;
-
 public:
   static checkdescriptor const *descriptor ();
-
-  // offset -> abbreviations
-  typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
-  abbrev_map const abbrevs;
-
-  check_debug_abbrev (checkstack &stack, dwarflint &lint);
-  ~check_debug_abbrev ();
+  lowlevel_checks (checkstack &stack, dwarflint &lint);
 };
 
-#endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#endif//DWARFLINT_LOWLEVEL_CHECKS_HH
