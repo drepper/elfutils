@@ -23,6 +23,7 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#include "check_debug_line.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "pri.hh"
@@ -33,36 +34,14 @@
 
 #include <sstream>
 
-namespace
+checkdescriptor const &
+check_debug_line::descriptor ()
 {
-  class check_debug_line
-    : public check<check_debug_line>
-  {
-    section<sec_line> *_m_sec;
-    check_debug_info *_m_info;
-
-    struct include_directory_t
-    {
-      std::string name;
-      bool used;
-    };
-    typedef std::vector<include_directory_t> include_directories_t;
-
-    struct file_t
-    {
-      const char *name;
-      uint64_t dir_idx;
-      bool used;
-    };
-    typedef std::vector<file_t> files_t;
-
-  public:
-    static checkdescriptor descriptor () {
-      static checkdescriptor cd
-	(checkdescriptor::create ("check_debug_line")
-	 .groups ("@low")
-	 .prereq<typeof (*_m_sec)> ()
-	 .description (
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_line")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec)> ()
+     .description (
 "Checks for low-level structure of .debug_line.  In addition it\n"
 "checks:\n"
 " - for normalized values of certain attributes (such as that\n"
@@ -89,72 +68,82 @@ namespace
 "   be derived from several statements.  But certain flags in table\n"
 "   should be consistent in that case, namely is_stmt, basic_block,\n"
 "   end_sequence, prologue_end, epilogue_begin, isa.\n"
-		       ));
-      return cd;
-    }
+		   ));
+  return cd;
+}
+static reg<check_debug_line> reg_debug_line;
 
-    explicit check_debug_line (checkstack &stack, dwarflint &lint);
+namespace
+{
+  struct include_directory_t
+  {
+    std::string name;
+    bool used;
+  };
+  typedef std::vector<include_directory_t> include_directories_t;
 
-    /* Directory index.  */
-    bool read_directory_index (include_directories_t &include_directories,
-			       files_t &files, read_ctx *ctx,
-			       const char *name, uint64_t *ptr,
-			       where *where, bool &retval)
-    {
-      size_t nfile = files.size () + 1;
-      if (!checked_read_uleb128 (ctx, ptr,
-				 where, "directory index"))
-	return false;
+  struct file_t
+  {
+    const char *name;
+    uint64_t dir_idx;
+    bool used;
+  };
+  typedef std::vector<file_t> files_t;
 
-      if (*name == '/' && *ptr != 0)
-	wr_message (*where, cat (mc_impact_2, mc_line, mc_header))
+  /* Directory index.  */
+  bool read_directory_index (include_directories_t &include_directories,
+			     files_t &files, read_ctx *ctx,
+			     const char *name, uint64_t *ptr,
+			     where *where, bool &retval)
+  {
+    size_t nfile = files.size () + 1;
+    if (!checked_read_uleb128 (ctx, ptr,
+			       where, "directory index"))
+      return false;
+
+    if (*name == '/' && *ptr != 0)
+      wr_message (*where, cat (mc_impact_2, mc_line, mc_header))
+	<< "file #" << nfile
+	<< " has absolute pathname, but refers to directory != 0."
+	<< std::endl;
+
+    if (*ptr > include_directories.size ())
+      /* Not >=, dirs are indexed from 1.  */
+      {
+	wr_message (*where, cat (mc_impact_4, mc_line, mc_header))
 	  << "file #" << nfile
-	  << " has absolute pathname, but refers to directory != 0."
-	  << std::endl;
+	  << " refers to directory #" << *ptr
+	  << ", which wasn't defined." << std::endl;
 
-      if (*ptr > include_directories.size ())
-	/* Not >=, dirs are indexed from 1.  */
-	{
-	  wr_message (*where, cat (mc_impact_4, mc_line, mc_header))
-	    << "file #" << nfile
-	    << " refers to directory #" << *ptr
-	    << ", which wasn't defined." << std::endl;
+	/* Consumer might choke on that.  */
+	retval = false;
+      }
+    else if (*ptr != 0)
+      include_directories[*ptr - 1].used = true;
+    return true;
+  }
 
-	  /* Consumer might choke on that.  */
-	  retval = false;
-	}
-      else if (*ptr != 0)
-	include_directories[*ptr - 1].used = true;
-      return true;
-    }
-
-    bool
+  bool
     use_file (files_t &files, uint64_t file_idx,
 	      where *where, char const *msg = "")
-    {
-      if (file_idx == 0 || file_idx > files.size ())
-	{
-	  wr_error (*where)
-	    << msg << "invalid file index " << file_idx << '.'
-	    << std::endl;
-	  return false;
-	}
-      else
-	files[file_idx - 1].used = true;
-      return true;
-    }
-  };
-
-  reg<check_debug_line> reg_debug_line;
+  {
+    if (file_idx == 0 || file_idx > files.size ())
+      {
+	wr_error (*where)
+	  << msg << "invalid file index " << file_idx << '.'
+	  << std::endl;
+	return false;
+      }
+    else
+      files[file_idx - 1].used = true;
+    return true;
+  }
 }
 
 check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
   : _m_sec (lint.check (stack, _m_sec))
   , _m_info (lint.toplev_check (stack, _m_info))
 {
-  addr_record line_tables;
-  WIPE (line_tables);
-
   bool addr_64 = _m_sec->file.addr_64;
   struct read_ctx ctx;
   read_ctx_init (&ctx, _m_sec->sect.data, _m_sec->file.other_byte_order);
@@ -167,7 +156,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
       struct where where = WHERE (_m_sec->sect.id, NULL);
       uint64_t set_offset = read_ctx_get_offset (&ctx);
       where_reset_1 (&where, set_offset);
-      addr_record_add (&line_tables, set_offset);
+      _m_line_tables.insert ((Dwarf_Off)set_offset);
       const unsigned char *set_begin = ctx.ptr;
 
       /* Size.  */
@@ -630,9 +619,8 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
     for (std::vector<cu>::iterator it = _m_info->cus.begin ();
 	 it != _m_info->cus.end (); ++it)
       if (it->stmt_list.addr != (uint64_t)-1
-	  && !addr_record_has_addr (&line_tables, it->stmt_list.addr))
+	  && _m_line_tables.find (it->stmt_list.addr) != _m_line_tables.end ())
 	wr_error (it->stmt_list.who)
 	  << "unresolved reference to .debug_line table "
 	  << pri::hex (it->stmt_list.addr) << '.' << std::endl;
-  addr_record_free (&line_tables);
 }
