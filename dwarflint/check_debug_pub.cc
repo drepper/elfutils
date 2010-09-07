@@ -23,49 +23,39 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#include "check_debug_pub.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "pri.hh"
 
 namespace
 {
-  template<section_id sec_id>
-  class check_debug_pub
-    : public check<check_debug_pub<sec_id> >
+  template <class A, class B>
+  struct where xwhere (A a, B b)
   {
-  protected:
-    typedef section<sec_id> section_t;
-    section_t *_m_sec;
-    elf_file const &_m_file;
-    check_debug_info *_m_cus;
+    return WHERE (a, b);
+  }
+}
 
-    bool check_pub_structural ();
+template<section_id sec_id>
+check_debug_pub<sec_id>::check_debug_pub (checkstack &stack, dwarflint &lint)
+  : _m_sec (lint.check (stack, _m_sec))
+  , _m_file (_m_sec->file)
+  , _m_cus (lint.toplev_check (stack, _m_cus))
+{
+  check_pub_structural ();
+}
 
-  public:
-    check_debug_pub (checkstack &stack, dwarflint &lint)
-      : _m_sec (lint.check (stack, _m_sec))
-      , _m_file (_m_sec->file)
-      , _m_cus (lint.toplev_check (stack, _m_cus))
-    {
-      check_pub_structural ();
-    }
-  };
 
-  class check_debug_pubnames
-    : public check_debug_pub<sec_pubnames>
-  {
-  public:
-    check_debug_pubnames (checkstack &stack, dwarflint &lint)
-      : check_debug_pub<sec_pubnames> (stack, lint)
-    {}
-
-    static checkdescriptor const &descriptor () {
-      static checkdescriptor cd
-	(checkdescriptor::create ("check_debug_pubnames")
-	 .groups ("@low")
-	 .prereq<typeof (*_m_sec)> ()
-	 .prereq<check_debug_info> ()
-	 .description (
+checkdescriptor const &
+check_debug_pubnames::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_pubnames")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec)> ()
+     .prereq<check_debug_info> ()
+     .description (
 "Checks for low-level structure of .debug_pubnames.  In addition it\n"
 "checks:\n"
 " - for garbage inside padding\n"
@@ -74,39 +64,28 @@ namespace
 "Furthermore, if .debug_info is valid, it is checked:\n"
 " - that references point to actual CUs and DIEs\n"
 " - that there's only one pub section per CU\n"));
-      return cd;
-    }
-  };
-  reg<check_debug_pubnames> reg_debug_pubnames;
+  return cd;
+}
+static reg<check_debug_pubnames> reg_debug_pubnames;
+template check_debug_pub<sec_pubnames>::check_debug_pub (checkstack &stack,
+							 dwarflint &lint);
 
-  class check_debug_pubtypes
-    : public check_debug_pub<sec_pubtypes>
-  {
-  public:
-    check_debug_pubtypes (checkstack &stack, dwarflint &lint)
-      : check_debug_pub<sec_pubtypes> (stack, lint)
-    {}
-
-    static checkdescriptor const &descriptor () {
-      static checkdescriptor cd
-	(checkdescriptor::create ("check_debug_pubtypes")
-	 .groups ("@low")
-	 .prereq<typeof (*_m_sec)> ()
-	 .prereq<check_debug_info> ()
-	 .description (
+checkdescriptor const &
+check_debug_pubtypes::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_pubtypes")
+     .groups ("@low")
+     .prereq<typeof (*_m_sec)> ()
+     .prereq<check_debug_info> ()
+     .description (
 "Checks for low-level structure of .debug_pubtypes.  In addition it\n"
 "makes the same checks as check_debug_pubnames.\n"));
-      return cd;
-    }
-  };
-  reg<check_debug_pubtypes> reg_debug_pubtypes;
-
-  template <class A, class B>
-  struct where xwhere (A a, B b)
-  {
-    return WHERE (a, b);
-  }
+  return cd;
 }
+static reg<check_debug_pubtypes> reg_debug_pubtypes;
+template check_debug_pub<sec_pubtypes>::check_debug_pub (checkstack &stack,
+							 dwarflint &lint);
 
 template <section_id sec_id>
 bool
