@@ -29,6 +29,7 @@
 #include "low.h"
 #include "checks.hh"
 #include "check_debug_abbrev.ii"
+#include "check_debug_line.ii"
 #include "sections.ii"
 
 /** The pass for reading basic .debug_info data -- the layout of
@@ -39,7 +40,7 @@ class read_cu_headers
   section<sec_info> *_m_sec_info;
 
 public:
-  static checkdescriptor descriptor ();
+  static checkdescriptor const &descriptor ();
   std::vector<cu_head> const cu_headers;
   read_cu_headers (checkstack &stack, dwarflint &lint);
 };
@@ -77,7 +78,7 @@ class check_debug_info
   void check_info_structural ();
 
 public:
-  static checkdescriptor descriptor ();
+  static checkdescriptor const &descriptor ();
 
   coverage const &cov () const { return _m_cov; }
   bool need_ranges () const { return _m_need_ranges; }
@@ -89,6 +90,19 @@ public:
   ~check_debug_info ();
 
   cu *find_cu (::Dwarf_Off offset);
+};
+
+/** Check pending references that need other sections to be validated
+    first.  */
+class check_debug_info_refs
+  : public check<check_debug_info_refs>
+{
+  check_debug_info *_m_info;
+  check_debug_line *_m_line;
+
+public:
+  static checkdescriptor const &descriptor ();
+  check_debug_info_refs (checkstack &stack, dwarflint &lint);
 };
 
 #endif//DWARFLINT_CHECK_DEBUG_INFO_HH

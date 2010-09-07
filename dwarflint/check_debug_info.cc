@@ -39,8 +39,9 @@
 #include "check_debug_loc_range.hh"
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"
+#include "check_debug_line.hh"
 
-checkdescriptor
+checkdescriptor const &
 read_cu_headers::descriptor ()
 {
   static checkdescriptor cd
@@ -51,7 +52,7 @@ read_cu_headers::descriptor ()
 
 static reg<check_debug_info> reg_debug_info;
 
-checkdescriptor
+checkdescriptor const &
 check_debug_info::descriptor ()
 {
   static checkdescriptor cd
@@ -63,7 +64,6 @@ check_debug_info::descriptor ()
      .prereq<typeof (*_m_abbrevs)> ()
      .prereq<typeof (*_m_cu_headers)> ()
      .description (
-
 "Checks for low-level structure of .debug_info.  In addition it\n"
 "checks:\n"
 " - for dangling reference to .debug_abbrev section\n"
@@ -1273,3 +1273,34 @@ check_debug_info::find_cu (::Dwarf_Off offset)
 
   return NULL;
 }
+
+checkdescriptor const &
+check_debug_info_refs::descriptor ()
+{
+  static checkdescriptor cd
+    (checkdescriptor::create ("check_debug_info_refs")
+     .groups ("@low")
+     .prereq<typeof (*_m_info)> ()
+     .prereq<typeof (*_m_line)> ()
+     .description (
+"This pass checks for outstanding unresolved references from\n"
+".debug_info to .debug_line (and perhaps others as they are\n"
+"identified).\n"));
+  return cd;
+}
+
+check_debug_info_refs::check_debug_info_refs (checkstack &stack,
+					      dwarflint &lint)
+  : _m_info (lint.check (stack, _m_info))
+  , _m_line (lint.toplev_check (stack, _m_line))
+{
+  for (std::vector<cu>::iterator it = _m_info->cus.begin ();
+       it != _m_info->cus.end (); ++it)
+    if (it->stmt_list.addr != (uint64_t)-1
+	&& (_m_line == NULL
+	    || !_m_line->has_line_table (it->stmt_list.addr)))
+      wr_error (it->stmt_list.who)
+	<< "unresolved reference to .debug_line table "
+	<< pri::hex (it->stmt_list.addr) << '.' << std::endl;
+}
+static reg<check_debug_info_refs> reg_debug_info_refs;
