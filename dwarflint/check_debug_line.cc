@@ -60,9 +60,8 @@ check_debug_line::descriptor ()
 "   other instruction\n"
 " - that relocations are valid.  In ET_REL files that certain fields\n"
 "   are relocated\n"
-"Furthermore, if .debug_info is valid, it is checked:\n"
-" - that each line table is used by some CU\n"
-" - that the line table references at CUs point to actual line tables\n"
+"Furthermore, if .debug_info is valid, it is checked that each line\n"
+"table is used by some CU.\n"
 "TODOs:\n"
 " - overlaps in defined addresses are probably OK, one instruction can\n"
 "   be derived from several statements.  But certain flags in table\n"
@@ -614,13 +613,4 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
     relocation_skip_rest (&_m_sec->sect.rel, _m_sec->sect.id);
   else
     throw check_base::failed ();
-
-  if (_m_info != NULL)
-    for (std::vector<cu>::iterator it = _m_info->cus.begin ();
-	 it != _m_info->cus.end (); ++it)
-      if (it->stmt_list.addr != (uint64_t)-1
-	  && _m_line_tables.find (it->stmt_list.addr) != _m_line_tables.end ())
-	wr_error (it->stmt_list.who)
-	  << "unresolved reference to .debug_line table "
-	  << pri::hex (it->stmt_list.addr) << '.' << std::endl;
 }
