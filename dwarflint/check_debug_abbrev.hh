@@ -29,6 +29,7 @@
 #include "low.h"
 #include "checks.hh"
 #include "sections.ii"
+#include "check_debug_info.ii"
 
 class check_debug_abbrev
   : public check<check_debug_abbrev>
