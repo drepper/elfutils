@@ -56,8 +56,10 @@
 #include "libdwP.h"
 
 
-static Dwarf_Die *
-do_offdie (Dwarf *dbg, Dwarf_Off offset, Dwarf_Die *result, bool debug_types)
+Dwarf_Die *
+internal_function
+__libdw_offdie (Dwarf *dbg, Dwarf_Off offset, Dwarf_Die *result,
+		bool debug_types)
 {
   if (dbg == NULL)
     return NULL;
@@ -95,7 +97,7 @@ dwarf_offdie (dbg, offset, result)
      Dwarf_Off offset;
      Dwarf_Die *result;
 {
-  return do_offdie (dbg, offset, result, false);
+  return __libdw_offdie (dbg, offset, result, false);
 }
 INTDEF(dwarf_offdie)
 
@@ -105,5 +107,5 @@ dwarf_offdie_types (dbg, offset, result)
      Dwarf_Off offset;
      Dwarf_Die *result;
 {
-  return do_offdie (dbg, offset, result, true);
+  return __libdw_offdie (dbg, offset, result, true);
 }
