@@ -118,8 +118,8 @@ validate (Dwfl_Module *mod, int fd, bool check, GElf_Word debuglink_crc)
 	__libdwfl_seterrno (error);
       else if (likely (__libdwfl_find_build_id (mod, false,
 						mod->debug.elf) == 2))
-	  /* Also backdoor the gratuitous flag.  */
-	  mod->debug.valid = true;
+	/* Also backdoor the gratuitous flag.  */
+	mod->debug.valid = true;
       else
 	{
 	  /* A mismatch!  */
@@ -265,7 +265,7 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
 						     NULL, NULL, 0,
 						     NULL, NULL, 0,
 						     debuginfo_file_name);
-      if (fd >= 0 || errno != 0)
+      if (fd >= 0 || mod->debug.elf != NULL || errno != 0)
 	return fd;
     }
 
