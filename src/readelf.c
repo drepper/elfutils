@@ -4274,10 +4274,11 @@ struct listptr
 #define listptr_offset_size(p)	((p)->dwarf64 ? 8 : 4)
 #define listptr_address_size(p)	((p)->addr64 ? 8 : 4)
 
+static const char *listptr_name;
 static int
-compare_listptr (const void *a, const void *b, void *arg)
+compare_listptr (const void *a, const void *b)
 {
-  const char *name = arg;
+  const char *const name = listptr_name;
   struct listptr *p1 = (void *) a;
   struct listptr *p2 = (void *) b;
 
@@ -4357,8 +4358,11 @@ static void
 sort_listptr (struct listptr_table *table, const char *name)
 {
   if (table->n > 0)
-    qsort_r (table->table, table->n, sizeof table->table[0],
-	     &compare_listptr, (void *) name);
+    {
+      listptr_name = name;
+      qsort (table->table, table->n, sizeof table->table[0],
+	     &compare_listptr);
+    }
 }
 
 static bool
