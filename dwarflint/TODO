@@ -8,13 +8,6 @@
   can be either constant or *ptr in DWARF<=3 but only sec_offset is
   *ptr in DWARF>=4.
 
-* low-level checks
-** error out on incomplete debuginfo
-   Right now, without --strict, running dwarflint on a binary compiled
-   without debuginfo gives no errors.  On the other hand, with
-   --strict, dwarflint errors out on any debug section that's not
-   there, which is also wrong.  Fix it.
-
 * high-level checks
 
 ** DW_OP_GNU_implicit_pointer
