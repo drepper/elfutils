@@ -36,7 +36,10 @@ public:
   {
     static checkdescriptor cd
       (checkdescriptor::create ("check_nodebug")
-       .groups ("@low"));
+       .groups ("@low")
+       .description (
+"Checks that there are at least essential debuginfo sections present\n"
+"in the ELF file."));
     return &cd;
   }
 
