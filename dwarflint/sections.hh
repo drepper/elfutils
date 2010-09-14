@@ -68,7 +68,8 @@ public:
   static checkdescriptor const *descriptor () {
     static checkdescriptor cd
       (checkdescriptor::create (section_name[sec_id])
-       .inherit<section_base> ());
+       .inherit<section_base> ()
+       .hidden ());
     return &cd;
   }
 

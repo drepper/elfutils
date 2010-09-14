@@ -74,9 +74,9 @@ namespace
 
 lowlevel_checks::lowlevel_checks (checkstack &stack, dwarflint &lint)
 {
-  // Then check whatever else is there.  For each existing section
-  // request that the check passes.  Re-requesting already-passed
-  // checks is OK, the scheduler caches it.
+  // Then check all the debug sections that are there.  For each
+  // existing section request that the check passes.  Re-requesting
+  // already-passed checks is OK, the scheduler caches it.
 #define SEC(NAME)							\
   section<sec_##NAME> *NAME =						\
     lint.toplev_check<section<sec_##NAME> > (stack);			\

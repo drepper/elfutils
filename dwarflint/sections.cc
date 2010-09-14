@@ -40,7 +40,9 @@
 checkdescriptor const *
 load_sections::descriptor ()
 {
-  static checkdescriptor cd ("load_sections");
+  static checkdescriptor cd
+    (checkdescriptor::create ("load_sections")
+     .hidden ());
   return &cd;
 }
 

@@ -191,6 +191,12 @@ check_rules::should_check (checkstack const &stack) const
   std::cout << std::endl;
 #endif
 
+  // We always allow scheduling hidden checks.  Those are service
+  // routines that the user doesn't even see it the list of checks.
+  assert (!stack.empty ());
+  if (stack.back ()->hidden ())
+    return true;
+
   bool should = false;
   for (const_iterator it = begin (); it != end (); ++it)
     {
