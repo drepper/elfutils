@@ -68,6 +68,8 @@ extern "C"
     rel_exec,		/* Some as above, but we expect EXEC bit.  */
   };
 
+  // section_name[0] is for sec_invalid.  The last index is for
+  // count_debuginfo_sections and is NULL.
   extern char const *section_name[];
 
 #ifdef __cplusplus

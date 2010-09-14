@@ -201,6 +201,13 @@ namespace
   struct secinfo_map
     : public std::map <std::string, secentry>
   {
+    secinfo_map ()
+    {
+      // 0 is invalid section
+      for (unsigned i = 1; i < count_debuginfo_sections; ++i)
+	(*this)[section_name[i]] = secentry (static_cast<section_id> (i));
+    }
+
     secentry *get (const char *name)
     {
       iterator it = find (std::string (name));
@@ -235,17 +242,13 @@ namespace
       file->other_byte_order = true;
 
     Elf_Scn *reloc_symtab = NULL;
-
     secinfo_map secinfo;
-#define SEC(n) secinfo[".debug_" #n] = secentry (sec_##n);
-    DEBUGINFO_SECTIONS
-#undef SEC
 
-      /* Now find all necessary debuginfo sections and associated
-	 relocation sections.  */
+    /* Now find all necessary debuginfo sections and associated
+       relocation sections.  */
 
-      /* Section 0 is special, skip it.  */
-      REALLOC (file, sec);
+    /* Section 0 is special, skip it.  */
+    REALLOC (file, sec);
     file->sec[file->size++].id = sec_invalid;
 
     bool check_rel = true;
