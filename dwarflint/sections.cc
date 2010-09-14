@@ -29,7 +29,6 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <sstream>
 #include "../libelf/gelf.h"
 
 #include "sections.hh"
@@ -426,56 +425,12 @@ load_sections::~load_sections ()
   elf_end (file.elf);
 }
 
-namespace
-{
-  message_category
-  secid_to_cat (section_id secid)
-  {
-    switch (secid)
-      {
-      case sec_info: return mc_info;
-      case sec_abbrev: return mc_abbrevs;
-      case sec_aranges: return mc_aranges;
-      case sec_str: return mc_strings;
-      case sec_line: return mc_line;
-      case sec_loc: return mc_loc;
-      case sec_ranges: return mc_ranges;
-      case sec_mac: return mc_mac;
-
-      case sec_pubnames:
-      case sec_pubtypes:
-	return mc_pubtables;
-
-      case sec_rel:
-      case sec_rela:
-	return mc_reloc;
-
-	// xxx don't have one
-      case sec_invalid:
-      case sec_locexpr:
-      case rel_value:
-      case rel_address:
-      case rel_exec:
-	break;
-      };
-    std::stringstream ss;
-    ss << "Couldn't convert secid " << secid << " to mc.";
-    throw std::runtime_error (ss.str ());
-  }
-}
-
 sec &
 section_base::get_sec_or_throw (section_id secid)
 {
   if (sec *s = sections->file.debugsec[secid])
     if (s->data != NULL)
       return *s;
-
-  if (!tolerate_nodebug)
-    wr_message (WHERE (secid, NULL),
-		cat (mc_impact_4, mc_acc_suboptimal, mc_elf,
-		     secid_to_cat (secid)))
-      << "data not found." << std::endl;
 
   throw check_base::failed ();
 }
