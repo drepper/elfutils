@@ -24,7 +24,11 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "checks.hh"
-#include "options.h"
+#include "option.hh"
+
+static void_option show_progress
+  ("Print out checks as they are performed, their context and result.",
+   "show-progress");
 
 reporter::reporter (checkstack const &s, checkdescriptor const &a_cd)
   : stack (s)
@@ -36,7 +40,7 @@ reporter::reporter (checkstack const &s, checkdescriptor const &a_cd)
 void
 reporter::operator () (char const *what, bool ext)
 {
-  if (!be_verbose)
+  if (!show_progress)
     return;
 
   if (false)

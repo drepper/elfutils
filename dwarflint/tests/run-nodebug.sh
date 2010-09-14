@@ -33,3 +33,10 @@ testrun_compare ./dwarflint nodebug <<EOF
 error: .debug_abbrev: data not found.
 error: .debug_info: data not found.
 EOF
+
+testrun_compare ./dwarflint -i nodebug <<EOF
+No errors
+EOF
+
+testrun_compare ./dwarflint -q -i nodebug <<EOF
+EOF

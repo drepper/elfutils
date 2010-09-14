@@ -49,7 +49,7 @@ dwarflint_SOURCES = \
 	messages.cc messages.h \
 	section_id.cc section_id.h \
 	where.c where.h \
-	options.cc options.h \
+	option.cc option.hh \
 	addr-record.cc addr-record.h \
 	reloc.cc reloc.h \
 	tables.cc tables.hh tables.h \

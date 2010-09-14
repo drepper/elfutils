@@ -110,6 +110,9 @@
   there to be frequent additions to this "quirks table", so it should
   be fairly easy to extend this.
 
+  The current option --tolerant will go away when this is implemented.
+  I don't think it even works anyway.
+
 * multi-file mode
 
   While dwarflint manages checking several files (meaning you can put

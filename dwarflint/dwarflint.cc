@@ -1,5 +1,5 @@
 /* Dwarflint check scheduler.
-   Copyright (C) 2008,2009 Red Hat, Inc.
+   Copyright (C) 2008,2009,2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@
 #include "dwarflint.hh"
 #include "messages.h"
 #include "checks.hh"
-#include "options.h"
+#include "main.hh"
 
 #include <fcntl.h>
 #include <cstring>
@@ -122,6 +122,7 @@ namespace
 void
 dwarflint::check_registrar::list_checks () const
 {
+  bool be_verbose = opt_list_checks.value () == "full";
   typedef std::set<checkdescriptor const *> descset;
   descset descriptors;
   for (std::vector <item *>::const_iterator it = _m_items.begin ();
@@ -160,8 +161,9 @@ dwarflint::check_registrar::list_checks () const
 	}
     }
   if (!be_verbose)
-    std::cout << "Use --list-checks --verbose "
-      "to get detailed description of each check." << std::endl;
+    std::cout
+      << "Use --list-checks=full to get more detailed description."
+      << std::endl;
 }
 
 namespace

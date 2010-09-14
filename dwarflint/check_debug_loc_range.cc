@@ -1,6 +1,6 @@
 /* Routines related to .debug_loc and .debug_range.
 
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -38,12 +38,13 @@
 #include "../libdw/dwarf.h"
 
 #include "low.h"
-#include "options.h"
 #include "check_debug_loc_range.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "../src/dwarf-opcodes.h"
 #include "pri.hh"
+
+bool do_range_coverage = false; // currently no option
 
 checkdescriptor const *
 check_debug_ranges::descriptor ()

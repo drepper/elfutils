@@ -1,5 +1,5 @@
-/*
-   Copyright (C) 2008,2009 Red Hat, Inc.
+/* Pedantic checker for DWARF files
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,26 +23,10 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef __cplusplus
-extern "C"
-{
-#else
-#include <stdbool.h>
-#endif
+#ifndef DWARFLINT_MAIN_HH
+#define DWARFLINT_MAIN_HH
 
-  /* Whole-program options.  */
-  extern bool tolerate_nodebug;
-  extern bool be_quiet; /* -q */
-  extern bool be_verbose; /* -v */
-  extern bool be_strict; /* --strict */
-  extern bool be_gnu; /* --gnu */
-  extern bool be_tolerant; /* --tolerant */
-  extern bool show_refs; /* --ref */
-  extern bool do_high_level; /* ! --nohl */
-  extern bool dump_die_offsets; /* --dump-offsets */
+#include "option.hh"
+extern string_option opt_list_checks;
 
-  extern bool do_range_coverage;
-
-#ifdef __cplusplus
-}
-#endif
+#endif//DWARFLINT_MAIN_HH

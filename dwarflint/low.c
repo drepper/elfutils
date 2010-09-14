@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2008,2009 Red Hat, Inc.
+   Copyright (C) 2008,2009,2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -46,7 +46,6 @@
 #include "../src/dwarfstrings.h"
 #include "low.h"
 #include "readctx.h"
-#include "options.h"
 #include "tables.h"
 
 #define PRI_CU "CU 0x%" PRIx64
@@ -331,8 +330,7 @@ check_aranges_structural (struct elf_file *file,
 
       inline void aranges_coverage_add (uint64_t begin, uint64_t length)
       {
-	if (coverage_is_overlap (aranges_coverage, begin, length)
-	    && !be_gnu && !be_tolerant)
+	if (coverage_is_overlap (aranges_coverage, begin, length))
 	  {
 	    char buf[128];
 	    /* Not a show stopper, this shouldn't derail high-level.  */

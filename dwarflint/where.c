@@ -24,13 +24,14 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "where.h"
-#include "options.h"
 
 #include <inttypes.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+
+extern bool show_refs (void);
 
 const char *
 where_fmt (const struct where *wh, char *ptr)
@@ -189,7 +190,7 @@ where_fmt (const struct where *wh, char *ptr)
 void
 where_fmt_chain (const struct where *wh, const char *severity)
 {
-  if (wh != NULL && show_refs)
+  if (wh != NULL && show_refs ())
     for (struct where const *it = wh->next; it != NULL; it = it->next)
       printf ("%s: %s: caused by this reference.\n",
 	      severity, where_fmt (it, NULL));

@@ -24,9 +24,9 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "checks.hh"
-#include "options.h"
 #include "messages.h"
 #include "sections.hh"
+#include "option.hh"
 
 class check_nodebug
   : public check<check_nodebug>
@@ -62,10 +62,13 @@ private:
 };
 
 static reg<check_nodebug> reg_nodebug;
+static void_option ignore_missing
+  ("Don't complain if files have no DWARF at all",
+   "ignore-missing", 'i');
 
 check_nodebug::check_nodebug (checkstack &stack, dwarflint &lint)
 {
-  if (tolerate_nodebug)
+  if (ignore_missing)
     return;
 
   // We demand .debug_info and .debug_abbrev, the rest is optional.

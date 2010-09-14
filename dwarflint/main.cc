@@ -1,5 +1,5 @@
 /* Main entry point for dwarflint, a pedantic checker for DWARF files.
-   Copyright (C) 2008,2009 Red Hat, Inc.
+   Copyright (C) 2008,2009,2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -26,7 +26,6 @@
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
-#include <argp.h>
 #include <libintl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -35,58 +34,10 @@
 #include <sstream>
 
 #include "low.h"
-#include "options.h"
 #include "dwarflint.hh"
 #include "readctx.h"
 #include "checks.hh"
-
-/* Bug report address.  */
-const char *argp_program_bug_address = PACKAGE_BUGREPORT;
-
-#define ARGP_strict	300
-#define ARGP_gnu	301
-#define ARGP_tolerant	302
-#define ARGP_ref        303
-#define ARGP_nohl       304
-#define ARGP_dump_off   305
-#define ARGP_check      306
-#define ARGP_list_checks 307
-
-/* Definitions of arguments for argp functions.  */
-static const struct argp_option options[] =
-{
-  { "strict", ARGP_strict, NULL, 0,
-    N_("Be extremely strict, flag level 2 features."), 0 },
-  { "quiet", 'q', NULL, 0, N_("Do not print anything if successful"), 0 },
-  { "ignore-missing", 'i', NULL, 0,
-    N_("Don't complain if files have no DWARF at all"), 0 },
-  { "gnu", ARGP_gnu, NULL, 0,
-    N_("Binary has been created with GNU toolchain and is therefore known to be \
-broken in certain ways"), 0 },
-  { "tolerant", ARGP_tolerant, NULL, 0,
-    N_("Don't output certain common error messages"), 0 },
-  { "ref", ARGP_ref, NULL, 0,
-    N_("When validating .debug_loc and .debug_ranges, display information about \
-the DIE referring to the entry in consideration"), 0 },
-  { "nohl", ARGP_nohl, NULL, 0,
-    N_("Don't run high-level tests"), 0 },
-  { "verbose", 'v', NULL, 0,
-    N_("Be verbose"), 0 },
-  { "dump-offsets", ARGP_dump_off, NULL, 0,
-    N_("Dump DIE offsets to stderr as the tree is iterated."), 0 },
-  { "check", ARGP_check, "[+-][@]name,...", 0,
-    N_("Only run selected checks."), 0 },
-  { "list-checks", ARGP_list_checks, NULL, 0,
-    N_("List all the available checks."), 0 },
-  { NULL, 0, NULL, 0, NULL, 0 }
-};
-
-/* Short description of program.  */
-static const char doc[] = N_("\
-Pedantic checking of DWARF stored in ELF files.");
-
-/* Strings for arguments in help texts.  */
-static const char args_doc[] = N_("FILE...");
+#include "option.hh"
 
 /* Messages that are accepted (and made into warning).  */
 struct message_criteria warning_criteria;
@@ -94,142 +45,94 @@ struct message_criteria warning_criteria;
 /* Accepted (warning) messages, that are turned into errors.  */
 struct message_criteria error_criteria;
 
-/* Whether to list available checks and exit.  */
-static bool just_list_checks = false;
-
-
-static error_t parse_opt (int key, char *arg, struct argp_state *state);
-
-/* Data structure to communicate with argp functions.  */
-static struct argp argp =
+struct check_option_t
+  : public option_common
 {
-  options, parse_opt, args_doc, doc, NULL, NULL, NULL
-};
-
-struct initial_check_rules
-  : public check_rules
-{
-  initial_check_rules () {
-    push_back (check_rule ("@all", check_rule::request));
-    push_back (check_rule ("@nodefault", check_rule::forbid));
-  }
-} rules;
-
-/* Handle program arguments.  */
-static error_t
-parse_opt (int key, char *arg __attribute__ ((unused)),
-	   struct argp_state *state __attribute__ ((unused)))
-{
-  switch (key)
-    {
-    case ARGP_strict:
-      be_strict = true;
-      break;
-
-    case ARGP_gnu:
-      be_gnu = true;
-      break;
-
-    case ARGP_tolerant:
-      be_tolerant = true;
-      break;
-
-    case ARGP_ref:
-      show_refs = true;
-      break;
-
-    case ARGP_nohl:
-      do_high_level = false;
-      break;
-
-    case ARGP_dump_off:
-      dump_die_offsets = true;
-      break;
-
-    case ARGP_check:
-      {
-	static bool first = true;
-	std::stringstream ss (arg);
-	std::string item;
-
-    	while (std::getline (ss, item, ','))
-	  {
-	    if (item.empty ())
-	      continue;
-
-	    enum {
-	      forbid,
-	      request,
-	      replace
-	    } act;
-
-	    // If the first rule has no operator, we assume the user
-	    // wants to replace the implicit set of checks.
-	    if (first)
-	      {
-		act = replace;
-		first = false;
-	      }
-	    else
-	      // Otherwise the rules are implicitly requesting, even
-	      // without the '+' operator.
-	      act = request;
-
-	    bool minus = item[0] == '-';
-	    bool plus = item[0] == '+';
-	    if (plus || minus)
-	      item = item.substr (1);
-	    if (plus)
-	      act = request;
-	    if (minus)
-	      act = forbid;
-
-	    if (act == replace)
-	      {
-		rules.clear ();
-		act = request;
-	      }
-
-	    check_rule::action_t action
-	      = act == request ? check_rule::request : check_rule::forbid;
-	    rules.push_back (check_rule (item, action));
-	  }
-      }
-      break;
-
-    case ARGP_list_checks:
-      just_list_checks = true;
-      break;
-
-    case 'i':
-      tolerate_nodebug = true;
-      break;
-
-    case 'q':
-      be_quiet = true;
-      be_verbose = false;
-      break;
-
-    case 'v':
-      be_quiet = false;
-      be_verbose = true;
-      break;
-
-    case ARGP_KEY_NO_ARGS:
-      if (!just_list_checks)
-	{
-	  fputs (gettext ("Missing file name.\n"), stderr);
-	  argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
-		     program_invocation_short_name);
-	  exit (1);
-	}
-      break;
-
-    default:
-      return ARGP_ERR_UNKNOWN;
+  struct initial_check_rules
+    : public check_rules
+  {
+    initial_check_rules () {
+      push_back (check_rule ("@all", check_rule::request));
+      push_back (check_rule ("@nodefault", check_rule::forbid));
     }
-  return 0;
-}
+  } rules;
+
+  check_option_t ()
+    : option_common ("Only run selected checks.",
+		     "[+-][@]name,...", "check", 0)
+  {}
+
+  error_t parse_opt (char *arg, __attribute__ ((unused)) argp_state *state)
+  {
+    static bool first = true;
+    std::stringstream ss (arg);
+    std::string item;
+
+    while (std::getline (ss, item, ','))
+      {
+	if (item.empty ())
+	  continue;
+
+	enum {
+	  forbid,
+	  request,
+	  replace
+	} act;
+
+	// If the first rule has no operator, we assume the user
+	// wants to replace the implicit set of checks.
+	if (first)
+	  {
+	    act = replace;
+	    first = false;
+	  }
+	else
+	  // Otherwise the rules are implicitly requesting, even
+	  // without the '+' operator.
+	  act = request;
+
+	bool minus = item[0] == '-';
+	bool plus = item[0] == '+';
+	if (plus || minus)
+	  item = item.substr (1);
+	if (plus)
+	  act = request;
+	if (minus)
+	  act = forbid;
+
+	if (act == replace)
+	  {
+	    rules.clear ();
+	    act = request;
+	  }
+
+	check_rule::action_t action
+	  = act == request ? check_rule::request : check_rule::forbid;
+	rules.push_back (check_rule (item, action));
+      }
+    return 0;
+  }
+} check_option;
+
+void_option be_quiet ("Do not print anything if successful",
+		      "quiet", 'q');
+
+string_option opt_list_checks ("List all the available checks.",
+			       "full", "list-checks", 0,
+			       OPTION_ARG_OPTIONAL);
+
+// xxx The following three should go away when we introduce the
+// message filtering.  Or should be preserved, but in a way that makes
+// more sense, right now they are simply a misnomer.
+void_option ignore_bloat ("Ignore messages related to bloat.", "ignore-bloat");
+void_option be_strict ("Be somewhat stricter.", "strict");
+void_option be_tolerant ("Be somewhat more tolerant.", "tolerant");
+
+// xxx as soon as where is in c++, this can move there
+void_option opt_show_refs = void_option (
+"When validating .debug_loc and .debug_ranges, display information about \
+the DIE referring to the entry in consideration", "ref");
+extern "C" bool show_refs () { return (bool)opt_show_refs; }
 
 int
 main (int argc, char *argv[])
@@ -241,13 +144,21 @@ main (int argc, char *argv[])
   textdomain (PACKAGE_TARNAME);
 
   /* Parse and process arguments.  */
+  struct argp argp = options::registered ().build_argp ();
   int remaining;
   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
 
-  if (just_list_checks)
+  if (opt_list_checks.seen ())
     {
       dwarflint::check_registrar::inst ()->list_checks ();
       std::exit (0);
+    }
+  else if (remaining == argc)
+    {
+      fputs (gettext ("Missing file name.\n"), stderr);
+      argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
+		 program_invocation_short_name);
+      std::exit (1);
     }
 
   /* Initialize warning & error criteria.  */
@@ -257,10 +168,7 @@ main (int argc, char *argv[])
   error_criteria |= message_term (mc_error, mc_none);
 
   /* Configure warning & error criteria according to configuration.  */
-  if (tolerate_nodebug)
-    warning_criteria &= message_term (mc_none, mc_elf);
-
-  if (be_gnu)
+  if (ignore_bloat)
     warning_criteria &= message_term (mc_none, mc_acc_bloat);
 
   if (!be_strict)
@@ -277,7 +185,7 @@ main (int argc, char *argv[])
       warning_criteria &= message_term (mc_none, mc_ranges);
     }
 
-  if (be_verbose)
+  if (false) // for debugging
     {
       std::cout << "warning criteria: " << warning_criteria.str () << std::endl;
       std::cout << "error criteria:   " << error_criteria.str () << std::endl;
@@ -297,7 +205,7 @@ main (int argc, char *argv[])
 	  unsigned int prev_error_count = error_count;
 	  if (!only_one)
 	    std::cout << std::endl << fname << ":" << std::endl;
-	  dwarflint lint (fname, rules);
+	  dwarflint lint (fname, check_option.rules);
 
 	  if (prev_error_count == error_count && !be_quiet)
 	    puts (gettext ("No errors"));

@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -31,7 +31,6 @@
 #endif
 
 #include "checks.hh"
-#include "options.h"
 #include "c++/dwarf"
 #include "../libdwfl/libdwfl.h"
 
@@ -69,10 +68,7 @@ public:
   explicit highlevel_check (checkstack &stack, dwarflint &lint)
     : _m_loader (lint.check (stack, _m_loader))
     , dw (_m_loader->dw)
-  {
-    if (!do_high_level)
-      throw check_base::unscheduled ();
-  }
+  {}
 };
 
 template <class T>

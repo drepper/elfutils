@@ -59,9 +59,6 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 					      dwarflint &lint)
   : highlevel_check<check_matching_ranges> (stack, lint)
 {
-  if (be_tolerant || be_gnu)
-    throw check_base::unscheduled ();
-
   lint.check<check_debug_ranges> (stack);
   lint.check<check_debug_aranges> (stack);
 
