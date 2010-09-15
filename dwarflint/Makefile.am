@@ -40,11 +40,12 @@ bin_PROGRAMS = dwarflint
 dwarflint_SOURCES = \
 	main.cc \
 	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
-	dwarflint.cc dwarflint.hh misc.h \
+	checkrule.cc checkrule.hh \
+	dwarflint.cc dwarflint.hh dwarflint.ii misc.h \
 	low.c low.h \
 	expected-at.cc expected.hh \
 	coverage.cc coverage.h \
-	readctx.c  readctx.h \
+	readctx.c readctx.h \
 	pri.cc pri.hh \
 	messages.cc messages.h \
 	section_id.cc section_id.h \

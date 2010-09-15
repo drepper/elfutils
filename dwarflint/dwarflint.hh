@@ -29,40 +29,17 @@
 #include <map>
 #include <vector>
 #include <stdexcept>
-#include <string>
 #include <iosfwd>
 
 #include "../libelf/libelf.h"
 #include "checks.ii"
 #include "checkdescriptor.ii"
+#include "checkrule.hh"
 
 class checkstack
   : public std::vector <checkdescriptor const *>
 {};
 std::ostream &operator << (std::ostream &o, checkstack const &stack);
-
-struct check_rule
-{
-  enum action_t
-    {
-      forbid,
-      request,
-    };
-
-  std::string name;
-  action_t action;
-
-  check_rule (std::string const &a_name, action_t an_action)
-    : name (a_name)
-    , action (an_action)
-  {}
-};
-class check_rules
-  : public std::vector<check_rule>
-{
-  friend class dwarflint;
-  bool should_check (checkstack const &stack) const;
-};
 
 class dwarflint
 {
@@ -70,7 +47,7 @@ class dwarflint
   check_map _m_checks;
   char const *_m_fname;
   int _m_fd;
-  check_rules const &_m_rules;
+  checkrules const &_m_rules;
 
   static void *const marker;
 
@@ -109,7 +86,7 @@ public:
     std::vector <item *> _m_items;
   };
 
-  dwarflint (char const *fname, check_rules const &rules);
+  dwarflint (char const *fname, checkrules const &rules);
   ~dwarflint ();
   int fd () { return _m_fd; }
   char const *fname () { return _m_fname; }

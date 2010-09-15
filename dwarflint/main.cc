@@ -48,12 +48,12 @@ struct message_criteria error_criteria;
 struct check_option_t
   : public option_common
 {
-  struct initial_check_rules
-    : public check_rules
+  struct initial_checkrules
+    : public checkrules
   {
-    initial_check_rules () {
-      push_back (check_rule ("@all", check_rule::request));
-      push_back (check_rule ("@nodefault", check_rule::forbid));
+    initial_checkrules () {
+      push_back (checkrule ("@all", checkrule::request));
+      push_back (checkrule ("@nodefault", checkrule::forbid));
     }
   } rules;
 
@@ -106,9 +106,9 @@ struct check_option_t
 	    act = request;
 	  }
 
-	check_rule::action_t action
-	  = act == request ? check_rule::request : check_rule::forbid;
-	rules.push_back (check_rule (item, action));
+	checkrule::action_t action
+	  = act == request ? checkrule::request : checkrule::forbid;
+	rules.push_back (checkrule (item, action));
       }
     return 0;
   }

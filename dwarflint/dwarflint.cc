@@ -67,7 +67,7 @@ namespace
   }
 }
 
-dwarflint::dwarflint (char const *a_fname, check_rules const &rules)
+dwarflint::dwarflint (char const *a_fname, checkrules const &rules)
   : _m_fname (a_fname)
   , _m_fd (get_fd (_m_fname))
   , _m_rules (rules)
@@ -165,61 +165,6 @@ dwarflint::check_registrar::list_checks () const
       << "Use --list-checks=full to get more detailed description."
       << std::endl;
 }
-
-namespace
-{
-  bool
-  rule_matches (std::string const &name,
-		checkdescriptor const &cd)
-  {
-    if (name == "@all")
-      return true;
-    if (name == "@none")
-      return false;
-    if (name == cd.name ())
-      return true;
-    return cd.in_group (name);
-  }
-}
-
-bool
-check_rules::should_check (checkstack const &stack) const
-{
-#if 0
-  std::cout << "---\nstack" << std::endl;
-  for (checkstack::const_iterator jt = stack.begin ();
-       jt != stack.end (); ++jt)
-    std::cout << (*jt)->name << std::flush << "  ";
-  std::cout << std::endl;
-#endif
-
-  // We always allow scheduling hidden checks.  Those are service
-  // routines that the user doesn't even see it the list of checks.
-  assert (!stack.empty ());
-  if (stack.back ()->hidden ())
-    return true;
-
-  bool should = false;
-  for (const_iterator it = begin (); it != end (); ++it)
-    {
-      std::string const &rule_name = it->name;
-      bool nflag = it->action == check_rule::request;
-      if (nflag == should)
-	continue;
-
-      for (checkstack::const_iterator jt = stack.begin ();
-	   jt != stack.end (); ++jt)
-	if (rule_matches (rule_name, **jt))
-	  {
-	    //std::cout << " rule: " << rule_name << " " << nflag << std::endl;
-	    should = nflag;
-	    break;
-	  }
-    }
-
-  return should;
-}
-
 
 void *const dwarflint::marker = (void *)-1;
 

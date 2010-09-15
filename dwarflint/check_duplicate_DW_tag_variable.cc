@@ -23,12 +23,7 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
 #include "highlevel_check.hh"
-#include "../src/dwarfstrings.h"
 #include "all-dies-it.hh"
 #include "pri.hh"
 #include "messages.h"
