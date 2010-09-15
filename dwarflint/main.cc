@@ -52,8 +52,8 @@ struct check_option_t
     : public checkrules
   {
     initial_checkrules () {
-      push_back (checkrule ("@all", checkrule::request));
-      push_back (checkrule ("@nodefault", checkrule::forbid));
+      push_back (checkrule_internal ("@all", checkrule::request));
+      push_back (checkrule_internal ("@nodefault", checkrule::forbid));
     }
   } rules;
 
@@ -217,6 +217,12 @@ main (int argc, char *argv[])
 	}
     }
   while (++remaining < argc);
+
+  for (checkrules::const_iterator it = check_option.rules.begin ();
+       it != check_option.rules.end (); ++it)
+    if (!it->used ())
+      std::cerr << "warning: the rule `" << it->name ()
+		<< "' never matched." << std::endl;
 
   return error_count != 0;
 }

@@ -31,7 +31,15 @@
 checkrule::checkrule (std::string const &a_name, action_t an_action)
   : _m_name (a_name)
   , _m_action (an_action)
+  , _m_used (false)
 {
+}
+
+checkrule_internal::checkrule_internal (std::string const &a_name,
+					action_t an_action)
+  : checkrule (a_name, an_action)
+{
+  mark_used ();
 }
 
 namespace
@@ -72,13 +80,14 @@ checkrules::should_check (checkstack const &stack) const
     {
       std::string const &rule_name = it->name ();
       bool nflag = it->action () == checkrule::request;
-      if (nflag == should)
+      if (nflag == should && it->used ())
 	continue;
 
       for (checkstack::const_iterator jt = stack.begin ();
 	   jt != stack.end (); ++jt)
 	if (rule_matches (rule_name, **jt))
 	  {
+	    it->mark_used ();
 	    //std::cout << " rule: " << rule_name << " " << nflag << std::endl;
 	    should = nflag;
 	    break;

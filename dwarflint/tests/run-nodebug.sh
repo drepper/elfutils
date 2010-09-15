@@ -40,3 +40,9 @@ EOF
 
 testrun_compare ./dwarflint -q -i nodebug <<EOF
 EOF
+
+# This has nothing to do with the nodebug test, but we can just as
+# well stick it in there.
+testrun_compare ./dwarflint --check=oentuh -q nodebug <<EOF
+warning: the rule \`oentuh' never matched.
+EOF

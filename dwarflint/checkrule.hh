@@ -41,12 +41,23 @@ struct checkrule
 private:
   std::string _m_name;
   action_t _m_action;
+  mutable bool _m_used;
 
 public:
   checkrule (std::string const &name, action_t action);
 
   std::string const &name () const { return _m_name; }
   action_t action () const { return _m_action; }
+  bool used () const { return _m_used; }
+  void mark_used () const { _m_used = true; }
+};
+
+// These are like normal rules, but they are initially marked as used
+// so as not to be warned about.
+struct checkrule_internal
+  : public checkrule
+{
+  checkrule_internal (std::string const &name, action_t action);
 };
 
 class checkrules
