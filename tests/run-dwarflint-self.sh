@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2009 Red Hat, Inc.
+# Copyright (C) 2009, 2010 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@ runtest()
 {
   for file; do
     if [ -f $file ]; then
-      testrun ../dwarflint/dwarflint -q -i --gnu $file ||
+      testrun ../dwarflint/dwarflint -q -i --check=@low $file ||
       { echo "*** failure in $file"; status=1; }
     fi
   done
