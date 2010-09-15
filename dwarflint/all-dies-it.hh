@@ -122,6 +122,13 @@ public:
     return *_m_die_it;
   }
 
+  typename T::debug_info_entry const &parent ()
+  {
+    if (_m_die_it_stack.empty ())
+      throw std::runtime_error ("no parent");
+    return *_m_die_it_stack.back ().first;
+  }
+
   typename T::debug_info_entry const *operator-> () const
   {
     return &**this;
