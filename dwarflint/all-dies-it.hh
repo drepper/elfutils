@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -36,48 +36,48 @@ class all_dies_iterator
   typedef typename T::debug_info_entry::children_type::const_iterator die_it_t;
   typedef std::vector <std::pair <die_it_t, die_it_t> > die_it_stack_t;
 
-  typename T::compile_units::const_iterator cu_it, cu_it_end;
-  die_it_t die_it, die_it_end;
-  die_it_stack_t die_it_stack;
-  bool atend;
+  typename T::compile_units::const_iterator _m_cu_it, _m_cu_it_end;
+  die_it_t _m_die_it, _m_die_it_end;
+  die_it_stack_t _m_die_it_stack;
+  bool _m_atend;
 
   void nest ()
   {
-    while (die_it->has_children ())
+    while (_m_die_it->has_children ())
       {
-	die_it_stack.push_back (std::make_pair (die_it, die_it_end));
-	die_it_end = (*die_it).children ().end ();
-	die_it = (*die_it).children ().begin ();
+	_m_die_it_stack.push_back (std::make_pair (_m_die_it, _m_die_it_end));
+	_m_die_it_end = (*_m_die_it).children ().end ();
+	_m_die_it = (*_m_die_it).children ().begin ();
       }
   }
 
   void start ()
   {
-    die_it = die_it_t (*cu_it);
-    die_it_end = die_it_t ();
+    _m_die_it = die_it_t (*_m_cu_it);
+    _m_die_it_end = die_it_t ();
     nest ();
   }
 
 public:
   // An end iterator.
   all_dies_iterator ()
-    : atend (true)
+    : _m_atend (true)
   {}
 
   explicit all_dies_iterator (T const &dw)
-    : cu_it (dw.compile_units ().begin ())
-    , cu_it_end (dw.compile_units ().end ())
-    , atend (false)
+    : _m_cu_it (dw.compile_units ().begin ())
+    , _m_cu_it_end (dw.compile_units ().end ())
+    , _m_atend (false)
   {
     start ();
   }
 
   bool operator== (all_dies_iterator const &other)
   {
-    return (atend && other.atend)
-      || (cu_it == other.cu_it
-	  && die_it == other.die_it
-	  && die_it_stack == other.die_it_stack);
+    return (_m_atend && other._m_atend)
+      || (_m_cu_it == other._m_cu_it
+	  && _m_die_it == other._m_die_it
+	  && _m_die_it_stack == other._m_die_it_stack);
   }
 
   bool operator!= (all_dies_iterator const &other)
@@ -87,18 +87,18 @@ public:
 
   all_dies_iterator operator++ () // prefix
   {
-    if (!atend)
+    if (!_m_atend)
       {
-	if (++die_it == die_it_end)
+	if (++_m_die_it == _m_die_it_end)
 	  {
-	    if (die_it_stack.size () > 0)
+	    if (_m_die_it_stack.size () > 0)
 	      {
-		die_it = die_it_stack.back ().first;
-		die_it_end = die_it_stack.back ().second;
-		die_it_stack.pop_back ();
+		_m_die_it = _m_die_it_stack.back ().first;
+		_m_die_it_end = _m_die_it_stack.back ().second;
+		_m_die_it_stack.pop_back ();
 	      }
-	    else if (++cu_it == cu_it_end)
-	      atend = true;
+	    else if (++_m_cu_it == _m_cu_it_end)
+	      _m_atend = true;
 	    else
 	      start ();
 	  }
@@ -117,9 +117,9 @@ public:
 
   typename T::debug_info_entry const &operator* () const
   {
-    if (/*unlikely*/ (atend))
+    if (/*unlikely*/ (_m_atend))
       throw std::runtime_error ("dereferencing end iterator");
-    return *die_it;
+    return *_m_die_it;
   }
 
   typename T::debug_info_entry const *operator-> () const

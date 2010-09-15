@@ -51,7 +51,8 @@ struct check_option_t
   struct initial_checkrules
     : public checkrules
   {
-    initial_checkrules () {
+    initial_checkrules ()
+    {
       push_back (checkrule_internal ("@all", checkrule::request));
       push_back (checkrule_internal ("@nodefault", checkrule::forbid));
     }
@@ -73,7 +74,8 @@ struct check_option_t
 	if (item.empty ())
 	  continue;
 
-	enum {
+	enum
+	{
 	  forbid,
 	  request,
 	  replace
