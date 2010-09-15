@@ -46,3 +46,26 @@ EOF
 testrun_compare ./dwarflint --check=oentuh -q nodebug <<EOF
 warning: the rule \`oentuh' never matched.
 EOF
+
+# ... and since we are testing this here, also check that we don't get
+# this message in situations where it makes no sense.
+LANG=C testrun_compare ./dwarflint --check=oentuh -q noeuht <<EOF
+error: Cannot open input file: No such file or directory.
+EOF
+
+LANG=C testrun_compare ./dwarflint --check=oentuh -q noeuht nodebug <<EOF
+
+noeuht:
+error: Cannot open input file: No such file or directory.
+
+nodebug:
+warning: the rule \`oentuh' never matched.
+EOF
+
+LANG=C testrun_compare ./dwarflint --check=oentuh -q nodebug nodebug <<EOF
+
+nodebug:
+
+nodebug:
+warning: the rule \`oentuh' never matched.
+EOF

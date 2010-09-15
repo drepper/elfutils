@@ -198,6 +198,7 @@ main (int argc, char *argv[])
 
   /* Now process all the files given at the command line.  */
   bool only_one = remaining + 1 == argc;
+  bool one_passed = false;
   do
     {
       try
@@ -208,6 +209,7 @@ main (int argc, char *argv[])
 	  if (!only_one)
 	    std::cout << std::endl << fname << ":" << std::endl;
 	  dwarflint lint (fname, check_option.rules);
+	  one_passed = true;
 
 	  if (prev_error_count == error_count && !be_quiet)
 	    puts (gettext ("No errors"));
@@ -220,11 +222,12 @@ main (int argc, char *argv[])
     }
   while (++remaining < argc);
 
-  for (checkrules::const_iterator it = check_option.rules.begin ();
-       it != check_option.rules.end (); ++it)
-    if (!it->used ())
-      std::cerr << "warning: the rule `" << it->name ()
-		<< "' never matched." << std::endl;
+  if (one_passed)
+    for (checkrules::const_iterator it = check_option.rules.begin ();
+	 it != check_option.rules.end (); ++it)
+      if (!it->used ())
+	std::cerr << "warning: the rule `" << it->name ()
+		  << "' never matched." << std::endl;
 
   return error_count != 0;
 }
