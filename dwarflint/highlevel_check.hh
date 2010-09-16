@@ -38,13 +38,13 @@ class open_highlevel_dwarf
   : public check<open_highlevel_dwarf>
 {
   Dwfl *const _m_dwfl;
-  Dwarf *const _m_dw;
 public:
   static checkdescriptor const *descriptor () {
     static checkdescriptor cd ("open_highlevel_dwarf");
     return &cd;
   }
 
+  Dwarf *const c_dw;
   elfutils::dwarf const dw;
   open_highlevel_dwarf (checkstack &stack, dwarflint &lint);
   ~open_highlevel_dwarf ();
@@ -63,10 +63,12 @@ public:
     return &cd;
   }
 
+  Dwarf *const c_dw;
   elfutils::dwarf const &dw;
 
-  explicit highlevel_check (checkstack &stack, dwarflint &lint)
+  highlevel_check (checkstack &stack, dwarflint &lint)
     : _m_loader (lint.check (stack, _m_loader))
+    , c_dw (_m_loader->c_dw)
     , dw (_m_loader->dw)
   {}
 };

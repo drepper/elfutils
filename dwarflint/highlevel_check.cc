@@ -1,5 +1,5 @@
 /* Initialization of high-level check context
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -134,8 +134,8 @@ namespace
 open_highlevel_dwarf::open_highlevel_dwarf (checkstack &stack, dwarflint &lint)
   : _m_dwfl ((lint.check<lowlevel_checks> (stack),
 	      open_dwfl ()))
-  , _m_dw (open_dwarf (_m_dwfl, lint.fname (), lint.fd ()))
-  , dw (open_hl_dwarf (_m_dw))
+  , c_dw (open_dwarf (_m_dwfl, lint.fname (), lint.fd ()))
+  , dw (open_hl_dwarf (c_dw))
 {}
 
 open_highlevel_dwarf::~open_highlevel_dwarf ()
