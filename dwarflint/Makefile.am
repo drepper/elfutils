@@ -72,6 +72,7 @@ dwarflint_SOURCES = \
 	check_dups_abstract_origin.cc \
 	check_duplicate_DW_tag_variable.cc \
 	check_nodebug.cc \
+	locstats.cc \
 	../src/dwarfstrings.c
 
 TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
