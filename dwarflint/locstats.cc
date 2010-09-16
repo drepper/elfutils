@@ -26,6 +26,8 @@
 #include "highlevel_check.hh"
 #include "all-dies-it.hh"
 #include "option.hh"
+#include "messages.h"
+#include "pri.hh"
 
 #include <sstream>
 
@@ -120,6 +122,19 @@ namespace
       return at (0).start == value;
     }
   };
+
+  class no_ranges {};
+
+  // Look through the stack of parental dies and return the non-empty
+  // ranges instance closest to the stack top (i.e. die_stack.end ()).
+  dwarf::ranges
+  find_ranges (std::vector<dwarf::debug_info_entry> const &die_stack)
+  {
+    for (auto it = die_stack.rbegin (); it != die_stack.rend (); ++it)
+      if (!it->ranges ().empty ())
+	return it->ranges ();
+    throw no_ranges ();
+  }
 }
 
 locstats::locstats (checkstack &stack, dwarflint &lint)
@@ -143,8 +158,6 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
       if (!is_formal_parameter && die.tag () != DW_TAG_variable)
 	continue;
 
-      dwarf::debug_info_entry const &parent = it.parent ();
-
       dwarf::debug_info_entry::attributes_type const &attrs
 	= die.attributes ();
 
@@ -154,9 +167,10 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 
       // Of formal parameters we ignore those that are children of
       // subprograms that are themselves declarations.
+      std::vector<dwarf::debug_info_entry> const &die_stack = it.stack ();
       if (is_formal_parameter)
 	{
-	  if (parent.attributes ().find (DW_AT_declaration)
+	  if (die_stack.back ().attributes ().find (DW_AT_declaration)
 	      != die.attributes ().end ())
 	    continue;
 	}
@@ -207,34 +221,41 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	    // Globals and statics have non-list location that is a
 	    // singleton DW_OP_addr expression.
 	    continue;
-	  coverage = 100;
+	  coverage = (len == 0) ? 0 : 100;
 	}
 
       // location list
       else
 	{
-	  dwarf::ranges const &ranges
-	    = die.ranges ().empty () ? parent.ranges () : die.ranges ();
-	  if (ranges.empty ())
-	    // what?
-	    continue;
-
-	  size_t length = 0;
-	  size_t covered = 0;
-	  for (dwarf::ranges::const_iterator rit = ranges.begin ();
-	       rit != ranges.end (); ++rit)
+	  try
 	    {
-	      Dwarf_Addr low = (*rit).first;
-	      Dwarf_Addr high = (*rit).second;
-	      length += high - low;
-	      /*std::cerr << std::endl << " " << low << ".." << high
-		<< std::endl;*/
-	      for (Dwarf_Addr addr = low; addr < high; ++addr)
-		if (dwarf_getlocation_addr (locattr, addr,
-					    NULL, NULL, 0) > 0)
-		  covered++;
+	      dwarf::ranges ranges (find_ranges (die_stack));
+	      size_t length = 0;
+	      size_t covered = 0;
+	      for (dwarf::ranges::const_iterator rit = ranges.begin ();
+		   rit != ranges.end (); ++rit)
+		{
+		  Dwarf_Addr low = (*rit).first;
+		  Dwarf_Addr high = (*rit).second;
+		  length += high - low;
+		  /*std::cerr << std::endl << " " << low << ".." << high
+		    << std::endl;*/
+		  for (Dwarf_Addr addr = low; addr < high; ++addr)
+		    if (dwarf_getlocation_addr (locattr, addr,
+						NULL, NULL, 0) > 0)
+		      covered++;
+		}
+	      coverage = 100 * covered / length;
 	    }
-	  coverage = 100 * covered / length;
+	  catch (no_ranges const &e)
+	    {
+	      struct where where = WHERE (sec_info, NULL);
+	      where_reset_1 (&where, it.cu ().offset ());
+	      where_reset_2 (&where, die.offset ());
+	      wr_error (where)
+		<< "no ranges for this DIE." << std::endl;
+	      continue;
+	    }
 	}
 
       tally[coverage]++;

@@ -122,11 +122,19 @@ public:
     return *_m_die_it;
   }
 
-  typename T::debug_info_entry const &parent ()
+  std::vector<typename T::debug_info_entry> stack () const
   {
-    if (_m_die_it_stack.empty ())
-      throw std::runtime_error ("no parent");
-    return *_m_die_it_stack.back ().first;
+    std::vector<typename T::debug_info_entry> ret;
+    for (auto it = _m_die_it_stack.begin ();
+	 it != _m_die_it_stack.end (); ++it)
+      ret.push_back (*it->first);
+    ret.push_back (*_m_die_it);
+    return ret;
+  }
+
+  typename T::compile_unit cu () const
+  {
+    return *_m_cu_it;
   }
 
   typename T::debug_info_entry const *operator-> () const
