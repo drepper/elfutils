@@ -39,7 +39,7 @@ public:
        .groups ("@low")
        .description (
 "Checks that there are at least essential debuginfo sections present\n"
-"in the ELF file."));
+"in the ELF file.\n"));
     return &cd;
   }
 
