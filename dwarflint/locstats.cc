@@ -232,18 +232,46 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	      dwarf::ranges ranges (find_ranges (die_stack));
 	      size_t length = 0;
 	      size_t covered = 0;
+
+	      // Arbitrarily assume that there will be no more than 10
+	      // expressions per address.
+	      size_t nlocs = 10;
+	      Dwarf_Op *exprs[nlocs];
+	      size_t exprlens[nlocs];
+
 	      for (dwarf::ranges::const_iterator rit = ranges.begin ();
 		   rit != ranges.end (); ++rit)
 		{
 		  Dwarf_Addr low = (*rit).first;
 		  Dwarf_Addr high = (*rit).second;
 		  length += high - low;
-		  /*std::cerr << std::endl << " " << low << ".." << high
-		    << std::endl;*/
+		  //std::cerr << " " << low << ".." << high << std::endl;
+
 		  for (Dwarf_Addr addr = low; addr < high; ++addr)
-		    if (dwarf_getlocation_addr (locattr, addr,
-						NULL, NULL, 0) > 0)
-		      covered++;
+		    {
+		      int got = dwarf_getlocation_addr (locattr, addr,
+							exprs, exprlens, nlocs);
+		      if (got < 0)
+			{
+			  struct where where = WHERE (sec_info, NULL);
+			  where_reset_1 (&where, it.cu ().offset ());
+			  where_reset_2 (&where, die.offset ());
+			  wr_error (where)
+			    << "dwarf_getlocation_addr: "
+			    << dwarf_errmsg (-1) << std::endl;
+			  break;
+			}
+
+		      // At least one expression for the address must
+		      // be of non-zero length for us to count that
+		      // address as covered.
+		      for (int i = 0; i < got; ++i)
+			if (exprlens[i] > 0)
+			  {
+			    covered++;
+			    break;
+			  }
+		    }
 		}
 	      coverage = 100 * covered / length;
 	    }
