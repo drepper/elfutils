@@ -52,20 +52,21 @@ namespace
 
   reg<locstats> reg_locstats;
 
-#define DIE_TYPES				\
-  TYPE(single_addr)				\
-  TYPE(artificial)				\
-  TYPE(inline)					\
+#define DIE_TYPES		\
+  TYPE(single_addr)		\
+  TYPE(artificial)		\
+  TYPE(inlined)			\
+  TYPE(inlined_subroutine)	\
   TYPE(no_coverage)
 
   string_option opt_ignore
     ("Skip certain DIEs.",
-     "[+-]{single-addr|artificial|inline|no-coverage}[,...]",
+     "[+-]{single-addr|artificial|inlined|inlined_subroutine|no-coverage}[,...]",
      "locstats:ignore");
 
   string_option opt_dump
     ("Dump certain DIEs.",
-     "[+-]{single-addr|artificial|inline|no-coverage}[,...]",
+     "[+-]{single-addr|artificial|inlined|inlined_subroutine|no-coverage}[,...]",
      "locstats:dump");
 
   string_option opt_tabulation_rule
@@ -205,7 +206,7 @@ namespace
   }
 
   bool
-  is_inline (dwarf::debug_info_entry const &die)
+  is_inlined (dwarf::debug_info_entry const &die)
   {
     dwarf::debug_info_entry::attributes_type::const_iterator it
       = die.attributes ().find (DW_AT_inline);
@@ -266,26 +267,46 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 		!= parent.attributes ().end ()))
 	  continue;
 
-      if (interested.test (dt_inline))
+      if (interested.test (dt_inlined)
+	  || interested.test (dt_inlined_subroutine))
 	{
 	  bool inlined = false;
+	  bool inlined_subroutine = false;
 	  for (std::vector<dwarf::debug_info_entry>::const_reverse_iterator
 		 stit = die_stack.rbegin (); stit != die_stack.rend (); ++stit)
-	    if (stit->tag () == DW_TAG_subprogram
-		&& is_inline (*stit))
-	      {
-		inlined = true;
-		break;
-	      }
+	    {
+	      if (interested.test (dt_inlined)
+		  && stit->tag () == DW_TAG_subprogram
+		  && is_inlined (*stit))
+		{
+		  inlined = true;
+		  if (interested.test (dt_inlined_subroutine)
+		      && inlined_subroutine)
+		    break;
+		}
+	      if (interested.test (dt_inlined_subroutine)
+		  && stit->tag () == DW_TAG_inlined_subroutine)
+		{
+		  inlined_subroutine = true;
+		  if (interested.test (dt_inlined)
+		      && inlined)
+		    break;
+		}
+	    }
 
 	  if (inlined)
 	    {
-	      if (ignore.test (dt_inline))
+	      if (ignore.test (dt_inlined))
 		continue;
-	      die_type.set (dt_inline, inlined);
+	      die_type.set (dt_inlined);
+	    }
+	  if (inlined_subroutine)
+	    {
+	      if (ignore.test (dt_inlined_subroutine))
+		continue;
+	      die_type.set (dt_inlined_subroutine, inlined_subroutine);
 	    }
 	}
-
 
       // Unfortunately the location expression is not yet wrapped
       // in c++, so we need to revert back to C code.
@@ -410,7 +431,7 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 
       if ((dump & die_type).any ())
 	{
-#define TYPE(T) << " "#T
+#define TYPE(T) << (die_type.test (dt_##T) ? " "#T : "")
 	  std::cerr << "dumping" DIE_TYPES << " DIE" << std::endl;
 #undef TYPE
 
