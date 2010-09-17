@@ -30,6 +30,7 @@
 #include "pri.hh"
 
 #include <sstream>
+#include <bitset>
 
 using elfutils::dwarf;
 
@@ -51,11 +52,23 @@ namespace
 
   reg<locstats> reg_locstats;
 
-  void_option ignore_single_addr
-    ("Exclude global and static variables from the statistics.",
-     "locstats:ignore-single-addr");
+#define DIE_TYPES				\
+  TYPE(single_addr)				\
+  TYPE(artificial)				\
+  TYPE(inline)					\
+  TYPE(no_coverage)
 
-  string_option tabulation_rule
+  string_option opt_ignore
+    ("Skip certain DIEs.",
+     "[+-]{single-addr|artificial|inline|no-coverage}[,...]",
+     "locstats:ignore");
+
+  string_option opt_dump
+    ("Dump certain DIEs.",
+     "[+-]{single-addr|artificial|inline|no-coverage}[,...]",
+     "locstats:dump");
+
+  string_option opt_tabulation_rule
     ("Rule for sorting results into buckets.",
      "start[:step][,...]",
      "locstats:tabulate");
@@ -123,6 +136,61 @@ namespace
     }
   };
 
+#define TYPE(T) dt_##T,
+  enum die_type_e
+    {
+      DIE_TYPES
+      dt__count
+    };
+#undef TYPE
+
+  class die_type_matcher
+    : public std::bitset<dt__count>
+  {
+    class invalid {};
+    std::pair<die_type_e, bool>
+    parse (std::string &desc)
+    {
+      bool val = true;
+      if (desc == "")
+	throw invalid ();
+
+      char sign = desc[0];
+      if (sign == '+' || sign == '-')
+	{
+	  desc = desc.substr (1);
+	  val = sign == '+';
+	}
+
+#define TYPE(T)					\
+      if (desc == #T)				\
+	return std::make_pair (dt_##T, val);
+      DIE_TYPES
+#undef TYPE
+
+      throw invalid ();
+    }
+
+  public:
+    die_type_matcher (std::string const &rule)
+    {
+      std::stringstream ss;
+      ss << rule;
+
+      std::string item;
+      while (std::getline (ss, item, ','))
+	try
+	  {
+	    std::pair<die_type_e, bool> const &ig = parse (item);
+	    set (ig.first, ig.second);
+	  }
+	catch (invalid &i)
+	  {
+	    std::cerr << "Invalid die type: " << item << std::endl;
+	  }
+    }
+  };
+
   class no_ranges {};
 
   // Look through the stack of parental dies and return the non-empty
@@ -135,6 +203,20 @@ namespace
 	return it->ranges ();
     throw no_ranges ();
   }
+
+  bool
+  is_inline (dwarf::debug_info_entry const &die)
+  {
+    dwarf::debug_info_entry::attributes_type::const_iterator it
+      = die.attributes ().find (DW_AT_inline);
+    if (it != die.attributes ().end ())
+      {
+	char const *name = (*it).second.dwarf_constant ().name ();
+	return std::strcmp (name, "declared_inlined") == 0
+	  || std::strcmp (name, "inlined") == 0;
+      }
+    return false;
+  }
 }
 
 locstats::locstats (checkstack &stack, dwarflint &lint)
@@ -145,12 +227,17 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
   for (int i = 0; i <= 100; ++i)
     tally[i] = 0;
 
-  tabrules_t tabrules (tabulation_rule.seen ()
-		       ? tabulation_rule.value () : "10:10");
+  tabrules_t tabrules (opt_tabulation_rule.seen ()
+		       ? opt_tabulation_rule.value () : "10:10");
+
+  die_type_matcher ignore (opt_ignore.seen () ? opt_ignore.value () : "");
+  die_type_matcher dump (opt_dump.seen () ? opt_dump.value () : "");
+  std::bitset<dt__count> interested = ignore | dump;
 
   for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
        it != all_dies_iterator<dwarf> (); ++it)
     {
+      std::bitset<dt__count> die_type;
       dwarf::debug_info_entry const &die = *it;
 
       // We are interested in variables and formal parameters
@@ -165,15 +252,40 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
       if (attrs.find (DW_AT_declaration) != attrs.end ())
 	continue;
 
+      if (attrs.find (DW_AT_artificial) != attrs.end ()
+	  && ignore.test (dt_artificial))
+	continue;
+
       // Of formal parameters we ignore those that are children of
       // subprograms that are themselves declarations.
       std::vector<dwarf::debug_info_entry> const &die_stack = it.stack ();
+      dwarf::debug_info_entry const &parent = *(die_stack.rbegin () + 1);
       if (is_formal_parameter)
+	if (parent.tag () == DW_TAG_subroutine_type
+	    || (parent.attributes ().find (DW_AT_declaration)
+		!= parent.attributes ().end ()))
+	  continue;
+
+      if (interested.test (dt_inline))
 	{
-	  if (die_stack.back ().attributes ().find (DW_AT_declaration)
-	      != die.attributes ().end ())
-	    continue;
+	  bool inlined = false;
+	  for (std::vector<dwarf::debug_info_entry>::const_reverse_iterator
+		 stit = die_stack.rbegin (); stit != die_stack.rend (); ++stit)
+	    if (stit->tag () == DW_TAG_subprogram
+		&& is_inline (*stit))
+	      {
+		inlined = true;
+		break;
+	      }
+
+	  if (inlined)
+	    {
+	      if (ignore.test (dt_inline))
+		continue;
+	      die_type.set (dt_inline, inlined);
+	    }
 	}
+
 
       // Unfortunately the location expression is not yet wrapped
       // in c++, so we need to revert back to C code.
@@ -216,11 +328,14 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
       // non-list location
       else if (dwarf_getlocation (locattr, &expr, &len) == 0)
 	{
-	  if (len == 1 && expr[0].atom == DW_OP_addr
-	      && ignore_single_addr)
-	    // Globals and statics have non-list location that is a
-	    // singleton DW_OP_addr expression.
-	    continue;
+	  // Globals and statics have non-list location that is a
+	  // singleton DW_OP_addr expression.
+	  if (len == 1 && expr[0].atom == DW_OP_addr)
+	    {
+	      if (ignore.test (dt_single_addr))
+		continue;
+	      die_type.set (dt_single_addr);
+	    }
 	  coverage = (len == 0) ? 0 : 100;
 	}
 
@@ -286,8 +401,41 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	    }
 	}
 
+      if (coverage == 0)
+	{
+	  if (ignore.test (dt_no_coverage))
+	    continue;
+	  die_type.set (dt_no_coverage);
+	}
+
+      if ((dump & die_type).any ())
+	{
+#define TYPE(T) << " "#T
+	  std::cerr << "dumping" DIE_TYPES << " DIE" << std::endl;
+#undef TYPE
+
+	  std::string pad = "";
+	  for (auto sit = die_stack.begin (); sit != die_stack.end (); ++sit)
+	    {
+	      auto const &d = *sit;
+	      std::cerr << pad << pri::ref (d) << " "
+			<< pri::tag (d.tag ()) << std::endl;
+	      for (auto atit = d.attributes ().begin ();
+		   atit != d.attributes ().end (); ++atit)
+		{
+		  auto const &attr = *atit;
+		  std::cerr << pad << "    " << to_string (attr) << std::endl;
+		}
+	      pad += " ";
+	    }
+
+	  std::cerr << "empty coverage " << pri::ref (die) << " "
+		    << to_string (die) << std::endl;
+	}
+
       tally[coverage]++;
       total++;
+      //std::cerr << std::endl;
     }
 
   unsigned long cumulative = 0;
