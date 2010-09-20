@@ -65,16 +65,20 @@ namespace
   TYPE(artificial)		\
   TYPE(inlined)			\
   TYPE(inlined_subroutine)	\
-  TYPE(no_coverage)
+  TYPE(no_coverage)		\
+  TYPE(mutable)			\
+  TYPE(immutable)
 
   string_option opt_ignore
     ("Skip certain DIEs.",
-     "[+-]{single-addr|artificial|inlined|inlined_subroutine|no-coverage}[,...]",
+     "{single-addr|artificial|inlined|inlined_subroutine\
+|no-coverage|mutable|immutable}[,...]",
      "locstats:ignore");
 
   string_option opt_dump
     ("Dump certain DIEs.",
-     "[+-]{single-addr|artificial|inlined|inlined_subroutine|no-coverage}[,...]",
+     "{single-addr|artificial|inlined|inlined_subroutine\
+|no-coverage|mutable|immutable}[,...]",
      "locstats:dump");
 
   string_option opt_tabulation_rule
@@ -196,13 +200,6 @@ or special value 0.0 indicating cases with no coverage whatsoever \
       if (desc == "")
 	throw invalid ();
 
-      char sign = desc[0];
-      if (sign == '+' || sign == '-')
-	{
-	  desc = desc.substr (1);
-	  val = sign == '+';
-	}
-
 #define TYPE(T)					\
       if (desc == #T)				\
 	return std::make_pair (dt_##T, val);
@@ -230,6 +227,58 @@ or special value 0.0 indicating cases with no coverage whatsoever \
 	    std::cerr << "Invalid die type: " << item << std::endl;
 	  }
     }
+  };
+
+  class mutability_t
+  {
+    bool _m_is_mutable;
+    bool _m_is_immutable;
+
+  public:
+    mutability_t ()
+      : _m_is_mutable (false)
+      , _m_is_immutable (false)
+    {
+    }
+
+    void set (bool what)
+    {
+      if (what)
+	_m_is_mutable = true;
+      else
+	_m_is_immutable = true;
+    }
+
+    void set_both ()
+    {
+      set (true);
+      set (false);
+    }
+
+    void locexpr (Dwarf_Op *expr, size_t len)
+    {
+      // We scan the expression looking for DW_OP_{bit_,}piece
+      // operators which mark ends of sub-expressions to us.
+      bool m = false;
+      for (size_t i = 0; i < len; ++i)
+	switch (expr[i].atom)
+	  {
+	  case DW_OP_implicit_value:
+	  case DW_OP_stack_value:
+	    m = true;
+	    break;
+
+	  case DW_OP_bit_piece:
+	  case DW_OP_piece:
+	    set (m);
+	    m = false;
+	    break;
+	  };
+      set (m);
+    }
+
+    bool is_mutable () const { return _m_is_mutable; }
+    bool is_immutable () const { return _m_is_immutable; }
   };
 
   struct error
@@ -281,6 +330,9 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
   die_type_matcher ignore (opt_ignore.seen () ? opt_ignore.value () : "");
   die_type_matcher dump (opt_dump.seen () ? opt_dump.value () : "");
   std::bitset<dt__count> interested = ignore | dump;
+  bool interested_mutability
+    = interested.test (dt_mutable) || interested.test (dt_immutable);
+
 
   for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
        it != all_dies_iterator<dwarf> (); ++it)
@@ -384,14 +436,23 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
       int coverage;
       Dwarf_Op *expr;
       size_t len;
+      mutability_t mut;
 
       // consts need no location
       if (attrs.find (DW_AT_const_value) != attrs.end ())
-	coverage = 100;
+	{
+	  coverage = 100;
+	  if (interested_mutability)
+	    mut.set (true);
+	}
 
       // no location
       else if (locattr == NULL)
-	coverage = cov_00;
+	{
+	  coverage = cov_00;
+	  if (interested_mutability)
+	    mut.set_both ();
+	}
 
       // non-list location
       else if (dwarf_getlocation (locattr, &expr, &len) == 0)
@@ -404,6 +465,8 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 		continue;
 	      die_type.set (dt_single_addr);
 	    }
+	  if (interested_mutability)
+	    mut.locexpr (expr, len);
 	  coverage = (len == 0) ? cov_00 : 100;
 	}
 
@@ -435,27 +498,25 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 		      int got = dwarf_getlocation_addr (locattr, addr,
 							exprs, exprlens, nlocs);
 		      if (got < 0)
-			{
-			  struct where where = WHERE (sec_info, NULL);
-			  where_reset_1 (&where, it.cu ().offset ());
-			  where_reset_2 (&where, die.offset ());
-			  wr_error (where)
-			    << "dwarf_getlocation_addr: "
-			    << dwarf_errmsg (-1) << std::endl;
-			  break;
-			}
+			throw ::error (std::string ("dwarf_getlocation_addr: ")
+				       + dwarf_errmsg (-1));
 
 		      // At least one expression for the address must
 		      // be of non-zero length for us to count that
 		      // address as covered.
 		      for (int i = 0; i < got; ++i)
-			if (exprlens[i] > 0)
-			  {
-			    covered++;
-			    break;
-			  }
+			{
+			  if (interested_mutability)
+			    mut.locexpr (exprs[i], exprlens[i]);
+			  if (exprlens[i] > 0)
+			    {
+			      covered++;
+			      break;
+			    }
+			}
 		    }
 		}
+
 	      if (length == 0)
 		throw ::error ("zero-length range");
 
@@ -479,6 +540,22 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	  if (ignore.test (dt_no_coverage))
 	    continue;
 	  die_type.set (dt_no_coverage);
+	}
+      else if (interested_mutability)
+	{
+	  assert (mut.is_mutable () || mut.is_immutable ());
+	  if (mut.is_mutable ())
+	    {
+	      if (ignore.test (dt_mutable))
+		continue;
+	      die_type.set (dt_mutable);
+	    }
+	  if (mut.is_immutable ())
+	    {
+	      if (ignore.test (dt_immutable))
+		continue;
+	      die_type.set (dt_immutable);
+	    }
 	}
 
       if ((dump & die_type).any ())
@@ -522,8 +599,8 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	{
 	  long int samples = cumulative - last;
 
-	  // The case 0.0..0 should be printed simply as 0
-	  if (last_pct == cov_00 && i == 0)
+	  // The case 0.0..x should be printed simply as 0
+	  if (last_pct == cov_00 && i > cov_00)
 	    last_pct = 0;
 
 	  if (last_pct == cov_00)
