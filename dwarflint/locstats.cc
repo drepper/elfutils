@@ -474,7 +474,7 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	    }
 	}
 
-      if (coverage == 0)
+      if (coverage == cov_00)
 	{
 	  if (ignore.test (dt_no_coverage))
 	    continue;
