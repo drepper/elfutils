@@ -17,6 +17,7 @@
    http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00816.html
 
 ** dwarflint --stats
+*** the mutable/immutable part is not implemented yet
    http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00849.html
 
 ** expected trees/attributes

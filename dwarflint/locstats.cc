@@ -78,7 +78,9 @@ namespace
      "locstats:dump");
 
   string_option opt_tabulation_rule
-    ("Rule for sorting results into buckets.",
+    ("Rule for sorting results into buckets. start is either integer 0..100, \
+or special value 0.0 indicating cases with no coverage whatsoever \
+(i.e. not those that happen to round to 0%).",
      "start[:step][,...]",
      "locstats:tabulate");
 
@@ -93,6 +95,9 @@ namespace
       return start < other.start;
     }
   };
+
+  // Sharp 0.0% coverage (i.e. not a single address byte is covered)
+  const int cov_00 = -1;
 
   struct tabrules_t
     : public std::vector<tabrule>
@@ -109,11 +114,36 @@ namespace
 	    continue;
 	  int start;
 	  int step;
-	  int r = std::sscanf (item.c_str (), "%d:%d", &start, &step);
-	  if (r == EOF || r == 0)
-	    continue;
-	  if (r == 1)
+	  char const *ptr = item.c_str ();
+
+	  if (item.length () >= 3
+	      && std::strncmp (ptr, "0.0", 3) == 0)
+	    {
+	      start = cov_00;
+	      ptr += 3;
+	    }
+	  else
+	    start = std::strtol (ptr, const_cast<char **> (&ptr), 10);
+
+	  if (*ptr == 0)
 	    step = 0;
+	  else
+	    {
+	      if (*ptr != ':')
+		{
+		  step = 0;
+		  goto garbage;
+		}
+	      else
+		ptr++;
+
+	      step = std::strtol (ptr, const_cast<char **> (&ptr), 10);
+	      if (*ptr != 0)
+	      garbage:
+		std::cerr << "Ignoring garbage at the end of the rule item: '"
+			  << ptr << '\'' << std::endl;
+	    }
+
 	  push_back (tabrule (start, step));
 	}
 
@@ -127,6 +157,8 @@ namespace
 	erase (begin ());
       else
 	{
+	  if (at (0).start == cov_00)
+	    at (0).start = 0;
 	  at (0).start += at (0).step;
 	  if (size () > 1)
 	    {
@@ -200,7 +232,13 @@ namespace
     }
   };
 
-  class no_ranges {};
+  struct error
+    : public std::runtime_error
+  {
+    explicit error (std::string const &what_arg)
+      : std::runtime_error (what_arg)
+    {}
+  };
 
   // Look through the stack of parental dies and return the non-empty
   // ranges instance closest to the stack top (i.e. die_stack.end ()).
@@ -210,7 +248,7 @@ namespace
     for (auto it = die_stack.rbegin (); it != die_stack.rend (); ++it)
       if (!it->ranges ().empty ())
 	return it->ranges ();
-    throw no_ranges ();
+    throw error ("no ranges for this DIE");
   }
 
   bool
@@ -231,6 +269,8 @@ namespace
 locstats::locstats (checkstack &stack, dwarflint &lint)
   : highlevel_check<locstats> (stack, lint)
 {
+  // map percentage->occurrences.  Percentage is cov_00..100, where
+  // 0..100 is rounded-down integer division.
   std::map<int, unsigned long> tally;
   unsigned long total = 0;
   for (int i = 0; i <= 100; ++i)
@@ -238,7 +278,6 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 
   tabrules_t tabrules (opt_tabulation_rule.seen ()
 		       ? opt_tabulation_rule.value () : "10:10");
-
   die_type_matcher ignore (opt_ignore.seen () ? opt_ignore.value () : "");
   die_type_matcher dump (opt_dump.seen () ? opt_dump.value () : "");
   std::bitset<dt__count> interested = ignore | dump;
@@ -261,8 +300,8 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
       if (attrs.find (DW_AT_declaration) != attrs.end ())
 	continue;
 
-      if (attrs.find (DW_AT_artificial) != attrs.end ()
-	  && ignore.test (dt_artificial))
+      if (ignore.test (dt_artificial)
+	  && attrs.find (DW_AT_artificial) != attrs.end ())
 	continue;
 
       // Of formal parameters we ignore those that are children of
@@ -352,7 +391,7 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 
       // no location
       else if (locattr == NULL)
-	coverage = 0;
+	coverage = cov_00;
 
       // non-list location
       else if (dwarf_getlocation (locattr, &expr, &len) == 0)
@@ -365,7 +404,7 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 		continue;
 	      die_type.set (dt_single_addr);
 	    }
-	  coverage = (len == 0) ? 0 : 100;
+	  coverage = (len == 0) ? cov_00 : 100;
 	}
 
       // location list
@@ -417,15 +456,20 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 			  }
 		    }
 		}
-	      coverage = 100 * covered / length;
+	      if (length == 0)
+		throw ::error ("zero-length range");
+
+	      if (covered == 0)
+		coverage = cov_00;
+	      else
+		coverage = 100 * covered / length;
 	    }
-	  catch (no_ranges const &e)
+	  catch (::error const &e)
 	    {
 	      struct where where = WHERE (sec_info, NULL);
 	      where_reset_1 (&where, it.cu ().offset ());
 	      where_reset_2 (&where, die.offset ());
-	      wr_error (where)
-		<< "no ranges for this DIE." << std::endl;
+	      wr_error (where) << e.what () << '.' << std::endl;
 	      continue;
 	    }
 	}
@@ -469,15 +513,24 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 
   unsigned long cumulative = 0;
   unsigned long last = 0;
-  int last_pct = 0;
+  int last_pct = cov_00;
   std::cout << "cov%\tsamples\tcumul" << std::endl;
-  for (int i = 0; i <= 100; ++i)
+  for (int i = cov_00; i <= 100; ++i)
     {
       cumulative += tally.find (i)->second;
       if (tabrules.match (i))
 	{
 	  long int samples = cumulative - last;
-	  std::cout << std::dec << last_pct;
+
+	  // The case 0.0..0 should be printed simply as 0
+	  if (last_pct == cov_00 && i == 0)
+	    last_pct = 0;
+
+	  if (last_pct == cov_00)
+	    std::cout << "0.0";
+	  else
+	    std::cout << std::dec << last_pct;
+
 	  if (last_pct != i)
 	    std::cout << ".." << i;
 	  std::cout << "\t" << samples
