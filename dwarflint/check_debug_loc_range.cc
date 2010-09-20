@@ -731,7 +731,8 @@ namespace
 {
   /* Operands are passed back as attribute forms.  In particular,
      DW_FORM_dataX for X-byte operands, DW_FORM_[us]data for
-     ULEB128/SLEB128 operands, and DW_FORM_addr for 32b/64b operands.
+     ULEB128/SLEB128 operands, and DW_FORM_addr/DW_FORM_ref_addr
+     for 32b/64b operands.
      If the opcode takes no operands, 0 is passed.
 
      Return value is false if we couldn't determine (i.e. invalid
@@ -767,16 +768,21 @@ namespace
      form.  For block forms, the value passed back in VALUEP is block
      length.  */
   bool
-  read_ctx_read_form (struct read_ctx *ctx, int address_size, uint8_t form,
-		      uint64_t *valuep, struct where *where, const char *what,
-		      bool *is_blockp)
+  read_ctx_read_form (struct read_ctx *ctx, struct cu *cu,
+		      uint8_t form, uint64_t *valuep, struct where *where,
+		      const char *what, bool *is_blockp)
   {
     if (is_blockp != NULL)
       *is_blockp = false;
     switch (form)
       {
       case DW_FORM_addr:
-	return read_ctx_read_offset (ctx, address_size == 8, valuep);
+	return read_ctx_read_offset (ctx, cu->head->address_size == 8, valuep);
+      case DW_FORM_ref_addr:
+	return read_ctx_read_offset (ctx, (cu->head->version >= 3
+					   ? cu->head->offset_size
+					   : cu->head->address_size) == 8,
+				     valuep);
       case DW_FORM_udata:
 	return checked_read_uleb128 (ctx, valuep, where, what);
       case DW_FORM_sdata:
@@ -831,7 +837,7 @@ namespace
 	  }
 
 	*is_blockp = true;
-	return read_ctx_read_form (ctx, address_size, dform,
+	return read_ctx_read_form (ctx, cu, dform,
 				   valuep, where, what, NULL)
 	  && read_ctx_skip (ctx, *valuep);
       }
@@ -879,7 +885,7 @@ namespace
     bool isblock;
     uint64_t off = read_ctx_get_offset (ctx) + init_off;
 
-    if (!read_ctx_read_form (ctx, cu->head->address_size, form,
+    if (!read_ctx_read_form (ctx, cu, form,
 			     valuep, where, str, &isblock))
       {
 	wr_error (*where)
