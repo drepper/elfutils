@@ -196,7 +196,7 @@
   DW_OP_0 (DW_OP_push_object_address)				\
   DW_OP_1 (DW_OP_call2, DW_FORM_data2)				\
   DW_OP_1 (DW_OP_call4, DW_FORM_data4)				\
-  DW_OP_1 (DW_OP_call_ref, DW_FORM_addr)			\
+  DW_OP_1 (DW_OP_call_ref, DW_FORM_ref_addr)			\
   DW_OP_0 (DW_OP_form_tls_address)				\
   DW_OP_0 (DW_OP_GNU_push_tls_address)				\
   DW_OP_0 (DW_OP_call_frame_cfa)				\
@@ -204,4 +204,6 @@
   DW_OP_0 (DW_OP_GNU_uninit)					\
   /* DWARF 4 */							\
   DW_OP_0 (DW_OP_stack_value)					\
-  DW_OP_1 (DW_OP_implicit_value, DW_FORM_block)
+  DW_OP_1 (DW_OP_implicit_value, DW_FORM_block)			\
+  /* GNU extensions */						\
+  DW_OP_2 (DW_OP_GNU_implicit_pointer, DW_FORM_ref_addr, DW_FORM_sdata)
