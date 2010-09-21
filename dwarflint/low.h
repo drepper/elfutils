@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2008,2009 Red Hat, Inc.
+   Copyright (C) 2008, 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -98,9 +98,6 @@ extern "C"
   extern bool address_aligned (uint64_t addr, uint64_t align);
   extern bool necessary_alignment (uint64_t start, uint64_t length,
 				   uint64_t align);
-  extern bool read_size_extra (struct read_ctx *ctx, uint32_t size32,
-			       uint64_t *sizep, int *offset_sizep,
-			       struct where *wh);
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
   extern bool supported_version (unsigned version,
 				 size_t num_supported, struct where *where, ...);

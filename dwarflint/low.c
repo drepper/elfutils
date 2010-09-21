@@ -135,35 +135,6 @@ cu_find_cu (struct cu *cu_chain, uint64_t offset)
 }
 
 bool
-read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
-		 int *offset_sizep, struct where *wh)
-{
-  if (size32 == DWARF3_LENGTH_64_BIT)
-    {
-      if (!read_ctx_read_8ubyte (ctx, sizep))
-	{
-	  wr_error (wh, ": can't read 64bit CU length.\n");
-	  return false;
-	}
-
-      *offset_sizep = 8;
-    }
-  else if (size32 >= DWARF3_LENGTH_MIN_ESCAPE_CODE)
-    {
-      wr_error (wh, ": unrecognized CU length escape value: "
-		"%" PRIx32 ".\n", size32);
-      return false;
-    }
-  else
-    {
-      *sizep = size32;
-      *offset_sizep = 4;
-    }
-
-  return true;
-}
-
-bool
 check_zero_padding (struct read_ctx *ctx,
 		    enum message_category category,
 		    struct where const *wh)

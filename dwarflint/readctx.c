@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Petr Machata <pmachata@redhat.com>, 2009.
 
@@ -26,10 +26,12 @@
 
 #include "readctx.h"
 #include "low.h"
+#include "../libdw/dwarf.h"
 
 #include <stdlib.h>
 #include <assert.h>
 #include <byteswap.h>
+#include <inttypes.h>
 
 /* read_Xubyte_* is basically cut'n'paste from memory-access.h.  */
 union unaligned
@@ -314,4 +316,33 @@ bool
 read_ctx_eof (struct read_ctx *ctx)
 {
   return !read_ctx_need_data (ctx, 1);
+}
+
+bool
+read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
+		 int *offset_sizep, struct where *wh)
+{
+  if (size32 == DWARF3_LENGTH_64_BIT)
+    {
+      if (!read_ctx_read_8ubyte (ctx, sizep))
+	{
+	  wr_error (wh, ": can't read 64bit CU length.\n");
+	  return false;
+	}
+
+      *offset_sizep = 8;
+    }
+  else if (size32 >= DWARF3_LENGTH_MIN_ESCAPE_CODE)
+    {
+      wr_error (wh, ": unrecognized CU length escape value: "
+		"%" PRIx32 ".\n", size32);
+      return false;
+    }
+  else
+    {
+      *sizep = size32;
+      *offset_sizep = 4;
+    }
+
+  return true;
 }
