@@ -93,8 +93,6 @@ extern "C"
   // xxx some of that will go away
   extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
 						  uint64_t abbrev_code);
-  extern bool read_rel (struct elf_file *file, struct sec *sec,
-			Elf_Data *reldata, bool elf_64);
   extern bool address_aligned (uint64_t addr, uint64_t align);
   extern bool necessary_alignment (uint64_t start, uint64_t length,
 				   uint64_t align);
@@ -121,13 +119,6 @@ extern "C"
   };
 
   // xxx low-level check entry points, will go away
-  struct cu;
-  extern void check_range_relocations (enum message_category cat,
-				       struct where *where,
-				       struct elf_file const *file,
-				       GElf_Sym *begin_symbol,
-				       GElf_Sym *end_symbol,
-				       const char *description);
 
   extern int check_sibling_form (dwarf_version_h ver, uint64_t form);
   extern bool is_location_attrib (uint64_t name);

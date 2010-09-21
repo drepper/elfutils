@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2008,2009 Red Hat, Inc.
+   Copyright (C) 2008, 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -27,8 +27,12 @@
 #define DWARFLINT_RELOC_H
 
 #include "where.h"
+#include "elf_file.ii"
 #include <libelf.h>
 #include <gelf.h>
+
+// xxx remove
+#include "messages.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -36,8 +40,6 @@ extern "C"
 #else
 # include <stdbool.h>
 #endif
-
-  struct elf_file;
 
   struct relocation
   {
@@ -71,6 +73,9 @@ extern "C"
     skip_ok,
   };
 
+  bool read_rel (struct elf_file *file, struct sec *sec,
+		 Elf_Data *reldata, bool elf_64);
+
   struct relocation *relocation_next (struct relocation_data *reloc,
 				      uint64_t offset,
 				      struct where const *where,
@@ -90,6 +95,13 @@ extern "C"
 		     unsigned width, uint64_t *value,
 		     struct where const *where,
 		     enum section_id offset_into, GElf_Sym **symptr);
+
+  void check_range_relocations (enum message_category cat,
+				struct where *where,
+				struct elf_file const *file,
+				GElf_Sym *begin_symbol,
+				GElf_Sym *end_symbol,
+				const char *description);
 
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"
 
