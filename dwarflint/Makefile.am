@@ -46,6 +46,7 @@ dwarflint_SOURCES = \
 	expected-at.cc expected.hh \
 	coverage.cc coverage.h \
 	readctx.c readctx.h \
+	checked_read.cc checked_read.h \
 	pri.cc pri.hh \
 	messages.cc messages.h \
 	section_id.cc section_id.h \

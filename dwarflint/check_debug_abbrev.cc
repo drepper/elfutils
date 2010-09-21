@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -32,6 +32,7 @@
 #include "pri.hh"
 #include "tables.hh"
 #include "sections.hh"
+#include "checked_read.h"
 
 #include <dwarf.h>
 #include <sstream>
@@ -522,3 +523,15 @@ check_debug_abbrev::~check_debug_abbrev ()
       free (it->second.abbr);
     }
 }
+
+int
+check_sibling_form (dwarf_version_h ver, uint64_t form)
+{
+  if (!dwver_form_allowed (ver, DW_AT_sibling, form))
+    return -2;
+  else if (form == DW_FORM_ref_addr)
+    return -1;
+  else
+    return 0;
+}
+

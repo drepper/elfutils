@@ -61,52 +61,6 @@ necessary_alignment (uint64_t start, uint64_t length, uint64_t align)
 }
 
 bool
-checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
-		      struct where *where, const char *what)
-{
-  const unsigned char *ptr = ctx->ptr;
-  int st = read_ctx_read_uleb128 (ctx, ret);
-  if (st < 0)
-    wr_error (where, ": can't read %s.\n", what);
-  else if (st > 0)
-    {
-      char buf[19]; // 16 hexa digits, "0x", terminating zero
-      sprintf (buf, "%#" PRIx64, *ret);
-      wr_format_leb128_message (where, what, buf, ptr, ctx->ptr);
-    }
-  return st >= 0;
-}
-
-bool
-checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
-		      struct where *where, const char *what)
-{
-  const unsigned char *ptr = ctx->ptr;
-  int st = read_ctx_read_sleb128 (ctx, ret);
-  if (st < 0)
-    wr_error (where, ": can't read %s.\n", what);
-  else if (st > 0)
-    {
-      char buf[20]; // sign, "0x", 16 hexa digits, terminating zero
-      int64_t val = *ret;
-      sprintf (buf, "%s%#" PRIx64, val < 0 ? "-" : "", val < 0 ? -val : val);
-      wr_format_leb128_message (where, what, buf, ptr, ctx->ptr);
-    }
-  return st >= 0;
-}
-
-int
-check_sibling_form (dwarf_version_h ver, uint64_t form)
-{
-  if (!dwver_form_allowed (ver, DW_AT_sibling, form))
-    return -2;
-  else if (form == DW_FORM_ref_addr)
-    return -1;
-  else
-    return 0;
-}
-
-bool
 is_location_attrib (uint64_t name)
 {
   switch (name)

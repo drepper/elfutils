@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_abbrev.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,31 +23,32 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
-#define DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#ifndef DWARFLINT_CHECKED_READ_HH
+#define DWARFLINT_CHECKED_READ_HH
 
-#include "low.h"
-#include "checks.hh"
-#include "sections.ii"
-#include "check_debug_info.ii"
+#include "readctx.h"
 
-class check_debug_abbrev
-  : public check<check_debug_abbrev>
+#ifdef __cplusplus
+extern "C"
 {
-  section<sec_abbrev> *_m_sec_abbr;
-  read_cu_headers *_m_cu_headers;
+#endif
 
-public:
-  static checkdescriptor const *descriptor ();
+bool read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
+		      int *offset_sizep, struct where *where);
 
-  // offset -> abbreviations
-  typedef std::map< ::Dwarf_Off, abbrev_table> abbrev_map;
-  abbrev_map const abbrevs;
+bool read_address_size (struct read_ctx *ctx,
+			bool addr_64,
+			int *address_sizep,
+			struct where const *where);
 
-  check_debug_abbrev (checkstack &stack, dwarflint &lint);
-  ~check_debug_abbrev ();
-};
+bool checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
+			   struct where *where, const char *what);
 
-int check_sibling_form (dwarf_version_h ver, uint64_t form);
+bool checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
+			   struct where *where, const char *what);
 
-#endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH
+#ifdef __cplusplus
+}
+#endif
+
+#endif//DWARFLINT_CHECKED_READ_HH

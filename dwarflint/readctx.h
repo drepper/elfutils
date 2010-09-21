@@ -29,9 +29,6 @@
 #include <stdbool.h>
 #include "../libelf/libelf.h"
 
-// xxx We don't really like this one
-#include "where.h"
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -76,18 +73,6 @@ bool read_ctx_read_var (struct read_ctx *ctx, int width, uint64_t *ret);
 const char *read_ctx_read_str (struct read_ctx *ctx);
 bool read_ctx_skip (struct read_ctx *ctx, uint64_t len);
 bool read_ctx_eof (struct read_ctx *ctx);
-
-/* The following procedures build on the ones above and do their own
-   error reporting in addition.  */
-
-bool read_size_extra (struct read_ctx *ctx, uint32_t size32,
-		      uint64_t *sizep, int *offset_sizep,
-		      struct where *where);
-
-bool read_address_size (struct read_ctx *ctx,
-			bool addr_64,
-			int *address_sizep,
-			struct where const *where);
 
 /* See if what remains in the read context is just a zero padding.  If
    yes, return true.  If it isn't, revert the read pointer back as if

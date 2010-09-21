@@ -41,6 +41,7 @@
 #include "check_debug_loc_range.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
+#include "checked_read.h"
 #include "../src/dwarf-opcodes.h"
 #include "pri.hh"
 

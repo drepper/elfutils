@@ -120,11 +120,6 @@ extern "C"
   extern int check_sibling_form (dwarf_version_h ver, uint64_t form);
   extern bool is_location_attrib (uint64_t name);
 
-  bool checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
-			     struct where *where, const char *what);
-  bool checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
-			     struct where *where, const char *what);
-
   struct abbrev_attrib
   {
     struct where where;

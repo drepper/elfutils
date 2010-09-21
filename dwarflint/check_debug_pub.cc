@@ -27,15 +27,7 @@
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "pri.hh"
-
-namespace
-{
-  template <class A, class B>
-  struct where xwhere (A a, B b)
-  {
-    return WHERE (a, b);
-  }
-}
+#include "checked_read.h"
 
 template<section_id sec_id>
 check_debug_pub<sec_id>::check_debug_pub (checkstack &stack, dwarflint &lint)
