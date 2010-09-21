@@ -263,7 +263,7 @@ namespace
 	    << pri::lacks_relocation ("abbrev table offset") << std::endl;
 
 	/* Address size.  */
-	if (!read_address_size (file->addr_64, &ctx, &head.address_size,
+	if (!read_address_size (&ctx, file->addr_64, &head.address_size,
 				&head.where))
 	  throw check_base::failed ();
 

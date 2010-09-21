@@ -196,38 +196,6 @@ check_range_relocations (enum message_category cat,
 		file->sec[end_symbol->st_shndx].name);
 }
 
-bool
-read_address_size (bool elf_64,
-		   struct read_ctx *ctx,
-		   int *address_sizep,
-		   struct where const *where)
-{
-  uint8_t address_size;
-  if (!read_ctx_read_ubyte (ctx, &address_size))
-    {
-      wr_error (where, ": can't read address size.\n");
-      return false;
-    }
-
-  if (address_size != 4 && address_size != 8)
-    {
-      /* Keep going.  Deduce the address size from ELF header, and try
-	 to parse it anyway.  */
-      wr_error (where,
-		": invalid address size: %d (only 4 or 8 allowed).\n",
-		address_size);
-      address_size = elf_64 ? 8 : 4;
-    }
-  else if ((address_size == 8) != elf_64)
-    /* Keep going, we may still be able to parse it.  */
-    wr_error (where,
-	      ": CU reports address size of %d in %d-bit ELF.\n",
-	      address_size, elf_64 ? 64 : 32);
-
-  *address_sizep = address_size;
-  return true;
-}
-
 static void
 compare_coverage (struct elf_file *file,
 		  struct coverage *coverage, struct coverage *other,
@@ -389,7 +357,7 @@ check_aranges_structural (struct elf_file *file,
 
       /* Address size.  */
       int address_size;
-      if (!read_address_size (file->addr_64, &sub_ctx, &address_size, &where))
+      if (!read_address_size (&sub_ctx, file->addr_64, &address_size, &where))
 	{
 	  retval = false;
 	  goto next;

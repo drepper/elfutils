@@ -76,10 +76,16 @@ bool read_ctx_skip (struct read_ctx *ctx, uint64_t len);
 bool read_ctx_eof (struct read_ctx *ctx);
 
 /* The following procedures build on the ones above and do their own
-   error reporting.  */
+   error reporting in addition.  */
 
 bool read_size_extra (struct read_ctx *ctx, uint32_t size32,
-		      uint64_t *sizep, int *offset_sizep, struct where *wh);
+		      uint64_t *sizep, int *offset_sizep,
+		      struct where *where);
+
+bool read_address_size (struct read_ctx *ctx,
+			bool addr_64,
+			int *address_sizep,
+			struct where const *where);
 
 #ifdef __cplusplus
 }

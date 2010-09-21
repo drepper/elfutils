@@ -104,10 +104,6 @@ extern "C"
   extern bool check_zero_padding (struct read_ctx *ctx,
 				  enum message_category category,
 				  struct where const *wh);
-  extern bool read_address_size (bool elf_64,
-				 struct read_ctx *ctx,
-				 int *address_sizep,
-				 struct where const *where);
 
   struct section_coverage
   {
