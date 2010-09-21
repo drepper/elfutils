@@ -26,9 +26,10 @@
 // xxx drop as soon as not necessary
 #define __STDC_FORMAT_MACROS
 
+#include "low.h"
 #include "reloc.h"
 #include "messages.h"
-#include "low.h"
+#include "misc.h"
 #include "readctx.h"
 
 #include <sstream>

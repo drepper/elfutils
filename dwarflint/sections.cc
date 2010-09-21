@@ -34,6 +34,7 @@
 #include "sections.hh"
 #include "messages.h"
 #include "pri.hh"
+#include "misc.h"
 
 checkdescriptor const *
 load_sections::descriptor ()

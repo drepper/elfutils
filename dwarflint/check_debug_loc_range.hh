@@ -23,12 +23,29 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "low.h"
 #include "checks.hh"
 #include "sections.ii"
 #include "check_debug_info.ii"
 #include "messages.h"
 #include "coverage.hh"
+
+struct section_coverage
+{
+  struct sec *sec;
+  struct coverage cov;
+  bool hit; /* true if COV is not pristine.  */
+  bool warn; /* dwarflint should emit a warning if a coverage
+		appears in this section */
+};
+
+struct coverage_map
+{
+  struct elf_file *elf;
+  struct section_coverage *scos;
+  size_t size;
+  size_t alloc;
+  bool allow_overlap;
+};
 
 class check_debug_ranges
   : public check<check_debug_ranges>

@@ -28,8 +28,6 @@
 
 #include "../libdw/libdw.h"
 #include "../libebl/libebl.h"
-#include "coverage.h"
-#include "addr-record.h"
 #include "reloc.h"
 
 #ifdef __cplusplus
@@ -75,56 +73,6 @@ extern "C"
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
   extern bool supported_version (unsigned version,
 				 size_t num_supported, struct where *where, ...);
-
-  struct section_coverage
-  {
-    struct sec *sec;
-    struct coverage cov;
-    bool hit; /* true if COV is not pristine.  */
-    bool warn; /* dwarflint should emit a warning if a coverage
-		  appears in this section */
-  };
-
-  struct coverage_map
-  {
-    struct elf_file *elf;
-    struct section_coverage *scos;
-    size_t size;
-    size_t alloc;
-    bool allow_overlap;
-  };
-
-  struct cu_head
-  {
-    uint64_t offset;
-    Dwarf_Off size;               // Size of this CU.
-    Dwarf_Off head_size;          // Size from begin to 1st byte of CU.
-    Dwarf_Off total_size;         // size + head_size
-
-    int offset_size;		  // Offset size in this CU.
-    struct where where;           // Where was this section defined.
-    Dwarf_Off abbrev_offset;      // Abbreviation section that this CU uses.
-    int version;                  // CU version
-    int address_size;             // Address size in bytes on the target machine.
-  };
-
-  struct cu
-  {
-    struct cu *next;              // For compatibility with C level.
-                                  // xxx will probably go away eventually
-    struct cu_head const *head;
-    uint64_t cudie_offset;
-    uint64_t low_pc;              // DW_AT_low_pc value of CU DIE, -1 if not present.
-    struct ref stmt_list;
-    struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
-    struct ref_record die_refs;   // DIE references into other CUs from this CU.
-    struct ref_record loc_refs;   // references into .debug_loc from this CU.
-    struct ref_record range_refs; // references into .debug_ranges from this CU.
-    struct ref_record decl_file_refs;  // values of DW_AT_decl_file in this CU.
-    bool has_arange;              // Whether we saw arange section pointing at this CU.
-    bool has_pubnames;            // Likewise for pubnames.
-    bool has_pubtypes;            // Likewise for pubtypes.
-  };
 
 #ifdef __cplusplus
 }

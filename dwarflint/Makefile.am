@@ -42,7 +42,7 @@ dwarflint_SOURCES = \
 	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
 	checkrule.cc checkrule.hh \
 	dwarflint.cc dwarflint.hh dwarflint.ii misc.h \
-	low.c low.h elf_file.ii \
+	low.cc low.h elf_file.ii \
 	expected-at.cc expected.hh \
 	coverage.cc coverage.h \
 	readctx.c readctx.h \
