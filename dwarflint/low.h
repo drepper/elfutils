@@ -101,9 +101,6 @@ extern "C"
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"
   extern bool supported_version (unsigned version,
 				 size_t num_supported, struct where *where, ...);
-  extern bool check_zero_padding (struct read_ctx *ctx,
-				  enum message_category category,
-				  struct where const *wh);
 
   struct section_coverage
   {

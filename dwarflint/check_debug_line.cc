@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_line.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -362,10 +362,13 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
       else if (sub_ctx.ptr < program_start)
 	{
 	  struct where wh = WHERE (sec_line, NULL);
-	  if (!check_zero_padding (&sub_ctx, cat (mc_line, mc_header), &where))
+	  uint64_t off_start, off_end;
+	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
+	    wr_message_padding_0 (cat (mc_line, mc_header), &wh,
+				  off_start, off_end);
+	  else
 	    wr_message_padding_n0 (cat (mc_line, mc_header), &wh,
-				   read_ctx_get_offset (&sub_ctx),
-				   program_start - sub_ctx.begin);
+				   off_start, program_start - sub_ctx.begin);
 	  sub_ctx.ptr = program_start;
 	}
 
@@ -479,13 +482,18 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		  }
 		else if (sub_ctx.ptr < next)
 		  {
-		    if (handled
-			&& !check_zero_padding (&sub_ctx, mc_line, &where))
+		    uint64_t off_start, off_end;
+		    if (handled)
 		      {
 			struct where wh = WHERE (sec_line, NULL);
-			wr_message_padding_n0 (mc_line, &wh,
-					       read_ctx_get_offset (&sub_ctx),
-					       next - sub_ctx.begin);
+			if (read_check_zero_padding (&sub_ctx,
+						     &off_start, &off_end))
+			  wr_message_padding_0 (mc_line, &wh,
+						off_start, off_end);
+			else
+			  wr_message_padding_n0 (mc_line, &wh,
+						 off_start,
+						 next - sub_ctx.begin);
 		      }
 		    sub_ctx.ptr = next;
 		  }
@@ -596,11 +604,15 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	wr_error (where)
 	  << "sequence of opcodes not terminated with DW_LNE_end_sequence."
 	  << std::endl;
-      else if (sub_ctx.ptr != sub_ctx.end
-	       && !check_zero_padding (&sub_ctx, mc_line, &wh))
-	wr_message_padding_n0 (mc_line, &wh,
-			       /*begin*/read_ctx_get_offset (&sub_ctx),
-			       /*end*/sub_ctx.end - sub_ctx.begin);
+      else if (sub_ctx.ptr != sub_ctx.end)
+	{
+	  uint64_t off_start, off_end;
+	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
+	    wr_message_padding_0 (mc_line, &wh, off_start, off_end);
+	  else
+	    wr_message_padding_n0 (mc_line, &wh,
+				   off_start, sub_ctx.end - sub_ctx.begin);
+	}
       }
 
     next:

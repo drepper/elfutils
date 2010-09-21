@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_pub*.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -226,14 +226,17 @@ check_debug_pub<sec_id>::check_pub_structural ()
 	}
 
 	struct where wh = WHERE (_m_sec->sect.id, NULL);
-	if (sub_ctx.ptr != sub_ctx.end
-	    && !check_zero_padding (&sub_ctx, mc_pubtables, &wh))
+	if (sub_ctx.ptr != sub_ctx.end)
 	  {
-	    wh = WHERE (_m_sec->sect.id, NULL);
-	    wr_message_padding_n0 (mc_pubtables | mc_error, &wh,
-				   read_ctx_get_offset (&sub_ctx),
-				   read_ctx_get_offset (&sub_ctx) + size);
-	    retval = false;
+	    uint64_t off_start, off_end;
+	    if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
+	      wr_message_padding_0 (mc_pubtables, &wh, off_start, off_end);
+	    else
+	      {
+		wr_message_padding_n0 (mc_pubtables | mc_error, &wh,
+				       off_start, off_start + size);
+		retval = false;
+	      }
 	  }
       }
 

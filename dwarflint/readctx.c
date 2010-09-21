@@ -379,3 +379,32 @@ read_address_size (struct read_ctx *ctx,
   return true;
 }
 
+static void
+update_off (struct read_ctx *ctx,
+	    uint64_t *ret_off)
+{
+  if (ret_off != NULL)
+    *ret_off = (uint64_t)(ctx->ptr - ctx->begin);
+}
+
+bool
+read_check_zero_padding (struct read_ctx *ctx,
+			 uint64_t *ret_off_start,
+			 uint64_t *ret_off_end)
+{
+  assert (ctx->ptr != ctx->end);
+  update_off (ctx, ret_off_start);
+  bool ret = true;
+
+  const unsigned char *save_ptr = ctx->ptr;
+  while (!read_ctx_eof (ctx))
+    if (*ctx->ptr++ != 0)
+      {
+	ctx->ptr = save_ptr;
+	goto done;
+      }
+
+ done:
+  update_off (ctx, ret_off_end);
+  return ret;
+}

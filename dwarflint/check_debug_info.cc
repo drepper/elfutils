@@ -168,6 +168,7 @@ namespace
   {
     struct read_ctx ctx;
     read_ctx_init (&ctx, sec->data, file->other_byte_order);
+    uint64_t off_start, off_end;
 
     std::vector <cu_head> ret;
     while (!read_ctx_eof (&ctx))
@@ -183,9 +184,14 @@ namespace
 	/* Reading CU head is a bit tricky, because we don't know if
 	   we have run into (superfluous but allowed) zero padding
 	   between CUs.  */
+
 	if (!read_ctx_need_data (&ctx, 4)
-	    && check_zero_padding (&ctx, cat (mc_info, mc_header), &where))
-	  break;
+	    && read_check_zero_padding (&ctx, &off_start, &off_end))
+	  {
+	    wr_message_padding_0 (cat (mc_info, mc_header), &where,
+				  off_start, off_end);
+	    break;
+	  }
 
 	/* CU length.  In DWARF 2, (uint32_t)-1 is simply a CU of that
 	   length.  In DWARF 3+ that's an escape for 64bit length.
@@ -199,8 +205,12 @@ namespace
 	    throw check_base::failed ();
 	  }
 	if (size32 == 0
-	    && check_zero_padding (&ctx, cat (mc_info, mc_header), &where))
-	  break;
+	    && read_check_zero_padding (&ctx, &off_start, &off_end))
+	  {
+	    wr_message_padding_0 (cat (mc_info, mc_header), &where,
+				  off_start, off_end);
+	    break;
+	  }
 
 	Dwarf_Off cu_size;
 	if (!read_size_extra (&ctx, size32, &cu_size,
@@ -1146,14 +1156,18 @@ check_debug_info::check_info_structural ()
 	  break;
 	}
 
-      if (cu_ctx.ptr != cu_ctx.end
-	  && !check_zero_padding (&cu_ctx, mc_info, &where))
+      if (cu_ctx.ptr != cu_ctx.end)
 	{
-	  // Garbage coordinates:
-	  uint64_t start
-	    = read_ctx_get_offset (&ctx) + read_ctx_get_offset (&cu_ctx);
-	  uint64_t end = read_ctx_get_offset (&ctx) + head.total_size;
-	  wr_message_padding_n0 (mc_info, &where, start, end);
+	  uint64_t off_start, off_end;
+	  if (read_check_zero_padding (&cu_ctx, &off_start, &off_end))
+	    wr_message_padding_0 (mc_info, &where, off_start, off_end);
+	  else
+	    {
+	      // Garbage coordinates:
+	      uint64_t start = read_ctx_get_offset (&ctx) + off_start;
+	      uint64_t end = read_ctx_get_offset (&ctx) + head.total_size;
+	      wr_message_padding_n0 (mc_info, &where, start, end);
+	    }
 	}
 
       int i = read_ctx_skip (&ctx, head.total_size);

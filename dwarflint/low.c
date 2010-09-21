@@ -135,26 +135,6 @@ cu_find_cu (struct cu *cu_chain, uint64_t offset)
 }
 
 bool
-check_zero_padding (struct read_ctx *ctx,
-		    enum message_category category,
-		    struct where const *wh)
-{
-  assert (ctx->ptr != ctx->end);
-  const unsigned char *save_ptr = ctx->ptr;
-  while (!read_ctx_eof (ctx))
-    if (*ctx->ptr++ != 0)
-      {
-	ctx->ptr = save_ptr;
-	return false;
-      }
-
-  wr_message_padding_0 (category, wh,
-			(uint64_t)(save_ptr - ctx->begin),
-			(uint64_t)(ctx->end - ctx->begin));
-  return true;
-}
-
-bool
 supported_version (unsigned version,
 		   size_t num_supported, struct where *where, ...)
 {
@@ -463,15 +443,19 @@ check_aranges_structural (struct elf_file *file,
 	    aranges_coverage_add (address, length);
 	}
 
-      if (sub_ctx.ptr != sub_ctx.end
-	  && !check_zero_padding (&sub_ctx, mc_aranges,
-				  &WHERE (where.section, NULL)))
+      if (sub_ctx.ptr != sub_ctx.end)
 	{
-	  wr_message_padding_n0 (mc_aranges | mc_error,
-				 &WHERE (where.section, NULL),
-				 read_ctx_get_offset (&sub_ctx),
-				 read_ctx_get_offset (&sub_ctx) + size);
-	  retval = false;
+	  uint64_t start, end;
+	  if (read_check_zero_padding (&sub_ctx, &start, &end))
+	    wr_message_padding_0 (mc_aranges, &WHERE (where.section, NULL),
+				  start, end);
+	  else
+	    {
+	      wr_message_padding_n0 (mc_aranges | mc_error,
+				     &WHERE (where.section, NULL),
+				     start, start + size);
+	      retval = false;
+	    }
 	}
 
     next:

@@ -28,6 +28,8 @@
 
 #include <stdbool.h>
 #include "../libelf/libelf.h"
+
+// xxx We don't really like this one
 #include "where.h"
 
 #ifdef __cplusplus
@@ -87,6 +89,14 @@ bool read_address_size (struct read_ctx *ctx,
 			int *address_sizep,
 			struct where const *where);
 
+/* See if what remains in the read context is just a zero padding.  If
+   yes, return true.  If it isn't, revert the read pointer back as if
+   nothing had happened and return false.  Furthermore, in any case,
+   if any of the ret pointers is non-NULL, it is filled, respectively,
+   with start and end offset of the zero padding run.  */
+bool read_check_zero_padding (struct read_ctx *ctx,
+			      uint64_t *ret_off_start,
+			      uint64_t *ret_off_end);
 #ifdef __cplusplus
 }
 #endif
