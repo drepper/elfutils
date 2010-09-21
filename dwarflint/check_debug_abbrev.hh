@@ -48,6 +48,8 @@ public:
   ~check_debug_abbrev ();
 };
 
-int check_sibling_form (dwarf_version_h ver, uint64_t form);
+// xxx When dwarf version objects are properly implemented, that's
+// where this should end up in.
+bool is_location_attrib (uint64_t name);
 
 #endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH

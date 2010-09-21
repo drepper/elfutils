@@ -29,11 +29,8 @@
 #include "../libdw/libdw.h"
 #include "../libebl/libebl.h"
 #include "coverage.h"
-#include "messages.h"
-#include "readctx.h"
 #include "addr-record.h"
 #include "reloc.h"
-#include "tables.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -114,11 +111,6 @@ extern "C"
     size_t alloc;
     bool allow_overlap;
   };
-
-  // xxx low-level check entry points, will go away
-
-  extern int check_sibling_form (dwarf_version_h ver, uint64_t form);
-  extern bool is_location_attrib (uint64_t name);
 
   struct abbrev_attrib
   {

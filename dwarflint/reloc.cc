@@ -29,6 +29,8 @@
 #include "reloc.h"
 #include "messages.h"
 #include "low.h"
+#include "readctx.h"
+
 #include <sstream>
 #include <libebl.h>
 #include <cassert>

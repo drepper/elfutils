@@ -1,6 +1,6 @@
 /* Dwarf version tables, C binding.
 
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -48,6 +48,8 @@ extern "C"
   bool dwver_form_allowed (dwarf_version_h ver, int attr, int form);
 
   bool dwver_form_allowed_in (dwarf_version_h ver, int attr,int form, int tag);
+
+  int dwver_check_sibling_form (dwarf_version_h ver, int form);
 
 #ifdef __cplusplus
 }

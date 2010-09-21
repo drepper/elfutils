@@ -425,6 +425,17 @@ dwver_form_allowed_in (dwarf_version const *ver, int attr, int form, int tag)
   return ver->form_allowed (attr, form, tag);
 }
 
+int
+dwver_check_sibling_form (dwarf_version_h ver, int form)
+{
+  if (!dwver_form_allowed (ver, DW_AT_sibling, form))
+    return -2;
+  else if (form == DW_FORM_ref_addr)
+    return -1;
+  else
+    return 0;
+}
+
 #if 0
 
 .at (DW_AT_abstract_origin)

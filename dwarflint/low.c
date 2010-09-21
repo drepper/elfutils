@@ -27,26 +27,9 @@
 # include <config.h>
 #endif
 
-#include <assert.h>
-#include <error.h>
-#include <gelf.h>
-#include <inttypes.h>
-#include <libintl.h>
-#include <locale.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <system.h>
-#include <unistd.h>
-
-#include "../libdw/dwarf.h"
-#include "../libebl/libebl.h"
-#include "../src/dwarfstrings.h"
 #include "low.h"
-#include "readctx.h"
-#include "tables.h"
+#include "messages.h"
+#include <stdarg.h>
 
 bool
 address_aligned (uint64_t addr, uint64_t align)
@@ -58,21 +41,6 @@ bool
 necessary_alignment (uint64_t start, uint64_t length, uint64_t align)
 {
   return address_aligned (start + length, align) && length < align;
-}
-
-bool
-is_location_attrib (uint64_t name)
-{
-  switch (name)
-    {
-    case DW_AT_location:
-    case DW_AT_frame_base:
-    case DW_AT_data_location:
-    case DW_AT_data_member_location:
-      return true;
-    default:
-      return false;
-    }
 }
 
 bool

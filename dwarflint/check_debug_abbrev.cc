@@ -33,6 +33,8 @@
 #include "tables.hh"
 #include "sections.hh"
 #include "checked_read.h"
+#include "messages.h"
+#include "tables.h"
 
 #include <dwarf.h>
 #include <sstream>
@@ -413,7 +415,7 @@ namespace
 		    << "excessive DW_AT_sibling attribute at childless abbrev."
 		    << std::endl;
 
-		switch (check_sibling_form (ver, attrib_form))
+		switch (dwver_check_sibling_form (ver, attrib_form))
 		  {
 		  case -1:
 		    wr_message (where, cat (mc_die_rel, mc_impact_2))
@@ -524,14 +526,17 @@ check_debug_abbrev::~check_debug_abbrev ()
     }
 }
 
-int
-check_sibling_form (dwarf_version_h ver, uint64_t form)
+bool
+is_location_attrib (uint64_t name)
 {
-  if (!dwver_form_allowed (ver, DW_AT_sibling, form))
-    return -2;
-  else if (form == DW_FORM_ref_addr)
-    return -1;
-  else
-    return 0;
+  switch (name)
+    {
+    case DW_AT_location:
+    case DW_AT_frame_base:
+    case DW_AT_data_location:
+    case DW_AT_data_member_location:
+      return true;
+    default:
+      return false;
+    }
 }
-

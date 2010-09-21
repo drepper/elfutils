@@ -28,6 +28,7 @@
 #include "sections.hh"
 #include "pri.hh"
 #include "checked_read.h"
+#include "messages.h"
 
 #include <dwarf.h>
 #include "../libdw/known-dwarf.h"

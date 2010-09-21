@@ -33,6 +33,7 @@
 #include "../libdw/dwarf.h"
 
 #include "messages.h"
+#include "tables.h"
 #include "pri.hh"
 #include "option.hh"
 #include "sections.hh"
@@ -638,7 +639,7 @@ namespace
 		form = value;
 
 		if (it->name == DW_AT_sibling)
-		  switch (check_sibling_form (ver, form))
+		  switch (dwver_check_sibling_form (ver, form))
 		    {
 		    case -1:
 		      wr_message (where, cat (mc_die_rel, mc_impact_2))
