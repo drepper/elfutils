@@ -434,21 +434,3 @@ read_rel (struct elf_file *file,
 	 sizeof (*sec->rel.rel), &compare_rel);
   return true;
 }
-
-void
-check_range_relocations (enum message_category cat,
-			 struct where *where,
-			 struct elf_file const *file,
-			 GElf_Sym *begin_symbol,
-			 GElf_Sym *end_symbol,
-			 const char *description)
-{
-  if (begin_symbol != NULL
-      && end_symbol != NULL
-      && begin_symbol->st_shndx != end_symbol->st_shndx)
-    wr_message (cat | mc_impact_2 | mc_reloc, where,
-		": %s relocated against different sections (%s and %s).\n",
-		description,
-		file->sec[begin_symbol->st_shndx].name,
-		file->sec[end_symbol->st_shndx].name);
-}

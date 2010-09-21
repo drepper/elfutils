@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_loc and .debug_range.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -66,12 +66,19 @@ struct hole_info
 
 /* DATA has to be a pointer to an instance of struct hole_info.
    DATA->data has to point at d_buf of section in question.  */
-extern bool found_hole (uint64_t start, uint64_t length, void *data);
+bool found_hole (uint64_t start, uint64_t length, void *data);
 
-extern bool check_location_expression (elf_file const &file,
-				       struct read_ctx *parent_ctx,
-				       struct cu *cu,
-				       uint64_t init_off,
-				       struct relocation_data *reloc,
-				       size_t length,
-				       struct where *wh);
+bool check_location_expression (elf_file const &file,
+				struct read_ctx *parent_ctx,
+				struct cu *cu,
+				uint64_t init_off,
+				struct relocation_data *reloc,
+				size_t length,
+				struct where *wh);
+
+void check_range_relocations (enum message_category cat,
+			      struct where *where,
+			      struct elf_file const *file,
+			      GElf_Sym *begin_symbol,
+			      GElf_Sym *end_symbol,
+			      const char *description);

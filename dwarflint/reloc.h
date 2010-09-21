@@ -31,9 +31,6 @@
 #include <libelf.h>
 #include <gelf.h>
 
-// xxx remove
-#include "messages.h"
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -95,13 +92,6 @@ extern "C"
 		     unsigned width, uint64_t *value,
 		     struct where const *where,
 		     enum section_id offset_into, GElf_Sym **symptr);
-
-  void check_range_relocations (enum message_category cat,
-				struct where *where,
-				struct elf_file const *file,
-				GElf_Sym *begin_symbol,
-				GElf_Sym *end_symbol,
-				const char *description);
 
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"
 
