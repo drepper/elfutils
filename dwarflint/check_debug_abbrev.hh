@@ -26,10 +26,48 @@
 #ifndef DWARFLINT_CHECK_DEBUG_ABBREV_HH
 #define DWARFLINT_CHECK_DEBUG_ABBREV_HH
 
-#include "low.h"
 #include "checks.hh"
 #include "sections.ii"
 #include "check_debug_info.ii"
+
+struct abbrev_attrib
+{
+  struct where where;
+  uint16_t name;
+  uint8_t form;
+};
+
+struct abbrev
+{
+  uint64_t code;
+  struct where where;
+
+  /* Attributes.  */
+  struct abbrev_attrib *attribs;
+  size_t size;
+  size_t alloc;
+
+  /* While ULEB128 can hold numbers > 32bit, these are not legal
+     values of many enum types.  So just use as large type as
+     necessary to cover valid values.  */
+  uint16_t tag;
+  bool has_children;
+
+  /* Whether some DIE uses this abbrev.  */
+  bool used;
+};
+
+struct abbrev_table
+{
+  struct abbrev_table *next;
+  struct abbrev *abbr;
+  uint64_t offset;
+  size_t size;
+  size_t alloc;
+  bool used;		/* There are CUs using this table.  */
+
+  abbrev *find_abbrev (uint64_t abbrev_code) const;
+};
 
 class check_debug_abbrev
   : public check<check_debug_abbrev>

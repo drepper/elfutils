@@ -77,18 +77,17 @@ check_debug_abbrev::descriptor ()
   return &cd;
 }
 
-struct abbrev *
-abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
-			  uint64_t abbrev_code)
+abbrev *
+abbrev_table::find_abbrev (uint64_t abbrev_code) const
 {
   size_t a = 0;
-  size_t b = abbrevs->size;
+  size_t b = size;
   struct abbrev *ab = NULL;
 
   while (a < b)
     {
       size_t i = (a + b) / 2;
-      ab = abbrevs->abbr + i;
+      ab = abbr + i;
 
       if (ab->code > abbrev_code)
 	b = i;
@@ -278,7 +277,7 @@ namespace
 	    assert (ver != NULL);
 	  }
 
-	struct abbrev *original = abbrev_table_find_abbrev (section, abbr_code);
+	struct abbrev *original = section->find_abbrev (abbr_code);
 	if (unlikely (original != NULL))
 	  wr_error (where)
 	    << "duplicate abbrev code " << abbr_code

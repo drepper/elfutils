@@ -597,7 +597,7 @@ namespace
 
 	/* Find the abbrev matching the code.  */
 	prev_abbrev = abbrev;
-	abbrev = abbrev_table_find_abbrev (abbrevs, abbr_code);
+	abbrev = abbrevs->find_abbrev (abbr_code);
 	if (abbrev == NULL)
 	  {
 	    wr_error (where)

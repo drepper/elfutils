@@ -39,8 +39,6 @@ extern "C"
 # include <stdbool.h>
 #endif
 
-  struct hl_ctx;
-
   struct sec
   {
     GElf_Shdr shdr;
@@ -71,22 +69,6 @@ extern "C"
 			      different from the host.  */
   };
 
-  /* Check that .debug_aranges and .debug_ranges match.  */
-  extern bool elf_file_init (struct elf_file *file, Elf *elf);
-
-  struct abbrev_table
-  {
-    struct abbrev_table *next;
-    struct abbrev *abbr;
-    uint64_t offset;
-    size_t size;
-    size_t alloc;
-    bool used;		/* There are CUs using this table.  */
-  };
-
-  // xxx some of that will go away
-  extern struct abbrev *abbrev_table_find_abbrev (struct abbrev_table const *abbrevs,
-						  uint64_t abbrev_code);
   extern bool address_aligned (uint64_t addr, uint64_t align);
   extern bool necessary_alignment (uint64_t start, uint64_t length,
 				   uint64_t align);
@@ -110,33 +92,6 @@ extern "C"
     size_t size;
     size_t alloc;
     bool allow_overlap;
-  };
-
-  struct abbrev_attrib
-  {
-    struct where where;
-    uint16_t name;
-    uint8_t form;
-  };
-
-  struct abbrev
-  {
-    uint64_t code;
-    struct where where;
-
-    /* Attributes.  */
-    struct abbrev_attrib *attribs;
-    size_t size;
-    size_t alloc;
-
-    /* While ULEB128 can hold numbers > 32bit, these are not legal
-       values of many enum types.  So just use as large type as
-       necessary to cover valid values.  */
-    uint16_t tag;
-    bool has_children;
-
-    /* Whether some DIE uses this abbrev.  */
-    bool used;
   };
 
   struct cu_head
