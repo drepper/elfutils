@@ -122,13 +122,6 @@ extern "C"
 
   // xxx low-level check entry points, will go away
   struct cu;
-  extern bool check_aranges_structural (struct elf_file *file,
-					struct sec *sec,
-					struct cu *cu_chain,
-					struct coverage *coverage);
-  extern bool check_line_structural (struct elf_file *file,
-				     struct sec *sec,
-				     struct addr_record *line_tables);
   extern void check_range_relocations (enum message_category cat,
 				       struct where *where,
 				       struct elf_file const *file,
