@@ -32,9 +32,9 @@
 #include "pri.hh"
 #include "tables.hh"
 #include "sections.hh"
-#include "checked_read.h"
-#include "messages.h"
-#include "tables.h"
+#include "checked_read.hh"
+#include "messages.hh"
+#include "misc.h"
 
 #include <dwarf.h>
 #include <sstream>
@@ -146,13 +146,13 @@ namespace
     struct where where = WHERE (sec_abbrev, NULL);
 
     // Tolerate failure here.
-    dwarf_version_h ver = NULL;
+    dwarf_version const *ver = NULL;
     if (cu_headers == NULL)
       {
 	wr_error (where)
 	  << "couldn't load CU headers; assuming CUs are of latest DWARF flavor."
 	  << std::endl;
-	ver = get_latest_dwarf_version ();
+	ver = dwarf_version::get_latest ();
       }
     where.addr1 = 0;
 
@@ -246,7 +246,8 @@ namespace
 		  if (it->abbrev_offset == abbr_off)
 		    {
 		      section->used = true;
-		      dwarf_version_h nver = get_dwarf_version (it->version);
+		      dwarf_version const *nver
+			= dwarf_version::get (it->version);
 		      if (ver == NULL)
 			ver = nver;
 		      else if (nver != ver)
@@ -271,7 +272,7 @@ namespace
 		    // table without knowing what version to use.
 		    wr_error (where)
 		      << "abbreviation table is never used." << std::endl;
-		    ver = get_latest_dwarf_version ();
+		    ver = dwarf_version::get_latest ();
 		  }
 	      }
 	    assert (ver != NULL);
@@ -414,7 +415,7 @@ namespace
 		    << "excessive DW_AT_sibling attribute at childless abbrev."
 		    << std::endl;
 
-		switch (dwver_check_sibling_form (ver, attrib_form))
+		switch (ver->check_sibling_form (attrib_form))
 		  {
 		  case -1:
 		    wr_message (where, cat (mc_die_rel, mc_impact_2))
@@ -432,7 +433,7 @@ namespace
 	    /* Similar for DW_AT_location and friends.  */
 	    else if (is_location_attrib (attrib_name))
 	      {
-		if (!dwver_form_allowed (ver, attrib_name, attrib_form))
+		if (!ver->form_allowed (attrib_name, attrib_form))
 		  complain_invalid_form (where, attrib_name, attrib_form,
 					 "location attribute");
 	      }

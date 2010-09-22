@@ -31,72 +31,61 @@
 #include <libelf.h>
 #include <gelf.h>
 
-#ifdef __cplusplus
-extern "C"
+struct relocation
 {
-#else
-# include <stdbool.h>
-#endif
+  uint64_t offset;
+  uint64_t addend;
+  int symndx;
+  int type;
+  bool invalid;	/* Whether this one relocation should be
+		   ignored.  Necessary so that we don't report
+		   invalid & missing relocation twice.  */
+};
 
-  struct relocation
-  {
-    uint64_t offset;
-    uint64_t addend;
-    int symndx;
-    int type;
-    bool invalid;	/* Whether this one relocation should be
-			   ignored.  Necessary so that we don't report
-			   invalid & missing relocation twice.  */
-  };
+struct relocation_data
+{
+  Elf_Data *symdata;       /* Symbol table associated with this
+			      relocation section.  */
+  size_t type;             /* SHT_REL or SHT_RELA.  */
 
-  struct relocation_data
-  {
-    Elf_Data *symdata;		/* Symbol table associated with this
-				   relocation section.  */
-    size_t type;		/* SHT_REL or SHT_RELA.  */
+  struct relocation *rel;  /* Array of relocations.  May be NULL if
+			      there are no associated relocation
+			      data.  */
+  size_t size;
+  size_t alloc;
+  size_t index;            /* Current index. */
+};
 
-    struct relocation *rel;	/* Array of relocations.  May be NULL
-				   if there are no associated
-				   relocation data.  */
-    size_t size;
-    size_t alloc;
-    size_t index;		/* Current index. */
-  };
-
-  enum skip_type
+enum skip_type
   {
     skip_unref = 0,
     skip_mismatched = 1,
     skip_ok,
   };
 
-  bool read_rel (struct elf_file *file, struct sec *sec,
-		 Elf_Data *reldata, bool elf_64);
+bool read_rel (struct elf_file *file, struct sec *sec,
+	       Elf_Data *reldata, bool elf_64);
 
-  struct relocation *relocation_next (struct relocation_data *reloc,
-				      uint64_t offset,
-				      struct where const *where,
-				      enum skip_type st);
+struct relocation *relocation_next (struct relocation_data *reloc,
+				    uint64_t offset,
+				    struct where const *where,
+				    enum skip_type st);
 
-  void relocation_reset (struct relocation_data *reloc);
+void relocation_reset (struct relocation_data *reloc);
 
-  void relocation_skip (struct relocation_data *reloc, uint64_t offset,
-			struct where const *where, enum skip_type st);
+void relocation_skip (struct relocation_data *reloc, uint64_t offset,
+		      struct where const *where, enum skip_type st);
 
-  void relocation_skip_rest (struct relocation_data *reloc,
-			     enum section_id id);
+void relocation_skip_rest (struct relocation_data *reloc,
+			   enum section_id id);
 
-  void relocate_one (struct elf_file const *file,
-		     struct relocation_data *reloc,
-		     struct relocation *rel,
-		     unsigned width, uint64_t *value,
-		     struct where const *where,
-		     enum section_id offset_into, GElf_Sym **symptr);
+void relocate_one (struct elf_file const *file,
+		   struct relocation_data *reloc,
+		   struct relocation *rel,
+		   unsigned width, uint64_t *value,
+		   struct where const *where,
+		   enum section_id offset_into, GElf_Sym **symptr);
 
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif//DWARFLINT_RELOC_H

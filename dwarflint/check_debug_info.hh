@@ -27,7 +27,7 @@
 #define DWARFLINT_CHECK_DEBUG_INFO_HH
 
 #include <libdw.h>
-#include "addr-record.h"
+#include "addr-record.hh"
 #include "elf_file.ii"
 #include "coverage.hh"
 #include "checks.hh"

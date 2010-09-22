@@ -24,7 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "highlevel_check.hh"
-#include "messages.h"
+#include "messages.hh"
 
 #include "sections.hh"
 #include "lowlevel_checks.hh"

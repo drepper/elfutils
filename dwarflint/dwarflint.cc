@@ -24,7 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "dwarflint.hh"
-#include "messages.h"
+#include "messages.hh"
 #include "checks.hh"
 #include "main.hh"
 

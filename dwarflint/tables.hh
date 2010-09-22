@@ -1,6 +1,6 @@
 /* Dwarf version tables.
 
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -70,6 +70,14 @@ public:
   {
     return find_form (allowed_forms (at, tag), f);
   }
+
+  int check_sibling_form (int form) const;
+
+  static dwarf_version const *get (unsigned version)
+    __attribute__ ((pure));
+
+  static dwarf_version const *get_latest ()
+    __attribute__ ((pure));
 };
 
 #endif//DWARFLINT_TABLES_HH

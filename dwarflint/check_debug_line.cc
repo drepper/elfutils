@@ -27,8 +27,8 @@
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "pri.hh"
-#include "checked_read.h"
-#include "messages.h"
+#include "checked_read.hh"
+#include "messages.hh"
 
 #include <dwarf.h>
 #include "../libdw/known-dwarf.h"

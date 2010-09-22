@@ -28,7 +28,6 @@
 // a version in its own.
 
 #include "tables.hh"
-#include "tables.h"
 #include "../libdw/dwarf.h"
 
 #include <map>
@@ -389,8 +388,8 @@ namespace
   std_dwarf dwarf4 (dwarf_4_at_table, dwarf_4_form_table, &dwarf3);
 }
 
-dwarf_version_h
-get_dwarf_version (unsigned version)
+dwarf_version const *
+dwarf_version::get (unsigned version)
 {
   switch (version)
     {
@@ -401,34 +400,16 @@ get_dwarf_version (unsigned version)
     };
 }
 
-dwarf_version_h
-get_latest_dwarf_version ()
+dwarf_version const *
+dwarf_version::get_latest ()
 {
-  return &dwarf4;
-}
-
-bool
-dwver_form_valid (dwarf_version const *ver, int form)
-{
-  return ver->form_allowed (form);
-}
-
-bool
-dwver_form_allowed (dwarf_version const *ver, int attr, int form)
-{
-  return ver->form_allowed (attr, form);
-}
-
-bool
-dwver_form_allowed_in (dwarf_version const *ver, int attr, int form, int tag)
-{
-  return ver->form_allowed (attr, form, tag);
+  return get (4);
 }
 
 int
-dwver_check_sibling_form (dwarf_version_h ver, int form)
+dwarf_version::check_sibling_form (int form) const
 {
-  if (!dwver_form_allowed (ver, DW_AT_sibling, form))
+  if (!form_allowed (DW_AT_sibling, form))
     return -2;
   else if (form == DW_FORM_ref_addr)
     return -1;

@@ -1,5 +1,4 @@
-/* Dwarf version tables, C binding.
-
+/* Pedantic checking of DWARF files
    Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -24,35 +23,48 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_TABLES_H
-#define DWARFLINT_TABLES_H
+#ifndef DWARFLINT_SECTION_ID_HH
+#define DWARFLINT_SECTION_ID_HH
 
-#ifdef __cplusplus
-extern "C"
-{
-#else
-# include <stdbool.h>
-#endif
+#define DEBUGINFO_SECTIONS \
+  SEC (info)		   \
+  SEC (abbrev)		   \
+  SEC (aranges)		   \
+  SEC (pubnames)	   \
+  SEC (pubtypes)	   \
+  SEC (str)		   \
+  SEC (line)		   \
+  SEC (loc)		   \
+  SEC (mac)		   \
+  SEC (ranges)
 
-  struct dwarf_version;
-  typedef struct dwarf_version const *dwarf_version_h;
+enum section_id
+  {
+    sec_invalid = 0,
 
-  dwarf_version_h get_dwarf_version (unsigned version)
-    __attribute__ ((pure));
+    /* Debuginfo sections:  */
+#define SEC(n) sec_##n,
+    DEBUGINFO_SECTIONS
+    count_debuginfo_sections,
+#undef SEC
 
-  dwarf_version_h get_latest_dwarf_version ()
-    __attribute__ ((pure));
+    /* Non-debuginfo sections:  */
+    sec_rel = count_debuginfo_sections,
+    sec_rela,
 
-  bool dwver_form_valid (dwarf_version_h ver, int form);
+    // XXX the following should really be split out to different enum
+    /* Non-sections:  */
+    sec_locexpr,	/* Not a section, but a portion of file that
+			   contains a location expression.  */
+    rel_value,		/* For relocations, this denotes that the
+			   relocation is applied to taget value, not a
+			   section offset.  */
+    rel_address,	/* Same as above, but for addresses.  */
+    rel_exec,		/* Some as above, but we expect EXEC bit.  */
+  };
 
-  bool dwver_form_allowed (dwarf_version_h ver, int attr, int form);
+// section_name[0] is for sec_invalid.  The last index is for
+// count_debuginfo_sections and is NULL.
+extern char const *section_name[];
 
-  bool dwver_form_allowed_in (dwarf_version_h ver, int attr,int form, int tag);
-
-  int dwver_check_sibling_form (dwarf_version_h ver, int form);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif//DWARFLINT_TABLES_H
+#endif//DWARFLINT_SECTION_ID_HH

@@ -32,7 +32,7 @@
 #include "../libelf/gelf.h"
 
 #include "sections.hh"
-#include "messages.h"
+#include "messages.hh"
 #include "pri.hh"
 #include "misc.h"
 

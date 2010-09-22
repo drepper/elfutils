@@ -38,7 +38,7 @@
 #include "check_debug_info.hh"
 #include "check_debug_loc_range.hh"
 #include "cu_coverage.hh"
-#include "checked_read.h"
+#include "checked_read.hh"
 
 checkdescriptor const *
 check_debug_aranges::descriptor ()

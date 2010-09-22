@@ -32,16 +32,17 @@
 #include <algorithm>
 #include "../libdw/dwarf.h"
 
-#include "messages.h"
-#include "tables.h"
+#include "messages.hh"
+#include "tables.hh"
 #include "pri.hh"
 #include "option.hh"
 #include "sections.hh"
-#include "checked_read.h"
+#include "checked_read.hh"
 #include "check_debug_loc_range.hh"
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"
 #include "check_debug_line.hh"
+#include "misc.h"
 
 checkdescriptor const *
 read_cu_headers::descriptor ()
@@ -238,7 +239,7 @@ namespace
 	    wr_error (head.where) << "can't read version." << std::endl;
 	    throw check_base::failed ();
 	  }
-	if (get_dwarf_version (version) == NULL)
+	if (dwarf_version::get (version) == NULL)
 	  {
 	    wr_error (head.where) << "unsupported CU version "
 				  << version << '.' << std::endl;
@@ -501,7 +502,7 @@ namespace
     +1 in case some dies were actually loaded
   */
   int
-  read_die_chain (dwarf_version_h ver,
+  read_die_chain (dwarf_version const *ver,
 		  elf_file const &file,
 		  struct read_ctx *ctx,
 		  struct cu *cu,
@@ -629,7 +630,7 @@ namespace
 					   "indirect attribute form"))
 		  return -1;
 
-		if (!dwver_form_valid (ver, form))
+		if (!ver->form_allowed (form))
 		  {
 		    wr_error (where)
 		      << "invalid indirect form " << pri::hex (value)
@@ -639,7 +640,7 @@ namespace
 		form = value;
 
 		if (it->name == DW_AT_sibling)
-		  switch (dwver_check_sibling_form (ver, form))
+		  switch (ver->check_sibling_form (form))
 		    {
 		    case -1:
 		      wr_message (where, cat (mc_die_rel, mc_impact_2))
@@ -1067,7 +1068,7 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
     fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->head->where, NULL));
   bool retval = true;
 
-  dwarf_version_h ver = get_dwarf_version (cu->head->version);
+  dwarf_version const *ver = dwarf_version::get (cu->head->version);
   assert (ver != NULL);
 
   /* Look up Abbrev table for this CU.  */

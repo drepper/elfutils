@@ -23,7 +23,7 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "addr-record.h"
+#include "addr-record.hh"
 #include "misc.h"
 
 size_t

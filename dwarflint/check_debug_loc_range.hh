@@ -26,7 +26,7 @@
 #include "checks.hh"
 #include "sections.ii"
 #include "check_debug_info.ii"
-#include "messages.h"
+#include "messages.hh"
 #include "coverage.hh"
 
 struct section_coverage

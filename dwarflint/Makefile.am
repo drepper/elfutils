@@ -44,17 +44,17 @@ dwarflint_SOURCES = \
 	dwarflint.cc dwarflint.hh dwarflint.ii misc.h \
 	low.cc low.h elf_file.ii \
 	expected-at.cc expected.hh \
-	coverage.cc coverage.h \
+	coverage.cc coverage.hh \
 	readctx.c readctx.h \
-	checked_read.cc checked_read.h \
+	checked_read.cc checked_read.hh \
 	pri.cc pri.hh \
-	messages.cc messages.h \
-	section_id.cc section_id.h \
+	messages.cc messages.hh \
+	section_id.cc section_id.hh \
 	where.c where.h \
 	option.cc option.hh \
-	addr-record.cc addr-record.h \
-	reloc.cc reloc.h \
-	tables.cc tables.hh tables.h \
+	addr-record.cc addr-record.hh \
+	reloc.cc reloc.hh \
+	tables.cc tables.hh \
 	all-dies-it.hh \
 	checks.cc checks.hh checks.ii \
 	sections.cc sections.hh sections.ii \

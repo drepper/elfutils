@@ -41,9 +41,10 @@
 #include "check_debug_loc_range.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
-#include "checked_read.h"
+#include "checked_read.hh"
 #include "../src/dwarf-opcodes.h"
 #include "pri.hh"
+#include "misc.h"
 
 bool do_range_coverage = false; // currently no option
 

@@ -26,7 +26,7 @@
 #include "highlevel_check.hh"
 #include "all-dies-it.hh"
 #include "option.hh"
-#include "messages.h"
+#include "messages.hh"
 #include "pri.hh"
 
 #include <sstream>

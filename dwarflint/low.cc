@@ -28,7 +28,7 @@
 #endif
 
 #include "low.h"
-#include "messages.h"
+#include "messages.hh"
 #include <stdarg.h>
 
 bool

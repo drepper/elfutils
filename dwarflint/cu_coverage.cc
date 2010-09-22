@@ -26,6 +26,7 @@
 #include "cu_coverage.hh"
 #include "check_debug_info.hh"
 #include "check_debug_loc_range.hh"
+#include <cstring>
 
 checkdescriptor const *
 cu_coverage::descriptor ()
@@ -41,7 +42,7 @@ cu_coverage::cu_coverage (checkstack &stack, dwarflint &lint)
   : _m_info (lint.check (stack, _m_info))
   , _m_ranges (lint.check_if (_m_info->need_ranges (), stack, _m_ranges))
 {
-  memset (&cov, 0, sizeof (cov));
+  std::memset (&cov, 0, sizeof (cov));
   coverage_add_all (&cov, &_m_info->cov ());
   if (_m_ranges)
     coverage_add_all (&cov, &_m_ranges->cov ());

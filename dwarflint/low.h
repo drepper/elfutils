@@ -28,7 +28,7 @@
 
 #include "../libdw/libdw.h"
 #include "../libebl/libebl.h"
-#include "reloc.h"
+#include "reloc.hh"
 
 #ifdef __cplusplus
 extern "C"

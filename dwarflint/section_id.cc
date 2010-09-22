@@ -23,7 +23,7 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "section_id.h"
+#include "section_id.hh"
 
 #include <stdlib.h>
 

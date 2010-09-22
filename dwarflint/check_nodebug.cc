@@ -24,7 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "checks.hh"
-#include "messages.h"
+#include "messages.hh"
 #include "sections.hh"
 #include "option.hh"
 

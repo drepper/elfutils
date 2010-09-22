@@ -27,8 +27,8 @@
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "pri.hh"
-#include "checked_read.h"
-#include "messages.h"
+#include "checked_read.hh"
+#include "messages.hh"
 
 template<section_id sec_id>
 check_debug_pub<sec_id>::check_debug_pub (checkstack &stack, dwarflint &lint)

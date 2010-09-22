@@ -33,7 +33,7 @@
 #include "../src/dwarfstrings.h"
 #include "../libdw/c++/dwarf-knowledge.cc"
 #include "pri.hh"
-#include "messages.h"
+#include "messages.hh"
 
 using elfutils::dwarf;
 

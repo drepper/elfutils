@@ -23,18 +23,12 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_MESSAGES_H
-#define DWARFLINT_MESSAGES_H
+#ifndef DWARFLINT_MESSAGES_HH
+#define DWARFLINT_MESSAGES_HH
 
 #include "where.h"
 #include "libdw.h"
-
-#ifdef __cplusplus
-# define IF_CPLUSPLUS(X) X
-# include <string>
-extern "C"
-{
-#endif
+#include <string>
 
 #define MESSAGE_CATEGORIES						\
   /* Severity: */							\
@@ -69,98 +63,90 @@ extern "C"
   MC (mac,       22) /* messages related to .debug_mac */ \
   MC (other,     31) /* messages unrelated to any of the above */
 
-  enum message_category
+enum message_category
   {
     mc_none      = 0,
 
-#define MC(CAT, ID)\
+#define MC(CAT, ID)				\
     mc_##CAT = 1u << ID,
     MESSAGE_CATEGORIES
 #undef MC
   };
 
-  struct message_term
+struct message_term
+{
+  /* Given a term like A && !B && C && !D, we decompose it thus: */
+  unsigned long positive; /* non-zero bits for plain predicates */
+  unsigned long negative; /* non-zero bits for negated predicates */
+
+  message_term (unsigned long pos, unsigned long neg)
+    : positive (pos), negative (neg)
+  {}
+  std::string str () const;
+};
+
+struct message_criteria
+{
+  struct message_term *terms;
+  size_t size;
+  size_t alloc;
+
+  message_criteria ()
+    : terms (NULL), size (0), alloc (0)
+  {}
+
+  ~message_criteria ()
   {
-    /* Given a term like A && !B && C && !D, we decompose it thus: */
-    unsigned long positive; /* non-zero bits for plain predicates */
-    unsigned long negative; /* non-zero bits for negated predicates */
+    free (terms);
+  }
 
-#ifdef __cplusplus
-    message_term (unsigned long pos, unsigned long neg)
-      : positive (pos), negative (neg)
-    {}
-    std::string str () const;
-#endif
-  };
+  void operator |= (message_term const &term);
+  void operator &= (message_term const &term);
+  std::string str () const;
+};
 
-  struct message_criteria
-  {
-    struct message_term *terms;
-    size_t size;
-    size_t alloc;
+message_criteria operator ! (message_term const &);
 
-#ifdef __cplusplus
-    message_criteria ()
-      : terms (NULL), size (0), alloc (0)
-    {}
-    ~message_criteria ()
-    {
-      free (terms);
-    }
+extern void wr_error (const struct where *wh, const char *format, ...)
+  __attribute__ ((format (printf, 2, 3)));
 
-    void operator |= (message_term const &term);
-    void operator &= (message_term const &term);
-    std::string str () const;
-#endif
-  };
+extern void wr_warning (const struct where *wh, const char *format, ...)
+  __attribute__ ((format (printf, 2, 3)));
 
-#ifdef __cplusplus
-  message_criteria operator ! (message_term const &);
-#endif
+extern void wr_message (unsigned long category, const struct where *wh,
+			const char *format, ...)
+  __attribute__ ((format (printf, 3, 4)));
 
-  extern void wr_error (const struct where *wh, const char *format, ...)
-    __attribute__ ((format (printf, 2, 3)));
+extern void wr_format_padding_message (unsigned long category,
+				       struct where const *wh,
+				       uint64_t start, uint64_t end,
+				       char const *kind);
 
-  extern void wr_warning (const struct where *wh, const char *format, ...)
-    __attribute__ ((format (printf, 2, 3)));
+extern void wr_format_leb128_message (struct where const *where,
+				      const char *what,
+				      const char *purpose,
+				      const unsigned char *begin,
+				      const unsigned char *end);
 
-  extern void wr_message (unsigned long category, const struct where *wh,
-			  const char *format, ...)
-    __attribute__ ((format (printf, 3, 4)));
+extern void wr_message_padding_0 (unsigned long category,
+				  struct where const *wh,
+				  uint64_t start, uint64_t end);
 
-  extern void wr_format_padding_message (unsigned long category,
-					 struct where const *wh,
-					 uint64_t start, uint64_t end,
-					 char const *kind);
+extern void wr_message_padding_n0 (unsigned long category,
+				   struct where const *wh,
+				   uint64_t start, uint64_t end);
 
-  extern void wr_format_leb128_message (struct where const *where,
-					const char *what,
-					const char *purpose,
-					const unsigned char *begin,
-					const unsigned char *end);
-
-  extern void wr_message_padding_0 (unsigned long category,
-				    struct where const *wh,
-				    uint64_t start, uint64_t end);
-
-  extern void wr_message_padding_n0 (unsigned long category,
-				     struct where const *wh,
-				     uint64_t start, uint64_t end);
-
-  extern bool message_accept (struct message_criteria const *cri,
-			      unsigned long cat);
+extern bool message_accept (struct message_criteria const *cri,
+			    unsigned long cat);
 
 
-  extern unsigned error_count;
+extern unsigned error_count;
 
-  /* Messages that are accepted (and made into warning).  */
-  extern struct message_criteria warning_criteria;
+/* Messages that are accepted (and made into warning).  */
+extern struct message_criteria warning_criteria;
 
-  /* Accepted (warning) messages, that are turned into errors.  */
-  extern struct message_criteria error_criteria;
-
-#ifdef __cplusplus
-}
+/* Accepted (warning) messages, that are turned into errors.  */
+extern struct message_criteria error_criteria;
 
 inline message_category
 cat (message_category c1,
@@ -177,6 +163,5 @@ std::ostream &wr_error (where const &wh);
 std::ostream &wr_error ();
 std::ostream &wr_message (where const &wh, message_category cat);
 std::ostream &wr_message (message_category cat);
-#endif
 
-#endif//DWARFLINT_MESSAGES_H
+#endif//DWARFLINT_MESSAGES_HH

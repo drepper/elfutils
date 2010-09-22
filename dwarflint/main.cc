@@ -38,7 +38,7 @@
 #include "readctx.h"
 #include "checks.hh"
 #include "option.hh"
-#include "messages.h"
+#include "messages.hh"
 
 /* Messages that are accepted (and made into warning).  */
 struct message_criteria warning_criteria;

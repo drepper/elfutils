@@ -27,8 +27,8 @@
 #define __STDC_FORMAT_MACROS
 
 #include "low.h"
-#include "reloc.h"
-#include "messages.h"
+#include "reloc.hh"
+#include "messages.hh"
 #include "misc.h"
 #include "readctx.h"
 

@@ -26,7 +26,7 @@
 #ifndef DWARFLINT_WHERE_H
 #define DWARFLINT_WHERE_H
 
-#include "section_id.h"
+#include "section_id.hh"
 
 #include <stdint.h>
 #include <stdlib.h>

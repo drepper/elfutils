@@ -31,8 +31,8 @@
 #endif
 
 #include <dwarf.h>
-#include "checked_read.h"
-#include "messages.h"
+#include "checked_read.hh"
+#include "messages.hh"
 
 bool
 read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
