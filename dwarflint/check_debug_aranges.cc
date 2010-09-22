@@ -32,13 +32,15 @@
 
 #include <inttypes.h>
 
-#include "low.h"
+#include "elf_file.hh"
 #include "sections.hh"
 #include "check_debug_aranges.hh"
 #include "check_debug_info.hh"
 #include "check_debug_loc_range.hh"
 #include "cu_coverage.hh"
 #include "checked_read.hh"
+#include "misc.hh"
+#include "pri.hh"
 
 checkdescriptor const *
 check_debug_aranges::descriptor ()

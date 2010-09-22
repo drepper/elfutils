@@ -29,8 +29,8 @@
 #endif
 
 #include "coverage.hh"
+#include "misc.hh"
 #include "pri.hh"
-#include "misc.h"
 
 #include <stdbool.h>
 #include <assert.h>

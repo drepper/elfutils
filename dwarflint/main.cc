@@ -33,7 +33,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "low.h"
 #include "dwarflint.hh"
 #include "readctx.h"
 #include "checks.hh"

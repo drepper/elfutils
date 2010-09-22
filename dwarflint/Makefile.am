@@ -38,28 +38,29 @@ no_mudflap.os = -fmudflap
 bin_PROGRAMS = dwarflint
 
 dwarflint_SOURCES = \
-	main.cc \
-	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
-	checkrule.cc checkrule.hh \
-	dwarflint.cc dwarflint.hh dwarflint.ii misc.h \
-	low.cc low.h elf_file.ii \
-	expected-at.cc expected.hh \
-	coverage.cc coverage.hh \
-	readctx.c readctx.h \
-	checked_read.cc checked_read.hh \
-	pri.cc pri.hh \
-	messages.cc messages.hh \
-	section_id.cc section_id.hh \
-	where.c where.h \
-	option.cc option.hh \
 	addr-record.cc addr-record.hh \
-	reloc.cc reloc.hh \
-	tables.cc tables.hh \
 	all-dies-it.hh \
+	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
+	checked_read.cc checked_read.hh \
+	checkrule.cc checkrule.hh \
 	checks.cc checks.hh checks.ii \
-	sections.cc sections.hh sections.ii \
-	highlevel_check.cc highlevel_check.hh \
+	coverage.cc coverage.hh \
 	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
+	dwarflint.cc dwarflint.hh dwarflint.ii \
+	elf_file.hh elf_file.ii \
+	expected-at.cc expected.hh \
+	highlevel_check.cc highlevel_check.hh \
+	main.cc \
+	messages.cc messages.hh \
+	misc.cc misc.hh \
+	option.cc option.hh \
+	pri.cc pri.hh \
+	readctx.c readctx.h \
+	reloc.cc reloc.hh \
+	section_id.cc section_id.hh \
+	sections.cc sections.hh sections.ii \
+	tables.cc tables.hh \
+	where.c where.h \
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \
 	check_debug_info.cc check_debug_info.hh check_debug_info.ii \
 	check_debug_line.cc check_debug_line.hh check_debug_line.ii \

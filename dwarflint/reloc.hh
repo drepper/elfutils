@@ -66,10 +66,10 @@ enum skip_type
 bool read_rel (struct elf_file *file, struct sec *sec,
 	       Elf_Data *reldata, bool elf_64);
 
-struct relocation *relocation_next (struct relocation_data *reloc,
-				    uint64_t offset,
-				    struct where const *where,
-				    enum skip_type st);
+relocation *relocation_next (struct relocation_data *reloc,
+			     uint64_t offset,
+			     struct where const *where,
+			     enum skip_type st);
 
 void relocation_reset (struct relocation_data *reloc);
 

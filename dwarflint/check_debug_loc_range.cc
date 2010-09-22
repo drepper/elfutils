@@ -37,14 +37,14 @@
 #include <algorithm>
 #include "../libdw/dwarf.h"
 
-#include "low.h"
+#include "elf_file.hh"
 #include "check_debug_loc_range.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "checked_read.hh"
 #include "../src/dwarf-opcodes.h"
 #include "pri.hh"
-#include "misc.h"
+#include "misc.hh"
 
 bool do_range_coverage = false; // currently no option
 

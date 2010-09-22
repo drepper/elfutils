@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_aranges.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -26,7 +26,6 @@
 #ifndef DWARFLINT_CHECK_DEBUG_ARANGES_HH
 #define DWARFLINT_CHECK_DEBUG_ARANGES_HH
 
-#include "low.h"
 #include "checks.hh"
 #include "sections.ii"
 #include "check_debug_info.ii"

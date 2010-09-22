@@ -34,7 +34,7 @@
 #include "sections.hh"
 #include "checked_read.hh"
 #include "messages.hh"
-#include "misc.h"
+#include "misc.hh"
 
 #include <dwarf.h>
 #include <sstream>

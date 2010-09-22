@@ -24,7 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "messages.hh"
-#include "misc.h"
+#include "misc.hh"
 #include "coverage.hh"
 
 #include <vector>

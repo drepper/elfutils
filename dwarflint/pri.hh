@@ -29,6 +29,8 @@
 #include <libdw.h>
 #include <string>
 
+#define PRI_NOT_ENOUGH ": not enough data for %s.\n"
+
 namespace pri
 {
   class pribase

@@ -42,7 +42,7 @@
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"
 #include "check_debug_line.hh"
-#include "misc.h"
+#include "misc.hh"
 
 checkdescriptor const *
 read_cu_headers::descriptor ()

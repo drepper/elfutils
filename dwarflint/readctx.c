@@ -25,7 +25,6 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "readctx.h"
-#include "low.h"
 #include "../libdw/dwarf.h"
 
 #include <stdlib.h>

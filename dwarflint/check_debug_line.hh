@@ -29,8 +29,9 @@
 #include "check_debug_info.ii"
 #include "sections.ii"
 #include "checks.hh"
+
+#include "../libdw/libdw.h"
 #include <set>
-#include "low.h"
 
 class check_debug_line
   : public check<check_debug_line>

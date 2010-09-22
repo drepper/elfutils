@@ -23,59 +23,41 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_LOW_H
-#define DWARFLINT_LOW_H
+#ifndef DWARFLINT_ELF_FILE_HH
+#define DWARFLINT_ELF_FILE_HH
 
 #include "../libdw/libdw.h"
 #include "../libebl/libebl.h"
 #include "reloc.hh"
 
-#ifdef __cplusplus
-extern "C"
+struct sec
 {
-#else
-# include <stdbool.h>
-#endif
+  GElf_Shdr shdr;
+  struct relocation_data rel;
+  Elf_Scn *scn;
+  const char *name;
 
-  struct sec
-  {
-    GElf_Shdr shdr;
-    struct relocation_data rel;
-    Elf_Scn *scn;
-    const char *name;
-
-    Elf_Data *data;	/* May be NULL if data in this section are
+  Elf_Data *data;	/* May be NULL if data in this section are
 			   missing or not substantial.  */
-    enum section_id id;
-  };
+  enum section_id id;
+};
 
-  struct elf_file
-  {
-    GElf_Ehdr ehdr;	/* Header of underlying Elf.  */
-    Elf *elf;
-    Ebl *ebl;
+struct elf_file
+{
+  GElf_Ehdr ehdr;	/* Header of underlying Elf.  */
+  Elf *elf;
+  Ebl *ebl;
 
-    struct sec *sec;	/* Array of sections.  */
-    size_t size;
-    size_t alloc;
+  struct sec *sec;	/* Array of sections.  */
+  size_t size;
+  size_t alloc;
 
-    /* Pointers into SEC above.  Maps section_id to section.  */
-    struct sec *debugsec[count_debuginfo_sections];
+  /* Pointers into SEC above.  Maps section_id to section.  */
+  struct sec *debugsec[count_debuginfo_sections];
 
-    bool addr_64;	/* True if it's 64-bit Elf.  */
-    bool other_byte_order; /* True if the file has a byte order
-			      different from the host.  */
-  };
+  bool addr_64;	/* True if it's 64-bit Elf.  */
+  bool other_byte_order; /* True if the file has a byte order
+			    different from the host.  */
+};
 
-  extern bool address_aligned (uint64_t addr, uint64_t align);
-  extern bool necessary_alignment (uint64_t start, uint64_t length,
-				   uint64_t align);
-#define PRI_NOT_ENOUGH ": not enough data for %s.\n"
-  extern bool supported_version (unsigned version,
-				 size_t num_supported, struct where *where, ...);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif/*DWARFLINT_LOW_H*/
+#endif/*DWARFLINT_ELF_FILE_HH*/

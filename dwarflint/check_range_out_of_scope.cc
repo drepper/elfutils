@@ -31,7 +31,7 @@
 #include "coverage.hh"
 #include "pri.hh"
 #include "check_debug_loc_range.hh"
-#include "misc.h"
+#include "misc.hh"
 
 using elfutils::dwarf;
 

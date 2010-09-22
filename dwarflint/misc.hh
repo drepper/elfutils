@@ -23,10 +23,16 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_MISC_H
-#define DWARFLINT_MISC_H
+#ifndef DWARFLINT_MISC_HH
+#define DWARFLINT_MISC_HH
 
-#include <string.h>
+#include <cstring>
+#include "where.h"
+
+extern "C"
+{
+#include "../lib/system.h"
+}
 
 #define REALLOC(A, BUF)						\
   do {								\
@@ -45,21 +51,12 @@
 
 #define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
 
-#ifdef __cplusplus
-# define IF_CPLUSPLUS(X) X
-#else
-# define IF_CPLUSPLUS(X) /*X*/
-#endif
+bool address_aligned (uint64_t addr, uint64_t align);
+bool necessary_alignment (uint64_t start, uint64_t length,
+			  uint64_t align);
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+bool supported_version (unsigned version,
+			size_t num_supported, struct where *where, ...);
 
-#include "../lib/system.h"
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif//DWARFLINT_MISC_H
+#endif//DWARFLINT_MISC_HH

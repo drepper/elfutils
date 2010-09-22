@@ -27,7 +27,7 @@
 # include <config.h>
 #endif
 
-#include "low.h"
+#include "misc.hh"
 #include "messages.hh"
 #include <stdarg.h>
 

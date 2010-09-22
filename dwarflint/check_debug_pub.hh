@@ -29,7 +29,7 @@
 #include "sections.ii"
 #include "check_debug_info.ii"
 #include "checks.hh"
-#include "low.h"
+#include "elf_file.ii"
 
 template<section_id sec_id>
 class check_debug_pub

@@ -24,7 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "addr-record.hh"
-#include "misc.h"
+#include "misc.hh"
 
 size_t
 addr_record_find_addr (struct addr_record *ar, uint64_t addr)
