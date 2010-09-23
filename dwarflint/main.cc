@@ -46,7 +46,7 @@ struct message_criteria warning_criteria;
 struct message_criteria error_criteria;
 
 struct check_option_t
-  : public option_common
+  : public global_opt<option_common>
 {
   struct initial_checkrules
     : public checkrules
@@ -59,8 +59,8 @@ struct check_option_t
   } rules;
 
   check_option_t ()
-    : option_common ("Only run selected checks.",
-		     "[+-][@]name,...", "check", 0)
+    : global_opt<option_common> ("Only run selected checks.",
+				 "[+-][@]name,...", "check", 0)
   {}
 
   error_t parse_opt (char *arg, __attribute__ ((unused)) argp_state *state)
@@ -116,23 +116,29 @@ struct check_option_t
   }
 } check_option;
 
-void_option be_quiet ("Do not print anything if successful",
-		      "quiet", 'q');
+global_opt<void_option>
+  be_quiet ("Do not print anything if successful",
+	    "quiet", 'q');
 
-string_option opt_list_checks ("List all the available checks.",
-			       "full", "list-checks", 0,
-			       OPTION_ARG_OPTIONAL);
+global_opt<string_option>
+  opt_list_checks ("List all the available checks.",
+		   "full", "list-checks", 0,
+		   OPTION_ARG_OPTIONAL);
 
 // xxx The following three should go away when we introduce the
 // message filtering.  Or should be preserved, but in a way that makes
 // more sense, right now they are simply a misnomer.
-void_option ignore_bloat ("Ignore messages related to bloat.", "ignore-bloat");
-void_option be_strict ("Be somewhat stricter.", "strict");
-void_option be_tolerant ("Be somewhat more tolerant.", "tolerant");
+global_opt<void_option>
+  ignore_bloat ("Ignore messages related to bloat.", "ignore-bloat");
+global_opt<void_option>
+  be_strict ("Be somewhat stricter.", "strict");
+global_opt<void_option>
+  be_tolerant ("Be somewhat more tolerant.", "tolerant");
 
 // xxx as soon as where is in c++, this can move there
-void_option opt_show_refs = void_option (
-"When validating .debug_loc and .debug_ranges, display information about \
+global_opt<void_option>
+  opt_show_refs("\
+When validating .debug_loc and .debug_ranges, display information about \
 the DIE referring to the entry in consideration", "ref");
 extern "C" bool show_refs () { return (bool)opt_show_refs; }
 
@@ -146,7 +152,7 @@ main (int argc, char *argv[])
   textdomain (PACKAGE_TARNAME);
 
   /* Parse and process arguments.  */
-  struct argp argp = options::registered ().build_argp ();
+  struct argp argp = global_opts.build_argp ();
   int remaining;
   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
 

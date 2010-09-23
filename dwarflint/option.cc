@@ -32,8 +32,8 @@
 #include <cstring>
 #include <iostream>
 
-option_common *
-options::opt (int key) const
+option_i *
+options::find_opt (int key) const
 {
   const_iterator it = find (key);
   if (it == end ())
@@ -41,17 +41,17 @@ options::opt (int key) const
   return it->second;
 }
 
-option_common const *
+option_i const *
 options::getopt (int key) const
 {
-  return opt (key);
+  return find_opt (key);
 }
 
 error_t
 options::parse_opt (int key, char *arg,
 		    __attribute__ ((unused)) argp_state *state)
 {
-  option_common *o = registered ().opt (key);
+  option_i *o = global_opts.find_opt (key); // XXX temporary
   if (o == NULL)
     return ARGP_ERR_UNKNOWN;
   return o->parse_opt (arg, state);
@@ -60,10 +60,19 @@ options::parse_opt (int key, char *arg,
 struct last_option
   : public argp_option
 {
-  last_option () {
+  last_option ()
+  {
     std::memset (this, 0, sizeof (*this));
   }
 };
+
+void
+options::add (option_i *opt)
+{
+  int key = opt->key ();
+  assert (getopt (key) == NULL);
+  (*this)[key] = opt;
+}
 
 /* Bug report address.  */
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
@@ -87,17 +96,10 @@ Pedantic checking of DWARF stored in ELF files.",
 }
 
 
-int option_common::_m_last_opt = 300;
-
-options &
-options::registered ()
-{
-  static options opts;
-  return opts;
-}
+int option_i::_m_last_opt = 300;
 
 int
-option_common::get_short_option (char opt_short)
+option_i::get_short_option (char opt_short)
 {
   if (opt_short)
     return opt_short;
@@ -127,7 +129,6 @@ option_common::option_common (char const *description,
 			      arg_description, flags,
 			      description, 0))
   , _m_seen (false)
-{
-  assert (options::registered ().getopt (_m_opt.key) == NULL);
-  options::registered ()[_m_opt.key] = this;
-}
+{}
+
+options global_opts;

@@ -28,6 +28,10 @@
 #include "sections.hh"
 #include "option.hh"
 
+static void_option ignore_missing
+  ("Don't complain if files have no DWARF at all",
+   "ignore", 'i');
+
 class check_nodebug
   : public check<check_nodebug>
 {
@@ -37,6 +41,7 @@ public:
     static checkdescriptor cd
       (checkdescriptor::create ("check_nodebug")
        .groups ("@low")
+       .option (ignore_missing)
        .description (
 "Checks that there are at least essential debuginfo sections present\n"
 "in the ELF file.\n"));
@@ -62,9 +67,6 @@ private:
 };
 
 static reg<check_nodebug> reg_nodebug;
-static void_option ignore_missing
-  ("Don't complain if files have no DWARF at all",
-   "ignore-missing", 'i');
 
 check_nodebug::check_nodebug (checkstack &stack, dwarflint &lint)
 {

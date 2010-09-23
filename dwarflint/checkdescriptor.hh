@@ -29,6 +29,9 @@
 #include <set>
 #include <string>
 #include <iosfwd>
+#include <vector>
+
+#include "option.ii"
 
 struct checkgroups
   : public std::set<std::string>
@@ -52,6 +55,7 @@ struct checkdescriptor
     char const *const _m_name;
     char const *_m_description;
     bool _m_hidden;
+    std::vector<option_i *> _m_opts;
 
   public:
     create (char const *name = NULL);
@@ -70,6 +74,12 @@ struct checkdescriptor
     create hidden ()
     {
       _m_hidden = true;
+      return *this;
+    }
+
+    create option (option_i &opt)
+    {
+      _m_opts.push_back (&opt);
       return *this;
     }
   };

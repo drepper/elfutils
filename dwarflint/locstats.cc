@@ -36,6 +36,24 @@ using elfutils::dwarf;
 
 namespace
 {
+
+#define DIE_OPTSTRING					\
+  "{single-addr|artificial|inlined|inlined_subroutine\
+|no-coverage|mutable|immutable}[,...]"
+
+  string_option opt_ignore
+  ("Skip certain DIEs.", DIE_OPTSTRING, "ignore");
+
+  string_option opt_dump
+  ("Dump certain DIEs.", DIE_OPTSTRING, "dump");
+
+  string_option opt_tabulation_rule
+  ("Rule for sorting results into buckets. start is either integer 0..100, \
+or special value 0.0 indicating cases with no coverage whatsoever \
+(i.e. not those that happen to round to 0%).",
+   "start[:step][,...]",
+   "tabulate");
+
   class locstats
     : public highlevel_check<locstats>
   {
@@ -44,6 +62,9 @@ namespace
       static checkdescriptor cd
 	(checkdescriptor::create ("locstats")
 	 .groups ("@nodefault")
+	 .option (opt_ignore)
+	 .option (opt_dump)
+	 .option (opt_tabulation_rule)
 	 .description (
 "Computes a location info coverage statistics.  Goes through the whole\n"
 "DIE graph, looking at each variable and formal parameter, and\n"
@@ -68,25 +89,6 @@ namespace
   TYPE(no_coverage)		\
   TYPE(mutable)			\
   TYPE(immutable)
-
-  string_option opt_ignore
-    ("Skip certain DIEs.",
-     "{single-addr|artificial|inlined|inlined_subroutine\
-|no-coverage|mutable|immutable}[,...]",
-     "locstats:ignore");
-
-  string_option opt_dump
-    ("Dump certain DIEs.",
-     "{single-addr|artificial|inlined|inlined_subroutine\
-|no-coverage|mutable|immutable}[,...]",
-     "locstats:dump");
-
-  string_option opt_tabulation_rule
-    ("Rule for sorting results into buckets. start is either integer 0..100, \
-or special value 0.0 indicating cases with no coverage whatsoever \
-(i.e. not those that happen to round to 0%).",
-     "start[:step][,...]",
-     "locstats:tabulate");
 
   struct tabrule
   {
@@ -325,10 +327,10 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
   for (int i = 0; i <= 100; ++i)
     tally[i] = 0;
 
-  tabrules_t tabrules (opt_tabulation_rule.seen ()
-		       ? opt_tabulation_rule.value () : "10:10");
-  die_type_matcher ignore (opt_ignore.seen () ? opt_ignore.value () : "");
-  die_type_matcher dump (opt_dump.seen () ? opt_dump.value () : "");
+  tabrules_t tabrules (/*opt_tabulation_rule.seen ()
+			 ? opt_tabulation_rule.value () :*/ "10:10");
+  die_type_matcher ignore (/*opt_ignore.seen () ? opt_ignore.value () :*/ "");
+  die_type_matcher dump (/*opt_dump.seen () ? opt_dump.value () :*/ "");
   std::bitset<dt__count> interested = ignore | dump;
   bool interested_mutability
     = interested.test (dt_mutable) || interested.test (dt_immutable);

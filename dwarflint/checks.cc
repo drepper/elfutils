@@ -26,7 +26,7 @@
 #include "checks.hh"
 #include "option.hh"
 
-static void_option show_progress
+static global_opt<void_option> show_progress
   ("Print out checks as they are performed, their context and result.",
    "show-progress");
 

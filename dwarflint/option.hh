@@ -31,32 +31,48 @@
 #include <map>
 #include <vector>
 #include <cassert>
-
 #include <iostream>
 
-class option_common;
+#include "option.ii"
 
 class options
-  : private std::map<int, option_common *>
+  : private std::map<int, option_i *>
 {
   friend class option_common;
   std::vector<argp_option> _m_opts;
 
-  option_common *opt (int key) const;
+  option_i *find_opt (int key) const;
   static error_t parse_opt (int key, char *arg, argp_state *state);
 
 public:
-  static options &registered ();
-  option_common const *getopt (int key) const;
+  option_i const *getopt (int key) const;
   argp build_argp ();
+  void add (option_i *opt);
+};
+
+class option_i // we cannot call it simply "option", this conflicts
+	       // with another global declaration
+{
+  // last allocated option unique identifier
+  static int _m_last_opt;
+
+protected:
+  // Answer either opt_short argument if it's non-0.  Otherwise create
+  // new unique identifier.
+  static int get_short_option (char opt_short);
+
+public:
+  virtual bool seen () const = 0;
+  virtual argp_option const &build_option () const = 0;
+  virtual error_t parse_opt (char *arg, argp_state *state) = 0;
+  virtual int key () const = 0;
+  virtual ~option_i () {}
 };
 
 class option_common
+  : public option_i
 {
   argp_option _m_opt;
-
-  static int _m_last_opt;
-  static int get_short_option (char opt_short);
 
 protected:
   bool _m_seen;
@@ -66,12 +82,24 @@ protected:
 		 char const *opt_long, char opt_short,
 		 int flags = 0);
 
-public: // consumer interface
-  bool seen () const { return _m_seen; }
+public:
+  bool
+  seen () const
+  {
+    return _m_seen;
+  }
 
-public: // option handler interface
-  argp_option const &build_option () const { return _m_opt; }
-  virtual error_t parse_opt (char *arg, argp_state *state) = 0;
+  argp_option const &
+  build_option () const
+  {
+    return _m_opt;
+  }
+
+  int
+  key () const
+  {
+    return _m_opt.key;
+  }
 };
 
 template<class arg_type>
@@ -143,5 +171,19 @@ struct value_converter<std::string>
 
 typedef xoption<void> void_option;
 typedef xoption<std::string> string_option;
+
+extern options global_opts;
+
+template<class OPT>
+struct global_opt
+  : public OPT
+{
+  template<typename... Args>
+  global_opt (Args const&... args)
+    : OPT (args...)
+  {
+    global_opts.add (this);
+  }
+};
 
 #endif//DWARFLINT_OPTION_HH
