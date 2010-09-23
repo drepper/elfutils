@@ -79,6 +79,9 @@ public:
 
     void list_checks () const;
 
+    typedef std::vector<checkdescriptor const *> checkdescriptors_t;
+    checkdescriptors_t get_descriptors () const;
+
   private:
     friend class dwarflint;
     void enroll (dwarflint &lint);

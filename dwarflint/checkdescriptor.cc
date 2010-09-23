@@ -78,6 +78,7 @@ checkdescriptor::checkdescriptor (create const &c)
   , _m_groups (c._m_groups)
   , _m_prereq (c._m_prereq)
   , _m_hidden (c._m_hidden)
+  , _m_opts (c._m_opts)
 {}
 
 bool

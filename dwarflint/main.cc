@@ -152,9 +152,12 @@ main (int argc, char *argv[])
   textdomain (PACKAGE_TARNAME);
 
   /* Parse and process arguments.  */
-  struct argp argp = global_opts.build_argp ();
+  argp_full args (global_opts,
+		  dwarflint::check_registrar::inst ()->get_descriptors ());
+
+
   int remaining;
-  argp_parse (&argp, argc, argv, 0, &remaining, NULL);
+  argp_parse (&args.get (), argc, argv, 0, &remaining, NULL);
 
   if (opt_list_checks.seen ())
     {
@@ -164,7 +167,7 @@ main (int argc, char *argv[])
   else if (remaining == argc)
     {
       fputs (gettext ("Missing file name.\n"), stderr);
-      argp_help (&argp, stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
+      argp_help (&args.get (), stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
 		 program_invocation_short_name);
       std::exit (1);
     }

@@ -119,17 +119,23 @@ namespace
   }
 }
 
+dwarflint::check_registrar::checkdescriptors_t
+dwarflint::check_registrar::get_descriptors () const
+{
+  std::set<checkdescriptor const *> descriptors;
+  for (std::vector <item *>::const_iterator it = _m_items.begin ();
+       it != _m_items.end (); ++it)
+    include (descriptors, (*it)->descriptor ());
+  return checkdescriptors_t (descriptors.begin (), descriptors.end ());
+}
+
 void
 dwarflint::check_registrar::list_checks () const
 {
   bool be_verbose = opt_list_checks.value () == "full";
-  typedef std::set<checkdescriptor const *> descset;
-  descset descriptors;
-  for (std::vector <item *>::const_iterator it = _m_items.begin ();
-       it != _m_items.end (); ++it)
-    include (descriptors, (*it)->descriptor ());
+  checkdescriptors_t descriptors = get_descriptors ();
 
-  for (descset::const_iterator it = descriptors.begin ();
+  for (checkdescriptors_t::const_iterator it = descriptors.begin ();
        it != descriptors.end (); ++it)
     {
       checkdescriptor const &cd = **it;

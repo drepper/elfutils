@@ -53,7 +53,7 @@ dwarflint_SOURCES = \
 	main.cc \
 	messages.cc messages.hh \
 	misc.cc misc.hh \
-	option.cc option.hh \
+	option.cc option.hh option.ii \
 	pri.cc pri.hh \
 	readctx.c readctx.h \
 	reloc.cc reloc.hh \

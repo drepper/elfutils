@@ -28,6 +28,8 @@
 #endif
 
 #include "option.hh"
+#include "dwarflint.hh"
+#include "checkdescriptor.hh"
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -78,7 +80,7 @@ options::add (option_i *opt)
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 argp
-options::build_argp ()
+options::build_argp () const
 {
   _m_opts.clear ();
   for (const_iterator it = begin (); it != end (); ++it)
@@ -93,6 +95,43 @@ Pedantic checking of DWARF stored in ELF files.",
     NULL, NULL, NULL
   };
   return a;
+}
+
+argp_full::argp_full (options const &global,
+		      std::vector<checkdescriptor const *> checkdescriptors)
+{
+  argp main = global.build_argp ();
+
+  typedef dwarflint::check_registrar::checkdescriptors_t checkdescriptors_t;
+  for (checkdescriptors_t::const_iterator it = checkdescriptors.begin ();
+       it != checkdescriptors.end (); ++it)
+    if (!(*it)->opts ().empty ())
+      {
+	_m_children_argps.push_back ((*it)->opts ().build_argp ());
+	_m_children_headers.push_back (std::string ("Options for ")
+				       + (*it)->name ()
+				       + ":");
+      }
+
+  unsigned pos = 0;
+  for (checkdescriptors_t::const_iterator it = checkdescriptors.begin ();
+       it != checkdescriptors.end (); ++it)
+    if (!(*it)->opts ().empty ())
+      {
+	argp_child child = {&_m_children_argps[pos], 0,
+			    _m_children_headers[pos].c_str (), 0};
+	_m_children.push_back (child);
+	pos++;
+      }
+  assert (_m_children_argps.size () == _m_children.size ());
+
+  if (!_m_children.empty ())
+    {
+      _m_children.push_back ((argp_child){NULL, 0, NULL, 0});
+      main.children = &_m_children.front ();
+    }
+
+  _m_argp = main;
 }
 
 

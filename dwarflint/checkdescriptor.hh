@@ -31,7 +31,7 @@
 #include <iosfwd>
 #include <vector>
 
-#include "option.ii"
+#include "option.hh"
 
 struct checkgroups
   : public std::set<std::string>
@@ -55,7 +55,7 @@ struct checkdescriptor
     char const *const _m_name;
     char const *_m_description;
     bool _m_hidden;
-    std::vector<option_i *> _m_opts;
+    options _m_opts;
 
   public:
     create (char const *name = NULL);
@@ -79,7 +79,7 @@ struct checkdescriptor
 
     create option (option_i &opt)
     {
-      _m_opts.push_back (&opt);
+      _m_opts.add (&opt);
       return *this;
     }
   };
@@ -95,12 +95,15 @@ struct checkdescriptor
 
   bool hidden () const { return _m_hidden; }
 
+  options const &opts () const { return _m_opts; }
+
 private:
   char const *const _m_name;
   char const *const _m_description;
   checkgroups const _m_groups;
   prereqs const _m_prereq;
   bool _m_hidden;
+  options const _m_opts;
 };
 
 template <class T>

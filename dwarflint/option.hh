@@ -34,20 +34,38 @@
 #include <iostream>
 
 #include "option.ii"
+#include "checkdescriptor.ii"
 
 class options
   : private std::map<int, option_i *>
 {
   friend class option_common;
-  std::vector<argp_option> _m_opts;
+  mutable std::vector<argp_option> _m_opts;
 
   option_i *find_opt (int key) const;
   static error_t parse_opt (int key, char *arg, argp_state *state);
 
 public:
   option_i const *getopt (int key) const;
-  argp build_argp ();
+  argp build_argp () const;
   void add (option_i *opt);
+  bool empty () const
+  {
+    return std::map<int, option_i *>::empty ();
+  }
+};
+
+class argp_full
+{
+  std::vector<argp> _m_children_argps;
+  std::vector<std::string> _m_children_headers;
+  std::vector<argp_child> _m_children;
+  argp _m_argp;
+
+public:
+  argp_full (options const &global,
+	     std::vector<checkdescriptor const *> checkdescriptors);
+  argp const &get () const { return _m_argp; }
 };
 
 class option_i // we cannot call it simply "option", this conflicts
