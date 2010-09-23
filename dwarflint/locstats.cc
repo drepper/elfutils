@@ -38,14 +38,16 @@ namespace
 {
 
 #define DIE_OPTSTRING					\
-  "{single-addr|artificial|inlined|inlined_subroutine\
-|no-coverage|mutable|immutable}[,...]"
+  "}[,...]"
 
   string_option opt_ignore
-  ("Skip certain DIEs.", DIE_OPTSTRING, "ignore");
+  ("Skip certain DIEs.  class may be one of single_addr, artificial, inlined, \
+inlined_subroutine, no_coverage, mutable, or immutable.",
+   "class[,...]", "ignore");
 
   string_option opt_dump
-  ("Dump certain DIEs.", DIE_OPTSTRING, "dump");
+  ("Dump certain DIEs.  For classes, see option 'ignore'.",
+   "class[,...]", "dump");
 
   string_option opt_tabulation_rule
   ("Rule for sorting results into buckets. start is either integer 0..100, \
