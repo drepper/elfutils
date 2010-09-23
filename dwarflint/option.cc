@@ -80,7 +80,7 @@ options::add (option_i *opt)
 const char *argp_program_bug_address = PACKAGE_BUGREPORT;
 
 argp
-options::build_argp () const
+options::build_argp (bool toplev) const
 {
   _m_opts.clear ();
   for (const_iterator it = begin (); it != end (); ++it)
@@ -89,8 +89,8 @@ options::build_argp () const
   argp a = {
     &_m_opts.front (),
     &options::parse_opt,
-    "FILE...",
-    "\
+    !toplev ? NULL : "FILE...",
+    !toplev ? NULL : "\
 Pedantic checking of DWARF stored in ELF files.",
     NULL, NULL, NULL
   };
@@ -100,7 +100,7 @@ Pedantic checking of DWARF stored in ELF files.",
 argp_full::argp_full (options const &global,
 		      std::vector<checkdescriptor const *> checkdescriptors)
 {
-  argp main = global.build_argp ();
+  argp main = global.build_argp (true);
 
   typedef dwarflint::check_registrar::checkdescriptors_t checkdescriptors_t;
   for (checkdescriptors_t::const_iterator it = checkdescriptors.begin ();

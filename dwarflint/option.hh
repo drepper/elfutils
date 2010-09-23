@@ -47,7 +47,7 @@ class options
 
 public:
   option_i const *getopt (int key) const;
-  argp build_argp () const;
+  argp build_argp (bool toplev = false) const;
   void add (option_i *opt);
   bool empty () const
   {
