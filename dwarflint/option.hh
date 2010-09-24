@@ -48,10 +48,10 @@ public:
   option_i const *getopt (int key) const;
   argp build_argp (bool toplev = false) const;
   void add (option_i *opt);
-  bool empty () const
-  {
-    return std::map<int, option_i *>::empty ();
-  }
+  using std::map<int, option_i *>::empty;
+  using std::map<int, option_i *>::begin;
+  using std::map<int, option_i *>::end;
+  using std::map<int, option_i *>::const_iterator;
 };
 
 // Wrapper of argp parsing.  While in general argp does a decent job,
@@ -97,6 +97,7 @@ public:
   virtual argp_option const &build_option () const = 0;
   virtual error_t parse_opt (char *arg, argp_state *state) = 0;
   virtual int key () const = 0;
+  virtual std::string format () const = 0;
   virtual ~option_i () {}
 };
 
@@ -131,6 +132,8 @@ public:
   {
     return _m_opt.key;
   }
+
+  std::string format () const;
 };
 
 template<class arg_type>

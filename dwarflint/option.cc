@@ -209,4 +209,45 @@ option_common::option_common (char const *description,
   , _m_seen (false)
 {}
 
+std::string
+option_common::format () const
+{
+  std::string ret;
+  bool has_short = _m_opt.key < 127;
+  if (has_short)
+    {
+      char buf[3] = {};
+      std::sprintf (buf, "-%c", _m_opt.key);
+      std::string xxx (buf);
+      ret += buf;
+    }
+
+  if (_m_opt.name != NULL)
+    {
+      if (has_short)
+	ret += ", ";
+      ret += "--";
+      ret += _m_opt.name;
+    }
+
+  if (_m_opt.arg != NULL)
+    {
+      bool optional = !!(_m_opt.flags & OPTION_ARG_OPTIONAL);
+      if (optional)
+	ret += '[';
+      ret += '=';
+      ret += _m_opt.arg;
+      if (optional)
+	ret += ']';
+    }
+
+  if (_m_opt.doc != NULL)
+    {
+      ret += "\t";
+      ret += _m_opt.doc;
+    }
+
+  return ret;
+}
+
 options global_opts;

@@ -163,6 +163,16 @@ dwarflint::check_registrar::list_checks () const
 	  char const *desc = cd.description ();
 	  if (desc != NULL)
 	    std::cout << desc;
+
+	  options const &opts = cd.opts ();
+	  if (!opts.empty ())
+	    {
+	      std::cout << "recognized options:" << std::endl;
+	      for (options::const_iterator ot = opts.begin ();
+		   ot != opts.end (); ++ot)
+		std::cout << "  " << ot->second->format () << std::endl;
+	    }
+
 	  std::cout << std::endl;
 	}
     }
