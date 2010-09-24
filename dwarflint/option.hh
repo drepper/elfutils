@@ -39,11 +39,10 @@
 class options
   : private std::map<int, option_i *>
 {
-  friend class option_common;
+  friend class argppp;
   mutable std::vector<argp_option> _m_opts;
 
   option_i *find_opt (int key) const;
-  static error_t parse_opt (int key, char *arg, argp_state *state);
 
 public:
   option_i const *getopt (int key) const;
@@ -55,17 +54,31 @@ public:
   }
 };
 
-class argp_full
+// Wrapper of argp parsing.  While in general argp does a decent job,
+// it's not possible to pass user arguments to the parser function
+// from the argp structure itself, and therefore share the same parser
+// for all the children.  Since that's what we need to do, we need to
+// pass the "input" argument to argp_parse, and carefully setup the
+// child_inputs arguments.  That means coordinating the whole parsing
+// process from one place.  As a result this is hardly a nice,
+// reusable piece of code.
+class argppp
 {
   std::vector<argp> _m_children_argps;
   std::vector<std::string> _m_children_headers;
   std::vector<argp_child> _m_children;
+  std::vector<options const *> _m_children_inputs;
   argp _m_argp;
+  bool _m_inited;
+  argppp (options const &global,
+	  std::vector<checkdescriptor const *> checkdescriptors);
+
+  static error_t parse_opt (int key, char *arg, argp_state *state);
 
 public:
-  argp_full (options const &global,
-	     std::vector<checkdescriptor const *> checkdescriptors);
-  argp const &get () const { return _m_argp; }
+  static argppp &inst ();
+  void parse (int argc, char **argv, unsigned flags, int *remaining);
+  void help (FILE *stream, unsigned flags, char *name);
 };
 
 class option_i // we cannot call it simply "option", this conflicts

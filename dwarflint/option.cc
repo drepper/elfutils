@@ -49,16 +49,6 @@ options::getopt (int key) const
   return find_opt (key);
 }
 
-error_t
-options::parse_opt (int key, char *arg,
-		    __attribute__ ((unused)) argp_state *state)
-{
-  option_i *o = global_opts.find_opt (key); // XXX temporary
-  if (o == NULL)
-    return ARGP_ERR_UNKNOWN;
-  return o->parse_opt (arg, state);
-}
-
 struct last_option
   : public argp_option
 {
@@ -88,7 +78,7 @@ options::build_argp (bool toplev) const
   _m_opts.push_back (last_option ());
   argp a = {
     &_m_opts.front (),
-    &options::parse_opt,
+    NULL, // needs to be initialized later, in argppp
     !toplev ? NULL : "FILE...",
     !toplev ? NULL : "\
 Pedantic checking of DWARF stored in ELF files.",
@@ -97,8 +87,18 @@ Pedantic checking of DWARF stored in ELF files.",
   return a;
 }
 
-argp_full::argp_full (options const &global,
-		      std::vector<checkdescriptor const *> checkdescriptors)
+argppp &
+argppp::inst ()
+{
+  static argppp my
+    (global_opts,
+     dwarflint::check_registrar::inst ()->get_descriptors ());
+  return my;
+}
+
+argppp::argppp (options const &global,
+		std::vector<checkdescriptor const *> checkdescriptors)
+  : _m_inited (false)
 {
   argp main = global.build_argp (true);
 
@@ -108,9 +108,11 @@ argp_full::argp_full (options const &global,
     if (!(*it)->opts ().empty ())
       {
 	_m_children_argps.push_back ((*it)->opts ().build_argp ());
+	_m_children_argps.back ().parser = &parse_opt;
 	_m_children_headers.push_back (std::string ("Options for ")
 				       + (*it)->name ()
 				       + ":");
+	_m_children_inputs.push_back (&(*it)->opts ());
       }
 
   unsigned pos = 0;
@@ -131,9 +133,46 @@ argp_full::argp_full (options const &global,
       main.children = &_m_children.front ();
     }
 
+  main.parser = &parse_opt;
   _m_argp = main;
 }
 
+error_t
+argppp::parse_opt (int key, char *arg, argp_state *state)
+{
+  if (key == ARGP_KEY_INIT && !inst ()._m_inited)
+    {
+      inst ()._m_inited = true;
+      unsigned i = 0;
+      for (std::vector<options const *>::const_iterator it
+	     = inst ()._m_children_inputs.begin ();
+	   it != inst ()._m_children_inputs.end (); ++it)
+	state->child_inputs[i++] = const_cast<options *> (*it);
+      return 0;
+    }
+  else
+    {
+      assert (state->input != NULL);
+      options const *opts = static_cast<options const *> (state->input);
+      option_i *o = opts->find_opt (key);
+      if (o == NULL)
+	return ARGP_ERR_UNKNOWN;
+      return o->parse_opt (arg, state);
+    }
+}
+
+void
+argppp::parse (int argc, char **argv, unsigned flags, int *remaining)
+{
+  assert (!_m_inited);
+  argp_parse (&_m_argp, argc, argv, flags, remaining, &global_opts);
+}
+
+void
+argppp::help (FILE *stream, unsigned flags, char *name)
+{
+  argp_help (&_m_argp, stream, flags, name);
+}
 
 int option_i::_m_last_opt = 300;
 
