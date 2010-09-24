@@ -43,18 +43,17 @@ namespace
   string_option opt_ignore
   ("Skip certain DIEs.  class may be one of single_addr, artificial, inlined, \
 inlined_subroutine, no_coverage, mutable, or immutable.",
-   "class[,...]", "ignore");
+   "class[,...]", "locstats:ignore");
 
   string_option opt_dump
   ("Dump certain DIEs.  For classes, see option 'ignore'.",
-   "class[,...]", "dump");
+   "class[,...]", "locstats:dump");
 
   string_option opt_tabulation_rule
   ("Rule for sorting results into buckets. start is either integer 0..100, \
 or special value 0.0 indicating cases with no coverage whatsoever \
 (i.e. not those that happen to round to 0%).",
-   "start[:step][,...]",
-   "tabulate");
+   "start[:step][,...]", "locstats:tabulate");
 
   class locstats
     : public highlevel_check<locstats>

@@ -30,7 +30,7 @@
 
 static void_option ignore_missing
   ("Don't complain if files have no DWARF at all",
-   "ignore", 'i');
+   "nodebug:ignore", 'i');
 
 class check_nodebug
   : public check<check_nodebug>
