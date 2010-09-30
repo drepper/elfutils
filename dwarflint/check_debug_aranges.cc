@@ -263,8 +263,9 @@ check_aranges_structural (struct elf_file *file,
 	  where.ref = &where_cudie;
 	  where_cudie.formatting = wf_cudie;
 	  if (cu->has_arange)
-	    wr_message (mc_impact_2 | mc_aranges | mc_header, &where,
-			": there has already been arange section for this CU.\n");
+	    wr_error (where)
+	      << "there has already been arange section for this CU."
+	      << std::endl;
 	  else
 	    cu->has_arange = true;
 	}
