@@ -63,13 +63,12 @@ namespace
 
   // Register the check.
   reg<check_range_out_of_scope> reg_range_out_of_scope;
+  const ::Dwarf_Addr noaddr = -1;
 }
 
 check_range_out_of_scope::check_range_out_of_scope (checkstack &stack, dwarflint &lint)
   : highlevel_check<check_range_out_of_scope> (stack, lint)
 {
-  lint.check <check_debug_loc> (stack);
-
   try
     {
       class dwarf::compile_units const &cus = dw.compile_units ();
@@ -102,7 +101,7 @@ check_range_out_of_scope::recursively_validate
   where_reset_2 (&wh, die.offset ());
 
   ::Dwarf_Addr low_pc = 0;
-  ::Dwarf_Addr high_pc = -1;
+  ::Dwarf_Addr high_pc = ::noaddr;
   ranges_t my_ranges;
   for (dwarf::debug_info_entry::attributes_type::const_iterator
 	 at = die.attributes ().begin ();
@@ -121,7 +120,7 @@ check_range_out_of_scope::recursively_validate
 	  my_ranges.push_back (*it);
     }
 
-  if (low_pc != 0 || high_pc != (::Dwarf_Addr)-1)
+  if (low_pc != 0 || high_pc != ::noaddr)
     {
       // Simultaneous appearance of both low_pc/high_pc pair
       // and rangelist pointer is forbidden by 3.1.1 #1.
@@ -130,12 +129,12 @@ check_range_out_of_scope::recursively_validate
       // purpose as low_pc/high_pc pair that covers one
       // address point.
 
-      if (high_pc == (::Dwarf_Addr)-1
+      if (high_pc == ::noaddr
 	  && die.tag () != DW_TAG_compile_unit
 	  && die.tag () != DW_TAG_partial_unit)
 	high_pc = low_pc + 1;
 
-      if (high_pc != (::Dwarf_Addr)-1)
+      if (high_pc != ::noaddr)
 	{
 	  if (my_ranges.size () != 0)
 	    wr_message (wh, cat (mc_impact_4, mc_info, mc_error))

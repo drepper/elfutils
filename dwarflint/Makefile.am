@@ -80,12 +80,15 @@ dwarflint_SOURCES = \
 TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-check_duplicate_DW_tag_variable.sh \
 	tests/run-location-leaks.sh \
-	tests/run-nodebug.sh
+	tests/run-nodebug.sh \
+	tests/run-check_range_out_of_scope.sh
 
-EXTRA_DIST = tests/run-debug_abbrev-duplicate-attribute.sh tests/debug_abbrev-duplicate-attribute.bz2 \
-	tests/run-check_duplicate_DW_tag_variable.sh tests/crc7.ko.debug.bz2 \
-	tests/run-location-leaks.sh tests/location-leaks.bz2 \
-	tests/run-nodebug.sh tests/nodebug.bz2
+EXTRA_DIST = $(TESTS) \
+	tests/debug_abbrev-duplicate-attribute.bz2 \
+	tests/crc7.ko.debug.bz2 \
+	tests/location-leaks.bz2 \
+	tests/nodebug.bz2 \
+	tests/check_range_out_of_scope-1.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
