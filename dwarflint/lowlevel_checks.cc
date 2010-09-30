@@ -45,6 +45,7 @@ lowlevel_checks::descriptor ()
      .prereq<check_debug_line> ()
      .prereq<check_debug_loc> ()
      .prereq<check_debug_ranges> ()
+     .prereq<check_debug_info_refs> ()
      .hidden ()
      );
   return &cd;

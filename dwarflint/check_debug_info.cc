@@ -42,6 +42,7 @@
 #include "check_debug_abbrev.hh"
 #include "check_debug_info.hh"
 #include "check_debug_line.hh"
+#include "check_debug_aranges.hh"
 #include "misc.hh"
 
 checkdescriptor const *
@@ -1300,9 +1301,10 @@ check_debug_info_refs::descriptor ()
      .prereq<typeof (*_m_info)> ()
      .prereq<typeof (*_m_line)> ()
      .description (
-"This pass checks for outstanding unresolved references from\n"
-".debug_info to .debug_line (and perhaps others as they are\n"
-"identified).\n"));
+"This pass checks:\n"
+" - for outstanding unresolved references from .debug_info to .debug_line\n"
+" - that each CU has an associated aranges entry (that even if there is\n"
+"   no .debug_aranges to begin with).\n"));
   return &cd;
 }
 
@@ -1310,13 +1312,23 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
 					      dwarflint &lint)
   : _m_info (lint.check (stack, _m_info))
   , _m_line (lint.toplev_check (stack, _m_line))
+  , _m_aranges (lint.toplev_check (stack, _m_aranges))
 {
   for (std::vector<cu>::iterator it = _m_info->cus.begin ();
        it != _m_info->cus.end (); ++it)
-    if (it->stmt_list.addr != (uint64_t)-1
-	&& (_m_line == NULL
-	    || !_m_line->has_line_table (it->stmt_list.addr)))
-      wr_error (it->stmt_list.who)
-	<< "unresolved reference to .debug_line table "
-	<< pri::hex (it->stmt_list.addr) << '.' << std::endl;
+    {
+      if (it->stmt_list.addr != (uint64_t)-1
+	  && (_m_line == NULL
+	      || !_m_line->has_line_table (it->stmt_list.addr)))
+	wr_error (it->stmt_list.who)
+	  << "unresolved reference to .debug_line table "
+	  << pri::hex (it->stmt_list.addr) << '.' << std::endl;
+
+      if (_m_aranges != NULL && !it->has_arange)
+	wr_message (it->head->where,
+		    cat (mc_impact_3, mc_acc_suboptimal, mc_aranges, mc_info))
+	  << "no aranges table is associated with this CU." << std::endl;
+    }
 }
+
+static reg<check_debug_info_refs> reg_debug_info_refs;

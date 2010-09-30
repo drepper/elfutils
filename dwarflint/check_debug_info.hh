@@ -33,6 +33,7 @@
 #include "checks.hh"
 #include "check_debug_abbrev.ii"
 #include "check_debug_line.ii"
+#include "check_debug_aranges.ii"
 #include "sections.ii"
 
 struct cu_head
@@ -43,7 +44,7 @@ struct cu_head
   Dwarf_Off total_size;         // size + head_size
 
   int offset_size;		  // Offset size in this CU.
-  struct where where;           // Where was this section defined.
+  struct where where;           // Where this section was defined.
   Dwarf_Off abbrev_offset;      // Abbreviation section that this CU uses.
   int version;                  // CU version
   int address_size;             // Address size in bytes on the target machine.
@@ -133,6 +134,7 @@ class check_debug_info_refs
 {
   check_debug_info *_m_info;
   check_debug_line *_m_line;
+  check_debug_aranges *_m_aranges;
 
 public:
   static checkdescriptor const *descriptor ();
