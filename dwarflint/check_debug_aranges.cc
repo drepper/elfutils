@@ -82,12 +82,14 @@ namespace
     elf_file *elf;
     section_id id;
     char const *what;
+    bool reverse;
 
     hole_user (elf_file *a_elf, section_id a_id,
-	       char const *a_what)
+	       char const *a_what, bool a_reverse)
       : elf (a_elf)
       , id (a_id)
       , what (a_what)
+      , reverse (a_reverse)
     {}
   };
 }
@@ -119,10 +121,18 @@ hole (uint64_t start, uint64_t length, void *user)
     {
       char buf[128];
       where where = WHERE (info.id, NULL);
+      char const *what = info.what;
+      char const *cu = "CUs";
+      if (info.reverse)
+	{
+	  char const *tmp = what;
+	  what = cu;
+	  cu = tmp;
+	}
       wr_message (mc_aranges | mc_impact_3, &where,
-		  ": addresses %s are covered with CUs, but not with %s.\n",
-		  range_fmt (buf, sizeof buf, start, start + length),
-		  info.what);
+		  ": addresses %s are covered with %s, but not with %s.\n",
+		  range_fmt (buf, sizeof (buf), start, start + length),
+		  cu, what);
     }
 
   if (sec == NULL)
@@ -132,17 +142,26 @@ hole (uint64_t start, uint64_t length, void *user)
 }
 
 static void
+compare_coverage_1 (struct elf_file *file,
+		    struct coverage *coverage, struct coverage *other,
+		    enum section_id id, char const *what,
+		    bool reverse)
+{
+  struct coverage *cov = coverage_clone (coverage);
+  coverage_remove_all (cov, other);
+  hole_user info (file, id, what, reverse);
+  coverage_find_ranges (cov, hole, &info);
+  coverage_free (cov);
+  free (cov);
+}
+
+static void
 compare_coverage (struct elf_file *file,
 		  struct coverage *coverage, struct coverage *other,
 		  enum section_id id, char const *what)
 {
-  struct coverage *cov = coverage_clone (coverage);
-  coverage_remove_all (cov, other);
-
-  hole_user info (file, id, what);
-  coverage_find_ranges (cov, hole, &info);
-  coverage_free (cov);
-  free (cov);
+  compare_coverage_1 (file, coverage, other, id, what, false);
+  compare_coverage_1 (file, other, coverage, id, what, false);
 }
 
 inline static void
