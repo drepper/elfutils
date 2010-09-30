@@ -82,7 +82,8 @@ TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-location-leaks.sh \
 	tests/run-nodebug.sh \
 	tests/run-check_range_out_of_scope.sh \
-	tests/run-check_debug_info_refs.sh
+	tests/run-check_debug_info_refs.sh \
+	tests/run-aranges_terminate_early.sh
 
 EXTRA_DIST = $(TESTS) \
 	tests/debug_abbrev-duplicate-attribute.bz2 \
@@ -90,7 +91,8 @@ EXTRA_DIST = $(TESTS) \
 	tests/location-leaks.bz2 \
 	tests/nodebug.bz2 \
 	tests/check_range_out_of_scope-1.bz2 \
-	tests/check_debug_info_refs-1.bz2
+	tests/check_debug_info_refs-1.bz2 \
+	tests/aranges_terminate_early.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
