@@ -98,8 +98,9 @@ wrap_str::wrap_str (std::string const &str, unsigned width)
 
       // While skipping back, we might end at the very beginning.  If
       // that's the case, we have a word that doesn't fit user limit.
-      // Include it whole anyway.
-      if (space == last)
+      // Include it whole anyway.  For newline, account for
+      // freshly-introduced indent.
+      if (space <= last + (newline ? indent : 0))
 	{
 	  space = pos;
 	  while (space < str.size () && !isspace (str[space]))
@@ -131,8 +132,14 @@ wrap_str::join () const
 {
   std::string ret;
   for (const_iterator it = begin (); it != end (); ++it)
-    ret += it->build (_m_image) + "\n";
+    ret += build (it) + "\n";
   return ret;
+}
+
+std::string
+wrap_str::build (wrap_str::const_iterator it) const
+{
+  return it->build (_m_image);
 }
 
 namespace
@@ -164,6 +171,9 @@ namespace
       assert (wrap ("\n\n", 5) == "\n\n");
       assert (wrap ("\n\n", 0) == "\n\n");
       assert (wrap ("ab\ncd ef gh ij", 5) == "ab\ncd ef\ngh ij\n");
+      assert (wrap (" - abcd abbb accc", 3) == " - abcd\n   abbb\n   accc\n");
+      assert (wrap (" -abcd abbb accc", 3) == " -abcd\n  abbb\n  accc\n");
+      assert (wrap ("  abcd abbb accc", 3) == "  abcd\n  abbb\n  accc\n");
     }
   } _;
 }

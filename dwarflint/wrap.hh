@@ -58,6 +58,7 @@ public:
   wrap_str (std::string const &str, unsigned width);
 
   std::string join () const;
+  std::string build (const_iterator it) const;
 };
 
 #endif//DWARFLINT_WRAP_HH
