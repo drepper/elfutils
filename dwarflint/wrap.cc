@@ -31,9 +31,9 @@
 namespace
 {
   size_t
-  skip_blank (std::string const &str, size_t pos)
+  skip_blank (char const *str, size_t pos)
   {
-    while (pos < str.size () && isblank (str[pos]))
+    while (isblank (str[pos]))
       pos++;
     return pos;
   }
@@ -48,21 +48,22 @@ wrapline_t::wrapline_t (size_t start, size_t end, size_t indent)
 }
 
 std::string
-wrapline_t::build (std::string const &image) const
+wrapline_t::build (char const *image) const
 {
-  assert (_m_end <= image.size ());
-  std::string main = image.substr (_m_start, _m_end - _m_start);
+  assert (_m_end <= std::strlen (image));
+  std::string main (image, _m_start, _m_end - _m_start);
   char const *padding = spaces (_m_indent);
   return std::string (padding) + main;
 }
 
-wrap_str::wrap_str (std::string const &str, unsigned width)
+wrap_str::wrap_str (char const *str, unsigned width)
   : _m_image (str)
 {
   size_t pos = 0;
   bool newline = true;
   size_t indent = 0;
-  while (pos < str.size ())
+  size_t str_size = std::strlen (str);
+  while (pos < str_size)
     {
       size_t last = pos;
 
@@ -74,14 +75,14 @@ wrap_str::wrap_str (std::string const &str, unsigned width)
       if (newline)
 	{
 	  pos = skip_blank (str, pos);
-	  if (pos < str.size () && str[pos] == '-')
+	  if (pos < str_size && str[pos] == '-')
 	    pos = skip_blank (str, pos + 1);
 	  indent = pos - last;
 	}
       length -= indent;
 
       // Take the remainder of the line, but don't cross hard EOLs.
-      for (; length > 0 && pos < str.size (); --length)
+      for (; length > 0 && pos < str_size; --length)
 	if (str[pos] == '\n')
 	  break;
 	else
@@ -91,7 +92,7 @@ wrap_str::wrap_str (std::string const &str, unsigned width)
       // Look as far back as the end of previous line.
       size_t space = pos;
       for (; space > last; --space)
-	if (space == str.size () || isspace (str[space]))
+	if (space == str_size || isspace (str[space]))
 	  break;
 
       // While skipping back, we might end at the very beginning.  If
@@ -101,7 +102,7 @@ wrap_str::wrap_str (std::string const &str, unsigned width)
       if (space <= last + (newline ? indent : 0))
 	{
 	  space = pos;
-	  while (space < str.size () && !isspace (str[space]))
+	  while (space < str_size && !isspace (str[space]))
 	    space++;
 	}
 
@@ -109,7 +110,7 @@ wrap_str::wrap_str (std::string const &str, unsigned width)
       push_back (wrapline_t (last, space, newline ? 0 : indent));
 
       // Skip useless white space at the end of the line, up to EOL.
-      while (space < str.size () && isspace (str[space]) && str[space] != '\n')
+      while (space < str_size && isspace (str[space]) && str[space] != '\n')
 	space++;
 
       if (str[space] == '\n')
@@ -179,7 +180,7 @@ namespace
   class tests
   {
     std::string
-    wrap (std::string const &str, size_t width)
+    wrap (char const *str, size_t width)
     {
       return wrap_str (str, width).join ();
     }

@@ -38,13 +38,13 @@ class wrapline_t
 
 public:
   wrapline_t (size_t start, size_t end, size_t indent);
-  std::string build (std::string const &image) const;
+  std::string build (char const *image) const;
 };
 
 class wrap_str
   : private std::vector<wrapline_t>
 {
-  std::string const &_m_image;
+  char const *_m_image;
 
 public:
   typedef std::vector<wrapline_t> super_t;
@@ -55,7 +55,7 @@ public:
   using super_t::end;
   using super_t::empty;
 
-  wrap_str (std::string const &str, unsigned width);
+  wrap_str (char const *str, unsigned width);
 
   std::string join () const;
   std::string build (const_iterator it) const;
