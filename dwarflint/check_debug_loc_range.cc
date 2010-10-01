@@ -57,17 +57,17 @@ check_debug_ranges::descriptor ()
      .prereq<typeof (*_m_sec_ranges)> ()
      .prereq<typeof (*_m_info)> ()
      .description (
-"Checks for low-level structure of .debug_ranges.  In addition it\n"
+"Checks for low-level structure of .debug_ranges.  In addition it "
 "checks:\n"
 " - for overlapping and dangling references from .debug_info\n"
 " - that base address is set and that it actually changes the address\n"
 " - that ranges have a positive size\n"
 " - that there are no unreferenced holes in the section\n"
-" - that relocations are valid.  In ET_REL files that certain fields\n"
-"   are relocated\n"
-" - neither or both of range start and range end are expected to be\n"
-"   relocated.  It's expected that they are both relocated against the\n"
-"   same section.\n"));
+" - that relocations are valid.  In ET_REL files that certain fields "
+"are relocated\n"
+" - neither or both of range start and range end are expected to be "
+"relocated.  It's expected that they are both relocated against the "
+"same section.\n"));
   return &cd;
 }
 
@@ -80,17 +80,17 @@ check_debug_loc::descriptor ()
      .prereq<typeof (*_m_sec_loc)> ()
      .prereq<typeof (*_m_info)> ()
      .description (
-"Checks for low-level structure of .debug_loc.  In addition it\n"
-"makes the same checks as .debug_ranges.  For location expressions\n"
+"Checks for low-level structure of .debug_loc.  In addition it "
+"makes the same checks as .debug_ranges.  For location expressions "
 "it further checks:\n"
-" - that DW_OP_bra and DW_OP_skip argument is non-zero and doesn't\n"
-"   escape the expression.  In addition it is required that the jump\n"
-"   ends on another instruction, not arbitrarily in the middle of the\n"
-"   byte stream, even if that position happened to be interpretable as\n"
-"   another well-defined instruction stream.\n"
+" - that DW_OP_bra and DW_OP_skip argument is non-zero and doesn't "
+"escape the expression.  In addition it is required that the jump "
+"ends on another instruction, not arbitrarily in the middle of the "
+"byte stream, even if that position happened to be interpretable as "
+"another well-defined instruction stream.\n"
 " - on 32-bit machines it rejects DW_OP_const8u and DW_OP_const8s\n"
-" - on 32-bit machines it checks that ULEB128-encoded arguments aren't\n"
-"   quantities that don't fit into 32 bits\n"));
+" - on 32-bit machines it checks that ULEB128-encoded arguments aren't "
+"quantities that don't fit into 32 bits\n"));
   return &cd;
 }
 

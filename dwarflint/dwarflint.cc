@@ -27,6 +27,7 @@
 #include "messages.hh"
 #include "checks.hh"
 #include "main.hh"
+#include "wrap.hh"
 
 #include <fcntl.h>
 #include <cstring>
@@ -134,6 +135,7 @@ dwarflint::check_registrar::list_checks () const
 {
   bool be_verbose = opt_list_checks.value () == "full";
   checkdescriptors_t descriptors = get_descriptors ();
+  const size_t columns = 70;
 
   for (checkdescriptors_t::const_iterator it = descriptors.begin ();
        it != descriptors.end (); ++it)
@@ -160,17 +162,17 @@ dwarflint::check_registrar::list_checks () const
 	  prereqs const &prereq = cd.prereq ();
 	  if (!prereq.empty ())
 	    std::cout << "prerequisites: " << prereq << std::endl;
+
 	  char const *desc = cd.description ();
 	  if (desc != NULL)
-	    std::cout << desc;
+	    std::cout << wrap_str (desc, columns).join ();
 
 	  options const &opts = cd.opts ();
 	  if (!opts.empty ())
 	    {
 	      std::cout << "recognized options:" << std::endl;
-	      for (options::const_iterator ot = opts.begin ();
-		   ot != opts.end (); ++ot)
-		std::cout << "  " << ot->second->format () << std::endl;
+	      argp a = opts.build_argp ();
+	      argp_help (&a, stdout, ARGP_HELP_LONG, NULL);
 	    }
 
 	  std::cout << std::endl;

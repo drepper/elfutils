@@ -50,11 +50,11 @@ check_debug_pubnames::descriptor ()
      .prereq<typeof (*_m_sec)> ()
      .prereq<check_debug_info> ()
      .description (
-"Checks for low-level structure of .debug_pubnames.  In addition it\n"
+"Checks for low-level structure of .debug_pubnames.  In addition it "
 "checks:\n"
 " - for garbage inside padding\n"
-" - that relocations are valid.  In ET_REL files that certain fields\n"
-"   are relocated\n"
+" - that relocations are valid.  In ET_REL files that certain fields "
+"are relocated\n"
 "Furthermore, if .debug_info is valid, it is checked:\n"
 " - that references point to actual CUs and DIEs\n"
 " - that there's only one pub section per CU\n"));
@@ -72,7 +72,7 @@ check_debug_pubtypes::descriptor ()
      .prereq<typeof (*_m_sec)> ()
      .prereq<check_debug_info> ()
      .description (
-"Checks for low-level structure of .debug_pubtypes.  In addition it\n"
+"Checks for low-level structure of .debug_pubtypes.  In addition it "
 "makes the same checks as check_debug_pubnames.\n"));
   return &cd;
 }

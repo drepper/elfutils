@@ -67,13 +67,13 @@ or special value 0.0 indicating cases with no coverage whatsoever \
 	 .option (opt_dump)
 	 .option (opt_tabulation_rule)
 	 .description (
-"Computes a location info coverage statistics.  Goes through the whole\n"
-"DIE graph, looking at each variable and formal parameter, and\n"
-"determining scope coverage of its location information.  In other\n"
-"words for how big a part of scope we know, where the variable\n"
+"Computes a location info coverage statistics.  Goes through the whole "
+"DIE graph, looking at each variable and formal parameter, and "
+"determining scope coverage of its location information.  In other "
+"words for how big a part of scope we know, where the variable "
 "\"lives\".\n"
-" https://fedorahosted.org/pipermail/elfutils-devel/2010-July/001498.html\n"
-" https://fedorahosted.org/pipermail/elfutils-devel/2010-September/001602.html\n"));
+" - https://fedorahosted.org/pipermail/elfutils-devel/2010-July/001498.html\n"
+" - https://fedorahosted.org/pipermail/elfutils-devel/2010-September/001602.html\n"));
       return &cd;
     }
 

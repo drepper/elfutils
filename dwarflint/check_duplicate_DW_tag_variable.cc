@@ -57,8 +57,8 @@ namespace
 	(checkdescriptor::create ("check_duplicate_DW_tag_variable")
 	 .inherit<highlevel_check<check_duplicate_DW_tag_variable> > ()
 	 .description (
-"Implements a check for two full DW_TAG_variable DIEs with the same\n"
-"DW_AT_name value.  This covers duplicate declaration, duplicate\n"
+"Implements a check for two full DW_TAG_variable DIEs with the same "
+"DW_AT_name value.  This covers duplicate declaration, duplicate "
 "definition and declaration with definition.\n"
 " https://fedorahosted.org/pipermail/elfutils-devel/2010-July/001497.html\n"
 " http://gcc.gnu.org/bugzilla/show_bug.cgi?id=39524\n"));

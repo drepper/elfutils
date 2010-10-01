@@ -43,7 +43,7 @@ public:
        .groups ("@low")
        .option (ignore_missing)
        .description (
-"Checks that there are at least essential debuginfo sections present\n"
+"Checks that there are at least essential debuginfo sections present "
 "in the ELF file.\n"));
     return &cd;
   }

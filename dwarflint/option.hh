@@ -93,12 +93,12 @@ protected:
   static int get_short_option (char opt_short);
 
 public:
+  virtual ~option_i () {}
+
   virtual bool seen () const = 0;
   virtual argp_option const &build_option () const = 0;
   virtual error_t parse_opt (char *arg, argp_state *state) = 0;
   virtual int key () const = 0;
-  virtual std::string format () const = 0;
-  virtual ~option_i () {}
 };
 
 class option_common
@@ -132,8 +132,6 @@ public:
   {
     return _m_opt.key;
   }
-
-  std::string format () const;
 };
 
 template<class arg_type>

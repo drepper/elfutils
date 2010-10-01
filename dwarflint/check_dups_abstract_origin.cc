@@ -48,8 +48,8 @@ namespace
 	(checkdescriptor::create ("check_dups_abstract_origin")
 	 .inherit<highlevel_check<check_dups_abstract_origin> > ()
 	 .description (
-"If a given attribute name is present on a DIE, it is\n"
-"suspicious if that attribute name appears on the DIE that's the\n"
+"If a given attribute name is present on a DIE, it is "
+"suspicious if that attribute name appears on the DIE that's the "
 "first DIE's DW_AT_abstract_origin or DW_AT_specification.\n"
 " https://bugzilla.redhat.com/show_bug.cgi?id=527430\n"));
       return &cd;

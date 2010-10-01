@@ -52,10 +52,10 @@ check_debug_aranges::descriptor ()
      .prereq<typeof (*_m_info)> ()
      .prereq<typeof (*_m_cu_coverage)> ()
      .description (
-"Checks for low-level structure of .debug_aranges.  In addition it\n"
+"Checks for low-level structure of .debug_aranges.  In addition it "
 "checks:\n"
-" - that relocations are valid.  In ET_REL files that certain fields\n"
-"   are relocated\n"
+" - that relocations are valid.  In ET_REL files that certain fields "
+"are relocated\n"
 " - for dangling and duplicate CU references\n"
 " - for garbage inside padding\n"
 " - for zero-length ranges\n"
