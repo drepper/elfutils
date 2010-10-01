@@ -61,4 +61,6 @@ public:
   std::string build (const_iterator it) const;
 };
 
+char const *spaces (size_t n);
+
 #endif//DWARFLINT_WRAP_HH

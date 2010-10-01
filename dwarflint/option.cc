@@ -218,7 +218,6 @@ option_common::format () const
     {
       char buf[3] = {};
       std::sprintf (buf, "-%c", _m_opt.key);
-      std::string xxx (buf);
       ret += buf;
     }
 

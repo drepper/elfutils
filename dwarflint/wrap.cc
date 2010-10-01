@@ -52,9 +52,7 @@ wrapline_t::build (std::string const &image) const
 {
   assert (_m_end <= image.size ());
   std::string main = image.substr (_m_start, _m_end - _m_start);
-  char padding[_m_indent + 1];
-  std::memset (padding, ' ', _m_indent);
-  padding[_m_indent] = 0;
+  char const *padding = spaces (_m_indent);
   return std::string (padding) + main;
 }
 
@@ -144,6 +142,40 @@ wrap_str::build (wrap_str::const_iterator it) const
 
 namespace
 {
+  template <unsigned Max>
+  class spc
+  {
+    char *_m_buf;
+    char *_m_endp;
+  public:
+    spc ()
+      : _m_buf (new char[Max])
+      , _m_endp (_m_buf + Max - 1)
+    {
+      std::memset (_m_buf, ' ', Max - 1);
+      _m_buf[Max] = 0;
+    }
+    ~spc ()
+    {
+      delete [] _m_buf;
+    }
+    char const *get (size_t n)
+    {
+      assert (n < Max);
+      return _m_endp - n;
+    }
+  };
+}
+
+char const *
+spaces (size_t n)
+{
+  static spc<128> spaces;
+  return spaces.get (n);
+}
+
+namespace
+{
   class tests
   {
     std::string
@@ -152,9 +184,19 @@ namespace
       return wrap_str (str, width).join ();
     }
 
+    std::string
+    spacess (size_t i)
+    {
+      return spaces (i);
+    }
+
   public:
     tests ()
     {
+      assert (spacess (0) == "");
+      assert (spacess (1) == " ");
+      assert (spacess (2) == "  ");
+      assert (spacess (10) == "          ");
       assert (wrap ("a b c d", 1) == "a\nb\nc\nd\n");
       assert (wrap ("a bbbbb c d", 1) == "a\nbbbbb\nc\nd\n");
       assert (wrap ("a b", 3) == "a b\n");
