@@ -61,6 +61,7 @@ dwarflint_SOURCES = \
 	sections.cc sections.hh sections.ii \
 	tables.cc tables.hh \
 	where.c where.h \
+	wrap.cc wrap.hh \
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \
 	check_debug_info.cc check_debug_info.hh check_debug_info.ii \
 	check_debug_line.cc check_debug_line.hh check_debug_line.ii \
