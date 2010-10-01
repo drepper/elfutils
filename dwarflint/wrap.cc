@@ -153,7 +153,7 @@ namespace
       , _m_endp (_m_buf + Max - 1)
     {
       std::memset (_m_buf, ' ', Max - 1);
-      _m_buf[Max] = 0;
+      _m_buf[Max - 1] = 0;
     }
     ~spc ()
     {
