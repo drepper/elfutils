@@ -17,8 +17,8 @@
    http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00816.html
 
 ** dwarflint --stats
-*** the mutable/immutable part is not implemented yet
-   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00849.html
+*** mutability probably needs to take into account DW_OP_call*
+   https://fedorahosted.org/pipermail/elfutils-devel/2010-October/001628.html
 
 ** expected trees/attributes
    This is about the check_expected_trees check.  All attributes are

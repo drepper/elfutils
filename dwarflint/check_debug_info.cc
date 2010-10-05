@@ -630,7 +630,10 @@ namespace
 		if (!checked_read_uleb128 (ctx, &value, &where,
 					   "indirect attribute form"))
 		  return -1;
+		form = value;
 
+		// xxx Some of what's below is probably duplicated in
+		// check_debug_abbrev.  Consolidate.
 		if (!ver->form_allowed (form))
 		  {
 		    wr_error (where)
@@ -638,7 +641,6 @@ namespace
 		      << '.' << std::endl;
 		    return -1;
 		  }
-		form = value;
 
 		if (it->name == DW_AT_sibling)
 		  switch (ver->check_sibling_form (form))
@@ -654,7 +656,13 @@ namespace
 			<< "DW_AT_sibling attribute with non-reference "
 			"(indirect) form \"" << pri::form (value)
 			<< "\"." << std::endl;
-		    };
+		    }
+	      }
+
+	    if (form == DW_FORM_indirect)
+	      {
+		wr_error (&where, ": indirect form is again indirect.\n");
+		return -1;
 	      }
 
 	    value_check_cb_t value_check_cb = NULL;
@@ -938,10 +946,6 @@ namespace
 		    goto cant_read;
 		  break;
 		}
-
-	      case DW_FORM_indirect:
-		wr_error (&where, ": indirect form is again indirect.\n");
-		return -1;
 
 	      default:
 		wr_error (&where,
