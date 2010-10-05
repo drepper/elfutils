@@ -28,48 +28,42 @@
 #define DWARFLINT_TABLES_HH
 
 #include <set>
+#include "check_debug_info.ii"
 
-typedef int form;
+typedef int form; // xxx get rid of this or something, it collides
+		  // with the x_form stuff.
 typedef int attr;
 typedef int die_tag;
 class locexpr_op {};
 
+class x_form; //  xxx and rename this guy
+
 class dwarf_version
 {
-protected:
-  typedef std::set <form> form_set_t;
-
-private:
-  inline static bool find_form (form_set_t const &s, int f)
-  {
-    return s.find (f) != s.end ();
-  }
+public:
+  enum form_width_t
+    {
+      fw_0 = 0,
+      fw_1 = 1,
+      fw_2 = 2,
+      fw_4 = 4,
+      fw_8 = 8,
+      fw_uleb,
+      fw_unknown
+    };
+  // Return width of data stored with given form.  CU may be NULL if
+  // you are sure that the form size doesn't depend on addr_64 or off.
+  // Forms for which width makes no sense, such as DW_FORM_string, get
+  // fw_unknown.  Unknown forms get an assert.
+  virtual form_width_t
+  form_width (int form, struct cu const *cu = NULL) const = 0;
 
 public:
-  // Answer all known forms.
-  virtual form_set_t const &allowed_forms () const = 0;
+  virtual bool form_allowed (form f) const = 0;
 
-  // Answer all forms allowed in theory for this attribute.
-  virtual form_set_t const &allowed_forms (attr at) const = 0;
+  virtual x_form const *get_form (int name) const = 0;
 
-  // Answer forms allowed for this attribute at DIE with that tag.
-  virtual form_set_t const &allowed_forms (attr at, die_tag tag) const = 0;
-
-public:
-  bool form_allowed (form f) const
-  {
-    return find_form (allowed_forms (), f);
-  }
-
-  bool form_allowed (attr at, form f) const
-  {
-    return find_form (allowed_forms (at), f);
-  }
-
-  bool form_allowed (attr at, form f, die_tag tag) const
-  {
-    return find_form (allowed_forms (at, tag), f);
-  }
+  virtual bool form_allowed (attr at, form f) const = 0;
 
   int check_sibling_form (int form) const;
 

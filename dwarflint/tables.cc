@@ -28,8 +28,9 @@
 // a version in its own.
 
 #include "tables.hh"
-#include "../libdw/dwarf.h"
+#include "check_debug_info.hh"
 
+#include "../libdw/dwarf.h"
 #include <map>
 #include <bitset>
 #include <cassert>
@@ -67,76 +68,151 @@ namespace
 #undef ADD
     return s;
   }
+}
+
+class x_form
+{
+public:
+  virtual int name () const = 0;
+  virtual dw_class_set const &classes () const = 0;
+  virtual dwarf_version::form_width_t
+  width (struct cu const *cu = NULL) const = 0;
+  virtual ~x_form () {}
+};
+
+namespace {
 
   struct dwarf_row {
     int val;
     dw_class_set classes;
   };
 
-  class form_table
+  class x_form_table
   {
-    typedef std::set <form> _form_set_t;
-    typedef std::map <dw_class, _form_set_t > _form_map_t;
+    typedef std::map<int, x_form const *> _forms_map_t;
+    _forms_map_t const _m_forms;
 
-    static _form_map_t init_class_forms (dwarf_row const forms[],
-					 form_table const *parent)
+    static _forms_map_t build_forms (x_form const *const *forms)
     {
-      _form_map_t class_forms;
-
-      if (parent != NULL)
-	{
-	  std::set <form> overriden_forms;
-	  for (size_t i = 0; forms[i].val != 0; ++i)
-	    overriden_forms.insert (forms[i].val);
-
-	  for (_form_map_t::const_iterator it = parent->m_class_forms.begin ();
-	       it != parent->m_class_forms.end (); ++it)
-	    {
-	      std::set <form> new_forms = it->second;
-	      for (_form_set_t::const_iterator ot = overriden_forms.begin ();
-		   ot != overriden_forms.end (); ++ot)
-		new_forms.erase (*ot);
-	      class_forms.insert (std::make_pair (it->first, new_forms));
-	    }
-	}
-
-      for (size_t i = 0; forms[i].val != 0; ++i)
-	for (unsigned c = 0; c < forms[i].classes.size (); ++c)
-	  class_forms[static_cast<dw_class> (c)].insert (forms[i].val);
-
-      return class_forms;
+      _forms_map_t ret;
+      for (x_form const *const *it = forms; *it != NULL; ++it)
+	ret[(*it)->name ()] = *it;
+      return ret;
     }
-
-    static _form_set_t init_all_forms (_form_map_t const &class_forms)
-    {
-      _form_set_t all_forms;
-      for (_form_map_t::const_iterator it = class_forms.begin ();
-	   it != class_forms.end (); ++it)
-	all_forms.insert (it->second.begin (), it->second.end ());
-      return all_forms;
-    }
-
-    _form_map_t const m_class_forms;
-    _form_set_t const m_all_forms;
 
   public:
-    form_table (dwarf_row const forms[], form_table const *parent = NULL)
-      : m_class_forms (init_class_forms (forms, parent))
-      , m_all_forms (init_all_forms (m_class_forms))
+    x_form_table (x_form const *const forms[])
+      : _m_forms (build_forms (forms))
     {}
 
-    std::set <form> const &get (dw_class c) const
+    x_form const *
+    get (int f) const
     {
-      _form_map_t::const_iterator it = m_class_forms.find (c);
-      assert (it != m_class_forms.end ());
-      return it->second;
+      _forms_map_t::const_iterator it = _m_forms.find (f);
+      if (it != _m_forms.end ())
+	return it->second;
+      else
+	return NULL;
     }
 
-    std::set <form> const &get_all () const
+    bool
+    has_form (int f) const
     {
-      return m_all_forms;
+      return get (f) != NULL;
     }
   };
+
+  class basic_form
+    : public x_form
+  {
+  protected:
+    int _m_name;
+    dw_class_set _m_classes;
+  public:
+    basic_form (int a_name, dw_class_set a_classes)
+      : _m_name (a_name)
+      , _m_classes (a_classes)
+    {}
+
+    int
+    name () const
+    {
+      return _m_name;
+    }
+
+    dw_class_set const &
+    classes () const
+    {
+      return _m_classes;
+    }
+  };
+
+  class fixed_form
+    : public basic_form
+  {
+  protected:
+    dwarf_version::form_width_t _m_width;
+
+  public:
+    fixed_form (int a_name, dw_class_set a_classes,
+		dwarf_version::form_width_t a_width)
+      : basic_form (a_name, a_classes)
+      , _m_width (a_width)
+    {}
+
+    dwarf_version::form_width_t
+    width (__attribute__ ((unused)) struct cu const *cu = NULL) const
+    {
+      return _m_width;
+    }
+  };
+
+  struct width_off {
+    static dwarf_version::form_width_t width (struct cu const *cu) {
+      return static_cast<dwarf_version::form_width_t> (cu->head->offset_size);
+    }
+  };
+
+  struct width_addr {
+    static dwarf_version::form_width_t width (struct cu const *cu) {
+      return static_cast<dwarf_version::form_width_t> (cu->head->address_size);
+    }
+  };
+
+  template<class Sel>
+  class selwidth_form
+    : public basic_form
+  {
+  public:
+    template <class... Clss>
+    selwidth_form (int a_name, Clss... a_classes)
+      : basic_form (a_name, dw_classes (a_classes...))
+    {}
+
+    dwarf_version::form_width_t
+    width (struct cu const *cu) const
+    {
+      return Sel::width (cu);
+    }
+  };
+
+  typedef selwidth_form<width_off> w_off_form;
+  typedef selwidth_form<width_addr> w_addr_form;
+
+  template<dw_class... Clss>
+  class simple_form
+    : public fixed_form
+  {
+  public:
+    simple_form (int a_name, dwarf_version::form_width_t a_width)
+      : fixed_form (a_name, dw_classes (Clss...), a_width)
+    {}
+  };
+
+  typedef simple_form<cl_block> block_form;
+  typedef simple_form<cl_constant> const_form;
+  typedef simple_form<cl_reference> ref_form;
+  typedef simple_form<cl_flag> flag_form;
 
   dwarf_row const dwarf_2_at_table[] = {
     {DW_AT_sibling,		dw_classes (cl_reference)},
@@ -201,30 +277,35 @@ namespace
     {0,				dw_classes ()}
   };
 
-  dwarf_row const dwarf_2_form_table_rows[] = {
-    {DW_FORM_addr,   dw_classes (cl_address)},
-    {DW_FORM_block2, dw_classes (cl_block)},
-    {DW_FORM_block4, dw_classes (cl_block)},
-    {DW_FORM_data2,  dw_classes (cl_constant)},
-    {DW_FORM_data4,  dw_classes (cl_constant)},
-    {DW_FORM_data8,  dw_classes (cl_constant)},
-    {DW_FORM_string, dw_classes (cl_string)},
-    {DW_FORM_block,  dw_classes (cl_block)},
-    {DW_FORM_block1, dw_classes (cl_block)},
-    {DW_FORM_data1,  dw_classes (cl_constant)},
-    {DW_FORM_flag,   dw_classes (cl_flag)},
-    {DW_FORM_sdata,  dw_classes (cl_constant)},
-    {DW_FORM_strp,   dw_classes (cl_string)},
-    {DW_FORM_udata,  dw_classes (cl_constant)},
-    {DW_FORM_ref_addr, dw_classes (cl_reference)},
-    {DW_FORM_ref1,   dw_classes (cl_reference)},
-    {DW_FORM_ref2,   dw_classes (cl_reference)},
-    {DW_FORM_ref4,   dw_classes (cl_reference)},
-    {DW_FORM_ref8,   dw_classes (cl_reference)},
-    {DW_FORM_ref_udata, dw_classes (cl_reference)},
-    {0,	             dw_classes ()}
+  static x_form const *dwarf_2_forms[] = {
+    new block_form (DW_FORM_block, dwarf_version::fw_uleb),
+    new block_form (DW_FORM_block1, dwarf_version::fw_1),
+    new block_form (DW_FORM_block2, dwarf_version::fw_2),
+    new block_form (DW_FORM_block4, dwarf_version::fw_4),
+
+    new const_form (DW_FORM_data1, dwarf_version::fw_1),
+    new const_form (DW_FORM_data2, dwarf_version::fw_2),
+    new const_form (DW_FORM_data4, dwarf_version::fw_4),
+    new const_form (DW_FORM_data8, dwarf_version::fw_8),
+    new const_form (DW_FORM_sdata, dwarf_version::fw_uleb),
+    new const_form (DW_FORM_udata, dwarf_version::fw_uleb),
+
+    new flag_form (DW_FORM_flag, dwarf_version::fw_1),
+
+    new ref_form (DW_FORM_ref1, dwarf_version::fw_1),
+    new ref_form (DW_FORM_ref2, dwarf_version::fw_2),
+    new ref_form (DW_FORM_ref4, dwarf_version::fw_4),
+    new ref_form (DW_FORM_ref8, dwarf_version::fw_8),
+    new ref_form (DW_FORM_ref_udata, dwarf_version::fw_uleb),
+
+    new fixed_form (DW_FORM_string, dw_classes (cl_string),
+		    dwarf_version::fw_unknown),
+    new w_off_form (DW_FORM_strp, cl_string),
+    new w_addr_form (DW_FORM_addr, cl_address),
+    new w_addr_form (DW_FORM_ref_addr, cl_reference),
+
+    NULL
   };
-  form_table const dwarf_2_form_table (dwarf_2_form_table_rows);
 
   /* Changes from dwarf_2_*_table:  */
   dwarf_row const dwarf_3_at_table[] = {
@@ -278,14 +359,14 @@ namespace
     {0,			dw_classes ()}
   };
 
-  dwarf_row const dwarf_3_form_table_rows[] = {
-    {DW_FORM_data4,	dw_classes (cl_constant, cl_lineptr, cl_loclistptr,
-				    cl_macptr, cl_rangelistptr)},
-    {DW_FORM_data8,	dw_classes (cl_constant, cl_lineptr, cl_loclistptr,
-				    cl_macptr, cl_rangelistptr)},
-    {0,			dw_classes ()}
+  typedef simple_form<cl_constant, cl_lineptr, cl_loclistptr,
+		      cl_macptr, cl_rangelistptr> dw3_data_form;
+  x_form const *dwarf_3_forms[] = {
+    new dw3_data_form (DW_FORM_data4, dwarf_version::fw_4),
+    new dw3_data_form (DW_FORM_data8, dwarf_version::fw_8),
+    new w_off_form (DW_FORM_ref_addr, cl_reference),
+    NULL
   };
-  form_table const dwarf_3_form_table (dwarf_3_form_table_rows, &dwarf_2_form_table);
 
   /* Changes from dwarf_3_*_table:  */
   dwarf_row const dwarf_4_at_table[] = {
@@ -319,73 +400,155 @@ namespace
     {0,			dw_classes ()}
   };
 
-  dwarf_row const dwarf_4_form_table_rows[] = {
-    {DW_FORM_data4,		dw_classes (cl_constant)},
-    {DW_FORM_data8,		dw_classes (cl_constant)},
-    {DW_FORM_sec_offset,	dw_classes (cl_lineptr, cl_loclistptr,
-					    cl_macptr, cl_rangelistptr)},
-    {DW_FORM_exprloc,		dw_classes (cl_exprloc)},
-    {DW_FORM_flag_present,	dw_classes (cl_flag)},
-    {DW_FORM_ref_sig8,		dw_classes (cl_reference)},
-    {0,				dw_classes ()}
+  x_form const *dwarf_4_forms[] = {
+    new const_form (DW_FORM_data4, dwarf_version::fw_4),
+    new const_form (DW_FORM_data8, dwarf_version::fw_8),
+    new w_off_form (DW_FORM_sec_offset,
+		    cl_lineptr, cl_loclistptr, cl_macptr, cl_rangelistptr),
+    new simple_form<cl_exprloc> (DW_FORM_exprloc, dwarf_version::fw_uleb),
+    new flag_form (DW_FORM_flag_present, dwarf_version::fw_0),
+    new ref_form (DW_FORM_ref_sig8, dwarf_version::fw_8),
+    NULL
   };
-  form_table const dwarf_4_form_table (dwarf_4_form_table_rows, &dwarf_3_form_table);
 
   class std_dwarf
     : public dwarf_version
   {
-    typedef std::map <attr, form_set_t> _forms_t;
-    _forms_t m_forms;
-    dwarf_version const *m_parent;
-    form_table const &m_formtab;
+    typedef std::map <attr, dw_class_set> _attr_classes;
+    _attr_classes const _m_attr_classes;
+    x_form_table const _m_formtab;
+    dwarf_version const *_m_parent;
+
+    _attr_classes build_attr_classes (dwarf_row const attrtab[])
+    {
+      _attr_classes ret;
+      for (unsigned i = 0; attrtab[i].val != 0; ++i)
+	ret[attrtab[i].val] = attrtab[i].classes;
+      return ret;
+    }
 
   public:
-    std_dwarf (dwarf_row const attrtab[], form_table const &formtab,
+    std_dwarf (dwarf_row const attrtab[],
+	       x_form const *const forms[],
 	       dwarf_version const *parent = NULL)
-      : m_parent (parent)
-      , m_formtab (formtab)
-    {
-      for (unsigned i = 0; attrtab[i].val != 0; ++i)
-	for (unsigned c = 0; c < attrtab[i].classes.size (); ++c)
-	  if (attrtab[i].classes[c])
-	    m_forms[attrtab[i].val]
-	      = formtab.get (static_cast <dw_class> (c));
+      : _m_attr_classes (build_attr_classes (attrtab))
+      , _m_formtab (x_form_table (forms))
+      , _m_parent (parent)
+    {}
 
-      /*
-	std::cout << pri::attr (attrtab[i].at) << " {";
-	for (std::set <int>::const_iterator it = forms.begin ();
-	it != forms.end (); ++it)
-	std::cout << (it == forms.begin () ? "" : ", ") << pri::form (*it);
-	std::cout << "}" << std::endl;
-      */
+    form_width_t
+    form_width (__attribute__ ((unused)) int form,
+		__attribute__ ((unused)) struct cu const *cu = NULL) const
+    {
+      assert (!"NIY!");
     }
 
-    form_set_t const &allowed_forms () const
+    x_form const *
+    get_form (int name) const
     {
-      return m_formtab.get_all ();
+      if (x_form const *form = _m_formtab.get (name))
+	return form;
+      else if (_m_parent != NULL)
+	return _m_parent->get_form (name);
+      else
+	return NULL;
     }
 
-    form_set_t const &allowed_forms (attr at) const
+    bool
+    form_allowed (form f) const
     {
-      _forms_t::const_iterator it = m_forms.find (at);
-      assert (it != m_forms.end () || m_parent != NULL);
-      if (it != m_forms.end ())
+      return _m_formtab.has_form (f)
+	|| (_m_parent != NULL && _m_parent->form_allowed (f));
+    }
+
+    dw_class_set const &
+    attr_classes (int at) const
+    {
+      _attr_classes::const_iterator it = _m_attr_classes.find (at);
+      if (it != _m_attr_classes.end ())
 	return it->second;
       else
-	return m_parent->allowed_forms (at);
+	{
+	  assert (_m_parent != NULL);
+	  if (std_dwarf const *std_parent
+	      = dynamic_cast<std_dwarf const *> (_m_parent)) // xxx
+	    return std_parent->attr_classes (at);
+	}
+      assert (!"Unsupported attribute!"); // xxx but I won't tell you which one
     }
 
-    // Answer forms allowed at DIE with that tag.
-    form_set_t const &allowed_forms (attr at,
-				     __attribute__ ((unused)) die_tag tag) const
+    bool
+    form_allowed (attr at, form f) const
     {
-      return allowed_forms (at);
+      dw_class_set const &at_classes = attr_classes (at);
+      x_form const *form = this->get_form (f);
+      assert (form != NULL);
+      dw_class_set const &form_classes = form->classes ();
+      return (at_classes & form_classes).any ();
     }
   };
 
-  std_dwarf dwarf2 (dwarf_2_at_table, dwarf_2_form_table);
-  std_dwarf dwarf3 (dwarf_3_at_table, dwarf_3_form_table, &dwarf2);
-  std_dwarf dwarf4 (dwarf_4_at_table, dwarf_4_form_table, &dwarf3);
+  class x_std_dwarf
+    : public dwarf_version
+  {
+  public:
+    dwarf_version::form_width_t
+    form_width (int form, struct cu *cu)
+    {
+      switch (form)
+	{
+	case DW_FORM_flag_present:
+	  return fw_0;
+
+	case DW_FORM_block1:
+	case DW_FORM_data1:
+	case DW_FORM_flag:
+	case DW_FORM_ref1:
+	  return fw_1;
+
+	case DW_FORM_block2:
+	case DW_FORM_data2:
+	case DW_FORM_ref2:
+	  return fw_2;
+
+	case DW_FORM_block4:
+	case DW_FORM_data4:
+	case DW_FORM_ref4:
+	  return fw_4;
+
+	case DW_FORM_data8:
+	case DW_FORM_ref8:
+	case DW_FORM_ref_sig8:
+	  return fw_8;
+
+	case DW_FORM_addr:
+	  return cu->head->address_size == 8 ? fw_8 : fw_4;
+
+	case DW_FORM_ref_addr:
+	case DW_FORM_strp:
+	case DW_FORM_sec_offset:
+	  return cu->head->offset_size == 8 ? fw_8 : fw_4;
+
+	case DW_FORM_block:
+	case DW_FORM_sdata:
+	case DW_FORM_udata:
+	case DW_FORM_ref_udata:
+	case DW_FORM_exprloc:
+	case DW_FORM_indirect:
+	  return fw_uleb;
+
+	case DW_FORM_string:
+	  throw std::runtime_error
+	    ("You shouldn't need the width of DW_FORM_string.");
+	}
+
+      assert (!"Unhandled form!");
+    }
+  };
+
+  std_dwarf dwarf2 (dwarf_2_at_table, dwarf_2_forms);
+  std_dwarf dwarf3 (dwarf_3_at_table, dwarf_3_forms, &dwarf2);
+  std_dwarf dwarf4 (dwarf_4_at_table, dwarf_4_forms, &dwarf3);
 }
 
 dwarf_version const *
