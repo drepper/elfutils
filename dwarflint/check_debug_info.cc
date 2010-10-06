@@ -800,7 +800,7 @@ namespace
 		  }
 		}
 
-	    form_width_t width = ver->get_form (form)->width (cu);
+	    ::form const *x_form = ver->get_form (form);
 
 	    /* Setup per-form checking & relocation.  */
 	    switch (form)
@@ -838,97 +838,75 @@ namespace
 		break;
 	      }
 
-	    /* Load attribute value.  */
-	    switch (form)
+	    form_width_t width = x_form->width (cu);
+	    storage_class_t storclass = x_form->storage_class ();
+	    switch (storclass)
 	      {
-	      case DW_FORM_strp:
-	      case DW_FORM_sec_offset:
-	      case DW_FORM_ref_addr:
-	      case DW_FORM_addr:
-	      case DW_FORM_ref1:
-	      case DW_FORM_flag:
-	      case DW_FORM_data1:
-	      case DW_FORM_ref2:
-	      case DW_FORM_data2:
-	      case DW_FORM_data4:
-	      case DW_FORM_ref4:
-	      case DW_FORM_data8:
-	      case DW_FORM_ref8:
-		if (!read_ctx_read_var (ctx, width, &value))
+	      case sc_block:
+	      case sc_value:
+		// Read the value, or the length field if it's a block
+		// form.
+		switch (width)
 		  {
-		  cant_read:
-		    wr_error (where)
-		      << "can't read value of attribute "
-		      << pri::attr (it->name) << '.' << std::endl;
-		    return -1;
+		  case fw_0:
+		    // who knows, DW_FORM_flag_absent might turn up one day
+		    assert (x_form->name () == DW_FORM_flag_present);
+		    value = 1;
+		    break;
+
+		  case fw_1:
+		  case fw_2:
+		  case fw_4:
+		  case fw_8:
+		    if (!read_ctx_read_var (ctx, width, &value))
+		      {
+		      cant_read:
+			wr_error (where)
+			  << "can't read value of attribute "
+			  << pri::attr (it->name) << '.' << std::endl;
+			return -1;
+		      }
+		    break;
+
+		  case fw_uleb:
+		  case fw_sleb:
+		    if (!checked_read_leb128 (ctx, width, &value,
+					      &where, "attribute value"))
+		      return -1;
+		    break;
+
+		  case fw_unknown:
+		    assert (!"Should never get there!");
 		  }
+
+		if (storclass != sc_block)
+		  break;
+
+		// Read & validate the block body.
+		if (is_location_attrib (it->name))
+		  {
+		    uint64_t expr_start
+		      = cu->head->offset + read_ctx_get_offset (ctx);
+		    if (!check_location_expression
+			(file, ctx, cu, expr_start, reloc, value, &where))
+		      return -1;
+		  }
+		else
+		  /* xxx really skip_mismatched?  We just don't
+		     know how to process these...  */
+		  relocation_skip (reloc,
+				   read_ctx_get_offset (ctx) + value,
+				   &where, skip_mismatched);
+
+		if (!read_ctx_skip (ctx, value))
+		  goto cant_read;
+
 		break;
 
-	      case DW_FORM_string:
+	      case sc_string:
 		if (!read_ctx_read_str (ctx))
 		  goto cant_read;
 		break;
-
-	      case DW_FORM_ref_udata:
-	      case DW_FORM_udata:
-		if (!checked_read_uleb128 (ctx, &value, &where,
-					   "attribute value"))
-		  return -1;
-		break;
-
-	      case DW_FORM_flag_present:
-		value = 1;
-		break;
-
-	      case DW_FORM_sdata:
-		{
-		  int64_t value64;
-		  if (!checked_read_sleb128 (ctx, &value64, &where,
-					     "attribute value"))
-		    return -1;
-		  value = (uint64_t) value64;
-		  break;
-		}
-
-	      case DW_FORM_block:
-	      case DW_FORM_block1:
-	      case DW_FORM_block2:
-	      case DW_FORM_block4:
-		{
-		  uint64_t length;
-		  if (width == 0)
-		    {
-		      assert (form == DW_FORM_block);
-		      if (!checked_read_uleb128 (ctx, &length, &where,
-						 "attribute value"))
-			return -1;
-		    }
-		  else if (!read_ctx_read_var (ctx, width, &length))
-		    goto cant_read;
-
-		  if (is_location_attrib (it->name))
-		    {
-		      uint64_t expr_start
-			= cu->head->offset + read_ctx_get_offset (ctx);
-		      if (!check_location_expression (file, ctx, cu, expr_start,
-						      reloc, length, &where))
-			return -1;
-		    }
-		  else
-		    /* xxx really skip_mismatched?  We just don't know
-		       how to process these...  */
-		    relocation_skip (reloc,
-				     read_ctx_get_offset (ctx) + length,
-				     &where, skip_mismatched);
-
-		  if (!read_ctx_skip (ctx, length))
-		    goto cant_read;
-		  break;
-		}
-
-	      default:
-		wr_error (&where,
-			  ": internal error: unhandled form 0x%x.\n", form);
 	      }
 
 	    /* Relocate the value if appropriate.  */
