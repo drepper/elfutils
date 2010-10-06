@@ -28,47 +28,104 @@
 #define DWARFLINT_TABLES_HH
 
 #include <set>
+#include <bitset>
 #include "check_debug_info.ii"
 
 typedef int die_tag;
 class locexpr_op {};
 
-class form;
+enum dw_class
+  {
+    cl_address,
+    cl_block,
+    cl_constant,
+    cl_exprloc,
+    cl_flag,
+    cl_reference,
+    cl_string,
+    cl_loclistptr,
+    cl_lineptr,
+    cl_macptr,
+    cl_rangelistptr,
+    max_dw_class
+  };
+
+class dw_class_set
+  : public std::bitset<max_dw_class>
+{
+public:
+  dw_class_set (dw_class a = max_dw_class, dw_class b = max_dw_class,
+		dw_class c = max_dw_class, dw_class d = max_dw_class,
+		dw_class e = max_dw_class);
+};
+
+enum form_width_t
+  {
+    fw_0 = 0,
+    fw_1 = 1,
+    fw_2 = 2,
+    fw_4 = 4,
+    fw_8 = 8,
+    fw_leb,
+    fw_unknown
+  };
+
+enum storage_class_t
+  {
+    sc_value,
+    sc_block,
+    sc_string,
+  };
+
+class form
+{
+public:
+  virtual int name () const = 0;
+  virtual dw_class_set const &classes () const = 0;
+  virtual form_width_t width (cu const *cu = NULL) const = 0;
+  //virtual storage_class_t storage_class () const = 0;
+
+  virtual ~form () {}
+};
 
 class dwarf_version
 {
 public:
-  enum form_width_t
-    {
-      fw_0 = 0,
-      fw_1 = 1,
-      fw_2 = 2,
-      fw_4 = 4,
-      fw_8 = 8,
-      fw_leb,
-      fw_unknown
-    };
-  // Return width of data stored with given form.  CU may be NULL if
-  // you are sure that the form size doesn't depend on addr_64 or off.
-  // Forms for which width makes no sense, such as DW_FORM_string, get
-  // fw_unknown.  Unknown forms get an assert.
+  /// Return form object for given form name.  Return NULL for unknown
+  /// forms.
+  virtual form const *get_form (int form) const = 0;
+
+  /// Shortcut for get_form (form) != NULL.
+  bool form_allowed (int form) const;
+
+  /// Figure out whether, in given DWARF version, given attribute is
+  /// allowed to have given form.
+  virtual bool form_allowed (int attr, int form) const = 0;
+
+  /// Return width of data stored with given form.  CU may be NULL if
+  /// you are sure that the form size doesn't depend on addr_64 or
+  /// off.  Forms for which width makes no sense, such as
+  /// DW_FORM_string, get fw_unknown.  Unknown forms get an assert.
   virtual form_width_t
   form_width (int form, struct cu const *cu = NULL) const = 0;
 
-public:
-  virtual bool form_allowed (int form) const = 0;
-
-  virtual form const *get_form (int form) const = 0;
-
-  virtual bool form_allowed (int attr, int form) const = 0;
-
-  int check_sibling_form (int form) const;
-
+  /// Return dwarf_version object for given DWARF version.
   static dwarf_version const *get (unsigned version)
     __attribute__ ((pure));
 
+  /// Return dwarf_version object for latest supported DWARF version.
   static dwarf_version const *get_latest ()
     __attribute__ ((pure));
 };
+
+/// Check that the form is suitable for the DW_AT_sibling attribute.
+enum sibling_form_suitable_t
+  {
+    sfs_ok,      ///< This form is OK for DW_AT_sibling
+    sfs_long,    ///< Global reference form, unnecessary for DW_AT_sibling
+    sfs_invalid, ///< This form isn't allowed at DW_AT_sibling
+  };
+sibling_form_suitable_t sibling_form_suitable (dwarf_version const *ver,
+					       int form);
 
 #endif//DWARFLINT_TABLES_HH

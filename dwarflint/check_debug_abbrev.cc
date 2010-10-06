@@ -415,18 +415,21 @@ namespace
 		    << "excessive DW_AT_sibling attribute at childless abbrev."
 		    << std::endl;
 
-		switch (ver->check_sibling_form (attrib_form))
+		switch (sibling_form_suitable (ver, attrib_form))
 		  {
-		  case -1:
+		  case sfs_long:
 		    wr_message (where, cat (mc_die_rel, mc_impact_2))
 		      << "DW_AT_sibling attribute with form DW_FORM_ref_addr."
 		      << std::endl;
 		    break;
 
-		  case -2:
+		  case sfs_invalid:
 		    wr_error (where)
 		      << "DW_AT_sibling attribute with non-reference form "
 		      << pri::form (attrib_form) << '.' << std::endl;
+
+		  case sfs_ok:
+		    ;
 		  };
 	      }
 

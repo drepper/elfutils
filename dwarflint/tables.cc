@@ -32,61 +32,19 @@
 
 #include "../libdw/dwarf.h"
 #include <map>
-#include <bitset>
 #include <cassert>
 
-namespace
+dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
+			    dw_class d, dw_class e)
 {
-  enum dw_class {
-    cl_address,
-    cl_block,
-    cl_constant,
-    cl_exprloc,
-    cl_flag,
-    cl_reference,
-    cl_string,
-    cl_loclistptr,
-    cl_lineptr,
-    cl_macptr,
-    cl_rangelistptr,
-    max_dw_class
-  };
-
-  enum storage_class_t {
-    sc_value,
-    sc_block,
-    sc_string,
-    max_storage_class
-  };
-
-  typedef std::bitset <max_dw_class> dw_class_set;
-
-  dw_class_set dw_classes (dw_class a = max_dw_class, dw_class b = max_dw_class,
-			   dw_class c = max_dw_class, dw_class d = max_dw_class,
-			   dw_class e = max_dw_class)
-  {
-    dw_class_set s;
-#define ADD(V) if (V != max_dw_class) s[V] = true
-    ADD (a);
-    ADD (b);
-    ADD (c);
-    ADD (d);
-    ADD (e);
+#define ADD(V) if (V != max_dw_class) (*this)[V] = true
+  ADD (a);
+  ADD (b);
+  ADD (c);
+  ADD (d);
+  ADD (e);
 #undef ADD
-    return s;
-  }
 }
-
-class form
-{
-public:
-  virtual int name () const = 0;
-  virtual dw_class_set const &classes () const = 0;
-  virtual dwarf_version::form_width_t width (cu const *cu = NULL) const = 0;
-  //virtual storage_class_t storage_class () const = 0;
-
-  virtual ~form () {}
-};
 
 namespace {
 
@@ -122,12 +80,6 @@ namespace {
       else
 	return NULL;
     }
-
-    bool
-    has_form (int f) const
-    {
-      return get (f) != NULL;
-    }
   };
 
   class basic_form
@@ -159,16 +111,15 @@ namespace {
     : public basic_form
   {
   protected:
-    dwarf_version::form_width_t _m_width;
+    form_width_t _m_width;
 
   public:
-    fixed_form (int a_name, dw_class_set a_classes,
-		dwarf_version::form_width_t a_width)
+    fixed_form (int a_name, dw_class_set a_classes, form_width_t a_width)
       : basic_form (a_name, a_classes)
       , _m_width (a_width)
     {}
 
-    dwarf_version::form_width_t
+    form_width_t
     width (__attribute__ ((unused)) struct cu const *cu = NULL) const
     {
       return _m_width;
@@ -176,14 +127,14 @@ namespace {
   };
 
   struct width_off {
-    static dwarf_version::form_width_t width (struct cu const *cu) {
-      return static_cast<dwarf_version::form_width_t> (cu->head->offset_size);
+    static form_width_t width (struct cu const *cu) {
+      return static_cast<form_width_t> (cu->head->offset_size);
     }
   };
 
   struct width_addr {
-    static dwarf_version::form_width_t width (struct cu const *cu) {
-      return static_cast<dwarf_version::form_width_t> (cu->head->address_size);
+    static form_width_t width (struct cu const *cu) {
+      return static_cast<form_width_t> (cu->head->address_size);
     }
   };
 
@@ -194,10 +145,10 @@ namespace {
   public:
     template <class... Clss>
     selwidth_form (int a_name, Clss... a_classes)
-      : basic_form (a_name, dw_classes (a_classes...))
+      : basic_form (a_name, dw_class_set (a_classes...))
     {}
 
-    dwarf_version::form_width_t
+    form_width_t
     width (struct cu const *cu) const
     {
       return Sel::width (cu);
@@ -212,8 +163,8 @@ namespace {
     : public fixed_form
   {
   public:
-    simple_form (int a_name, dwarf_version::form_width_t a_width)
-      : fixed_form (a_name, dw_classes (Clss...), a_width)
+    simple_form (int a_name, form_width_t a_width)
+      : fixed_form (a_name, dw_class_set (Clss...), a_width)
     {}
   };
 
@@ -223,91 +174,90 @@ namespace {
   typedef simple_form<cl_flag> flag_form;
 
   dwarf_row const dwarf_2_at_table[] = {
-    {DW_AT_sibling,		dw_classes (cl_reference)},
-    {DW_AT_location,		dw_classes (cl_block, cl_constant)},
-    {DW_AT_name,		dw_classes (cl_string)},
-    {DW_AT_ordering,		dw_classes (cl_constant)},
-    {DW_AT_byte_size,		dw_classes (cl_constant)},
-    {DW_AT_bit_offset,		dw_classes (cl_constant)},
-    {DW_AT_bit_size,		dw_classes (cl_constant)},
-    {DW_AT_stmt_list,		dw_classes (cl_constant)},
-    {DW_AT_low_pc,		dw_classes (cl_address)},
-    {DW_AT_high_pc,		dw_classes (cl_address)},
-    {DW_AT_language,		dw_classes (cl_constant)},
-    {DW_AT_discr,		dw_classes (cl_reference)},
-    {DW_AT_discr_value,		dw_classes (cl_constant)},
-    {DW_AT_visibility,		dw_classes (cl_constant)},
-    {DW_AT_import,		dw_classes (cl_reference)},
-    {DW_AT_string_length,	dw_classes (cl_block, cl_constant)},
-    {DW_AT_common_reference,	dw_classes (cl_reference)},
-    {DW_AT_comp_dir,		dw_classes (cl_string)},
-    {DW_AT_const_value,		dw_classes (cl_string, cl_constant, cl_block)},
-    {DW_AT_containing_type,	dw_classes (cl_reference)},
-    {DW_AT_default_value,	dw_classes (cl_reference)},
-    {DW_AT_inline,		dw_classes (cl_constant)},
-    {DW_AT_is_optional,		dw_classes (cl_flag)},
-    {DW_AT_lower_bound,		dw_classes (cl_constant, cl_reference)},
-    {DW_AT_producer,		dw_classes (cl_string)},
-    {DW_AT_prototyped,		dw_classes (cl_flag)},
-    {DW_AT_return_addr,		dw_classes (cl_block, cl_constant)},
-    {DW_AT_start_scope,		dw_classes (cl_constant)},
-    {DW_AT_bit_stride,		dw_classes (cl_constant)},
-    {DW_AT_upper_bound,		dw_classes (cl_constant, cl_reference)},
-    {DW_AT_abstract_origin,	dw_classes (cl_constant)},
-    {DW_AT_accessibility,	dw_classes (cl_reference)},
-    {DW_AT_address_class,	dw_classes (cl_constant)},
-    {DW_AT_artificial,		dw_classes (cl_flag)},
-    {DW_AT_base_types,		dw_classes (cl_reference)},
-    {DW_AT_calling_convention,	dw_classes (cl_constant)},
-    {DW_AT_count,		dw_classes (cl_constant, cl_reference)},
-    {DW_AT_data_member_location, dw_classes (cl_block, cl_reference)},
-    {DW_AT_decl_column,		dw_classes (cl_constant)},
-    {DW_AT_decl_file,		dw_classes (cl_constant)},
-    {DW_AT_decl_line,		dw_classes (cl_constant)},
-    {DW_AT_declaration,		dw_classes (cl_flag)},
-    {DW_AT_discr_list,		dw_classes (cl_block)},
-    {DW_AT_encoding,		dw_classes (cl_constant)},
-    {DW_AT_external,		dw_classes (cl_flag)},
-    {DW_AT_frame_base,		dw_classes (cl_block, cl_constant)},
-    {DW_AT_friend,		dw_classes (cl_reference)},
-    {DW_AT_identifier_case,	dw_classes (cl_constant)},
-    {DW_AT_macro_info,		dw_classes (cl_constant)},
-    {DW_AT_namelist_item,	dw_classes (cl_block)},
-    {DW_AT_priority,		dw_classes (cl_reference)},
-    {DW_AT_segment,		dw_classes (cl_block, cl_constant)},
-    {DW_AT_specification,	dw_classes (cl_reference)},
-    {DW_AT_static_link,		dw_classes (cl_block, cl_constant)},
-    {DW_AT_type,		dw_classes (cl_reference)},
-    {DW_AT_use_location,	dw_classes (cl_block, cl_constant)},
-    {DW_AT_variable_parameter,	dw_classes (cl_flag)},
-    {DW_AT_virtuality,		dw_classes (cl_constant)},
-    {DW_AT_vtable_elem_location, dw_classes (cl_block, cl_reference)},
-    {0,				dw_classes ()}
+    {DW_AT_sibling,		dw_class_set (cl_reference)},
+    {DW_AT_location,		dw_class_set (cl_block, cl_constant)},
+    {DW_AT_name,		dw_class_set (cl_string)},
+    {DW_AT_ordering,		dw_class_set (cl_constant)},
+    {DW_AT_byte_size,		dw_class_set (cl_constant)},
+    {DW_AT_bit_offset,		dw_class_set (cl_constant)},
+    {DW_AT_bit_size,		dw_class_set (cl_constant)},
+    {DW_AT_stmt_list,		dw_class_set (cl_constant)},
+    {DW_AT_low_pc,		dw_class_set (cl_address)},
+    {DW_AT_high_pc,		dw_class_set (cl_address)},
+    {DW_AT_language,		dw_class_set (cl_constant)},
+    {DW_AT_discr,		dw_class_set (cl_reference)},
+    {DW_AT_discr_value,		dw_class_set (cl_constant)},
+    {DW_AT_visibility,		dw_class_set (cl_constant)},
+    {DW_AT_import,		dw_class_set (cl_reference)},
+    {DW_AT_string_length,	dw_class_set (cl_block, cl_constant)},
+    {DW_AT_common_reference,	dw_class_set (cl_reference)},
+    {DW_AT_comp_dir,		dw_class_set (cl_string)},
+    {DW_AT_const_value,		dw_class_set (cl_string, cl_constant, cl_block)},
+    {DW_AT_containing_type,	dw_class_set (cl_reference)},
+    {DW_AT_default_value,	dw_class_set (cl_reference)},
+    {DW_AT_inline,		dw_class_set (cl_constant)},
+    {DW_AT_is_optional,		dw_class_set (cl_flag)},
+    {DW_AT_lower_bound,		dw_class_set (cl_constant, cl_reference)},
+    {DW_AT_producer,		dw_class_set (cl_string)},
+    {DW_AT_prototyped,		dw_class_set (cl_flag)},
+    {DW_AT_return_addr,		dw_class_set (cl_block, cl_constant)},
+    {DW_AT_start_scope,		dw_class_set (cl_constant)},
+    {DW_AT_bit_stride,		dw_class_set (cl_constant)},
+    {DW_AT_upper_bound,		dw_class_set (cl_constant, cl_reference)},
+    {DW_AT_abstract_origin,	dw_class_set (cl_constant)},
+    {DW_AT_accessibility,	dw_class_set (cl_reference)},
+    {DW_AT_address_class,	dw_class_set (cl_constant)},
+    {DW_AT_artificial,		dw_class_set (cl_flag)},
+    {DW_AT_base_types,		dw_class_set (cl_reference)},
+    {DW_AT_calling_convention,	dw_class_set (cl_constant)},
+    {DW_AT_count,		dw_class_set (cl_constant, cl_reference)},
+    {DW_AT_data_member_location, dw_class_set (cl_block, cl_reference)},
+    {DW_AT_decl_column,		dw_class_set (cl_constant)},
+    {DW_AT_decl_file,		dw_class_set (cl_constant)},
+    {DW_AT_decl_line,		dw_class_set (cl_constant)},
+    {DW_AT_declaration,		dw_class_set (cl_flag)},
+    {DW_AT_discr_list,		dw_class_set (cl_block)},
+    {DW_AT_encoding,		dw_class_set (cl_constant)},
+    {DW_AT_external,		dw_class_set (cl_flag)},
+    {DW_AT_frame_base,		dw_class_set (cl_block, cl_constant)},
+    {DW_AT_friend,		dw_class_set (cl_reference)},
+    {DW_AT_identifier_case,	dw_class_set (cl_constant)},
+    {DW_AT_macro_info,		dw_class_set (cl_constant)},
+    {DW_AT_namelist_item,	dw_class_set (cl_block)},
+    {DW_AT_priority,		dw_class_set (cl_reference)},
+    {DW_AT_segment,		dw_class_set (cl_block, cl_constant)},
+    {DW_AT_specification,	dw_class_set (cl_reference)},
+    {DW_AT_static_link,		dw_class_set (cl_block, cl_constant)},
+    {DW_AT_type,		dw_class_set (cl_reference)},
+    {DW_AT_use_location,	dw_class_set (cl_block, cl_constant)},
+    {DW_AT_variable_parameter,	dw_class_set (cl_flag)},
+    {DW_AT_virtuality,		dw_class_set (cl_constant)},
+    {DW_AT_vtable_elem_location, dw_class_set (cl_block, cl_reference)},
+    {0,				dw_class_set ()}
   };
 
   form const *dwarf_2_forms[] = {
-    new block_form (DW_FORM_block, dwarf_version::fw_leb),
-    new block_form (DW_FORM_block1, dwarf_version::fw_1),
-    new block_form (DW_FORM_block2, dwarf_version::fw_2),
-    new block_form (DW_FORM_block4, dwarf_version::fw_4),
+    new block_form (DW_FORM_block, fw_leb),
+    new block_form (DW_FORM_block1, fw_1),
+    new block_form (DW_FORM_block2, fw_2),
+    new block_form (DW_FORM_block4, fw_4),
 
-    new const_form (DW_FORM_data1, dwarf_version::fw_1),
-    new const_form (DW_FORM_data2, dwarf_version::fw_2),
-    new const_form (DW_FORM_data4, dwarf_version::fw_4),
-    new const_form (DW_FORM_data8, dwarf_version::fw_8),
-    new const_form (DW_FORM_sdata, dwarf_version::fw_leb),
-    new const_form (DW_FORM_udata, dwarf_version::fw_leb),
+    new const_form (DW_FORM_data1, fw_1),
+    new const_form (DW_FORM_data2, fw_2),
+    new const_form (DW_FORM_data4, fw_4),
+    new const_form (DW_FORM_data8, fw_8),
+    new const_form (DW_FORM_sdata, fw_leb),
+    new const_form (DW_FORM_udata, fw_leb),
 
-    new flag_form (DW_FORM_flag, dwarf_version::fw_1),
+    new flag_form (DW_FORM_flag, fw_1),
 
-    new ref_form (DW_FORM_ref1, dwarf_version::fw_1),
-    new ref_form (DW_FORM_ref2, dwarf_version::fw_2),
-    new ref_form (DW_FORM_ref4, dwarf_version::fw_4),
-    new ref_form (DW_FORM_ref8, dwarf_version::fw_8),
-    new ref_form (DW_FORM_ref_udata, dwarf_version::fw_leb),
+    new ref_form (DW_FORM_ref1, fw_1),
+    new ref_form (DW_FORM_ref2, fw_2),
+    new ref_form (DW_FORM_ref4, fw_4),
+    new ref_form (DW_FORM_ref8, fw_8),
+    new ref_form (DW_FORM_ref_udata, fw_leb),
 
-    new fixed_form (DW_FORM_string, dw_classes (cl_string),
-		    dwarf_version::fw_unknown),
+    new fixed_form (DW_FORM_string, dw_class_set (cl_string), fw_unknown),
     new w_off_form (DW_FORM_strp, cl_string),
     new w_addr_form (DW_FORM_addr, cl_address),
     new w_addr_form (DW_FORM_ref_addr, cl_reference),
@@ -317,105 +267,106 @@ namespace {
 
   /* Changes from dwarf_2_*_table:  */
   dwarf_row const dwarf_3_at_table[] = {
-    {DW_AT_location,	dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_byte_size,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_bit_offset,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_bit_size,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_stmt_list,	dw_classes (cl_lineptr)},
-    {DW_AT_string_length, dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_const_value,	dw_classes (cl_block, cl_constant, cl_string)},
-    {DW_AT_lower_bound,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_return_addr,	dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_bit_stride,	dw_classes (cl_constant)},
-    {DW_AT_upper_bound,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_count,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_data_member_location, dw_classes (cl_block, cl_constant,
+    {DW_AT_location,	dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_byte_size,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_bit_offset,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_bit_size,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_stmt_list,	dw_class_set (cl_lineptr)},
+    {DW_AT_string_length, dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_const_value,	dw_class_set (cl_block, cl_constant, cl_string)},
+    {DW_AT_lower_bound,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_return_addr,	dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_bit_stride,	dw_class_set (cl_constant)},
+    {DW_AT_upper_bound,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_count,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_data_member_location, dw_class_set (cl_block, cl_constant,
 					     cl_loclistptr)},
-    {DW_AT_frame_base,	dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_macro_info,	dw_classes (cl_macptr)},
-    {DW_AT_segment,	dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_static_link,	dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_use_location, dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_vtable_elem_location, dw_classes (cl_block, cl_loclistptr)},
-    {DW_AT_associated,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_data_location, dw_classes (cl_block)},
-    {DW_AT_byte_stride,	dw_classes (cl_block, cl_constant, cl_reference)},
-    {DW_AT_entry_pc,	dw_classes (cl_address)},
-    {DW_AT_use_UTF8,	dw_classes (cl_flag)},
-    {DW_AT_extension,	dw_classes (cl_reference)},
-    {DW_AT_ranges,	dw_classes (cl_rangelistptr)},
-    {DW_AT_trampoline,	dw_classes (cl_address, cl_flag, cl_reference,
+    {DW_AT_frame_base,	dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_macro_info,	dw_class_set (cl_macptr)},
+    {DW_AT_segment,	dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_static_link,	dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_use_location, dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_vtable_elem_location, dw_class_set (cl_block, cl_loclistptr)},
+    {DW_AT_associated,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_data_location, dw_class_set (cl_block)},
+    {DW_AT_byte_stride,	dw_class_set (cl_block, cl_constant, cl_reference)},
+    {DW_AT_entry_pc,	dw_class_set (cl_address)},
+    {DW_AT_use_UTF8,	dw_class_set (cl_flag)},
+    {DW_AT_extension,	dw_class_set (cl_reference)},
+    {DW_AT_ranges,	dw_class_set (cl_rangelistptr)},
+    {DW_AT_trampoline,	dw_class_set (cl_address, cl_flag, cl_reference,
 				    cl_string)},
-    {DW_AT_call_column,	dw_classes (cl_constant)},
-    {DW_AT_call_file,	dw_classes (cl_constant)},
-    {DW_AT_call_line,	dw_classes (cl_constant)},
-    {DW_AT_description,	dw_classes (cl_string)},
-    {DW_AT_binary_scale, dw_classes (cl_constant)},
-    {DW_AT_decimal_scale, dw_classes (cl_constant)},
-    {DW_AT_small,	dw_classes (cl_reference)},
-    {DW_AT_decimal_sign, dw_classes (cl_constant)},
-    {DW_AT_digit_count,	dw_classes (cl_constant)},
-    {DW_AT_picture_string, dw_classes (cl_string)},
-    {DW_AT_mutable,	dw_classes (cl_flag)},
-    {DW_AT_threads_scaled, dw_classes (cl_flag)},
-    {DW_AT_explicit,	dw_classes (cl_flag)},
-    {DW_AT_object_pointer, dw_classes (cl_reference)},
-    {DW_AT_endianity,	dw_classes (cl_constant)},
-    {DW_AT_elemental,	dw_classes (cl_flag)},
-    {DW_AT_pure,	dw_classes (cl_flag)},
-    {DW_AT_recursive,	dw_classes (cl_flag)},
-    {0,			dw_classes ()}
+    {DW_AT_call_column,	dw_class_set (cl_constant)},
+    {DW_AT_call_file,	dw_class_set (cl_constant)},
+    {DW_AT_call_line,	dw_class_set (cl_constant)},
+    {DW_AT_description,	dw_class_set (cl_string)},
+    {DW_AT_binary_scale, dw_class_set (cl_constant)},
+    {DW_AT_decimal_scale, dw_class_set (cl_constant)},
+    {DW_AT_small,	dw_class_set (cl_reference)},
+    {DW_AT_decimal_sign, dw_class_set (cl_constant)},
+    {DW_AT_digit_count,	dw_class_set (cl_constant)},
+    {DW_AT_picture_string, dw_class_set (cl_string)},
+    {DW_AT_mutable,	dw_class_set (cl_flag)},
+    {DW_AT_threads_scaled, dw_class_set (cl_flag)},
+    {DW_AT_explicit,	dw_class_set (cl_flag)},
+    {DW_AT_object_pointer, dw_class_set (cl_reference)},
+    {DW_AT_endianity,	dw_class_set (cl_constant)},
+    {DW_AT_elemental,	dw_class_set (cl_flag)},
+    {DW_AT_pure,	dw_class_set (cl_flag)},
+    {DW_AT_recursive,	dw_class_set (cl_flag)},
+    {0,			dw_class_set ()}
   };
 
   typedef simple_form<cl_constant, cl_lineptr, cl_loclistptr,
 		      cl_macptr, cl_rangelistptr> dw3_data_form;
   form const *dwarf_3_forms[] = {
-    new dw3_data_form (DW_FORM_data4, dwarf_version::fw_4),
-    new dw3_data_form (DW_FORM_data8, dwarf_version::fw_8),
+    new dw3_data_form (DW_FORM_data4, fw_4),
+    new dw3_data_form (DW_FORM_data8, fw_8),
     new w_off_form (DW_FORM_ref_addr, cl_reference),
     NULL
   };
 
   /* Changes from dwarf_3_*_table:  */
   dwarf_row const dwarf_4_at_table[] = {
-    {DW_AT_location,	dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_bit_offset,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_bit_size,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_high_pc,	dw_classes (cl_address, cl_constant)},
-    {DW_AT_string_length, dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_const_value,	dw_classes (cl_block, cl_constant, cl_string)},
-    {DW_AT_lower_bound,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_return_addr,	dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_bit_stride,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_upper_bound,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_count,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_data_member_location, dw_classes (cl_constant, cl_exprloc,
-					     cl_loclistptr)},
-    {DW_AT_frame_base,	dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_namelist_item, dw_classes (cl_reference)},
-    {DW_AT_segment,	dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_static_link,	dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_use_location, dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_vtable_elem_location, dw_classes (cl_exprloc, cl_loclistptr)},
-    {DW_AT_allocated,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_associated,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_data_location, dw_classes (cl_exprloc)},
-    {DW_AT_byte_stride,	dw_classes (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_signature,	dw_classes (cl_reference)},
-    {DW_AT_main_subprogram, dw_classes (cl_flag)},
-    {DW_AT_data_bit_offset, dw_classes (cl_constant)},
-    {DW_AT_const_expr,	dw_classes (cl_flag)},
-    {0,			dw_classes ()}
+    {DW_AT_location,	dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_bit_offset,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_bit_size,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_high_pc,	dw_class_set (cl_address, cl_constant)},
+    {DW_AT_string_length, dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_const_value,	dw_class_set (cl_block, cl_constant, cl_string)},
+    {DW_AT_lower_bound,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_return_addr,	dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_bit_stride,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_upper_bound,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_count,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_data_member_location,
+			dw_class_set (cl_constant, cl_exprloc, cl_loclistptr)},
+    {DW_AT_frame_base,	dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_namelist_item, dw_class_set (cl_reference)},
+    {DW_AT_segment,	dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_static_link,	dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_use_location, dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_vtable_elem_location,
+			dw_class_set (cl_exprloc, cl_loclistptr)},
+    {DW_AT_allocated,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_associated,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_data_location, dw_class_set (cl_exprloc)},
+    {DW_AT_byte_stride,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
+    {DW_AT_signature,	dw_class_set (cl_reference)},
+    {DW_AT_main_subprogram, dw_class_set (cl_flag)},
+    {DW_AT_data_bit_offset, dw_class_set (cl_constant)},
+    {DW_AT_const_expr,	dw_class_set (cl_flag)},
+    {0,			dw_class_set ()}
   };
 
   form const *dwarf_4_forms[] = {
-    new const_form (DW_FORM_data4, dwarf_version::fw_4),
-    new const_form (DW_FORM_data8, dwarf_version::fw_8),
+    new const_form (DW_FORM_data4, fw_4),
+    new const_form (DW_FORM_data8, fw_8),
     new w_off_form (DW_FORM_sec_offset,
 		    cl_lineptr, cl_loclistptr, cl_macptr, cl_rangelistptr),
-    new simple_form<cl_exprloc> (DW_FORM_exprloc, dwarf_version::fw_leb),
-    new flag_form (DW_FORM_flag_present, dwarf_version::fw_0),
-    new ref_form (DW_FORM_ref_sig8, dwarf_version::fw_8),
+    new simple_form<cl_exprloc> (DW_FORM_exprloc, fw_leb),
+    new flag_form (DW_FORM_flag_present, fw_0),
+    new ref_form (DW_FORM_ref_sig8, fw_8),
     NULL
   };
 
@@ -460,13 +411,6 @@ namespace {
 	return _m_parent->get_form (name);
       else
 	return NULL;
-    }
-
-    bool
-    form_allowed (int form) const
-    {
-      return _m_formtab.has_form (form)
-	|| (_m_parent != NULL && _m_parent->form_allowed (form));
     }
 
     dw_class_set const &
@@ -519,15 +463,21 @@ dwarf_version::get_latest ()
   return get (4);
 }
 
-int
-dwarf_version::check_sibling_form (int form) const
+sibling_form_suitable_t
+sibling_form_suitable (dwarf_version const *ver, int form)
 {
-  if (!form_allowed (DW_AT_sibling, form))
-    return -2;
+  if (!ver->form_allowed (DW_AT_sibling, form))
+    return sfs_invalid;
   else if (form == DW_FORM_ref_addr)
-    return -1;
+    return sfs_long;
   else
-    return 0;
+    return sfs_ok;
+}
+
+bool
+dwarf_version::form_allowed (int form) const
+{
+  return get_form (form) != NULL;
 }
 
 #if 0

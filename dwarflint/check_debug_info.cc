@@ -643,19 +643,22 @@ namespace
 		  }
 
 		if (it->name == DW_AT_sibling)
-		  switch (ver->check_sibling_form (form))
+		  switch (sibling_form_suitable (ver, form))
 		    {
-		    case -1:
+		    case sfs_long:
 		      wr_message (where, cat (mc_die_rel, mc_impact_2))
 			<< "DW_AT_sibling attribute with (indirect) form "
 			"DW_FORM_ref_addr." << std::endl;
 		      break;
 
-		    case -2:
+		    case sfs_invalid:
 		      wr_error (where)
 			<< "DW_AT_sibling attribute with non-reference "
 			"(indirect) form \"" << pri::form (value)
 			<< "\"." << std::endl;
+
+		    case sfs_ok:
+		      ;
 		    }
 	      }
 
@@ -797,7 +800,7 @@ namespace
 		  }
 		}
 
-	    dwarf_version::form_width_t width = ver->form_width (form, cu);
+	    form_width_t width = ver->form_width (form, cu);
 
 	    /* Setup per-form checking & relocation.  */
 	    switch (form)
