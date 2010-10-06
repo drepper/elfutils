@@ -101,17 +101,26 @@ namespace
   {
   protected:
     form_width_t _m_width;
+    storage_class_t _m_storclass;
 
   public:
-    full_form (int a_name, dw_class_set a_classes, form_width_t a_width)
+    full_form (int a_name, dw_class_set a_classes,
+	       form_width_t a_width, storage_class_t a_storclass)
       : basic_form (a_name, a_classes)
       , _m_width (a_width)
+      , _m_storclass (a_storclass)
     {}
 
     form_width_t
     width (__attribute__ ((unused)) struct cu const *cu = NULL) const
     {
       return _m_width;
+    }
+
+    storage_class_t
+    storage_class () const
+    {
+      return _m_storclass;
     }
   };
 
@@ -127,7 +136,7 @@ namespace
     }
   };
 
-  template<class WidthSel>
+  template<class WidthSel, storage_class_t StorClass>
   class selwidth_form
     : public basic_form
   {
@@ -142,25 +151,30 @@ namespace
     {
       return WidthSel::width (cu);
     }
+
+    storage_class_t
+    storage_class () const
+    {
+      return StorClass;
+    }
   };
 
-  typedef selwidth_form<width_off> offset_form;
-  typedef selwidth_form<width_addr> address_form;
+  typedef selwidth_form<width_off, sc_value> offset_form;
+  typedef selwidth_form<width_addr, sc_value> address_form;
 
-  template<dw_class... Clss>
-  class selclass_form
+  template<storage_class_t StorClass, dw_class... Clss>
+  struct preset_form
     : public full_form
   {
-  public:
-    selclass_form (int a_name, form_width_t a_width)
-      : full_form (a_name, dw_class_set (Clss...), a_width)
+    preset_form (int a_name, form_width_t a_width)
+      : full_form (a_name, dw_class_set (Clss...), a_width, StorClass)
     {}
   };
 
-  typedef selclass_form<cl_block> block_form;
-  typedef selclass_form<cl_constant> const_form;
-  typedef selclass_form<cl_reference> ref_form;
-  typedef selclass_form<cl_flag> flag_form;
+  typedef preset_form<sc_block, cl_block> block_form;
+  typedef preset_form<sc_value, cl_constant> const_form;
+  typedef preset_form<sc_value, cl_reference> ref_form;
+  typedef preset_form<sc_value, cl_flag> flag_form;
 
   struct dwarf_row {
     int val;
@@ -230,12 +244,20 @@ namespace
     {0,				dw_class_set ()}
   };
 
+  struct string_form
+    : public preset_form<sc_string, cl_string>
+  {
+    string_form (int a_name)
+      : preset_form<sc_string, cl_string> (a_name, fw_unknown)
+    {}
+  };
+
   struct dwarf_2_forms
     : public form_table
   {
     dwarf_2_forms ()
     {
-      add (new block_form (DW_FORM_block, fw_leb));
+      add (new block_form (DW_FORM_block, fw_uleb));
       add (new block_form (DW_FORM_block1, fw_1));
       add (new block_form (DW_FORM_block2, fw_2));
       add (new block_form (DW_FORM_block4, fw_4));
@@ -244,8 +266,8 @@ namespace
       add (new const_form (DW_FORM_data2, fw_2));
       add (new const_form (DW_FORM_data4, fw_4));
       add (new const_form (DW_FORM_data8, fw_8));
-      add (new const_form (DW_FORM_sdata, fw_leb));
-      add (new const_form (DW_FORM_udata, fw_leb));
+      add (new const_form (DW_FORM_sdata, fw_sleb));
+      add (new const_form (DW_FORM_udata, fw_uleb));
 
       add (new flag_form (DW_FORM_flag, fw_1));
 
@@ -253,9 +275,9 @@ namespace
       add (new ref_form (DW_FORM_ref2, fw_2));
       add (new ref_form (DW_FORM_ref4, fw_4));
       add (new ref_form (DW_FORM_ref8, fw_8));
-      add (new ref_form (DW_FORM_ref_udata, fw_leb));
+      add (new ref_form (DW_FORM_ref_udata, fw_uleb));
 
-      add (new full_form (DW_FORM_string, cl_string, fw_unknown));
+      add (new string_form (DW_FORM_string));
       add (new offset_form (DW_FORM_strp, cl_string));
       add (new address_form (DW_FORM_addr, cl_address));
       add (new address_form (DW_FORM_ref_addr, cl_reference));
@@ -314,8 +336,9 @@ namespace
     {0,			dw_class_set ()}
   };
 
-  typedef selclass_form<cl_constant, cl_lineptr, cl_loclistptr,
-			cl_macptr, cl_rangelistptr> dw3_data_form;
+  typedef preset_form<sc_value,
+		      cl_constant, cl_lineptr, cl_loclistptr,
+		      cl_macptr, cl_rangelistptr> dw3_data_form;
 
   struct dwarf_3_forms
     : public form_table
@@ -361,6 +384,14 @@ namespace
     {0,			dw_class_set ()}
   };
 
+  struct exprloc_form
+    : public preset_form<sc_block, cl_exprloc>
+  {
+    exprloc_form (int a_name)
+      : preset_form<sc_block, cl_exprloc> (a_name, fw_uleb)
+    {}
+  };
+
   struct dwarf_4_forms
     : public form_table
   {
@@ -371,7 +402,7 @@ namespace
       add (new offset_form
 	   (DW_FORM_sec_offset,
 	    cl_lineptr, cl_loclistptr, cl_macptr, cl_rangelistptr));
-      add (new selclass_form<cl_exprloc> (DW_FORM_exprloc, fw_leb));
+      add (new exprloc_form (DW_FORM_exprloc));
       add (new flag_form (DW_FORM_flag_present, fw_0));
       add (new ref_form (DW_FORM_ref_sig8, fw_8));
     }

@@ -66,7 +66,8 @@ enum form_width_t
     fw_2 = 2,
     fw_4 = 4,
     fw_8 = 8,
-    fw_leb,
+    fw_sleb,
+    fw_uleb,
     fw_unknown
   };
 
@@ -86,12 +87,16 @@ public:
   virtual dw_class_set const &classes () const = 0;
 
   /// Return width of data stored with given form.  CU may be NULL if
-  /// you are sure that the form size doesn't depend on addr_64 or
-  /// off.  Forms for which width makes no sense, such as
-  /// DW_FORM_string, get fw_unknown.  Unknown forms get an assert.
+  /// you are sure that the form size doesn't depend on bitness of
+  /// address_size or offset_size.
+  ///
+  /// Forms for which width makes no sense (namely those in the
+  /// storage class of sc_string) get fw_unknown.  Unknown forms get
+  /// an assert.
   virtual form_width_t width (cu const *cu = NULL) const = 0;
 
-  //virtual storage_class_t storage_class () const = 0;
+  /// Return storage class of given form.  Closely related to width.
+  virtual storage_class_t storage_class () const = 0;
 
   virtual ~form () {}
 };
@@ -125,6 +130,14 @@ public:
   /// Return dwarf_version object for latest supported DWARF version.
   static dwarf_version const *get_latest ()
     __attribute__ ((pure));
+
+  /// Return dwarf_version that represents SOURCE extended with
+  /// EXTENSION.  Currently this probably has no use, but one obvious
+  /// candidate usage is representing GNU extensions over core DWARF.
+  /// Extension can contain overrides of the source dwarf_version
+  /// object, and these overrides take precedence.
+  static dwarf_version const *extend (dwarf_version const *source,
+				      dwarf_version const *extension);
 };
 
 /// Check that the form is suitable for the DW_AT_sibling attribute.
