@@ -800,7 +800,7 @@ namespace
 		  }
 		}
 
-	    form_width_t width = ver->form_width (form, cu);
+	    form_width_t width = ver->get_form (form)->width (cu);
 
 	    /* Setup per-form checking & relocation.  */
 	    switch (form)

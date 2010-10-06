@@ -81,11 +81,27 @@ class form
 {
 public:
   virtual int name () const = 0;
+
+  /// Answer set of DWARF classes that this form can have.
   virtual dw_class_set const &classes () const = 0;
+
+  /// Return width of data stored with given form.  CU may be NULL if
+  /// you are sure that the form size doesn't depend on addr_64 or
+  /// off.  Forms for which width makes no sense, such as
+  /// DW_FORM_string, get fw_unknown.  Unknown forms get an assert.
   virtual form_width_t width (cu const *cu = NULL) const = 0;
+
   //virtual storage_class_t storage_class () const = 0;
 
   virtual ~form () {}
+};
+
+class attribute
+{
+public:
+  virtual int name () const = 0;
+  virtual dw_class_set const &classes () const = 0;
+  virtual ~attribute () {}
 };
 
 class dwarf_version
@@ -93,21 +109,14 @@ class dwarf_version
 public:
   /// Return form object for given form name.  Return NULL for unknown
   /// forms.
-  virtual form const *get_form (int form) const = 0;
+  virtual form const *get_form (int form_name) const = 0;
 
-  /// Shortcut for get_form (form) != NULL.
-  bool form_allowed (int form) const;
+  /// Shortcut for get_form (form_name) != NULL.
+  bool form_allowed (int form_name) const;
 
   /// Figure out whether, in given DWARF version, given attribute is
   /// allowed to have given form.
-  virtual bool form_allowed (int attr, int form) const = 0;
-
-  /// Return width of data stored with given form.  CU may be NULL if
-  /// you are sure that the form size doesn't depend on addr_64 or
-  /// off.  Forms for which width makes no sense, such as
-  /// DW_FORM_string, get fw_unknown.  Unknown forms get an assert.
-  virtual form_width_t
-  form_width (int form, struct cu const *cu = NULL) const = 0;
+  virtual bool form_allowed (int attr_name, int form_name) const = 0;
 
   /// Return dwarf_version object for given DWARF version.
   static dwarf_version const *get (unsigned version)

@@ -46,31 +46,20 @@ dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
 #undef ADD
 }
 
-namespace {
-
-  struct dwarf_row {
-    int val;
-    dw_class_set classes;
-  };
-
-  class x_form_table
+namespace
+{
+  class form_table
   {
     typedef std::map<int, form const *> _forms_map_t;
-    _forms_map_t const _m_forms;
+    _forms_map_t _m_forms;
 
-    static _forms_map_t build_forms (form const *const *forms)
+  protected:
+    void add (form const *f)
     {
-      _forms_map_t ret;
-      for (form const *const *it = forms; *it != NULL; ++it)
-	ret[(*it)->name ()] = *it;
-      return ret;
+      _m_forms[f->name ()] = f;
     }
 
   public:
-    x_form_table (form const *const forms[])
-      : _m_forms (build_forms (forms))
-    {}
-
     form const *
     get (int f) const
     {
@@ -173,6 +162,11 @@ namespace {
   typedef simple_form<cl_reference> ref_form;
   typedef simple_form<cl_flag> flag_form;
 
+  struct dwarf_row {
+    int val;
+    dw_class_set classes;
+  };
+
   dwarf_row const dwarf_2_at_table[] = {
     {DW_AT_sibling,		dw_class_set (cl_reference)},
     {DW_AT_location,		dw_class_set (cl_block, cl_constant)},
@@ -236,33 +230,37 @@ namespace {
     {0,				dw_class_set ()}
   };
 
-  form const *dwarf_2_forms[] = {
-    new block_form (DW_FORM_block, fw_leb),
-    new block_form (DW_FORM_block1, fw_1),
-    new block_form (DW_FORM_block2, fw_2),
-    new block_form (DW_FORM_block4, fw_4),
+  struct dwarf_2_forms
+    : public form_table
+  {
+    dwarf_2_forms ()
+    {
+      add (new block_form (DW_FORM_block, fw_leb));
+      add (new block_form (DW_FORM_block1, fw_1));
+      add (new block_form (DW_FORM_block2, fw_2));
+      add (new block_form (DW_FORM_block4, fw_4));
 
-    new const_form (DW_FORM_data1, fw_1),
-    new const_form (DW_FORM_data2, fw_2),
-    new const_form (DW_FORM_data4, fw_4),
-    new const_form (DW_FORM_data8, fw_8),
-    new const_form (DW_FORM_sdata, fw_leb),
-    new const_form (DW_FORM_udata, fw_leb),
+      add (new const_form (DW_FORM_data1, fw_1));
+      add (new const_form (DW_FORM_data2, fw_2));
+      add (new const_form (DW_FORM_data4, fw_4));
+      add (new const_form (DW_FORM_data8, fw_8));
+      add (new const_form (DW_FORM_sdata, fw_leb));
+      add (new const_form (DW_FORM_udata, fw_leb));
 
-    new flag_form (DW_FORM_flag, fw_1),
+      add (new flag_form (DW_FORM_flag, fw_1));
 
-    new ref_form (DW_FORM_ref1, fw_1),
-    new ref_form (DW_FORM_ref2, fw_2),
-    new ref_form (DW_FORM_ref4, fw_4),
-    new ref_form (DW_FORM_ref8, fw_8),
-    new ref_form (DW_FORM_ref_udata, fw_leb),
+      add (new ref_form (DW_FORM_ref1, fw_1));
+      add (new ref_form (DW_FORM_ref2, fw_2));
+      add (new ref_form (DW_FORM_ref4, fw_4));
+      add (new ref_form (DW_FORM_ref8, fw_8));
+      add (new ref_form (DW_FORM_ref_udata, fw_leb));
 
-    new fixed_form (DW_FORM_string, dw_class_set (cl_string), fw_unknown),
-    new w_off_form (DW_FORM_strp, cl_string),
-    new w_addr_form (DW_FORM_addr, cl_address),
-    new w_addr_form (DW_FORM_ref_addr, cl_reference),
-
-    NULL
+      add (new fixed_form (DW_FORM_string, dw_class_set (cl_string),
+			   fw_unknown));
+      add (new w_off_form (DW_FORM_strp, cl_string));
+      add (new w_addr_form (DW_FORM_addr, cl_address));
+      add (new w_addr_form (DW_FORM_ref_addr, cl_reference));
+    }
   };
 
   /* Changes from dwarf_2_*_table:  */
@@ -319,11 +317,16 @@ namespace {
 
   typedef simple_form<cl_constant, cl_lineptr, cl_loclistptr,
 		      cl_macptr, cl_rangelistptr> dw3_data_form;
-  form const *dwarf_3_forms[] = {
-    new dw3_data_form (DW_FORM_data4, fw_4),
-    new dw3_data_form (DW_FORM_data8, fw_8),
-    new w_off_form (DW_FORM_ref_addr, cl_reference),
-    NULL
+
+  struct dwarf_3_forms
+    : public form_table
+  {
+    dwarf_3_forms ()
+    {
+      add (new dw3_data_form (DW_FORM_data4, fw_4));
+      add (new dw3_data_form (DW_FORM_data8, fw_8));
+      add (new w_off_form (DW_FORM_ref_addr, cl_reference));
+    }
   };
 
   /* Changes from dwarf_3_*_table:  */
@@ -359,15 +362,20 @@ namespace {
     {0,			dw_class_set ()}
   };
 
-  form const *dwarf_4_forms[] = {
-    new const_form (DW_FORM_data4, fw_4),
-    new const_form (DW_FORM_data8, fw_8),
-    new w_off_form (DW_FORM_sec_offset,
-		    cl_lineptr, cl_loclistptr, cl_macptr, cl_rangelistptr),
-    new simple_form<cl_exprloc> (DW_FORM_exprloc, fw_leb),
-    new flag_form (DW_FORM_flag_present, fw_0),
-    new ref_form (DW_FORM_ref_sig8, fw_8),
-    NULL
+  struct dwarf_4_forms
+    : public form_table
+  {
+    dwarf_4_forms ()
+    {
+      add (new const_form (DW_FORM_data4, fw_4));
+      add (new const_form (DW_FORM_data8, fw_8));
+      add (new w_off_form
+	   (DW_FORM_sec_offset,
+	    cl_lineptr, cl_loclistptr, cl_macptr, cl_rangelistptr));
+      add (new simple_form<cl_exprloc> (DW_FORM_exprloc, fw_leb));
+      add (new flag_form (DW_FORM_flag_present, fw_0));
+      add (new ref_form (DW_FORM_ref_sig8, fw_8));
+    }
   };
 
   class std_dwarf
@@ -376,7 +384,7 @@ namespace {
     // attr_name->allowed_classes
     typedef std::map <int, dw_class_set> _attr_classes;
     _attr_classes const _m_attr_classes;
-    x_form_table const _m_formtab;
+    form_table const _m_formtab;
     dwarf_version const *_m_parent;
 
     _attr_classes build_attr_classes (dwarf_row const attrtab[])
@@ -389,18 +397,12 @@ namespace {
 
   public:
     std_dwarf (dwarf_row const attrtab[],
-	       form const *const forms[],
+	       form_table const &formtab,
 	       dwarf_version const *parent = NULL)
       : _m_attr_classes (build_attr_classes (attrtab))
-      , _m_formtab (x_form_table (forms))
+      , _m_formtab (formtab)
       , _m_parent (parent)
     {}
-
-    form_width_t
-    form_width (int name, struct cu const *cu = NULL) const
-    {
-      return get_form (name)->width (cu);
-    }
 
     form const *
     get_form (int name) const
@@ -440,9 +442,9 @@ namespace {
     }
   };
 
-  std_dwarf dwarf2 (dwarf_2_at_table, dwarf_2_forms);
-  std_dwarf dwarf3 (dwarf_3_at_table, dwarf_3_forms, &dwarf2);
-  std_dwarf dwarf4 (dwarf_4_at_table, dwarf_4_forms, &dwarf3);
+  std_dwarf dwarf2 (dwarf_2_at_table, dwarf_2_forms ());
+  std_dwarf dwarf3 (dwarf_3_at_table, dwarf_3_forms (), &dwarf2);
+  std_dwarf dwarf4 (dwarf_4_at_table, dwarf_4_forms (), &dwarf3);
 }
 
 dwarf_version const *
