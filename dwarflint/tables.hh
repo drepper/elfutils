@@ -31,9 +31,6 @@
 #include <bitset>
 #include "check_debug_info.ii"
 
-typedef int die_tag;
-class locexpr_op {};
-
 enum dw_class
   {
     cl_address,
@@ -116,12 +113,16 @@ public:
   /// forms.
   virtual form const *get_form (int form_name) const = 0;
 
+  /// Return attribute object for given attribute name.  Return NULL
+  /// for unknown attributes;
+  virtual attribute const *get_attribute (int attribute_name) const = 0;
+
   /// Shortcut for get_form (form_name) != NULL.
   bool form_allowed (int form_name) const;
 
   /// Figure out whether, in given DWARF version, given attribute is
   /// allowed to have given form.
-  virtual bool form_allowed (int attr_name, int form_name) const = 0;
+  virtual bool form_allowed (int attribute_name, int form_name) const = 0;
 
   /// Return dwarf_version object for given DWARF version.
   static dwarf_version const *get (unsigned version)

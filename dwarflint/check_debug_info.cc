@@ -838,10 +838,17 @@ namespace
 		break;
 	      }
 
+	    /* Read value depending on the form width and storage
+	       class.  */
 	    form_width_t width = x_form->width (cu);
 	    storage_class_t storclass = x_form->storage_class ();
 	    switch (storclass)
 	      {
+	      case sc_string:
+		if (!read_ctx_read_str (ctx))
+		  goto cant_read;
+		break;
+
 	      case sc_block:
 	      case sc_value:
 		// Read the value, or the length field if it's a block
@@ -901,11 +908,6 @@ namespace
 		if (!read_ctx_skip (ctx, value))
 		  goto cant_read;
 
-		break;
-
-	      case sc_string:
-		if (!read_ctx_read_str (ctx))
-		  goto cant_read;
 		break;
 	      }
 

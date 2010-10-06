@@ -48,37 +48,42 @@ dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
 
 namespace
 {
-  class form_table
+  template <class T>
+  class index_table
   {
-    typedef std::map<int, form const *> _forms_map_t;
-    _forms_map_t _m_forms;
+    typedef std::map<int, T const *> _map_t;
+    _map_t _m_data;
 
   protected:
-    void add (form const *f)
+    void add (T const *f)
     {
-      _m_forms[f->name ()] = f;
+      _m_data[f->name ()] = f;
     }
 
   public:
-    form const *
+    T const *
     get (int f) const
     {
-      _forms_map_t::const_iterator it = _m_forms.find (f);
-      if (it != _m_forms.end ())
+      typename _map_t::const_iterator it = _m_data.find (f);
+      if (it != _m_data.end ())
 	return it->second;
       else
 	return NULL;
     }
   };
 
-  class basic_form
-    : public form
+  typedef index_table<form> form_table;
+  typedef index_table<attribute> attribute_table;
+
+  template<class T>
+  class basic
+    : public T
   {
     int _m_name;
     dw_class_set _m_classes;
 
   public:
-    basic_form (int a_name, dw_class_set a_classes)
+    basic (int a_name, dw_class_set a_classes)
       : _m_name (a_name)
       , _m_classes (a_classes)
     {}
@@ -95,6 +100,9 @@ namespace
       return _m_name;
     }
   };
+
+  typedef basic<form> basic_form;
+  typedef basic<attribute> basic_attribute;
 
   class full_form
     : public basic_form
@@ -162,12 +170,12 @@ namespace
   typedef selwidth_form<width_off, sc_value> offset_form;
   typedef selwidth_form<width_addr, sc_value> address_form;
 
-  template<storage_class_t StorClass, dw_class... Clss>
+  template<storage_class_t StorClass, dw_class... Classes>
   struct preset_form
     : public full_form
   {
     preset_form (int a_name, form_width_t a_width)
-      : full_form (a_name, dw_class_set (Clss...), a_width, StorClass)
+      : full_form (a_name, dw_class_set (Classes...), a_width, StorClass)
     {}
   };
 
@@ -176,72 +184,97 @@ namespace
   typedef preset_form<sc_value, cl_reference> ref_form;
   typedef preset_form<sc_value, cl_flag> flag_form;
 
+  template<dw_class... Classes>
+  struct preset_attribute
+    : public basic_attribute
+  {
+    preset_attribute (int a_name)
+      : basic_attribute (a_name, dw_class_set (Classes...))
+    {}
+  };
+
+  typedef preset_attribute<cl_constant> const_attribute;
+  typedef preset_attribute<cl_reference> ref_attribute;
+  typedef preset_attribute<cl_address> addr_attribute;
+  typedef preset_attribute<cl_string> string_attribute;
+  typedef preset_attribute<cl_flag> flag_attribute;
+  typedef preset_attribute<cl_block> block_attribute;
+  typedef preset_attribute<cl_block, cl_constant> const_or_block_attribute;
+  typedef preset_attribute<cl_block, cl_reference> ref_or_block_attribute;
+  typedef preset_attribute<cl_reference, cl_constant> const_or_ref_attribute;
+
   struct dwarf_row {
     int val;
     dw_class_set classes;
   };
 
-  dwarf_row const dwarf_2_at_table[] = {
-    {DW_AT_sibling,		dw_class_set (cl_reference)},
-    {DW_AT_location,		dw_class_set (cl_block, cl_constant)},
-    {DW_AT_name,		dw_class_set (cl_string)},
-    {DW_AT_ordering,		dw_class_set (cl_constant)},
-    {DW_AT_byte_size,		dw_class_set (cl_constant)},
-    {DW_AT_bit_offset,		dw_class_set (cl_constant)},
-    {DW_AT_bit_size,		dw_class_set (cl_constant)},
-    {DW_AT_stmt_list,		dw_class_set (cl_constant)},
-    {DW_AT_low_pc,		dw_class_set (cl_address)},
-    {DW_AT_high_pc,		dw_class_set (cl_address)},
-    {DW_AT_language,		dw_class_set (cl_constant)},
-    {DW_AT_discr,		dw_class_set (cl_reference)},
-    {DW_AT_discr_value,		dw_class_set (cl_constant)},
-    {DW_AT_visibility,		dw_class_set (cl_constant)},
-    {DW_AT_import,		dw_class_set (cl_reference)},
-    {DW_AT_string_length,	dw_class_set (cl_block, cl_constant)},
-    {DW_AT_common_reference,	dw_class_set (cl_reference)},
-    {DW_AT_comp_dir,		dw_class_set (cl_string)},
-    {DW_AT_const_value,		dw_class_set (cl_string, cl_constant, cl_block)},
-    {DW_AT_containing_type,	dw_class_set (cl_reference)},
-    {DW_AT_default_value,	dw_class_set (cl_reference)},
-    {DW_AT_inline,		dw_class_set (cl_constant)},
-    {DW_AT_is_optional,		dw_class_set (cl_flag)},
-    {DW_AT_lower_bound,		dw_class_set (cl_constant, cl_reference)},
-    {DW_AT_producer,		dw_class_set (cl_string)},
-    {DW_AT_prototyped,		dw_class_set (cl_flag)},
-    {DW_AT_return_addr,		dw_class_set (cl_block, cl_constant)},
-    {DW_AT_start_scope,		dw_class_set (cl_constant)},
-    {DW_AT_bit_stride,		dw_class_set (cl_constant)},
-    {DW_AT_upper_bound,		dw_class_set (cl_constant, cl_reference)},
-    {DW_AT_abstract_origin,	dw_class_set (cl_constant)},
-    {DW_AT_accessibility,	dw_class_set (cl_reference)},
-    {DW_AT_address_class,	dw_class_set (cl_constant)},
-    {DW_AT_artificial,		dw_class_set (cl_flag)},
-    {DW_AT_base_types,		dw_class_set (cl_reference)},
-    {DW_AT_calling_convention,	dw_class_set (cl_constant)},
-    {DW_AT_count,		dw_class_set (cl_constant, cl_reference)},
-    {DW_AT_data_member_location, dw_class_set (cl_block, cl_reference)},
-    {DW_AT_decl_column,		dw_class_set (cl_constant)},
-    {DW_AT_decl_file,		dw_class_set (cl_constant)},
-    {DW_AT_decl_line,		dw_class_set (cl_constant)},
-    {DW_AT_declaration,		dw_class_set (cl_flag)},
-    {DW_AT_discr_list,		dw_class_set (cl_block)},
-    {DW_AT_encoding,		dw_class_set (cl_constant)},
-    {DW_AT_external,		dw_class_set (cl_flag)},
-    {DW_AT_frame_base,		dw_class_set (cl_block, cl_constant)},
-    {DW_AT_friend,		dw_class_set (cl_reference)},
-    {DW_AT_identifier_case,	dw_class_set (cl_constant)},
-    {DW_AT_macro_info,		dw_class_set (cl_constant)},
-    {DW_AT_namelist_item,	dw_class_set (cl_block)},
-    {DW_AT_priority,		dw_class_set (cl_reference)},
-    {DW_AT_segment,		dw_class_set (cl_block, cl_constant)},
-    {DW_AT_specification,	dw_class_set (cl_reference)},
-    {DW_AT_static_link,		dw_class_set (cl_block, cl_constant)},
-    {DW_AT_type,		dw_class_set (cl_reference)},
-    {DW_AT_use_location,	dw_class_set (cl_block, cl_constant)},
-    {DW_AT_variable_parameter,	dw_class_set (cl_flag)},
-    {DW_AT_virtuality,		dw_class_set (cl_constant)},
-    {DW_AT_vtable_elem_location, dw_class_set (cl_block, cl_reference)},
-    {0,				dw_class_set ()}
+  struct dwarf_2_attributes
+    : public attribute_table
+  {
+    dwarf_2_attributes ()
+    {
+      add (new ref_attribute (DW_AT_sibling));
+      add (new const_or_block_attribute (DW_AT_location));
+      add (new string_attribute (DW_AT_name));
+      add (new const_attribute (DW_AT_ordering));
+      add (new const_attribute (DW_AT_byte_size));
+      add (new const_attribute (DW_AT_bit_offset));
+      add (new const_attribute (DW_AT_bit_size));
+      add (new const_attribute (DW_AT_stmt_list));
+      add (new addr_attribute (DW_AT_low_pc));
+      add (new addr_attribute (DW_AT_high_pc));
+      add (new const_attribute (DW_AT_language));
+      add (new ref_attribute (DW_AT_discr));
+      add (new const_attribute (DW_AT_discr_value));
+      add (new const_attribute (DW_AT_visibility));
+      add (new ref_attribute (DW_AT_import));
+      add (new const_or_block_attribute (DW_AT_string_length));
+      add (new ref_attribute (DW_AT_common_reference));
+      add (new string_attribute (DW_AT_comp_dir));
+      add (new basic_attribute (DW_AT_const_value,
+				dw_class_set (cl_string, cl_constant,
+					      cl_block)));
+      add (new ref_attribute (DW_AT_containing_type));
+      add (new ref_attribute (DW_AT_default_value));
+      add (new const_attribute (DW_AT_inline));
+      add (new flag_attribute (DW_AT_is_optional));
+      add (new const_or_ref_attribute (DW_AT_lower_bound));
+      add (new string_attribute (DW_AT_producer));
+      add (new flag_attribute (DW_AT_prototyped));
+      add (new const_or_block_attribute (DW_AT_return_addr));
+      add (new const_attribute (DW_AT_start_scope));
+      add (new const_attribute (DW_AT_bit_stride));
+      add (new const_or_ref_attribute (DW_AT_upper_bound));
+      add (new const_attribute (DW_AT_abstract_origin));
+      add (new ref_attribute (DW_AT_accessibility));
+      add (new const_attribute (DW_AT_address_class));
+      add (new flag_attribute (DW_AT_artificial));
+      add (new ref_attribute (DW_AT_base_types));
+      add (new const_attribute (DW_AT_calling_convention));
+      add (new const_or_ref_attribute (DW_AT_count));
+      add (new ref_or_block_attribute (DW_AT_data_member_location));
+      add (new const_attribute (DW_AT_decl_column));
+      add (new const_attribute (DW_AT_decl_file));
+      add (new const_attribute (DW_AT_decl_line));
+      add (new flag_attribute (DW_AT_declaration));
+      add (new block_attribute (DW_AT_discr_list));
+      add (new const_attribute (DW_AT_encoding));
+      add (new flag_attribute (DW_AT_external));
+      add (new const_or_block_attribute (DW_AT_frame_base));
+      add (new ref_attribute (DW_AT_friend));
+      add (new const_attribute (DW_AT_identifier_case));
+      add (new const_attribute (DW_AT_macro_info));
+      add (new block_attribute (DW_AT_namelist_item));
+      add (new ref_attribute (DW_AT_priority));
+      add (new const_or_block_attribute (DW_AT_segment));
+      add (new ref_attribute (DW_AT_specification));
+      add (new const_or_block_attribute (DW_AT_static_link));
+      add (new ref_attribute (DW_AT_type));
+      add (new const_or_block_attribute (DW_AT_use_location));
+      add (new flag_attribute (DW_AT_variable_parameter));
+      add (new const_attribute (DW_AT_virtuality));
+      add (new ref_or_block_attribute (DW_AT_vtable_elem_location));
+    }
   };
 
   struct string_form
@@ -284,56 +317,67 @@ namespace
     }
   };
 
-  /* Changes from dwarf_2_*_table:  */
-  dwarf_row const dwarf_3_at_table[] = {
-    {DW_AT_location,	dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_byte_size,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_bit_offset,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_bit_size,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_stmt_list,	dw_class_set (cl_lineptr)},
-    {DW_AT_string_length, dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_const_value,	dw_class_set (cl_block, cl_constant, cl_string)},
-    {DW_AT_lower_bound,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_return_addr,	dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_bit_stride,	dw_class_set (cl_constant)},
-    {DW_AT_upper_bound,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_count,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_data_member_location, dw_class_set (cl_block, cl_constant,
-					     cl_loclistptr)},
-    {DW_AT_frame_base,	dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_macro_info,	dw_class_set (cl_macptr)},
-    {DW_AT_segment,	dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_static_link,	dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_use_location, dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_vtable_elem_location, dw_class_set (cl_block, cl_loclistptr)},
-    {DW_AT_associated,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_data_location, dw_class_set (cl_block)},
-    {DW_AT_byte_stride,	dw_class_set (cl_block, cl_constant, cl_reference)},
-    {DW_AT_entry_pc,	dw_class_set (cl_address)},
-    {DW_AT_use_UTF8,	dw_class_set (cl_flag)},
-    {DW_AT_extension,	dw_class_set (cl_reference)},
-    {DW_AT_ranges,	dw_class_set (cl_rangelistptr)},
-    {DW_AT_trampoline,	dw_class_set (cl_address, cl_flag, cl_reference,
-				    cl_string)},
-    {DW_AT_call_column,	dw_class_set (cl_constant)},
-    {DW_AT_call_file,	dw_class_set (cl_constant)},
-    {DW_AT_call_line,	dw_class_set (cl_constant)},
-    {DW_AT_description,	dw_class_set (cl_string)},
-    {DW_AT_binary_scale, dw_class_set (cl_constant)},
-    {DW_AT_decimal_scale, dw_class_set (cl_constant)},
-    {DW_AT_small,	dw_class_set (cl_reference)},
-    {DW_AT_decimal_sign, dw_class_set (cl_constant)},
-    {DW_AT_digit_count,	dw_class_set (cl_constant)},
-    {DW_AT_picture_string, dw_class_set (cl_string)},
-    {DW_AT_mutable,	dw_class_set (cl_flag)},
-    {DW_AT_threads_scaled, dw_class_set (cl_flag)},
-    {DW_AT_explicit,	dw_class_set (cl_flag)},
-    {DW_AT_object_pointer, dw_class_set (cl_reference)},
-    {DW_AT_endianity,	dw_class_set (cl_constant)},
-    {DW_AT_elemental,	dw_class_set (cl_flag)},
-    {DW_AT_pure,	dw_class_set (cl_flag)},
-    {DW_AT_recursive,	dw_class_set (cl_flag)},
-    {0,			dw_class_set ()}
+  typedef preset_attribute<cl_block, cl_loclistptr> block_or_loc_attribute;
+  typedef preset_attribute<cl_block, cl_constant, cl_reference>
+  block_const_ref_attribute;
+
+  struct dwarf_3_attributes
+    : public attribute_table
+  {
+    dwarf_3_attributes ()
+    {
+      add (new block_or_loc_attribute (DW_AT_location));
+      add (new block_const_ref_attribute (DW_AT_byte_size));
+      add (new block_const_ref_attribute (DW_AT_bit_offset));
+      add (new block_const_ref_attribute (DW_AT_bit_size));
+      add (new basic_attribute (DW_AT_stmt_list, cl_lineptr));
+      add (new block_or_loc_attribute (DW_AT_string_length));
+      add (new basic_attribute (DW_AT_const_value,
+				dw_class_set (cl_block, cl_constant,
+					      cl_string)));
+      add (new block_const_ref_attribute (DW_AT_lower_bound));
+      add (new block_or_loc_attribute (DW_AT_return_addr));
+      add (new const_attribute (DW_AT_bit_stride));
+      add (new block_const_ref_attribute (DW_AT_upper_bound));
+      add (new block_const_ref_attribute (DW_AT_count));
+      add (new basic_attribute (DW_AT_data_member_location,
+				dw_class_set (cl_block, cl_constant,
+					      cl_loclistptr)));
+      add (new block_or_loc_attribute (DW_AT_frame_base));
+      add (new basic_attribute (DW_AT_macro_info, cl_macptr));
+      add (new block_or_loc_attribute (DW_AT_segment));
+      add (new block_or_loc_attribute (DW_AT_static_link));
+      add (new block_or_loc_attribute (DW_AT_use_location));
+      add (new block_or_loc_attribute (DW_AT_vtable_elem_location));
+      add (new block_const_ref_attribute (DW_AT_associated));
+      add (new block_attribute (DW_AT_data_location));
+      add (new block_const_ref_attribute (DW_AT_byte_stride));
+      add (new addr_attribute (DW_AT_entry_pc));
+      add (new flag_attribute (DW_AT_use_UTF8));
+      add (new ref_attribute (DW_AT_extension));
+      add (new basic_attribute (DW_AT_ranges, cl_rangelistptr));
+      add (new basic_attribute (DW_AT_trampoline,
+				dw_class_set (cl_address, cl_flag,
+					      cl_reference, cl_string)));
+      add (new const_attribute (DW_AT_call_column));
+      add (new const_attribute (DW_AT_call_file));
+      add (new const_attribute (DW_AT_call_line));
+      add (new string_attribute (DW_AT_description));
+      add (new const_attribute (DW_AT_binary_scale));
+      add (new const_attribute (DW_AT_decimal_scale));
+      add (new ref_attribute (DW_AT_small));
+      add (new const_attribute (DW_AT_decimal_sign));
+      add (new const_attribute (DW_AT_digit_count));
+      add (new string_attribute (DW_AT_picture_string));
+      add (new flag_attribute (DW_AT_mutable));
+      add (new flag_attribute (DW_AT_threads_scaled));
+      add (new flag_attribute (DW_AT_explicit));
+      add (new ref_attribute (DW_AT_object_pointer));
+      add (new const_attribute (DW_AT_endianity));
+      add (new flag_attribute (DW_AT_elemental));
+      add (new flag_attribute (DW_AT_pure));
+      add (new flag_attribute (DW_AT_recursive));
+    }
   };
 
   typedef preset_form<sc_value,
@@ -351,37 +395,47 @@ namespace
     }
   };
 
-  /* Changes from dwarf_3_*_table:  */
-  dwarf_row const dwarf_4_at_table[] = {
-    {DW_AT_location,	dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_bit_offset,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_bit_size,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_high_pc,	dw_class_set (cl_address, cl_constant)},
-    {DW_AT_string_length, dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_const_value,	dw_class_set (cl_block, cl_constant, cl_string)},
-    {DW_AT_lower_bound,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_return_addr,	dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_bit_stride,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_upper_bound,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_count,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_data_member_location,
-			dw_class_set (cl_constant, cl_exprloc, cl_loclistptr)},
-    {DW_AT_frame_base,	dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_namelist_item, dw_class_set (cl_reference)},
-    {DW_AT_segment,	dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_static_link,	dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_use_location, dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_vtable_elem_location,
-			dw_class_set (cl_exprloc, cl_loclistptr)},
-    {DW_AT_allocated,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_associated,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_data_location, dw_class_set (cl_exprloc)},
-    {DW_AT_byte_stride,	dw_class_set (cl_constant, cl_exprloc, cl_reference)},
-    {DW_AT_signature,	dw_class_set (cl_reference)},
-    {DW_AT_main_subprogram, dw_class_set (cl_flag)},
-    {DW_AT_data_bit_offset, dw_class_set (cl_constant)},
-    {DW_AT_const_expr,	dw_class_set (cl_flag)},
-    {0,			dw_class_set ()}
+  typedef preset_attribute<cl_exprloc, cl_loclistptr> exprloc_loclist_attribute;
+  typedef preset_attribute<cl_constant, cl_exprloc, cl_reference>
+  const_exprloc_ref_attribute;
+
+  struct dwarf_4_attributes
+    : public attribute_table
+  {
+    dwarf_4_attributes ()
+    {
+      add (new exprloc_loclist_attribute (DW_AT_location));
+      add (new const_exprloc_ref_attribute (DW_AT_bit_offset));
+      add (new const_exprloc_ref_attribute (DW_AT_bit_size));
+      add (new basic_attribute (DW_AT_high_pc,
+				dw_class_set (cl_address, cl_constant)));
+      add (new exprloc_loclist_attribute (DW_AT_string_length));
+      add (new basic_attribute (DW_AT_const_value,
+				dw_class_set (cl_block, cl_constant,
+					      cl_string)));
+      add (new const_exprloc_ref_attribute (DW_AT_lower_bound));
+      add (new exprloc_loclist_attribute (DW_AT_return_addr));
+      add (new const_exprloc_ref_attribute (DW_AT_bit_stride));
+      add (new const_exprloc_ref_attribute (DW_AT_upper_bound));
+      add (new const_exprloc_ref_attribute (DW_AT_count));
+      add (new basic_attribute (DW_AT_data_member_location,
+				dw_class_set (cl_constant, cl_exprloc,
+					      cl_loclistptr)));
+      add (new exprloc_loclist_attribute (DW_AT_frame_base));
+      add (new ref_attribute (DW_AT_namelist_item));
+      add (new exprloc_loclist_attribute (DW_AT_segment));
+      add (new exprloc_loclist_attribute (DW_AT_static_link));
+      add (new exprloc_loclist_attribute (DW_AT_use_location));
+      add (new exprloc_loclist_attribute (DW_AT_vtable_elem_location));
+      add (new const_exprloc_ref_attribute (DW_AT_allocated));
+      add (new const_exprloc_ref_attribute (DW_AT_associated));
+      add (new basic_attribute (DW_AT_data_location, cl_exprloc));
+      add (new const_exprloc_ref_attribute (DW_AT_byte_stride));
+      add (new ref_attribute (DW_AT_signature));
+      add (new flag_attribute (DW_AT_main_subprogram));
+      add (new const_attribute (DW_AT_data_bit_offset));
+      add (new flag_attribute (DW_AT_const_expr));
+    }
   };
 
   struct exprloc_form
@@ -411,70 +465,63 @@ namespace
   class std_dwarf
     : public dwarf_version
   {
-    // attr_name->allowed_classes
-    typedef std::map <int, dw_class_set> _attr_classes;
-    _attr_classes const _m_attr_classes;
+    attribute_table const _m_attrtab;
     form_table const _m_formtab;
     dwarf_version const *_m_parent;
 
-    _attr_classes build_attr_classes (dwarf_row const attrtab[])
+    template<class T>
+    T const *
+    lookfor (index_table<T> const &table, int name,
+	     T const*(dwarf_version::*fail) (int) const) const
     {
-      _attr_classes ret;
-      for (unsigned i = 0; attrtab[i].val != 0; ++i)
-	ret[attrtab[i].val] = attrtab[i].classes;
-      return ret;
+      if (T const *emt = table.get (name))
+	return emt;
+      else if (_m_parent != NULL)
+	return (_m_parent->*fail) (name);
+      else
+	return NULL;
     }
 
   public:
-    std_dwarf (dwarf_row const attrtab[],
+    std_dwarf (attribute_table const &attrtab,
 	       form_table const &formtab,
 	       dwarf_version const *parent = NULL)
-      : _m_attr_classes (build_attr_classes (attrtab))
+      : _m_attrtab (attrtab)
       , _m_formtab (formtab)
       , _m_parent (parent)
     {}
 
     form const *
-    get_form (int name) const
+    get_form (int form_name) const
     {
-      if (form const *form = _m_formtab.get (name))
-	return form;
-      else if (_m_parent != NULL)
-	return _m_parent->get_form (name);
-      else
-	return NULL;
+      return lookfor (_m_formtab, form_name, &dwarf_version::get_form);
     }
 
-    dw_class_set const &
-    get_attr_classes (int at) const
+    attribute const *
+    get_attribute (int attribute_name) const
     {
-      _attr_classes::const_iterator it = _m_attr_classes.find (at);
-      if (it != _m_attr_classes.end ())
-	return it->second;
-      else
-	{
-	  assert (_m_parent != NULL);
-	  if (std_dwarf const *std_parent
-	      = dynamic_cast<std_dwarf const *> (_m_parent)) // xxx
-	    return std_parent->get_attr_classes (at);
-	}
-      assert (!"Unsupported attribute!"); // xxx but I won't tell you which one
+      return lookfor (_m_attrtab, attribute_name,
+		      &dwarf_version::get_attribute);
     }
 
     bool
-    form_allowed (int attr_name, int form_name) const
+    form_allowed (int attribute_name, int form_name) const
     {
-      dw_class_set const &attr_classes = get_attr_classes (attr_name);
+      attribute const *attribute = this->get_attribute (attribute_name);
+      assert (attribute != NULL);
+      dw_class_set const &attr_classes = attribute->classes ();
+
       form const *form = this->get_form (form_name);
       assert (form != NULL);
       dw_class_set const &form_classes = form->classes ();
+
       return (attr_classes & form_classes).any ();
     }
   };
 
-  std_dwarf dwarf2 (dwarf_2_at_table, dwarf_2_forms ());
-  std_dwarf dwarf3 (dwarf_3_at_table, dwarf_3_forms (), &dwarf2);
-  std_dwarf dwarf4 (dwarf_4_at_table, dwarf_4_forms (), &dwarf3);
+  std_dwarf dwarf2 (dwarf_2_attributes (), dwarf_2_forms (), NULL);
+  std_dwarf dwarf3 (dwarf_3_attributes (), dwarf_3_forms (), &dwarf2);
+  std_dwarf dwarf4 (dwarf_4_attributes (), dwarf_4_forms (), &dwarf3);
 }
 
 dwarf_version const *
