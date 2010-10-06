@@ -27,28 +27,24 @@
 #define DWARFLINT_CHECKED_READ_HH
 
 #include "readctx.h"
+#include "where.h"
+#include "tables.hh"
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+bool read_size_extra (read_ctx *ctx, uint32_t size32, uint64_t *sizep,
+		      int *offset_sizep, where *where);
 
-bool read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
-		      int *offset_sizep, struct where *where);
-
-bool read_address_size (struct read_ctx *ctx,
+bool read_address_size (read_ctx *ctx,
 			bool addr_64,
 			int *address_sizep,
-			struct where const *where);
+			where const *where);
 
-bool checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
-			   struct where *where, const char *what);
+bool checked_read_uleb128 (read_ctx *ctx, uint64_t *ret,
+			   where *where, const char *what);
 
-bool checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
-			   struct where *where, const char *what);
+bool checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
+			   where *where, const char *what);
 
-#ifdef __cplusplus
-}
-#endif
+bool checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
+			  where *where, const char *what);
 
 #endif//DWARFLINT_CHECKED_READ_HH

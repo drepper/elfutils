@@ -31,6 +31,8 @@
 #endif
 
 #include <dwarf.h>
+#include <cassert>
+
 #include "checked_read.hh"
 #include "messages.hh"
 
@@ -113,8 +115,8 @@ checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
 }
 
 bool
-checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
-		      struct where *where, const char *what)
+checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
+		      where *where, const char *what)
 {
   const unsigned char *ptr = ctx->ptr;
   int st = read_ctx_read_sleb128 (ctx, ret);
@@ -128,4 +130,21 @@ checked_read_sleb128 (struct read_ctx *ctx, int64_t *ret,
       wr_format_leb128_message (where, what, buf, ptr, ctx->ptr);
     }
   return st >= 0;
+}
+
+bool
+checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
+		     where *where, const char *what)
+{
+  assert (width == fw_sleb || width == fw_uleb);
+  if (width == fw_sleb)
+    {
+      int64_t svalue;
+      if (!checked_read_sleb128 (ctx, &svalue, where, what))
+	return false;
+      *ret = (uint64_t) svalue;
+      return true;
+    }
+  else
+    return checked_read_uleb128 (ctx, ret, where, what);
 }
