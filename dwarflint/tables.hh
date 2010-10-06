@@ -30,13 +30,10 @@
 #include <set>
 #include "check_debug_info.ii"
 
-typedef int form; // xxx get rid of this or something, it collides
-		  // with the x_form stuff.
-typedef int attr;
 typedef int die_tag;
 class locexpr_op {};
 
-class x_form; //  xxx and rename this guy
+class form;
 
 class dwarf_version
 {
@@ -48,7 +45,7 @@ public:
       fw_2 = 2,
       fw_4 = 4,
       fw_8 = 8,
-      fw_uleb,
+      fw_leb,
       fw_unknown
     };
   // Return width of data stored with given form.  CU may be NULL if
@@ -59,11 +56,11 @@ public:
   form_width (int form, struct cu const *cu = NULL) const = 0;
 
 public:
-  virtual bool form_allowed (form f) const = 0;
+  virtual bool form_allowed (int form) const = 0;
 
-  virtual x_form const *get_form (int name) const = 0;
+  virtual form const *get_form (int form) const = 0;
 
-  virtual bool form_allowed (attr at, form f) const = 0;
+  virtual bool form_allowed (int attr, int form) const = 0;
 
   int check_sibling_form (int form) const;
 

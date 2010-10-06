@@ -797,51 +797,7 @@ namespace
 		  }
 		}
 
-	    /* Width extraction.  */
-	    size_t width = -1;
-	    switch (form)
-	      {
-	      case DW_FORM_ref_udata:
-		width = 0;
-		break;
-
-	      case DW_FORM_block1:
-	      case DW_FORM_ref1:
-		width = 1;
-		break;
-
-	      case DW_FORM_block2:
-	      case DW_FORM_ref2:
-		width = 2;
-		break;
-
-	      case DW_FORM_data4:
-	      case DW_FORM_block4:
-	      case DW_FORM_ref4:
-		width = 4;
-		break;
-
-	      case DW_FORM_data8:
-	      case DW_FORM_ref8:
-		width = 8;
-		break;
-
-	      case DW_FORM_strp:
-	      case DW_FORM_sec_offset:
-		width = cu->head->offset_size;
-		break;
-
-	      case DW_FORM_ref_addr:
-		if (cu->head->version >= 3)
-		  width = cu->head->offset_size;
-		else
-		  width = cu->head->address_size;
-		break;
-
-	      case DW_FORM_addr:
-		width = cu->head->address_size;
-		break;
-	      }
+	    dwarf_version::form_width_t width = ver->form_width (form, cu);
 
 	    /* Setup per-form checking & relocation.  */
 	    switch (form)
@@ -884,8 +840,18 @@ namespace
 	      {
 	      case DW_FORM_strp:
 	      case DW_FORM_sec_offset:
-		if (!read_ctx_read_offset (ctx, cu->head->offset_size == 8,
-					   &value))
+	      case DW_FORM_ref_addr:
+	      case DW_FORM_addr:
+	      case DW_FORM_ref1:
+	      case DW_FORM_flag:
+	      case DW_FORM_data1:
+	      case DW_FORM_ref2:
+	      case DW_FORM_data2:
+	      case DW_FORM_data4:
+	      case DW_FORM_ref4:
+	      case DW_FORM_data8:
+	      case DW_FORM_ref8:
+		if (!read_ctx_read_var (ctx, width, &value))
 		  {
 		  cant_read:
 		    wr_error (where)
@@ -900,13 +866,6 @@ namespace
 		  goto cant_read;
 		break;
 
-	      case DW_FORM_ref_addr:
-	      case DW_FORM_addr:
-		assert (width != (size_t)-1);
-		if (!read_ctx_read_offset (ctx, width == 8, &value))
-		  goto cant_read;
-		break;
-
 	      case DW_FORM_ref_udata:
 	      case DW_FORM_udata:
 		if (!checked_read_uleb128 (ctx, &value, &where,
@@ -916,31 +875,6 @@ namespace
 
 	      case DW_FORM_flag_present:
 		value = 1;
-		break;
-
-	      case DW_FORM_ref1:
-	      case DW_FORM_flag:
-	      case DW_FORM_data1:
-		if (!read_ctx_read_var (ctx, 1, &value))
-		  goto cant_read;
-		break;
-
-	      case DW_FORM_ref2:
-	      case DW_FORM_data2:
-		if (!read_ctx_read_var (ctx, 2, &value))
-		  goto cant_read;
-		break;
-
-	      case DW_FORM_data4:
-	      case DW_FORM_ref4:
-		if (!read_ctx_read_var (ctx, 4, &value))
-		  goto cant_read;
-		break;
-
-	      case DW_FORM_data8:
-	      case DW_FORM_ref8:
-		if (!read_ctx_read_8ubyte (ctx, &value))
-		  goto cant_read;
 		break;
 
 	      case DW_FORM_sdata:
