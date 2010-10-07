@@ -25,7 +25,7 @@
 
 // The tables here capture attribute/allowed forms depending on DWARF
 // version.  Apart from standardized DWARF formats, e.g. DWARF3+GNU is
-// a version in its own.
+// a version of its own.
 
 #include "tables.hh"
 #include "check_debug_info.hh"
@@ -467,79 +467,46 @@ namespace
   {
     attribute_table const _m_attrtab;
     form_table const _m_formtab;
-    dwarf_version const *_m_parent;
-
-    template<class T>
-    T const *
-    lookfor (index_table<T> const &table, int name,
-	     T const*(dwarf_version::*fail) (int) const) const
-    {
-      if (T const *emt = table.get (name))
-	return emt;
-      else if (_m_parent != NULL)
-	return (_m_parent->*fail) (name);
-      else
-	return NULL;
-    }
 
   public:
     std_dwarf (attribute_table const &attrtab,
-	       form_table const &formtab,
-	       dwarf_version const *parent = NULL)
+	       form_table const &formtab)
       : _m_attrtab (attrtab)
       , _m_formtab (formtab)
-      , _m_parent (parent)
     {}
 
     form const *
     get_form (int form_name) const
     {
-      return lookfor (_m_formtab, form_name, &dwarf_version::get_form);
+      return _m_formtab.get (form_name);
     }
 
     attribute const *
     get_attribute (int attribute_name) const
     {
-      return lookfor (_m_attrtab, attribute_name,
-		      &dwarf_version::get_attribute);
-    }
-
-    bool
-    form_allowed (int attribute_name, int form_name) const
-    {
-      attribute const *attribute = this->get_attribute (attribute_name);
-      assert (attribute != NULL);
-      dw_class_set const &attr_classes = attribute->classes ();
-
-      form const *form = this->get_form (form_name);
-      assert (form != NULL);
-      dw_class_set const &form_classes = form->classes ();
-
-      return (attr_classes & form_classes).any ();
+      return _m_attrtab.get (attribute_name);
     }
   };
-
-  std_dwarf dwarf2 (dwarf_2_attributes (), dwarf_2_forms (), NULL);
-  std_dwarf dwarf3 (dwarf_3_attributes (), dwarf_3_forms (), &dwarf2);
-  std_dwarf dwarf4 (dwarf_4_attributes (), dwarf_4_forms (), &dwarf3);
 }
 
-dwarf_version const *
-dwarf_version::get (unsigned version)
+bool
+dwarf_version::form_allowed (int form) const
 {
-  switch (version)
-    {
-    case 2: return &dwarf2;
-    case 3: return &dwarf3;
-    case 4: return &dwarf4;
-    default: return NULL;
-    };
+  return get_form (form) != NULL;
 }
 
-dwarf_version const *
-dwarf_version::get_latest ()
+bool
+dwarf_version::form_allowed (int attribute_name, int form_name) const
 {
-  return get (4);
+  attribute const *attribute = this->get_attribute (attribute_name);
+  assert (attribute != NULL);
+  dw_class_set const &attr_classes = attribute->classes ();
+
+  form const *form = this->get_form (form_name);
+  assert (form != NULL);
+  dw_class_set const &form_classes = form->classes ();
+
+  return (attr_classes & form_classes).any ();
 }
 
 sibling_form_suitable_t
@@ -553,314 +520,82 @@ sibling_form_suitable (dwarf_version const *ver, int form)
     return sfs_ok;
 }
 
-bool
-dwarf_version::form_allowed (int form) const
+
+namespace
 {
-  return get_form (form) != NULL;
+  class dwarf_version_union
+    : public dwarf_version
+  {
+    dwarf_version const *_m_source;
+    dwarf_version const *_m_extension;
+
+  public:
+    dwarf_version_union (dwarf_version const *source,
+			 dwarf_version const *extension)
+      : _m_source (source)
+      , _m_extension (extension)
+    {
+    }
+
+    template<class T>
+    T const *
+    lookfor (int name, T const*(dwarf_version::*getter) (int) const) const
+    {
+      if (T const *emt = (_m_extension->*getter) (name))
+	return emt;
+      else
+	return (_m_source->*getter) (name);
+    }
+
+    form const *
+    get_form (int form_name) const
+    {
+      return lookfor (form_name, &dwarf_version::get_form);
+    }
+
+    attribute const *
+    get_attribute (int attribute_name) const
+    {
+      return lookfor (attribute_name, &dwarf_version::get_attribute);
+    }
+  };
 }
 
-#if 0
-
-.at (DW_AT_abstract_origin)
-.version (dwarf_2, dwarf_3, dwarf_4).classes (reference)
-
-.ad (DW_AT_accessibility)
-.version (dwarf_2, dwarf_3, dwarf_4).classes (constant)
-
-.at (DW_AT_allocated)
-.version (dwarf_3).classes (constant, block, reference)
-.version (dwarf_4).classes (constant, exprloc, reference)
-
-;
-
-
-{DW_AT_abstract_origin, 		0x31	2,3,4	reference
-
-DW_AT_accessibility		0x32	2,3,4	constant
-
-DW_AT_address_class		0x33	2,3,4	constant
-
-
-// compositions of dwarf_version:
-//  - extend (A, B): allow union of A and B
-//  - strict (A, B): allow intersection of A and B
-
-// AT->class
-DW_AT_abstract_origin		0x31	/*2,3,4*/reference
-
-DW_AT_accessibility		0x32	/*2,3,4*/constant
-
-DW_AT_address_class		0x33	/*2,3,4*/constant
-
-DW_AT_allocated			0x4e	/*3*/constant,block,reference
-DW_AT_allocated			0x4e	/*4*/constant,exprloc,reference
-
-DW_AT_artificial		0x34	/*2,3,4*/flag
-
-DW_AT_associated		0x4f	/*3*/block,constant,reference
-DW_AT_associated		0x4f	/*4*/constant,exprloc,reference
-
-DW_AT_base_types		0x35	/*2,3,4*/reference
-
-DW_AT_binary_scale		0x5b	/*3,4*/constant
-
-DW_AT_bit_offset		0x0c	/*2*/constant
-DW_AT_bit_offset		0x0c	/*3*/block,constant,reference
-DW_AT_bit_offset		0x0c	/*4*/constant,exprloc,reference
-
-DW_AT_bit_size			0x0d	/*2*/constant
-DW_AT_bit_size			0x0d	/*3*/block,constant,reference
-DW_AT_bit_size			0x0d	/*4*/constant,exprloc,reference
-
-DW_AT_bit_stride		0x2e	/*3*/constant
-DW_AT_bit_stride		0x2e	/*4*/constant,exprloc,reference
-
-DW_AT_byte_size			0x0b	/*2*/constant
-DW_AT_byte_size			0x0b	/*3*/block,constant,reference
-DW_AT_byte_size			0x0b	/*4*/constant,exprloc,reference
-
-DW_AT_byte_stride		0x51	/*3*/block,constant,reference
-DW_AT_byte_stride		0x51	/*4*/constant,exprloc,reference
-
-DW_AT_call_column		0x57	/*3,4*/constant
-
-DW_AT_call_file			0x58	/*3,4*/constant
-
-DW_AT_call_line			0x59	/*3,4*/constant
-
-DW_AT_calling_convention	0x36	/*2,3,4*/constant
-
-DW_AT_common_reference		0x1a	/*2,3,4*/reference
-
-DW_AT_comp_dir			0x1b	/*2,3,4*/string
-
-DW_AT_const_expr		0x6c	/*4*/flag
-
-DW_AT_const_value		0x1c	/*2*/string,constant,block
-DW_AT_const_value		0x1c	/*3*/block,constant,string
-DW_AT_const_value		0x1c	/*4*/block,constant,string
-
-DW_AT_containing_type		0x1d	/*2,3,4*/reference
-
-DW_AT_count			0x37	/*2*/constant,reference
-DW_AT_count			0x37	/*3*/block,constant,reference
-DW_AT_count			0x37	/*4*/constant,exprloc,reference
-
-DW_AT_data_bit_offset		0x6b	/*4*/constant
-
-DW_AT_data_location		0x50	/*3*/block
-DW_AT_data_location		0x50	/*4*/exprloc
-
-DW_AT_data_member_location	0x38	/*2*/block,reference
-DW_AT_data_member_location	0x38	/*3*/block,constant,loclistptr
-DW_AT_data_member_location	0x38	/*4*/constant,exprloc,loclistptr
-
-DW_AT_decimal_scale		0x5c	/*3,4*/constant
-
-DW_AT_decimal_sign		0x5e	/*3,4*/constant
-
-DW_AT_decl_column		0x39	/*2,3,4*/constant
-
-DW_AT_decl_file			0x3a	/*2,3,4*/constant
-
-DW_AT_decl_line			0x3b	/*2,3,4*/constant
-
-DW_AT_declaration		0x3c	/*2,3,4*/flag
-
-DW_AT_default_value		0x1e	/*2,3,4*/reference
-
-DW_AT_description		0x5a	/*3,4*/string
-
-DW_AT_digit_count		0x5f	/*3,4*/constant
-
-DW_AT_discr			0x15	/*2,3,4*/reference
-
-DW_AT_discr_list		0x3d	/*2,3,4*/block
-
-DW_AT_discr_value		0x16	/*2,3,4*/constant
-
-DW_AT_elemental			0x66	/*3,4*/flag
-
-DW_AT_encoding			0x3e	/*2,3,4*/constant
-
-DW_AT_endianity			0x65	/*3,4*/constant
-
-DW_AT_entry_pc			0x52	/*3,4*/address
-
-DW_AT_explicit			0x63	/*3,4*/flag
-
-DW_AT_extension			0x54	/*3,4*/reference
-
-DW_AT_external			0x3f	/*2,3,4*/flag
-
-DW_AT_frame_base		0x40	/*2*/block,constant
-DW_AT_frame_base		0x40	/*3*/block,loclistptr
-DW_AT_frame_base		0x40	/*4*/exprloc,loclistptr
-
-DW_AT_friend			0x41	/*2,3,4*/reference
-
-DW_AT_high_pc			0x12	/*2,3*/address
-DW_AT_high_pc			0x12	/*4*/address,constant
-
-DW_AT_identifier_case		0x42	/*2,3,4*/constant
-
-DW_AT_import			0x18	/*2,3,4*/reference
-
-DW_AT_inline			0x20	/*2,3,4*/constant
-
-DW_AT_is_optional		0x21	/*2,3,4*/flag
-
-DW_AT_language			0x13	/*2,3,4*/constant
-
-DW_AT_location			0x02	/*2*/block,constant
-DW_AT_location			0x02	/*3*/block,loclistptr
-DW_AT_location			0x02	/*4*/exprloc,loclistptr
-
-DW_AT_low_pc			0x11	/*2,3,4*/address
-
-DW_AT_lower_bound		0x22	/*2*/constant,reference
-DW_AT_lower_bound		0x22	/*3*/block,constant,reference
-DW_AT_lower_bound		0x22	/*4*/constant,exprloc,reference
-
-DW_AT_macro_info		0x43	/*2*/constant
-DW_AT_macro_info		0x43	/*3,4*/macptr
-
-DW_AT_main_subprogram		0x6a	/*4*/flag
-
-DW_AT_mutable			0x61	/*3,4*/flag
-
-DW_AT_name			0x03	/*2,3,4*/string
-
-DW_AT_namelist_item		0x44	/*2,3*/block
-DW_AT_namelist_item		0x44	/*4*/reference
-
-DW_AT_object_pointer		0x64	/*3,4*/reference
-
-DW_AT_ordering			0x09	/*2,3,4*/constant
-
-DW_AT_picture_string		0x60	/*3,4*/string
-
-DW_AT_priority			0x45	/*2,3,4*/reference
-
-DW_AT_producer			0x25	/*2,3,4*/string
-
-DW_AT_prototyped		0x27	/*2,3,4*/flag
-
-DW_AT_pure			0x67	/*3,4*/flag
-
-DW_AT_ranges			0x55	/*3,4*/rangelistptr
-
-DW_AT_recursive			0x68	/*3,4*/flag
-
-DW_AT_return_addr		0x2a	/*2*/block,constant
-DW_AT_return_addr		0x2a	/*3*/block,loclistptr
-DW_AT_return_addr		0x2a	/*4*/exprloc,loclistptr
-
-DW_AT_segment			0x46	/*2*/block,constant
-DW_AT_segment			0x46	/*3*/block,loclistptr
-DW_AT_segment			0x46	/*4*/exprloc,loclistptr
-
-DW_AT_sibling			0x01	/*2,3,4*/reference
-
-DW_AT_signature			0x69	/*4*/reference
-
-DW_AT_small			0x5d	/*3,4*/reference
-
-DW_AT_specification		0x47	/*2,3,4*/reference
-
-DW_AT_start_scope		0x2c	/*2,3,4*/constant
-
-DW_AT_static_link		0x48	/*2*/block,constant
-DW_AT_static_link		0x48	/*3*/block,loclistptr
-DW_AT_static_link		0x48	/*4*/exprloc,loclistptr
-
-DW_AT_stmt_list			0x10	/*2*/constant
-DW_AT_stmt_list			0x10	/*3,4*/lineptr
-
-DW_AT_stride_size		0x2e	/*2*/constant
-
-DW_AT_string_length		0x19	/*2*/block,constant
-DW_AT_string_length		0x19	/*3*/block,loclistptr
-DW_AT_string_length		0x19	/*4*/exprloc,loclistptr
-
-DW_AT_threads_scaled		0x62	/*3,4*/flag
-
-DW_AT_trampoline		0x56	/*3,4*/address,flag,reference,string
-
-DW_AT_type			0x49	/*2,3,4*/reference
-
-DW_AT_upper_bound		0x2f	/*2*/constant
-DW_AT_upper_bound		0x2f	/*3*/block,constant,reference
-DW_AT_upper_bound		0x2f	/*4*/constant,exprloc,reference
-
-DW_AT_use_UTF8			0x53	/*3,4*/flag
-
-DW_AT_use_location		0x4a	/*2*/block,constant
-DW_AT_use_location		0x4a	/*3*/block,loclistptr
-DW_AT_use_location		0x4a	/*4*/exprloc,loclistptr
-
-DW_AT_variable_parameter	0x4b	/*2,3,4*/flag
-
-DW_AT_virtuality		0x4c	/*2,3,4*/constant
-
-DW_AT_visibility		0x17	/*2,3,4*/constant
-
-DW_AT_vtable_elem_location	0x4d	/*2*/block,reference
-DW_AT_vtable_elem_location	0x4d	/*3*/block,loclistptr
-DW_AT_vtable_elem_location	0x4d	/*4*/exprloc,loclistptr
-
-
-// FORM->class
-DW_FORM_addr		0x01	/*2,3,4*/address
-
-DW_FORM_block		0x09	/*2,3,4*/block
-
-DW_FORM_block1		0x0a	/*2,3,4*/block
-
-DW_FORM_block2		0x03	/*2,3,4*/block
-
-DW_FORM_block4		0x04	/*2,3,4*/block
-
-DW_FORM_data1		0x0b	/*2,3,4*/constant
-
-DW_FORM_data2		0x05	/*2,3,4*/constant
-
-DW_FORM_data4		0x06	/*2,4*/constant
-DW_FORM_data4		0x06	/*3*/constant, lineptr, loclistptr, macptr, rangelistptr
-
-DW_FORM_data8		0x07	/*2,4*/constant
-DW_FORM_data8		0x07	/*3*/constant, lineptr, loclistptr, macptr, rangelistptr
-
-DW_FORM_exprloc		0x18	/*4*/exprloc
-
-DW_FORM_flag		0x0c	/*2,3,4*/flag
-
-DW_FORM_flag_present	0x19	/*4*/flag
-
-DW_FORM_indirect	0x16	/*2,3,4*/-
-
-DW_FORM_ref1		0x11	/*2,3,4*/reference
-
-DW_FORM_ref2		0x12	/*2,3,4*/reference
-
-DW_FORM_ref4		0x13	/*2,3,4*/reference
-
-DW_FORM_ref8		0x14	/*2,3,4*/reference
-
-DW_FORM_ref_addr	0x10	/*2,3,4*/reference
-
-DW_FORM_ref_sig8	0x20	/*4*/reference
-
-DW_FORM_ref_udata	0x15	/*2,3,4*/reference
-
-DW_FORM_sdata		0x0d	/*2,3,4*/constant
-
-DW_FORM_sec_offset	0x17	/*4*/lineptr, loclistptr, macptr, rangelistptr
-
-DW_FORM_string		0x08	/*2,3,4*/string
-
-DW_FORM_strp		0x0e	/*2,3,4*/string
-
-DW_FORM_udata		0x0f	/*2,3,4*/constant
-
-#endif
+dwarf_version const *
+dwarf_version::extend (dwarf_version const *source,
+		       dwarf_version const *extension)
+{
+  assert (source != NULL);
+  assert (extension != NULL);
+  // this leaks, but we don't really care.  These objects have to live
+  // the whole execution time anyway.
+  return new dwarf_version_union (source, extension);
+}
+
+namespace
+{
+  std_dwarf dwarf2 ((dwarf_2_attributes ()), dwarf_2_forms ());
+  std_dwarf ext_dwarf3 ((dwarf_3_attributes ()), dwarf_3_forms ());
+  std_dwarf ext_dwarf4 ((dwarf_4_attributes ()), dwarf_4_forms ());
+
+  dwarf_version const *dwarf3 = dwarf_version::extend (&dwarf2, &ext_dwarf3);
+  dwarf_version const *dwarf4 = dwarf_version::extend (dwarf3, &ext_dwarf4);
+}
+
+dwarf_version const *
+dwarf_version::get (unsigned version)
+{
+  switch (version)
+    {
+    case 2: return &dwarf2;
+    case 3: return dwarf3;
+    case 4: return dwarf4;
+    default: return NULL;
+    };
+}
+
+dwarf_version const *
+dwarf_version::get_latest ()
+{
+  return get (4);
+}

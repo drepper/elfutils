@@ -122,7 +122,7 @@ public:
 
   /// Figure out whether, in given DWARF version, given attribute is
   /// allowed to have given form.
-  virtual bool form_allowed (int attribute_name, int form_name) const = 0;
+  bool form_allowed (int attribute_name, int form_name) const;
 
   /// Return dwarf_version object for given DWARF version.
   static dwarf_version const *get (unsigned version)
