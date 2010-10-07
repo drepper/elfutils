@@ -28,7 +28,7 @@
 
 #include "readctx.h"
 #include "where.h"
-#include "tables.hh"
+#include "dwarf_version.hh"
 
 bool read_size_extra (read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 		      int *offset_sizep, where *where);

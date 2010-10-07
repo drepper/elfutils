@@ -47,6 +47,7 @@ dwarflint_SOURCES = \
 	coverage.cc coverage.hh \
 	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
 	dwarflint.cc dwarflint.hh dwarflint.ii \
+	dwarf_version.cc dwarf_version.hh \
 	elf_file.hh elf_file.ii \
 	expected-at.cc expected.hh \
 	highlevel_check.cc highlevel_check.hh \
@@ -59,7 +60,6 @@ dwarflint_SOURCES = \
 	reloc.cc reloc.hh \
 	section_id.cc section_id.hh \
 	sections.cc sections.hh sections.ii \
-	tables.cc tables.hh \
 	where.c where.h \
 	wrap.cc wrap.hh \
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \

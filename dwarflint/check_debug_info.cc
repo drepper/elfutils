@@ -33,7 +33,7 @@
 #include "../libdw/dwarf.h"
 
 #include "messages.hh"
-#include "tables.hh"
+#include "dwarf_version.hh"
 #include "pri.hh"
 #include "option.hh"
 #include "sections.hh"

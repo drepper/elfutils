@@ -27,7 +27,7 @@
 // version.  Apart from standardized DWARF formats, e.g. DWARF3+GNU is
 // a version of its own.
 
-#include "tables.hh"
+#include "dwarf_version.hh"
 #include "check_debug_info.hh"
 
 #include "../libdw/dwarf.h"

@@ -30,7 +30,7 @@
 #include "check_debug_info.hh"
 #include "check_debug_abbrev.hh"
 #include "pri.hh"
-#include "tables.hh"
+#include "dwarf_version.hh"
 #include "sections.hh"
 #include "checked_read.hh"
 #include "messages.hh"
