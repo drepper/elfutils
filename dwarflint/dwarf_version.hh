@@ -29,6 +29,7 @@
 
 #include <bitset>
 #include "check_debug_info.ii"
+#include "dwarf_version.ii"
 
 enum dw_class
   {
@@ -108,6 +109,12 @@ public:
   {
     return _m_classes;
   }
+
+  /// Answer a class of form given attribute as a context.  This
+  /// assumes that the result is exactly one class.  You must validate
+  /// the form via form_allowed before calling this.  If more than two
+  /// classes match, the form and attribute tables are ill-designed.
+  dw_class cls (attribute const *attribute) const;
 
   /// Return width of data stored with given form.  CU may be NULL if
   /// you are sure that the form size doesn't depend on bitness of

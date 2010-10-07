@@ -36,6 +36,7 @@
 #include "../libdw/dwarf.h"
 #include <map>
 #include <cassert>
+#include <string.h>
 
 dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
 			    dw_class d, dw_class e)
@@ -64,6 +65,16 @@ form::form (int a_name, dw_class_set a_classes,
   , _m_width (a_width)
   , _m_storclass (a_storclass)
 {}
+
+dw_class
+form::cls (attribute const *attribute) const
+{
+  assert (attribute != NULL);
+  dw_class_set result = classes ();
+  result &= attribute->classes ();
+  assert (result.count () == 1);
+  return static_cast<dw_class> (ffsl (result.to_ulong ()));
+}
 
 form_width_t
 form::width (cu const *cu) const
