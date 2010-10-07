@@ -29,15 +29,15 @@ template <class T>
 void
 dwver_index_table<T>::add (T const &emt)
 {
-  _m_data.insert (std::make_pair (emt.name (), emt));
+  _m_table.insert (std::make_pair (emt.name (), emt));
 }
 
 template <class T>
 T const *
 dwver_index_table<T>::get (int f) const
 {
-  typename _map_t::const_iterator it = _m_data.find (f);
-  if (it != _m_data.end ())
+  typename _table_t::const_iterator it = _m_table.find (f);
+  if (it != _m_table.end ())
     return &it->second;
   else
     return NULL;

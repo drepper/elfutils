@@ -32,14 +32,14 @@
 template <class T>
 class dwver_index_table
 {
-  typedef std::map<int, T> _map_t;
-  _map_t _m_data;
+  typedef std::map<int, T> _table_t;
+  _table_t _m_table;
 
 protected:
-  void add (T const &f);
+  void add (T const &emt);
 
 public:
-  T const *get (int f) const;
+  T const *get (int name) const;
 };
 
 typedef dwver_index_table<form> form_table;
