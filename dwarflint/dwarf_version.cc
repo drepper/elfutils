@@ -59,7 +59,7 @@ form::form (int a_name, dw_class_set a_classes,
 {}
 
 form::form (int a_name, dw_class_set a_classes,
-      form_width_special_t a_width, storage_class_t a_storclass)
+	    form_width_special_t a_width, storage_class_t a_storclass)
   : _m_name (a_name)
   , _m_classes (a_classes)
   , _m_width (a_width)
@@ -67,13 +67,22 @@ form::form (int a_name, dw_class_set a_classes,
 {}
 
 dw_class
-form::cls (attribute const *attribute) const
+dwarf_version::form_class (form const *form, attribute const *attribute) const
 {
+  assert (form != NULL);
   assert (attribute != NULL);
-  dw_class_set result = classes ();
+  dw_class_set result = form->classes ();
   result &= attribute->classes ();
-  assert (result.count () == 1);
-  return static_cast<dw_class> (ffsl (result.to_ulong ()));
+  assert (result.any ());
+  if (result.count () > 1)
+    {
+      dw_class ret = this->ambiguous_class (form, attribute, result);
+      assert (ret < max_dw_class);
+      assert (result[ret]);
+      return ret;
+    }
+  else
+    return static_cast<dw_class> (ffsl (result.to_ulong ()));
 }
 
 form_width_t
@@ -160,6 +169,17 @@ namespace
     get_attribute (int attribute_name) const
     {
       return lookfor (attribute_name, &dwarf_version::get_attribute);
+    }
+
+    dw_class
+    ambiguous_class (form const *form,
+		     attribute const *attribute,
+		     dw_class_set const &candidates) const
+    {
+      dw_class ret = _m_extension->ambiguous_class (form, attribute, candidates);
+      if (ret == max_dw_class)
+	ret = _m_source->ambiguous_class (form, attribute, candidates);
+      return ret;
     }
   };
 }

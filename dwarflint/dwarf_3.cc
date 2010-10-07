@@ -27,6 +27,7 @@
 #include "dwarf_2.hh"
 #include "dwarf_3.hh"
 #include "../libdw/dwarf.h"
+#include <cassert>
 
 namespace
 {
@@ -112,6 +113,16 @@ namespace
     dwarf_3_ext_t ()
       : std_dwarf (dwarf_3_attributes (), dwarf_3_forms ())
     {}
+
+    dw_class
+    ambiguous_class (__attribute__ ((unused)) form const *form,
+		     attribute const *attribute,
+		     dw_class_set const &candidates) const
+    {
+      assert (attribute->name () == DW_AT_data_member_location);
+      assert (candidates == dw_class_set (cl_constant, cl_loclistptr));
+      return cl_loclistptr;
+    }
   };
 }
 

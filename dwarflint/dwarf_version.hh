@@ -110,12 +110,6 @@ public:
     return _m_classes;
   }
 
-  /// Answer a class of form given attribute as a context.  This
-  /// assumes that the result is exactly one class.  You must validate
-  /// the form via form_allowed before calling this.  If more than two
-  /// classes match, the form and attribute tables are ill-designed.
-  dw_class cls (attribute const *attribute) const;
-
   /// Return width of data stored with given form.  CU may be NULL if
   /// you are sure that the form size doesn't depend on bitness of
   /// address_size or offset_size.
@@ -170,12 +164,32 @@ public:
   /// for unknown attributes;
   virtual attribute const *get_attribute (int attribute_name) const = 0;
 
+  /// If more than one class ends up as a candidate after the request
+  /// to form_class, this function is called to resolve the ambiguity.
+  virtual dw_class
+  ambiguous_class (__attribute__ ((unused)) form const *form,
+		   __attribute__ ((unused)) attribute const *attribute,
+		   __attribute__ ((unused)) dw_class_set const &candidates)
+    const
+  {
+    return max_dw_class; // = we don't know.  This will assert back in caller.
+  }
+
   /// Shortcut for get_form (form_name) != NULL.
   bool form_allowed (int form_name) const;
 
   /// Figure out whether, in given DWARF version, given attribute is
   /// allowed to have given form.
   bool form_allowed (int attribute_name, int form_name) const;
+
+  /// Answer a class of FORM given ATTRIBUTE as a context.  If there's
+  /// exactly one candidate class, that's the one answered.  If
+  /// there's more, ambiguous_class is called to resolve the
+  /// ambiguity.  If there's no candidate, then the request is
+  /// invalid, you must validate the form via form_allowed before
+  /// calling this.
+  dw_class form_class (form const *form, attribute const *attribute) const;
+
 
   /// Return dwarf_version object for given DWARF version.
   static dwarf_version const *get (unsigned version)
