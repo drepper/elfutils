@@ -77,6 +77,25 @@ public:
   storage_class_t storage_class () const;
 };
 
+template<storage_class_t StorClass, dw_class... Classes>
+struct preset_form
+  : public full_form
+{
+  preset_form (int a_name, form_width_t a_width)
+    : full_form (a_name, dw_class_set (Classes...), a_width, StorClass)
+  {}
+};
+
+template<dw_class... Classes>
+struct preset_attribute
+  : public basic_attribute
+{
+  preset_attribute (int a_name)
+    : basic_attribute (a_name, dw_class_set (Classes...))
+  {}
+};
+
+
 struct offset_form
   : public basic_form
 {
@@ -95,28 +114,10 @@ struct address_form
   storage_class_t storage_class () const;
 };
 
-template<storage_class_t StorClass, dw_class... Classes>
-struct preset_form
-  : public full_form
-{
-  preset_form (int a_name, form_width_t a_width)
-    : full_form (a_name, dw_class_set (Classes...), a_width, StorClass)
-  {}
-};
-
 struct string_form
   : public preset_form<sc_string, cl_string>
 {
   string_form (int a_name);
-};
-
-template<dw_class... Classes>
-struct preset_attribute
-  : public basic_attribute
-{
-  preset_attribute (int a_name)
-    : basic_attribute (a_name, dw_class_set (Classes...))
-  {}
 };
 
 typedef preset_form<sc_block, cl_block> block_form;
