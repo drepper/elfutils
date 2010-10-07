@@ -26,6 +26,50 @@
 #include "dwarf_version-imp.hh"
 #include "check_debug_info.hh"
 
+template <class T>
+void
+dwver_index_table<T>::add (T const *f)
+{
+  _m_data[f->name ()] = f;
+}
+
+template <class T>
+T const *
+dwver_index_table<T>::get (int f) const
+{
+  typename _map_t::const_iterator it = _m_data.find (f);
+  if (it != _m_data.end ())
+    return it->second;
+  else
+    return NULL;
+}
+
+template class dwver_index_table<form>;
+template class dwver_index_table<attribute>;
+
+template<class T>
+dwver_basic<T>::dwver_basic (int a_name, dw_class_set a_classes)
+  : _m_name (a_name)
+  , _m_classes (a_classes)
+{}
+
+template<class T>
+dw_class_set const &
+dwver_basic<T>::classes () const
+{
+  return _m_classes;
+}
+
+template<class T>
+int
+dwver_basic<T>::name () const
+{
+  return _m_name;
+}
+
+template class dwver_basic<form>;
+template class dwver_basic<attribute>;
+
 full_form::full_form (int a_name, dw_class_set a_classes,
 		      form_width_t a_width, storage_class_t a_storclass)
   : basic_form (a_name, a_classes)
@@ -45,17 +89,40 @@ full_form::storage_class () const
   return _m_storclass;
 }
 
+
+offset_form::offset_form (int a_name, dw_class_set a_classes)
+  : basic_form (a_name, a_classes)
+{}
+
 form_width_t
-width_off::width (cu const *cu)
+offset_form::width (cu const *cu) const
 {
   return static_cast<form_width_t> (cu->head->offset_size);
 }
 
+storage_class_t
+offset_form::storage_class () const
+{
+  return sc_value;
+}
+
+
+address_form::address_form (int a_name, dw_class_set a_classes)
+  : basic_form (a_name, a_classes)
+{}
+
 form_width_t
-width_addr::width (struct cu const *cu)
+address_form::width (cu const *cu) const
 {
   return static_cast<form_width_t> (cu->head->address_size);
 }
+
+storage_class_t
+address_form::storage_class () const
+{
+  return sc_value;
+}
+
 
 string_form::string_form (int a_name)
   : preset_form<sc_string, cl_string> (a_name, fw_unknown)

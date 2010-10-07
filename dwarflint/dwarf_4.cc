@@ -90,7 +90,8 @@ namespace
       add (new const_form (DW_FORM_data8, fw_8));
       add (new offset_form
 	   (DW_FORM_sec_offset,
-	    cl_lineptr, cl_loclistptr, cl_macptr, cl_rangelistptr));
+	    dw_class_set (cl_lineptr, cl_loclistptr,
+			  cl_macptr, cl_rangelistptr)));
       add (new exprloc_form (DW_FORM_exprloc));
       add (new flag_form (DW_FORM_flag_present, fw_0));
       add (new ref_form (DW_FORM_ref_sig8, fw_8));

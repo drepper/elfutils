@@ -36,21 +36,10 @@ class dwver_index_table
   _map_t _m_data;
 
 protected:
-  void add (T const *f)
-  {
-    _m_data[f->name ()] = f;
-  }
+  void add (T const *f);
 
 public:
-  T const *
-  get (int f) const
-  {
-    typename _map_t::const_iterator it = _m_data.find (f);
-    if (it != _m_data.end ())
-      return it->second;
-    else
-      return NULL;
-  }
+  T const *get (int f) const;
 };
 
 typedef dwver_index_table<form> form_table;
@@ -64,22 +53,10 @@ class dwver_basic
   dw_class_set _m_classes;
 
 public:
-  dwver_basic (int a_name, dw_class_set a_classes)
-    : _m_name (a_name)
-    , _m_classes (a_classes)
-  {}
+  dwver_basic (int a_name, dw_class_set a_classes);
 
-  dw_class_set const &
-  classes () const
-  {
-    return _m_classes;
-  }
-
-  int
-  name () const
-  {
-    return _m_name;
-  }
+  dw_class_set const &classes () const;
+  int name () const;
 };
 
 typedef dwver_basic<form> basic_form;
@@ -100,35 +77,22 @@ public:
   storage_class_t storage_class () const;
 };
 
-struct width_off {
-  static form_width_t width (cu const *cu);
-};
-
-struct width_addr {
-  static form_width_t width (cu const *cu);
-};
-
-template<class WidthSel, storage_class_t StorClass>
-class selwidth_form
+struct offset_form
   : public basic_form
 {
-public:
-  template <class... Clss>
-  selwidth_form (int a_name, Clss... a_classes)
-    : basic_form (a_name, dw_class_set (a_classes...))
-  {}
+  offset_form (int a_name, dw_class_set a_classes);
 
-  form_width_t
-  width (struct cu const *cu) const
-  {
-    return WidthSel::width (cu);
-  }
+  form_width_t width (cu const *cu) const;
+  storage_class_t storage_class () const;
+};
 
-  storage_class_t
-  storage_class () const
-  {
-    return StorClass;
-  }
+struct address_form
+  : public basic_form
+{
+  address_form (int a_name, dw_class_set a_classes);
+
+  form_width_t width (cu const *cu) const;
+  storage_class_t storage_class () const;
 };
 
 template<storage_class_t StorClass, dw_class... Classes>
@@ -155,8 +119,6 @@ struct preset_attribute
   {}
 };
 
-typedef selwidth_form<width_off, sc_value> offset_form;
-typedef selwidth_form<width_addr, sc_value> address_form;
 typedef preset_form<sc_block, cl_block> block_form;
 typedef preset_form<sc_value, cl_constant> const_form;
 typedef preset_form<sc_value, cl_reference> ref_form;
