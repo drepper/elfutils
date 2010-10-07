@@ -623,6 +623,8 @@ namespace
 	    where.ref = &it->where;
 
 	    int form_name = it->form;
+	    form const *form = ver->get_form (form_name);
+	    attribute const *attribute = ver->get_attribute (it->name);
 	    bool indirect = form_name == DW_FORM_indirect;
 	    if (indirect)
 	      {
@@ -642,7 +644,7 @@ namespace
 		    return -1;
 		  }
 
-		if (it->name == DW_AT_sibling)
+		if (attribute->name () == DW_AT_sibling)
 		  switch (sibling_form_suitable (ver, form_name))
 		    {
 		    case sfs_long:
@@ -706,36 +708,18 @@ namespace
 	    /* Setup locptr checking.  */
 	    if (is_location_attrib (it->name))
 	      {
-		switch (form_name)
-		  {
-		  case DW_FORM_data8:
-		    if (cu->head->offset_size == 4)
-		      wr_error (where)
-			<< "location attribute with form \""
-			<< pri::form (form_name) << "\" in 32-bit CU."
-			<< std::endl;
-		    /* fall-through */
+		if (form->width () == fw_8
+		    && cu->head->offset_size == 4)
+		  wr_error (where)
+		    << "location attribute with form \""
+		    << pri::form (form_name) << "\" in 32-bit CU."
+		    << std::endl;
 
-		  case DW_FORM_data4:
-		  case DW_FORM_sec_offset:
+		if (ver->form_class (form, attribute) == cl_loclistptr)
+		  {
 		    value_check_cb = check_locptr;
 		    extra_mc = mc_loc;
 		    check_someptr = true;
-		    break;
-
-		  case DW_FORM_block1:
-		  case DW_FORM_block2:
-		  case DW_FORM_block4:
-		  case DW_FORM_block:
-		    break;
-
-		  default:
-		    /* Only print error if it's indirect.  Otherwise we
-		       gave diagnostic during abbrev loading.  */
-		    if (indirect)
-		      wr_error (where)
-			<< "location attribute with invalid (indirect) form \""
-			<< pri::form (form_name) << "\"." << std::endl;
 		  }
 	      }
 	    /* Setup rangeptr or lineptr checking.  */
@@ -771,15 +755,6 @@ namespace
 			    extra_mc = mc_line;
 			  }
 			break;
-
-		      default:
-			/* Only print error if it's indirect.  Otherwise we
-			   gave diagnostic during abbrev loading.  */
-			if (indirect)
-			  wr_error (where)
-			    << pri::attr (it->name)
-			    << " with invalid (indirect) form \""
-			    << pri::form (form_name) << "\"." << std::endl;
 		      }
 		    break;
 
@@ -800,8 +775,6 @@ namespace
 		    break;
 		  }
 		}
-
-	    form const *form = ver->get_form (form_name);
 
 	    /* Setup per-form checking & relocation.  */
 	    switch (form_name)
