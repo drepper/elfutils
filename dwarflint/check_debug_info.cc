@@ -828,10 +828,6 @@ namespace
 		break;
 
 	      case DW_FORM_data4:
-		if (check_someptr)
-		  relocate = rel_require;
-		break;
-
 	      case DW_FORM_data8:
 		if (check_someptr)
 		  relocate = rel_require;
