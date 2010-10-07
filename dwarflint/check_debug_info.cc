@@ -622,19 +622,19 @@ namespace
 	  {
 	    where.ref = &it->where;
 
-	    uint8_t form = it->form;
-	    bool indirect = form == DW_FORM_indirect;
+	    int form_name = it->form;
+	    bool indirect = form_name == DW_FORM_indirect;
 	    if (indirect)
 	      {
 		uint64_t value;
 		if (!checked_read_uleb128 (ctx, &value, &where,
 					   "indirect attribute form"))
 		  return -1;
-		form = value;
+		form_name = value;
 
 		// xxx Some of what's below is probably duplicated in
 		// check_debug_abbrev.  Consolidate.
-		if (!ver->form_allowed (form))
+		if (!ver->form_allowed (form_name))
 		  {
 		    wr_error (where)
 		      << "invalid indirect form " << pri::hex (value)
@@ -643,7 +643,7 @@ namespace
 		  }
 
 		if (it->name == DW_AT_sibling)
-		  switch (sibling_form_suitable (ver, form))
+		  switch (sibling_form_suitable (ver, form_name))
 		    {
 		    case sfs_long:
 		      wr_message (where, cat (mc_die_rel, mc_impact_2))
@@ -662,7 +662,7 @@ namespace
 		    }
 	      }
 
-	    if (form == DW_FORM_indirect)
+	    if (form_name == DW_FORM_indirect)
 	      {
 		wr_error (&where, ": indirect form is again indirect.\n");
 		return -1;
@@ -706,13 +706,14 @@ namespace
 	    /* Setup locptr checking.  */
 	    if (is_location_attrib (it->name))
 	      {
-		switch (form)
+		switch (form_name)
 		  {
 		  case DW_FORM_data8:
 		    if (cu->head->offset_size == 4)
 		      wr_error (where)
 			<< "location attribute with form \""
-			<< pri::form (form) << "\" in 32-bit CU." << std::endl;
+			<< pri::form (form_name) << "\" in 32-bit CU."
+			<< std::endl;
 		    /* fall-through */
 
 		  case DW_FORM_data4:
@@ -734,7 +735,7 @@ namespace
 		    if (indirect)
 		      wr_error (where)
 			<< "location attribute with invalid (indirect) form \""
-			<< pri::form (form) << "\"." << std::endl;
+			<< pri::form (form_name) << "\"." << std::endl;
 		  }
 	      }
 	    /* Setup rangeptr or lineptr checking.  */
@@ -744,7 +745,7 @@ namespace
 		case DW_AT_ranges:
 		case DW_AT_stmt_list:
 		  {
-		    switch (form)
+		    switch (form_name)
 		      {
 		      case DW_FORM_data8:
 			if (cu->head->offset_size == 4)
@@ -778,7 +779,7 @@ namespace
 			  wr_error (where)
 			    << pri::attr (it->name)
 			    << " with invalid (indirect) form \""
-			    << pri::form (form) << "\"." << std::endl;
+			    << pri::form (form_name) << "\"." << std::endl;
 		      }
 		    break;
 
@@ -800,10 +801,10 @@ namespace
 		  }
 		}
 
-	    ::form const *x_form = ver->get_form (form);
+	    form const *form = ver->get_form (form_name);
 
 	    /* Setup per-form checking & relocation.  */
-	    switch (form)
+	    switch (form_name)
 	      {
 	      case DW_FORM_strp:
 		value_check_cb = check_strp;
@@ -836,8 +837,8 @@ namespace
 
 	    /* Read value depending on the form width and storage
 	       class.  */
-	    form_width_t width = x_form->width (cu);
-	    storage_class_t storclass = x_form->storage_class ();
+	    form_width_t width = form->width (cu);
+	    storage_class_t storclass = form->storage_class ();
 	    switch (storclass)
 	      {
 	      case sc_string:
@@ -853,7 +854,7 @@ namespace
 		  {
 		  case fw_0:
 		    // who knows, DW_FORM_flag_absent might turn up one day
-		    assert (x_form->name () == DW_FORM_flag_present);
+		    assert (form->name () == DW_FORM_flag_present);
 		    value = 1;
 		    break;
 
@@ -915,11 +916,11 @@ namespace
 		if (relocate == rel_no)
 		  wr_message (where, cat (mc_impact_4, mc_die_other,
 					  mc_reloc, extra_mc))
-		    << "unexpected relocation of " << pri::form (form) << '.'
-		    << std::endl;
+		    << "unexpected relocation of " << pri::form (form_name)
+		    << '.' << std::endl;
 
 		relocate_one (&file, reloc, rel, width, &value, &where,
-			      reloc_target (form, it), symbolp);
+			      reloc_target (form_name, it), symbolp);
 
 		if (relocatedp != NULL)
 		  *relocatedp = true;
@@ -934,7 +935,8 @@ namespace
 			    && value != 0)))
 		  wr_message (where, cat (mc_impact_2, mc_die_other,
 					  mc_reloc, extra_mc))
-		    << pri::lacks_relocation (pri::form (form)) << std::endl;
+		    << pri::lacks_relocation (pri::form (form_name))
+		    << std::endl;
 	      }
 
 	    /* Dispatch value checking.  */
