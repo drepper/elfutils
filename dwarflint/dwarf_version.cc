@@ -31,6 +31,7 @@
 #include "dwarf_2.hh"
 #include "dwarf_3.hh"
 #include "dwarf_4.hh"
+#include "check_debug_info.hh"
 
 #include "../libdw/dwarf.h"
 #include <map>
@@ -47,6 +48,39 @@ dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
   ADD (e);
 #undef ADD
 }
+
+form::form (int a_name, dw_class_set a_classes,
+	    form_width_t a_width, storage_class_t a_storclass)
+  : _m_name (a_name)
+  , _m_classes (a_classes)
+  , _m_width (a_width)
+  , _m_storclass (a_storclass)
+{}
+
+form::form (int a_name, dw_class_set a_classes,
+      form_width_special_t a_width, storage_class_t a_storclass)
+  : _m_name (a_name)
+  , _m_classes (a_classes)
+  , _m_width (a_width)
+  , _m_storclass (a_storclass)
+{}
+
+form_width_t
+form::width (cu const *cu) const
+{
+  if (_m_width == fw_offset)
+    return static_cast<form_width_t> (cu->head->offset_size);
+  else if (_m_width == fw_address)
+    return static_cast<form_width_t> (cu->head->address_size);
+  else
+    return static_cast<form_width_t> (_m_width);
+}
+
+attribute::attribute (int a_name, dw_class_set a_classes)
+  : _m_name (a_name)
+  , _m_classes (a_classes)
+{}
+
 
 bool
 dwarf_version::form_allowed (int form) const

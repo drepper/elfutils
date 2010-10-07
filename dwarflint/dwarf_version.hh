@@ -64,7 +64,15 @@ enum form_width_t
     fw_8 = 8,
     fw_sleb,
     fw_uleb,
-    fw_unknown
+    fw_unknown,
+  };
+
+/// Special forms for use in DWARF tables.  These never leak out to
+/// the user of dwarf_version.
+enum form_width_special_t
+  {
+    fw_offset = fw_unknown + 1,
+    fw_address,
   };
 
 enum storage_class_t
@@ -76,11 +84,30 @@ enum storage_class_t
 
 class form
 {
+  int const _m_name;
+  dw_class_set const _m_classes;
+  int const _m_width;
+  storage_class_t const _m_storclass;
+
 public:
-  virtual int name () const = 0;
+  form (int a_name, dw_class_set a_classes,
+	form_width_t a_width, storage_class_t a_storclass);
+
+  form (int a_name, dw_class_set a_classes,
+	form_width_special_t a_width, storage_class_t a_storclass);
+
+  int
+  name () const
+  {
+    return _m_name;
+  }
 
   /// Answer set of DWARF classes that this form can have.
-  virtual dw_class_set const &classes () const = 0;
+  dw_class_set const &
+  classes () const
+  {
+    return _m_classes;
+  }
 
   /// Return width of data stored with given form.  CU may be NULL if
   /// you are sure that the form size doesn't depend on bitness of
@@ -89,20 +116,40 @@ public:
   /// Forms for which width makes no sense (namely those in the
   /// storage class of sc_string) get fw_unknown.  Unknown forms get
   /// an assert.
-  virtual form_width_t width (cu const *cu = NULL) const = 0;
+  ///
+  /// Return value is never fw_offset or fw_address.  These get
+  /// resolved to fw_4 or fw_8 depending on corresponding value in
+  /// CU->head.
+  form_width_t width (cu const *cu = NULL) const;
 
   /// Return storage class of given form.  Closely related to width.
-  virtual storage_class_t storage_class () const = 0;
-
-  virtual ~form () {}
+  storage_class_t
+  storage_class () const
+  {
+    return _m_storclass;
+  }
 };
 
 class attribute
 {
+  int const _m_name;
+  dw_class_set const _m_classes;
+
 public:
-  virtual int name () const = 0;
-  virtual dw_class_set const &classes () const = 0;
-  virtual ~attribute () {}
+  attribute (int a_name, dw_class_set a_classes);
+
+  int
+  name () const
+  {
+    return _m_name;
+  }
+
+  /// Answer set of DWARF classes that this form can have.
+  dw_class_set const &
+  classes () const
+  {
+    return _m_classes;
+  }
 };
 
 class dwarf_version

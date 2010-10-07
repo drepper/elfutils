@@ -39,37 +39,35 @@ namespace
   {
     dwarf_4_attributes ()
     {
-      add (new exprloc_loclist_attribute (DW_AT_location));
-      add (new const_exprloc_ref_attribute (DW_AT_bit_offset));
-      add (new const_exprloc_ref_attribute (DW_AT_bit_size));
-      add (new basic_attribute (DW_AT_high_pc,
-				dw_class_set (cl_address, cl_constant)));
-      add (new exprloc_loclist_attribute (DW_AT_string_length));
-      add (new basic_attribute (DW_AT_const_value,
-				dw_class_set (cl_block, cl_constant,
-					      cl_string)));
-      add (new const_exprloc_ref_attribute (DW_AT_lower_bound));
-      add (new exprloc_loclist_attribute (DW_AT_return_addr));
-      add (new const_exprloc_ref_attribute (DW_AT_bit_stride));
-      add (new const_exprloc_ref_attribute (DW_AT_upper_bound));
-      add (new const_exprloc_ref_attribute (DW_AT_count));
-      add (new basic_attribute (DW_AT_data_member_location,
-				dw_class_set (cl_constant, cl_exprloc,
-					      cl_loclistptr)));
-      add (new exprloc_loclist_attribute (DW_AT_frame_base));
-      add (new ref_attribute (DW_AT_namelist_item));
-      add (new exprloc_loclist_attribute (DW_AT_segment));
-      add (new exprloc_loclist_attribute (DW_AT_static_link));
-      add (new exprloc_loclist_attribute (DW_AT_use_location));
-      add (new exprloc_loclist_attribute (DW_AT_vtable_elem_location));
-      add (new const_exprloc_ref_attribute (DW_AT_allocated));
-      add (new const_exprloc_ref_attribute (DW_AT_associated));
-      add (new basic_attribute (DW_AT_data_location, cl_exprloc));
-      add (new const_exprloc_ref_attribute (DW_AT_byte_stride));
-      add (new ref_attribute (DW_AT_signature));
-      add (new flag_attribute (DW_AT_main_subprogram));
-      add (new const_attribute (DW_AT_data_bit_offset));
-      add (new flag_attribute (DW_AT_const_expr));
+      add (exprloc_loclist_attribute (DW_AT_location));
+      add (const_exprloc_ref_attribute (DW_AT_bit_offset));
+      add (const_exprloc_ref_attribute (DW_AT_bit_size));
+      add (attribute (DW_AT_high_pc,
+		      dw_class_set (cl_address, cl_constant)));
+      add (exprloc_loclist_attribute (DW_AT_string_length));
+      add (attribute (DW_AT_const_value,
+		      dw_class_set (cl_block, cl_constant, cl_string)));
+      add (const_exprloc_ref_attribute (DW_AT_lower_bound));
+      add (exprloc_loclist_attribute (DW_AT_return_addr));
+      add (const_exprloc_ref_attribute (DW_AT_bit_stride));
+      add (const_exprloc_ref_attribute (DW_AT_upper_bound));
+      add (const_exprloc_ref_attribute (DW_AT_count));
+      add (attribute (DW_AT_data_member_location,
+		      dw_class_set (cl_constant, cl_exprloc, cl_loclistptr)));
+      add (exprloc_loclist_attribute (DW_AT_frame_base));
+      add (ref_attribute (DW_AT_namelist_item));
+      add (exprloc_loclist_attribute (DW_AT_segment));
+      add (exprloc_loclist_attribute (DW_AT_static_link));
+      add (exprloc_loclist_attribute (DW_AT_use_location));
+      add (exprloc_loclist_attribute (DW_AT_vtable_elem_location));
+      add (const_exprloc_ref_attribute (DW_AT_allocated));
+      add (const_exprloc_ref_attribute (DW_AT_associated));
+      add (attribute (DW_AT_data_location, cl_exprloc));
+      add (const_exprloc_ref_attribute (DW_AT_byte_stride));
+      add (ref_attribute (DW_AT_signature));
+      add (flag_attribute (DW_AT_main_subprogram));
+      add (const_attribute (DW_AT_data_bit_offset));
+      add (flag_attribute (DW_AT_const_expr));
     }
   };
 
@@ -86,15 +84,14 @@ namespace
   {
     dwarf_4_forms ()
     {
-      add (new const_form (DW_FORM_data4, fw_4));
-      add (new const_form (DW_FORM_data8, fw_8));
-      add (new offset_form
-	   (DW_FORM_sec_offset,
-	    dw_class_set (cl_lineptr, cl_loclistptr,
-			  cl_macptr, cl_rangelistptr)));
-      add (new exprloc_form (DW_FORM_exprloc));
-      add (new flag_form (DW_FORM_flag_present, fw_0));
-      add (new ref_form (DW_FORM_ref_sig8, fw_8));
+      add (const_form (DW_FORM_data4, fw_4));
+      add (const_form (DW_FORM_data8, fw_8));
+      add (offset_form (DW_FORM_sec_offset,
+			dw_class_set (cl_lineptr, cl_loclistptr,
+				      cl_macptr, cl_rangelistptr)));
+      add (exprloc_form (DW_FORM_exprloc));
+      add (flag_form (DW_FORM_flag_present, fw_0));
+      add (ref_form (DW_FORM_ref_sig8, fw_8));
     }
   };
 

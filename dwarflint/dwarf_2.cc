@@ -34,67 +34,66 @@ namespace
   {
     dwarf_2_attributes ()
     {
-      add (new ref_attribute (DW_AT_sibling));
-      add (new const_or_block_attribute (DW_AT_location));
-      add (new string_attribute (DW_AT_name));
-      add (new const_attribute (DW_AT_ordering));
-      add (new const_attribute (DW_AT_byte_size));
-      add (new const_attribute (DW_AT_bit_offset));
-      add (new const_attribute (DW_AT_bit_size));
-      add (new const_attribute (DW_AT_stmt_list));
-      add (new addr_attribute (DW_AT_low_pc));
-      add (new addr_attribute (DW_AT_high_pc));
-      add (new const_attribute (DW_AT_language));
-      add (new ref_attribute (DW_AT_discr));
-      add (new const_attribute (DW_AT_discr_value));
-      add (new const_attribute (DW_AT_visibility));
-      add (new ref_attribute (DW_AT_import));
-      add (new const_or_block_attribute (DW_AT_string_length));
-      add (new ref_attribute (DW_AT_common_reference));
-      add (new string_attribute (DW_AT_comp_dir));
-      add (new basic_attribute (DW_AT_const_value,
-				dw_class_set (cl_string, cl_constant,
-					      cl_block)));
-      add (new ref_attribute (DW_AT_containing_type));
-      add (new ref_attribute (DW_AT_default_value));
-      add (new const_attribute (DW_AT_inline));
-      add (new flag_attribute (DW_AT_is_optional));
-      add (new const_or_ref_attribute (DW_AT_lower_bound));
-      add (new string_attribute (DW_AT_producer));
-      add (new flag_attribute (DW_AT_prototyped));
-      add (new const_or_block_attribute (DW_AT_return_addr));
-      add (new const_attribute (DW_AT_start_scope));
-      add (new const_attribute (DW_AT_bit_stride));
-      add (new const_or_ref_attribute (DW_AT_upper_bound));
-      add (new const_attribute (DW_AT_abstract_origin));
-      add (new ref_attribute (DW_AT_accessibility));
-      add (new const_attribute (DW_AT_address_class));
-      add (new flag_attribute (DW_AT_artificial));
-      add (new ref_attribute (DW_AT_base_types));
-      add (new const_attribute (DW_AT_calling_convention));
-      add (new const_or_ref_attribute (DW_AT_count));
-      add (new ref_or_block_attribute (DW_AT_data_member_location));
-      add (new const_attribute (DW_AT_decl_column));
-      add (new const_attribute (DW_AT_decl_file));
-      add (new const_attribute (DW_AT_decl_line));
-      add (new flag_attribute (DW_AT_declaration));
-      add (new block_attribute (DW_AT_discr_list));
-      add (new const_attribute (DW_AT_encoding));
-      add (new flag_attribute (DW_AT_external));
-      add (new const_or_block_attribute (DW_AT_frame_base));
-      add (new ref_attribute (DW_AT_friend));
-      add (new const_attribute (DW_AT_identifier_case));
-      add (new const_attribute (DW_AT_macro_info));
-      add (new block_attribute (DW_AT_namelist_item));
-      add (new ref_attribute (DW_AT_priority));
-      add (new const_or_block_attribute (DW_AT_segment));
-      add (new ref_attribute (DW_AT_specification));
-      add (new const_or_block_attribute (DW_AT_static_link));
-      add (new ref_attribute (DW_AT_type));
-      add (new const_or_block_attribute (DW_AT_use_location));
-      add (new flag_attribute (DW_AT_variable_parameter));
-      add (new const_attribute (DW_AT_virtuality));
-      add (new ref_or_block_attribute (DW_AT_vtable_elem_location));
+      add (ref_attribute (DW_AT_sibling));
+      add (const_or_block_attribute (DW_AT_location));
+      add (string_attribute (DW_AT_name));
+      add (const_attribute (DW_AT_ordering));
+      add (const_attribute (DW_AT_byte_size));
+      add (const_attribute (DW_AT_bit_offset));
+      add (const_attribute (DW_AT_bit_size));
+      add (const_attribute (DW_AT_stmt_list));
+      add (addr_attribute (DW_AT_low_pc));
+      add (addr_attribute (DW_AT_high_pc));
+      add (const_attribute (DW_AT_language));
+      add (ref_attribute (DW_AT_discr));
+      add (const_attribute (DW_AT_discr_value));
+      add (const_attribute (DW_AT_visibility));
+      add (ref_attribute (DW_AT_import));
+      add (const_or_block_attribute (DW_AT_string_length));
+      add (ref_attribute (DW_AT_common_reference));
+      add (string_attribute (DW_AT_comp_dir));
+      add (attribute (DW_AT_const_value,
+		      dw_class_set (cl_string, cl_constant, cl_block)));
+      add (ref_attribute (DW_AT_containing_type));
+      add (ref_attribute (DW_AT_default_value));
+      add (const_attribute (DW_AT_inline));
+      add (flag_attribute (DW_AT_is_optional));
+      add (const_or_ref_attribute (DW_AT_lower_bound));
+      add (string_attribute (DW_AT_producer));
+      add (flag_attribute (DW_AT_prototyped));
+      add (const_or_block_attribute (DW_AT_return_addr));
+      add (const_attribute (DW_AT_start_scope));
+      add (const_attribute (DW_AT_bit_stride));
+      add (const_or_ref_attribute (DW_AT_upper_bound));
+      add (const_attribute (DW_AT_abstract_origin));
+      add (ref_attribute (DW_AT_accessibility));
+      add (const_attribute (DW_AT_address_class));
+      add (flag_attribute (DW_AT_artificial));
+      add (ref_attribute (DW_AT_base_types));
+      add (const_attribute (DW_AT_calling_convention));
+      add (const_or_ref_attribute (DW_AT_count));
+      add (ref_or_block_attribute (DW_AT_data_member_location));
+      add (const_attribute (DW_AT_decl_column));
+      add (const_attribute (DW_AT_decl_file));
+      add (const_attribute (DW_AT_decl_line));
+      add (flag_attribute (DW_AT_declaration));
+      add (block_attribute (DW_AT_discr_list));
+      add (const_attribute (DW_AT_encoding));
+      add (flag_attribute (DW_AT_external));
+      add (const_or_block_attribute (DW_AT_frame_base));
+      add (ref_attribute (DW_AT_friend));
+      add (const_attribute (DW_AT_identifier_case));
+      add (const_attribute (DW_AT_macro_info));
+      add (block_attribute (DW_AT_namelist_item));
+      add (ref_attribute (DW_AT_priority));
+      add (const_or_block_attribute (DW_AT_segment));
+      add (ref_attribute (DW_AT_specification));
+      add (const_or_block_attribute (DW_AT_static_link));
+      add (ref_attribute (DW_AT_type));
+      add (const_or_block_attribute (DW_AT_use_location));
+      add (flag_attribute (DW_AT_variable_parameter));
+      add (const_attribute (DW_AT_virtuality));
+      add (ref_or_block_attribute (DW_AT_vtable_elem_location));
     }
   };
 
@@ -103,30 +102,30 @@ namespace
   {
     dwarf_2_forms ()
     {
-      add (new block_form (DW_FORM_block, fw_uleb));
-      add (new block_form (DW_FORM_block1, fw_1));
-      add (new block_form (DW_FORM_block2, fw_2));
-      add (new block_form (DW_FORM_block4, fw_4));
+      add (block_form (DW_FORM_block, fw_uleb));
+      add (block_form (DW_FORM_block1, fw_1));
+      add (block_form (DW_FORM_block2, fw_2));
+      add (block_form (DW_FORM_block4, fw_4));
 
-      add (new const_form (DW_FORM_data1, fw_1));
-      add (new const_form (DW_FORM_data2, fw_2));
-      add (new const_form (DW_FORM_data4, fw_4));
-      add (new const_form (DW_FORM_data8, fw_8));
-      add (new const_form (DW_FORM_sdata, fw_sleb));
-      add (new const_form (DW_FORM_udata, fw_uleb));
+      add (const_form (DW_FORM_data1, fw_1));
+      add (const_form (DW_FORM_data2, fw_2));
+      add (const_form (DW_FORM_data4, fw_4));
+      add (const_form (DW_FORM_data8, fw_8));
+      add (const_form (DW_FORM_sdata, fw_sleb));
+      add (const_form (DW_FORM_udata, fw_uleb));
 
-      add (new flag_form (DW_FORM_flag, fw_1));
+      add (flag_form (DW_FORM_flag, fw_1));
 
-      add (new ref_form (DW_FORM_ref1, fw_1));
-      add (new ref_form (DW_FORM_ref2, fw_2));
-      add (new ref_form (DW_FORM_ref4, fw_4));
-      add (new ref_form (DW_FORM_ref8, fw_8));
-      add (new ref_form (DW_FORM_ref_udata, fw_uleb));
+      add (ref_form (DW_FORM_ref1, fw_1));
+      add (ref_form (DW_FORM_ref2, fw_2));
+      add (ref_form (DW_FORM_ref4, fw_4));
+      add (ref_form (DW_FORM_ref8, fw_8));
+      add (ref_form (DW_FORM_ref_udata, fw_uleb));
 
-      add (new string_form (DW_FORM_string));
-      add (new offset_form (DW_FORM_strp, cl_string));
-      add (new address_form (DW_FORM_addr, cl_address));
-      add (new address_form (DW_FORM_ref_addr, cl_reference));
+      add (string_form (DW_FORM_string));
+      add (offset_form (DW_FORM_strp, cl_string));
+      add (address_form (DW_FORM_addr, cl_address));
+      add (address_form (DW_FORM_ref_addr, cl_reference));
     }
   };
 

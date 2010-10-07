@@ -32,11 +32,11 @@
 template <class T>
 class dwver_index_table
 {
-  typedef std::map<int, T const *> _map_t;
+  typedef std::map<int, T> _map_t;
   _map_t _m_data;
 
 protected:
-  void add (T const *f);
+  void add (T const &f);
 
 public:
   T const *get (int f) const;
@@ -45,73 +45,35 @@ public:
 typedef dwver_index_table<form> form_table;
 typedef dwver_index_table<attribute> attribute_table;
 
-template<class T>
-class dwver_basic
-  : public T
-{
-  int _m_name;
-  dw_class_set _m_classes;
-
-public:
-  dwver_basic (int a_name, dw_class_set a_classes);
-
-  dw_class_set const &classes () const;
-  int name () const;
-};
-
-typedef dwver_basic<form> basic_form;
-typedef dwver_basic<attribute> basic_attribute;
-
-class full_form
-  : public basic_form
-{
-protected:
-  form_width_t _m_width;
-  storage_class_t _m_storclass;
-
-public:
-  full_form (int a_name, dw_class_set a_classes,
-	     form_width_t a_width, storage_class_t a_storclass);
-
-  form_width_t width (cu const *cu = NULL) const;
-  storage_class_t storage_class () const;
-};
-
 template<storage_class_t StorClass, dw_class... Classes>
 struct preset_form
-  : public full_form
+  : public form
 {
   preset_form (int a_name, form_width_t a_width)
-    : full_form (a_name, dw_class_set (Classes...), a_width, StorClass)
+    : form (a_name, dw_class_set (Classes...), a_width, StorClass)
   {}
 };
 
 template<dw_class... Classes>
 struct preset_attribute
-  : public basic_attribute
+  : public attribute
 {
   preset_attribute (int a_name)
-    : basic_attribute (a_name, dw_class_set (Classes...))
+    : attribute (a_name, dw_class_set (Classes...))
   {}
 };
 
 
 struct offset_form
-  : public basic_form
+  : public form
 {
   offset_form (int a_name, dw_class_set a_classes);
-
-  form_width_t width (cu const *cu) const;
-  storage_class_t storage_class () const;
 };
 
 struct address_form
-  : public basic_form
+  : public form
 {
   address_form (int a_name, dw_class_set a_classes);
-
-  form_width_t width (cu const *cu) const;
-  storage_class_t storage_class () const;
 };
 
 struct string_form
