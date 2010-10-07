@@ -23,6 +23,9 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifndef DWARFLINT_DWARF_VERSION_IMP_HH
+#define DWARFLINT_DWARF_VERSION_IMP_HH
+
 #include "dwarf_version.hh"
 #include <map>
 
@@ -182,3 +185,5 @@ public:
   form const *get_form (int form_name) const;
   attribute const *get_attribute (int attribute_name) const;
 };
+
+#endif//DWARFLINT_DWARF_VERSION_IMP_HH

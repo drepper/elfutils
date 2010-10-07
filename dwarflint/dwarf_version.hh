@@ -24,10 +24,9 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_TABLES_HH
-#define DWARFLINT_TABLES_HH
+#ifndef DWARFLINT_DWARF_VERSION_HH
+#define DWARFLINT_DWARF_VERSION_HH
 
-#include <set>
 #include <bitset>
 #include "check_debug_info.ii"
 
@@ -151,4 +150,4 @@ enum sibling_form_suitable_t
 sibling_form_suitable_t sibling_form_suitable (dwarf_version const *ver,
 					       int form);
 
-#endif//DWARFLINT_TABLES_HH
+#endif//DWARFLINT_DWARF_VERSION_HH

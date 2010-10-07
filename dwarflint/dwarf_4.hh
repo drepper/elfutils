@@ -23,7 +23,6 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-
 #ifndef DWARFLINT_DWARF_4_HH
 #define DWARFLINT_DWARF_4_HH
 
