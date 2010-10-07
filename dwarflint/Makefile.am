@@ -47,7 +47,11 @@ dwarflint_SOURCES = \
 	coverage.cc coverage.hh \
 	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
 	dwarflint.cc dwarflint.hh dwarflint.ii \
-	dwarf_version.cc dwarf_version.hh \
+	dwarf_version.cc dwarf_version.hh dwarf_version.ii \
+	dwarf_version-imp.cc dwarf_version-imp.hh \
+	dwarf_2.cc dwarf_2.hh \
+	dwarf_3.cc dwarf_3.hh \
+	dwarf_4.cc dwarf_4.hh \
 	elf_file.hh elf_file.ii \
 	expected-at.cc expected.hh \
 	highlevel_check.cc highlevel_check.hh \
