@@ -121,7 +121,7 @@ public:
   /// Return value is never fw_offset or fw_address.  These get
   /// resolved to fw_4 or fw_8 depending on corresponding value in
   /// CU->head.
-  form_width_t width (cu const *cu = NULL) const;
+  form_width_t width (cu const *cu) const;
 
   /// Return storage class of given form.  Closely related to width.
   storage_class_t

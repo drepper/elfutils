@@ -623,7 +623,6 @@ namespace
 	    where.ref = &it->where;
 
 	    int form_name = it->form;
-	    form const *form = ver->get_form (form_name);
 	    attribute const *attribute = ver->get_attribute (it->name);
 	    bool indirect = form_name == DW_FORM_indirect;
 	    if (indirect)
@@ -669,6 +668,7 @@ namespace
 		wr_error (&where, ": indirect form is again indirect.\n");
 		return -1;
 	      }
+	    form const *form = ver->get_form (form_name);
 
 	    value_check_cb_t value_check_cb = NULL;
 
