@@ -34,8 +34,18 @@ namespace
   {
     dwarf_2_attributes ()
     {
+      // Note about location descriptions in DWARF 2 (and 3).  In
+      // DWARF 2, location expressions can have classes of cl_constant
+      // or cl_block.  But we need to tell those block expressions
+      // from any old block attribute to validate the expression, and
+      // those constants from any old number to validate the
+      // reference.  So we retrofit all the DW_FORM_block* forms and
+      // appropriate attributes with cl_exprloc form DWARF 4 and
+      // cl_loclistptr (even though in DWARF 4 it's actually only
+      // DW_FORM_exprloc that has this class).
+
       add (ref_attribute (DW_AT_sibling));
-      add (const_or_block_attribute (DW_AT_location));
+      add (location_attribute (DW_AT_location));
       add (string_attribute (DW_AT_name));
       add (const_attribute (DW_AT_ordering));
       add (const_attribute (DW_AT_byte_size));
@@ -49,7 +59,7 @@ namespace
       add (const_attribute (DW_AT_discr_value));
       add (const_attribute (DW_AT_visibility));
       add (ref_attribute (DW_AT_import));
-      add (const_or_block_attribute (DW_AT_string_length));
+      add (location_attribute (DW_AT_string_length));
       add (ref_attribute (DW_AT_common_reference));
       add (string_attribute (DW_AT_comp_dir));
       add (attribute (DW_AT_const_value,
@@ -61,7 +71,7 @@ namespace
       add (const_or_ref_attribute (DW_AT_lower_bound));
       add (string_attribute (DW_AT_producer));
       add (flag_attribute (DW_AT_prototyped));
-      add (const_or_block_attribute (DW_AT_return_addr));
+      add (location_attribute (DW_AT_return_addr));
       add (const_attribute (DW_AT_start_scope));
       add (const_attribute (DW_AT_bit_stride));
       add (const_or_ref_attribute (DW_AT_upper_bound));
@@ -72,7 +82,7 @@ namespace
       add (ref_attribute (DW_AT_base_types));
       add (const_attribute (DW_AT_calling_convention));
       add (const_or_ref_attribute (DW_AT_count));
-      add (ref_or_block_attribute (DW_AT_data_member_location));
+      add (static_location_attribute (DW_AT_data_member_location));
       add (const_attribute (DW_AT_decl_column));
       add (const_attribute (DW_AT_decl_file));
       add (const_attribute (DW_AT_decl_line));
@@ -80,39 +90,55 @@ namespace
       add (block_attribute (DW_AT_discr_list));
       add (const_attribute (DW_AT_encoding));
       add (flag_attribute (DW_AT_external));
-      add (const_or_block_attribute (DW_AT_frame_base));
+      add (location_attribute (DW_AT_frame_base));
       add (ref_attribute (DW_AT_friend));
       add (const_attribute (DW_AT_identifier_case));
       add (const_attribute (DW_AT_macro_info));
       add (block_attribute (DW_AT_namelist_item));
       add (ref_attribute (DW_AT_priority));
-      add (const_or_block_attribute (DW_AT_segment));
+      add (location_attribute (DW_AT_segment));
       add (ref_attribute (DW_AT_specification));
-      add (const_or_block_attribute (DW_AT_static_link));
+      add (location_attribute (DW_AT_static_link));
       add (ref_attribute (DW_AT_type));
-      add (const_or_block_attribute (DW_AT_use_location));
+      add (location_attribute (DW_AT_use_location));
       add (flag_attribute (DW_AT_variable_parameter));
       add (const_attribute (DW_AT_virtuality));
-      add (ref_or_block_attribute (DW_AT_vtable_elem_location));
+      add (static_location_attribute (DW_AT_vtable_elem_location));
     }
   };
+
+  struct exprloc_form
+    : public preset_form<sc_block, cl_exprloc, cl_block>
+  {
+    exprloc_form (int a_name, form_width_t a_width)
+      : preset_form<sc_block, cl_exprloc, cl_block> (a_name, a_width)
+    {}
+  };
+
+  // xxx We still need to retrofit all the cl_*ptr to above list of
+  // attributes.  Except cl_loclistptr which is already done.
+  typedef preset_form<sc_value,
+		      cl_constant, cl_lineptr, cl_loclistptr,
+		      cl_macptr, cl_rangelistptr> dw2_data_form;
 
   struct dwarf_2_forms
     : public form_table
   {
     dwarf_2_forms ()
     {
-      add (block_form (DW_FORM_block, fw_uleb));
-      add (block_form (DW_FORM_block1, fw_1));
-      add (block_form (DW_FORM_block2, fw_2));
-      add (block_form (DW_FORM_block4, fw_4));
+      add (exprloc_form (DW_FORM_block, fw_uleb));
+      add (exprloc_form (DW_FORM_block1, fw_1));
+      add (exprloc_form (DW_FORM_block2, fw_2));
+      add (exprloc_form (DW_FORM_block4, fw_4));
 
-      add (const_form (DW_FORM_data1, fw_1));
-      add (const_form (DW_FORM_data2, fw_2));
-      add (const_form (DW_FORM_data4, fw_4));
-      add (const_form (DW_FORM_data8, fw_8));
-      add (const_form (DW_FORM_sdata, fw_sleb));
-      add (const_form (DW_FORM_udata, fw_uleb));
+      // These constant forms can in theory, in legal DWARF 2,
+      // represent various pointers.
+      add (dw2_data_form (DW_FORM_data1, fw_1));
+      add (dw2_data_form (DW_FORM_data2, fw_2));
+      add (dw2_data_form (DW_FORM_data4, fw_4));
+      add (dw2_data_form (DW_FORM_data8, fw_8));
+      add (dw2_data_form (DW_FORM_sdata, fw_sleb));
+      add (dw2_data_form (DW_FORM_udata, fw_uleb));
 
       add (flag_form (DW_FORM_flag, fw_1));
 

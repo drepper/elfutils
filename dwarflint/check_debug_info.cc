@@ -634,7 +634,9 @@ namespace
 		form_name = value;
 
 		// xxx Some of what's below is probably duplicated in
-		// check_debug_abbrev.  Consolidate.
+		// check_debug_abbrev.  Plus we really want to run the
+		// same checks for direct and indirect attributes.
+		// Consolidate.
 		if (!ver->form_allowed (form_name))
 		  {
 		    wr_error (where)
@@ -705,76 +707,66 @@ namespace
 	       relocation was made against.  */
 	    GElf_Sym **symbolp = NULL;
 
-	    /* Setup locptr checking.  */
-	    if (is_location_attrib (it->name))
+	    assert (form);
+	    assert (attribute);
+
+	    dw_class cls = ver->form_class (form, attribute);
+	    static dw_class_set ref_classes
+	      (cl_reference, cl_loclistptr, cl_lineptr, cl_macptr,
+	       cl_rangelistptr);
+
+	    if (ref_classes.test (cls))
+	      if (form->width (cu) == fw_8
+		  && cu->head->offset_size == 4)
+		wr_error (where)
+		  << "reference attribute with form \""
+		  << pri::form (form_name) << "\" in 32-bit CU."
+		  << std::endl;
+
+	    /* Setup pointer checking.  */
+	    switch (cls)
 	      {
-		if (form->width () == fw_8
-		    && cu->head->offset_size == 4)
-		  wr_error (where)
-		    << "location attribute with form \""
-		    << pri::form (form_name) << "\" in 32-bit CU."
-		    << std::endl;
+	      case cl_loclistptr:
+		check_someptr = true;
+		value_check_cb = check_locptr;
+		extra_mc = mc_loc;
+		break;
 
-		if (ver->form_class (form, attribute) == cl_loclistptr)
-		  {
-		    value_check_cb = check_locptr;
-		    extra_mc = mc_loc;
-		    check_someptr = true;
-		  }
+	      case cl_rangelistptr:
+		check_someptr = true;
+		value_check_cb = check_rangeptr;
+		extra_mc = mc_ranges;
+		break;
+
+	      case cl_lineptr:
+		check_someptr = true;
+		value_check_cb = check_lineptr;
+		extra_mc = mc_line;
+		break;
+
+	      default:
+		;
+	      };
+
+	    /* Setup low_pc / high_pc checking.  */
+	    switch (it->name)
+	      {
+	      case DW_AT_low_pc:
+		relocatedp = &low_pc_relocated;
+		symbolp = &low_pc_symbol;
+		valuep = &low_pc;
+		break;
+
+	      case DW_AT_high_pc:
+		relocatedp = &high_pc_relocated;
+		symbolp = &high_pc_symbol;
+		valuep = &high_pc;
+		break;
+
+	      case DW_AT_decl_file:
+		value_check_cb = check_decl_file;
+		break;
 	      }
-	    /* Setup rangeptr or lineptr checking.  */
-	    else
-	      switch (it->name)
-		{
-		case DW_AT_ranges:
-		case DW_AT_stmt_list:
-		  {
-		    switch (form_name)
-		      {
-		      case DW_FORM_data8:
-			if (cu->head->offset_size == 4)
-			  // xxx could now also be checked during abbrev loading
-			  wr_error (where)
-			    << pri::attr (it->name)
-			    << " with form DW_FORM_data8 in 32-bit CU."
-			    << std::endl;
-			/* fall-through */
-
-		      case DW_FORM_data4:
-		      case DW_FORM_sec_offset:
-			check_someptr = true;
-			if (it->name == DW_AT_ranges)
-			  {
-			    value_check_cb = check_rangeptr;
-			    extra_mc = mc_ranges;
-			  }
-			else
-			  {
-			    assert (it->name == DW_AT_stmt_list);
-			    value_check_cb = check_lineptr;
-			    extra_mc = mc_line;
-			  }
-			break;
-		      }
-		    break;
-
-		  case DW_AT_low_pc:
-		    relocatedp = &low_pc_relocated;
-		    symbolp = &low_pc_symbol;
-		    valuep = &low_pc;
-		    break;
-
-		  case DW_AT_high_pc:
-		    relocatedp = &high_pc_relocated;
-		    symbolp = &high_pc_symbol;
-		    valuep = &high_pc;
-		    break;
-
-		  case DW_AT_decl_file:
-		    value_check_cb = check_decl_file;
-		    break;
-		  }
-		}
 
 	    /* Setup per-form checking & relocation.  */
 	    switch (form_name)
@@ -860,7 +852,7 @@ namespace
 		  break;
 
 		// Read & validate the block body.
-		if (is_location_attrib (it->name))
+		if (cls == cl_exprloc)
 		  {
 		    uint64_t expr_start
 		      = cu->head->offset + read_ctx_get_offset (ctx);
@@ -869,8 +861,6 @@ namespace
 		      return -1;
 		  }
 		else
-		  /* xxx really skip_mismatched?  We just don't
-		     know how to process these...  */
 		  relocation_skip (reloc,
 				   read_ctx_get_offset (ctx) + value,
 				   &where, skip_mismatched);

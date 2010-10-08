@@ -358,13 +358,16 @@ namespace
 				       "attribute form"))
 	      throw check_base::failed ();
 
+	    /* Now if both are zero, this was the last attribute.  */
 	    null_attrib = attrib_name == 0 && attrib_form == 0;
 
-	    /* Now if both are zero, this was the last attribute.  */
+	    attribute const *attribute = NULL;
+	    form const *form = NULL;
 	    if (!null_attrib)
 	      {
 		/* Otherwise validate name and form.  */
-		if (attrib_name > DW_AT_hi_user)
+		attribute = ver->get_attribute (attrib_name);
+		if (attribute == NULL)
 		  {
 		    wr_error (where)
 		      << "invalid name " << pri::hex (attrib_name)
@@ -373,7 +376,8 @@ namespace
 		    continue;
 		  }
 
-		if (!ver->form_allowed (attrib_form))
+		form = ver->get_form (attrib_form);
+		if (form == NULL)
 		  {
 		    wr_error (where)
 		      << "invalid form " << pri::hex (attrib_form)
@@ -381,6 +385,10 @@ namespace
 		    failed = true;
 		    continue;
 		  }
+
+		if (!ver->form_allowed (attribute->name (), form->name ()))
+		  complain_invalid_form (where, attrib_name, attrib_form,
+					 "attribute");
 
 		std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
 		  = seen.insert (std::make_pair (attrib_name, attr_off));
@@ -431,14 +439,6 @@ namespace
 		  case sfs_ok:
 		    ;
 		  };
-	      }
-
-	    /* Similar for DW_AT_location and friends.  */
-	    else if (is_location_attrib (attrib_name))
-	      {
-		if (!ver->form_allowed (attrib_name, attrib_form))
-		  complain_invalid_form (where, attrib_name, attrib_form,
-					 "location attribute");
 	      }
 
 	    /* Similar for DW_AT_ranges.  */
@@ -526,20 +526,5 @@ check_debug_abbrev::~check_debug_abbrev ()
       for (size_t i = 0; i < it->second.size; ++i)
 	free (it->second.abbr[i].attribs);
       free (it->second.abbr);
-    }
-}
-
-bool
-is_location_attrib (uint64_t name)
-{
-  switch (name)
-    {
-    case DW_AT_location:
-    case DW_AT_frame_base:
-    case DW_AT_data_location:
-    case DW_AT_data_member_location:
-      return true;
-    default:
-      return false;
     }
 }

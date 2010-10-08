@@ -31,39 +31,38 @@
 
 namespace
 {
-  typedef preset_attribute<cl_block, cl_loclistptr> block_or_loc_attribute;
-  typedef preset_attribute<cl_block, cl_constant, cl_reference>
-  block_const_ref_attribute;
-
   struct dwarf_3_attributes
     : public attribute_table
   {
     dwarf_3_attributes ()
     {
-      add (block_or_loc_attribute (DW_AT_location));
-      add (block_const_ref_attribute (DW_AT_byte_size));
-      add (block_const_ref_attribute (DW_AT_bit_offset));
-      add (block_const_ref_attribute (DW_AT_bit_size));
+      add (location_attribute (DW_AT_location));
+      add (dynval_attribute (DW_AT_byte_size));
+      add (dynval_attribute (DW_AT_bit_offset));
+      add (dynval_attribute (DW_AT_bit_size));
       add (attribute (DW_AT_stmt_list, cl_lineptr));
-      add (block_or_loc_attribute (DW_AT_string_length));
-      add (attribute (DW_AT_const_value,
-		      dw_class_set (cl_block, cl_constant, cl_string)));
-      add (block_const_ref_attribute (DW_AT_lower_bound));
-      add (block_or_loc_attribute (DW_AT_return_addr));
-      add (const_attribute (DW_AT_bit_stride));
-      add (block_const_ref_attribute (DW_AT_upper_bound));
-      add (block_const_ref_attribute (DW_AT_count));
+      add (location_attribute (DW_AT_string_length));
+      add (dynval_attribute (DW_AT_lower_bound));
+      add (location_attribute (DW_AT_return_addr));
+
+      // Note, DWARF 3 claims only a const class for DW_AT_bit_stride,
+      // but from 2.19 it's clear that this is an omission.
+      add (dynval_attribute (DW_AT_bit_stride));
+
+      add (dynval_attribute (DW_AT_upper_bound));
+      add (dynval_attribute (DW_AT_count));
       add (attribute (DW_AT_data_member_location,
-		      dw_class_set (cl_block, cl_constant, cl_loclistptr)));
-      add (block_or_loc_attribute (DW_AT_frame_base));
+		      dw_class_set (cl_exprloc, cl_constant, cl_loclistptr)));
+      add (location_attribute (DW_AT_frame_base));
       add (attribute (DW_AT_macro_info, cl_macptr));
-      add (block_or_loc_attribute (DW_AT_segment));
-      add (block_or_loc_attribute (DW_AT_static_link));
-      add (block_or_loc_attribute (DW_AT_use_location));
-      add (block_or_loc_attribute (DW_AT_vtable_elem_location));
-      add (block_const_ref_attribute (DW_AT_associated));
-      add (block_attribute (DW_AT_data_location));
-      add (block_const_ref_attribute (DW_AT_byte_stride));
+      add (location_attribute (DW_AT_segment));
+      add (location_attribute (DW_AT_static_link));
+      add (location_attribute (DW_AT_use_location));
+      add (location_attribute (DW_AT_vtable_elem_location));
+      add (dynval_attribute (DW_AT_allocated));
+      add (dynval_attribute (DW_AT_associated));
+      add (attribute (DW_AT_data_location, cl_exprloc));
+      add (dynval_attribute (DW_AT_byte_stride));
       add (addr_attribute (DW_AT_entry_pc));
       add (flag_attribute (DW_AT_use_UTF8));
       add (ref_attribute (DW_AT_extension));
@@ -95,15 +94,24 @@ namespace
   typedef preset_form<sc_value,
 		      cl_constant, cl_lineptr, cl_loclistptr,
 		      cl_macptr, cl_rangelistptr> dw3_data_form;
+  typedef preset_form<sc_block, cl_block, cl_exprloc> locexpr_form;
 
   struct dwarf_3_forms
     : public form_table
   {
     dwarf_3_forms ()
     {
+      add (offset_form (DW_FORM_ref_addr, cl_reference));
+
+      // In DWARF 2 we made all the const forms into various cl_*ptr,
+      // since that's how the standard was worded: it allowed
+      // DW_AT_location to have any constant form.  Revert that.
+      add (const_form (DW_FORM_data1, fw_1));
+      add (const_form (DW_FORM_data2, fw_2));
       add (dw3_data_form (DW_FORM_data4, fw_4));
       add (dw3_data_form (DW_FORM_data8, fw_8));
-      add (offset_form (DW_FORM_ref_addr, cl_reference));
+      add (const_form (DW_FORM_sdata, fw_sleb));
+      add (const_form (DW_FORM_udata, fw_uleb));
     }
   };
 

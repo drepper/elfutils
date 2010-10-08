@@ -86,8 +86,4 @@ public:
   ~check_debug_abbrev ();
 };
 
-// xxx When dwarf version objects are properly implemented, that's
-// where this should end up in.
-bool is_location_attrib (uint64_t name);
-
 #endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH

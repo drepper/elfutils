@@ -30,44 +30,19 @@
 
 namespace
 {
-  typedef preset_attribute<cl_exprloc, cl_loclistptr> exprloc_loclist_attribute;
-  typedef preset_attribute<cl_constant, cl_exprloc, cl_reference>
-  const_exprloc_ref_attribute;
-
   struct dwarf_4_attributes
     : public attribute_table
   {
     dwarf_4_attributes ()
     {
-      add (exprloc_loclist_attribute (DW_AT_location));
-      add (const_exprloc_ref_attribute (DW_AT_bit_offset));
-      add (const_exprloc_ref_attribute (DW_AT_bit_size));
-      add (attribute (DW_AT_high_pc,
-		      dw_class_set (cl_address, cl_constant)));
-      add (exprloc_loclist_attribute (DW_AT_string_length));
-      add (attribute (DW_AT_const_value,
-		      dw_class_set (cl_block, cl_constant, cl_string)));
-      add (const_exprloc_ref_attribute (DW_AT_lower_bound));
-      add (exprloc_loclist_attribute (DW_AT_return_addr));
-      add (const_exprloc_ref_attribute (DW_AT_bit_stride));
-      add (const_exprloc_ref_attribute (DW_AT_upper_bound));
-      add (const_exprloc_ref_attribute (DW_AT_count));
-      add (attribute (DW_AT_data_member_location,
-		      dw_class_set (cl_constant, cl_exprloc, cl_loclistptr)));
-      add (exprloc_loclist_attribute (DW_AT_frame_base));
+      add (attribute (DW_AT_high_pc, dw_class_set (cl_address, cl_constant)));
       add (ref_attribute (DW_AT_namelist_item));
-      add (exprloc_loclist_attribute (DW_AT_segment));
-      add (exprloc_loclist_attribute (DW_AT_static_link));
-      add (exprloc_loclist_attribute (DW_AT_use_location));
-      add (exprloc_loclist_attribute (DW_AT_vtable_elem_location));
-      add (const_exprloc_ref_attribute (DW_AT_allocated));
-      add (const_exprloc_ref_attribute (DW_AT_associated));
-      add (attribute (DW_AT_data_location, cl_exprloc));
-      add (const_exprloc_ref_attribute (DW_AT_byte_stride));
       add (ref_attribute (DW_AT_signature));
       add (flag_attribute (DW_AT_main_subprogram));
       add (const_attribute (DW_AT_data_bit_offset));
       add (flag_attribute (DW_AT_const_expr));
+      add (flag_attribute (DW_AT_enum_class));
+      add (string_attribute (DW_AT_linkage_name));
     }
   };
 
@@ -92,6 +67,14 @@ namespace
       add (exprloc_form (DW_FORM_exprloc));
       add (flag_form (DW_FORM_flag_present, fw_0));
       add (ref_form (DW_FORM_ref_sig8, fw_8));
+
+      // In DWARF 2 we claim that blocks are exprloc forms (see
+      // comment there).  Revert back to pure blocks now that we have
+      // proper support for cl_exprloc.
+      add (block_form (DW_FORM_block, fw_uleb));
+      add (block_form (DW_FORM_block1, fw_1));
+      add (block_form (DW_FORM_block2, fw_2));
+      add (block_form (DW_FORM_block4, fw_4));
     }
   };
 
