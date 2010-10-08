@@ -83,7 +83,7 @@ dwarf_version::form_class (form const *form, attribute const *attribute) const
       return ret;
     }
   else
-    return static_cast<dw_class> (ffsl (result.to_ulong ()));
+    return static_cast<dw_class> (ffsl (result.to_ulong ()) - 1);
 }
 
 form_width_t
