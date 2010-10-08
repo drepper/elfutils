@@ -31,6 +31,7 @@
 #include "dwarf_2.hh"
 #include "dwarf_3.hh"
 #include "dwarf_4.hh"
+#include "dwarf_mips.hh"
 #include "check_debug_info.hh"
 
 #include "../libdw/dwarf.h"
@@ -198,11 +199,32 @@ dwarf_version::extend (dwarf_version const *source,
 dwarf_version const *
 dwarf_version::get (unsigned version)
 {
+  // xxx The GNU toolchain commonly uses DW_AT_MIPS_linkage_name,
+  // which is part of the MIPS extensions.  So that's what we return.
+  // I wonder how to solve this "right".  We cannot simply request
+  // DW_AT_producer/DW_AT_language values here, since we need the
+  // version to know how to read these attributes in the first place.
+
   switch (version)
     {
-    case 2: return dwarf_2 ();
-    case 3: return dwarf_3 ();
-    case 4: return dwarf_4 ();
+    case 2:
+      {
+	static dwarf_version const *dw = extend (dwarf_2 (), dwarf_mips_ext ());
+	return dw;
+      }
+
+    case 3:
+      {
+	static dwarf_version const *dw = extend (dwarf_3 (), dwarf_mips_ext ());
+	return dw;
+      }
+
+    case 4:
+      {
+	static dwarf_version const *dw = extend (dwarf_4 (), dwarf_mips_ext ());
+	return dw;
+      }
+
     default: return NULL;
     };
 }
