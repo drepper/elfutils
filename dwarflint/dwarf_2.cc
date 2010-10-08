@@ -65,8 +65,8 @@ namespace
       add (const_attribute (DW_AT_start_scope));
       add (const_attribute (DW_AT_bit_stride));
       add (const_or_ref_attribute (DW_AT_upper_bound));
-      add (const_attribute (DW_AT_abstract_origin));
-      add (ref_attribute (DW_AT_accessibility));
+      add (ref_attribute (DW_AT_abstract_origin));
+      add (const_attribute (DW_AT_accessibility));
       add (const_attribute (DW_AT_address_class));
       add (flag_attribute (DW_AT_artificial));
       add (ref_attribute (DW_AT_base_types));
