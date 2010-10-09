@@ -33,6 +33,7 @@
 
 enum dw_class
   {
+    cl_indirect,
     cl_address,
     cl_block,
     cl_constant,
@@ -137,7 +138,8 @@ class attribute
   dw_class_set const _m_classes;
 
 public:
-  attribute (int a_name, dw_class_set a_classes);
+  /// NB this ctor automatically adds cl_indirect to a_classes.
+  attribute (int a_name, dw_class_set const &a_classes);
 
   int
   name () const

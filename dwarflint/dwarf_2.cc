@@ -155,6 +155,8 @@ namespace
       add (offset_form (DW_FORM_strp, cl_string));
       add (address_form (DW_FORM_addr, cl_address));
       add (address_form (DW_FORM_ref_addr, cl_reference));
+
+      add (form (DW_FORM_indirect, cl_indirect, fw_uleb, sc_value));
     }
   };
 

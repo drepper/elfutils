@@ -97,9 +97,19 @@ form::width (cu const *cu) const
     return static_cast<form_width_t> (_m_width);
 }
 
-attribute::attribute (int a_name, dw_class_set a_classes)
+namespace
+{
+  dw_class_set
+  include_indirect (dw_class_set a_classes)
+  {
+    a_classes.set (cl_indirect);
+    return a_classes;
+  }
+}
+
+attribute::attribute (int a_name, dw_class_set const &a_classes)
   : _m_name (a_name)
-  , _m_classes (a_classes)
+  , _m_classes (include_indirect (a_classes))
 {}
 
 
