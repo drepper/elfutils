@@ -622,16 +622,17 @@ namespace
 	  {
 	    where.ref = &it->where;
 
-	    int form_name = it->form;
 	    attribute const *attribute = ver->get_attribute (it->name);
-	    bool indirect = form_name == DW_FORM_indirect;
-	    if (indirect)
+	    int form_name = it->form;
+	    form const *form = ver->get_form (form_name);
+	    if (ver->form_class (form, attribute) == cl_indirect)
 	      {
 		uint64_t value;
 		if (!checked_read_uleb128 (ctx, &value, &where,
 					   "indirect attribute form"))
 		  return -1;
 		form_name = value;
+		form = ver->get_form (form_name);
 
 		// xxx Some of what's below is probably duplicated in
 		// check_debug_abbrev.  Plus we really want to run the
@@ -665,12 +666,12 @@ namespace
 		    }
 	      }
 
-	    if (form_name == DW_FORM_indirect)
+	    dw_class cls = ver->form_class (form, attribute);
+	    if (cls == cl_indirect)
 	      {
 		wr_error (&where, ": indirect form is again indirect.\n");
 		return -1;
 	      }
-	    form const *form = ver->get_form (form_name);
 
 	    value_check_cb_t value_check_cb = NULL;
 
@@ -710,7 +711,6 @@ namespace
 	    assert (form);
 	    assert (attribute);
 
-	    dw_class cls = ver->form_class (form, attribute);
 	    static dw_class_set ref_classes
 	      (cl_reference, cl_loclistptr, cl_lineptr, cl_macptr,
 	       cl_rangelistptr);
