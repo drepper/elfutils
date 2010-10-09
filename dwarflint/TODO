@@ -1,12 +1,24 @@
 -*-org-*-
-* DWARF 4 support
-  This TODO item is actually to go through the DWARF 4 standard and
-  add TODO items for individual tasks.
+* Generic DWARF support
+  We now have dwarf_version, form and attribute classes.  These can be
+  (and are) set up to support DWARF 2, 3 and 4 separately, as well as
+  the MIPS extension (in a kinda-sorta way, since I've got no binaries
+  to check this).
 
-  Roland: i.e., block* forms can be constant-block or location in
-  DWARF<=3, but only exprloc is a location in DWARF>=4; data* forms
-  can be either constant or *ptr in DWARF<=3 but only sec_offset is
-  *ptr in DWARF>=4.
+  There's a leftover read_ctx_read_form in check_debug_loc_range.cc,
+  but that should be painless to rewrite using what we have now.
+
+  But there's still some code around that depends on per-form/per-attr
+  switches, namely check_debug_info.cc::reloc_target and the
+  reference-checking code in the same file.  Maybe the way to do this
+  is to merge all the cl_*ptr into one class cl_pointer and have
+  dwarflint know that the attribute determines what it points to.
+  (Except that some forms determine the target themselves.)  Then
+  declare at relevant attributes the pointer target (a section_id), if
+  any.  I.e. type the forms more richly.
+
+  So that's about the FORMs and ATs.  But there's more, e.g. DW_OP_
+  support.
 
 * high-level checks
 
@@ -30,7 +42,7 @@
    in DWARF revisions and doesn't tackle the expected children case at
    all.  It seems that what we need is some sort of XPath-like
    approach to matching sub-graphs.  Each time one of the queries
-   triggered, a check would be done for expected "neighborhood" of the
+   triggers, a check would be done for expected "neighborhood" of the
    node.  Such a query might reach far from the original node,
    spanning layers of parent/child or die/neighbor relationship.
 
@@ -83,9 +95,10 @@
 
 ** streams vs fmtstring
    We now use C++ streams in most places (there are remnants of C
-   printfs in places).  But we would like to be able to localize it
-   all, and I'm afraid that means moving back to some sort of
-   formatting strings.
+   printfs in places).  But streams suck for localization.  Personally
+   I'm not too enthusiastic about non-English bugreports, but rest of
+   elfutils is localized, and dwarflint should be too.  I'm afraid
+   that means moving back to some sort of formatting strings.
 
 ** filtering
 
@@ -111,12 +124,16 @@
   there to be frequent additions to this "quirks table", so it should
   be fairly easy to extend this.
 
+  (Maybe quirk is simply a dwarf_version.  After loading the CU DIE,
+  dwarflint would consult the quirk table and construct new
+  dwarf_version with appropriate exceptions.)
+
   The current option --tolerant will go away when this is implemented.
   I don't think it even works anyway.
 
 * multi-file mode
 
-  While dwarflint manages checking several files (meaning you can put
-  several file names to a command line), it treats each of them in
-  isolation.  In theory these files can link to each other and form
-  graphs, and dwarflint should be able to handle this.
+  While dwarflint can check several files (meaning you can put several
+  file names to a command line), it treats each of them in isolation.
+  In theory these files can link to each other and form graphs, and
+  dwarflint should be able to check the whole graph.
