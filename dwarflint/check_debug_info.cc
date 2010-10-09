@@ -298,16 +298,16 @@ namespace
   }
 
   section_id
-  reloc_target (uint8_t form, struct abbrev_attrib *at)
+  reloc_target (form const *form, attribute const *attribute)
   {
-    switch (form)
+    switch (form->name ())
       {
       case DW_FORM_strp:
 	return sec_str;
 
       case DW_FORM_addr:
 
-	switch (at->name)
+	switch (attribute->name ())
 	  {
 	  case DW_AT_low_pc:
 	  case DW_AT_high_pc:
@@ -335,7 +335,7 @@ namespace
       case DW_FORM_data4:
       case DW_FORM_data8:
 
-	switch (at->name)
+	switch (attribute->name ())
 	  {
 	  case DW_AT_stmt_list:
 	    return sec_line;
@@ -381,8 +381,8 @@ namespace
 	assert (!"Should be handled specially!");
       };
 
-    std::cout << "XXX don't know how to handle form=" << pri::form (form)
-	      << ", at=" << pri::attr (at->name) << std::endl;
+    std::cout << "XXX don't know how to handle form=" << *form
+	      << ", at=" << *attribute << std::endl;
 
     return rel_value;
   }
@@ -854,7 +854,7 @@ namespace
 
 		form_width_t width = form->width (cu);
 		relocate_one (&file, reloc, rel, width, &value, &where,
-			      reloc_target (form_name, it), symbolp);
+			      reloc_target (form, attribute), symbolp);
 
 		if (relocatedp != NULL)
 		  *relocatedp = true;
