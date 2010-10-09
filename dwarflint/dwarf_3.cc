@@ -40,7 +40,6 @@ namespace
       add (dynval_attribute (DW_AT_byte_size));
       add (dynval_attribute (DW_AT_bit_offset));
       add (dynval_attribute (DW_AT_bit_size));
-      add (attribute (DW_AT_stmt_list, cl_lineptr));
       add (location_attribute (DW_AT_string_length));
       add (dynval_attribute (DW_AT_lower_bound));
       add (location_attribute (DW_AT_return_addr));
@@ -54,7 +53,6 @@ namespace
       add (attribute (DW_AT_data_member_location,
 		      dw_class_set (cl_exprloc, cl_constant, cl_loclistptr)));
       add (location_attribute (DW_AT_frame_base));
-      add (attribute (DW_AT_macro_info, cl_macptr));
       add (location_attribute (DW_AT_segment));
       add (location_attribute (DW_AT_static_link));
       add (location_attribute (DW_AT_use_location));
@@ -105,7 +103,9 @@ namespace
 
       // In DWARF 2 we made all the const forms into various cl_*ptr,
       // since that's how the standard was worded: it allowed
-      // DW_AT_location to have any constant form.  Revert that.
+      // DW_AT_location to have any constant form.  In DWARF 3, only
+      // data4 and data8 are like this.  In addition, these two can
+      // also be cl_rangelistptr.
       add (const_form (DW_FORM_data1, fw_1));
       add (const_form (DW_FORM_data2, fw_2));
       add (dw3_data_form (DW_FORM_data4, fw_4));

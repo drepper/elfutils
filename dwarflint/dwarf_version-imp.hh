@@ -86,7 +86,6 @@ typedef preset_form<sc_block, cl_block> block_form;
 typedef preset_form<sc_value, cl_constant> const_form;
 typedef preset_form<sc_value, cl_reference> ref_form;
 typedef preset_form<sc_value, cl_flag> flag_form;
-typedef preset_form<sc_block, cl_block> block_form;
 
 typedef preset_attribute<cl_constant> const_attribute;
 typedef preset_attribute<cl_reference> ref_attribute;
@@ -94,7 +93,6 @@ typedef preset_attribute<cl_address> addr_attribute;
 typedef preset_attribute<cl_string> string_attribute;
 typedef preset_attribute<cl_flag> flag_attribute;
 typedef preset_attribute<cl_block> block_attribute;
-typedef preset_attribute<cl_reference, cl_constant> const_or_ref_attribute;
 
 // [DWARF 3, DWARF 4, section 2.19]: attributes that [...] specify a
 // property [...] that is an integer value, where the value may be

@@ -29,6 +29,8 @@
 
 namespace
 {
+  typedef preset_attribute<cl_reference, cl_constant> const_or_ref_attribute;
+
   struct dwarf_2_attributes
     : public attribute_table
   {
@@ -43,6 +45,9 @@ namespace
       // appropriate attributes with cl_exprloc form DWARF 4 and
       // cl_loclistptr (even though in DWARF 4 it's actually only
       // DW_FORM_exprloc that has this class).
+      //
+      // Similarly with cl_lineptr and cl_macptr.  cl_rangelistptr
+      // wasn't introduced until DWARF 3.
 
       add (ref_attribute (DW_AT_sibling));
       add (location_attribute (DW_AT_location));
@@ -51,7 +56,7 @@ namespace
       add (const_attribute (DW_AT_byte_size));
       add (const_attribute (DW_AT_bit_offset));
       add (const_attribute (DW_AT_bit_size));
-      add (const_attribute (DW_AT_stmt_list));
+      add (attribute (DW_AT_stmt_list, cl_lineptr));
       add (addr_attribute (DW_AT_low_pc));
       add (addr_attribute (DW_AT_high_pc));
       add (const_attribute (DW_AT_language));
@@ -93,7 +98,7 @@ namespace
       add (location_attribute (DW_AT_frame_base));
       add (ref_attribute (DW_AT_friend));
       add (const_attribute (DW_AT_identifier_case));
-      add (const_attribute (DW_AT_macro_info));
+      add (attribute (DW_AT_macro_info, cl_macptr));
       add (block_attribute (DW_AT_namelist_item));
       add (ref_attribute (DW_AT_priority));
       add (location_attribute (DW_AT_segment));
@@ -115,11 +120,9 @@ namespace
     {}
   };
 
-  // xxx We still need to retrofit all the cl_*ptr to above list of
-  // attributes.  Except cl_loclistptr which is already done.
   typedef preset_form<sc_value,
 		      cl_constant, cl_lineptr, cl_loclistptr,
-		      cl_macptr, cl_rangelistptr> dw2_data_form;
+		      cl_macptr> dw2_data_form;
 
   struct dwarf_2_forms
     : public form_table
