@@ -28,6 +28,7 @@
 #define DWARFLINT_DWARF_VERSION_HH
 
 #include <bitset>
+#include <iosfwd>
 #include "check_debug_info.ii"
 #include "dwarf_version.ii"
 
@@ -131,6 +132,8 @@ public:
     return _m_storclass;
   }
 };
+std::ostream &operator << (std::ostream &os, form const &obj);
+
 
 class attribute
 {
@@ -154,6 +157,7 @@ public:
     return _m_classes;
   }
 };
+std::ostream &operator << (std::ostream &os, attribute const &obj);
 
 class dwarf_version
 {

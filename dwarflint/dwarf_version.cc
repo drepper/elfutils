@@ -33,6 +33,7 @@
 #include "dwarf_4.hh"
 #include "dwarf_mips.hh"
 #include "check_debug_info.hh"
+#include "pri.hh"
 
 #include "../libdw/dwarf.h"
 #include <map>
@@ -97,6 +98,12 @@ form::width (cu const *cu) const
     return static_cast<form_width_t> (_m_width);
 }
 
+std::ostream &
+operator << (std::ostream &os, form const &obj)
+{
+  return os << pri::form (obj.name ());
+}
+
 namespace
 {
   dw_class_set
@@ -111,6 +118,12 @@ attribute::attribute (int a_name, dw_class_set const &a_classes)
   : _m_name (a_name)
   , _m_classes (include_indirect (a_classes))
 {}
+
+std::ostream &
+operator << (std::ostream &os, attribute const &obj)
+{
+  return os << pri::attr (obj.name ());
+}
 
 
 bool

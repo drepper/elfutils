@@ -495,6 +495,37 @@ namespace
     ref_record_add (&ctx->cu->decl_file_refs, value, ctx->where);
   }
 
+  /// Read value depending on the form width and storage class.
+  bool
+  read_sc_value (uint64_t *valuep, form const *form, cu const *cu,
+		 read_ctx *ctx, where *wherep)
+  {
+    form_width_t width = form->width (cu);
+    switch (width)
+      {
+      case fw_0:
+	// Who knows, DW_FORM_flag_absent might turn up one day...
+	assert (form->name () == DW_FORM_flag_present);
+	*valuep = 1;
+	return true;
+
+      case fw_1:
+      case fw_2:
+      case fw_4:
+      case fw_8:
+	return read_ctx_read_var (ctx, width, valuep);
+
+      case fw_uleb:
+      case fw_sleb:
+	return checked_read_leb128 (ctx, width, valuep,
+				    wherep, "attribute value");
+
+      case fw_unknown:
+	;
+      }
+    UNREACHABLE;
+  }
+
   /*
     Returns:
     -1 in case of error
@@ -628,42 +659,13 @@ namespace
 	    if (ver->form_class (form, attribute) == cl_indirect)
 	      {
 		uint64_t value;
-		if (!checked_read_uleb128 (ctx, &value, &where,
-					   "indirect attribute form"))
+		if (!read_sc_value (&value, form, cu, ctx, &where))
 		  return -1;
 		form_name = value;
-		form = ver->get_form (form_name);
-
-		// xxx Some of what's below is probably duplicated in
-		// check_debug_abbrev.  Plus we really want to run the
-		// same checks for direct and indirect attributes.
-		// Consolidate.
-		if (!ver->form_allowed (form_name))
-		  {
-		    wr_error (where)
-		      << "invalid indirect form " << pri::hex (value)
-		      << '.' << std::endl;
-		    return -1;
-		  }
-
-		if (attribute->name () == DW_AT_sibling)
-		  switch (sibling_form_suitable (ver, form_name))
-		    {
-		    case sfs_long:
-		      wr_message (where, cat (mc_die_rel, mc_impact_2))
-			<< "DW_AT_sibling attribute with (indirect) form "
-			"DW_FORM_ref_addr." << std::endl;
-		      break;
-
-		    case sfs_invalid:
-		      wr_error (where)
-			<< "DW_AT_sibling attribute with non-reference "
-			"(indirect) form \"" << pri::form (value)
-			<< "\"." << std::endl;
-
-		    case sfs_ok:
-		      ;
-		    }
+		form = check_debug_abbrev::check_form
+		  (ver, form_name, attribute, &where, true);
+		if (form == NULL)
+		  return -1;
 	      }
 
 	    dw_class cls = ver->form_class (form, attribute);
@@ -681,9 +683,6 @@ namespace
 
 	    uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->head->offset;
 	    bool type_is_rel = file.ehdr.e_type == ET_REL;
-
-	    /* Attribute value.  */
-	    uint64_t value = 0;
 
 	    /* Whether the value should be relocated first.  Note that
 	       relocations are really required only in REL files, so
@@ -800,75 +799,46 @@ namespace
 		break;
 	      }
 
-	    /* Read value depending on the form width and storage
-	       class.  */
-	    form_width_t width = form->width (cu);
+	    /* Attribute value.  */
+	    uint64_t value;
 	    storage_class_t storclass = form->storage_class ();
-	    switch (storclass)
+	    if (storclass == sc_string)
 	      {
-	      case sc_string:
 		if (!read_ctx_read_str (ctx))
 		  goto cant_read;
-		break;
-
-	      case sc_block:
-	      case sc_value:
-		// Read the value, or the length field if it's a block
-		// form.
-		switch (width)
+	      }
+	    else
+	      {
+		if (!read_sc_value (&value, form, cu, ctx, &where))
 		  {
-		  case fw_0:
-		    // who knows, DW_FORM_flag_absent might turn up one day
-		    assert (form->name () == DW_FORM_flag_present);
-		    value = 1;
-		    break;
+		    // Note that for fw_uleb and fw_sleb we report the
+		    // error the second time now.
+		  cant_read:
+		    wr_error (where)
+		      << "can't read value of attribute "
+		      << *attribute << '.' << std::endl;
+		    return -1;
+		  }
 
-		  case fw_1:
-		  case fw_2:
-		  case fw_4:
-		  case fw_8:
-		    if (!read_ctx_read_var (ctx, width, &value))
+		if (storclass == sc_block)
+		  {
+		    // Read & validate the block body.
+		    if (cls == cl_exprloc)
 		      {
-		      cant_read:
-			wr_error (where)
-			  << "can't read value of attribute "
-			  << pri::attr (it->name) << '.' << std::endl;
-			return -1;
+			uint64_t expr_start
+			  = cu->head->offset + read_ctx_get_offset (ctx);
+			if (!check_location_expression
+			    (file, ctx, cu, expr_start, reloc, value, &where))
+			  return false;
 		      }
-		    break;
+		    else
+		      relocation_skip (reloc,
+				       read_ctx_get_offset (ctx) + value,
+				       &where, skip_mismatched);
 
-		  case fw_uleb:
-		  case fw_sleb:
-		    if (!checked_read_leb128 (ctx, width, &value,
-					      &where, "attribute value"))
-		      return -1;
-		    break;
-
-		  case fw_unknown:
-		    assert (!"Should never get there!");
+		    if (!read_ctx_skip (ctx, value))
+		      goto cant_read;
 		  }
-
-		if (storclass != sc_block)
-		  break;
-
-		// Read & validate the block body.
-		if (cls == cl_exprloc)
-		  {
-		    uint64_t expr_start
-		      = cu->head->offset + read_ctx_get_offset (ctx);
-		    if (!check_location_expression
-			(file, ctx, cu, expr_start, reloc, value, &where))
-		      return -1;
-		  }
-		else
-		  relocation_skip (reloc,
-				   read_ctx_get_offset (ctx) + value,
-				   &where, skip_mismatched);
-
-		if (!read_ctx_skip (ctx, value))
-		  goto cant_read;
-
-		break;
 	      }
 
 	    /* Relocate the value if appropriate.  */
@@ -882,6 +852,7 @@ namespace
 		    << "unexpected relocation of " << pri::form (form_name)
 		    << '.' << std::endl;
 
+		form_width_t width = form->width (cu);
 		relocate_one (&file, reloc, rel, width, &value, &where,
 			      reloc_target (form_name, it), symbolp);
 

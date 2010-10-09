@@ -34,19 +34,19 @@ extern "C"
 #include "../lib/system.h"
 }
 
-#define REALLOC(A, BUF)						\
-  do {								\
-    typeof ((A)) _a = (A);					\
-    if (_a->size == _a->alloc)					\
-      {								\
-	if (_a->alloc == 0)					\
-	  _a->alloc = 8;					\
-	else							\
-	  _a->alloc *= 2;					\
-	_a->BUF = (typeof (_a->BUF))				\
-	  xrealloc (_a->BUF,					\
-		    sizeof (*_a->BUF) * _a->alloc);		\
-      }								\
+#define REALLOC(A, BUF)					\
+  do {							\
+    typeof ((A)) _a = (A);				\
+    if (_a->size == _a->alloc)				\
+      {							\
+	if (_a->alloc == 0)				\
+	  _a->alloc = 8;				\
+	else						\
+	  _a->alloc *= 2;				\
+	_a->BUF = (typeof (_a->BUF))			\
+	  xrealloc (_a->BUF,				\
+		    sizeof (*_a->BUF) * _a->alloc);	\
+      }							\
   } while (0)
 
 #define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
@@ -57,6 +57,8 @@ bool necessary_alignment (uint64_t start, uint64_t length,
 
 bool supported_version (unsigned version,
 			size_t num_supported, struct where *where, ...);
+
+#define UNREACHABLE assert (!"unreachable")
 
 
 #endif//DWARFLINT_MISC_HH
