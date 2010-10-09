@@ -441,33 +441,12 @@ namespace
 		  };
 	      }
 
-	    /* Similar for DW_AT_ranges.  */
-	    else if (attrib_name == DW_AT_ranges
-		     || attrib_name == DW_AT_stmt_list)
-	      {
-		if (attrib_form != DW_FORM_data4
-		    && attrib_form != DW_FORM_data8
-		    && attrib_form != DW_FORM_sec_offset
-		    && attrib_form != DW_FORM_indirect)
-		  complain_invalid_form (where, attrib_name, attrib_form);
-		if (attrib_name == DW_AT_ranges)
-		  ranges = true;
-	      }
-
-	    /* Similar for DW_AT_{low,high}_pc, plus also make sure we
-	       don't see high_pc without low_pc.  */
-	    else if (attrib_name == DW_AT_low_pc
-		     || attrib_name == DW_AT_high_pc)
-	      {
-		if (attrib_form != DW_FORM_addr
-		    && attrib_form != DW_FORM_ref_addr)
-		  complain_invalid_form (where, attrib_name, attrib_form);
-
-		if (attrib_name == DW_AT_low_pc)
-		  low_pc = true;
-		else if (attrib_name == DW_AT_high_pc)
-		  high_pc = true;
-	      }
+	    else if (attrib_name == DW_AT_ranges)
+	      ranges = true;
+	    else if (attrib_name == DW_AT_low_pc)
+	      low_pc = true;
+	    else if (attrib_name == DW_AT_high_pc)
+	      high_pc = true;
 
 	    acur->name = attrib_name;
 	    acur->form = attrib_form;
