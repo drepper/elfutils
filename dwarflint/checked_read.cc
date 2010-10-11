@@ -98,8 +98,8 @@ read_address_size (struct read_ctx *ctx,
 }
 
 bool
-checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
-		      struct where *where, const char *what)
+checked_read_uleb128 (read_ctx *ctx, uint64_t *ret,
+		      where const *where, const char *what)
 {
   const unsigned char *ptr = ctx->ptr;
   int st = read_ctx_read_uleb128 (ctx, ret);
@@ -116,7 +116,7 @@ checked_read_uleb128 (struct read_ctx *ctx, uint64_t *ret,
 
 bool
 checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
-		      where *where, const char *what)
+		      where const *where, const char *what)
 {
   const unsigned char *ptr = ctx->ptr;
   int st = read_ctx_read_sleb128 (ctx, ret);
@@ -134,7 +134,7 @@ checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
 
 bool
 checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
-		     where *where, const char *what)
+		     where const *where, const char *what)
 {
   assert (width == fw_sleb || width == fw_uleb);
   if (width == fw_sleb)

@@ -39,12 +39,12 @@ bool read_address_size (read_ctx *ctx,
 			where const *where);
 
 bool checked_read_uleb128 (read_ctx *ctx, uint64_t *ret,
-			   where *where, const char *what);
+			   where const *where, const char *what);
 
 bool checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
-			   where *where, const char *what);
+			   where const *where, const char *what);
 
 bool checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
-			  where *where, const char *what);
+			  where const *where, const char *what);
 
 #endif//DWARFLINT_CHECKED_READ_HH
