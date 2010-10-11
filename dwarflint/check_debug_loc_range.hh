@@ -28,6 +28,7 @@
 #include "check_debug_info.ii"
 #include "messages.hh"
 #include "coverage.hh"
+#include "dwarf_version.ii"
 
 struct section_coverage
 {
@@ -85,7 +86,8 @@ struct hole_info
    DATA->data has to point at d_buf of section in question.  */
 bool found_hole (uint64_t start, uint64_t length, void *data);
 
-bool check_location_expression (elf_file const &file,
+bool check_location_expression (dwarf_version const *ver,
+				elf_file const &file,
 				struct read_ctx *parent_ctx,
 				struct cu *cu,
 				uint64_t init_off,

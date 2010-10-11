@@ -381,7 +381,8 @@ namespace
   }
 
   bool
-  check_loc_or_range_ref (struct elf_file *file,
+  check_loc_or_range_ref (dwarf_version const *ver,
+			  struct elf_file *file,
 			  const struct read_ctx *parent_ctx,
 			  struct cu *cu,
 			  struct sec *sec,
@@ -551,8 +552,8 @@ namespace
 
 		/* location expression itself */
 		uint64_t expr_start = read_ctx_get_offset (&ctx);
-		if (!check_location_expression (*file, &ctx, cu, expr_start,
-						&sec->rel, len, &where))
+		if (!check_location_expression
+		    (ver, *file, &ctx, cu, expr_start, &sec->rel, len, &where))
 		  return false;
 		uint64_t expr_end = read_ctx_get_offset (&ctx);
 		if (!overlap
@@ -629,11 +630,11 @@ namespace
 
     enum message_category cat = sec->id == sec_loc ? mc_loc : mc_ranges;
 
+    {
     /* Relocation checking in the followings assumes that all the
        references are organized in monotonously increasing order.  That
        doesn't have to be the case.  So merge all the references into
        one sorted array.  */
-    {
     typedef std::vector<ref_cu> ref_cu_vect;
     ref_cu_vect refs;
     for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
@@ -661,10 +662,18 @@ namespace
 	    relocation_skip (&sec->rel, off, &wh, skip_unref);
 	  }
 
+	// xxx right now this is just so that we can ver->get_form
+	// down the road, which is just a result of the way
+	// dwarf-opcodes encode operator operand types.  But in the
+	// future, we'd like versions to support also queries for
+	// operators and their operands, so keep it.
+	dwarf_version const *ver
+	  = dwarf_version::get (it->cu->head->version);
+
 	/* XXX We pass cu_coverage down for all ranges.  That means all
 	   ranges get recorded, not only those belonging to CUs.
 	   Perhaps that's undesirable.  */
-	if (!check_loc_or_range_ref (file, &ctx, it->cu, sec,
+	if (!check_loc_or_range_ref (ver, file, &ctx, it->cu, sec,
 				     &coverage, coverage_map, pc_coverage,
 				     off, &it->ref.who, cat))
 	  retval = false;
@@ -742,12 +751,16 @@ namespace
   */
 
   bool
-  get_location_opcode_operands (uint8_t opcode, uint8_t *op1, uint8_t *op2)
+  get_location_opcode_operands (dwarf_version const *ver,
+				uint8_t opcode,
+				form const **f1p,
+				form const **f2p)
   {
+    int op1, op2;
     switch (opcode)
       {
 #define DW_OP_2(OPCODE, OP1, OP2)				\
-	case OPCODE: *op1 = OP1; *op2 = OP2; return true;
+	case OPCODE: op1 = OP1; op2 = OP2; break;
 #define DW_OP_1(OPCODE, OP1) DW_OP_2(OPCODE, OP1, 0)
 #define DW_OP_0(OPCODE) DW_OP_2(OPCODE, 0, 0)
 
@@ -759,92 +772,22 @@ namespace
       default:
 	return false;
       };
-  }
 
-  /* The value passed back in uint64_t VALUEP may actually be
-     type-casted signed quantity.  WHAT and WHERE describe error
-     message and context for LEB128 loading.
+#define RETV(OP,P)		\
+    if (OP != 0)		\
+      {				\
+	form const *f = NULL;	\
+	f = ver->get_form (OP);	\
+	if (f == NULL)		\
+	  return false;		\
+	*P = f;			\
+      }				\
+    else			\
+      *P = NULL;
 
-     If IS_BLOCKP is non-NULL, block values are accepted, and
-     *IS_BLOCKP is initialized depending on whether FORM is a block
-     form.  For block forms, the value passed back in VALUEP is block
-     length.  */
-  bool
-  read_ctx_read_form (struct read_ctx *ctx, struct cu *cu,
-		      uint8_t form, uint64_t *valuep, struct where *where,
-		      const char *what, bool *is_blockp)
-  {
-    if (is_blockp != NULL)
-      *is_blockp = false;
-    switch (form)
-      {
-      case DW_FORM_addr:
-	return read_ctx_read_offset (ctx, cu->head->address_size == 8, valuep);
-      case DW_FORM_ref_addr:
-	return read_ctx_read_offset (ctx, (cu->head->version >= 3
-					   ? cu->head->offset_size
-					   : cu->head->address_size) == 8,
-				     valuep);
-      case DW_FORM_udata:
-	return checked_read_uleb128 (ctx, valuep, where, what);
-      case DW_FORM_sdata:
-	return checked_read_sleb128 (ctx, (int64_t *)valuep, where, what);
-      case DW_FORM_data1:
-	{
-	  uint8_t v;
-	  if (!read_ctx_read_ubyte (ctx, &v))
-	    return false;
-	  if (valuep != NULL)
-	    *valuep = v;
-	  return true;
-	}
-      case DW_FORM_data2:
-	{
-	  uint16_t v;
-	  if (!read_ctx_read_2ubyte (ctx, &v))
-	    return false;
-	  if (valuep != NULL)
-	    *valuep = v;
-	  return true;
-	}
-      case DW_FORM_data4:
-	{
-	  uint32_t v;
-	  if (!read_ctx_read_4ubyte (ctx, &v))
-	    return false;
-	  if (valuep != NULL)
-	    *valuep = v;
-	  return true;
-	}
-      case DW_FORM_data8:
-	return read_ctx_read_8ubyte (ctx, valuep);
-      };
-
-    if (is_blockp != NULL)
-      {
-	int dform;
-	switch (form)
-	  {
-#define HANDLE(BFORM, DFORM)			\
-	    case BFORM:				\
-	      dform = DFORM;			\
-	      break
-	    HANDLE (DW_FORM_block, DW_FORM_udata);
-	    HANDLE (DW_FORM_block1, DW_FORM_data1);
-	    HANDLE (DW_FORM_block2, DW_FORM_data2);
-	    HANDLE (DW_FORM_block4, DW_FORM_data4);
-#undef HANDLE
-	  default:
-	    return false;
-	  }
-
-	*is_blockp = true;
-	return read_ctx_read_form (ctx, cu, dform,
-				   valuep, where, what, NULL)
-	  && read_ctx_skip (ctx, *valuep);
-      }
-
-    return false;
+    RETV (op1, f1p);
+    RETV (op2, f2p);
+    return true;
   }
 
   static enum section_id
@@ -876,24 +819,25 @@ namespace
 		uint64_t init_off,
 		struct relocation_data *reloc,
 		int opcode,
-		int form,
+		form const *form,
 		uint64_t *valuep,
 		char const *str,
 		struct where *where)
   {
-    if (form == 0)
+    if (form == NULL)
       return true;
 
-    bool isblock;
     uint64_t off = read_ctx_get_offset (ctx) + init_off;
 
-    if (!read_ctx_read_form (ctx, cu, form,
-			     valuep, where, str, &isblock))
+    storage_class_t storclass = form->storage_class ();
+    assert (storclass != sc_string);
+    if (!read_generic_value (ctx, form->width (cu), storclass,
+			     where, valuep, NULL))
       {
 	wr_error (*where)
 	  << "opcode \"" << pri::locexpr_opcode (opcode)
 	  << "\": can't read " << str << " (form \""
-	  << pri::form (form) << "\")." << std::endl;
+	  << *form << "\")." << std::endl;
 	return false;
       }
 
@@ -905,14 +849,14 @@ namespace
     if ((rel = relocation_next (reloc, off,
 				where, skip_mismatched)))
       {
-	if (!isblock)
+	if (storclass != sc_block)
 	  relocate_one (&file, reloc, rel,
 			cu->head->address_size, valuep, where,
 			reloc_target_loc (opcode), NULL);
 	else
 	  wr_error (where, ": relocation relocates a length field.\n");
       }
-    if (isblock)
+    if (storclass == sc_block)
       {
 	uint64_t off_block_end = read_ctx_get_offset (ctx) + init_off - 1;
 	relocation_next (reloc, off_block_end, where, skip_ok);
@@ -923,7 +867,8 @@ namespace
 }
 
 bool
-check_location_expression (elf_file const &file,
+check_location_expression (dwarf_version const *ver,
+			   elf_file const &file,
 			   struct read_ctx *parent_ctx,
 			   struct cu *cu,
 			   uint64_t init_off,
@@ -959,8 +904,9 @@ check_location_expression (elf_file const &file,
 	  break;
 	}
 
-      uint8_t op1, op2;
-      if (!get_location_opcode_operands (opcode, &op1, &op2))
+      form const *form1 = NULL;
+      form const *form2 = NULL;
+      if (!get_location_opcode_operands (ver, opcode, &form1, &form2))
 	{
 	  wr_error (where)
 	    << "can't decode opcode \""
@@ -970,9 +916,9 @@ check_location_expression (elf_file const &file,
 
       uint64_t value1, value2;
       if (!op_read_form (file, &ctx, cu, init_off, reloc,
-			 opcode, op1, &value1, "1st operand", &where)
+			 opcode, form1, &value1, "1st operand", &where)
 	  || !op_read_form (file, &ctx, cu, init_off, reloc,
-			    opcode, op2, &value2, "2st operand", &where))
+			    opcode, form2, &value2, "2st operand", &where))
 	goto out;
 
       switch (opcode)

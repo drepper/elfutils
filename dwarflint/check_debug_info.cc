@@ -789,6 +789,8 @@ namespace
 		  {
 		    uint64_t expr_start
 		      = cu->head->offset + read_ctx_get_offset (ctx) - value;
+		    // xxx should we disallow relocation of length
+		    // field?  See check_debug_loc_range::op_read_form
 		    if (!check_location_expression
 			(ver, file, &block, cu,
 			 expr_start, reloc, value, &where))

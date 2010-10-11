@@ -5,9 +5,6 @@
   the MIPS extension (in a kinda-sorta way, since I've got no binaries
   to check this).
 
-  There's a leftover read_ctx_read_form in check_debug_loc_range.cc,
-  but that should be painless to rewrite using what we have now.
-
   But there's still some code around that depends on per-form/per-attr
   switches, namely check_debug_info.cc::reloc_target and the
   reference-checking code in the same file.  Maybe the way to do this
