@@ -792,7 +792,7 @@ namespace
 		    if (!check_location_expression
 			(ver, file, &block, cu,
 			 expr_start, reloc, value, &where))
-		      return false;
+		      return -1;
 		  }
 		else
 		  relocation_skip (reloc, read_ctx_get_offset (ctx),
