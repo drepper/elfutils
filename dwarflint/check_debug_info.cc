@@ -770,44 +770,33 @@ namespace
 
 	    /* Attribute value.  */
 	    uint64_t value;
+	    read_ctx block;
+
 	    storage_class_t storclass = form->storage_class ();
-	    if (storclass == sc_string)
+	    if (!read_generic_value (ctx, form->width (cu), storclass,
+				     &where, &value, &block))
 	      {
-		if (!read_ctx_read_str (ctx))
-		  goto cant_read;
+		// Note that for fw_uleb and fw_sleb we report the
+		// error the second time now.
+		wr_error (where)
+		  << "can't read value of attribute "
+		  << *attribute << '.' << std::endl;
+		return -1;
 	      }
-	    else
+	    if (storclass == sc_block)
 	      {
-		if (!read_sc_value (&value, form->width (cu), ctx, &where))
+		if (cls == cl_exprloc)
 		  {
-		    // Note that for fw_uleb and fw_sleb we report the
-		    // error the second time now.
-		  cant_read:
-		    wr_error (where)
-		      << "can't read value of attribute "
-		      << *attribute << '.' << std::endl;
-		    return -1;
+		    uint64_t expr_start
+		      = cu->head->offset + read_ctx_get_offset (ctx) - value;
+		    if (!check_location_expression
+			(ver, file, &block, cu,
+			 expr_start, reloc, value, &where))
+		      return false;
 		  }
-
-		if (storclass == sc_block)
-		  {
-		    // Read & validate the block body.
-		    if (cls == cl_exprloc)
-		      {
-			uint64_t expr_start
-			  = cu->head->offset + read_ctx_get_offset (ctx);
-			if (!check_location_expression
-			    (file, ctx, cu, expr_start, reloc, value, &where))
-			  return false;
-		      }
-		    else
-		      relocation_skip (reloc,
-				       read_ctx_get_offset (ctx) + value,
-				       &where, skip_mismatched);
-
-		    if (!read_ctx_skip (ctx, value))
-		      goto cant_read;
-		  }
+		else
+		  relocation_skip (reloc, read_ctx_get_offset (ctx),
+				   &where, skip_mismatched);
 	      }
 
 	    /* Relocate the value if appropriate.  */

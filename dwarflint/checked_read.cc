@@ -176,3 +176,41 @@ read_sc_value (uint64_t *valuep, form_width_t width,
     }
   UNREACHABLE;
 }
+
+bool
+read_generic_value (read_ctx *ctx,
+		    form_width_t width, storage_class_t storclass,
+		    where const *where, uint64_t *valuep, read_ctx *blockp)
+{
+  uint64_t value;
+  if (storclass == sc_value
+      || storclass == sc_block)
+    {
+      if (!read_sc_value (&value, width, ctx, where))
+	return false;
+      if (valuep != NULL)
+	*valuep = value;
+      if (storclass == sc_value)
+	return true;
+    }
+
+  unsigned char const *start = ctx->ptr;
+  if (storclass == sc_string)
+    {
+      if (!read_ctx_read_str (ctx))
+	return false;
+    }
+  else if (storclass == sc_block)
+    {
+      if (!read_ctx_skip (ctx, value))
+	return false;
+    }
+
+  if (blockp != NULL)
+    {
+      if (!read_ctx_init_sub (blockp, ctx, start, ctx->ptr))
+	return false;
+    }
+
+  return true;
+}

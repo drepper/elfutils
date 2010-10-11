@@ -51,4 +51,14 @@ bool checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
 bool read_sc_value (uint64_t *valuep, form_width_t width,
 		    read_ctx *ctx, where const *where);
 
+/// Read value depending on the form width and storage class.
+/// Value is returned via VALUEP, if that is non-NULL; for block
+/// forms, the value is block length.  Block context is returned via
+/// BLOCKP, in non-NULL; for string class, the block is the string
+/// itself.
+bool read_generic_value (read_ctx *ctx,
+			 form_width_t width, storage_class_t storclass,
+			 where const *where, uint64_t *valuep,
+			 read_ctx *blockp);
+
 #endif//DWARFLINT_CHECKED_READ_HH
