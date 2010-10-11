@@ -495,37 +495,6 @@ namespace
     ref_record_add (&ctx->cu->decl_file_refs, value, ctx->where);
   }
 
-  /// Read value depending on the form width and storage class.
-  bool
-  read_sc_value (uint64_t *valuep, form const *form, cu const *cu,
-		 read_ctx *ctx, where *wherep)
-  {
-    form_width_t width = form->width (cu);
-    switch (width)
-      {
-      case fw_0:
-	// Who knows, DW_FORM_flag_absent might turn up one day...
-	assert (form->name () == DW_FORM_flag_present);
-	*valuep = 1;
-	return true;
-
-      case fw_1:
-      case fw_2:
-      case fw_4:
-      case fw_8:
-	return read_ctx_read_var (ctx, width, valuep);
-
-      case fw_uleb:
-      case fw_sleb:
-	return checked_read_leb128 (ctx, width, valuep,
-				    wherep, "attribute value");
-
-      case fw_unknown:
-	;
-      }
-    UNREACHABLE;
-  }
-
   /*
     Returns:
     -1 in case of error
@@ -659,7 +628,7 @@ namespace
 	    if (ver->form_class (form, attribute) == cl_indirect)
 	      {
 		uint64_t value;
-		if (!read_sc_value (&value, form, cu, ctx, &where))
+		if (!read_sc_value (&value, form->width (cu), ctx, &where))
 		  return -1;
 		form_name = value;
 		form = check_debug_abbrev::check_form
@@ -809,7 +778,7 @@ namespace
 	      }
 	    else
 	      {
-		if (!read_sc_value (&value, form, cu, ctx, &where))
+		if (!read_sc_value (&value, form->width (cu), ctx, &where))
 		  {
 		    // Note that for fw_uleb and fw_sleb we report the
 		    // error the second time now.

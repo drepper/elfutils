@@ -47,4 +47,8 @@ bool checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
 bool checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
 			  where const *where, const char *what);
 
+/// Read value depending on the form width and storage class.
+bool read_sc_value (uint64_t *valuep, form_width_t width,
+		    read_ctx *ctx, where const *where);
+
 #endif//DWARFLINT_CHECKED_READ_HH

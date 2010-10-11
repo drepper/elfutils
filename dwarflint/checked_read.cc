@@ -35,6 +35,7 @@
 
 #include "checked_read.hh"
 #include "messages.hh"
+#include "misc.hh"
 
 bool
 read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
@@ -147,4 +148,31 @@ checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
     }
   else
     return checked_read_uleb128 (ctx, ret, where, what);
+}
+
+bool
+read_sc_value (uint64_t *valuep, form_width_t width,
+	       read_ctx *ctx, where const *where)
+{
+  switch (width)
+    {
+    case fw_0:
+      *valuep = 1;
+      return true;
+
+    case fw_1:
+    case fw_2:
+    case fw_4:
+    case fw_8:
+      return read_ctx_read_var (ctx, width, valuep);
+
+    case fw_uleb:
+    case fw_sleb:
+      return checked_read_leb128 (ctx, width, valuep,
+				  where, "attribute value");
+
+    case fw_unknown:
+      ;
+    }
+  UNREACHABLE;
 }
