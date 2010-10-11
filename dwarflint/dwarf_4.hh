@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,42 +23,15 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_MISC_HH
-#define DWARFLINT_MISC_HH
+#ifndef DWARFLINT_DWARF_4_HH
+#define DWARFLINT_DWARF_4_HH
 
-#include <cstring>
-#include "where.h"
+#include "dwarf_version.ii"
 
-extern "C"
-{
-#include "../lib/system.h"
-}
+/// Pure DWARF 4 extension.
+dwarf_version const *dwarf_4_ext ();
 
-#define REALLOC(A, BUF)					\
-  do {							\
-    typeof ((A)) _a = (A);				\
-    if (_a->size == _a->alloc)				\
-      {							\
-	if (_a->alloc == 0)				\
-	  _a->alloc = 8;				\
-	else						\
-	  _a->alloc *= 2;				\
-	_a->BUF = (typeof (_a->BUF))			\
-	  xrealloc (_a->BUF,				\
-		    sizeof (*_a->BUF) * _a->alloc);	\
-      }							\
-  } while (0)
+/// DWARF 4 and below.
+dwarf_version const *dwarf_4 ();
 
-#define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
-
-bool address_aligned (uint64_t addr, uint64_t align);
-bool necessary_alignment (uint64_t start, uint64_t length,
-			  uint64_t align);
-
-bool supported_version (unsigned version,
-			size_t num_supported, struct where *where, ...);
-
-#define UNREACHABLE assert (!"unreachable")
-
-
-#endif//DWARFLINT_MISC_HH
+#endif//DWARFLINT_DWARF_4_HH

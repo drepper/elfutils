@@ -46,6 +46,12 @@ dwarflint_SOURCES = \
 	checks.cc checks.hh checks.ii \
 	coverage.cc coverage.hh \
 	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
+	dwarf_2.cc dwarf_2.hh \
+	dwarf_3.cc dwarf_3.hh \
+	dwarf_4.cc dwarf_4.hh \
+	dwarf_mips.cc dwarf_mips.hh \
+	dwarf_version-imp.cc dwarf_version-imp.hh \
+	dwarf_version.cc dwarf_version.hh dwarf_version.ii \
 	dwarflint.cc dwarflint.hh dwarflint.ii \
 	elf_file.hh elf_file.ii \
 	expected-at.cc expected.hh \
@@ -59,23 +65,24 @@ dwarflint_SOURCES = \
 	reloc.cc reloc.hh \
 	section_id.cc section_id.hh \
 	sections.cc sections.hh sections.ii \
-	tables.cc tables.hh \
 	where.c where.h \
 	wrap.cc wrap.hh \
+	\
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \
+	check_debug_aranges.cc check_debug_aranges.hh check_debug_aranges.ii \
 	check_debug_info.cc check_debug_info.hh check_debug_info.ii \
 	check_debug_line.cc check_debug_line.hh check_debug_line.ii \
-	check_debug_pub.cc check_debug_pub.hh \
 	check_debug_loc_range.cc check_debug_loc_range.hh check_debug_loc_range.ii \
-	check_debug_aranges.cc check_debug_aranges.hh check_debug_aranges.ii \
-	lowlevel_checks.cc lowlevel_checks.hh \
-	check_matching_ranges.cc \
-	check_range_out_of_scope.cc \
-	check_expected_trees.cc \
-	check_dups_abstract_origin.cc \
+	check_debug_pub.cc check_debug_pub.hh \
 	check_duplicate_DW_tag_variable.cc \
+	check_dups_abstract_origin.cc \
+	check_expected_trees.cc \
+	check_matching_ranges.cc \
 	check_nodebug.cc \
+	check_range_out_of_scope.cc \
 	locstats.cc \
+	lowlevel_checks.cc lowlevel_checks.hh \
+	\
 	../src/dwarfstrings.c
 
 TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \

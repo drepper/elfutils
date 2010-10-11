@@ -29,6 +29,7 @@
 #include "checks.hh"
 #include "sections.ii"
 #include "check_debug_info.ii"
+#include "dwarf_version.ii"
 
 struct abbrev_attrib
 {
@@ -83,11 +84,13 @@ public:
   abbrev_map const abbrevs;
 
   check_debug_abbrev (checkstack &stack, dwarflint &lint);
+  static form const *check_form (dwarf_version const *ver,
+				 int form_name,
+				 attribute const *attribute,
+				 where const *where,
+				 bool indirect);
+
   ~check_debug_abbrev ();
 };
-
-// xxx When dwarf version objects are properly implemented, that's
-// where this should end up in.
-bool is_location_attrib (uint64_t name);
 
 #endif//DWARFLINT_CHECK_DEBUG_ABBREV_HH

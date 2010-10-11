@@ -33,7 +33,7 @@
 #include "../libdw/dwarf.h"
 
 #include "messages.hh"
-#include "tables.hh"
+#include "dwarf_version.hh"
 #include "pri.hh"
 #include "option.hh"
 #include "sections.hh"
@@ -298,16 +298,16 @@ namespace
   }
 
   section_id
-  reloc_target (uint8_t form, struct abbrev_attrib *at)
+  reloc_target (form const *form, attribute const *attribute)
   {
-    switch (form)
+    switch (form->name ())
       {
       case DW_FORM_strp:
 	return sec_str;
 
       case DW_FORM_addr:
 
-	switch (at->name)
+	switch (attribute->name ())
 	  {
 	  case DW_AT_low_pc:
 	  case DW_AT_high_pc:
@@ -335,7 +335,7 @@ namespace
       case DW_FORM_data4:
       case DW_FORM_data8:
 
-	switch (at->name)
+	switch (attribute->name ())
 	  {
 	  case DW_AT_stmt_list:
 	    return sec_line;
@@ -381,8 +381,8 @@ namespace
 	assert (!"Should be handled specially!");
       };
 
-    std::cout << "XXX don't know how to handle form=" << pri::form (form)
-	      << ", at=" << pri::attr (at->name) << std::endl;
+    std::cout << "XXX don't know how to handle form=" << *form
+	      << ", at=" << *attribute << std::endl;
 
     return rel_value;
   }
@@ -622,39 +622,26 @@ namespace
 	  {
 	    where.ref = &it->where;
 
-	    uint8_t form = it->form;
-	    bool indirect = form == DW_FORM_indirect;
-	    if (indirect)
+	    attribute const *attribute = ver->get_attribute (it->name);
+	    int form_name = it->form;
+	    form const *form = ver->get_form (form_name);
+	    if (ver->form_class (form, attribute) == cl_indirect)
 	      {
 		uint64_t value;
-		if (!checked_read_uleb128 (ctx, &value, &where,
-					   "indirect attribute form"))
+		if (!read_sc_value (&value, form->width (cu), ctx, &where))
 		  return -1;
+		form_name = value;
+		form = check_debug_abbrev::check_form
+		  (ver, form_name, attribute, &where, true);
+		if (form == NULL)
+		  return -1;
+	      }
 
-		if (!ver->form_allowed (form))
-		  {
-		    wr_error (where)
-		      << "invalid indirect form " << pri::hex (value)
-		      << '.' << std::endl;
-		    return -1;
-		  }
-		form = value;
-
-		if (it->name == DW_AT_sibling)
-		  switch (ver->check_sibling_form (form))
-		    {
-		    case -1:
-		      wr_message (where, cat (mc_die_rel, mc_impact_2))
-			<< "DW_AT_sibling attribute with (indirect) form "
-			"DW_FORM_ref_addr." << std::endl;
-		      break;
-
-		    case -2:
-		      wr_error (where)
-			<< "DW_AT_sibling attribute with non-reference "
-			"(indirect) form \"" << pri::form (value)
-			<< "\"." << std::endl;
-		    };
+	    dw_class cls = ver->form_class (form, attribute);
+	    if (cls == cl_indirect)
+	      {
+		wr_error (&where, ": indirect form is again indirect.\n");
+		return -1;
 	      }
 
 	    value_check_cb_t value_check_cb = NULL;
@@ -666,9 +653,6 @@ namespace
 	    uint64_t ctx_offset = read_ctx_get_offset (ctx) + cu->head->offset;
 	    bool type_is_rel = file.ehdr.e_type == ET_REL;
 
-	    /* Attribute value.  */
-	    uint64_t value = 0;
-
 	    /* Whether the value should be relocated first.  Note that
 	       relocations are really required only in REL files, so
 	       missing relocations are not warned on even with
@@ -679,7 +663,6 @@ namespace
 	      rel_require,	// require a relocation
 	      rel_nonzero,	// require a relocation if value != 0
 	    } relocate = rel_no;
-	    size_t width = 0;
 
 	    /* Point to variable that you want to copy relocated value
 	       to.  */
@@ -693,259 +676,129 @@ namespace
 	       relocation was made against.  */
 	    GElf_Sym **symbolp = NULL;
 
-	    /* Setup locptr checking.  */
-	    if (is_location_attrib (it->name))
+	    assert (form);
+	    assert (attribute);
+
+	    static dw_class_set ref_classes
+	      (cl_reference, cl_loclistptr, cl_lineptr, cl_macptr,
+	       cl_rangelistptr);
+
+	    if (ref_classes.test (cls))
+	      if (form->width (cu) == fw_8
+		  && cu->head->offset_size == 4)
+		wr_error (where)
+		  << "reference attribute with form \""
+		  << pri::form (form_name) << "\" in 32-bit CU."
+		  << std::endl;
+
+	    /* Setup pointer checking.  */
+	    switch (cls)
 	      {
-		switch (form)
-		  {
-		  case DW_FORM_data8:
-		    if (cu->head->offset_size == 4)
-		      wr_error (where)
-			<< "location attribute with form \""
-			<< pri::form (form) << "\" in 32-bit CU." << std::endl;
-		    /* fall-through */
+	      case cl_loclistptr:
+		check_someptr = true;
+		value_check_cb = check_locptr;
+		extra_mc = mc_loc;
+		break;
 
-		  case DW_FORM_data4:
-		  case DW_FORM_sec_offset:
-		    value_check_cb = check_locptr;
-		    extra_mc = mc_loc;
-		    check_someptr = true;
-		    break;
+	      case cl_rangelistptr:
+		check_someptr = true;
+		value_check_cb = check_rangeptr;
+		extra_mc = mc_ranges;
+		break;
 
-		  case DW_FORM_block1:
-		  case DW_FORM_block2:
-		  case DW_FORM_block4:
-		  case DW_FORM_block:
-		    break;
+	      case cl_lineptr:
+		check_someptr = true;
+		value_check_cb = check_lineptr;
+		extra_mc = mc_line;
+		break;
 
-		  default:
-		    /* Only print error if it's indirect.  Otherwise we
-		       gave diagnostic during abbrev loading.  */
-		    if (indirect)
-		      wr_error (where)
-			<< "location attribute with invalid (indirect) form \""
-			<< pri::form (form) << "\"." << std::endl;
-		  };
+	      default:
+		;
+	      };
+
+	    /* Setup low_pc / high_pc checking.  */
+	    switch (it->name)
+	      {
+	      case DW_AT_low_pc:
+		relocatedp = &low_pc_relocated;
+		symbolp = &low_pc_symbol;
+		valuep = &low_pc;
+		break;
+
+	      case DW_AT_high_pc:
+		relocatedp = &high_pc_relocated;
+		symbolp = &high_pc_symbol;
+		valuep = &high_pc;
+		break;
+
+	      case DW_AT_decl_file:
+		value_check_cb = check_decl_file;
+		break;
 	      }
-	    /* Setup rangeptr or lineptr checking.  */
-	    else
-	      switch (it->name)
-		{
-		case DW_AT_ranges:
-		case DW_AT_stmt_list:
-		  {
-		    switch (form)
-		      {
-		      case DW_FORM_data8:
-			if (cu->head->offset_size == 4)
-			  // xxx could now also be checked during abbrev loading
-			  wr_error (where)
-			    << pri::attr (it->name)
-			    << " with form DW_FORM_data8 in 32-bit CU."
-			    << std::endl;
-			/* fall-through */
 
-		      case DW_FORM_data4:
-		      case DW_FORM_sec_offset:
-			check_someptr = true;
-			if (it->name == DW_AT_ranges)
-			  {
-			    value_check_cb = check_rangeptr;
-			    extra_mc = mc_ranges;
-			  }
-			else
-			  {
-			    assert (it->name == DW_AT_stmt_list);
-			    value_check_cb = check_lineptr;
-			    extra_mc = mc_line;
-			  }
-			break;
-
-		      default:
-			/* Only print error if it's indirect.  Otherwise we
-			   gave diagnostic during abbrev loading.  */
-			if (indirect)
-			  wr_error (where)
-			    << pri::attr (it->name)
-			    << " with invalid (indirect) form \""
-			    << pri::form (form) << "\"." << std::endl;
-		      }
-		    break;
-
-		  case DW_AT_low_pc:
-		    relocatedp = &low_pc_relocated;
-		    symbolp = &low_pc_symbol;
-		    valuep = &low_pc;
-		    break;
-
-		  case DW_AT_high_pc:
-		    relocatedp = &high_pc_relocated;
-		    symbolp = &high_pc_symbol;
-		    valuep = &high_pc;
-		    break;
-
-		  case DW_AT_decl_file:
-		    value_check_cb = check_decl_file;
-		    break;
-		  }
-		}
-
-	    /* Load attribute value and setup per-form checking.  */
-	    switch (form)
+	    /* Setup per-form checking & relocation.  */
+	    switch (form_name)
 	      {
 	      case DW_FORM_strp:
 		value_check_cb = check_strp;
 	      case DW_FORM_sec_offset:
-		if (!read_ctx_read_offset (ctx, cu->head->offset_size == 8,
-					   &value))
-		  {
-		  cant_read:
-		    wr_error (where)
-		      << "can't read value of attribute "
-		      << pri::attr (it->name) << '.' << std::endl;
-		    return -1;
-		  }
-
 		relocate = rel_require;
-		width = cu->head->offset_size;
-		break;
-
-	      case DW_FORM_string:
-		if (!read_ctx_read_str (ctx))
-		  goto cant_read;
 		break;
 
 	      case DW_FORM_ref_addr:
 		value_check_cb = check_die_ref_global;
-		width = cu->head->offset_size;
-
-		if (cu->head->version == 2)
-		case DW_FORM_addr:
-		  width = cu->head->address_size;
-
-		if (!read_ctx_read_offset (ctx, width == 8, &value))
-		  goto cant_read;
-
+	      case DW_FORM_addr:
 		/* In non-rel files, neither addr, nor ref_addr /need/
 		   a relocation.  */
 		relocate = rel_nonzero;
 		break;
 
 	      case DW_FORM_ref_udata:
-		value_check_cb = check_die_ref_local;
-	      case DW_FORM_udata:
-		if (!checked_read_uleb128 (ctx, &value, &where,
-					   "attribute value"))
-		  return -1;
-		break;
-
-	      case DW_FORM_flag_present:
-		value = 1;
-		break;
-
 	      case DW_FORM_ref1:
-		value_check_cb = check_die_ref_local;
-	      case DW_FORM_flag:
-	      case DW_FORM_data1:
-		if (!read_ctx_read_var (ctx, 1, &value))
-		  goto cant_read;
-		break;
-
 	      case DW_FORM_ref2:
+	      case DW_FORM_ref4:
+	      case DW_FORM_ref8:
 		value_check_cb = check_die_ref_local;
-	      case DW_FORM_data2:
-		if (!read_ctx_read_var (ctx, 2, &value))
-		  goto cant_read;
 		break;
 
 	      case DW_FORM_data4:
-		if (check_someptr)
-		  {
-		    relocate = rel_require;
-		    width = 4;
-		  }
-		if (false)
-	      case DW_FORM_ref4:
-		  value_check_cb = check_die_ref_local;
-		if (!read_ctx_read_var (ctx, 4, &value))
-		  goto cant_read;
-		break;
-
 	      case DW_FORM_data8:
 		if (check_someptr)
-		  {
-		    relocate = rel_require;
-		    width = 8;
-		  }
-		if (false)
-		case DW_FORM_ref8:
-		  value_check_cb = check_die_ref_local;
-		if (!read_ctx_read_8ubyte (ctx, &value))
-		  goto cant_read;
+		  relocate = rel_require;
 		break;
+	      }
 
-	      case DW_FORM_sdata:
-		{
-		  int64_t value64;
-		  if (!checked_read_sleb128 (ctx, &value64, &where,
-					     "attribute value"))
-		    return -1;
-		  value = (uint64_t) value64;
-		  break;
-		}
+	    /* Attribute value.  */
+	    uint64_t value;
+	    read_ctx block;
 
-	      case DW_FORM_block:
-		{
-		  uint64_t length;
-
-		  if (false)
-		  case DW_FORM_block1:
-		    width = 1;
-
-		  if (false)
-		  case DW_FORM_block2:
-		    width = 2;
-
-		  if (false)
-		  case DW_FORM_block4:
-		    width = 4;
-
-		  if (width == 0)
-		    {
-		      if (!checked_read_uleb128 (ctx, &length, &where,
-						 "attribute value"))
-			return -1;
-		    }
-		  else if (!read_ctx_read_var (ctx, width, &length))
-		    goto cant_read;
-
-		  if (is_location_attrib (it->name))
-		    {
-		      uint64_t expr_start
-			= cu->head->offset + read_ctx_get_offset (ctx);
-		      if (!check_location_expression (file, ctx, cu, expr_start,
-						      reloc, length, &where))
-			return -1;
-		    }
-		  else
-		    /* xxx really skip_mismatched?  We just don't know
-		       how to process these...  */
-		    relocation_skip (reloc,
-				     read_ctx_get_offset (ctx) + length,
-				     &where, skip_mismatched);
-
-		  if (!read_ctx_skip (ctx, length))
-		    goto cant_read;
-		  break;
-		}
-
-	      case DW_FORM_indirect:
-		wr_error (&where, ": indirect form is again indirect.\n");
+	    storage_class_t storclass = form->storage_class ();
+	    if (!read_generic_value (ctx, form->width (cu), storclass,
+				     &where, &value, &block))
+	      {
+		// Note that for fw_uleb and fw_sleb we report the
+		// error the second time now.
+		wr_error (where)
+		  << "can't read value of attribute "
+		  << *attribute << '.' << std::endl;
 		return -1;
-
-	      default:
-		wr_error (&where,
-			  ": internal error: unhandled form 0x%x.\n", form);
+	      }
+	    if (storclass == sc_block)
+	      {
+		if (cls == cl_exprloc)
+		  {
+		    uint64_t expr_start
+		      = cu->head->offset + read_ctx_get_offset (ctx) - value;
+		    // xxx should we disallow relocation of length
+		    // field?  See check_debug_loc_range::op_read_form
+		    if (!check_location_expression
+			(ver, file, &block, cu,
+			 expr_start, reloc, value, &where))
+		      return -1;
+		  }
+		else
+		  relocation_skip (reloc, read_ctx_get_offset (ctx),
+				   &where, skip_mismatched);
 	      }
 
 	    /* Relocate the value if appropriate.  */
@@ -956,11 +809,12 @@ namespace
 		if (relocate == rel_no)
 		  wr_message (where, cat (mc_impact_4, mc_die_other,
 					  mc_reloc, extra_mc))
-		    << "unexpected relocation of " << pri::form (form) << '.'
-		    << std::endl;
+		    << "unexpected relocation of " << pri::form (form_name)
+		    << '.' << std::endl;
 
+		form_width_t width = form->width (cu);
 		relocate_one (&file, reloc, rel, width, &value, &where,
-			      reloc_target (form, it), symbolp);
+			      reloc_target (form, attribute), symbolp);
 
 		if (relocatedp != NULL)
 		  *relocatedp = true;
@@ -975,7 +829,8 @@ namespace
 			    && value != 0)))
 		  wr_message (where, cat (mc_impact_2, mc_die_other,
 					  mc_reloc, extra_mc))
-		    << pri::lacks_relocation (pri::form (form)) << std::endl;
+		    << pri::lacks_relocation (pri::form (form_name))
+		    << std::endl;
 	      }
 
 	    /* Dispatch value checking.  */

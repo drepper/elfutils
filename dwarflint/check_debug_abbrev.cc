@@ -30,7 +30,7 @@
 #include "check_debug_info.hh"
 #include "check_debug_abbrev.hh"
 #include "pri.hh"
-#include "tables.hh"
+#include "dwarf_version.hh"
 #include "sections.hh"
 #include "checked_read.hh"
 #include "messages.hh"
@@ -111,13 +111,14 @@ namespace
   };
 
   void
-  complain_invalid_form (where const &where, int name, int form,
-			 std::string const &specification = "")
+  complain (where const *where,
+	    attribute const *attribute, form const *form,
+	    bool indirect, char const *qualifier)
   {
-    wr_error (where)
-      << specification << (" "[specification.length () == 0])
-      << pri::attr (name) << " with invalid form "
-      << pri::form (form) << '.' << std::endl;
+    wr_error (*where)
+      << "attribute " << *attribute << " with " << qualifier
+      << (indirect ? " indirect" : "") << " form"
+      << *form << '.' << std::endl;
   }
 
   bool
@@ -358,55 +359,55 @@ namespace
 				       "attribute form"))
 	      throw check_base::failed ();
 
-	    null_attrib = attrib_name == 0 && attrib_form == 0;
-
 	    /* Now if both are zero, this was the last attribute.  */
-	    if (!null_attrib)
-	      {
-		/* Otherwise validate name and form.  */
-		if (attrib_name > DW_AT_hi_user)
-		  {
-		    wr_error (where)
-		      << "invalid name " << pri::hex (attrib_name)
-		      << '.' << std::endl;
-		    failed = true;
-		    continue;
-		  }
-
-		if (!ver->form_allowed (attrib_form))
-		  {
-		    wr_error (where)
-		      << "invalid form " << pri::hex (attrib_form)
-		      << '.' << std::endl;
-		    failed = true;
-		    continue;
-		  }
-
-		std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
-		  = seen.insert (std::make_pair (attrib_name, attr_off));
-		if (!inserted.second)
-		  {
-		    wr_error (where)
-		      << "duplicate attribute " << pri::attr (attrib_name)
-		      << " (first was at " << pri::hex (inserted.first->second)
-		      << ")." << std::endl;
-		    // I think we may allow such files for high-level
-		    // consumption, so don't fail the check...
-		    if (attrib_name == DW_AT_sibling)
-		      // ... unless it's DW_AT_sibling.
-		      failed = true;
-		  }
-	      }
+	    null_attrib = attrib_name == 0 && attrib_form == 0;
+	    attribute const *attribute = NULL;
 
 	    REALLOC (cur, attribs);
 
 	    struct abbrev_attrib *acur = cur->attribs + cur->size++;
 	    WIPE (*acur);
+	    acur->name = attrib_name;
+	    acur->form = attrib_form;
+	    acur->where = where;
 
-	    /* We do structural checking of sibling attribute, so make
-	       sure our assumptions in actual DIE-loading code are
-	       right.  We expect form from reference class, but only
-	       CU-local, not DW_FORM_ref_addr.  */
+	    if (null_attrib)
+	      break;
+
+	    /* Otherwise validate name and form.  */
+	    attribute = ver->get_attribute (attrib_name);
+	    if (attribute == NULL)
+	      {
+		wr_error (where)
+		  << "invalid name " << pri::hex (attrib_name)
+		  << '.' << std::endl;
+		failed = true;
+		continue;
+	      }
+
+	    std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
+	      = seen.insert (std::make_pair (attrib_name, attr_off));
+	    if (!inserted.second)
+	      {
+		wr_error (where)
+		  << "duplicate attribute " << pri::attr (attrib_name)
+		  << " (first was at " << pri::hex (inserted.first->second)
+		  << ")." << std::endl;
+		// I think we may allow such files for high-level
+		// consumption, so don't fail the check...
+		if (attrib_name == DW_AT_sibling)
+		  // ... unless it's DW_AT_sibling.
+		  failed = true;
+	      }
+
+	    form const *form = check_debug_abbrev::check_form
+	      (ver, attrib_form, attribute, &where, false);
+	    if (form == NULL)
+	      {
+		failed = true;
+		continue;
+	      }
+
 	    if (attrib_name == DW_AT_sibling)
 	      {
 		if (!cur->has_children)
@@ -414,61 +415,13 @@ namespace
 			      cat (mc_die_rel, mc_acc_bloat, mc_impact_1))
 		    << "excessive DW_AT_sibling attribute at childless abbrev."
 		    << std::endl;
-
-		switch (ver->check_sibling_form (attrib_form))
-		  {
-		  case -1:
-		    wr_message (where, cat (mc_die_rel, mc_impact_2))
-		      << "DW_AT_sibling attribute with form DW_FORM_ref_addr."
-		      << std::endl;
-		    break;
-
-		  case -2:
-		    wr_error (where)
-		      << "DW_AT_sibling attribute with non-reference form "
-		      << pri::form (attrib_form) << '.' << std::endl;
-		  };
 	      }
-
-	    /* Similar for DW_AT_location and friends.  */
-	    else if (is_location_attrib (attrib_name))
-	      {
-		if (!ver->form_allowed (attrib_name, attrib_form))
-		  complain_invalid_form (where, attrib_name, attrib_form,
-					 "location attribute");
-	      }
-
-	    /* Similar for DW_AT_ranges.  */
-	    else if (attrib_name == DW_AT_ranges
-		     || attrib_name == DW_AT_stmt_list)
-	      {
-		if (attrib_form != DW_FORM_data4
-		    && attrib_form != DW_FORM_data8
-		    && attrib_form != DW_FORM_sec_offset
-		    && attrib_form != DW_FORM_indirect)
-		  complain_invalid_form (where, attrib_name, attrib_form);
-		if (attrib_name == DW_AT_ranges)
-		  ranges = true;
-	      }
-
-	    /* Similar for DW_AT_{low,high}_pc, plus also make sure we
-	       don't see high_pc without low_pc.  */
-	    else if (attrib_name == DW_AT_low_pc
-		     || attrib_name == DW_AT_high_pc)
-	      {
-		if (attrib_form != DW_FORM_addr
-		    && attrib_form != DW_FORM_ref_addr)
-		  complain_invalid_form (where, attrib_name, attrib_form);
-
-		if (attrib_name == DW_AT_low_pc)
-		  low_pc = true;
-		else if (attrib_name == DW_AT_high_pc)
-		  high_pc = true;
-	      }
-
-	    acur->name = attrib_name;
-	    acur->form = attrib_form;
-	    acur->where = where;
+	    if (attrib_name == DW_AT_ranges)
+	      ranges = true;
+	    else if (attrib_name == DW_AT_low_pc)
+	      low_pc = true;
+	    else if (attrib_name == DW_AT_high_pc)
+	      high_pc = true;
 	  }
 	while (!null_attrib);
 
@@ -510,6 +463,32 @@ check_debug_abbrev::check_debug_abbrev (checkstack &stack, dwarflint &lint)
 {
 }
 
+form const *
+check_debug_abbrev::check_form (dwarf_version const *ver, int form_name,
+				attribute const *attribute, where const *where,
+				bool indirect)
+{
+  form const *form = ver->get_form (form_name);
+  if (form == NULL)
+    {
+      wr_error (*where)
+	<< "invalid form " << pri::hex (form_name)
+	<< '.' << std::endl;
+      return NULL;
+    }
+
+  if (!ver->form_allowed (attribute->name (), form_name))
+    {
+      complain (where, attribute, form, indirect, "invalid");
+      return NULL;
+    }
+  else if (attribute->name () == DW_AT_sibling
+	   && sibling_form_suitable (ver, form_name) == sfs_long)
+    complain (where, attribute, form, indirect, "unsuitable");
+
+  return form;
+}
+
 check_debug_abbrev::~check_debug_abbrev ()
 {
   // xxx So using new[]/delete[] would be nicer (delete ignores
@@ -523,20 +502,5 @@ check_debug_abbrev::~check_debug_abbrev ()
       for (size_t i = 0; i < it->second.size; ++i)
 	free (it->second.abbr[i].attribs);
       free (it->second.abbr);
-    }
-}
-
-bool
-is_location_attrib (uint64_t name)
-{
-  switch (name)
-    {
-    case DW_AT_location:
-    case DW_AT_frame_base:
-    case DW_AT_data_location:
-    case DW_AT_data_member_location:
-      return true;
-    default:
-      return false;
     }
 }

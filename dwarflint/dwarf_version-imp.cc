@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,42 +23,55 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_MISC_HH
-#define DWARFLINT_MISC_HH
+#include "dwarf_version-imp.hh"
 
-#include <cstring>
-#include "where.h"
-
-extern "C"
+template <class T>
+void
+dwver_index_table<T>::add (T const &emt)
 {
-#include "../lib/system.h"
+  _m_table.insert (std::make_pair (emt.name (), emt));
 }
 
-#define REALLOC(A, BUF)					\
-  do {							\
-    typeof ((A)) _a = (A);				\
-    if (_a->size == _a->alloc)				\
-      {							\
-	if (_a->alloc == 0)				\
-	  _a->alloc = 8;				\
-	else						\
-	  _a->alloc *= 2;				\
-	_a->BUF = (typeof (_a->BUF))			\
-	  xrealloc (_a->BUF,				\
-		    sizeof (*_a->BUF) * _a->alloc);	\
-      }							\
-  } while (0)
+template <class T>
+T const *
+dwver_index_table<T>::get (int f) const
+{
+  typename _table_t::const_iterator it = _m_table.find (f);
+  if (it != _m_table.end ())
+    return &it->second;
+  else
+    return NULL;
+}
 
-#define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
+template class dwver_index_table<form>;
+template class dwver_index_table<attribute>;
 
-bool address_aligned (uint64_t addr, uint64_t align);
-bool necessary_alignment (uint64_t start, uint64_t length,
-			  uint64_t align);
+offset_form::offset_form (int a_name, dw_class_set a_classes)
+  : form (a_name, a_classes, fw_offset, sc_value)
+{}
 
-bool supported_version (unsigned version,
-			size_t num_supported, struct where *where, ...);
+address_form::address_form (int a_name, dw_class_set a_classes)
+  : form (a_name, a_classes, fw_address, sc_value)
+{}
 
-#define UNREACHABLE assert (!"unreachable")
+string_form::string_form (int a_name)
+  : preset_form<sc_string, cl_string> (a_name, fw_unknown)
+{}
 
+std_dwarf::std_dwarf (attribute_table const &attrtab,
+		      form_table const &formtab)
+  : _m_attrtab (attrtab)
+  , _m_formtab (formtab)
+{}
 
-#endif//DWARFLINT_MISC_HH
+form const *
+std_dwarf::get_form (int form_name) const
+{
+  return _m_formtab.get (form_name);
+}
+
+attribute const *
+std_dwarf::get_attribute (int attribute_name) const
+{
+  return _m_attrtab.get (attribute_name);
+}
