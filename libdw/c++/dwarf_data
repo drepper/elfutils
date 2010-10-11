@@ -870,7 +870,7 @@ namespace elfutils
 
       struct value_string : public value_dispatch, public std::string
       {
-	typedef subr::hash<std::string> hasher;
+	typedef std::tr1::hash<std::string> hasher;
 
 	inline value_string () {}
 

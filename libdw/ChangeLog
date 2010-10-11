@@ -1,3 +1,10 @@
+2010-10-11  Mark Wielaard  <mjw@redhat.com>
+
+	* c++/subr.hh (string_hash_combine): Removed.
+	(hash<std::string>): Extend std::tr1::hash<std::string>.
+	* c++/dwarf_data (value_string): typedef std::tr1::hash<std::string>
+	hasher.
+
 2010-07-26  Roland McGrath  <roland@redhat.com>
 
 	* dwarf_getlocation_implicit_pointer.c: New file.

@@ -53,12 +53,6 @@ namespace elfutils
       hash_combine (seed, v.second);
     }
 
-    inline void
-    string_hash_combine (size_t &hash, const std::string::value_type &c)
-    {
-      hash = hash * 33 + c;
-    }
-
     template<typename T, typename B>
     struct base_hasher : public std::unary_function<T, size_t>
     {
@@ -147,7 +141,7 @@ namespace elfutils
 
     template<>
     struct hash<std::string>
-      : public container_hasher<std::string, string_hash_combine, 5381>
+      : public std::tr1::hash<std::string>
     {
     };
 
