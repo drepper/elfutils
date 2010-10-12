@@ -455,7 +455,7 @@ namespace
 	    << " is not zero-terminated." << std::endl;
 
 	if (ctx->strings_coverage != NULL)
-	  coverage_add (ctx->strings_coverage, addr, strp - startp + 1);
+	  ctx->strings_coverage->add (addr, strp - startp + 1);
       }
   }
 
@@ -861,7 +861,7 @@ namespace
 	    cu->low_pc = low_pc;
 
 	    if (high_pc != (uint64_t)-1)
-	      coverage_add (pc_coverage, low_pc, high_pc - low_pc);
+	      pc_coverage->add (low_pc, high_pc - low_pc);
 	  }
 
 	if (high_pc != (uint64_t)-1 && low_pc != (uint64_t)-1)
@@ -971,12 +971,9 @@ check_debug_info::check_info_structural ()
 
   bool success = true;
 
-  struct coverage strings_coverage_mem, *strings_coverage = NULL;
-  if (strings != NULL && check_category (mc_strings))
-    {
-      WIPE (strings_coverage_mem);
-      strings_coverage = &strings_coverage_mem;
-    }
+  coverage *strings_coverage =
+    (strings != NULL && check_category (mc_strings))
+    ? new coverage () : NULL;
 
   struct relocation_data *reloc = sec.rel.size > 0 ? &sec.rel : NULL;
   if (reloc != NULL)
@@ -1088,10 +1085,9 @@ check_debug_info::check_info_structural ()
       if (success)
 	{
 	  struct hole_info info = {sec_str, mc_strings, strings->d_buf, 0};
-	  coverage_find_holes (strings_coverage, 0, strings->d_size,
-			       found_hole, &info);
+	  strings_coverage->find_holes (0, strings->d_size, found_hole, &info);
 	}
-      coverage_free (strings_coverage);
+      delete strings_coverage;
     }
 }
 
@@ -1102,7 +1098,6 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
   , _m_abbrevs (lint.check (stack, _m_abbrevs))
   , _m_cu_headers (lint.check (stack, _m_cu_headers))
 {
-  memset (&_m_cov, 0, sizeof (_m_cov));
   check_info_structural ();
 
   // re-link CUs so that they form a chain again.  This is to
@@ -1133,7 +1128,6 @@ check_debug_info::~check_debug_info ()
       ref_record_free (&it->loc_refs);
       ref_record_free (&it->decl_file_refs);
     }
-  coverage_free (&_m_cov);
 }
 
 cu *

@@ -163,24 +163,18 @@ check_range_out_of_scope::recursively_validate
 	case DW_TAG_catch_block:
 	  {
 	    coverage cov1;
-	    WIPE (cov1);
-
 	    for (ranges_t::const_iterator it = my_ranges.begin ();
 		 it != my_ranges.end (); ++it)
-	      coverage_add (&cov1, (*it).first, (*it).second - (*it).first);
+	      cov1.add ((*it).first, (*it).second - (*it).first);
 
 	    coverage cov2;
-	    WIPE (cov2);
 	    for (ranges_t::const_iterator it = ranges.begin ();
 		 it != ranges.end (); ++it)
-	      coverage_add (&cov2, (*it).first, (*it).second - (*it).first);
+	      cov2.add ((*it).first, (*it).second - (*it).first);
 
-	    coverage result;
-	    WIPE (result);
-	    coverage_add_all (&result, &cov1);
-	    coverage_remove_all (&result, &cov2);
+	    coverage result = cov1 - cov2;
 
-	    if (result.size > 0)
+	    if (!result.empty ())
 	      {
 		wr_error (wh)
 		  << "PC range " << cov::format_ranges (cov1)
@@ -191,10 +185,6 @@ check_range_out_of_scope::recursively_validate
 		  << "in this context: " << cov::format_ranges (cov2)
 		  << std::endl;
 	      }
-
-	    coverage_free (&result);
-	    coverage_free (&cov2);
-	    coverage_free (&cov1);
 	  }
 	}
     }
@@ -203,11 +193,10 @@ check_range_out_of_scope::recursively_validate
   ranges_t const &use_ranges
     = my_ranges.size () > 0 ? my_ranges : ranges;
   coverage cov;
-  WIPE (cov);
 
   for (ranges_t::const_iterator it = use_ranges.begin ();
        it != use_ranges.end (); ++it)
-    coverage_add (&cov, (*it).first, (*it).second - (*it).first);
+    cov.add ((*it).first, (*it).second - (*it).first);
 
   // Now finally look for location attributes and check that
   // _their_ PCs form a subset of ranges of this DIE.
@@ -231,7 +220,7 @@ check_range_out_of_scope::recursively_validate
 		  ::Dwarf_Addr end = (*lt).first.second; //1st past end
 		  ::Dwarf_Addr length = end - start;
 		  if (length > 0 // skip empty ranges
-		      && !coverage_is_covered (&cov, start, length))
+		      && !cov.is_covered (start, length))
 		    {
 		      runoff = true;
 		      wr_error (wh)
@@ -247,8 +236,6 @@ check_range_out_of_scope::recursively_validate
 	    }
 	}
     }
-
-  coverage_free (&cov);
 
   // Check children recursively.
   for (dwarf::debug_info_entry::children_type::const_iterator

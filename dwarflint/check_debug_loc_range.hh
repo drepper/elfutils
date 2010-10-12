@@ -35,14 +35,15 @@ struct section_coverage
   struct sec *sec;
   struct coverage cov;
   bool hit; /* true if COV is not pristine.  */
-  bool warn; /* dwarflint should emit a warning if a coverage
-		appears in this section */
+  bool warn; /* dwarflint should emit a warning if a coverage appears
+		in this section */
+  section_coverage (struct sec *a_sec, bool a_warn);
 };
 
 struct coverage_map
 {
   struct elf_file *elf;
-  struct section_coverage *scos;
+  std::vector<section_coverage> scos;
   size_t size;
   size_t alloc;
   bool allow_overlap;
@@ -60,7 +61,6 @@ public:
 
   coverage const &cov () const { return _m_cov; }
   check_debug_ranges (checkstack &stack, dwarflint &lint);
-  ~check_debug_ranges ();
 };
 
 class check_debug_loc

@@ -29,6 +29,7 @@
 
 #include <string>
 #include <sstream>
+#include <vector>
 
 /* Functions and data structures for handling of address range
    coverage.  We use that to find holes of unused bytes in DWARF
@@ -39,62 +40,66 @@ struct cov_range
   uint64_t start;
   uint64_t length;
 
-#ifdef __cplusplus
   uint64_t end () const { return start + length; }
-#endif
+
+  bool operator== (cov_range const &rhs) const
+  {
+    return start == rhs.start
+      && length == rhs.length;
+  }
 };
 
 struct coverage
+  : private std::vector<cov_range>
 {
-  struct cov_range *ranges;
-  size_t size;
-  size_t alloc;
+  iterator find (uint64_t start);
+  const_iterator find (uint64_t start) const;
 
-#ifdef __cplusplus
-  cov_range &back () { return ranges[size - 1]; }
-  cov_range const &back () const { return ranges[size - 1]; }
-#endif
+public:
+  using std::vector<cov_range>::front;
+  using std::vector<cov_range>::back;
+  using std::vector<cov_range>::size;
+  using std::vector<cov_range>::empty;
+
+  void add (uint64_t start, uint64_t length);
+
+  /// Returns true if something was actually removed, false if whole
+  /// range falls into hole in coverage.
+  bool remove (uint64_t start, uint64_t length);
+
+  void add_all (coverage const &other);
+
+  // Returns true if something was actually removed, false if whole
+  // range falls into hole in coverage.
+  bool remove_all (coverage const &other);
+
+  bool find_ranges (bool (*cb)(uint64_t start, uint64_t length, void *data),
+		    void *data) const;
+
+  /// Returns true if whole range ADDRESS/LENGTH is covered by COV.
+  /// If LENGTH is zero, it's checked that the address is inside or at
+  /// the edge of covered range, or that there is a zero-length range
+  /// at that address.
+  bool is_covered (uint64_t start, uint64_t length) const;
+
+  /// Returns true if at least some of the range ADDRESS/LENGTH is
+  /// covered by COV.  Zero-LENGTH range never overlaps.  */
+  bool is_overlap (uint64_t start, uint64_t length) const;
+
+  bool find_holes (uint64_t start, uint64_t length,
+		   bool (*cb)(uint64_t start, uint64_t length, void *data),
+		   void *data) const;
+
+  coverage operator+ (coverage const &rhs) const;
+  coverage operator- (coverage const &rhs) const;
+  bool operator== (coverage const &rhs) const
+  {
+    return static_cast<std::vector<cov_range> > (rhs) == *this;
+  }
 };
 
 char *range_fmt (char *buf, size_t buf_size,
 		 uint64_t start, uint64_t end);
-
-struct coverage *coverage_clone (struct coverage const *cov)
-  __attribute__ ((malloc));
-void coverage_free (struct coverage *cov);
-
-void coverage_add (struct coverage *cov, uint64_t start, uint64_t length);
-void coverage_add_all (struct coverage *__restrict__ cov,
-		       struct coverage const *__restrict__ other);
-
-/* Returns true if something was actually removed, false if whole
-   range falls into hole in coverage.  */
-bool coverage_remove (struct coverage *cov, uint64_t start, uint64_t length);
-
-/* Returns true if something was actually removed, false if whole
-   range falls into hole in coverage.  */
-bool coverage_remove_all (struct coverage *__restrict__ cov,
-			  struct coverage const *__restrict__ other);
-
-/* Returns true if whole range ADDRESS/LENGTH is covered by COV.
-   LENGTH may not be zero.  */
-bool coverage_is_covered (struct coverage const *cov,
-			  uint64_t start, uint64_t length);
-
-/* Returns true if at least some of the range ADDRESS/LENGTH is
-   covered by COV.  Zero-LENGTH range never overlaps.  */
-bool coverage_is_overlap (struct coverage const *cov,
-			  uint64_t start, uint64_t length);
-
-bool coverage_find_holes (struct coverage const *cov,
-			  uint64_t start, uint64_t length,
-			  bool (*cb)(uint64_t start, uint64_t length,
-				     void *data),
-			  void *data);
-bool coverage_find_ranges (struct coverage const *cov,
-			  bool (*cb)(uint64_t start, uint64_t length,
-				     void *data),
-			  void *data);
 
 namespace cov
 {

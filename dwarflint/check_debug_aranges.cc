@@ -147,12 +147,9 @@ compare_coverage_1 (struct elf_file *file,
 		    enum section_id id, char const *what,
 		    bool reverse)
 {
-  struct coverage *cov = coverage_clone (coverage);
-  coverage_remove_all (cov, other);
+  struct coverage cov = *coverage - *other;
   hole_user info (file, id, what, reverse);
-  coverage_find_ranges (cov, hole, &info);
-  coverage_free (cov);
-  free (cov);
+  cov.find_ranges (hole, &info);
 }
 
 static void
@@ -169,7 +166,7 @@ aranges_coverage_add (struct coverage *aranges_coverage,
 		      uint64_t begin, uint64_t length,
 		      struct where *where)
 {
-  if (coverage_is_overlap (aranges_coverage, begin, length))
+  if (aranges_coverage->is_overlap (begin, length))
     {
       char buf[128];
       /* Not a show stopper, this shouldn't derail high-level.  */
@@ -178,7 +175,7 @@ aranges_coverage_add (struct coverage *aranges_coverage,
 		  range_fmt (buf, sizeof buf, begin, begin + length));
     }
 
-  coverage_add (aranges_coverage, begin, length);
+  aranges_coverage->add (begin, length);
 }
 
 /* COVERAGE is portion of address space covered by CUs (either via
@@ -196,9 +193,7 @@ check_aranges_structural (struct elf_file *file,
   bool retval = true;
 
   struct coverage *aranges_coverage
-    = coverage != NULL
-    ? (struct coverage *)calloc (1, sizeof (struct coverage))
-    : NULL;
+    = coverage != NULL ? new struct coverage () : NULL;
 
   while (!read_ctx_eof (&ctx))
     {
@@ -418,8 +413,7 @@ check_aranges_structural (struct elf_file *file,
     {
       compare_coverage (file, coverage, aranges_coverage,
 			sec_aranges, "aranges");
-      coverage_free (aranges_coverage);
-      free (aranges_coverage);
+      delete aranges_coverage;
     }
 
   return retval;

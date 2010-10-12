@@ -96,19 +96,6 @@ check_debug_loc::descriptor ()
 
 namespace
 {
-  void
-  section_coverage_init (struct section_coverage *sco,
-			 struct sec *sec, bool warn)
-  {
-    assert (sco != NULL);
-    assert (sec != NULL);
-
-    sco->sec = sec;
-    WIPE (sco->cov);
-    sco->hit = false;
-    sco->warn = warn;
-  }
-
   bool
   coverage_map_init (struct coverage_map *coverage_map,
 		     struct elf_file *elf,
@@ -119,7 +106,6 @@ namespace
     assert (coverage_map != NULL);
     assert (elf != NULL);
 
-    WIPE (*coverage_map);
     coverage_map->elf = elf;
     coverage_map->allow_overlap = allow_overlap;
 
@@ -130,11 +116,8 @@ namespace
 	bool normal = (sec->shdr.sh_flags & mask) == mask;
 	bool warn = (sec->shdr.sh_flags & warn_mask) == warn_mask;
 	if (normal || warn)
-	  {
-	    REALLOC (coverage_map, scos);
-	    section_coverage_init
-	      (coverage_map->scos + coverage_map->size++, sec, !normal);
-	  }
+	  coverage_map->scos
+	    .push_back (section_coverage (sec, !normal));
       }
 
     return true;
@@ -143,13 +126,13 @@ namespace
   struct coverage_map *
   coverage_map_alloc_XA (struct elf_file *elf, bool allow_overlap)
   {
-    coverage_map *ret = (coverage_map *)xmalloc (sizeof (*ret));
+    coverage_map *ret = new coverage_map ();
     if (!coverage_map_init (ret, elf,
 			    SHF_EXECINSTR | SHF_ALLOC,
 			    SHF_ALLOC,
 			    allow_overlap))
       {
-	free (ret);
+	delete ret;
 	return NULL;
       }
     return ret;
@@ -258,10 +241,9 @@ namespace
   {
     for (size_t i = 0; i < coverage_map->size; ++i)
       {
-	section_coverage *sco = coverage_map->scos + i;
+	section_coverage *sco = &coverage_map->scos[i];
 	wrap_cb_arg arg = {cb, sco, user};
-	if (!coverage_find_holes (&sco->cov, 0, sco->sec->shdr.sh_size,
-				  unwrap_cb, &arg))
+	if (!sco->cov.find_holes (0, sco->sec->shdr.sh_size, unwrap_cb, &arg))
 	  return false;
       }
 
@@ -284,12 +266,11 @@ namespace
     /* This is for analyzing how much of the current range falls into
        sections in coverage map.  Whatever is left uncovered doesn't
        fall anywhere and is reported.  */
-    struct coverage range_cov;
-    WIPE (range_cov);
+    coverage range_cov;
 
     for (size_t i = 0; i < coverage_map->size; ++i)
       {
-	struct section_coverage *sco = coverage_map->scos + i;
+	struct section_coverage *sco = &coverage_map->scos[i];
 	GElf_Shdr *shdr = &sco->sec->shdr;
 	struct coverage *cov = &sco->cov;
 
@@ -326,7 +307,7 @@ namespace
 	uint64_t r_cov_end = cov_end + r_delta;
 
 	if (!overlap && !coverage_map->allow_overlap
-	    && coverage_is_overlap (cov, cov_begin, cov_end - cov_begin))
+	    && cov->is_overlap (cov_begin, cov_end - cov_begin))
 	  {
 	    /* Not a show stopper, this shouldn't derail high-level.  */
 	    wr_message (cat | mc_impact_2 | mc_error, where,
@@ -341,11 +322,11 @@ namespace
 		      range_fmt (buf, sizeof buf, address, end), sco->sec->name);
 
 	/* Section coverage... */
-	coverage_add (cov, cov_begin, cov_end - cov_begin);
+	cov->add (cov_begin, cov_end - cov_begin);
 	sco->hit = true;
 
 	/* And range coverage... */
-	coverage_add (&range_cov, r_cov_begin, r_cov_end - r_cov_begin);
+	range_cov.add (r_cov_begin, r_cov_end - r_cov_begin);
       }
 
     if (!found)
@@ -356,27 +337,7 @@ namespace
     else if (length > 0)
       {
 	hole_env env = {where, address, end};
-	coverage_find_holes (&range_cov, 0, length, range_hole, &env);
-      }
-
-    coverage_free (&range_cov);
-  }
-
-  void
-  coverage_map_free (struct coverage_map *coverage_map)
-  {
-    for (size_t i = 0; i < coverage_map->size; ++i)
-      coverage_free (&coverage_map->scos[i].cov);
-    free (coverage_map->scos);
-  }
-
-  void
-  coverage_map_free_XA (coverage_map *coverage_map)
-  {
-    if (coverage_map != NULL)
-      {
-	coverage_map_free (coverage_map);
-	free (coverage_map);
+	range_cov.find_holes (0, length, range_hole, &env);
       }
   }
 
@@ -413,7 +374,7 @@ namespace
     bool retval = true;
     bool contains_locations = sec->id == sec_loc;
 
-    if (coverage_is_covered (coverage, addr, 1))
+    if (coverage->is_covered (addr, 1))
       {
 	wr_error (wh, ": reference to %#" PRIx64
 		  " points into another location or range list.\n", addr);
@@ -443,7 +404,7 @@ namespace
 	GElf_Sym begin_symbol_mem, *begin_symbol = &begin_symbol_mem;
 	bool begin_relocated = false;
 	if (!overlap
-	    && coverage_is_overlap (coverage, begin_off, cu->head->address_size))
+	    && coverage->is_overlap (begin_off, cu->head->address_size))
 	  HAVE_OVERLAP;
 
 	if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8, &begin_addr))
@@ -467,7 +428,7 @@ namespace
 	GElf_Sym end_symbol_mem, *end_symbol = &end_symbol_mem;
 	bool end_relocated = false;
 	if (!overlap
-	    && coverage_is_overlap (coverage, end_off, cu->head->address_size))
+	    && coverage->is_overlap (end_off, cu->head->address_size))
 	  HAVE_OVERLAP;
 
 	if (!read_ctx_read_offset (&ctx, cu->head->address_size == 8,
@@ -530,7 +491,7 @@ namespace
 		if (coverage_map != NULL)
 		  coverage_map_add (coverage_map, address, length, &where, cat);
 		if (pc_coverage != NULL)
-		  coverage_add (pc_coverage, address, length);
+		  pc_coverage->add (address, length);
 	      }
 
 	    if (contains_locations)
@@ -538,8 +499,7 @@ namespace
 		/* location expression length */
 		uint16_t len;
 		if (!overlap
-		    && coverage_is_overlap (coverage,
-					    read_ctx_get_offset (&ctx), 2))
+		    && coverage->is_overlap (read_ctx_get_offset (&ctx), 2))
 		  HAVE_OVERLAP;
 
 		if (!read_ctx_read_2ubyte (&ctx, &len))
@@ -557,8 +517,7 @@ namespace
 		  return false;
 		uint64_t expr_end = read_ctx_get_offset (&ctx);
 		if (!overlap
-		    && coverage_is_overlap (coverage,
-					    expr_start, expr_end - expr_start))
+		    && coverage->is_overlap (expr_start, expr_end - expr_start))
 		  HAVE_OVERLAP;
 
 		if (!read_ctx_skip (&ctx, len))
@@ -580,7 +539,7 @@ namespace
 	  }
 #undef HAVE_OVERLAP
 
-	coverage_add (coverage, where.addr1, read_ctx_get_offset (&ctx) - where.addr1);
+	coverage->add (where.addr1, read_ctx_get_offset (&ctx) - where.addr1);
 	if (done)
 	  break;
       }
@@ -626,7 +585,6 @@ namespace
 
     /* Overlap discovery.  */
     struct coverage coverage;
-    WIPE (coverage);
 
     enum message_category cat = sec->id == sec_loc ? mc_loc : mc_ranges;
 
@@ -691,7 +649,7 @@ namespace
 	struct hole_info hi = {
 	  sec->id, cat, ctx.data->d_buf, cu_chain->head->address_size
 	};
-	coverage_find_holes (&coverage, 0, ctx.data->d_size, found_hole, &hi);
+	coverage.find_holes (0, ctx.data->d_size, found_hole, &hi);
 
 	if (coverage_map)
 	  {
@@ -703,11 +661,18 @@ namespace
 	  }
       }
 
-    coverage_free (&coverage);
-    coverage_map_free_XA (coverage_map);
+    delete coverage_map;
 
     return retval;
   }
+}
+
+section_coverage::section_coverage (struct sec *a_sec, bool a_warn)
+  : sec (a_sec)
+  , hit (false)
+  , warn (a_warn)
+{
+  assert (a_sec);
 }
 
 check_debug_ranges::check_debug_ranges (checkstack &stack, dwarflint &lint)
@@ -720,11 +685,6 @@ check_debug_ranges::check_debug_ranges (checkstack &stack, dwarflint &lint)
 					&_m_info->cus.front (),
 					&_m_cov))
     throw check_base::failed ();
-}
-
-check_debug_ranges::~check_debug_ranges ()
-{
-  coverage_free (&_m_cov);
 }
 
 check_debug_loc::check_debug_loc (checkstack &stack, dwarflint &lint)

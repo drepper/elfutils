@@ -37,213 +37,184 @@
 #include <string.h>
 #include <inttypes.h>
 
-namespace
+coverage::const_iterator
+coverage::find (uint64_t start) const
 {
-  template <class X>
-  decltype (((X *)0)->ranges)
-  coverage_find (X *cov, uint64_t start)
-  {
-    assert (cov->size > 0);
+  assert (!empty ());
 
-    size_t a = 0;
-    size_t b = cov->size;
+  size_t a = 0;
+  size_t b = size ();
 
-    while (a < b)
-      {
-	size_t i = (a + b) / 2;
-	cov_range const *r = cov->ranges + i;
+  while (a < b)
+    {
+      size_t i = (a + b) / 2;
+      cov_range const &r = at (i);
 
-	if (r->start > start)
-	  b = i;
-	else if (r->start < start)
-	  a = i + 1;
-	else
-	  return cov->ranges + i;
-      }
+      if (r.start > start)
+	b = i;
+      else if (r.start < start)
+	a = i + 1;
+      else
+	return begin () + i;
+    }
 
-    return cov->ranges + a;
-  }
+  return begin () + a;
+}
+
+coverage::iterator
+coverage::find (uint64_t start)
+{
+  const_iterator it = const_cast<coverage const *> (this)->find (start);
+  return begin () + (it - begin ());
 }
 
 void
-coverage_add (struct coverage *cov, uint64_t start, uint64_t length)
+coverage::add (uint64_t start, uint64_t length)
 {
-  if (length == 0)
-    return;
-
-  struct cov_range nr = (struct cov_range){start, length};
-  if (cov->size == 0)
+  cov_range nr = (struct cov_range){start, length};
+  if (empty ())
     {
-      REALLOC (cov, ranges);
-      cov->ranges[cov->size++] = nr;
+      push_back (nr);
       return;
     }
 
-  struct cov_range *r = coverage_find (cov, start);
+  iterator r_i = find (start);
 
-  struct cov_range *insert = &nr;
-  struct cov_range *coalesce = &nr;
-  struct cov_range *end = cov->ranges + cov->size;
+  cov_range *to_insert = &nr;
+  cov_range *coalesce = &nr;
 
   // Coalesce with previous range?
-  struct cov_range *p = r - 1;
-  if (r > cov->ranges && coalesce->start <= p->start + p->length)
+  iterator p_i = r_i - 1;
+  if (r_i > begin () && coalesce->start <= p_i->start + p_i->length)
     {
       uint64_t coalesce_end = coalesce->start + coalesce->length;
-      if (coalesce_end > p->start + p->length)
+      if (coalesce_end > p_i->start + p_i->length)
 	{
-	  p->length = coalesce_end - p->start;
-	  coalesce = p;
+	  p_i->length = coalesce_end - p_i->start;
+	  coalesce = &*p_i;
 	}
       else
 	coalesce = NULL;
-      insert = NULL;
+      to_insert = NULL;
     }
 
   // Coalesce with one or more following ranges?
-  if (coalesce != NULL && coalesce != end)
+  if (coalesce != NULL && r_i != end ())
     {
-      p = r;
-      while (p != end && coalesce->start + coalesce->length >= p->start)
+      p_i = r_i;
+      while (p_i != end ()
+	     && coalesce->start + coalesce->length >= p_i->start)
 	{
-	  uint64_t p_end = p->start + p->length;
+	  uint64_t p_end = p_i->start + p_i->length;
 	  if (p_end > coalesce->start + coalesce->length)
 	    coalesce->length = p_end - coalesce->start;
-	  if (insert != NULL)
+	  if (to_insert != NULL)
 	    {
-	      *p = *insert;
-	      insert = NULL;
-	      coalesce = p;
-	      assert (p == r);
-	      ++r; // when doing memory moves, don't overwrite this range
+	      *p_i = *to_insert;
+	      to_insert = NULL;
+	      coalesce = &*p_i;
+	      assert (p_i == r_i);
+	      ++r_i; // keep this element
 	    }
-	  ++p;
+	  ++p_i;
 	}
-      if (p > r)
-	{
-	  size_t rem = cov->size - (p - cov->ranges);
-	  memmove (r, p, sizeof (*cov->ranges) * rem);
-	  cov->size -= p - r;
-	}
+      if (p_i > r_i)
+	erase (r_i, p_i);
     }
 
-  if (insert != NULL)
+  if (to_insert != NULL)
     {
-      size_t rem = end - r;
-      size_t idx = r - cov->ranges;
-      REALLOC (cov, ranges);
-      r = cov->ranges + idx;
-
-      cov->size++;
-      if (rem > 0)
-	memmove (r + 1, r, sizeof (*cov->ranges) * rem);
-      *r = nr;
+      size_t idx = r_i - begin ();
+      insert (begin () + idx, *to_insert);
     }
 }
 
 bool
-coverage_remove (struct coverage *cov, uint64_t begin, uint64_t length)
+coverage::remove (uint64_t start,
+		  uint64_t length)
 {
-  uint64_t end = begin + length;
-  if (cov->size == 0 || begin == end)
+  uint64_t a_end = start + length;
+  if (empty () || start == a_end)
     return false;
 
-  struct cov_range *r = coverage_find (cov, begin);
-  struct cov_range *erase_begin = NULL, *erase_end = r; // end exclusive
+  iterator r_i = find (start);
+  iterator erase_begin_i = end ();
+  iterator erase_end_i = r_i; // end exclusive
   bool overlap = false;
 
   // Cut from previous range?
-  struct cov_range *p = r - 1;
-  if (r > cov->ranges && begin < p->start + p->length)
+  iterator p_i = r_i - 1;
+  if (r_i > begin () && start < p_i->start + p_i->length)
     {
-      uint64_t r_end = p->start + p->length;
+      uint64_t r_end = p_i->start + p_i->length;
       // Do we cut the beginning of the range?
-      if (begin == p->start)
-	p->length = end >= r_end ? 0 : r_end - end;
+      if (start == p_i->start)
+	p_i->length = a_end >= r_end ? 0 : r_end - a_end;
       else
 	{
-	  p->length = begin - p->start;
+	  p_i->length = start - p_i->start;
 	  // Do we shoot a hole in that range?
-	  if (end < r_end)
+	  if (a_end < r_end)
 	    {
-	      coverage_add (cov, end, r_end - end);
+	      add (a_end, r_end - a_end);
 	      return true;
 	    }
 	}
 
       overlap = true;
-      if (p->length == 0)
-	erase_begin = p;
+      if (p_i->length == 0)
+	erase_begin_i = p_i;
     }
 
-  if (erase_begin == NULL)
-    erase_begin = r;
+  if (erase_begin_i == end ())
+    erase_begin_i = r_i;
 
   // Cut from next range?
-  while (r < cov->ranges + cov->size
-	 && r->start < end)
+  while (r_i < end () && r_i->start < a_end)
     {
       overlap = true;
-      if (end >= r->start + r->length)
+      if (a_end >= r_i->start + r_i->length)
 	{
-	  ++erase_end;
-	  ++r;
+	  ++erase_end_i;
+	  ++r_i;
 	}
       else
 	{
-	  uint64_t end0 = r->start + r->length;
-	  r->length = end0 - end;
-	  r->start = end;
-	  assert (end0 == r->start + r->length);
+	  uint64_t end0 = r_i->start + r_i->length;
+	  r_i->length = end0 - a_end;
+	  r_i->start = a_end;
+	  assert (end0 == r_i->start + r_i->length);
 	}
     }
 
   // Did we cut out anything completely?
-  if (erase_end > erase_begin)
-    {
-      struct cov_range *cov_end = cov->ranges + cov->size;
-      size_t rem = cov_end - erase_end;
-      if (rem > 0)
-	memmove (erase_begin, erase_end, sizeof (*cov->ranges) * rem);
-      cov->size -= erase_end - erase_begin;
-    }
+  if (erase_end_i > erase_begin_i)
+    erase (erase_begin_i, erase_end_i);
 
   return overlap;
 }
 
 bool
-coverage_is_covered (struct coverage const *cov,
-		     uint64_t start, uint64_t length)
+coverage::is_covered (uint64_t start, uint64_t length) const
 {
   assert (length > 0);
 
-  if (cov->size == 0)
+  if (empty ())
     return false;
 
-  struct cov_range const *r = coverage_find (cov, start);
-  uint64_t end = start + length;
-  if (r < cov->ranges + cov->size)
-    if (start >= r->start)
-      return end <= r->start + r->length;
+  const_iterator r_i = find (start);
+  uint64_t a_end = start + length;
+  if (r_i < end ())
+    if (start >= r_i->start)
+      return a_end <= r_i->start + r_i->length;
 
-  if (r > cov->ranges)
+  if (r_i > begin ())
     {
-      --r;
-      return end <= r->start + r->length;
+      --r_i;
+      return a_end <= r_i->start + r_i->length;
     }
 
   return false;
-}
-
-namespace
-{
-  bool overlaps (uint64_t start, uint64_t end,
-		 struct cov_range const *r)
-  {
-    return (start >= r->start && start < r->start + r->length)
-      || (end > r->start && end <= r->start + r->length)
-      || (start < r->start && end > r->start + r->length);
-  }
 }
 
 char *
@@ -256,103 +227,110 @@ range_fmt (char *buf, size_t buf_size, uint64_t start, uint64_t end)
   return buf;
 }
 
-bool
-coverage_is_overlap (struct coverage const *cov,
-		     uint64_t start, uint64_t length)
+namespace
 {
-  if (length == 0 || cov->size == 0)
+  bool overlaps (uint64_t start, uint64_t end, cov_range const &r)
+  {
+    return (start >= r.start && start < r.start + r.length)
+      || (end > r.start && end <= r.start + r.length)
+      || (start < r.start && end > r.start + r.length);
+  }
+}
+
+bool
+coverage::is_overlap (uint64_t start, uint64_t length) const
+{
+  if (empty () || length == 0)
     return false;
 
-  uint64_t end = start + length;
+  uint64_t a_end = start + length;
+  const_iterator r_i = find (start);
 
-  struct cov_range const *r = coverage_find (cov, start);
-
-  if (r < cov->ranges + cov->size && overlaps (start, end, r))
+  if (r_i < end () && overlaps (start, a_end, *r_i))
     return true;
 
-  if (r > cov->ranges)
-    return overlaps (start, end, r - 1);
+  if (r_i > begin ())
+    return overlaps (start, a_end, *--r_i);
 
   return false;
 }
 
 bool
-coverage_find_holes (struct coverage const *cov,
-		     uint64_t start, uint64_t length,
-		     bool (*hole)(uint64_t start, uint64_t length, void *data),
-		     void *data)
+coverage::find_holes (uint64_t start, uint64_t length,
+		      bool (*hole)(uint64_t start, uint64_t length,
+				   void *user_data),
+		      void *user_data) const
 {
   if (length == 0)
     return true;
 
-  if (cov->size == 0)
-    return hole (start, length, data);
+  if (empty ())
+    return hole (start, length, user_data);
 
-  if (start < cov->ranges[0].start)
-    if (!hole (start, cov->ranges[0].start - start, data))
+  if (start < front ().start)
+    if (!hole (start, front ().start - start, user_data))
       return false;
 
-  for (size_t i = 0; i < cov->size - 1; ++i)
+  for (size_t i = 0; i < size () - 1; ++i)
     {
-      uint64_t end_i = cov->ranges[i].end ();
-      if (!hole (end_i, cov->ranges[i+1].start - end_i, data))
+      uint64_t end_i = at (i).end ();
+      if (!hole (end_i, at (i+1).start - end_i, user_data))
 	return false;
     }
 
-  if (start + length > cov->back ().end ())
+  if (start + length > back ().end ())
     {
-      uint64_t end_last = cov->back ().end ();
-      return hole (end_last, start + length - end_last, data);
+      uint64_t end_last = back ().end ();
+      return hole (end_last, start + length - end_last, user_data);
     }
 
   return true;
 }
 
 bool
-coverage_find_ranges (struct coverage const *cov,
-		      bool (*cb)(uint64_t start, uint64_t length, void *data),
-		      void *data)
+coverage::find_ranges (bool (*cb)(uint64_t start, uint64_t length, void *data),
+		       void *user_data) const
 {
-  for (size_t i = 0; i < cov->size; ++i)
-    if (!cb (cov->ranges[i].start, cov->ranges[i].length, data))
+  for (const_iterator it = begin (); it != end (); ++it)
+    if (!cb (it->start, it->length, user_data))
       return false;
 
   return true;
 }
 
 void
-coverage_free (struct coverage *cov)
+coverage::add_all (coverage const &other)
 {
-  free (cov->ranges);
-}
-
-coverage *
-coverage_clone (struct coverage const *cov)
-{
-  coverage *ret = (coverage *)xmalloc (sizeof (*ret));
-  WIPE (*ret);
-  coverage_add_all (ret, cov);
-  return ret;
-}
-
-void
-coverage_add_all (struct coverage *__restrict__ cov,
-		  struct coverage const *__restrict__ other)
-{
-  for (size_t i = 0; i < other->size; ++i)
-    coverage_add (cov, other->ranges[i].start, other->ranges[i].length);
+  for (size_t i = 0; i < other.size (); ++i)
+    add (other[i].start, other[i].length);
 }
 
 bool
-coverage_remove_all (struct coverage *__restrict__ cov,
-		     struct coverage const *__restrict__ other)
+coverage::remove_all (coverage const &other)
 {
   bool ret = false;
-  for (size_t i = 0; i < other->size; ++i)
-    if (coverage_remove (cov, other->ranges[i].start, other->ranges[i].length))
+  for (size_t i = 0; i < other.size (); ++i)
+    if (remove (other[i].start, other[i].length))
       ret = true;
   return ret;
 }
+
+coverage
+coverage::operator+ (coverage const &rhs) const
+{
+  coverage ret = *this;
+  ret.add_all (rhs);
+  return ret;
+}
+
+coverage
+coverage::operator- (coverage const &rhs) const
+{
+  coverage ret = *this;
+  ret.remove_all (rhs);
+  return ret;
+}
+
 
 bool
 cov::_format_base::fmt (uint64_t start, uint64_t length)
@@ -380,7 +358,7 @@ cov::format_ranges::format_ranges (coverage const &cov,
 				   std::string const &delim)
   : _format_base (delim)
 {
-  coverage_find_ranges (&cov, &wrap_fmt, this);
+  cov.find_ranges (&wrap_fmt, this);
 }
 
 cov::format_holes::format_holes (coverage const &cov,
@@ -388,5 +366,5 @@ cov::format_holes::format_holes (coverage const &cov,
 				 std::string const &delim)
   : _format_base (delim)
 {
-  coverage_find_holes (&cov, start, length, &wrap_fmt, this);
+  cov.find_holes (start, length, &wrap_fmt, this);
 }

@@ -44,7 +44,6 @@ public:
   coverage cov;
 
   cu_coverage (checkstack &stack, dwarflint &lint);
-  ~cu_coverage ();
 };
 
 #endif//DWARFLINT_CU_COVERAGE_HH

@@ -41,14 +41,7 @@ cu_coverage::descriptor ()
 cu_coverage::cu_coverage (checkstack &stack, dwarflint &lint)
   : _m_info (lint.check (stack, _m_info))
   , _m_ranges (lint.check_if (_m_info->need_ranges (), stack, _m_ranges))
+  , cov (_m_info->cov ()
+	 + (_m_ranges != NULL ? _m_ranges->cov () : coverage ()))
 {
-  std::memset (&cov, 0, sizeof (cov));
-  coverage_add_all (&cov, &_m_info->cov ());
-  if (_m_ranges)
-    coverage_add_all (&cov, &_m_ranges->cov ());
-}
-
-cu_coverage::~cu_coverage ()
-{
-  coverage_free (&cov);
 }
