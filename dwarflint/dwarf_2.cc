@@ -120,10 +120,6 @@ namespace
     {}
   };
 
-  typedef preset_form<sc_value,
-		      cl_constant, cl_lineptr, cl_loclistptr,
-		      cl_macptr> dw2_data_form;
-
   struct dwarf_2_forms
     : public form_table
   {
@@ -136,6 +132,10 @@ namespace
 
       // These constant forms can in theory, in legal DWARF 2,
       // represent various pointers.
+      typedef preset_form<sc_value,
+			  cl_constant, cl_lineptr, cl_loclistptr,
+			  cl_macptr> dw2_data_form;
+
       add (dw2_data_form (DW_FORM_data1, fw_1));
       add (dw2_data_form (DW_FORM_data2, fw_2));
       add (dw2_data_form (DW_FORM_data4, fw_4));

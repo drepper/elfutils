@@ -89,11 +89,6 @@ namespace
     }
   };
 
-  typedef preset_form<sc_value,
-		      cl_constant, cl_lineptr, cl_loclistptr,
-		      cl_macptr, cl_rangelistptr> dw3_data_form;
-  typedef preset_form<sc_block, cl_block, cl_exprloc> locexpr_form;
-
   struct dwarf_3_forms
     : public form_table
   {
@@ -106,6 +101,10 @@ namespace
       // DW_AT_location to have any constant form.  In DWARF 3, only
       // data4 and data8 are like this.  In addition, these two can
       // also be cl_rangelistptr.
+      typedef preset_form<sc_value,
+			  cl_constant, cl_lineptr, cl_loclistptr,
+			  cl_macptr, cl_rangelistptr> dw3_data_form;
+
       add (const_form (DW_FORM_data1, fw_1));
       add (const_form (DW_FORM_data2, fw_2));
       add (dw3_data_form (DW_FORM_data4, fw_4));
