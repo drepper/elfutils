@@ -850,19 +850,19 @@ namespace
 	       low_pc or high_pc.  */
 	    if (valuep != NULL)
 	      *valuep = value;
-
-	    /* Check PC coverage.  */
-	    if (abbrev->tag == DW_TAG_compile_unit
-		|| abbrev->tag == DW_TAG_partial_unit)
-	      {
-		if (it->name == DW_AT_low_pc)
-		  cu->low_pc = value;
-
-		if (low_pc != (uint64_t)-1 && high_pc != (uint64_t)-1)
-		  coverage_add (pc_coverage, low_pc, high_pc - low_pc);
-	      }
 	  }
 	where.ref = NULL;
+
+	/* Check PC coverage.  */
+	if ((abbrev->tag == DW_TAG_compile_unit
+	     || abbrev->tag == DW_TAG_partial_unit)
+	    && low_pc != (uint64_t)-1)
+	  {
+	    cu->low_pc = low_pc;
+
+	    if (high_pc != (uint64_t)-1)
+	      coverage_add (pc_coverage, low_pc, high_pc - low_pc);
+	  }
 
 	if (high_pc != (uint64_t)-1 && low_pc != (uint64_t)-1)
 	  {
