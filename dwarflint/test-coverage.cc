@@ -141,10 +141,20 @@ main ()
   assert (cov.empty ());
   cmpfmt(cov, "");
 
+  cov.add (0, 10);
   assert (cov == cov);
   assert (cov == coverage (cov));
   assert (cov == coverage (cov) + coverage (cov));
   assert ((coverage (cov) - coverage (cov)).empty ());
+
+  cov.add (20, 0);
+  cmpfmt (cov, "[0x0, 0xa), [0x14, 0x14)");
+  chkcov (cov, 20, 0);
+  chkncov (cov, 19, 1);
+  chkncov (cov, 20, 1);
+  chkncov (cov, 30, 0);
+  cov.add (30, 10);
+  cmpholes(cov, "[0xa, 0x14), [0x14, 0x1e)");
 
   if (fail)
     std::exit (1);

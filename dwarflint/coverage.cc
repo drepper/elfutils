@@ -197,8 +197,6 @@ coverage::remove (uint64_t start,
 bool
 coverage::is_covered (uint64_t start, uint64_t length) const
 {
-  assert (length > 0);
-
   if (empty ())
     return false;
 
