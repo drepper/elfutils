@@ -151,6 +151,10 @@ main ()
   cov.add (20, 0);
   cmpfmt (cov, "[0x0, 0xa), [0x14, 0x14)");
   chkcov (cov, 20, 0);
+  chkcov (cov, 0, 0);
+  chkcov (cov, 9, 0);
+  chkcov (cov, 10, 0);
+  chkncov (cov, 11, 0);
   chkncov (cov, 19, 1);
   chkncov (cov, 20, 1);
   chkncov (cov, 30, 0);
