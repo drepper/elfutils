@@ -32,6 +32,7 @@ void
 chkcov (coverage const &cov, uint64_t start, uint64_t length)
 {
   assert (cov.is_covered (start, length));
+  assert (cov.is_overlap (start, length));
   for (uint64_t i = start; i < start + length; ++i)
     {
       assert (cov.is_covered (i, 1));

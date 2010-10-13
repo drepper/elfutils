@@ -238,8 +238,10 @@ namespace
 bool
 coverage::is_overlap (uint64_t start, uint64_t length) const
 {
-  if (empty () || length == 0)
+  if (empty ())
     return false;
+  if (length == 0)
+    return is_covered (start, length);
 
   uint64_t a_end = start + length;
   const_iterator r_i = find (start);
