@@ -59,7 +59,7 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
-		  dwarf-print dwarf_edit \
+		  dwarf-print dwarf_edit dwarf_edit_output \
 		  test-flag-nobits
 
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
@@ -88,7 +88,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
 	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh \
-	run-dwarf_edit.sh run-dwarfcmp-test-self.sh \
+	run-dwarf_edit.sh dwarf_edit_output run-dwarfcmp-test-self.sh \
 	run-test-flag-nobits.sh
 # run-show-ciefde.sh
 
@@ -196,6 +196,9 @@ dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 dwarf_edit_SOURCES = dwarf_edit.cc print-die.cc
 dwarf_edit_LDADD = $(libdwpp) $(libmudflap) -ldl
+
+dwarf_edit_output_SOURCES = dwarf_edit_output.cc print-die.cc
+dwarf_edit_output_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
 arsymtest_LDADD = $(libelf) $(libmudflap)
