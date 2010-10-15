@@ -169,6 +169,57 @@ circular_struct (dwarf_edit &in)
   return in;
 }
 
+// Same as above, but with struct pointer type defined after struct.
+dwarf_edit &
+circular_struct2 (dwarf_edit &in)
+{
+  dwarf_edit::compile_unit &cu = in.add_unit ();
+  cu.attributes ()[DW_AT_producer].string () = "dwarf_edit_output_test";
+
+  dwarf_edit::debug_info_entry::pointer int_ref
+    = cu.add_entry (DW_TAG_base_type);
+  int_ref->attributes ()[DW_AT_name].identifier () = "int";
+  int_ref->attributes ()[DW_AT_byte_size].constant () = 4;
+
+  dwarf_edit::debug_info_entry::pointer list_ptr
+    = cu.add_entry (DW_TAG_structure_type);
+  dwarf_edit::debug_info_entry &list = *list_ptr;
+  list.attributes ()[DW_AT_name].identifier () = "list";
+  list.attributes ()[DW_AT_byte_size].constant () = 0x10;
+
+  dwarf_edit::debug_info_entry &mi = *list.add_entry (DW_TAG_member);
+  mi.attributes ()[DW_AT_name].identifier () = "i";
+  mi.attributes ()[DW_AT_type].reference () = int_ref;
+
+  dwarf_edit::debug_info_entry &mn = *list.add_entry (DW_TAG_member);
+  mn.attributes ()[DW_AT_name].identifier () = "next";
+
+  dwarf_edit::debug_info_entry::pointer struct_ptr_ref
+    = cu.add_entry (DW_TAG_pointer_type);
+  struct_ptr_ref->attributes ()[DW_AT_byte_size].constant () = 8;
+  struct_ptr_ref->attributes ()[DW_AT_type].reference () = list_ptr;
+
+  mn.attributes ()[DW_AT_type].reference () = struct_ptr_ref;
+
+  return in;
+}
+
+dwarf_edit &
+two_circular_structs (dwarf_edit &in)
+{
+  circular_struct (in);
+  circular_struct (in);
+  return in;
+}
+
+dwarf_edit &
+two_circular_structs2 (dwarf_edit &in)
+{
+  circular_struct (in);
+  circular_struct2 (in);
+  return in;
+}
+
 static int show_input, show_output;
 
 void
@@ -254,6 +305,21 @@ main (int argc, char **argv)
   dwarf_edit in7;
   if (RUNTEST (7))
     test_run (7, "circular_struct", circular_struct (in7));
+
+  dwarf_edit in8;
+  if (RUNTEST (8))
+    test_run (8, "circular_struct2", circular_struct2 (in8));
+
+  // XXX Won't merge CUs on main dwarf branch (does on dwarf-hacking)
+  // How to check?
+  dwarf_edit in9;
+  if (RUNTEST (9))
+    test_run (9, "two_circular_structs", two_circular_structs (in9));
+
+  // Won't merge CUs since order of children different.
+  dwarf_edit in10;
+  if (RUNTEST (10))
+    test_run (10, "two_circular_structs2", two_circular_structs2 (in9));
 
   return 0;
 }
