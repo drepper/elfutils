@@ -84,24 +84,27 @@ coverage::add (uint64_t start, uint64_t length)
   cov_range *coalesce = &nr;
 
   // Coalesce with previous range?
-  iterator p_i = r_i - 1;
-  if (r_i > begin () && coalesce->start <= p_i->start + p_i->length)
+  if (r_i > begin ())
     {
-      uint64_t coalesce_end = coalesce->start + coalesce->length;
-      if (coalesce_end > p_i->start + p_i->length)
+      iterator p_i = r_i - 1;
+      if (coalesce->start <= p_i->start + p_i->length)
 	{
-	  p_i->length = coalesce_end - p_i->start;
-	  coalesce = &*p_i;
+	  uint64_t coalesce_end = coalesce->start + coalesce->length;
+	  if (coalesce_end > p_i->start + p_i->length)
+	    {
+	      p_i->length = coalesce_end - p_i->start;
+	      coalesce = &*p_i;
+	    }
+	  else
+	    coalesce = NULL;
+	  to_insert = NULL;
 	}
-      else
-	coalesce = NULL;
-      to_insert = NULL;
     }
 
   // Coalesce with one or more following ranges?
   if (coalesce != NULL && r_i != end ())
     {
-      p_i = r_i;
+      iterator p_i = r_i;
       while (p_i != end ()
 	     && coalesce->start + coalesce->length >= p_i->start)
 	{
@@ -143,27 +146,30 @@ coverage::remove (uint64_t start,
   bool overlap = false;
 
   // Cut from previous range?
-  iterator p_i = r_i - 1;
-  if (r_i > begin () && start < p_i->start + p_i->length)
+  if (r_i > begin ())
     {
-      uint64_t r_end = p_i->start + p_i->length;
-      // Do we cut the beginning of the range?
-      if (start == p_i->start)
-	p_i->length = a_end >= r_end ? 0 : r_end - a_end;
-      else
+      iterator p_i = r_i - 1;
+      if (start < p_i->start + p_i->length)
 	{
-	  p_i->length = start - p_i->start;
-	  // Do we shoot a hole in that range?
-	  if (a_end < r_end)
+	  uint64_t r_end = p_i->start + p_i->length;
+	  // Do we cut the beginning of the range?
+	  if (start == p_i->start)
+	    p_i->length = a_end >= r_end ? 0 : r_end - a_end;
+	  else
 	    {
-	      add (a_end, r_end - a_end);
-	      return true;
+	      p_i->length = start - p_i->start;
+	      // Do we shoot a hole in that range?
+	      if (a_end < r_end)
+		{
+		  add (a_end, r_end - a_end);
+		  return true;
+		}
 	    }
-	}
 
-      overlap = true;
-      if (p_i->length == 0)
-	erase_begin_i = p_i;
+	  overlap = true;
+	  if (p_i->length == 0)
+	    erase_begin_i = p_i;
+	}
     }
 
   if (erase_begin_i == end ())
