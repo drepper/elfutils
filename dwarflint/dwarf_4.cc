@@ -66,6 +66,9 @@ namespace
 				      cl_macptr, cl_rangelistptr)));
       add (exprloc_form (DW_FORM_exprloc));
       add (flag_form (DW_FORM_flag_present, fw_0));
+
+      // xxx This actually needs to be something like ref8_form.  This
+      // and DW_AT_GNU_odr_signature.
       add (ref_form (DW_FORM_ref_sig8, fw_8));
 
       // In DWARF 2 we claim that blocks are exprloc forms (see

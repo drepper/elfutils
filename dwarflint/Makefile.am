@@ -49,6 +49,7 @@ dwarflint_SOURCES = \
 	dwarf_2.cc dwarf_2.hh \
 	dwarf_3.cc dwarf_3.hh \
 	dwarf_4.cc dwarf_4.hh \
+	dwarf_gnu.cc dwarf_gnu.hh \
 	dwarf_mips.cc dwarf_mips.hh \
 	dwarf_version-imp.cc dwarf_version-imp.hh \
 	dwarf_version.cc dwarf_version.hh dwarf_version.ii \

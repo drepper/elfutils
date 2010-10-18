@@ -31,6 +31,7 @@
 #include "dwarf_2.hh"
 #include "dwarf_3.hh"
 #include "dwarf_4.hh"
+#include "dwarf_gnu.hh"
 #include "dwarf_mips.hh"
 #include "check_debug_info.hh"
 #include "pri.hh"
@@ -227,24 +228,27 @@ dwarf_version::get (unsigned version)
   // I wonder how to solve this "right".  We cannot simply request
   // DW_AT_producer/DW_AT_language values here, since we need the
   // version to know how to read these attributes in the first place.
+  //
+  // Similarly we assume the GNU extension is used.
+  static dwarf_version const *ext = extend (dwarf_mips_ext (), dwarf_gnu_ext ());
 
   switch (version)
     {
     case 2:
       {
-	static dwarf_version const *dw = extend (dwarf_2 (), dwarf_mips_ext ());
+	static dwarf_version const *dw = extend (dwarf_2 (), ext);
 	return dw;
       }
 
     case 3:
       {
-	static dwarf_version const *dw = extend (dwarf_3 (), dwarf_mips_ext ());
+	static dwarf_version const *dw = extend (dwarf_3 (), ext);
 	return dw;
       }
 
     case 4:
       {
-	static dwarf_version const *dw = extend (dwarf_4 (), dwarf_mips_ext ());
+	static dwarf_version const *dw = extend (dwarf_4 (), ext);
 	return dw;
       }
 
