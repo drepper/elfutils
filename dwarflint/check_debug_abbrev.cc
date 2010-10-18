@@ -157,6 +157,7 @@ namespace
       }
     where.addr1 = 0;
 
+    bool failed = false;
     while (true)
       {
 	/* If we get EOF at this point, either the CU was improperly
@@ -336,7 +337,6 @@ namespace
 	bool low_pc = false;
 	bool high_pc = false;
 	bool ranges = false;
-	bool failed = false;
 	std::map<unsigned, uint64_t> seen;
 
 	do
@@ -379,7 +379,7 @@ namespace
 	    if (attribute == NULL)
 	      {
 		wr_error (where)
-		  << "invalid name " << pri::hex (attrib_name)
+		  << "invalid or unknown name " << pri::hex (attrib_name)
 		  << '.' << std::endl;
 		failed = true;
 		continue;
@@ -404,6 +404,9 @@ namespace
 	      (ver, attrib_form, attribute, &where, false);
 	    if (form == NULL)
 	      {
+		wr_error (where)
+		  << "invalid or unknown form " << pri::hex (attrib_form)
+		  << '.' << std::endl;
 		failed = true;
 		continue;
 	      }
@@ -434,10 +437,10 @@ namespace
 	  wr_error (where)
 	    << "the abbrev has DW_AT_high_pc & DW_AT_low_pc, "
 	    << "but also has DW_AT_ranges." << std::endl;
-
-	if (failed)
-	  throw check_base::failed ();
       }
+
+    if (failed)
+      throw check_base::failed ();
 
     abbrev_table *last = NULL;
     for (check_debug_abbrev::abbrev_map::iterator it = abbrevs.begin ();
