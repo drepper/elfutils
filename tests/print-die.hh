@@ -38,3 +38,5 @@ extern template void print_file (const char *, const dwarf &,
 				 const unsigned int);
 extern template void print_file (const char *, const dwarf_edit &,
 				 const unsigned int);
+extern template void print_file (const char *, const dwarf_output &,
+				 const unsigned int);

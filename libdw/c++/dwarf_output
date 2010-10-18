@@ -1707,7 +1707,9 @@ namespace elfutils
 	return self ();
       }
 
-#if 0  // Toggle this to enable massive debugging spew during construction.
+// Toggle this to enable massive debugging spew during construction.
+// #define _DWARF_OUTPUT_DEBUG_SPEW 1
+#ifdef _DWARF_OUTPUT_DEBUG_SPEW
       static inline std::ostream &debug ()
       {
 	return std::cout;
@@ -2405,7 +2407,7 @@ namespace elfutils
 	return b == NULL;
       }
 
-#if 0
+#ifdef _DWARF_OUTPUT_DEBUG_SPEW
       static inline std::ostream &
       dump (const typename pending_dwarf::debug_info_entry &a,
 	    const typename pending_dwarf::debug_info_entry &b,
