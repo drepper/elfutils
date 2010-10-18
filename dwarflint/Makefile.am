@@ -95,7 +95,8 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-nodebug.sh \
 	tests/run-check_range_out_of_scope.sh \
 	tests/run-check_debug_info_refs.sh \
-	tests/run-aranges_terminate_early.sh
+	tests/run-aranges_terminate_early.sh \
+	tests/run-libdl-2.12.so.debug.sh
 
 TESTS = $(EXTRA_TESTS) \
 	test-coverage
@@ -108,6 +109,7 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/check_range_out_of_scope-1.bz2 \
 	tests/check_debug_info_refs-1.bz2 \
 	tests/aranges_terminate_early.bz2
+	tests/libdl-2.12.so.debug.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
