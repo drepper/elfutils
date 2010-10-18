@@ -134,3 +134,14 @@
   file names to a command line), it treats each of them in isolation.
   In theory these files can link to each other and form graphs, and
   dwarflint should be able to check the whole graph.
+
+* failure tolerance
+
+  We'd like dwarflint to do things like checking each CU the abbrev
+  table of which I was able to read.  In fact dwarflint should check
+  even CUs that it has at least partial information about.  It could
+  bail out as soon as it hits invalid abbrev, or abbrev with unknown
+  attribute.  Even then it might give up its goal of validating
+  sibling references, and use them blindly to skip unknown portions.
+  Current check granularity makes this very awkward to express, I'll
+  have to rework how checks are defined and executed.
