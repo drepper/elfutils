@@ -381,7 +381,8 @@ namespace
 		wr_error (where)
 		  << "invalid or unknown name " << pri::hex (attrib_name)
 		  << '.' << std::endl;
-		failed = true;
+		// libdw should handle unknown attribute, as long as
+		// the form is kosher.
 		continue;
 	      }
 
@@ -390,7 +391,7 @@ namespace
 	    if (!inserted.second)
 	      {
 		wr_error (where)
-		  << "duplicate attribute " << pri::attr (attrib_name)
+		  << "duplicate attribute " << *attribute
 		  << " (first was at " << pri::hex (inserted.first->second)
 		  << ")." << std::endl;
 		// I think we may allow such files for high-level
@@ -416,7 +417,7 @@ namespace
 		if (!cur->has_children)
 		  wr_message (where,
 			      cat (mc_die_rel, mc_acc_bloat, mc_impact_1))
-		    << "excessive DW_AT_sibling attribute at childless abbrev."
+		    << "superfluous DW_AT_sibling attribute at childless abbrev."
 		    << std::endl;
 	      }
 	    if (attrib_name == DW_AT_ranges)

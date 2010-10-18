@@ -625,7 +625,8 @@ namespace
 	    attribute const *attribute = ver->get_attribute (it->name);
 	    int form_name = it->form;
 	    form const *form = ver->get_form (form_name);
-	    if (ver->form_class (form, attribute) == cl_indirect)
+	    if (attribute != NULL
+		&& ver->form_class (form, attribute) == cl_indirect)
 	      {
 		uint64_t value;
 		if (!read_sc_value (&value, form->width (cu), ctx, &where))
@@ -637,7 +638,9 @@ namespace
 		  return -1;
 	      }
 
-	    dw_class cls = ver->form_class (form, attribute);
+	    dw_class cls = attribute != NULL
+	      ? ver->form_class (form, attribute)
+	      : max_dw_class;
 	    if (cls == cl_indirect)
 	      {
 		wr_error (&where, ": indirect form is again indirect.\n");
@@ -676,14 +679,11 @@ namespace
 	       relocation was made against.  */
 	    GElf_Sym **symbolp = NULL;
 
-	    assert (form);
-	    assert (attribute);
-
 	    static dw_class_set ref_classes
 	      (cl_reference, cl_loclistptr, cl_lineptr, cl_macptr,
 	       cl_rangelistptr);
 
-	    if (ref_classes.test (cls))
+	    if (cls != max_dw_class && ref_classes.test (cls))
 	      if (form->width (cu) == fw_8
 		  && cu->head->offset_size == 4)
 		wr_error (where)
@@ -780,7 +780,7 @@ namespace
 		// error the second time now.
 		wr_error (where)
 		  << "can't read value of attribute "
-		  << *attribute << '.' << std::endl;
+		  << pri::attr (it->name) << '.' << std::endl;
 		return -1;
 	      }
 	    if (storclass == sc_block)
@@ -812,9 +812,12 @@ namespace
 		    << "unexpected relocation of " << pri::form (form_name)
 		    << '.' << std::endl;
 
-		form_width_t width = form->width (cu);
-		relocate_one (&file, reloc, rel, width, &value, &where,
-			      reloc_target (form, attribute), symbolp);
+		if (attribute != NULL)
+		  {
+		    form_width_t width = form->width (cu);
+		    relocate_one (&file, reloc, rel, width, &value, &where,
+				  reloc_target (form, attribute), symbolp);
+		  }
 
 		if (relocatedp != NULL)
 		  *relocatedp = true;

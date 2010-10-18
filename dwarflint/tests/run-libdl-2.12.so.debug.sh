@@ -29,14 +29,15 @@ srcdir=$srcdir/tests
 
 testfiles libdl-2.12.so.debug
 
-# Here we test that the user gets all the citations in .debug_abbrev,
-# and that dwarflint doesn't bail out on first failure.
+# Here we test that dwarflint can tolerate invalid attribute name.
 testrun_compare ./dwarflint --check=@low --nognu libdl-2.12.so.debug <<EOF
 error: .debug_abbrev: abbr. attribute 0xbe: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x330: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0xa28: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x108e: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x1300: invalid or unknown name 0x2107.
+error: .debug_line: table 4508: sequence of opcodes not terminated with DW_LNE_end_sequence.
+error: .debug_line: table 4606: sequence of opcodes not terminated with DW_LNE_end_sequence.
 EOF
 
 # Here we test proper support for DW_AT_GNU_vector
