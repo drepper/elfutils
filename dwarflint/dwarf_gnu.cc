@@ -49,12 +49,11 @@ namespace
 
       add (flag_attribute (DW_AT_GNU_vector));
 
-      // http://gcc.gnu.org/wiki/ThreadSafetyAnnotationsInDWARF
-
       // xxx these are glass cl_GNU_mutexlistptr.  data4 and data8 are
       // supposed to have this class.  So how do we smuggle this class
       // to whatever DW_FORM_data4 and DW_FORM_data8 have in current
       // version?  For now, just claim it's plain old constant.
+      // http://gcc.gnu.org/wiki/ThreadSafetyAnnotationsInDWARF
       add (const_attribute (DW_AT_GNU_guarded_by));
       add (const_attribute (DW_AT_GNU_pt_guarded_by));
       add (const_attribute (DW_AT_GNU_guarded));

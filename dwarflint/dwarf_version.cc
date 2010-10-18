@@ -220,17 +220,31 @@ dwarf_version::extend (dwarf_version const *source,
   return new dwarf_version_union (source, extension);
 }
 
+global_opt<void_option>
+  nognu ("Don't use GNU extension.", "nognu");
+
+namespace
+{
+  dwarf_version const *get_ext ()
+  {
+    // xxx The GNU toolchain commonly uses DW_AT_MIPS_linkage_name,
+    // which is part of the MIPS extensions.  So that's what we
+    // return.  I wonder how to solve this "right".  We cannot simply
+    // request DW_AT_producer/DW_AT_language values here, since we
+    // need the version to know how to read these attributes in the
+    // first place.
+
+    if (nognu)
+      return dwarf_mips_ext ();
+    else
+      return dwarf_version::extend (dwarf_mips_ext (), dwarf_gnu_ext ());
+  }
+}
+
 dwarf_version const *
 dwarf_version::get (unsigned version)
 {
-  // xxx The GNU toolchain commonly uses DW_AT_MIPS_linkage_name,
-  // which is part of the MIPS extensions.  So that's what we return.
-  // I wonder how to solve this "right".  We cannot simply request
-  // DW_AT_producer/DW_AT_language values here, since we need the
-  // version to know how to read these attributes in the first place.
-  //
-  // Similarly we assume the GNU extension is used.
-  static dwarf_version const *ext = extend (dwarf_mips_ext (), dwarf_gnu_ext ());
+  static dwarf_version const *ext = get_ext ();
 
   switch (version)
     {
@@ -252,7 +266,8 @@ dwarf_version::get (unsigned version)
 	return dw;
       }
 
-    default: return NULL;
+    default:
+      return NULL;
     };
 }
 
