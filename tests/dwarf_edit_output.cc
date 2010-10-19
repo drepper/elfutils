@@ -327,27 +327,31 @@ main (int argc, char **argv)
   // Test number to run (or all if none given)
   int r = 0;
   if (argc > 1)
-    r = atoi(argv[1]);
+    {
+      r = atoi(argv[1]);
+      argc--;
+      argv++;
+    }
 
   // Whether to print input/output/both [in|out|inout]
   show_input = 0;
   show_output = 0;
   if (argc > 2)
     {
-      if (strstr (argv[2], "in"))
+      if (strstr (argv[1], "in"))
 	show_input = 1;
-      if (strstr (argv[2], "out"))
+      if (strstr (argv[1], "out"))
 	show_output = 1;
+      argc--;
+      argv++;
     }
 
   if (show_input | show_output)
     {
-      // Abuse print_die_main initialization, but don't pass real
-      // argc/argv since we use those ourselves.
-      int dummy_argc = 0;
-      char **dummy_argv = NULL;
+      // Abuse print_die_main initialization. Allows adding --offsets.
+      // See print-die.cc for options one can add.
       unsigned int d;
-      print_die_main (dummy_argc, dummy_argv, d);
+      print_die_main (argc, argv, d);
     }
 
 #define RUNTEST(N) (r == 0 || r == N)
