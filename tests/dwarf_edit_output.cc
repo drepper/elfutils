@@ -426,8 +426,45 @@ var_struct_ptr_type (dwarf_edit &in)
 
 static int show_input, show_output;
 
+/* Tests whether the last die in the first CU and the last die in the
+   second CU have the same offset (which means they were/can be
+   merged). */
+bool
+test_last_two_var_dies (dwarf_output &out)
+{
+  dwarf_output::compile_units::const_iterator cu;
+  dwarf_output::debug_info_entry::children_type::const_iterator it;
+  ::Dwarf_Off off1 = 0;
+  ::Dwarf_Off off2 = 0;
+
+  cu = out.compile_units ().begin ();
+  it = (*cu).children ().begin ();
+  while (it != (*cu).children ().end ())
+    {
+      if ((*it).tag () == DW_TAG_variable)
+	off1 = (*it).offset ();
+      it++;
+    }
+  if (show_output)
+    cout << "offset last var cu1: " << hex << off1 << endl;
+
+  cu++;
+  it = (*cu).children ().begin ();
+  while (it != (*cu).children ().end ())
+    {
+      if ((*it).tag () == DW_TAG_variable)
+	off2 = (*it).offset ();
+      it++;
+    }
+  if (show_output)
+    cout << "offset last var cu2: " << hex << off2 << endl;
+
+  return off1 == off2;
+}
+
 void
-test_run (int n, const char *name, dwarf_edit &in)
+test_run (int n, const char *name, dwarf_edit &in,
+	  bool test_last, bool same_offset)
 {
   if (show_input | show_output)
     printf("*%s*\n", name);
@@ -449,6 +486,9 @@ test_run (int n, const char *name, dwarf_edit &in)
   dwarf_comparator<dwarf_edit, dwarf_output, true> cmp (tracker);
   if (! cmp.equals (in, out))
     error (-1, 0, "fail test #%d '%s'", n, name);
+
+  if (test_last && test_last_two_var_dies (out) != same_offset)
+    error (-1, 0, "fail test_last_two_var_dies #%d '%s'", n, name);
 }
 
 int
@@ -466,7 +506,7 @@ main (int argc, char **argv)
   // Whether to print input/output/both [in|out|inout]
   show_input = 0;
   show_output = 0;
-  if (argc > 2)
+  if (argc > 1)
     {
       if (strstr (argv[1], "in"))
 	show_input = 1;
@@ -488,52 +528,55 @@ main (int argc, char **argv)
 
   dwarf_edit in1;
   if (RUNTEST (1))
-    test_run (1, "empty_cu", empty_cu(in1));
+    test_run (1, "empty_cu", empty_cu(in1), false, false);
 
   dwarf_edit in2;
   if (RUNTEST (2))
-    test_run (2, "empty_cus", empty_cus(in2));
+    test_run (2, "empty_cus", empty_cus(in2), false, false);
 
   dwarf_edit in3;
   if (RUNTEST (3))
-    test_run (3, "two_same_dies", two_same_dies (in3));
+    test_run (3, "two_same_dies", two_same_dies (in3), false, false);
 
   dwarf_edit in4;
   if (RUNTEST (4))
-    test_run (4, "var_ref_type", var_ref_type (in4));
+    test_run (4, "var_ref_type", var_ref_type (in4), false, false);
 
   dwarf_edit in5;
   if (RUNTEST (5))
-    test_run (5, "var_ref_type_after", var_ref_type_after (in5));
+    test_run (5, "var_ref_type_after", var_ref_type_after (in5), false, false);
 
   dwarf_edit in6;
   if (RUNTEST (6))
-    test_run (6, "dup_same_type_vars", dup_same_type_vars (in6));
+    test_run (6, "dup_same_type_vars", dup_same_type_vars (in6), true, false);
 
   dwarf_edit in7;
   if (RUNTEST (7))
-    test_run (7, "circular_struct", circular_struct (in7));
+    test_run (7, "circular_struct", circular_struct (in7), false, false);
 
   dwarf_edit in8;
   if (RUNTEST (8))
-    test_run (8, "circular_struct2", circular_struct2 (in8));
+    test_run (8, "circular_struct2", circular_struct2 (in8), false, false);
 
   // XXX Won't merge CUs on main dwarf branch (does on dwarf-hacking)
   // How to check?
   dwarf_edit in9;
   if (RUNTEST (9))
-    test_run (9, "two_circular_structs", two_circular_structs (in9));
+    test_run (9, "two_circular_structs", two_circular_structs (in9),
+	      true, true);
 
   // Won't merge CUs since order of children different.
   // XXX vars are considered equal according to dwarf_comparator,
   // but not according to dwarf_output. Why not? And how to check?
   dwarf_edit in10;
   if (RUNTEST (10))
-    test_run (10, "two_circular_structs2", two_circular_structs2 (in10));
+    test_run (10, "two_circular_structs2", two_circular_structs2 (in10),
+	      true, true);
 
   dwarf_edit in11;
   if (RUNTEST (11))
-    test_run (11, "var_struct_ptr_type", var_struct_ptr_type (in11));
+    test_run (11, "var_struct_ptr_type", var_struct_ptr_type (in11),
+	      true, true);
 
   return 0;
 }
