@@ -35,6 +35,8 @@
 #include "c++/dwarf_comparator"
 #include "c++/dwarf_tracker"
 
+#include "c++/subr.hh"
+
 using namespace elfutils;
 using namespace std;
 
@@ -74,6 +76,19 @@ struct cmp
     in.jump (a, b);
     return equals (a, b);
   }
+
+  bool
+  compare_first_two_cus (const dwarf_edit &dw)
+  {
+    dwarf_edit::compile_units::const_iterator cu1, cu2;
+    cu1 = dw.compile_units ().begin ();
+    cu2 = dw.compile_units ().begin ();
+    cu2++;
+
+    cmp_tracker::walk in (&this->_m_tracker, cu1, cu2);
+
+    return equals (*cu1, *cu2);
+  }
 };
 
 dwarf_edit &
@@ -89,6 +104,7 @@ empty_cus (dwarf_edit &in)
   in.add_unit ();
   in.add_unit ();
   in.add_unit ();
+
   return in;
 }
 
@@ -181,13 +197,14 @@ dup_same_type_vars (dwarf_edit &in)
   var2.attributes ()[DW_AT_name].identifier () = "var2";
   var2.attributes ()[DW_AT_type].reference () = type2;
 
-  cmp compare;
   // Types are equal.
+  cmp compare;
   if (! compare.compare_dies (*type1, *type2, in))
     error (-1, 0, "dup_same_type_vars types not equal");
 
   // But vars have different names.
-  if (compare.compare_dies (var1, var2, in))
+  cmp compare2;
+  if (compare2.compare_dies (var1, var2, in))
     error (-1, 0, "two_same_type_vars vars equal");
 
   return in;
@@ -275,6 +292,7 @@ two_circular_structs (dwarf_edit &in)
 {
   circular_struct (in);
   circular_struct (in);
+
   return in;
 }
 
@@ -347,8 +365,10 @@ two_circular_structs2 (dwarf_edit &in)
   var2.attributes ()[DW_AT_name].identifier () = "var";
   var2.attributes ()[DW_AT_type].reference () = struct_ptr_ref2;
 
-  cmp compare;
-  if (! compare.compare_dies (var1, var2, in))
+  // CUs not equal since diffent order of children.
+  // But vars should be considered equal
+  cmp compare2;
+  if (! compare2.compare_dies (var1, var2, in))
     error (-1, 0, "two_circular_structs2 vars not equal");
 
   return in;
@@ -365,7 +385,7 @@ var_struct_ptr_type (dwarf_edit &in)
 
   // CU1
   dwarf_edit::compile_unit &cu1 = in.add_unit ();
-  cu1.attributes ()[DW_AT_producer].string () = "CU1";
+  cu1.attributes ()[DW_AT_producer].string () = "CU";
 
   dwarf_edit::debug_info_entry::pointer list_ptr1
     = cu1.add_entry (DW_TAG_structure_type);
@@ -395,7 +415,7 @@ var_struct_ptr_type (dwarf_edit &in)
 
   // CU2
   dwarf_edit::compile_unit &cu2 = in.add_unit ();
-  cu2.attributes ()[DW_AT_producer].string () = "CU2";
+  cu2.attributes ()[DW_AT_producer].string () = "CU";
 
   dwarf_edit::debug_info_entry::pointer list_ptr2
     = cu2.add_entry (DW_TAG_structure_type);
@@ -462,9 +482,38 @@ test_last_two_var_dies (dwarf_output &out)
   return off1 == off2;
 }
 
+typedef dwarf_output::debug_info_entry::children_type::const_iterator ci;
+struct match_offset : public std::binary_function<ci, ci, bool>
+{
+  inline bool operator () (const ci &ci1, const ci &ci2)
+  {
+    return (*ci1).offset () == (*ci2).offset ();
+  }
+};
+
+
+/* Tests whether the first two CUs have the same children (offset/identity)
+   which means they can be completely merged. */
+bool
+test_first_two_cus (dwarf_output &out)
+{
+  dwarf_output::compile_units::const_iterator cu;
+  cu = out.compile_units ().begin ();
+  ci children1 = (*cu).children ().begin ();
+  ci end1 = (*cu).children ().end();
+
+  cu++;
+  ci children2 = (*cu).children ().begin ();
+  ci end2 = (*cu).children ().end();
+
+  return subr::container_equal (children1, end1, children2, end2,
+				match_offset ());
+}
+
 void
 test_run (int n, const char *name, dwarf_edit &in,
-	  bool test_last, bool same_offset)
+	  bool test_last, bool same_offset,
+	  bool test_cus, bool same_cus)
 {
   if (show_input | show_output)
     printf("*%s*\n", name);
@@ -483,12 +532,24 @@ test_run (int n, const char *name, dwarf_edit &in,
 
   // NOTE: dwarf_comparator ignore_refs = true
   dwarf_ref_tracker<dwarf_edit, dwarf_output> tracker;
-  dwarf_comparator<dwarf_edit, dwarf_output, true> cmp (tracker);
-  if (! cmp.equals (in, out))
+  dwarf_comparator<dwarf_edit, dwarf_output, true> comp (tracker);
+  if (! comp.equals (in, out))
     error (-1, 0, "fail test #%d '%s'", n, name);
 
   if (test_last && test_last_two_var_dies (out) != same_offset)
     error (-1, 0, "fail test_last_two_var_dies #%d '%s'", n, name);
+
+  if (test_cus)
+    {
+      // test dwarf_comparator
+      cmp compare;
+      if (compare.compare_first_two_cus (in) != same_cus)
+	error (-1, 0, "fail compare_first_two_cus #%d '%s'", n, name);
+
+      // test dwarf_output
+      if (test_first_two_cus (out) != same_cus)
+	error (-1, 0, "fail test_first_two_cus #%d '%s'", n, name);
+    }
 }
 
 int
@@ -528,55 +589,59 @@ main (int argc, char **argv)
 
   dwarf_edit in1;
   if (RUNTEST (1))
-    test_run (1, "empty_cu", empty_cu(in1), false, false);
+    test_run (1, "empty_cu", empty_cu(in1), false, false, false, false);
 
   dwarf_edit in2;
   if (RUNTEST (2))
-    test_run (2, "empty_cus", empty_cus(in2), false, false);
+    test_run (2, "empty_cus", empty_cus(in2), false, false, true, true);
 
   dwarf_edit in3;
   if (RUNTEST (3))
-    test_run (3, "two_same_dies", two_same_dies (in3), false, false);
+    test_run (3, "two_same_dies", two_same_dies (in3),
+	      false, false, true, true);
 
   dwarf_edit in4;
   if (RUNTEST (4))
-    test_run (4, "var_ref_type", var_ref_type (in4), false, false);
+    test_run (4, "var_ref_type", var_ref_type (in4),
+	      false, false, false, false);
 
   dwarf_edit in5;
   if (RUNTEST (5))
-    test_run (5, "var_ref_type_after", var_ref_type_after (in5), false, false);
+    test_run (5, "var_ref_type_after", var_ref_type_after (in5),
+	      false, false, false, false);
 
   dwarf_edit in6;
   if (RUNTEST (6))
-    test_run (6, "dup_same_type_vars", dup_same_type_vars (in6), true, false);
+    test_run (6, "dup_same_type_vars", dup_same_type_vars (in6),
+	      true, false, true, false);
 
   dwarf_edit in7;
   if (RUNTEST (7))
-    test_run (7, "circular_struct", circular_struct (in7), false, false);
+    test_run (7, "circular_struct", circular_struct (in7),
+	      false, false, false, false);
 
   dwarf_edit in8;
   if (RUNTEST (8))
-    test_run (8, "circular_struct2", circular_struct2 (in8), false, false);
+    test_run (8, "circular_struct2", circular_struct2 (in8),
+	      false, false, false, false);
 
-  // XXX Won't merge CUs on main dwarf branch (does on dwarf-hacking)
-  // How to check?
   dwarf_edit in9;
   if (RUNTEST (9))
     test_run (9, "two_circular_structs", two_circular_structs (in9),
-	      true, true);
+	      true, true, true, true);
 
   // Won't merge CUs since order of children different.
   // XXX vars are considered equal according to dwarf_comparator,
-  // but not according to dwarf_output. Why not? And how to check?
+  // but not according to dwarf_output. Why not?
   dwarf_edit in10;
   if (RUNTEST (10))
     test_run (10, "two_circular_structs2", two_circular_structs2 (in10),
-	      true, true);
+	      true, true, true, false);
 
   dwarf_edit in11;
   if (RUNTEST (11))
     test_run (11, "var_struct_ptr_type", var_struct_ptr_type (in11),
-	      true, true);
+	      true, true, true, false);
 
   return 0;
 }
