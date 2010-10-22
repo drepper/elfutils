@@ -61,14 +61,6 @@ namespace
 bool
 checkrules::should_check (checkstack const &stack) const
 {
-#if 0
-  std::cout << "---\nstack" << std::endl;
-  for (checkstack::const_iterator jt = stack.begin ();
-       jt != stack.end (); ++jt)
-    std::cout << (*jt)->name << std::flush << "  ";
-  std::cout << std::endl;
-#endif
-
   // We always allow scheduling hidden checks.  Those are service
   // routines that the user doesn't even see it the list of checks.
   assert (!stack.empty ());

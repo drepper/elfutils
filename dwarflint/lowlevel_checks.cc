@@ -55,8 +55,8 @@ static reg<lowlevel_checks> reg_lowlevel_checks;
 namespace
 {
   template<class T> struct do_check {
-    static void check (checkstack &stack, dwarflint &lint) {
-      lint.check<T> (stack);
+    static bool check (checkstack &stack, dwarflint &lint) {
+      return lint.toplev_check<T> (stack);
     }
   };
 
@@ -65,8 +65,11 @@ namespace
 #define STUBBED_CHECK(NAME)						\
   struct check_debug_##NAME {};						\
   template<> struct do_check<check_debug_##NAME> {			\
-    static void check (__attribute__ ((unused)) checkstack &stack,	\
-		       __attribute__ ((unused)) dwarflint &lint) {}	\
+    static bool check (__attribute__ ((unused)) checkstack &stack,	\
+		       __attribute__ ((unused)) dwarflint &lint)	\
+    {									\
+      return true;							\
+    }									\
   }
   STUBBED_CHECK(str);
   STUBBED_CHECK(mac);
@@ -78,13 +81,20 @@ lowlevel_checks::lowlevel_checks (checkstack &stack, dwarflint &lint)
   // Then check all the debug sections that are there.  For each
   // existing section request that the check passes.  Re-requesting
   // already-passed checks is OK, the scheduler caches it.
+  bool passed = true;
+
 #define SEC(NAME)							\
   section<sec_##NAME> *NAME =						\
     lint.toplev_check<section<sec_##NAME> > (stack);			\
   if (NAME != NULL)							\
-    do_check<check_debug_##NAME>::check (stack, lint);
+    if (!do_check<check_debug_##NAME>::check (stack, lint))		\
+      passed = false;
+
   DEBUGINFO_SECTIONS;
 #undef SEC
 
   lint.check<check_debug_info_refs> (stack);
+
+  if (!passed)
+    throw check_base::failed ();
 }
