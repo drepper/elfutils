@@ -26,7 +26,7 @@
 #ifndef DWARFLINT_PRI_H
 #define DWARFLINT_PRI_H
 
-#include <libdw.h>
+#include "../libdw/libdw.h"
 #include <string>
 
 #define PRI_NOT_ENOUGH ": not enough data for %s.\n"

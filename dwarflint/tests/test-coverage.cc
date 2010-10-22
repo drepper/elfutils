@@ -1,8 +1,8 @@
 #include <iostream>
 #include <cstdlib>
 #include <cassert>
-#include "coverage.hh"
-#include "pri.hh"
+#include "../coverage.hh"
+#include "../pri.hh"
 
 bool fail = false;
 

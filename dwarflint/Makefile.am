@@ -35,7 +35,8 @@ AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 
 no_mudflap.os = -fmudflap
 
-bin_PROGRAMS = dwarflint test-coverage
+bin_PROGRAMS = dwarflint
+noinst_PROGRAMS = tests/test-coverage
 
 dwarflint_SOURCES = \
 	addr-record.cc addr-record.hh \
@@ -86,7 +87,7 @@ dwarflint_SOURCES = \
 	\
 	../src/dwarfstrings.c
 
-test_coverage_SOURCES = test-coverage.cc coverage.cc pri.cc \
+tests_test_coverage_SOURCES = tests/test-coverage.cc coverage.cc pri.cc \
 	../src/dwarfstrings.c
 
 EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
@@ -99,7 +100,7 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-libdl-2.12.so.debug.sh
 
 TESTS = $(EXTRA_TESTS) \
-	test-coverage
+	tests/test-coverage
 
 EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/debug_abbrev-duplicate-attribute.bz2 \
@@ -143,7 +144,7 @@ libeu = ../lib/libeu.a
 libdwpp = ../libdw/libdwpp.a $(libdw)
 
 dwarflint_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
-test_coverage_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
+tests_test_coverage_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 
 installcheck-binPROGRAMS: $(bin_PROGRAMS)
 	bad=0; pid=$$$$; list="$(bin_PROGRAMS)"; for p in $$list; do \

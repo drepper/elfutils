@@ -30,6 +30,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <cstdint>
 
 /* Functions and data structures for handling of address range
    coverage.  We use that to find holes of unused bytes in DWARF
