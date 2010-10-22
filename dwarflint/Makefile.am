@@ -36,7 +36,7 @@ AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 no_mudflap.os = -fmudflap
 
 bin_PROGRAMS = dwarflint
-noinst_PROGRAMS = tests/test-coverage
+noinst_PROGRAMS = tests/test-coverage tests/test-wrap
 
 dwarflint_SOURCES = \
 	addr-record.cc addr-record.hh \
@@ -90,6 +90,8 @@ dwarflint_SOURCES = \
 tests_test_coverage_SOURCES = tests/test-coverage.cc coverage.cc pri.cc \
 	../src/dwarfstrings.c
 
+tests_test_wrap_SOURCES = tests/test-wrap.cc wrap.cc
+
 EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-check_duplicate_DW_tag_variable.sh \
 	tests/run-location-leaks.sh \
@@ -100,7 +102,8 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-libdl-2.12.so.debug.sh
 
 TESTS = $(EXTRA_TESTS) \
-	tests/test-coverage
+	tests/test-coverage \
+	tests/test-wrap
 
 EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/debug_abbrev-duplicate-attribute.bz2 \
