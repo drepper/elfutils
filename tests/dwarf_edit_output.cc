@@ -37,6 +37,8 @@
 
 #include "c++/subr.hh"
 
+#include "../src/dwarfstrings.h"
+
 using namespace elfutils;
 using namespace std;
 
@@ -365,12 +367,6 @@ two_circular_structs2 (dwarf_edit &in)
   var2.attributes ()[DW_AT_name].identifier () = "var";
   var2.attributes ()[DW_AT_type].reference () = struct_ptr_ref2;
 
-  // CUs not equal since diffent order of children.
-  // But vars should be considered equal
-  cmp compare2;
-  if (! compare2.compare_dies (var1, var2, in))
-    error (-1, 0, "two_circular_structs2 vars not equal");
-
   return in;
 }
 
@@ -444,14 +440,89 @@ var_struct_ptr_type (dwarf_edit &in)
   return in;
 }
 
+dwarf_edit &
+small_circular_structs (dwarf_edit &in)
+{
+  dwarf_edit::compile_unit &cu1 = in.add_unit ();
+  dwarf_edit::debug_info_entry::pointer struct_ptr_ref1
+    = cu1.add_entry (DW_TAG_pointer_type);
+
+  dwarf_edit::debug_info_entry::pointer list_ptr1
+    = cu1.add_entry (DW_TAG_structure_type);
+  dwarf_edit::debug_info_entry &list1 = *list_ptr1;
+  list1.attributes ()[DW_AT_name].identifier () = "list";
+
+  dwarf_edit::debug_info_entry &mn1 = *list1.add_entry (DW_TAG_member);
+  mn1.attributes ()[DW_AT_name].identifier () = "next";
+  mn1.attributes ()[DW_AT_type].reference () = struct_ptr_ref1;
+
+  struct_ptr_ref1->attributes ()[DW_AT_type].reference () = list_ptr1;
+
+  dwarf_edit::compile_unit &cu2 = in.add_unit ();
+  dwarf_edit::debug_info_entry::pointer list_ptr2
+    = cu2.add_entry (DW_TAG_structure_type);
+  dwarf_edit::debug_info_entry &list2 = *list_ptr2;
+  list2.attributes ()[DW_AT_name].identifier () = "list";
+
+  dwarf_edit::debug_info_entry &mn2 = *list2.add_entry (DW_TAG_member);
+  mn2.attributes ()[DW_AT_name].identifier () = "next";
+
+  dwarf_edit::debug_info_entry::pointer struct_ptr_ref2
+    = cu2.add_entry (DW_TAG_pointer_type);
+  struct_ptr_ref2->attributes ()[DW_AT_type].reference () = list_ptr2;
+
+  mn2.attributes ()[DW_AT_type].reference () = struct_ptr_ref2;
+
+  return in;
+}
+
 static int show_input, show_output;
 
 /* Tests whether the last die in the first CU and the last die in the
-   second CU have the same offset (which means they were/can be
-   merged). */
-bool
-test_last_two_var_dies (dwarf_output &out)
+   second CU with the same tag have the same offset (which means they
+   were/can be merged). Succeeds when the comparison matches 'same'
+   argument (or the 'tag' couldn't be found in both CUs). */
+void
+test_last_two_dies (dwarf_edit &in, dwarf_output &out, int tag, bool same,
+		    int n, const char *name)
 {
+  dwarf_edit::compile_units::const_iterator cu_in;
+  dwarf_edit::debug_info_entry::children_type::const_iterator it_in;
+  const dwarf_edit::debug_info_entry *die1 = NULL;
+  const dwarf_edit::debug_info_entry *die2 = NULL;
+
+  cu_in = in.compile_units ().begin ();
+  it_in = (*cu_in).children ().begin ();
+  while (it_in != (*cu_in).children ().end ())
+    {
+      if ((*it_in).tag () == tag)
+	die1 = &(*it_in);
+      it_in++;
+    }
+  if (show_input)
+    cout << "input cu1 last: " << (die1 ? (*die1).to_string () : "NULL")
+	 << endl;
+
+  cu_in++;
+  it_in = (*cu_in).children ().begin ();
+  while (it_in != (*cu_in).children ().end ())
+    {
+      if ((*it_in).tag () == tag)
+	die2 = &(*it_in);
+      it_in++;
+    }
+  if (show_input)
+    cout << "input cu2 last: " << (die2 ? (*die2).to_string () : "NULL")
+	 << endl;
+
+  if (die1 != NULL)
+    {
+      cmp compare;
+      if (compare.compare_dies (*die1, *die2, in) != same)
+	error (-1, 0, "dwarf_comparator fail %s test #%d '%s'",
+	       dwarf_tag_string (tag), n, name);
+    }
+
   dwarf_output::compile_units::const_iterator cu;
   dwarf_output::debug_info_entry::children_type::const_iterator it;
   ::Dwarf_Off off1 = 0;
@@ -461,25 +532,32 @@ test_last_two_var_dies (dwarf_output &out)
   it = (*cu).children ().begin ();
   while (it != (*cu).children ().end ())
     {
-      if ((*it).tag () == DW_TAG_variable)
+      if ((*it).tag () == tag)
 	off1 = (*it).offset ();
       it++;
     }
   if (show_output)
-    cout << "offset last var cu1: " << hex << off1 << endl;
+    cout << "offset last (" << dwarf_tag_string (tag) << ") cu1: "
+	 << hex << off1 << endl;
 
   cu++;
   it = (*cu).children ().begin ();
   while (it != (*cu).children ().end ())
     {
-      if ((*it).tag () == DW_TAG_variable)
+      if ((*it).tag () == tag)
 	off2 = (*it).offset ();
       it++;
     }
   if (show_output)
-    cout << "offset last var cu2: " << hex << off2 << endl;
+    cout << "offset last (" << dwarf_tag_string (tag) << ") cu2: "
+	 << hex << off2 << endl;
 
-  return off1 == off2;
+  bool both_zero = off1 == 0 && off2 == 0;
+  bool equal = off1 == off2;
+  if (! both_zero && equal != same)
+    error (-1, 0, "dwarf_comparator fail %s test #%d '%s'",
+	   dwarf_tag_string (tag), n, name);
+
 }
 
 typedef dwarf_output::debug_info_entry::children_type::const_iterator ci;
@@ -536,8 +614,15 @@ test_run (int n, const char *name, dwarf_edit &in,
   if (! comp.equals (in, out))
     error (-1, 0, "fail test #%d '%s'", n, name);
 
-  if (test_last && test_last_two_var_dies (out) != same_offset)
-    error (-1, 0, "fail test_last_two_var_dies #%d '%s'", n, name);
+  if (test_last)
+    {
+      test_last_two_dies (in, out, DW_TAG_variable,
+			  same_offset, n, name);
+      test_last_two_dies (in, out, DW_TAG_pointer_type,
+			  same_offset, n, name);
+      test_last_two_dies (in, out, DW_TAG_structure_type,
+			  same_offset, n, name);
+    }
 
   if (test_cus)
     {
@@ -641,6 +726,12 @@ main (int argc, char **argv)
   dwarf_edit in11;
   if (RUNTEST (11))
     test_run (11, "var_struct_ptr_type", var_struct_ptr_type (in11),
+	      true, true, true, false);
+
+  // Smallest example of issue with test 10.
+  dwarf_edit in12;
+  if (RUNTEST (12))
+    test_run (12, "small_circular_structs", small_circular_structs (in12),
 	      true, true, true, false);
 
   return 0;
