@@ -197,7 +197,8 @@ dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
 dwarf_edit_SOURCES = dwarf_edit.cc print-die.cc
 dwarf_edit_LDADD = $(libdwpp) $(libmudflap) -ldl
 
-dwarf_edit_output_SOURCES = dwarf_edit_output.cc print-die.cc
+dwarf_edit_output_SOURCES = dwarf_edit_output.cc print-die.cc \
+			    ../src/dwarfstrings.c
 dwarf_edit_output_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)
