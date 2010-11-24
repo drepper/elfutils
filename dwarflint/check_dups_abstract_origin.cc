@@ -86,7 +86,7 @@ namespace
 		    ? "." : " with different value.")
 		<< std::endl;
 	}
-      } check;
+      } check_die_attr;
 
       for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
 	   it != all_dies_iterator<dwarf> (); ++it)
@@ -100,7 +100,7 @@ namespace
 		|| (*at).first == DW_AT_specification)
 	      {
 		assert ((*at).second.what_space () == dwarf::VS_reference);
-		check (die, *at);
+		check_die_attr (die, *at);
 	      }
 	}
     }
