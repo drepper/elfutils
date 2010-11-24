@@ -1,5 +1,5 @@
 /* elfutils::dwarf_output -- DWARF file generation in -*- C++ -*-
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -575,6 +575,170 @@ namespace elfutils
     {
       return !(*this == other);
     }
+
+  protected:
+    struct die_info
+    {
+      die_info_pair *_m_parent;
+      std::queue<value::value_reference *> _m_refs;
+      std::set< ::Dwarf_Off> _m_originals; // XXX fix for cross-file sharing input
+      size_t _m_original_cost;
+      std::bitset<2> _m_with_sibling;
+      unsigned int _m_uses;
+
+      inline die_info ()
+	: _m_parent (NULL), _m_refs (),
+	  _m_originals (), _m_original_cost (0),
+	  _m_with_sibling (), _m_uses (0)
+      {}
+
+      inline ~die_info ()
+      {
+	while (!_m_refs.empty ())
+	  {
+	    delete _m_refs.front ();
+	    _m_refs.pop ();
+	  }
+      }
+
+      inline void original (unsigned int &incoming_count,
+			    ::Dwarf_Off off, ::Dwarf_Off cost)
+      {
+	assert ((::Dwarf_Off) (size_t) cost == cost);
+	if (_m_originals.insert (off).second)
+	  {
+	    ++incoming_count;
+	    _m_original_cost += cost;
+	  }
+      }
+
+      inline std::set< ::Dwarf_Off>::size_type count_originals () const
+      {
+	return _m_originals.size ();
+      }
+
+      inline ptrdiff_t original_cost () const
+      {
+	return _m_original_cost;
+      }
+
+      inline ::Dwarf_Off original_offset () const
+      {
+	return *_m_originals.begin ();
+      }
+
+      template<typename streamish>
+      inline streamish &dump_originals (streamish &out) const
+      {
+	out << std::hex;
+	for (typename std::set< ::Dwarf_Off>::const_iterator i
+	       = _m_originals.begin ();
+	     i !=_m_originals.end ();
+	     ++i)
+	  out << " " << *i;
+	return out << std::dec;
+      }
+
+      inline ptrdiff_t output_cost () const
+      {
+	// XXX temporary proxy
+	return (double (_m_original_cost) / double (count_originals ())) + 0.5;
+      }
+
+      inline std::ostream &list_originals (std::ostream &o) const
+      {
+	for (std::set< ::Dwarf_Off>::const_iterator i = _m_originals.begin ();
+	     i != _m_originals.end ();
+	     ++i)
+	  o << " " << std::hex << *i;
+	return o;
+      }
+
+      inline unsigned int uses () const
+      {
+	return _m_uses;
+      }
+
+      inline void assert_unused () const
+      {
+	assert (uses () == 0);
+	assert (_m_with_sibling.none ());
+	assert (_m_refs.empty ());
+      }
+
+      inline void self (value::value_reference *ref)
+      {
+	_m_refs.push (ref);
+      }
+
+      inline void
+      self (const debug_info_entry::pointer &ref)
+      {
+	subr::nothing dummy;
+	self (new value::value_reference (ref, dummy));
+      }
+
+      inline void
+      self (const debug_info_entry::children_type::_base::const_iterator &ref)
+      {
+	self (debug_info_entry::pointer (ref, subr::nothing ()));
+      }
+
+      inline bool selfless () const
+      {
+	return _m_refs.empty ();
+      }
+
+      inline value::value_reference *self () const
+      {
+	assert (!selfless ());
+	return _m_refs.front ();
+      }
+
+      template<typename circular>
+      inline void
+      reify_refs (const debug_info_entry::pointer &ref)
+      {
+	for (size_t n = _m_refs.size (); n > 0; --n)
+	  {
+	    value::value_reference *self_ref = _m_refs.front ();
+	    self_ref->ref = ref;
+	    _m_refs.pop ();
+	    _m_refs.push (self_ref);
+
+	    circular *circle = dynamic_cast<circular *> (self_ref);
+	    if (circle != NULL && !circle->final ())
+	      circle->placed ();
+	  }
+      }
+
+      template<typename circular>
+      inline void
+      placed (die_info_pair *parent, const debug_info_entry::pointer &ref,
+	      bool have_sibling, unsigned int &total)
+      {
+	// Record first parent.
+	if (_m_parent == NULL)
+	  {
+	    assert (uses () == 0 || parent == NULL);
+	    _m_parent = parent;
+	  }
+	else
+	  assert (uses () > 0);
+
+	if (selfless ())
+	  {
+	    assert (uses () == 0);
+	    self (ref);
+	  }
+	else
+	  reify_refs<circular> (ref);
+
+	++total;
+	++_m_uses;
+	_m_with_sibling[have_sibling] = true;
+      }
+    };
   };
 
   // Explicit specializations.
@@ -712,169 +876,6 @@ namespace elfutils
     inline void make (args&&...)
     {
       throw std::logic_error ("dwarf_output cannot be default-constructed");
-    }
-  };
-
-  struct dwarf_output::die_info
-  {
-    die_info_pair *_m_parent;
-    std::queue<value::value_reference *> _m_refs;
-    std::set< ::Dwarf_Off> _m_originals; // XXX fix for cross-file sharing input
-    size_t _m_original_cost;
-    std::bitset<2> _m_with_sibling;
-    unsigned int _m_uses;
-
-    inline die_info ()
-      : _m_parent (NULL), _m_refs (),
-	_m_originals (), _m_original_cost (0),
-	_m_with_sibling (), _m_uses (0)
-    {}
-
-    inline ~die_info ()
-    {
-      while (!_m_refs.empty ())
-	{
-	  delete _m_refs.front ();
-	  _m_refs.pop ();
-	}
-    }
-
-    inline void original (unsigned int &incoming_count,
-			  ::Dwarf_Off off, ::Dwarf_Off cost)
-    {
-      assert ((::Dwarf_Off) (size_t) cost == cost);
-      if (_m_originals.insert (off).second)
-	{
-	  ++incoming_count;
-	  _m_original_cost += cost;
-	}
-    }
-
-    inline std::set< ::Dwarf_Off>::size_type count_originals () const
-    {
-      return _m_originals.size ();
-    }
-
-    inline ptrdiff_t original_cost () const
-    {
-      return _m_original_cost;
-    }
-
-    inline ::Dwarf_Off original_offset () const
-    {
-      return *_m_originals.begin ();
-    }
-
-    template<typename streamish>
-    inline streamish &dump_originals (streamish &out) const
-    {
-      out << std::hex;
-      for (typename std::set< ::Dwarf_Off>::const_iterator i
-	     = _m_originals.begin ();
-	   i !=_m_originals.end ();
-	   ++i)
-	out << " " << *i;
-      return out << std::dec;
-    }
-
-    inline ptrdiff_t output_cost () const
-    {
-      // XXX temporary proxy
-      return (double (_m_original_cost) / double (count_originals ())) + 0.5;
-    }
-
-    inline std::ostream &list_originals (std::ostream &o) const
-    {
-      for (std::set< ::Dwarf_Off>::const_iterator i = _m_originals.begin ();
-	   i != _m_originals.end ();
-	   ++i)
-	o << " " << std::hex << *i;
-      return o;
-    }
-
-    inline unsigned int uses () const
-    {
-      return _m_uses;
-    }
-
-    inline void assert_unused () const
-    {
-      assert (uses () == 0);
-      assert (_m_with_sibling.none ());
-      assert (_m_refs.empty ());
-    }
-
-    inline void self (value::value_reference *ref)
-    {
-      _m_refs.push (ref);
-    }
-
-    inline void
-    self (const debug_info_entry::pointer &ref)
-    {
-      subr::nothing dummy;
-      self (new value::value_reference (ref, dummy));
-    }
-
-    inline void
-    self (const debug_info_entry::children_type::_base::const_iterator &ref)
-    {
-      self (debug_info_entry::pointer (ref, subr::nothing ()));
-    }
-
-    inline bool selfless () const
-    {
-      return _m_refs.empty ();
-    }
-
-    inline value::value_reference *self () const
-    {
-      assert (!selfless ());
-      return _m_refs.front ();
-    }
-
-    template<typename circular>
-    inline void
-    reify_refs (const debug_info_entry::pointer &ref)
-    {
-      for (size_t n = _m_refs.size (); n > 0; --n)
-	{
-	  value::value_reference *self_ref = _m_refs.front ();
-	  self_ref->ref = ref;
-	  _m_refs.pop ();
-	  _m_refs.push (self_ref);
-
-	  circular *circle = dynamic_cast<circular *> (self_ref);
-	  if (circle != NULL && !circle->final ())
-	    circle->placed ();
-	}
-    }
-
-    template<typename circular>
-    inline void
-    placed (die_info_pair *parent, const debug_info_entry::pointer &ref,
-	    bool have_sibling, unsigned int &total)
-    {
-      // Record first parent.
-      if (_m_parent == NULL)
-	{
-	  assert (uses () == 0 || parent == NULL);
-	  _m_parent = parent;
-	}
-      else
-	assert (uses () > 0);
-
-      if (selfless ())
-	{
-	  assert (uses () == 0);
-	  self (ref);
-	}
-      else
-	reify_refs<circular> (ref);
-
-      ++total;
-      ++_m_uses;
-      _m_with_sibling[have_sibling] = true;
     }
   };
 
