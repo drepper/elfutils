@@ -1,5 +1,5 @@
 /* elfutils::dwarf_edit -- mutable DWARF representation in -*- C++ -*-
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -169,8 +169,10 @@ namespace elfutils
 	try
 	  {
 	    _m_tag = die.tag ();
-	    _m_attributes.swap (attributes_type (die.attributes (), arg));
-	    _m_children.swap (children_type (die.children (), arg));
+	    attributes_type t_attrs = attributes_type (die.attributes (), arg);
+	    _m_attributes.swap (t_attrs);
+	    children_type t_children = children_type (die.children (), arg);
+	    _m_children.swap (t_children);
 	  }
 	catch (...)
 	  {
