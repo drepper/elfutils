@@ -473,12 +473,12 @@ struct talker : public dwarf_ref_tracker<dwarf1, dwarf2>
 };
 
 template<class dw>
-static inline typename dw::compile_units::const_iterator
+static inline typename dw::compile_units_type::const_iterator
 find_cu (const dw &file, const typename dw::debug_info_entry &entry)
 {
   dwarf::debug_info_entry::identity_type id = entry.compile_unit ().identity ();
 
-  for (typename dw::compile_units::const_iterator cu
+  for (typename dw::compile_units_type::const_iterator cu
 	 = file.compile_units ().begin ();
        cu != file.compile_units ().end ();
        ++cu)

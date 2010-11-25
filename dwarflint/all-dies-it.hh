@@ -36,7 +36,7 @@ class all_dies_iterator
   typedef typename T::debug_info_entry::children_type::const_iterator die_it_t;
   typedef std::vector <std::pair <die_it_t, die_it_t> > die_it_stack_t;
 
-  typename T::compile_units::const_iterator _m_cu_it, _m_cu_it_end;
+  typename T::compile_units_type::const_iterator _m_cu_it, _m_cu_it_end;
   die_it_t _m_die_it, _m_die_it_end;
   die_it_stack_t _m_die_it_stack;
   bool _m_atend;

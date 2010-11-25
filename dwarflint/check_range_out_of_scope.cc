@@ -71,11 +71,11 @@ check_range_out_of_scope::check_range_out_of_scope (checkstack &stack, dwarflint
 {
   try
     {
-      class dwarf::compile_units const &cus = dw.compile_units ();
+      class dwarf::compile_units_type const &cus = dw.compile_units ();
       ranges_t r;
       r.push_back (std::make_pair (0, -1));
       where wh = WHERE (sec_info, NULL);
-      for (dwarf::compile_units::const_iterator it = cus.begin ();
+      for (dwarf::compile_units_type::const_iterator it = cus.begin ();
 	   it != cus.end (); ++it)
 	recursively_validate (*it, *it, r, wh);
     }

@@ -70,7 +70,7 @@ namespace elfutils
 
     // Main container anchoring all the output.
     template<class impl>
-    class compile_units : public std::list<typename impl::compile_unit>
+    class compile_units_type : public std::list<typename impl::compile_unit>
     {
       friend class subr::create_container;
 
@@ -79,16 +79,16 @@ namespace elfutils
 
       // Constructor copying CUs from input container.
       template<typename input, typename arg_type>
-      inline compile_units (const input &other, arg_type &arg)
-	: _base (subr::argify<input, compile_units, arg_type &>
+      inline compile_units_type (const input &other, arg_type &arg)
+	: _base (subr::argify<input, compile_units_type, arg_type &>
 		 (other.begin (), arg),
-		 subr::argify<input, compile_units, arg_type &>
+		 subr::argify<input, compile_units_type, arg_type &>
 		 (other.end (), arg))
       {}
 
     public:
       // Default constructor: an empty container, no CUs.
-      inline compile_units () {}
+      inline compile_units_type () {}
 
       template<typename other_children>
       bool operator== (const other_children &other) const
@@ -106,7 +106,7 @@ namespace elfutils
     class compile_unit : public impl::debug_info_entry
     {
       friend class subr::create_container;
-      friend class impl::compile_units;
+      friend class impl::compile_units_type;
 
     protected:
       template<typename input>

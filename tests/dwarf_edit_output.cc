@@ -68,7 +68,7 @@ struct cmp
 		const dwarf_edit::debug_info_entry &b,
 		const dwarf_edit &dw)
   {
-    dwarf_edit::compile_units::const_iterator cu1, cu2;
+    dwarf_edit::compile_units_type::const_iterator cu1, cu2;
     cu1 = dw.compile_units ().begin ();
     cu2 = dw.compile_units ().begin ();
     cu2++;
@@ -82,7 +82,7 @@ struct cmp
   bool
   compare_first_two_cus (const dwarf_edit &dw)
   {
-    dwarf_edit::compile_units::const_iterator cu1, cu2;
+    dwarf_edit::compile_units_type::const_iterator cu1, cu2;
     cu1 = dw.compile_units ().begin ();
     cu2 = dw.compile_units ().begin ();
     cu2++;
@@ -486,7 +486,7 @@ void
 test_last_two_dies (dwarf_edit &in, dwarf_output &out, int tag, bool same,
 		    int n, const char *name)
 {
-  dwarf_edit::compile_units::const_iterator cu_in;
+  dwarf_edit::compile_units_type::const_iterator cu_in;
   dwarf_edit::debug_info_entry::children_type::const_iterator it_in;
   const dwarf_edit::debug_info_entry *die1 = NULL;
   const dwarf_edit::debug_info_entry *die2 = NULL;
@@ -523,7 +523,7 @@ test_last_two_dies (dwarf_edit &in, dwarf_output &out, int tag, bool same,
 	       dwarf_tag_string (tag), n, name);
     }
 
-  dwarf_output::compile_units::const_iterator cu;
+  dwarf_output::compile_units_type::const_iterator cu;
   dwarf_output::debug_info_entry::children_type::const_iterator it;
   ::Dwarf_Off off1 = 0;
   ::Dwarf_Off off2 = 0;
@@ -575,7 +575,7 @@ struct match_offset : public std::binary_function<ci, ci, bool>
 bool
 test_first_two_cus (dwarf_output &out)
 {
-  dwarf_output::compile_units::const_iterator cu;
+  dwarf_output::compile_units_type::const_iterator cu;
   cu = out.compile_units ().begin ();
   ci children1 = (*cu).children ().begin ();
   ci end1 = (*cu).children ().end();

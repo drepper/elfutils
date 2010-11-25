@@ -59,8 +59,8 @@ namespace elfutils
   template<class dwarf1, class dwarf2>
   struct dwarf_tracker_base
   {
-    typedef typename dwarf1::compile_units::const_iterator cu1;
-    typedef typename dwarf2::compile_units::const_iterator cu2;
+    typedef typename dwarf1::compile_units_type::const_iterator cu1;
+    typedef typename dwarf2::compile_units_type::const_iterator cu2;
     typedef typename dwarf1::debug_info_entry dwarf1_die;
     typedef typename dwarf2::debug_info_entry dwarf2_die;
     typedef typename dwarf1_die::children_type::const_iterator die1;
@@ -229,10 +229,10 @@ namespace elfutils
       return match (a.compile_units (), b.compile_units ());
     }
 
-    typedef typename dwarf1::compile_units compile_units1;
-    typedef typename dwarf2::compile_units compile_units2;
-    typedef typename dwarf1::compile_units::const_iterator cu1_it;
-    typedef typename dwarf2::compile_units::const_iterator cu2_it;
+    typedef typename dwarf1::compile_units_type compile_units1;
+    typedef typename dwarf2::compile_units_type compile_units2;
+    typedef typename dwarf1::compile_units_type::const_iterator cu1_it;
+    typedef typename dwarf2::compile_units_type::const_iterator cu2_it;
     inline bool match (const compile_units1 &a, const compile_units2 &b)
     {
       cu1_it it1 = a.begin ();
@@ -242,7 +242,7 @@ namespace elfutils
       do
 	{
 	  if (subr::container_equal
-	      (it1, end1, it2, end2, MATCHER (compile_units)))
+	      (it1, end1, it2, end2, MATCHER (compile_units_type)))
 	    return true;
 	}
       while (_m_tracker.mismatch (it1, end1, it2, end2));

@@ -96,7 +96,7 @@ namespace elfutils
     typedef dwarf_data::range_list range_list;
     typedef dwarf_data::location_attr location_attr;
 
-    class compile_units;
+    class compile_units_type;
     class debug_info_entry;
     class attr_value;
 
@@ -489,14 +489,14 @@ namespace elfutils
        and construct a new dwarf_output object by copying using that
        collector (or, equivalently, call o.compile_units ().recollect (C)
        on the new collector C).  */
-    class compile_units
-      : public dwarf_data::compile_units<dwarf_output>
+    class compile_units_type
+      : public dwarf_data::compile_units_type<dwarf_output>
     {
       friend class dwarf_output;
 
     private:
-      inline compile_units (const compile_units &)
-	: dwarf_data::compile_units<dwarf_output> ()
+      inline compile_units_type (const compile_units_type &)
+	: dwarf_data::compile_units_type<dwarf_output> ()
       {
 	never_copy ();
       }
@@ -513,25 +513,25 @@ namespace elfutils
 
       // Constructor copying CUs from input container.
       template<typename input, typename copier>
-      inline compile_units (const input &other, copier &c)
+      inline compile_units_type (const input &other, copier &c)
       {
 	subr::create_container (this, other, c, cu_maker<input, copier>);
       }
 
     public:
       // Default constructor: an empty container, no CUs.
-      inline compile_units () {}
+      inline compile_units_type () {}
     };
 
   private:
-    compile_units _m_units;
+    compile_units_type _m_units;
 
   public:
-    class compile_units &compile_units ()
+    class compile_units_type &compile_units ()
     {
       return _m_units;
     }
-    const class compile_units &compile_units () const
+    const class compile_units_type &compile_units () const
     {
       return _m_units;
     }
@@ -561,7 +561,7 @@ namespace elfutils
     inline dwarf_output (const input &dw, dwarf_output_collector &c)
     {
       copier<input> maker (c);
-      _m_units.swap (compile_units::compile_units (dw.compile_units (), maker));
+      _m_units.swap (compile_units_type::compile_units_type (dw.compile_units (), maker));
     }
 
     template<typename file>
@@ -1914,8 +1914,8 @@ namespace elfutils
 
     // Create a whole CU in the output.
     inline void
-    make_unit (const typename dw::compile_units::const_iterator &in,
-	       const compile_units::iterator &out)
+    make_unit (const typename dw::compile_units_type::const_iterator &in,
+	       const compile_units_type::iterator &out)
     {
       die_info_pair *cu = unit_copier (this, *in).final_unit ();
 
@@ -1980,8 +1980,8 @@ namespace elfutils
 
     public:
       // Not really used so far, just for completeness.
-      typedef subr::wrapped_input_container<class dwarf_output::compile_units,
-					    pending_cu> compile_units;
+      typedef subr::wrapped_input_container<class dwarf_output::compile_units_type,
+					    pending_cu> compile_units_type;
 
       class debug_info_entry
       {
@@ -2787,7 +2787,7 @@ namespace elfutils
   extern template class dwarf_data::attributes_type<dwarf_output,
 						    dwarf_output::value>;
   extern template class dwarf_data::compile_unit<dwarf_output>;
-  extern template class dwarf_data::compile_units<dwarf_output>;
+  extern template class dwarf_data::compile_units_type<dwarf_output>;
 
   extern template class dwarf_output::copier<dwarf>;
   extern template class dwarf_output::copier<dwarf_edit>;

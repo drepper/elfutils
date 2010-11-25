@@ -315,7 +315,7 @@ print_file (const file &dw, const unsigned int limit)
   static refs_map common_refs;
   refs_map file_refs;
 
-  for (typename file::compile_units::const_iterator i
+  for (typename file::compile_units_type::const_iterator i
 	 = dw.compile_units ().begin (); i != dw.compile_units ().end (); ++i)
     if (refs_shared_cu)
       print_cu<file> (*i, limit, refs_shared_file ? common_refs : file_refs);

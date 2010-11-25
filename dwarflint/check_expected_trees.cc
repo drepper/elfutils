@@ -193,8 +193,8 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 	}
       } recursively_validate;
 
-      class dwarf::compile_units const &cus = dw.compile_units ();
-      for (dwarf::compile_units::const_iterator it = cus.begin ();
+      class dwarf::compile_units_type const &cus = dw.compile_units ();
+      for (dwarf::compile_units_type::const_iterator it = cus.begin ();
 	   it != cus.end (); ++it)
 	recursively_validate (*it, *it);
     }

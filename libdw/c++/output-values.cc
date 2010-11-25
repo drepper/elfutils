@@ -60,7 +60,7 @@ template class dwarf_data::value<dwarf_output, false>;
 template class dwarf_data::attr_value<dwarf_output, dwarf_output::value>;
 template class dwarf_data::attributes_type<dwarf_output, dwarf_output::value>;
 template class dwarf_data::compile_unit<dwarf_output>;
-template class dwarf_data::compile_units<dwarf_output>;
+template class dwarf_data::compile_units_type<dwarf_output>;
 
 template class dwarf_output::copier<dwarf>;
 template class dwarf_output::copier<dwarf_edit>;

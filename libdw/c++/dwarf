@@ -2154,24 +2154,24 @@ namespace elfutils
 
     // Container for raw CUs in file order, intended to be compatible
     // with a read-only subset of std::list<compile_unit>.
-    class raw_compile_units
+    class raw_compile_units_type
     {
       friend class dwarf;
     private:
       const dwarf &_m_file;
 
-      raw_compile_units (const dwarf &file) : _m_file (file) {}
+      raw_compile_units_type (const dwarf &file) : _m_file (file) {}
 
     public:
       typedef compile_unit value_type;
 
-      inline raw_compile_units (const raw_compile_units &u)
+      inline raw_compile_units_type (const raw_compile_units_type &u)
 	: _m_file (u._m_file) {}
 
       class const_iterator
 	: public std::iterator<std::input_iterator_tag, compile_unit>
       {
-	friend class raw_compile_units;
+	friend class raw_compile_units_type;
       private:
 	debug_info_entry _m_die;
 	const dwarf *_m_file;	// XXX
@@ -2244,9 +2244,9 @@ namespace elfutils
 	return const_iterator ();
       }
     };
-    inline raw_compile_units raw_compile_units () const
+    inline raw_compile_units_type raw_compile_units () const
     {
-      return raw_compile_units::raw_compile_units (*this);
+      return raw_compile_units_type::raw_compile_units_type (*this);
     }
 
   private:
@@ -2263,7 +2263,7 @@ namespace elfutils
 	}
     }
 
-    typedef skipping_wrapper<class raw_compile_units,
+    typedef skipping_wrapper<class raw_compile_units_type,
 			     compile_unit, compile_unit,
 			     skip_partial_unit> compile_units_base;
 
@@ -2271,16 +2271,16 @@ namespace elfutils
 
     // Container for logical CUs in file order, intended to be compatible
     // with a read-only subset of std::list<compile_unit>.
-    class compile_units : public compile_units_base
+    class compile_units_type : public compile_units_base
     {
       friend class dwarf;
     private:
-      compile_units (class raw_compile_units raw) : compile_units_base (raw) {}
+      compile_units_type (class raw_compile_units_type raw) : compile_units_base (raw) {}
 
     public:
       typedef compile_unit value_type;
 
-      compile_units (const compile_units &u) : compile_units_base (u) {}
+      compile_units_type (const compile_units_type &u) : compile_units_base (u) {}
 
       template<typename units>
       bool operator== (const units &other) const
@@ -2293,9 +2293,9 @@ namespace elfutils
 	return !(*this == other);
       }
     };
-    inline class compile_units compile_units () const
+    inline class compile_units_type compile_units () const
     {
-      return compile_units::compile_units (raw_compile_units ());
+      return compile_units_type::compile_units_type (raw_compile_units ());
     }
 
   private:

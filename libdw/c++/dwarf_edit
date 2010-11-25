@@ -269,14 +269,14 @@ namespace elfutils
     typedef dwarf_data::compile_unit<dwarf_edit> compile_unit;
 
     // Main container anchoring all the output.
-    class compile_units
-      : public dwarf_data::compile_units<dwarf_edit>
+    class compile_units_type
+      : public dwarf_data::compile_units_type<dwarf_edit>
     {
       friend class dwarf_edit;
 
     private:
-      inline compile_units (const compile_units &)
-	: dwarf_data::compile_units<dwarf_edit> ()
+      inline compile_units_type (const compile_units_type &)
+	: dwarf_data::compile_units_type<dwarf_edit> ()
       {
 	throw std::logic_error
 	  ("must copy-construct top-level dwarf_edit object instead");
@@ -284,14 +284,14 @@ namespace elfutils
 
       // Constructor copying CUs from input container.
       template<typename input, typename tracker>
-      inline compile_units (const input &other, tracker &t)
+      inline compile_units_type (const input &other, tracker &t)
       {
 	subr::create_container (this, other, t);
       }
 
     public:
       // Default constructor: an empty container, no CUs.
-      inline compile_units () {}
+      inline compile_units_type () {}
 
       inline compile_unit &add_unit ()
       {
@@ -301,16 +301,16 @@ namespace elfutils
     };
 
   private:
-    compile_units _m_units;
+    compile_units_type _m_units;
 
     typedef dwarf_ref_maker<dwarf_edit, dwarf_edit> edit_ref_maker;
 
   public:
-    class compile_units &compile_units ()
+    class compile_units_type &compile_units ()
     {
       return _m_units;
     }
-    const class compile_units &compile_units () const
+    const class compile_units_type &compile_units () const
     {
       return _m_units;
     }

@@ -63,7 +63,7 @@ namespace elfutils
   class dwarf_path_finder
   {
   public:
-    typedef typename dw::compile_units::const_iterator cu;
+    typedef typename dw::compile_units_type::const_iterator cu;
     typedef typename dw::debug_info_entry::children_type::const_iterator die;
 
     /* We maintain the current path down the logical DIE tree from the CU
