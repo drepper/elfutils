@@ -1,5 +1,5 @@
 /* -*- C++ -*- interfaces for libdw.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -2246,7 +2246,7 @@ namespace elfutils
     };
     inline raw_compile_units_type raw_compile_units () const
     {
-      return raw_compile_units_type::raw_compile_units_type (*this);
+      return raw_compile_units_type (*this);
     }
 
   private:
@@ -2295,7 +2295,7 @@ namespace elfutils
     };
     inline class compile_units_type compile_units () const
     {
-      return compile_units_type::compile_units_type (raw_compile_units ());
+      return compile_units_type (raw_compile_units ());
     }
 
   private:
@@ -2491,25 +2491,25 @@ namespace elfutils
   inline class dwarf::debug_info_entry::raw_children_type
   dwarf::debug_info_entry::raw_children () const
   {
-    return raw_children_type::raw_children_type (*this);
+    return raw_children_type (*this);
   }
 
   inline class dwarf::debug_info_entry::children_type
   dwarf::debug_info_entry::children () const
   {
-    return children_type::children_type (*this);
+    return children_type (*this);
   }
 
   inline class dwarf::debug_info_entry::raw_attributes_type
   dwarf::debug_info_entry::raw_attributes () const
   {
-    return raw_attributes_type::raw_attributes_type (*this);
+    return raw_attributes_type (*this);
   }
 
   inline class dwarf::debug_info_entry::attributes_type
   dwarf::debug_info_entry::attributes () const
   {
-    return attributes_type::attributes_type (raw_attributes ());
+    return attributes_type (raw_attributes ());
   }
 
   // Explicit specializations.

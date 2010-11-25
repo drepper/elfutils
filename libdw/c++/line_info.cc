@@ -45,7 +45,7 @@ dwarf::attr_value::source_file () const
     default:
       throw std::runtime_error ("XXX not a file name");
     }
-  return source_file::source_file (_m_attr);
+  return dwarf::source_file (_m_attr);
 }
 
 static bool

@@ -561,7 +561,7 @@ namespace elfutils
     inline dwarf_output (const input &dw, dwarf_output_collector &c)
     {
       copier<input> maker (c);
-      _m_units.swap (compile_units_type::compile_units_type (dw.compile_units (), maker));
+      _m_units.swap (compile_units_type (dw.compile_units (), maker));
     }
 
     template<typename file>
