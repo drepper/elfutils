@@ -171,33 +171,6 @@ dwarf::source_file::to_string () const
   return os.str ();
 }
 
-// dwarf::directory_table
-
-size_t
-dwarf::directory_table::size () const
-{
-  return _m_files->ndirs;
-}
-
-static inline dwarf::directory_table::const_iterator
-directory_table_array (Dwarf_Files *files)
-{
-  // See dwarf_getsrcdirs.
-  return reinterpret_cast<const char *const *> (&files->info[files->nfiles]);
-}
-
-dwarf::directory_table::const_iterator
-dwarf::directory_table::begin () const
-{
-  return directory_table_array (_m_files);
-}
-
-dwarf::directory_table::const_iterator
-dwarf::directory_table::end () const
-{
-  return directory_table_array (_m_files) + _m_files->ndirs;
-}
-
 // dwarf::file_table
 
 size_t

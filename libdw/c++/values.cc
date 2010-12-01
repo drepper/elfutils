@@ -663,8 +663,7 @@ template<typename line_info_table>
 static inline std::string
 line_info_string (const line_info_table *table)
 {
-  return ("[" + table->include_directories ().to_string ()
-	  + ", " + table->lines ().to_string () + "]");
+  return ("[" + table->lines ().to_string () + "]");
 }
 
 std::string
@@ -683,26 +682,6 @@ namespace elfutils
   }
 
 };
-
-// dwarf::directory_table
-
-static std::string
-dirtable_string (size_t ndirs)
-{
-  return dec_string (ndirs, "{", " dirs}");
-}
-
-std::string
-dwarf::directory_table::to_string () const
-{
-  return dirtable_string (_m_files->ndirs);
-}
-
-std::string
-dwarf_data::directory_table::to_string () const
-{
-  return dirtable_string (size ());
-}
 
 // dwarf::line_table
 

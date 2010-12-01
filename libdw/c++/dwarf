@@ -408,7 +408,6 @@ namespace elfutils
     class range_list;
     class ranges;
     class line_info_table;
-    class directory_table;
     class file_table;
     class line_table;
     class line_entry;
@@ -1034,10 +1033,6 @@ namespace elfutils
       const line_info_table line_info () const;
 
       // Convenience methods for line_info_table sub-containers.
-      inline const directory_table include_directories () const
-      {
-	return line_info ().include_directories ();
-      }
       inline const file_table files () const
       {
 	return line_info ().files ();
@@ -1601,67 +1596,6 @@ namespace elfutils
        */
     };
 
-    // This describes a CU's directory table, a simple array of strings.
-    class directory_table
-    {
-    private:
-      ::Dwarf_Files *_m_files;
-
-      template<typename table>
-      inline bool table_equal (const table &other) const
-      {
-	/* We ignore the first element, the compilation directory.
-	   This is not encoded in the .debug_line table, but in
-	   the DW_AT_comp_dir attribute of the referring CU.
-	   The directory table itself matches regardless.  */
-	const_iterator i = begin ();
-	typename table::const_iterator j = other.begin ();
-	return subr::container_equal
-	  (++i, end (), ++j, other.end (),
-	   subr::deref<directory_table, table,
-	   	       subr::name_equal<typename table::value_type> > ());
-      }
-
-    public:
-      typedef size_t size_type;
-      typedef ptrdiff_t difference_type;
-      typedef const char *value_type;
-
-      inline directory_table (::Dwarf_Files *const files)
-	: _m_files (files) {}
-      inline directory_table (const directory_table &t)
-	: _m_files (t._m_files) {}
-
-      std::string to_string () const;
-
-      typedef const char *const *const_iterator;
-
-      inline bool empty () const
-      {
-	return size () == 0;
-      }
-
-      size_t size () const;
-      const_iterator begin () const;
-      const_iterator end () const;
-
-      template<typename table>
-      inline bool operator== (const table &other) const
-      {
-	return table_equal (other);
-      }
-      template<typename table>
-      inline bool operator!= (const table &other) const
-      {
-	return !(*this == other);
-      }
-      // Short-circuit for comparing to self.
-      inline bool operator== (const directory_table &other) const
-      {
-	return _m_files == other._m_files || table_equal (other);
-      }
-    };
-
     /* This describes a CU's file table.  It works like a read-only
        std::vector<source_file>, and also supports lookup by name.  */
     class file_table
@@ -1887,10 +1821,6 @@ namespace elfutils
 
       std::string to_string () const;
 
-      inline const directory_table include_directories () const
-      {
-	return directory_table (_m_files);
-      }
       inline const file_table files () const
       {
 	return file_table (_m_files);
@@ -1900,8 +1830,7 @@ namespace elfutils
       template<typename table>
       inline bool operator== (const table &other) const
       {
-	return (include_directories () == other.include_directories ()
-		&& lines () == other.lines ());
+	return lines () == other.lines ();
       }
       template<typename table>
       inline bool operator!= (const table &other) const

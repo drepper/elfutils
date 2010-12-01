@@ -95,11 +95,9 @@ namespace elfutils
 
   public:
     typedef dwarf_data::source_file source_file;
-    typedef dwarf_data::directory_table directory_table;
     typedef dwarf_data::line_entry<source_file> line_entry;
     typedef dwarf_data::line_table<line_entry> line_table;
-    typedef dwarf_data::line_info_table<directory_table,
-					line_table> line_info_table;
+    typedef dwarf_data::line_info_table<line_table> line_info_table;
     typedef dwarf_data::dwarf_enum dwarf_enum;
     typedef dwarf_data::range_list range_list;
     typedef dwarf_data::location_attr location_attr;
@@ -390,8 +388,7 @@ namespace elfutils
   // Explicit instantiations.
   extern template class dwarf_data::line_entry<dwarf_edit::source_file>;
   extern template class dwarf_data::line_table<dwarf_edit::line_entry>;
-  extern template class dwarf_data::line_info_table<dwarf_edit::directory_table,
-						    dwarf_edit::line_table>;
+  extern template class dwarf_data::line_info_table<dwarf_edit::line_table>;
   extern template class dwarf_data::attr_value<dwarf_edit>;
   extern template class dwarf_data::value<dwarf_edit>;
 

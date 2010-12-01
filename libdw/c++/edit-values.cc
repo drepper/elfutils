@@ -1,5 +1,5 @@
 /* elfutils::dwarf_edit attribute value interfaces.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2010 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -56,8 +56,7 @@ using namespace elfutils;
 // Explicit instantiations.
 template class dwarf_data::line_entry<dwarf_edit::source_file>;
 template class dwarf_data::line_table<dwarf_edit::line_entry>;
-template class dwarf_data::line_info_table<dwarf_edit::directory_table,
-					   dwarf_edit::line_table>;
+template class dwarf_data::line_info_table<dwarf_edit::line_table>;
 template class dwarf_data::attr_value<dwarf_edit>;
 template class dwarf_data::value<dwarf_edit>;
 

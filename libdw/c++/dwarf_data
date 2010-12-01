@@ -157,11 +157,6 @@ namespace elfutils
       }
 
       // Convenience methods for line_info_table sub-containers.
-      inline const typename impl::directory_table &include_directories () const
-      {
-	return line_info ().include_directories ();
-      }
-
       inline const typename impl::line_table &lines () const
       {
 	return line_info ().lines ();
@@ -171,11 +166,6 @@ namespace elfutils
       inline typename impl::line_info_table &line_info ()
       {
 	return this->attributes ()[::DW_AT_stmt_list].line_info ();
-      }
-
-      inline typename impl::directory_table &include_directories ()
-      {
-	return line_info ().include_directories ();
       }
 
       inline typename impl::line_table &lines ()
@@ -295,46 +285,6 @@ namespace elfutils
       inline uintptr_t identity () const
       {
 	return (uintptr_t) this;
-      }
-    };
-
-    // This describes a CU's directory table, a simple array of strings.
-    class directory_table : public std::vector<std::string>
-    {
-    private:
-      typedef std::vector<std::string> _base;
-
-    public:
-      struct hasher : public subr::container_hasher<directory_table> {};
-
-      directory_table () {}
-
-      template<typename table>
-      directory_table (const table &other)
-      {
-	/* The first entry is "special". It can be NULL/empty.
-	   This is not encoded in the .debug_line table, but in
-	   the DW_AT_comp_dir attribute of the referring CU.  */
-	typename table::const_iterator first = other.begin ();
-	_base::push_back (*first ?: "");
-	_base::insert (_base::end (), ++first, other.end ());
-      }
-
-      std::string to_string () const;
-
-      template<typename table>
-      inline bool operator== (const table &other) const
-      {
-	/* We ignore the first element, the compilation directory.
-	   This is actually part of the CU, not part of the line info.
-	   The directory table itself matches regardless.  */
-	return (size () == other.size ()
-		&& subr::container_tail_equal (*this, other, 1));
-      }
-      template<typename table>
-      inline bool operator!= (const table &other) const
-      {
-	return !(*this == other);
       }
     };
 
@@ -550,58 +500,52 @@ namespace elfutils
       const_iterator find (::Dwarf_Addr) const;
     };
 
-    /* This holds the entirety of line information.  It's parameterized
-       by the directory_table and line_table representations.  */
-    template<typename directory_table, typename line_table>
+    /* This holds the entirety of line information.
+       The line_table is all there actually is.  */
+    template<typename line_table>
     class line_info_table
-      : private std::pair<directory_table, line_table>
     {
     private:
-      typedef std::pair<directory_table, line_table> _base;
+      line_table _m_lines;
 
     public:
-      friend class subr::base_hasher<line_info_table, _base>;
-      typedef subr::base_hasher<line_info_table, _base> hasher;
+      struct hasher : public std::unary_function<line_info_table, size_t>
+      {
+	inline size_t operator () (const line_info_table &info) const
+	{
+	  return subr::hash_this (info._m_lines);
+	}
+      };
 
-      inline line_info_table () : _base () {}
+      inline line_info_table () {}
 
       template<typename table>
       inline line_info_table (const table &other)
-	: _base (other.include_directories (), other.lines ())
+	: _m_lines (other.lines ())
       {}
 
       template<typename table>
       inline line_info_table &operator= (const table &other)
       {
-	this->first = directory_table (other.include_directories ());
-	this->second = line_table (other.lines ());
+	_m_lines = line_table (other.lines ());
 	return *this;
       }
 
       std::string to_string () const;
 
-      inline directory_table &include_directories ()
-      {
-	return this->first;
-      }
-      inline const directory_table &include_directories () const
-      {
-	return this->first;
-      }
       inline line_table &lines ()
       {
-	return this->second;
+	return _m_lines;
       }
       inline const line_table &lines () const
       {
-	return this->second;
+	return _m_lines;
       }
 
       template<typename table>
       inline bool operator== (const table &other) const
       {
-	return (include_directories () == other.include_directories ()
-		&& lines () == other.lines ());
+	return lines () == other.lines ();
       }
       template<typename table>
       inline bool operator!= (const table &other) const

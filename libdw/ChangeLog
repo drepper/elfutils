@@ -1,3 +1,20 @@
+2010-11-30  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf (dwarf::directory_table): Remove class.
+	(dwarf::compile_unit::include_directories): Remove method.
+	(dwarf::line_info_table::include_directories): Remove method.
+	(dwarf::line_info_table::operator==): Don't use it.
+	* c++/dwarf_data (dwarf_data::directory_table): Remove class.
+	(dwarf_data::compile_unit::include_directories): Remove method.
+	(dwarf_data::line_info_table::include_directories): Remove method.
+	(dwarf_data::line_info_table::hasher): Replace.
+	(dwarf_data::line_info_table::operator==): Don't use it.
+	* c++/dwarf_output (dwarf_output::directory_table): Remove class.
+	* c++/values.cc (line_info_string): Ignore include_directories.
+	(dwarf::directory_table): Remove methods.
+	* c++/line_info.cc (dwarf::directory_table): Remove methods.
+	* c++/edit-values.cc (dwarf_data::line_table): Update instantiation.
+
 2010-10-13  Roland McGrath  <roland@redhat.com>
 
 	* dwarf.h: Add DW_LANG_Go.
