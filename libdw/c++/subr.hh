@@ -1146,6 +1146,7 @@ namespace elfutils
       class element
       {
       private:
+	friend class sharing_stack;
 	value_type _m_value;
 	element *_m_next;
 	unsigned int _m_count;
@@ -1209,18 +1210,6 @@ namespace elfutils
 	    delete this;
 	}
 
-	inline element *pop ()
-	{
-	  assert (_m_count > 0);
-	  element *tail = _m_next;
-	  if (--_m_count == 0)
-	    {
-	      _m_next = NULL;
-	      delete this;
-	    }
-	  return tail;
-	}
-
 	inline const element *next () const
 	{
 	  return _m_next;
@@ -1271,14 +1260,21 @@ namespace elfutils
 
       inline void push (const value_type &value)
       {
+	element *old = _m_head;
 	_m_head = new element (value, _m_head);
 	++_m_size;
+	if (old != NULL)
+	  old->release ();
       }
 
       inline void pop ()
       {
-	_m_head = _m_head->pop ();
 	--_m_size;
+	element *tail = _m_head->_m_next;
+	if (tail != NULL)
+	  tail->acquire ();
+	_m_head->release ();
+	_m_head = tail;
       }
 
       inline const value_type &top () const
