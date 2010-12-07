@@ -96,7 +96,7 @@ namespace elfutils
        _m_path in _m_seen so that a derived tracker made from path_to
        "context" can use the right _m_root.
     */
-    typedef subr::stackish<die> die_path;
+    typedef subr::sharing_stack<die> die_path;
 
   private:
     // We use an empty list as a marker; every path includes at least one DIE.

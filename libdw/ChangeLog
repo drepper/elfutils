@@ -1,3 +1,11 @@
+2010-12-07  Petr Machata  <pmachata@redhat.com>
+
+	* c++/subr.hh (sharing_stack::element::pop): Remove.  Move the
+	logic to sharing_stack::pop.
+	* c++/dwarf (debug_info_entry::children_type::const_iterator): Use
+	sharing_stack instead of stackish.
+	* c++/dwarf_tracker (dwarf_path_finder): Likewise.
+
 2010-11-30  Roland McGrath  <roland@redhat.com>
 
 	* c++/dwarf (dwarf::directory_table): Remove class.
