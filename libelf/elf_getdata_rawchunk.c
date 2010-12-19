@@ -78,9 +78,9 @@ elf_getdata_rawchunk (elf, offset, size, type)
       return NULL;
     }
 
-  if (unlikely (elf->maximum_size != ~((size_t) 0)
-		&& (size > elf->maximum_size
-		    || (off64_t) (elf->maximum_size - size) < offset)))
+  if (unlikely (offset < 0 || offset + (off64_t) size < offset
+		|| (elf->maximum_size != ~((size_t) 0)
+		    && offset + size > elf->maximum_size)))
     {
       /* Invalid request.  */
       __libelf_seterrno (ELF_E_INVALID_OP);
