@@ -1,3 +1,24 @@
+Version 0.150
+
+libdw: Fix for handling huge .debug_aranges section.
+
+libdwfl: Fix for handling prelinked DSO with separate debug file.
+
+findtextrel: Fix diagnostics to work with usual section ordering.
+
+libebl: i386 backend fix for multi-register integer return value location.
+
+Version 0.149:
+
+libdw: Decode new DW_OP_GNU_implicit_pointer operation;
+       new function dwarf_getlocation_implicit_pointer.
+
+libdwfl: New function dwfl_dwarf_line.
+
+addr2line: New flag -F/--flags to print more DWARF line information details.
+
+strip: -g recognizes .gdb_index as a debugging section.
+
 Version 0.148:
 
 libdw: Accept DWARF 4 format: new functions dwarf_next_unit, dwarf_offdie_types.

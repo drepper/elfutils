@@ -72,6 +72,8 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
       return NULL;
     }
 
+  GElf_Addr vaddr = 0;
+  GElf_Addr address_sync = 0;
   GElf_Addr start = 0, end = 0, bias = 0;
   switch (ehdr->e_type)
     {
@@ -198,13 +200,15 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 	    goto elf_error;
 	  if (ph->p_type == PT_LOAD)
 	    {
+	      vaddr = ph->p_vaddr & -ph->p_align;
+	      address_sync = ph->p_vaddr + ph->p_memsz;
 	      if ((base & (ph->p_align - 1)) != 0)
 		base = (base + ph->p_align - 1) & -ph->p_align;
 	      start = base + (ph->p_vaddr & -ph->p_align);
 	      break;
 	    }
 	}
-      bias = base;
+      bias = start - vaddr;
 
       for (size_t i = phnum; i-- > 0;)
 	{
@@ -248,7 +252,9 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
       if (m->main.elf == NULL)
 	{
 	  m->main.elf = elf;
-	  m->main.bias = bias;
+	  m->main.vaddr = vaddr;
+	  m->main.address_sync = address_sync;
+	  m->main_bias = bias;
 	  m->e_type = ehdr->e_type;
 	  if (unlikely (elf_getshdrstrndx (elf, &m->main.shstrndx)))
 	    m->main.shstrndx = SHN_UNDEF;
@@ -256,7 +262,8 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
       else
 	{
 	  elf_end (elf);
-	  if (m->main.bias != base)
+	  if (m->main_bias != bias
+	      || m->main.vaddr != vaddr || m->main.address_sync != address_sync)
 	    goto overlap;
 	}
     }

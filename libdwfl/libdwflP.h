@@ -1,5 +1,5 @@
 /* Internal definitions for libdwfl.
-   Copyright (C) 2005-2010 Red Hat, Inc.
+   Copyright (C) 2005-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -141,7 +141,14 @@ struct dwfl_file
 
   Elf *elf;
   size_t shstrndx;		/* Cache of elf_getshdrstrndx on elf.  */
-  GElf_Addr bias;		/* Actual load address - p_vaddr.  */
+
+  /* This is the lowest p_vaddr in this ELF file, aligned to p_align.
+     For a file without phdrs, this is zero.  */
+  GElf_Addr vaddr;
+
+  /* This is an address chosen for synchronization between the main file
+     and the debug file.  See dwfl_module_getdwarf.c for how it's chosen.  */
+  GElf_Addr address_sync;
 };
 
 struct Dwfl_Module
@@ -155,6 +162,7 @@ struct Dwfl_Module
   GElf_Addr low_addr, high_addr;
 
   struct dwfl_file main, debug;
+  GElf_Addr main_bias;
   Ebl *ebl;
   GElf_Half e_type;		/* GElf_Ehdr.e_type cache.  */
   Dwfl_Error elferr;		/* Previous failure to open main file.  */
@@ -236,6 +244,50 @@ dwfl_linecu_inline (const Dwfl_Line *line)
   return lines->cu;
 }
 #define dwfl_linecu dwfl_linecu_inline
+
+static inline GElf_Addr
+dwfl_adjusted_address (Dwfl_Module *mod, GElf_Addr addr)
+{
+  return addr + mod->main_bias;
+}
+
+static inline GElf_Addr
+dwfl_deadjust_address (Dwfl_Module *mod, GElf_Addr addr)
+{
+  return addr - mod->main_bias;
+}
+
+static inline Dwarf_Addr
+dwfl_adjusted_dwarf_addr (Dwfl_Module *mod, Dwarf_Addr addr)
+{
+  return dwfl_adjusted_address (mod, (addr
+				      - mod->debug.address_sync
+				      + mod->main.address_sync));
+}
+
+static inline Dwarf_Addr
+dwfl_deadjust_dwarf_addr (Dwfl_Module *mod, Dwarf_Addr addr)
+{
+  return (dwfl_deadjust_address (mod, addr)
+	  - mod->main.address_sync
+	  + mod->debug.address_sync);
+}
+
+static inline GElf_Addr
+dwfl_adjusted_st_value (Dwfl_Module *mod, GElf_Addr addr)
+{
+  if (mod->symfile == &mod->main)
+    return dwfl_adjusted_address (mod, addr);
+  return dwfl_adjusted_dwarf_addr (mod, addr);
+}
+
+static inline GElf_Addr
+dwfl_deadjust_st_value (Dwfl_Module *mod, GElf_Addr addr)
+{
+  if (mod->symfile == &mod->main)
+    return dwfl_deadjust_address (mod, addr);
+  return dwfl_deadjust_dwarf_addr (mod, addr);
+}
 
 /* This describes a contiguous address range that lies in a single CU.
    We condense runs of Dwarf_Arange entries for the same CU into this.  */

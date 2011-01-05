@@ -475,6 +475,7 @@ enum
     DW_OP_GNU_push_tls_address = 0xe0,
     DW_OP_GNU_uninit = 0xf0,
     DW_OP_GNU_encoded_addr = 0xf1,
+    DW_OP_GNU_implicit_pointer = 0xf2,
 
     DW_OP_lo_user = 0xe0,	/* Implementation-defined range start.  */
     DW_OP_hi_user = 0xff	/* Implementation-defined range end.  */
@@ -579,6 +580,7 @@ enum
     DW_LANG_UPC = 0x0012,	     /* Unified Parallel C */
     DW_LANG_D = 0x0013,		     /* D */
     DW_LANG_Python = 0x0014,	     /* Python */
+    DW_LANG_Go = 0x0016,	     /* Google's Go (provisionally in DWARF5) */
 
     DW_LANG_lo_user = 0x8000,
     DW_LANG_Mips_Assembler = 0x8001,

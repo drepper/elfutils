@@ -1,5 +1,5 @@
 /* Interfaces for libdw.
-   Copyright (C) 2002-2010 Red Hat, Inc.
+   Copyright (C) 2002-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -734,6 +734,16 @@ extern ptrdiff_t dwarf_getlocation_relocatable (Dwarf_Attribute *attr,
 extern int dwarf_getlocation_implicit_value (Dwarf_Attribute *attr,
 					     const Dwarf_Op *op,
 					     Dwarf_Block *return_block)
+  __nonnull_attribute__ (2, 3);
+
+/* Return the attribute indicated by a DW_OP_GNU_implicit_pointer operation.
+   The OP pointer must point into an expression that dwarf_getlocation
+   or dwarf_getlocation_addr has returned given the same ATTR.
+   The result is the DW_AT_location or DW_AT_const_value attribute
+   of the OP->number DIE.  */
+extern int dwarf_getlocation_implicit_pointer (Dwarf_Attribute *attr,
+					       const Dwarf_Op *op,
+					       Dwarf_Attribute *result)
   __nonnull_attribute__ (2, 3);
 
 /* Return the relocatable form of a DW_OP_addr operation.  The OP pointer

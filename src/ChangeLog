@@ -1,3 +1,56 @@
+2011-01-04  Roland McGrath  <roland@redhat.com>
+
+	* strip.c (remove_shdrs): New variable.
+	(options, parse_opt): Grok --strip-sections to set it.
+	(handle_elf): When that's set, truncate off .shstrtab and shdrs.
+
+2010-11-10  Roland McGrath  <roland@redhat.com>
+
+	* findtextrel.c (process_file): Don't assume order of sections.
+	Reported by Mike Hommey <mh@glandium.org>.
+
+2010-07-26  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_ops): Handle DW_OP_GNU_implicit_pointer.
+
+2010-08-30  Roland McGrath  <roland@redhat.com>
+
+	Print .debug_loc/.debug_ranges with cognizance of actual DIE uses.
+	* readelf.c (parse_opt): Add section_info to implicit_debug_sections
+	for ranges, loc.
+	(struct listptr, struct listptr_table): New types.
+	(compare_listptr, reset_listptr, sort_listptr): New functions.
+	(notice_listptr, skip_listptr_hole): New functions.
+	(struct attrcb_args): Add silent member.
+	(attr_callback): Call notice_listptr for loclistptr and rangelistptr.
+	Suppress output if silent, but still call notice_listptr.
+	(print_debug_units): Suppress output if section_info not requested.
+	(print_debug_loc_section): Call sort_listptr, skip_listptr_hole.
+	(print_debug_ranges_section): Likewise.
+	(print_debug): Call reset_listptr on both tables.
+
+	* readelf.c (print_debug_ranges_section): Print empty list.
+	(print_debug_loc_section): Likewise.
+
+	* readelf.c (print_debug_loc_section): Check for bogus length
+	before calling print_ops.
+	(print_ops): Check harder for bogus data that would read off end.
+
+2010-08-11  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (for_each_section_argument): Process all sections with
+	matching name, not just the first.
+
+2010-07-26  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (print_ops): Take new argument for CU version.
+	Fix DW_OP_call_ref decoding to depend on it.
+	(print_debug_loc_section): Update caller.
+	(print_cfa_program): Take new argument, pass it down.
+	(print_debug_frame_section): Update caller.
+	(struct attrcb_args): New member version.
+	(print_debug_units): Initialize it.
+
 2010-07-02  Roland McGrath  <roland@redhat.com>
 
 	* readelf.c (print_debug_frame_section): Use format_dwarf_addr for
@@ -76,6 +129,7 @@
 	(struct attrcb_args): Add offset_size field.
 	(attr_callback): Use it for print_ops call.
 	(print_debug_info_section): Initialize it.
+	(print_ops): Likewise.
 
 2010-04-14  Roland McGrath  <roland@redhat.com>
 

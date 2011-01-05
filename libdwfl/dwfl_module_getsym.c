@@ -113,7 +113,7 @@ dwfl_module_getsym (Dwfl_Module *mod, int ndx,
 	}
       else if (alloc)
 	/* Apply the bias to the symbol value.  */
-	sym->st_value += mod->symfile->bias;
+	sym->st_value = dwfl_adjusted_st_value (mod, sym->st_value);
       break;
     }
 

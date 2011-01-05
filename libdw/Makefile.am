@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2002-2010 Red Hat, Inc.
+## Copyright (C) 2002-2011 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -84,7 +84,7 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_frame_info.c dwarf_frame_cfa.c dwarf_frame_register.c \
 		  dwarf_cfi_addrframe.c \
 		  dwarf_getcfi.c dwarf_getcfi_elf.c dwarf_cfi_end.c \
-		  dwarf_aggregate_size.c \
+		  dwarf_aggregate_size.c dwarf_getlocation_implicit_pointer.c \
 		  relocate.c dwarf_relocatable_info.c \
 		  dwarf_form_relocatable.c dwarf_line_relocatable.c \
 		  dwarf_ranges_relocatable.c dwarf_getlocation_relocatable.c \

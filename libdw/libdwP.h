@@ -485,6 +485,10 @@ extern int __libdw_getlocation (Dwarf_Attribute *attr, const Dwarf_Block *block,
 				Dwarf_Op **llbuf, size_t *listlen, int sec_idx)
   __nonnull_attribute__ (2, 4, 5) internal_function;
 
+extern Dwarf_Die *__libdw_offdie (Dwarf *dbg, Dwarf_Off offset,
+				  Dwarf_Die *result, bool debug_types)
+  internal_function;
+
 
 /* Return error code of last failing function call.  This value is kept
    separately for each thread.  */

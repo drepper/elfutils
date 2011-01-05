@@ -1,5 +1,5 @@
 /* Get information from a source line record returned by libdwfl.
-   Copyright (C) 2005-2010 Red Hat, Inc.
+   Copyright (C) 2005-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -67,7 +67,7 @@ dwfl_lineinfo (Dwfl_Line *line, Dwarf_Addr *addr, int *linep, int *colp,
 	  __libdwfl_seterrno (DWFL_E_LIBDW);
 	  return NULL;
 	}
-      *addr += cu->mod->debug.bias;
+      *addr = dwfl_adjusted_dwarf_addr (cu->mod, *addr);
     }
   if (linep != NULL)
     *linep = info->line;
