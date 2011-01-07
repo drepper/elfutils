@@ -45,6 +45,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <sys/param.h>
+#include <netinet/tcp.h>
 
 /* FIXME: regs should use GDB XML arch descriptor instead!  */
 #include <sys/user.h>
@@ -138,6 +139,14 @@ open_socket (const char *ports)
   i = close (sock);
   if (i != 0)
     error (EXIT_FAILURE, errno, gettext ("Could not close the port"));
+
+  i = 1;
+  /* Errors ignored.  */
+  setsockopt (sock2, SOL_SOCKET, SO_KEEPALIVE, &i, sizeof (i));
+
+  i = 1;
+  /* Errors ignored.  */
+  setsockopt (sock2, IPPROTO_TCP, TCP_NODELAY, &i, sizeof (i));
 
   return sock2;
 }
