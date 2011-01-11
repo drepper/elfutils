@@ -1,3 +1,14 @@
+2011-01-06  Roland McGrath  <roland@redhat.com>
+
+	* strip.c (handle_elf): Under --strip-sections, remove all
+	non-allocated sections and never generate .gnu_debuglink.
+
+2011-01-04  Roland McGrath  <roland@redhat.com>
+
+	* strip.c (remove_shdrs): New variable.
+	(options, parse_opt): Grok --strip-sections to set it.
+	(handle_elf): When that's set, truncate off .shstrtab and shdrs.
+
 2010-11-10  Roland McGrath  <roland@redhat.com>
 
 	* findtextrel.c (process_file): Don't assume order of sections.
