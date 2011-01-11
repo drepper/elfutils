@@ -1,5 +1,5 @@
 /* Discard section not used at runtime from object files.
-   Copyright (C) 2000-2010 Red Hat, Inc.
+   Copyright (C) 2000-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -65,6 +65,7 @@ ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 /* Values for the parameters which have no short form.  */
 #define OPT_REMOVE_COMMENT	0x100
 #define OPT_PERMISSIVE		0x101
+#define OPT_STRIP_SECTIONS	0x102
 
 
 /* Definitions of arguments for argp functions.  */
@@ -80,6 +81,8 @@ static const struct argp_option options[] =
   { "strip-debug", 'g', NULL, 0, N_("Remove all debugging symbols"), 0 },
   { NULL, 'd', NULL, OPTION_ALIAS, NULL, 0 },
   { NULL, 'S', NULL, OPTION_ALIAS, NULL, 0 },
+  { "strip-sections", OPT_STRIP_SECTIONS, NULL, 0,
+    N_("Remove section headers (not recommended)"), 0 },
   { "preserve-dates", 'p', NULL, 0,
     N_("Copy modified/access timestamps to the output"), 0 },
   { "remove-comment", OPT_REMOVE_COMMENT, NULL, 0,
@@ -139,6 +142,9 @@ static bool remove_comment;
 
 /* If true remove all debug sections.  */
 static bool remove_debug;
+
+/* If true remove all section headers.  */
+static bool remove_shdrs;
 
 /* If true relax some ELF rules for input files.  */
 static bool permissive;
@@ -266,6 +272,10 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'd':
     case 'S':
       remove_debug = true;
+      break;
+
+    case OPT_STRIP_SECTIONS:
+      remove_shdrs = true;
       break;
 
     case OPT_PERMISSIVE:
@@ -675,9 +685,10 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
   */
   for (cnt = 1; cnt < shnum; ++cnt)
     /* Check whether the section can be removed.  */
-    if (ebl_section_strip_p (ebl, ehdr, &shdr_info[cnt].shdr,
-			     shdr_info[cnt].name, remove_comment,
-			     remove_debug))
+    if (remove_shdrs ? !(shdr_info[cnt].shdr.sh_flags & SHF_ALLOC)
+	: ebl_section_strip_p (ebl, ehdr, &shdr_info[cnt].shdr,
+			       shdr_info[cnt].name, remove_comment,
+			       remove_debug))
       {
 	/* For now assume this section will be removed.  */
 	shdr_info[cnt].idx = 0;
@@ -992,7 +1003,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
     goto fail_close;
 
   /* Create the reference to the file with the debug info.  */
-  if (debug_fname != NULL)
+  if (debug_fname != NULL && !remove_shdrs)
     {
       /* Add the section header string table section name.  */
       shdr_info[cnt].se = ebl_strtabadd (shst, ".gnu_debuglink", 15);
@@ -1602,15 +1613,6 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
      we can actually write out the debug file.  */
   if (debug_fname != NULL)
     {
-      uint32_t debug_crc;
-      Elf_Data debug_crc_data =
-	{
-	  .d_type = ELF_T_WORD,
-	  .d_buf = &debug_crc,
-	  .d_size = sizeof (debug_crc),
-	  .d_version = EV_CURRENT
-	};
-
       /* Finally write the file.  */
       if (unlikely (elf_update (debugelf, ELF_C_WRITE) == -1))
 	{
@@ -1633,21 +1635,33 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       /* The temporary file does not exist anymore.  */
       tmp_debug_fname = NULL;
 
-      /* Compute the checksum which we will add to the executable.  */
-      if (crc32_file (debug_fd, &debug_crc) != 0)
+      if (!remove_shdrs)
 	{
-	  error (0, errno,
-		 gettext ("while computing checksum for debug information"));
-	  unlink (debug_fname);
-	  result = 1;
-	  goto fail_close;
-	}
+	  uint32_t debug_crc;
+	  Elf_Data debug_crc_data =
+	    {
+	      .d_type = ELF_T_WORD,
+	      .d_buf = &debug_crc,
+	      .d_size = sizeof (debug_crc),
+	      .d_version = EV_CURRENT
+	    };
 
-      /* Store it in the debuglink section data.  */
-      if (unlikely (gelf_xlatetof (newelf, &debuglink_crc_data,
-				   &debug_crc_data, ehdr->e_ident[EI_DATA])
-		    != &debuglink_crc_data))
-	INTERNAL_ERROR (fname);
+	  /* Compute the checksum which we will add to the executable.  */
+	  if (crc32_file (debug_fd, &debug_crc) != 0)
+	    {
+	      error (0, errno, gettext ("\
+while computing checksum for debug information"));
+	      unlink (debug_fname);
+	      result = 1;
+	      goto fail_close;
+	    }
+
+	  /* Store it in the debuglink section data.  */
+	  if (unlikely (gelf_xlatetof (newelf, &debuglink_crc_data,
+				       &debug_crc_data, ehdr->e_ident[EI_DATA])
+			!= &debuglink_crc_data))
+	    INTERNAL_ERROR (fname);
+	}
     }
 
   /* Finally finish the ELF header.  Fill in the fields not handled by
@@ -1663,6 +1677,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
   newehdr->e_entry = ehdr->e_entry;
   newehdr->e_flags = ehdr->e_flags;
   newehdr->e_phoff = ehdr->e_phoff;
+
   /* We need to position the section header table.  */
   const size_t offsize = gelf_fsize (elf, ELF_T_OFF, 1, EV_CURRENT);
   newehdr->e_shoff = ((shdr_info[shdridx].shdr.sh_offset
@@ -1714,6 +1729,53 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       error (0, 0, gettext ("while writing '%s': %s"),
 	     fname, elf_errmsg (-1));
       result = 1;
+    }
+
+  if (remove_shdrs)
+    {
+      /* libelf can't cope without the section headers being properly intact.
+	 So we just let it write them normally, and then we nuke them later.  */
+
+      if (newehdr->e_ident[EI_CLASS] == ELFCLASS32)
+	{
+	  assert (offsetof (Elf32_Ehdr, e_shentsize) + sizeof (Elf32_Half)
+		  == offsetof (Elf32_Ehdr, e_shnum));
+	  assert (offsetof (Elf32_Ehdr, e_shnum) + sizeof (Elf32_Half)
+		  == offsetof (Elf32_Ehdr, e_shstrndx));
+	  const Elf32_Off zero_off = 0;
+	  const Elf32_Half zero[3] = { 0, 0, SHN_UNDEF };
+	  if (pwrite_retry (fd, &zero_off, sizeof zero_off,
+			    offsetof (Elf32_Ehdr, e_shoff)) != sizeof zero_off
+	      || (pwrite_retry (fd, zero, sizeof zero,
+				offsetof (Elf32_Ehdr, e_shentsize))
+		  != sizeof zero)
+	      || ftruncate64 (fd, shdr_info[shdridx].shdr.sh_offset) < 0)
+	    {
+	      error (0, errno, gettext ("while writing '%s'"),
+		     fname);
+	      result = 1;
+	    }
+	}
+      else
+	{
+	  assert (offsetof (Elf64_Ehdr, e_shentsize) + sizeof (Elf64_Half)
+		  == offsetof (Elf64_Ehdr, e_shnum));
+	  assert (offsetof (Elf64_Ehdr, e_shnum) + sizeof (Elf64_Half)
+		  == offsetof (Elf64_Ehdr, e_shstrndx));
+	  const Elf64_Off zero_off = 0;
+	  const Elf64_Half zero[3] = { 0, 0, SHN_UNDEF };
+	  if (pwrite_retry (fd, &zero_off, sizeof zero_off,
+			    offsetof (Elf64_Ehdr, e_shoff)) != sizeof zero_off
+	      || (pwrite_retry (fd, zero, sizeof zero,
+				offsetof (Elf64_Ehdr, e_shentsize))
+		  != sizeof zero)
+	      || ftruncate64 (fd, shdr_info[shdridx].shdr.sh_offset) < 0)
+	    {
+	      error (0, errno, gettext ("while writing '%s'"),
+		     fname);
+	      result = 1;
+	    }
+	}
     }
 
  fail_close:
