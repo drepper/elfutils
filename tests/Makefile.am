@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2010 Red Hat, Inc.
+## Copyright (C) 1996-2011 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -89,7 +89,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
 	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh \
 	run-dwarf_edit.sh dwarf_edit_output run-dwarfcmp-test-self.sh \
-	run-test-flag-nobits.sh
+	run-test-flag-nobits.sh run-prelink-addr-test.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -147,7 +147,19 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile44.S.bz2 testfile44.expect.bz2 run-disasm-x86.sh \
 	     testfile45.S.bz2 testfile45.expect.bz2 run-disasm-x86-64.sh \
 	     testfile46.bz2 testfile47.bz2 testfile48.bz2 testfile48.debug.bz2 \
-	     testfile49.bz2 testfile50.bz2 testfile51.bz2
+	     testfile49.bz2 testfile50.bz2 testfile51.bz2 \
+	     run-prelink-addr-test.sh \
+	     testfile52-32.so.bz2 testfile52-32.so.debug.bz2 \
+	     testfile52-32.prelink.so.bz2 testfile52-32.noshdrs.so.bz2 \
+	     testfile52-64.so.bz2 testfile52-64.so.debug.bz2 \
+	     testfile52-64.prelink.so.bz2 testfile52-64.noshdrs.so.bz2 \
+	     testfile53-32.bz2 testfile53-32.debug.bz2 \
+	     testfile53-32.prelink.bz2 testfile53-64.bz2 \
+	     testfile53-64.debug.bz2 testfile53-64.prelink.bz2 \
+	     testfile54-32.so.bz2 testfile54-32.so.debug.bz2 \
+	     testfile54-32.prelink.so.bz2 testfile54-32.noshdrs.so.bz2 \
+	     testfile54-64.so.bz2 testfile54-64.so.debug.bz2 \
+	     testfile54-64.prelink.so.bz2 testfile54-64.noshdrs.so.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
