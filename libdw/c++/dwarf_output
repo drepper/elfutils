@@ -994,39 +994,6 @@ namespace elfutils
       return &x;
     }
 
-    struct shape_type
-    {
-      typedef std::vector<std::pair<int, int> > attrs_type;
-      attrs_type _m_attrs;
-      bool _m_has_children;
-      size_t _m_hash;
-
-      friend class subr::hashed_hasher<shape_type>;
-      typedef subr::hashed_hasher<shape_type> hasher;
-
-      inline void hashnadd (int name, int form);
-      inline shape_type (const die_type &die, bool last_sibling);
-
-      inline bool operator== (const shape_type &other) const
-      {
-	return (_m_hash == other._m_hash
-		&& _m_has_children == other._m_has_children
-		&& _m_attrs == other._m_attrs);
-      }
-      inline bool operator!= (const shape_type &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-    typedef subr::nothing shape_info;
-
-    typedef std::tr1::unordered_map<shape_type, shape_info,
-				    shape_type::hasher> shape_map;
-    shape_map _m_shapes;
-
-    void add_shape (die_type &die, bool last_sibling);
-
     struct stats_cmp
       : public std::binary_function<const die_map::value_type *,
 				    const die_map::value_type *,
