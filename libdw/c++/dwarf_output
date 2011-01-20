@@ -393,6 +393,18 @@ namespace elfutils
       {
 	return 0;
       }
+
+      /* The hash as used for a reference attribute value that points
+	 to this die.  Only uses "local" (non-reference) values.  The
+	 culculation should match the pending_entry::local_hash ()
+	 method result. */
+      inline size_t local_hash () const
+      {
+	size_t hash = _m_tag;
+	subr::hash_combine (hash, _m_attributes->size ());
+	subr::hash_combine (hash, _m_children->size ());
+	return hash;
+      }
     };
 
     struct value::value_reference
@@ -409,13 +421,12 @@ namespace elfutils
 	: _base (i, dummy)
       {}
 
-      /* The hash of a value_reference is its referent's identity,
-	 because we can have multiple value_reference objects that
-	 wind up pointing to the same entry.  This method is virtual
-	 for the circular_reference case, below.  */
+      /* The hash of a value_reference is its referent's local hash,
+	 which only takes non-reference values into account.  This
+	 method is virtual for the circular_reference case, below.  */
       virtual size_t hash () const
       {
-	return ref->identity ();
+	return ref->local_hash ();
       }
     };
 
@@ -1179,9 +1190,10 @@ namespace elfutils
     {
     private:
       const std::vector<entry *> *_m_entry;
+      const size_t _m_hash; // The local hash of the reference die (entry).
 
       inline circular_reference (const circular_reference &)
-	: value::value_reference ()
+	: value::value_reference (), _m_hash (0)
       {
 	throw std::logic_error ("cannot copy-construct");
       }
@@ -1189,7 +1201,8 @@ namespace elfutils
     public:
       inline circular_reference (const entry *die, copier *)
 	: value::value_reference (),
-	  _m_entry (new std::vector<entry *> (1, const_cast<entry *> (die)))
+	  _m_entry (new std::vector<entry *> (1, const_cast<entry *> (die))),
+	  _m_hash (die->local_hash ())
       {
 	die->dump () << " new circular_reference " << this << "\n";
       }
@@ -1229,14 +1242,11 @@ namespace elfutils
       }
 
       /* We have a special case for a reference attribute that is part
-	 of a circular chain.  That value always hashes as zero, so that
-	 each entry in a circular chain of references has the same hash
-	 value as any entry that it otherwise matches and that has any
-	 (eventually) circular reference as the corresponding
-	 attribute's value.  */
+	 of a circular chain.  It gets calculated from the
+	 pending_entry. */
       virtual size_t hash () const
       {
-	return 0;
+	return _m_hash;
       }
     };
 
@@ -1448,6 +1458,20 @@ namespace elfutils
 	self->debug () << "\n";
 	subr::for_each (_m_children, std::mem_fun (&entry::dump_entry));
 	self->dump (false, true) << " ends\n";
+      }
+
+      /* This should match the calculation of local_hash () of an
+	 debug_info_die. If we already matched, just take the hash of
+	 the matched die instead of recalculating. */
+      inline size_t local_hash () const
+      {
+	if (_m_matched != NULL)
+	  return _m_matched->first.local_hash ();
+
+	size_t hash = _m_tag;
+	subr::hash_combine (hash, _m_attributes.size ());
+	subr::hash_combine (hash, _m_children.size ());
+	return hash;
       }
     };
 
@@ -1752,6 +1776,15 @@ namespace elfutils
 	debug () << std::flush;
 	assert (_m_pending != NULL);
 	return _m_parent->_m_pending->child (_m_self_idx);
+      }
+
+      /* The local hash of the debug_info_entry if we are already
+	 final, otherwise calculate it from the pending_entry. */
+      inline size_t local_hash () const
+      {
+	if (_m_final)
+	  return _m_final->first.local_hash ();
+	return _m_pending->local_hash ();
       }
     };
 
