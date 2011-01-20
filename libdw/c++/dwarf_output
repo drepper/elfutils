@@ -1511,7 +1511,7 @@ namespace elfutils
        built in the output has one of these in place of a value_reference.
        These all live in the _m_entries map, one per input-side DIE.  */
     struct entry
-      : public value::value_dispatch
+      : public value::value_reference
     {
       ::Dwarf_Off _m_offset; // For debugging and statistics only.
       ::Dwarf_Off _m_cost;   // For statistics only.
