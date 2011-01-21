@@ -246,12 +246,17 @@ namespace elfutils
 	typedef std::vector<die_info_pair *> _base;
 
 	size_t _m_hash;
+	size_t _m_local_hash;
 
 	inline void set_hash ()
 	{
 	  _m_hash = 0;
+	  _m_local_hash = 0;
 	  for (_base::iterator i = _base::begin (); i != _base::end (); ++i)
-	    subr::hash_combine (_m_hash, (uintptr_t) *i);
+	    {
+	      subr::hash_combine (_m_hash, (uintptr_t) *i);
+	      subr::hash_combine (_m_local_hash, (*i)->first.local_hash ());
+	    }
 	}
 
         inline children_type () {}
@@ -293,6 +298,7 @@ namespace elfutils
 	inline bool is (const children_type &these) const
 	{
 	  return (_m_hash == these._m_hash
+		  && _m_local_hash == these._m_local_hash
 		  && size () == these.size ()
 		  && std::equal (_base::begin (), _base::end (),
 				 these._base::begin ()));
@@ -310,6 +316,11 @@ namespace elfutils
 	inline const_iterator end () const
 	{
 	  return const_iterator (_base::end (), subr::nothing ());
+	}
+
+	inline size_t local_hash () const
+	{
+	  return _m_local_hash;
 	}
       };
 
@@ -418,7 +429,7 @@ namespace elfutils
       {
 	size_t hash = _m_tag;
 	subr::hash_combine (hash, _m_attributes->local_hash ());
-	subr::hash_combine (hash, _m_children->size ());
+	subr::hash_combine (hash, _m_children->local_hash ());
 	return hash;
       }
     };
@@ -1499,7 +1510,15 @@ namespace elfutils
 	      attr_hash ^= (it->first << 3);
 	  }
 	subr::hash_combine (hash, attr_hash);
-	subr::hash_combine (hash, _m_children.size ());
+
+	size_t children_hash = 0;
+	for (typename std::vector<entry *>::const_iterator it
+	       = _m_children.begin ();
+	     it != _m_children.end ();
+	     ++it)
+	  subr::hash_combine (children_hash, (*it)->local_hash ());
+	subr::hash_combine (hash, children_hash);
+
 	return hash;
       }
     };
