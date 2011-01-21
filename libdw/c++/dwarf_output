@@ -167,9 +167,10 @@ namespace elfutils
 	typedef dwarf_data::attributes_type<dwarf_output, value> _base;
 
 	size_t _m_hash;
+	size_t _m_local_hash;
 
 	inline attributes_type ()
-	  : _base (), _m_hash (0)
+	  : _base (), _m_hash (0), _m_local_hash (0)
 	{}
 
 	struct same_attr : public std::equal_to<value_type>
@@ -185,7 +186,16 @@ namespace elfutils
 	{
 	  // Precompute our hash value based on our contents.
 	  for (iterator i = begin (); i != end (); ++i)
-	    subr::hash_combine (_m_hash, *i);
+	    {
+	      subr::hash_combine (_m_hash, *i);
+	      // XOR the attribute values together (so order doesn't matter)
+	      // but exclude reference attributes values (just include
+	      // their tag).
+	      if (i->second.what_space () != dwarf::VS_reference)
+		_m_local_hash ^= subr::hash_this (*i);
+	      else
+		_m_local_hash ^= (i->first << 3);
+	    }
 	}
 
 	inline const _base &base () const
@@ -196,7 +206,7 @@ namespace elfutils
       public:
 	template<typename iter>
 	inline attributes_type (const iter &from, const iter &to)
-	  : _base (from, to), _m_hash (0)
+	  : _base (from, to), _m_hash (0), _m_local_hash (0)
 	{
 	  do_hash ();
 	}
@@ -206,7 +216,7 @@ namespace elfutils
 
 	template<typename input, typename arg_type>
 	inline attributes_type (const input &other, arg_type &c)
-	  : _base (other, c), _m_hash (0)
+	  : _base (other, c), _m_hash (0), _m_local_hash (0)
 	{
 	  do_hash ();
 	}
@@ -214,9 +224,15 @@ namespace elfutils
 	inline bool is (const attributes_type &these) const
 	{
 	  return (_m_hash == these._m_hash
+		  && _m_local_hash == these._m_local_hash
 		  && size () == these.size ()
 		  && std::equal (begin (), end (), these.begin (),
 				 same_attr ()));
+	}
+
+	inline size_t local_hash () const
+	{
+	  return _m_local_hash;
 	}
       };
 
@@ -401,7 +417,7 @@ namespace elfutils
       inline size_t local_hash () const
       {
 	size_t hash = _m_tag;
-	subr::hash_combine (hash, _m_attributes->size ());
+	subr::hash_combine (hash, _m_attributes->local_hash ());
 	subr::hash_combine (hash, _m_children->size ());
 	return hash;
       }
@@ -1469,7 +1485,20 @@ namespace elfutils
 	  return _m_matched->first.local_hash ();
 
 	size_t hash = _m_tag;
-	subr::hash_combine (hash, _m_attributes.size ());
+	size_t attr_hash = 0;
+	// XOR the attribute values together (so order doesn't matter)
+	// but exclude reference attributes values (just include
+	// their tag).
+	for (attr_map::const_iterator it = _m_attributes.begin ();
+	     it != _m_attributes.end ();
+	     ++it)
+	  {
+	    if (it->second.what_space () != dwarf::VS_reference)
+	      attr_hash ^= subr::hash_this (*it);
+	    else
+	      attr_hash ^= (it->first << 3);
+	  }
+	subr::hash_combine (hash, attr_hash);
 	subr::hash_combine (hash, _m_children.size ());
 	return hash;
       }
