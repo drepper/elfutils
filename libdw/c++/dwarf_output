@@ -1875,21 +1875,13 @@ namespace elfutils
 	assert (_m_in->_m_pending == NULL);
 	_m_in->_m_pending = _m_out;
 
-	try
-	  {
-	    // This calls add_reference for each pending reference.
-	    _m_out->_m_attributes.set (in.attributes (), *this);
+	// This calls add_reference for each pending reference.
+	_m_out->_m_attributes.set (in.attributes (), *this);
 
-	    for (input_die_ptr i = in.children ().begin ();
-		 i != in.children ().end ();
-		 ++i)
-	      add_child (*i);
-	  }
-	catch (...)
-	  {
-	    _m_in->_m_pending = NULL;
-	    throw;
-	  }
+	for (input_die_ptr i = in.children ().begin ();
+	     i != in.children ().end ();
+	     ++i)
+	  add_child (*i);
 
 	_m_out = NULL;
 	_m_in->defined_self (_m_copier);

@@ -164,22 +164,11 @@ namespace elfutils
       template<typename die_type, typename arg_type>
       inline void set (const die_type &die, arg_type &arg)
       {
-	try
-	  {
-	    _m_tag = die.tag ();
-	    attributes_type t_attrs (die.attributes (), arg);
-	    _m_attributes.swap (t_attrs);
-	    children_type t_children (die.children (), arg);
-	    _m_children.swap (t_children);
-	  }
-	catch (...)
-	  {
-	    // Never leave a partially-formed DIE.
-	    _m_tag = -1;
-	    _m_attributes.clear ();
-	    _m_children.clear ();
-	    throw;
-	  };
+	_m_tag = die.tag ();
+	attributes_type t_attrs (die.attributes (), arg);
+	_m_attributes.swap (t_attrs);
+	children_type t_children (die.children (), arg);
+	_m_children.swap (t_children);
       }
 
     public:
