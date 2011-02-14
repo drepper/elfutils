@@ -167,10 +167,9 @@ namespace elfutils
 	typedef dwarf_data::attributes_type<dwarf_output, value> _base;
 
 	size_t _m_hash;
-	size_t _m_local_hash;
 
 	inline attributes_type ()
-	  : _base (), _m_hash (0), _m_local_hash (0)
+	  : _base (), _m_hash (0)
 	{}
 
 	struct same_attr : public std::equal_to<value_type>
@@ -186,16 +185,9 @@ namespace elfutils
 	{
 	  // Precompute our hash value based on our contents.
 	  for (iterator i = begin (); i != end (); ++i)
-	    {
+	    // XXX booo - still aren't handling circularity right...
+	    if (i->second.what_space () != dwarf::VS_reference)
 	      subr::hash_combine (_m_hash, *i);
-	      // XOR the attribute values together (so order doesn't matter)
-	      // but exclude reference attributes values (just include
-	      // their tag).
-	      if (i->second.what_space () != dwarf::VS_reference)
-		_m_local_hash ^= subr::hash_this (*i);
-	      else
-		_m_local_hash ^= (i->first << 3);
-	    }
 	}
 
 	inline const _base &base () const
@@ -206,7 +198,7 @@ namespace elfutils
       public:
 	template<typename iter>
 	inline attributes_type (const iter &from, const iter &to)
-	  : _base (from, to), _m_hash (0), _m_local_hash (0)
+	  : _base (from, to), _m_hash (0)
 	{
 	  do_hash ();
 	}
@@ -216,7 +208,7 @@ namespace elfutils
 
 	template<typename input, typename arg_type>
 	inline attributes_type (const input &other, arg_type &c)
-	  : _base (other, c), _m_hash (0), _m_local_hash (0)
+	  : _base (other, c), _m_hash (0)
 	{
 	  do_hash ();
 	}
@@ -224,15 +216,9 @@ namespace elfutils
 	inline bool is (const attributes_type &these) const
 	{
 	  return (_m_hash == these._m_hash
-		  && _m_local_hash == these._m_local_hash
 		  && size () == these.size ()
 		  && std::equal (begin (), end (), these.begin (),
 				 same_attr ()));
-	}
-
-	inline size_t local_hash () const
-	{
-	  return _m_local_hash;
 	}
       };
 
@@ -246,17 +232,12 @@ namespace elfutils
 	typedef std::vector<die_info_pair *> _base;
 
 	size_t _m_hash;
-	size_t _m_local_hash;
 
 	inline void set_hash ()
 	{
 	  _m_hash = 0;
-	  _m_local_hash = 0;
 	  for (_base::iterator i = _base::begin (); i != _base::end (); ++i)
-	    {
-	      subr::hash_combine (_m_hash, (uintptr_t) *i);
-	      subr::hash_combine (_m_local_hash, (*i)->first.local_hash ());
-	    }
+	    subr::hash_combine (_m_hash, (uintptr_t) *i);
 	}
 
         inline children_type () {}
@@ -298,7 +279,6 @@ namespace elfutils
 	inline bool is (const children_type &these) const
 	{
 	  return (_m_hash == these._m_hash
-		  && _m_local_hash == these._m_local_hash
 		  && size () == these.size ()
 		  && std::equal (_base::begin (), _base::end (),
 				 these._base::begin ()));
@@ -316,11 +296,6 @@ namespace elfutils
 	inline const_iterator end () const
 	{
 	  return const_iterator (_base::end (), subr::nothing ());
-	}
-
-	inline size_t local_hash () const
-	{
-	  return _m_local_hash;
 	}
       };
 
@@ -422,15 +397,11 @@ namespace elfutils
       }
 
       /* The hash as used for a reference attribute value that points
-	 to this die.  Only uses "local" (non-reference) values.  The
-	 culculation should match the pending_entry::local_hash ()
-	 method result. */
+	 to this die.  Only uses "local" (non-reference) values.
+	 Result cached in die_info.  */
       inline size_t local_hash () const
       {
-	size_t hash = _m_tag;
-	subr::hash_combine (hash, _m_attributes->local_hash ());
-	subr::hash_combine (hash, _m_children->local_hash ());
-	return hash;
+	return info ()->second._m_local_hash;
       }
     };
 
@@ -628,10 +599,12 @@ namespace elfutils
       std::bitset<2> _m_with_sibling;
       unsigned int _m_uses;
 
-      inline die_info ()
+      size_t _m_local_hash;
+
+      inline die_info (size_t local_hash)
 	: _m_parent (NULL), _m_refs (),
 	  _m_originals (), _m_original_cost (0),
-	  _m_with_sibling (), _m_uses (0)
+	  _m_with_sibling (), _m_uses (0), _m_local_hash (local_hash)
       {}
 
       inline ~die_info ()
@@ -1026,11 +999,12 @@ namespace elfutils
 
     inline die_info_pair *add_entry (int tag,
 				     const children_type *children,
-				     const attrs_type *attrs)
+				     const attrs_type *attrs,
+				     size_t local_hash)
     {
       std::pair <die_map::iterator, bool>
 	ins = _m_unique.insert (std::make_pair (die_type (tag, children, attrs),
-						die_info ()));
+						die_info (local_hash)));
       die_info_pair &x = *ins.first;
       if (ins.second)
 	x.second.assert_unused ();
@@ -1217,10 +1191,10 @@ namespace elfutils
     {
     private:
       const std::vector<entry *> *_m_entry;
-      const size_t _m_hash; // The local hash of the reference die (entry).
+      bool _m_final;
 
       inline circular_reference (const circular_reference &)
-	: value::value_reference (), _m_hash (0)
+	: value::value_reference ()
       {
 	throw std::logic_error ("cannot copy-construct");
       }
@@ -1229,14 +1203,15 @@ namespace elfutils
       inline circular_reference (const entry *die, copier *)
 	: value::value_reference (),
 	  _m_entry (new std::vector<entry *> (1, const_cast<entry *> (die))),
-	  _m_hash (die->local_hash ())
+	  _m_final (false)
       {
 	die->dump () << " new circular_reference " << this << "\n";
       }
 
       inline bool final () const
       {
-	return _m_entry == NULL;
+	// XXX was return _m_entry == NULL;
+	return _m_final;
       }
 
       inline typename std::vector<entry *>::const_iterator pending () const
@@ -1254,8 +1229,10 @@ namespace elfutils
       {
 	pending_entry ()->dump () << " placed circular_reference "
 				  << this << "\n";
-	delete _m_entry;
-	_m_entry = NULL;
+	// XXX Keeping around for local hash...
+	_m_final = true;
+	// delete _m_entry;
+	// _m_entry = NULL;
       }
 
       inline ~circular_reference ()
@@ -1273,7 +1250,7 @@ namespace elfutils
 	 pending_entry. */
       virtual size_t hash () const
       {
-	return _m_hash;
+	return pending_entry ()->local_hash ();
       }
     };
 
@@ -1395,6 +1372,40 @@ namespace elfutils
       typedef typename final_children_getter::
       template copy<debug_info_entry::children_type> get_final_children;
 
+      inline size_t calculate_local_hash ()
+      {
+	// Calculate the local hash for this new die.
+	// XOR the attribute values together (so order doesn't matter)
+	// but exclude reference attributes values (just include
+	// their tag). XXX - shouldn't be necessary, double check.
+	size_t lhash = _m_tag;
+	size_t attr_hash = 0;
+	for (attr_map::const_iterator it = _m_attributes.begin ();
+	     it != _m_attributes.end ();
+	     ++it)
+	  {
+	    if (it->second.what_space () != dwarf::VS_reference)
+	      attr_hash ^= subr::hash_this (*it);
+	    else
+	      attr_hash ^= (it->first << 3);
+	  }
+	subr::hash_combine (lhash, attr_hash);
+
+	size_t children_hash = 0;
+	for (typename std::vector<entry *>::const_iterator it
+	       = _m_children.begin ();
+	     it != _m_children.end ();
+	     ++it)
+	  {
+	    die_info_pair *final_child = get_final_child (*it);
+	    size_t child_lhash = final_child->second._m_local_hash;
+	    subr::hash_combine (children_hash, child_lhash);
+	  }
+	subr::hash_combine (lhash, children_hash);
+
+	return lhash;
+      }
+
       inline die_info_pair *final (copier *c,
 				   ::Dwarf_Off offset, ::Dwarf_Off cost)
       {
@@ -1405,6 +1416,9 @@ namespace elfutils
 	bool fresh = false;
 	if (_m_matched == NULL)
 	  {
+	    size_t lhash = calculate_local_hash ();
+
+	    // XXX We should drop this cache, or use the lhash in it...
 	    attrs_matcher equalator (c);
 	    const debug_info_entry::attributes_type *attrs
 	      = &co->add_attributes (_m_tag, _m_attributes, equalator)->first;
@@ -1414,7 +1428,7 @@ namespace elfutils
 				  (_m_children, std::ptr_fun (get_final_child)),
 				  fresh);
 
-	    _m_matched = co->add_entry (_m_tag, children, attrs);
+	    _m_matched = co->add_entry (_m_tag, children, attrs, lhash);
 	  }
 
 	// Final bookkeeping in the collector for this copied entry.
@@ -1485,41 +1499,6 @@ namespace elfutils
 	self->debug () << "\n";
 	subr::for_each (_m_children, std::mem_fun (&entry::dump_entry));
 	self->dump (false, true) << " ends\n";
-      }
-
-      /* This should match the calculation of local_hash () of an
-	 debug_info_die. If we already matched, just take the hash of
-	 the matched die instead of recalculating. */
-      inline size_t local_hash () const
-      {
-	if (_m_matched != NULL)
-	  return _m_matched->first.local_hash ();
-
-	size_t hash = _m_tag;
-	size_t attr_hash = 0;
-	// XOR the attribute values together (so order doesn't matter)
-	// but exclude reference attributes values (just include
-	// their tag).
-	for (attr_map::const_iterator it = _m_attributes.begin ();
-	     it != _m_attributes.end ();
-	     ++it)
-	  {
-	    if (it->second.what_space () != dwarf::VS_reference)
-	      attr_hash ^= subr::hash_this (*it);
-	    else
-	      attr_hash ^= (it->first << 3);
-	  }
-	subr::hash_combine (hash, attr_hash);
-
-	size_t children_hash = 0;
-	for (typename std::vector<entry *>::const_iterator it
-	       = _m_children.begin ();
-	     it != _m_children.end ();
-	     ++it)
-	  subr::hash_combine (children_hash, (*it)->local_hash ());
-	subr::hash_combine (hash, children_hash);
-
-	return hash;
       }
     };
 
@@ -1827,12 +1806,12 @@ namespace elfutils
       }
 
       /* The local hash of the debug_info_entry if we are already
-	 final, otherwise calculate it from the pending_entry. */
+	 final, otherwise get it from the pending_entry. */
       inline size_t local_hash () const
       {
 	if (_m_final)
 	  return _m_final->first.local_hash ();
-	return _m_pending->local_hash ();
+	return _m_pending->calculate_local_hash ();
       }
     };
 
