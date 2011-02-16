@@ -185,9 +185,7 @@ namespace elfutils
 	{
 	  // Precompute our hash value based on our contents.
 	  for (iterator i = begin (); i != end (); ++i)
-	    // XXX booo - still aren't handling circularity right...
-	    if (i->second.what_space () != dwarf::VS_reference)
-	      subr::hash_combine (_m_hash, *i);
+	    subr::hash_combine (_m_hash, *i);
 	}
 
 	inline const _base &base () const
@@ -1402,8 +1400,18 @@ namespace elfutils
 	     it != _m_children.end ();
 	     ++it)
 	  {
+	    // child lhash is always in the die_info, which might
+	    // be in the pending_entry when not yet finalized, or
+	    // part of the finalized child die_info.
 	    size_t child_lhash;
-	    child_lhash = (*it)->_m_pending->_m_info->_m_local_hash;
+	    struct pending_entry *pending = (*it)->_m_pending;
+	    if (pending)
+	      child_lhash = pending->_m_info->_m_local_hash;
+	    else
+	      {
+		die_info_pair *final_child = get_final_child (*it);
+		child_lhash = final_child->second._m_local_hash;
+	      }
 	    subr::hash_combine (children_hash, child_lhash);
 	  }
 	subr::hash_combine (lhash, children_hash);
