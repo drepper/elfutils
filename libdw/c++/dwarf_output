@@ -1000,11 +1000,11 @@ namespace elfutils
     inline die_info_pair *add_entry (int tag,
 				     const children_type *children,
 				     const attrs_type *attrs,
-				     size_t local_hash)
+				     die_info *info)
     {
       std::pair <die_map::iterator, bool>
 	ins = _m_unique.insert (std::make_pair (die_type (tag, children, attrs),
-						die_info (local_hash)));
+						*info));
       die_info_pair &x = *ins.first;
       if (ins.second)
 	x.second.assert_unused ();
@@ -1285,9 +1285,14 @@ namespace elfutils
       // Set if _m_children contains any entries not already final.
       bool _m_unfinished_children;
 
+      // The die_info that will be used when putting the die into
+      // the collector. Stores local hash as soon as all children
+      // are defined in defined_self ().
+      die_info *_m_info;
+
       inline pending_entry (int tag)
 	: _m_finalizing (NULL), _m_self (NULL), _m_matched (NULL),
-	  _m_tag (tag), _m_unfinished_children (false)
+	  _m_tag (tag), _m_unfinished_children (false), _m_info (NULL)
       {}
 
       inline ~pending_entry ()
@@ -1397,8 +1402,8 @@ namespace elfutils
 	     it != _m_children.end ();
 	     ++it)
 	  {
-	    die_info_pair *final_child = get_final_child (*it);
-	    size_t child_lhash = final_child->second._m_local_hash;
+	    size_t child_lhash;
+	    child_lhash = (*it)->_m_pending->_m_info->_m_local_hash;
 	    subr::hash_combine (children_hash, child_lhash);
 	  }
 	subr::hash_combine (lhash, children_hash);
@@ -1416,9 +1421,6 @@ namespace elfutils
 	bool fresh = false;
 	if (_m_matched == NULL)
 	  {
-	    size_t lhash = calculate_local_hash ();
-
-	    // XXX We should drop this cache, or use the lhash in it...
 	    attrs_matcher equalator (c);
 	    const debug_info_entry::attributes_type *attrs
 	      = &co->add_attributes (_m_tag, _m_attributes, equalator)->first;
@@ -1428,7 +1430,7 @@ namespace elfutils
 				  (_m_children, std::ptr_fun (get_final_child)),
 				  fresh);
 
-	    _m_matched = co->add_entry (_m_tag, children, attrs, lhash);
+	    _m_matched = co->add_entry (_m_tag, children, attrs, _m_info);
 	  }
 
 	// Final bookkeeping in the collector for this copied entry.
@@ -1627,10 +1629,9 @@ namespace elfutils
       }
 
       /* We are no longer an undefined entry, so decrement the count.
-	 Then finalize as much as we can now.  We attempt finalization
-	 even when the count is nonzero, so that a leaf entry with no
-	 forward references finishes immediately, and so then can its
-	 parents and on up if they don't own any pending references.  */
+	 But don't finalize yet. Since all children are known now we
+	 can create a candidate die_info that includes the local hash
+	 for this entry.  */
       inline void defined_self (copier *c)
       {
 	assert (_m_final == NULL);
@@ -1638,9 +1639,9 @@ namespace elfutils
 	assert (c->_m_undefined_entries > 0);
 	--c->_m_undefined_entries;
 	dump () << " defined_self => " << c->_m_undefined_entries << "\n";
-	finalize (c);
-	if (_m_final == NULL)
-	  assert (c->_m_undefined_entries > 0);
+
+	size_t lhash = _m_pending->calculate_local_hash ();
+	_m_pending->_m_info = new die_info (lhash);
       }
 
       /* A reference-following matching operation noticed along
@@ -1899,11 +1900,17 @@ namespace elfutils
 	return *_m_copier;
       }
 
-      /* Complain if we still have dangling references.
+      /* Try to finalize everything at once.
+	 Complain if we still have dangling references.
 	 If not, it should be impossible to have pending entries left.  */
       inline die_info_pair *final_unit () const
       {
 	assert (_m_out == NULL);
+
+	// We should now be able to finalize everything at once.
+	if (_m_copier->_m_undefined_entries == 0)
+	  _m_in->finalize (_m_copier);
+
 	if (unlikely (_m_in->_m_final == NULL))
 	  {
 	    _m_in->dump_entry ();
