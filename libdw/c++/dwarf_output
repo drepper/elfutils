@@ -1820,7 +1820,7 @@ namespace elfutils
       {
 	if (_m_final)
 	  return _m_final->first.local_hash ();
-	return _m_pending->calculate_local_hash ();
+	return _m_pending->_m_info->_m_local_hash;
       }
     };
 
