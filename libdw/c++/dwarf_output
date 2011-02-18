@@ -415,7 +415,7 @@ namespace elfutils
       inline size_t hash () const
       {
 	struct die_info *info = get_die_info ();
-	return info->_m_local_hash;
+	return info->_m_reference_hash;
       }
 
       virtual die_info *get_die_info () const
@@ -595,13 +595,21 @@ namespace elfutils
       std::bitset<2> _m_with_sibling;
       unsigned int _m_uses;
 
+      /* The local hash of the die, set when die_info is created.
+	 Uses only none-reference values.  */
       size_t _m_local_hash;
+
+      /* The reference hash of the die, based on just reference
+	 attribute values.  Needs all local hashes of referenced dies
+	 to be set.  */
+      size_t _m_reference_hash;
 
       inline die_info (size_t local_hash)
 	: _m_parent (NULL), _m_refs (),
 	  _m_originals (), _m_original_cost (0),
 	  _m_with_sibling (), _m_uses (0),
-	  _m_local_hash (local_hash)
+	  _m_local_hash (local_hash),
+	  _m_reference_hash (0)
       {}
 
       inline ~die_info ()
@@ -1374,6 +1382,32 @@ namespace elfutils
       typedef typename final_children_getter::
       template copy<debug_info_entry::children_type> get_final_children;
 
+      inline size_t get_reference_hash () const
+      {
+	assert (_m_info != NULL);
+
+	// Could already have been set by forward reference.
+	if (_m_info->_m_reference_hash != 0)
+	  return _m_info->_m_reference_hash;
+
+	size_t rhash = _m_info->_m_local_hash;
+	size_t attr_rhashes = 0;
+	for (attr_map::const_iterator it = _m_attributes.begin ();
+             it != _m_attributes.end ();
+             ++it)
+          {
+	    // XXX XOR is for order irrelevance, but shouldn't be necessary.
+	    // See also calculate_local_hash, which does the same.
+	    const entry *ref
+	      = dynamic_cast<const entry *> (it->second._m_value);
+	    if (ref != NULL)
+	      attr_rhashes ^= ref->get_reference_hash ();
+          }
+	subr::hash_combine (rhash, attr_rhashes);
+
+	return rhash;
+      }
+
       inline size_t calculate_local_hash ()
       {
 	// Calculate the local hash for this new die.
@@ -1681,6 +1715,27 @@ namespace elfutils
 	  *p.second = true;
       }
 
+      /* Recursively sets up reference hashes for the die_info of this
+	 pending_entry.  Depends on all local hashes having been setup
+	 already.  At this point all entries are still pending.  */
+      inline void setup_reference_hash () const
+      {
+	_m_pending->_m_info->_m_reference_hash = get_reference_hash ();
+
+        for (typename std::vector<entry *>::const_iterator it
+               = _m_pending->_m_children.begin ();
+             it != _m_pending->_m_children.end ();
+             ++it)
+	  (*it)->setup_reference_hash ();
+      }
+
+      inline size_t get_reference_hash () const
+      {
+	// XXX Need some recursion detection to assert we aren't
+	// running in circles. Probably just pass in stack of entries.
+	return _m_pending->get_reference_hash ();
+      }
+
       // Attempt to turn the pending entry into a final entry.
       void finalize (copier *c)
       {
@@ -1907,12 +1962,17 @@ namespace elfutils
 	return *_m_copier;
       }
 
-      /* Try to finalize everything at once.
+      /* Walk over the whole cu again to set reference hashes up.
+	 Then try to finalize everything at once.
 	 Complain if we still have dangling references.
 	 If not, it should be impossible to have pending entries left.  */
       inline die_info_pair *final_unit () const
       {
 	assert (_m_out == NULL);
+
+	// First walk over the whole CU tree again to setup the
+	// reference hash for each die_info.
+	_m_in->setup_reference_hash ();
 
 	// We should now be able to finalize everything at once.
 	if (_m_copier->_m_undefined_entries == 0)
