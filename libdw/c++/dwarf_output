@@ -393,14 +393,6 @@ namespace elfutils
       {
 	return 0;
       }
-
-      /* The hash as used for a reference attribute value that points
-	 to this die.  Only uses "local" (non-reference) values.
-	 Result cached in die_info.  */
-      inline size_t local_hash () const
-      {
-	return info ()->second._m_local_hash;
-      }
     };
 
     struct value::value_reference
@@ -420,9 +412,15 @@ namespace elfutils
       /* The hash of a value_reference is its referent's local hash,
 	 which only takes non-reference values into account.  This
 	 method is virtual for the circular_reference case, below.  */
-      virtual size_t hash () const
+      inline size_t hash () const
       {
-	return ref->local_hash ();
+	struct die_info *info = get_die_info ();
+	return info->_m_local_hash;
+      }
+
+      virtual die_info *get_die_info () const
+      {
+	return &ref->info ()->second;
       }
     };
 
@@ -602,7 +600,8 @@ namespace elfutils
       inline die_info (size_t local_hash)
 	: _m_parent (NULL), _m_refs (),
 	  _m_originals (), _m_original_cost (0),
-	  _m_with_sibling (), _m_uses (0), _m_local_hash (local_hash)
+	  _m_with_sibling (), _m_uses (0),
+	  _m_local_hash (local_hash)
       {}
 
       inline ~die_info ()
@@ -1246,9 +1245,9 @@ namespace elfutils
       /* We have a special case for a reference attribute that is part
 	 of a circular chain.  It gets calculated from the
 	 pending_entry. */
-      virtual size_t hash () const
+      virtual die_info *get_die_info () const
       {
-	return pending_entry ()->local_hash ();
+	return pending_entry ()->get_die_info ();
       }
     };
 
@@ -1816,11 +1815,11 @@ namespace elfutils
 
       /* The local hash of the debug_info_entry if we are already
 	 final, otherwise get it from the pending_entry. */
-      inline size_t local_hash () const
+      inline die_info *get_die_info () const
       {
 	if (_m_final)
-	  return _m_final->first.local_hash ();
-	return _m_pending->_m_info->_m_local_hash;
+	  return &_m_final->second;
+	return _m_pending->_m_info;
       }
     };
 
