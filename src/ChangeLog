@@ -1,3 +1,32 @@
+2011-02-11  Roland McGrath  <roland@redhat.com>
+
+	* elfcmp.c (verbose): New variable.
+	(options, parse_opt): Grok -l/--verbose to set it.
+	(main): Under -l, keep going after first difference.
+
+	* elfcmp.c (ignore_build_id): New variable.
+	(options, parse_opt): Grok --ignore-build-id to set it.
+	(main): For SHT_NOTE sections, compare note details rather than raw
+	bytes.  Under --ignore-build-id, don't complain about differing build
+	ID contents if lengths match.
+
+2011-02-08  Roland McGrath  <roland@redhat.com>
+
+	* ldscript.y (filename_id_star): Remove unused variable.
+
+	* unstrip.c (copy_elided_sections): Remove unused variable.
+
+	* elflint.c (check_dynamic): Remove unused variables.
+
+	* elflint.c (check_symtab): Warn about missing xndx section only once.
+
+	* ldgeneric.c (check_for_duplicate2): Remove unused variable.
+
+2011-01-06  Roland McGrath  <roland@redhat.com>
+
+	* strip.c (handle_elf): Under --strip-sections, remove all
+	non-allocated sections and never generate .gnu_debuglink.
+
 2011-01-04  Roland McGrath  <roland@redhat.com>
 
 	* strip.c (remove_shdrs): New variable.

@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl Configure input file for elfutils.                     -*-autoconf-*-
 dnl
-dnl Copyright (C) 1996-2010 Red Hat, Inc.
+dnl Copyright (C) 1996-2011 Red Hat, Inc.
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; if not, write to the Free Software Foundation,
 dnl Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
 dnl
-AC_INIT([Red Hat elfutils],[0.150],[http://bugzilla.redhat.com/bugzilla/],[elfutils])
+AC_INIT([Red Hat elfutils],[0.152],[http://bugzilla.redhat.com/bugzilla/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
@@ -55,9 +55,6 @@ AS_IF([test "$use_locks" = yes], [AC_DEFINE(USE_LOCKS)])
 
 AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
 
-dnl Add all the languages for which translations are available.
-ALL_LINGUAS="de es ja pl uk"
-
 AC_PROG_CC
 AC_PROG_RANLIB
 AC_PROG_YACC
@@ -66,8 +63,8 @@ AM_PROG_LEX
 AC_CACHE_CHECK([for gcc with C99 support], ac_cv_c99, [dnl
 old_CFLAGS="$CFLAGS"
 CFLAGS="$CFLAGS -std=gnu99"
-AC_COMPILE_IFELSE([dnl
-int foo (int a) { for (int i = 0; i < a; ++i) if (i % 4) break; int s = a; }],
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([dnl
+int foo (int a) { for (int i = 0; i < a; ++i) if (i % 4) break; int s = a; }])],
 		  ac_cv_c99=yes, ac_cv_c99=no)
 CFLAGS="$old_CFLAGS"])
 AS_IF([test "x$ac_cv_c99" != xyes],

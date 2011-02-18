@@ -1,3 +1,19 @@
+Version 0.152
+
+Various build and warning nits fixed for newest GCC and Autoconf.
+
+libdwfl: Yet another prelink-related fix for another regression.
+	 Look for Linux kernel images in files named with compression suffixes.
+
+elfcmp: New flag --ignore-build-id to ignore differing build ID bits.
+	New flag -l/--verbose to print all differences.
+
+Version 0.151
+
+libdwfl: Fix for more prelink cases with separate debug file.
+
+strip: New flag --strip-sections to remove section headers entirely.
+
 Version 0.150
 
 libdw: Fix for handling huge .debug_aranges section.
