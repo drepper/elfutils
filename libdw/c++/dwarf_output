@@ -1401,7 +1401,15 @@ namespace elfutils
 	    const entry *ref
 	      = dynamic_cast<const entry *> (it->second._m_value);
 	    if (ref != NULL)
-	      attr_rhashes ^= ref->get_reference_hash (stack);
+	      {
+		// Workaround weird case (bug?)
+		// https://fedorahosted.org/pipermail/elfutils-devel/2011-February/001792.html
+		if (it->first == DW_AT_containing_type
+		    && ref->_m_pending == this)
+		  continue;
+		else
+		  attr_rhashes ^= ref->get_reference_hash (stack);
+	      }
           }
 	subr::hash_combine (rhash, attr_rhashes);
 
