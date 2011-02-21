@@ -1382,7 +1382,7 @@ namespace elfutils
       typedef typename final_children_getter::
       template copy<debug_info_entry::children_type> get_final_children;
 
-      inline size_t get_reference_hash () const
+      inline size_t get_reference_hash (std::vector<const entry *> &stack) const
       {
 	assert (_m_info != NULL);
 
@@ -1401,7 +1401,7 @@ namespace elfutils
 	    const entry *ref
 	      = dynamic_cast<const entry *> (it->second._m_value);
 	    if (ref != NULL)
-	      attr_rhashes ^= ref->get_reference_hash ();
+	      attr_rhashes ^= ref->get_reference_hash (stack);
           }
 	subr::hash_combine (rhash, attr_rhashes);
 
@@ -1720,7 +1720,9 @@ namespace elfutils
 	 already.  At this point all entries are still pending.  */
       inline void setup_reference_hash () const
       {
-	_m_pending->_m_info->_m_reference_hash = get_reference_hash ();
+	std::vector<const entry *> stack;
+	_m_pending->_m_info->_m_reference_hash = get_reference_hash (stack);
+	assert (stack.empty ());
 
         for (typename std::vector<entry *>::const_iterator it
                = _m_pending->_m_children.begin ();
@@ -1729,11 +1731,30 @@ namespace elfutils
 	  (*it)->setup_reference_hash ();
       }
 
-      inline size_t get_reference_hash () const
+      inline size_t get_reference_hash (std::vector<const entry *> &stack) const
       {
-	// XXX Need some recursion detection to assert we aren't
-	// running in circles. Probably just pass in stack of entries.
-	return _m_pending->get_reference_hash ();
+	if (std::find (stack.begin (), stack.end (), this) != stack.end ())
+	  {
+	    std::cout << "Reference chain cycle detected\n"
+		      << "offset=[0x" << std::hex << _m_offset << std::dec
+		      << "] already on the reference chain stack\n";
+	    typename std::vector<const entry *>::iterator it;
+	    for (it = stack.begin ();
+		 it != stack.end ();
+		 it++)
+	      {
+		std::cout << "offset=[0x" << std::hex << (*it)->_m_offset
+			  << std::dec << "] "
+			  << dwarf::tags::name ((*it)->_m_pending->_m_tag)
+			  << "\n";
+	      }
+	    abort ();
+	  }
+
+	stack.push_back (this);
+	size_t res = _m_pending->get_reference_hash (stack);
+	stack.pop_back ();
+	return res;
       }
 
       // Attempt to turn the pending entry into a final entry.
