@@ -151,6 +151,7 @@ expected_value_space (int attr, int tag)
     case DW_AT_picture_string:
       return VS(string);
 
+    case DW_AT_linkage_name:
     case DW_AT_MIPS_linkage_name:
       return VS(identifier);
 

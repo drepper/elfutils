@@ -233,6 +233,7 @@ dwarf_attr_string (unsigned int attrnum)
       [DW_AT_elemental] = "elemental",
       [DW_AT_pure] = "pure",
       [DW_AT_recursive] = "recursive",
+      [DW_AT_linkage_name] = "linkage_name",
     };
   const unsigned int nknown_attrs = (sizeof (known_attrs)
 				     / sizeof (known_attrs[0]));
