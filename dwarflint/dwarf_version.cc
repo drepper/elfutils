@@ -58,19 +58,23 @@ dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
 }
 
 form::form (int a_name, dw_class_set a_classes,
-	    form_width_t a_width, storage_class_t a_storclass)
+	    form_width_t a_width, storage_class_t a_storclass,
+	    form_bitness_t a_bitness)
   : _m_name (a_name)
   , _m_classes (a_classes)
   , _m_width (a_width)
   , _m_storclass (a_storclass)
+  , _m_bitness (a_bitness)
 {}
 
 form::form (int a_name, dw_class_set a_classes,
-	    form_width_special_t a_width, storage_class_t a_storclass)
+	    form_width_special_t a_width, storage_class_t a_storclass,
+	    form_bitness_t a_bitness)
   : _m_name (a_name)
   , _m_classes (a_classes)
   , _m_width (a_width)
   , _m_storclass (a_storclass)
+  , _m_bitness (a_bitness)
 {}
 
 dw_class

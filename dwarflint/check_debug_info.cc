@@ -685,12 +685,16 @@ namespace
 	       cl_rangelistptr);
 
 	    if (cls != max_dw_class && ref_classes.test (cls))
-	      if (form->width (cu->head) == fw_8
-		  && cu->head->offset_size == 4)
-		wr_error (where)
-		  << "reference attribute with form \""
-		  << pri::form (form_name) << "\" in 32-bit CU."
-		  << std::endl;
+	      {
+		form_bitness_t bitness = form->bitness ();
+		if ((bitness == fb_32 && cu->head->offset_size == 8)
+		    || (bitness == fb_64 && cu->head->offset_size == 4))
+		  wr_error (where)
+		    << "reference attribute with form \""
+		    << pri::form (form_name) << "\" in "
+		    << (8 * cu->head->offset_size) << "-bit CU."
+		    << std::endl;
+	      }
 
 	    /* Setup pointer checking.  */
 	    switch (cls)

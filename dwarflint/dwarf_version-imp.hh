@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -49,8 +49,9 @@ template<storage_class_t StorClass, dw_class... Classes>
 struct preset_form
   : public form
 {
-  preset_form (int a_name, form_width_t a_width)
-    : form (a_name, dw_class_set (Classes...), a_width, StorClass)
+  preset_form (int a_name, form_width_t a_width,
+	       form_bitness_t a_bitness = fb_any)
+    : form (a_name, dw_class_set (Classes...), a_width, StorClass, a_bitness)
   {}
 };
 

@@ -85,19 +85,29 @@ enum storage_class_t
     sc_string,
   };
 
+enum form_bitness_t
+  {
+    fb_any, ///< Form is allowed in all CUs
+    fb_32,  ///< Form is allowed only in 32-bit CUs
+    fb_64,  ///< Form is allowed only in 64-bit CUs
+  };
+
 class form
 {
   int const _m_name;
   dw_class_set const _m_classes;
   int const _m_width;
   storage_class_t const _m_storclass;
+  form_bitness_t _m_bitness;
 
 public:
-  form (int a_name, dw_class_set a_classes,
-	form_width_t a_width, storage_class_t a_storclass);
+  form (int name, dw_class_set classes,
+	form_width_t width, storage_class_t storclass,
+	form_bitness_t bitness = fb_any);
 
-  form (int a_name, dw_class_set a_classes,
-	form_width_special_t a_width, storage_class_t a_storclass);
+  form (int name, dw_class_set classes,
+	form_width_special_t width, storage_class_t storclass,
+	form_bitness_t bitness = fb_any);
 
   int
   name () const
@@ -130,6 +140,12 @@ public:
   storage_class () const
   {
     return _m_storclass;
+  }
+
+  form_bitness_t
+  bitness () const
+  {
+    return _m_bitness;
   }
 };
 std::ostream &operator << (std::ostream &os, form const &obj);
