@@ -62,7 +62,7 @@ runtest ../src/unstrip
 runtest ../*/*.so
 
 # These are the biggest ones.
-runtest ../src/dwarflint
+runtest ../dwarflint/dwarflint
 runtest ../src/dwarfcmp
 runtest ../src/dwarfcmp-test
 
