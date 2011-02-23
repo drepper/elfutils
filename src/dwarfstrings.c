@@ -313,6 +313,46 @@ dwarf_attr_string (unsigned int attrnum)
 	result = "body_end";
 	break;
 
+      case DW_AT_GNU_vector:
+	result = "GNU_vector";
+	break;
+
+      case DW_AT_GNU_guarded_by:
+	result = "GNU_guarded_by";
+	break;
+
+      case DW_AT_GNU_pt_guarded_by:
+	result = "GNU_pt_guarded_by";
+	break;
+
+      case DW_AT_GNU_guarded:
+	result = "GNU_guarded";
+	break;
+
+      case DW_AT_GNU_pt_guarded:
+	result = "GNU_pt_guarded";
+	break;
+
+      case DW_AT_GNU_locks_excluded:
+	result = "GNU_locks_excluded";
+	break;
+
+      case DW_AT_GNU_exclusive_locks_required:
+	result = "GNU_exclusive_locks_required";
+	break;
+
+      case DW_AT_GNU_shared_locks_required:
+	result = "GNU_shared_locks_required";
+	break;
+
+      case DW_AT_GNU_odr_signature:
+	result = "GNU_odr_signature";
+	break;
+
+      case DW_AT_GNU_template_name:
+	result = "GNU_template_name";
+	break;
+
       default:
 	if (attrnum < DW_AT_lo_user)
 	  snprintf (buf, sizeof buf, gettext ("unknown attribute %hx"),
