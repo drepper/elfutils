@@ -1,6 +1,6 @@
 /* Routines related to .debug_info.
 
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -629,7 +629,8 @@ namespace
 		&& ver->form_class (form, attribute) == cl_indirect)
 	      {
 		uint64_t value;
-		if (!read_sc_value (&value, form->width (cu), ctx, &where))
+		if (!read_sc_value (&value, form->width (cu->head),
+				    ctx, &where))
 		  return -1;
 		form_name = value;
 		form = check_debug_abbrev::check_form
@@ -684,7 +685,7 @@ namespace
 	       cl_rangelistptr);
 
 	    if (cls != max_dw_class && ref_classes.test (cls))
-	      if (form->width (cu) == fw_8
+	      if (form->width (cu->head) == fw_8
 		  && cu->head->offset_size == 4)
 		wr_error (where)
 		  << "reference attribute with form \""
@@ -773,7 +774,7 @@ namespace
 	    read_ctx block;
 
 	    storage_class_t storclass = form->storage_class ();
-	    if (!read_generic_value (ctx, form->width (cu), storclass,
+	    if (!read_generic_value (ctx, form->width (cu->head), storclass,
 				     &where, &value, &block))
 	      {
 		// Note that for fw_uleb and fw_sleb we report the
@@ -814,7 +815,7 @@ namespace
 
 		if (attribute != NULL)
 		  {
-		    form_width_t width = form->width (cu);
+		    form_width_t width = form->width (cu->head);
 		    relocate_one (&file, reloc, rel, width, &value, &where,
 				  reloc_target (form, attribute), symbolp);
 		  }

@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -26,6 +26,10 @@
 // The tables here capture attribute/allowed forms depending on DWARF
 // version.  Apart from standardized DWARF formats, e.g. DWARF3+GNU is
 // a version of its own.
+
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
 #include "dwarf_version.hh"
 #include "dwarf_2.hh"
@@ -89,14 +93,22 @@ dwarf_version::form_class (form const *form, attribute const *attribute) const
 }
 
 form_width_t
-form::width (cu const *cu) const
+form::width (cu_head const *cu_head) const
 {
-  if (_m_width == fw_offset)
-    return static_cast<form_width_t> (cu->head->offset_size);
-  else if (_m_width == fw_address)
-    return static_cast<form_width_t> (cu->head->address_size);
-  else
-    return static_cast<form_width_t> (_m_width);
+  switch (_m_width)
+    {
+    case fw_offset:
+    case fw_address:
+      if (unlikely (cu_head == NULL))
+	return fw_unknown;
+      if (_m_width == fw_offset)
+	return static_cast<form_width_t> (cu_head->offset_size);
+      else
+	return static_cast<form_width_t> (cu_head->address_size);
+
+    default:
+      return static_cast<form_width_t> (_m_width);
+    }
 }
 
 std::ostream &

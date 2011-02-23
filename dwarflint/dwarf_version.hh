@@ -1,6 +1,6 @@
 /* Dwarf version tables.
 
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -122,8 +122,8 @@ public:
   ///
   /// Return value is never fw_offset or fw_address.  These get
   /// resolved to fw_4 or fw_8 depending on corresponding value in
-  /// CU->head.
-  form_width_t width (cu const *cu) const;
+  /// CU_HEAD.
+  form_width_t width (cu_head const *cu_head) const;
 
   /// Return storage class of given form.  Closely related to width.
   storage_class_t
