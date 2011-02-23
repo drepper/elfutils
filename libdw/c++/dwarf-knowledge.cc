@@ -12,7 +12,6 @@ using namespace elfutils;
 static unsigned int
 expected_value_space (int attr, int tag)
 {
-
   switch (attr)
     {
     case DW_AT_sibling:
@@ -154,6 +153,9 @@ expected_value_space (int attr, int tag)
 
     case DW_AT_MIPS_linkage_name:
       return VS(identifier);
+
+    case DW_AT_GNU_odr_signature:
+      return VS(constant);
     }
 
   return 0;
