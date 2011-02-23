@@ -186,7 +186,7 @@ public:
 
   /// Figure out whether, in given DWARF version, given attribute is
   /// allowed to have given form.
-  bool form_allowed (int attribute_name, int form_name) const;
+  virtual bool form_allowed (int attribute_name, int form_name) const;
 
   /// Answer a class of FORM given ATTRIBUTE as a context.  If there's
   /// exactly one candidate class, that's the one answered.  If
