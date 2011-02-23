@@ -1,3 +1,8 @@
+2011-02-23  Roland McGrath  <roland@redhat.com>
+
+	* c++/dwarf-knowledge.cc (expected_value_space):
+	Grok DW_AT_GNU_odr_signature.
+
 2010-12-07  Petr Machata  <pmachata@redhat.com>
 
 	* c++/subr.hh (sharing_stack::element::pop): Remove.  Move the
