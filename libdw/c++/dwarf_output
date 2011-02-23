@@ -151,6 +151,12 @@ namespace elfutils
       friend class dwarf_output;
       friend class dwarf_output_collector;
 
+      __attribute__((used)) die_info_pair *info () const
+      {
+       return reinterpret_cast<die_info_pair *>
+         (const_cast<debug_info_entry *> (this));
+      }
+
     public:
       class attributes_type
 	: public dwarf_data::attributes_type<dwarf_output, value>
