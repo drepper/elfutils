@@ -1,5 +1,8 @@
 2011-02-24  Roland McGrath  <roland@redhat.com>
 
+	* libdw.map (ELFUTILS_PRIVATE_TMP): New version set;
+	add __libdw_formptr.
+
 	* libdwP.h: Make declarations C++-compatible using __BEGIN_DECLS.
 
 2011-02-23  Roland McGrath  <roland@redhat.com>
