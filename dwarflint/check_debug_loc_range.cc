@@ -1,6 +1,6 @@
 /* Routines related to .debug_loc and .debug_range.
 
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -791,7 +791,7 @@ namespace
 
     storage_class_t storclass = form->storage_class ();
     assert (storclass != sc_string);
-    if (!read_generic_value (ctx, form->width (cu), storclass,
+    if (!read_generic_value (ctx, form->width (cu->head), storclass,
 			     where, valuep, NULL))
       {
 	wr_error (*where)

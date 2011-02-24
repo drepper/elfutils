@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -67,8 +67,7 @@ namespace
       add (exprloc_form (DW_FORM_exprloc));
       add (flag_form (DW_FORM_flag_present, fw_0));
 
-      // xxx This actually needs to be something like ref8_form.  This
-      // and DW_AT_GNU_odr_signature.
+      // http://wiki.dwarfstd.org/index.php?title=COMDAT_Type_Sections
       add (ref_form (DW_FORM_ref_sig8, fw_8));
 
       // In DWARF 2 we claim that blocks are exprloc forms (see

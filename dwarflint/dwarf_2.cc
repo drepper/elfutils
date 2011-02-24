@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -148,7 +148,7 @@ namespace
       add (ref_form (DW_FORM_ref1, fw_1));
       add (ref_form (DW_FORM_ref2, fw_2));
       add (ref_form (DW_FORM_ref4, fw_4));
-      add (ref_form (DW_FORM_ref8, fw_8));
+      add (ref_form (DW_FORM_ref8, fw_8, fb_64));
       add (ref_form (DW_FORM_ref_udata, fw_uleb));
 
       add (string_form (DW_FORM_string));

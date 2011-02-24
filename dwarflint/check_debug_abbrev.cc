@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -117,7 +117,7 @@ namespace
   {
     wr_error (*where)
       << "attribute " << *attribute << " with " << qualifier
-      << (indirect ? " indirect" : "") << " form"
+      << (indirect ? " indirect" : "") << " form "
       << *form << '.' << std::endl;
   }
 
@@ -405,9 +405,7 @@ namespace
 	      (ver, attrib_form, attribute, &where, false);
 	    if (form == NULL)
 	      {
-		wr_error (where)
-		  << "invalid or unknown form " << pri::hex (attrib_form)
-		  << '.' << std::endl;
+		// Error message is emitted in check_form.
 		failed = true;
 		continue;
 	      }

@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -63,12 +63,10 @@ namespace
       add (const_attribute (DW_AT_GNU_shared_locks_required));
 
       // Contains a shallower 8-byte signature of the type described
-      // in the type unit.  We encode it the same way as
-      // DW_AT_signature, which AFAICT is just a standardized name of
-      // DW_AT_GNU_odr_signature.
+      // in the type unit.  This is nominally a const_attribute, but
+      // we do the checking ourselves in form_allowed.
       // http://gcc.gnu.org/wiki/DwarfSeparateTypeInfo
-      // http://wiki.dwarfstd.org/index.php?title=COMDAT_Type_Sections
-      add (ref_attribute (DW_AT_GNU_odr_signature));
+      add (const_attribute (DW_AT_GNU_odr_signature));
 
       add (string_attribute (DW_AT_GNU_template_name)); // xxx ???
     }
@@ -80,6 +78,18 @@ namespace
     dwarf_gnu_ext_t ()
       : std_dwarf (dwarf_gnu_attributes (), form_table ())
     {}
+
+    virtual bool
+    form_allowed (int attribute_name, int form_name) const
+    {
+      if (attribute_name == DW_AT_GNU_odr_signature)
+	{
+	  form const *f = get_form (form_name);
+	  return f->classes ()[cl_constant] && f->width (NULL) == fw_8;
+	}
+      else
+	return std_dwarf::form_allowed (attribute_name, form_name);
+    }
   };
 }
 

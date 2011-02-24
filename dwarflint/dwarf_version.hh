@@ -1,6 +1,6 @@
 /* Dwarf version tables.
 
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -85,19 +85,29 @@ enum storage_class_t
     sc_string,
   };
 
+enum form_bitness_t
+  {
+    fb_any, ///< Form is allowed in all CUs
+    fb_32,  ///< Form is allowed only in 32-bit CUs
+    fb_64,  ///< Form is allowed only in 64-bit CUs
+  };
+
 class form
 {
   int const _m_name;
   dw_class_set const _m_classes;
   int const _m_width;
   storage_class_t const _m_storclass;
+  form_bitness_t _m_bitness;
 
 public:
-  form (int a_name, dw_class_set a_classes,
-	form_width_t a_width, storage_class_t a_storclass);
+  form (int name, dw_class_set classes,
+	form_width_t width, storage_class_t storclass,
+	form_bitness_t bitness = fb_any);
 
-  form (int a_name, dw_class_set a_classes,
-	form_width_special_t a_width, storage_class_t a_storclass);
+  form (int name, dw_class_set classes,
+	form_width_special_t width, storage_class_t storclass,
+	form_bitness_t bitness = fb_any);
 
   int
   name () const
@@ -122,14 +132,20 @@ public:
   ///
   /// Return value is never fw_offset or fw_address.  These get
   /// resolved to fw_4 or fw_8 depending on corresponding value in
-  /// CU->head.
-  form_width_t width (cu const *cu) const;
+  /// CU_HEAD.
+  form_width_t width (cu_head const *cu_head) const;
 
   /// Return storage class of given form.  Closely related to width.
   storage_class_t
   storage_class () const
   {
     return _m_storclass;
+  }
+
+  form_bitness_t
+  bitness () const
+  {
+    return _m_bitness;
   }
 };
 std::ostream &operator << (std::ostream &os, form const &obj);
@@ -186,7 +202,7 @@ public:
 
   /// Figure out whether, in given DWARF version, given attribute is
   /// allowed to have given form.
-  bool form_allowed (int attribute_name, int form_name) const;
+  virtual bool form_allowed (int attribute_name, int form_name) const;
 
   /// Answer a class of FORM given ATTRIBUTE as a context.  If there's
   /// exactly one candidate class, that's the one answered.  If
