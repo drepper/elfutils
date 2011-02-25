@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -79,8 +79,8 @@ namespace
 	    if ((at2 = m.find ((*at).first)) != m.end ())
 	      wr_message (to_where (die),
 			  cat (mc_impact_3, mc_acc_bloat, mc_die_rel))
-		<< "Attribute " << dwarf_attr_string (at2->first)
-		<< " is duplicated at " << dwarf_attr_string (attr.first)
+		<< "Attribute " << dwarf::attributes::name (at2->first)
+		<< " is duplicated at " << dwarf::attributes::name (attr.first)
 		<< " (" << pri::ref (referree) << ")"
 		<< (at2->second == (*at).second
 		    ? "." : " with different value.")

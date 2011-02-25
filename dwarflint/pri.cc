@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2008,2009,2010 Red Hat, Inc.
+   Copyright (C) 2008,2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,9 +23,14 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "../src/dwarfstrings.h"
 #include "pri.hh"
 #include <sstream>
+#include "c++/dwarf"
 
 std::ostream &
 pri::operator << (std::ostream &os, pri::pribase const &obj)
@@ -34,7 +39,7 @@ pri::operator << (std::ostream &os, pri::pribase const &obj)
 }
 
 pri::attr::attr (int attr_name)
-  : pribase (dwarf_attr_string (attr_name))
+  : pribase (elfutils::dwarf::attributes::name (attr_name))
 {}
 
 pri::form::form (int attr_form)
@@ -42,7 +47,7 @@ pri::form::form (int attr_form)
 {}
 
 pri::tag::tag (int die_tag)
-  : pribase (dwarf_tag_string (die_tag))
+  : pribase (elfutils::dwarf::tags::name (die_tag))
 {}
 
 pri::locexpr_opcode::locexpr_opcode (int opcode)

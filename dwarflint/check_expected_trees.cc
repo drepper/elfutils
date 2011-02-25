@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -159,8 +159,8 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 		kt = expect.find (name);
 	      if (kt == expect.end ())
 		wr_message (where, cat (mc_impact_3, mc_info))
-		  << ": DIE \"" << dwarf_tag_string (parent_tag)
-		  << "\" has attribute \"" << dwarf_attr_string (name)
+		  << ": DIE \"" << dwarf::tags::name (parent_tag)
+		  << "\" has attribute \"" << dwarf::attributes::name (name)
 		  << "\", which is not expected." << std::endl;
 
 	      try
@@ -169,8 +169,8 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 		  dwarf::value_space vs = (*jt).second.what_space ();
 		  if ((exp_vs & (1U << vs)) == 0)
 		    wr_message (where, cat (mc_impact_3, mc_info))
-		      << ": in DIE \"" << dwarf_tag_string (parent_tag)
-		      << "\", attribute \"" << dwarf_attr_string (name)
+		      << ": in DIE \"" << dwarf::tags::name (parent_tag)
+		      << "\", attribute \"" << dwarf::attributes::name (name)
 		      << "\" has value of unexpected type \"" << vs
 		      << "\"." << std::endl;
 		}
@@ -178,9 +178,10 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 	      catch (...)
 		{
 		  wr_message (where, cat (mc_impact_4, mc_info, mc_error))
-		    << ": in DIE \"" << dwarf_tag_string (parent_tag)
+		    << ": in DIE \"" << dwarf::tags::name (parent_tag)
 		    << "\", couldn't obtain type of attribute \""
-		    << dwarf_attr_string (name) << "\"." << std::endl;
+		    << dwarf::attributes::name (name) << "\"."
+		    << std::endl;
 		}
 	    }
 
