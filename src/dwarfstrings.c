@@ -97,6 +97,9 @@ dwarf_tag_string (unsigned int tag)
       [DW_TAG_mutable_type] = "mutable_type",
       [DW_TAG_condition] = "condition",
       [DW_TAG_shared_type] = "shared_type",
+      [DW_TAG_type_unit] = "type_unit",
+      [DW_TAG_rvalue_reference_type] = "rvalue_reference_type",
+      [DW_TAG_template_alias] = "template_alias",
     };
   const unsigned int nknown_tags = (sizeof (known_tags)
 				    / sizeof (known_tags[0]));
@@ -124,6 +127,26 @@ dwarf_tag_string (unsigned int tag)
 
       case DW_TAG_class_template:
 	result = "class_template";
+	break;
+
+      case DW_TAG_GNU_BINCL:
+	result = "GNU_BINCL";
+	break;
+
+      case DW_TAG_GNU_EINCL:
+	result = "GNU_EINCL";
+	break;
+
+      case DW_TAG_GNU_template_template_param:
+	result = "GNU_template_template_param";
+	break;
+
+      case DW_TAG_GNU_template_parameter_pack:
+	result = "GNU_template_parameter_pack";
+	break;
+
+      case DW_TAG_GNU_formal_parameter_pack:
+	result = "GNU_formal_parameter_pack";
 	break;
 
       default:
@@ -233,6 +256,11 @@ dwarf_attr_string (unsigned int attrnum)
       [DW_AT_elemental] = "elemental",
       [DW_AT_pure] = "pure",
       [DW_AT_recursive] = "recursive",
+      [DW_AT_signature] = "signature",
+      [DW_AT_main_subprogram] = "main_subprogram",
+      [DW_AT_data_bit_offset] = "data_bit_offset",
+      [DW_AT_const_expr] = "const_expr",
+      [DW_AT_enum_class] = "enum_class",
       [DW_AT_linkage_name] = "linkage_name",
     };
   const unsigned int nknown_attrs = (sizeof (known_attrs)
