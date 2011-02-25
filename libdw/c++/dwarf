@@ -1327,8 +1327,8 @@ namespace elfutils
 	::Dwarf_CU *_m_cu;
 	unsigned char *_m_readptr;
 
-	static unsigned char *formptr (Dwarf_Attribute *);
-	const_iterator (Dwarf_Attribute *, unsigned char *readptr);
+	static unsigned char *formptr (int secndx, Dwarf_Attribute *);
+	const_iterator (int secndx, Dwarf_Attribute *, unsigned char *readptr);
 
       public:
 	// Default constructor: only valid for operator=.
@@ -1376,14 +1376,10 @@ namespace elfutils
 	}
       };
 
-      const_iterator begin () const
-      {
-	const_iterator it (_m_attr.thisattr (), 0);
-	return ++it;
-      }
+      const_iterator begin () const;
       const_iterator end () const
       {
-	return const_iterator (_m_attr.thisattr (), (unsigned char *)-1);
+	return const_iterator (-1, _m_attr.thisattr (), (unsigned char *)-1);
       }
 
       const_iterator find (const key_type &match) const
@@ -1503,7 +1499,7 @@ namespace elfutils
 
 	// For end iterator.
 	inline explicit const_iterator (Dwarf_Attribute *attr)
-	  : dwarf::range_list::const_iterator (attr, (unsigned char *)-1)
+	  : dwarf::range_list::const_iterator (-1, attr, (unsigned char *)-1)
 	  , _m_block ()
 	{}
 
