@@ -35,7 +35,7 @@
 #include <cassert>
 #include <sstream>
 #include <algorithm>
-#include "../libdw/dwarf.h"
+#include "../libdw/c++/dwarf"
 
 #include "elf_file.hh"
 #include "check_debug_loc_range.hh"
@@ -767,7 +767,7 @@ namespace
       };
 
     std::cout << "XXX don't know how to handle opcode="
-	      << pri::locexpr_opcode (opcode) << std::endl;
+	      << elfutils::dwarf::ops::name (opcode) << std::endl;
 
     return rel_value;
   }
@@ -795,7 +795,7 @@ namespace
 			     where, valuep, NULL))
       {
 	wr_error (*where)
-	  << "opcode \"" << pri::locexpr_opcode (opcode)
+	  << "opcode \"" << elfutils::dwarf::ops::name (opcode)
 	  << "\": can't read " << str << " (form \""
 	  << *form << "\")." << std::endl;
 	return false;
@@ -870,7 +870,7 @@ check_location_expression (dwarf_version const *ver,
 	{
 	  wr_error (where)
 	    << "can't decode opcode \""
-	    << pri::locexpr_opcode (opcode) << "\"." << std::endl;
+	    << elfutils::dwarf::ops::name (opcode) << "\"." << std::endl;
 	  break;
 	}
 
@@ -890,16 +890,16 @@ check_location_expression (dwarf_version const *ver,
 
 	    if (skip == 0)
 	      wr_message (where, cat (mc_loc, mc_acc_bloat, mc_impact_3))
-		<< pri::locexpr_opcode (opcode)
+		<< elfutils::dwarf::ops::name (opcode)
 		<< " with skip 0." << std::endl;
 	    else if (skip > 0 && !read_ctx_need_data (&ctx, (size_t)skip))
 	      wr_error (where)
-		<< pri::locexpr_opcode (opcode)
+		<< elfutils::dwarf::ops::name (opcode)
 		<< " branches out of location expression." << std::endl;
 	    /* Compare with the offset after the two-byte skip value.  */
 	    else if (skip < 0 && ((uint64_t)-skip) > read_ctx_get_offset (&ctx))
 	      wr_error (where)
-		<< pri::locexpr_opcode (opcode)
+		<< elfutils::dwarf::ops::name (opcode)
 		<< " branches before the beginning of location expression."
 		<< std::endl;
 	    else
@@ -915,7 +915,7 @@ check_location_expression (dwarf_version const *ver,
 	case DW_OP_const8s:
 	  if (cu->head->address_size == 4)
 	    wr_error (where)
-	      << pri::locexpr_opcode (opcode) << " on 32-bit machine."
+	      << elfutils::dwarf::ops::name (opcode) << " on 32-bit machine."
 	      << std::endl;
 	  break;
 
@@ -927,7 +927,7 @@ check_location_expression (dwarf_version const *ver,
 		  || opcode == DW_OP_plus_uconst)
 	      && (value1 > (uint64_t)(uint32_t)-1))
 	    wr_message (where, cat (mc_loc, mc_acc_bloat, mc_impact_3))
-	      << pri::locexpr_opcode (opcode)
+	      << elfutils::dwarf::ops::name (opcode)
 	      << " with operand " << pri::hex (value1)
 	      << " on a 32-bit machine." << std::endl;
 	}
