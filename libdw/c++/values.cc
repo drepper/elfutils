@@ -1,5 +1,5 @@
 /* -*- C++ -*- interfaces for libdw.
-   Copyright (C) 2009-2010 Red Hat, Inc.
+   Copyright (C) 2009-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -387,15 +387,25 @@ namespace elfutils
 
 // dwarf::range_list
 
-dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr,
-						   ptrdiff_t offset)
-  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (attr->cu), _m_offset (offset)
+unsigned char *
+dwarf::range_list::const_iterator::formptr (Dwarf_Attribute *attr)
 {
-  if (_m_offset == 0)
+  unsigned char *readptr = __libdw_formptr (attr, IDX_debug_ranges,
+					    DWARF_E_NO_DEBUG_RANGES,
+					    NULL, NULL);
+  xif (attr, readptr == NULL);
+  return readptr;
+}
+
+dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr,
+						   unsigned char *readptr)
+  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (attr->cu)
+  , _m_readptr (readptr)
+{
+  if (_m_readptr == NULL)
     {
-      Dwarf_Word ofs;
-      xif (attr, dwarf_formudata (attr, &ofs) < 0); // XXX __libdw_formptr
-      _m_offset = ofs;
+      _m_readptr = formptr (attr);
+      xif (attr, _m_readptr == NULL);
     }
 }
 
@@ -405,17 +415,16 @@ range_list_advance (int secndx,
 		    Dwarf_Addr &base,
 		    Dwarf_Addr &begin,
 		    Dwarf_Addr &end,
-		    ptrdiff_t &offset,
+		    unsigned char *&readp,
 		    unsigned char **valp)
 {
   const Elf_Data *d = cu->dbg->sectiondata[secndx];
   if (unlikely (d == NULL))
     throw std::runtime_error ("XXX no ranges");
 
-  if (unlikely (offset < 0) || unlikely ((size_t) offset >= d->d_size))
-    throw std::runtime_error ("XXX bad offset in ranges iterator");
+  if (unlikely (readp >= (unsigned char *)d->d_buf + d->d_size))
+    throw std::runtime_error ("XXX bad readptr in ranges iterator");
 
-  unsigned char *readp = reinterpret_cast<unsigned char *> (d->d_buf) + offset;
   unsigned char *const readendp
     = reinterpret_cast<unsigned char *> (d->d_buf) + d->d_size;
 
@@ -449,12 +458,11 @@ range_list_advance (int secndx,
     }
 
   if (begin == 0 && end == 0) /* End of list entry.  */
-    offset = 1;
+    readp = (unsigned char *)-1;
   else
     {
       if (valp)
 	*valp = readp;
-      offset = readp - reinterpret_cast<unsigned char *> (d->d_buf);
 
       if (base == (Dwarf_Addr) -1)
 	{
@@ -484,7 +492,7 @@ dwarf::range_list::const_iterator &
 dwarf::range_list::const_iterator::operator++ ()
 {
   xif (_m_cu, range_list_advance (IDX_debug_ranges, _m_cu, _m_base,
-				  _m_begin, _m_end, _m_offset, NULL));
+				  _m_begin, _m_end, _m_readptr, NULL));
   return *this;
 }
 
@@ -582,11 +590,12 @@ inline void
 dwarf::location_attr::const_iterator::advance ()
 {
   xif (_m_cu, range_list_advance (IDX_debug_loc, _m_cu,
-				  _m_base, _m_begin, _m_end, _m_offset,
+				  _m_base, _m_begin, _m_end, _m_readptr,
 				  &_m_block.data));
-  if (_m_offset > 1)
-    _m_offset += 2 + (_m_block.length
-		      = read_2ubyte_unaligned_inc (_m_cu->dbg, _m_block.data));
+  // Special values are (unsigned char *){-1, 0, 1}.
+  if (((uintptr_t)_m_readptr + 1) > 2)
+    _m_readptr += 2 + (_m_block.length
+		       = read_2ubyte_unaligned_inc (_m_cu->dbg, _m_block.data));
   else
     // End iterator.
     _m_block = Dwarf_Block ();
@@ -598,11 +607,8 @@ dwarf::location_attr::begin () const
   const_iterator i (_m_attr.thisattr ());
   if (is_list ())
     {
-      // XXX __libdw_formptr
-      Dwarf_Word offset;
-      xif (_m_attr.thisattr (),
-	   dwarf_formudata (_m_attr.thisattr (), &offset) < 0);
-      i._m_offset = offset;
+      i._m_readptr = const_iterator::formptr (_m_attr.thisattr ());
+      xif (_m_attr.thisattr (), i._m_readptr == NULL);
       i.advance ();
     }
   else
@@ -611,7 +617,7 @@ dwarf::location_attr::begin () const
 	   dwarf_formblock (_m_attr.thisattr (), &i._m_block) < 0);
       i._m_base = 0;
       i._m_end = -1;
-      i._m_offset = 0;
+      i._m_readptr = NULL;
     }
 
   return i;
@@ -620,13 +626,13 @@ dwarf::location_attr::begin () const
 dwarf::location_attr::const_iterator &
 dwarf::location_attr::const_iterator::operator++ ()
 {
-  if (unlikely (_m_offset == 1))
+  if (unlikely (_m_readptr == (unsigned char *)-1))
     throw std::runtime_error ("incrementing end iterator");
 
-  if (_m_offset == 0)
+  if (_m_readptr == NULL)
     {
       // Singleton, now at end.
-      _m_offset = 1;
+      _m_readptr = (unsigned char *)-1;
       _m_block.data = NULL;
       _m_block.length = 0;
     }

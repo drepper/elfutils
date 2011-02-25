@@ -1,5 +1,5 @@
 /* -*- C++ -*- interfaces for libdw.
-   Copyright (C) 2009-2010 Red Hat, Inc.
+   Copyright (C) 2009-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -1325,24 +1325,25 @@ namespace elfutils
 	::Dwarf_Addr _m_begin;	// XXX reloc
 	::Dwarf_Addr _m_end;	// XXX reloc
 	::Dwarf_CU *_m_cu;
-	ptrdiff_t _m_offset;
+	unsigned char *_m_readptr;
 
-	const_iterator (Dwarf_Attribute *, ptrdiff_t offset);
+	static unsigned char *formptr (Dwarf_Attribute *);
+	const_iterator (Dwarf_Attribute *, unsigned char *readptr);
 
       public:
 	// Default constructor: only valid for operator=.
 	inline const_iterator ()
-	  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (NULL), _m_offset (-1)
+	  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (NULL), _m_readptr ((unsigned char *)1)
 	{}
 
 	inline const_iterator (const const_iterator &i)
 	  : _m_base (i._m_base), _m_begin (i._m_begin), _m_end (i._m_end),
-	    _m_cu (i._m_cu), _m_offset (i._m_offset)
+	    _m_cu (i._m_cu), _m_readptr (i._m_readptr)
 	{}
 
 	inline value_type operator* () const
 	{
-	  if (unlikely (_m_offset == 1))
+	  if (unlikely (_m_readptr == (unsigned char *)-1))
 	    throw std::runtime_error ("dereferencing end iterator");
 	  return std::make_pair (_m_base + _m_begin, _m_base + _m_end);
 	}
@@ -1353,13 +1354,13 @@ namespace elfutils
 	  _m_begin = other._m_begin;
 	  _m_end = other._m_end;
 	  _m_cu = other._m_cu;
-	  _m_offset = other._m_offset;
+	  _m_readptr = other._m_readptr;
 	  return *this;
 	}
 
 	inline bool operator== (const const_iterator &other) const
 	{
-	  return _m_offset == other._m_offset && _m_cu == other._m_cu;
+	  return _m_readptr == other._m_readptr && _m_cu == other._m_cu;
 	}
 	inline bool operator!= (const const_iterator &other) const
 	{
@@ -1382,7 +1383,7 @@ namespace elfutils
       }
       const_iterator end () const
       {
-	return const_iterator (_m_attr.thisattr (), 1);
+	return const_iterator (_m_attr.thisattr (), (unsigned char *)-1);
       }
 
       const_iterator find (const key_type &match) const
@@ -1502,7 +1503,8 @@ namespace elfutils
 
 	// For end iterator.
 	inline explicit const_iterator (Dwarf_Attribute *attr)
-	  : dwarf::range_list::const_iterator (attr, 1), _m_block ()
+	  : dwarf::range_list::const_iterator (attr, (unsigned char *)-1)
+	  , _m_block ()
 	{}
 
       public:
