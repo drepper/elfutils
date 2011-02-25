@@ -388,23 +388,31 @@ namespace elfutils
 // dwarf::range_list
 
 unsigned char *
-dwarf::range_list::const_iterator::formptr (Dwarf_Attribute *attr)
+dwarf::range_list::const_iterator::formptr (int secndx, Dwarf_Attribute *attr)
 {
-  unsigned char *readptr = __libdw_formptr (attr, IDX_debug_ranges,
+  unsigned char *readptr = __libdw_formptr (attr, secndx,
 					    DWARF_E_NO_DEBUG_RANGES,
 					    NULL, NULL);
   xif (attr, readptr == NULL);
   return readptr;
 }
 
-dwarf::range_list::const_iterator::const_iterator (Dwarf_Attribute *attr,
+dwarf::range_list::const_iterator
+dwarf::range_list::begin () const
+{
+  const_iterator it (IDX_debug_ranges, _m_attr.thisattr (), 0);
+  return ++it;
+}
+
+dwarf::range_list::const_iterator::const_iterator (int secndx,
+						   Dwarf_Attribute *attr,
 						   unsigned char *readptr)
   : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (attr->cu)
   , _m_readptr (readptr)
 {
   if (_m_readptr == NULL)
     {
-      _m_readptr = formptr (attr);
+      _m_readptr = formptr (secndx, attr);
       xif (attr, _m_readptr == NULL);
     }
 }
@@ -607,7 +615,8 @@ dwarf::location_attr::begin () const
   const_iterator i (_m_attr.thisattr ());
   if (is_list ())
     {
-      i._m_readptr = const_iterator::formptr (_m_attr.thisattr ());
+      i._m_readptr = const_iterator::formptr (IDX_debug_loc,
+					      _m_attr.thisattr ());
       xif (_m_attr.thisattr (), i._m_readptr == NULL);
       i.advance ();
     }
