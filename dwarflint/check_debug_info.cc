@@ -692,7 +692,7 @@ namespace
 		    || (bitness == fb_64 && cu->head->offset_size == 4))
 		  wr_error (where)
 		    << "reference attribute with form \""
-		    << pri::form (form_name) << "\" in "
+		    << elfutils::dwarf::forms::name (form_name) << "\" in "
 		    << (8 * cu->head->offset_size) << "-bit CU."
 		    << std::endl;
 	      }
@@ -816,7 +816,8 @@ namespace
 		if (relocate == rel_no)
 		  wr_message (where, cat (mc_impact_4, mc_die_other,
 					  mc_reloc, extra_mc))
-		    << "unexpected relocation of " << pri::form (form_name)
+		    << "unexpected relocation of "
+		    << elfutils::dwarf::forms::name (form_name)
 		    << '.' << std::endl;
 
 		if (attribute != NULL)
@@ -839,7 +840,8 @@ namespace
 			    && value != 0)))
 		  wr_message (where, cat (mc_impact_2, mc_die_other,
 					  mc_reloc, extra_mc))
-		    << pri::lacks_relocation (pri::form (form_name))
+		    << pri::lacks_relocation
+		        (elfutils::dwarf::forms::name (form_name))
 		    << std::endl;
 	      }
 

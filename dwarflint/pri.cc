@@ -38,10 +38,6 @@ pri::operator << (std::ostream &os, pri::pribase const &obj)
   return os << obj.m_s;
 }
 
-pri::form::form (int attr_form)
-  : pribase (dwarf_form_string (attr_form))
-{}
-
 pri::locexpr_opcode::locexpr_opcode (int opcode)
   : pribase (dwarf_locexpr_opcode_string (opcode))
 {}

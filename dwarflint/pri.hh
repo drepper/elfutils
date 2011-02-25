@@ -66,12 +66,6 @@ namespace pri
     {}
   };
 
-  struct form
-    : public pribase
-  {
-    form (int attr_form);
-  };
-
   struct locexpr_opcode
     : public pribase
   {

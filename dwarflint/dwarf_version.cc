@@ -38,7 +38,6 @@
 #include "dwarf_gnu.hh"
 #include "dwarf_mips.hh"
 #include "check_debug_info.hh"
-#include "pri.hh"
 #include "c++/dwarf"
 
 #include "../libdw/dwarf.h"
@@ -119,7 +118,7 @@ form::width (cu_head const *cu_head) const
 std::ostream &
 operator << (std::ostream &os, form const &obj)
 {
-  return os << pri::form (obj.name ());
+  return os << elfutils::dwarf::forms::name (obj.name ());
 }
 
 namespace
