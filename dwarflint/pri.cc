@@ -38,16 +38,8 @@ pri::operator << (std::ostream &os, pri::pribase const &obj)
   return os << obj.m_s;
 }
 
-pri::attr::attr (int attr_name)
-  : pribase (elfutils::dwarf::attributes::name (attr_name))
-{}
-
 pri::form::form (int attr_form)
   : pribase (dwarf_form_string (attr_form))
-{}
-
-pri::tag::tag (int die_tag)
-  : pribase (elfutils::dwarf::tags::name (die_tag))
 {}
 
 pri::locexpr_opcode::locexpr_opcode (int opcode)

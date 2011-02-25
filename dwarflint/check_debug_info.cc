@@ -31,6 +31,7 @@
 #include <cassert>
 #include <algorithm>
 #include "../libdw/dwarf.h"
+#include "../libdw/c++/dwarf"
 
 #include "messages.hh"
 #include "dwarf_version.hh"
@@ -785,7 +786,8 @@ namespace
 		// error the second time now.
 		wr_error (where)
 		  << "can't read value of attribute "
-		  << pri::attr (it->name) << '.' << std::endl;
+		  << elfutils::dwarf::attributes::name (it->name)
+		  << '.' << std::endl;
 		return -1;
 	      }
 	    if (storclass == sc_block)

@@ -39,6 +39,7 @@
 #include "dwarf_mips.hh"
 #include "check_debug_info.hh"
 #include "pri.hh"
+#include "c++/dwarf"
 
 #include "../libdw/dwarf.h"
 #include <map>
@@ -139,7 +140,7 @@ attribute::attribute (int a_name, dw_class_set const &a_classes)
 std::ostream &
 operator << (std::ostream &os, attribute const &obj)
 {
-  return os << pri::attr (obj.name ());
+  return os << elfutils::dwarf::attributes::name (obj.name ());
 }
 
 

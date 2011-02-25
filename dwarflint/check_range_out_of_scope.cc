@@ -1,5 +1,5 @@
 /* Check whether PC ranges reported at DIE fall into the containing scope.
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -224,7 +224,8 @@ check_range_out_of_scope::recursively_validate
 		    {
 		      runoff = true;
 		      wr_error (wh)
-			<< "attribute `" << pri::attr ((*at).first)
+			<< "attribute `"
+			<< elfutils::dwarf::attributes::name ((*at).first)
 			<< "': PC range " << pri::range (start, end)
 			<< " outside containing scope." << std::endl;
 		    }

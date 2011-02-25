@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -572,7 +572,7 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	    {
 	      auto const &d = *sit;
 	      std::cerr << pad << pri::ref (d) << " "
-			<< pri::tag (d.tag ()) << std::endl;
+			<< elfutils::dwarf::tags::name (d.tag ()) << std::endl;
 	      for (auto atit = d.attributes ().begin ();
 		   atit != d.attributes ().end (); ++atit)
 		{

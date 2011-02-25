@@ -32,7 +32,6 @@
 #include "expected.hh"
 #include "../src/dwarfstrings.h"
 #include "../libdw/c++/dwarf-knowledge.cc"
-#include "pri.hh"
 #include "messages.hh"
 
 using elfutils::dwarf;
@@ -127,19 +126,22 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 		 = expect.begin (); jt != expect.end (); ++jt)
 	    {
 	      std::set <int>::iterator kt = attributes.find (jt->first);
+	      char const *what = NULL;
 	      if (kt == attributes.end ())
 		switch (jt->second)
 		  {
 		  case opt_required:
-		    wr_message (where, cat (mc_impact_4, mc_info))
-		      << pri::tag (parent_tag) << " lacks required attribute "
-		      << pri::attr (jt->first) << '.' << std::endl;
-		    break;
+		    what = " lacks required attribute ";
+		    // FALL_THROUGH
 
 		  case opt_expected:
+		    if (what == NULL)
+		      what = " should contain attribute ";
 		    wr_message (where, cat (mc_impact_2, mc_info))
-		      << pri::tag (parent_tag) << " should contain attribute "
-		      << pri::attr (jt->first) << '.' << std::endl;
+		      << elfutils::dwarf::tags::name (parent_tag) << what
+		      << elfutils::dwarf::attributes::name (jt->first) << '.'
+		      << std::endl;
+		    break;
 
 		  case opt_optional:
 		    break;
