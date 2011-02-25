@@ -1,5 +1,5 @@
 /* Internal definitions for libdwarf.
-   Copyright (C) 2002-2010 Red Hat, Inc.
+   Copyright (C) 2002-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -353,6 +353,8 @@ struct Dwarf_Macro_s
 };
 
 
+__BEGIN_DECLS
+
 /* We have to include the file at this point because the inline
    functions access internals of the Dwarf structure.  */
 #include "memory-access.h"
@@ -471,7 +473,6 @@ extern Dwarf_Die *__libdw_offdie (Dwarf *dbg, Dwarf_Off offset,
 extern int __dwarf_errno_internal (void);
 
 
-#ifndef __cplusplus
 /* Reader hooks.  */
 
 /* Relocation hooks return -1 on error (in that case the error code
@@ -535,8 +536,10 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
   Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
   if (data == NULL)
     return false;
-  if (unlikely (addr < data->d_buf)
-      || unlikely (data->d_size - (addr - data->d_buf) < size))
+  if (unlikely ((const char *) addr < (const char *) data->d_buf)
+      || unlikely (data->d_size - ((const char *) addr
+				   - (const char *) data->d_buf)
+		   < size))
     {
       __libdw_seterrno (DWARF_E_INVALID_OFFSET);
       return false;
@@ -615,11 +618,10 @@ int __libdw_read_begin_end_pair_inc (Dwarf *dbg, int sec_index,
 				     Dwarf_Addr *basep)
   internal_function;
 
-unsigned char * __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
-				 int err_nodata, unsigned char **endpp,
-				 Dwarf_Off *offsetp)
+unsigned char *__libdw_formptr (Dwarf_Attribute *attr, int sec_index,
+				int err_nodata, unsigned char **endpp,
+				Dwarf_Off *offsetp)
   internal_function;
-#endif	/* Not C++ */
 
 static inline size_t
 cu_sec_idx (struct Dwarf_CU *cu)
@@ -632,6 +634,9 @@ cu_data (struct Dwarf_CU *cu)
 {
   return cu->dbg->sectiondata[cu_sec_idx (cu)];
 }
+
+
+__END_DECLS
 
 
 /* Aliases to avoid PLTs.  */
