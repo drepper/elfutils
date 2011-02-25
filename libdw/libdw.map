@@ -254,3 +254,9 @@ ELFUTILS_0.149 {
 
     dwfl_dwarf_line;
 } ELFUTILS_0.148;
+
+# This will go away when we figure out the C++ exports.
+ELFUTILS_PRIVATE_TMP {
+  global:
+    __libdw_formptr;
+};

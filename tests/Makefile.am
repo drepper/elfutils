@@ -87,9 +87,11 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
-	run-dwarfcmp-self.sh run-dwarflint-self.sh run-dwarf-attributes.sh \
-	run-dwarf_edit.sh dwarf_edit_output run-dwarfcmp-test-self.sh \
-	run-test-flag-nobits.sh run-prelink-addr-test.sh
+	run-dwarf-attributes.sh \
+	run-dwarf_edit.sh dwarf_edit_output \
+	run-test-flag-nobits.sh run-prelink-addr-test.sh \
+	run-dwarflint-self.sh \
+	run-dwarfcmp-self.sh run-dwarfcmp-test-self.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -212,8 +214,7 @@ dwarf_print_LDADD = $(libdwpp) $(libmudflap) -ldl
 dwarf_edit_SOURCES = dwarf_edit.cc print-die.cc
 dwarf_edit_LDADD = $(libdwpp) $(libmudflap) -ldl
 
-dwarf_edit_output_SOURCES = dwarf_edit_output.cc print-die.cc \
-			    ../src/dwarfstrings.c
+dwarf_edit_output_SOURCES = dwarf_edit_output.cc print-die.cc
 dwarf_edit_output_LDADD = $(libdwpp) $(libmudflap) -ldl
 
 arextract_LDADD = $(libelf) $(libmudflap)

@@ -257,7 +257,6 @@ namespace elfutils
 	assert (_m_tracker->_m_path.empty ());
 	assert (_m_tracker->_m_steps_taken == 0);
 	assert (_m_tracker->_m_walkahead == NULL);
-	::Dwarf_Off cu_offset = (*root).offset (); cu_offset = cu_offset;
 	_m_tracker->_m_root = root;
       }
 
@@ -301,12 +300,41 @@ namespace elfutils
 
     inline void prime_path_to (const typename dw::debug_info_entry &there)
     {
-      /* Since we can only used on a cloned tracker, _m_steps_taken
-	 counting does not matter.  */
-      assert (_m_owner != NULL);
-      assert (this != _m_owner->_m_walkahead);
-      assert (at_top ());
-      _m_path = path_to (there);
+      if (_m_owner != NULL)
+	{
+	  /* Since this is a cloned tracker,
+	     _m_steps_taken counting does not matter.  */
+	  assert (this != _m_owner->_m_walkahead);
+	  _m_path = path_to (there);
+	}
+      else
+	{
+	  /* Spin the walk ahead until we get THERE.  */
+	  const dwarf::debug_info_entry::identity_type id = there.identity ();
+	  if (_m_seen->find (id) != _m_seen->end ())
+	    {
+	      /* We're walking backwards now.  We have to repeat the
+		 whole walk to recover our _m_steps_taken state correctly.  */
+	      _m_path.clear ();
+	      clear_walk ();
+	    }
+
+	  if (at_top ())
+	    {
+	      /* We have to get the walk started.  */
+	      const die first = (*_m_root).children ().begin ();
+	      if (first == (*_m_root).children ().end ())
+		unreachable (there); // Empty CU!
+
+	      step_forward (first);
+	      if ((*first).identity () == id)
+		return;
+	    }
+
+	  /* We have not walked past it yet, so just keep walking.  */
+	  if (! walk_to (id))
+	    unreachable (there);
+	}
     }
 
     // Random access to a DIE, find the path of the walk that gets there.

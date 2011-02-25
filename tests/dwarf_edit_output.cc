@@ -37,8 +37,6 @@
 
 #include "c++/subr.hh"
 
-#include "../src/dwarfstrings.h"
-
 using namespace elfutils;
 using namespace std;
 
@@ -520,7 +518,7 @@ test_last_two_dies (dwarf_edit &in, dwarf_output &out, int tag, bool same,
       cmp compare;
       if (compare.compare_dies (*die1, *die2, in) != same)
 	error (-1, 0, "dwarf_comparator fail %s test #%d '%s'",
-	       dwarf_tag_string (tag), n, name);
+	       dwarf::tags::name (tag).c_str (), n, name);
     }
 
   dwarf_output::compile_units_type::const_iterator cu;
@@ -537,7 +535,7 @@ test_last_two_dies (dwarf_edit &in, dwarf_output &out, int tag, bool same,
       it++;
     }
   if (show_output)
-    cout << "offset last (" << dwarf_tag_string (tag) << ") cu1: "
+    cout << "offset last (" << dwarf::tags::name (tag) << ") cu1: "
 	 << hex << off1 << endl;
 
   cu++;
@@ -549,14 +547,14 @@ test_last_two_dies (dwarf_edit &in, dwarf_output &out, int tag, bool same,
       it++;
     }
   if (show_output)
-    cout << "offset last (" << dwarf_tag_string (tag) << ") cu2: "
+    cout << "offset last (" << dwarf::tags::name (tag) << ") cu2: "
 	 << hex << off2 << endl;
 
   bool both_zero = off1 == 0 && off2 == 0;
   bool equal = off1 == off2;
   if (! both_zero && equal != same)
     error (-1, 0, "dwarf_comparator fail %s test #%d '%s'",
-	   dwarf_tag_string (tag), n, name);
+	   dwarf::tags::name (tag).c_str (), n, name);
 
 }
 
