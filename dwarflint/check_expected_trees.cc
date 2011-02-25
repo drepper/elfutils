@@ -27,11 +27,12 @@
 # include <config.h>
 #endif
 
+#include "../libdw/c++/dwarf-knowledge.cc"
+#include "../libdw/c++/dwarf"
+
 #include "check_debug_info.hh"
 #include "highlevel_check.hh"
 #include "expected.hh"
-#include "../src/dwarfstrings.h"
-#include "../libdw/c++/dwarf-knowledge.cc"
 #include "messages.hh"
 
 using elfutils::dwarf;

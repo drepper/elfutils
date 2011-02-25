@@ -35,14 +35,15 @@
 #include <cassert>
 #include <sstream>
 #include <algorithm>
+
 #include "../libdw/c++/dwarf"
+#include "../src/dwarf-opcodes.h"
 
 #include "elf_file.hh"
 #include "check_debug_loc_range.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
 #include "checked_read.hh"
-#include "../src/dwarf-opcodes.h"
 #include "pri.hh"
 #include "misc.hh"
 

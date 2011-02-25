@@ -31,6 +31,12 @@
 # include <config.h>
 #endif
 
+#include <map>
+#include <cassert>
+#include <string.h>
+
+#include "../libdw/c++/dwarf"
+
 #include "dwarf_version.hh"
 #include "dwarf_2.hh"
 #include "dwarf_3.hh"
@@ -38,12 +44,6 @@
 #include "dwarf_gnu.hh"
 #include "dwarf_mips.hh"
 #include "check_debug_info.hh"
-#include "c++/dwarf"
-
-#include "../libdw/dwarf.h"
-#include <map>
-#include <cassert>
-#include <string.h>
 
 dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
 			    dw_class d, dw_class e)

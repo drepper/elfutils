@@ -30,7 +30,6 @@
 
 #include <cassert>
 #include <algorithm>
-#include "../libdw/dwarf.h"
 #include "../libdw/c++/dwarf"
 
 #include "messages.hh"

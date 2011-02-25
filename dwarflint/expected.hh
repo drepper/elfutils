@@ -30,7 +30,7 @@
 #include <sstream>
 #include <cassert>
 
-#include "c++/dwarf"
+#include "../libdw/c++/dwarf"
 
 enum optionality
 {

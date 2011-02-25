@@ -27,10 +27,12 @@
 # include <config.h>
 #endif
 
-#include "../src/dwarfstrings.h"
-#include "pri.hh"
 #include <sstream>
-#include "c++/dwarf"
+
+#include "../src/dwarfstrings.h"
+#include "../libdw/c++/dwarf"
+
+#include "pri.hh"
 
 std::ostream &
 pri::operator << (std::ostream &os, pri::pribase const &obj)

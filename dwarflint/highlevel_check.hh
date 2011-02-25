@@ -31,7 +31,7 @@
 #endif
 
 #include "checks.hh"
-#include "c++/dwarf"
+#include "../libdw/c++/dwarf"
 #include "../libdwfl/libdwfl.h"
 
 class open_highlevel_dwarf
