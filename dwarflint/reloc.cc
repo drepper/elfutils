@@ -161,6 +161,14 @@ do_one_relocation (elf_file const *file,
      would be possible to use dwfl, which already does XINDEX
      translation.  */
 
+  if (section_index == 0)
+    {
+	wr_error (reloc_where)
+	  << "relocation refers to an undefined symbol."
+	  << std::endl;
+	return;
+    }
+
   // Valid in the sense that it can be used as an index to file->sec
   bool section_index_valid = section_index < file->size;
 
