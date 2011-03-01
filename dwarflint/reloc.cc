@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -204,7 +204,7 @@ relocate_one (struct elf_file const *file,
 	  return;
 	}
 
-      uint64_t section_index = symbol->st_shndx;
+      GElf_Section section_index = symbol->st_shndx;
       /* XXX We should handle SHN_XINDEX here.  Or, instead, maybe it
 	 would be possible to use dwfl, which already does XINDEX
 	 translation.  */
@@ -212,7 +212,7 @@ relocate_one (struct elf_file const *file,
       /* For ET_REL files, we do section layout manually.  But we
 	 don't update symbol table doing that.  So instead of looking
 	 at symbol value, look at section address.  */
-      uint64_t sym_value = symbol->st_value;
+      GElf_Addr sym_value = symbol->st_value;
       if (file->ehdr.e_type == ET_REL
 	  && ELF64_ST_TYPE (symbol->st_info) == STT_SECTION)
 	{
@@ -259,14 +259,14 @@ relocate_one (struct elf_file const *file,
 	  enum section_id id;
 	  /* If symtab[symndx].st_shndx does not match the expected
 	     debug section's index, complain.  */
-	  if (section_index >= file->size)
+	  if (section_index == 0 || section_index >= file->size)
 	    wr_error (reloc_where)
 	      << "invalid associated section #" << section_index
 	      << '.' << std::endl;
 	  else if ((id = file->sec[section_index].id) != offset_into)
 	    wr_error (reloc_where)
 	      << "relocation references section "
-	      << file->sec[section_index].name << ", but "
+	      << (file->sec[section_index].name ?: "<invalid>") << ", but "
 	      << WHERE (offset_into, NULL) << " was expected." << std::endl;
 	}
 
