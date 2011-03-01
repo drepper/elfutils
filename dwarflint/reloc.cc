@@ -131,6 +131,20 @@ do_one_relocation (elf_file const *file,
 		   GElf_Sym *symbol,
 		   GElf_Sym **symptr)
 {
+#define require(T, STREAMOPS)			\
+  do {						\
+    if (!(T))					\
+      {						\
+	wr_error (reloc_where) << STREAMOPS	\
+			       << std::endl;	\
+	return;					\
+      }						\
+  } while (0)
+
+#define require_valid_section_index					\
+  require (section_index_valid,						\
+	   "invalid associated section #" << section_index << '.')
+
   symbol = gelf_getsym (reloc->symdata, rel->symndx, symbol);
   if (symptr != NULL)
     *symptr = symbol;
@@ -147,6 +161,9 @@ do_one_relocation (elf_file const *file,
      would be possible to use dwfl, which already does XINDEX
      translation.  */
 
+  // Valid in the sense that it can be used as an index to file->sec
+  bool section_index_valid = section_index < file->size;
+
   /* For ET_REL files, we do section layout manually.  But we
      don't update symbol table doing that.  So instead of looking
      at symbol value, look at section address.  */
@@ -155,6 +172,7 @@ do_one_relocation (elf_file const *file,
       && ELF64_ST_TYPE (symbol->st_info) == STT_SECTION)
     {
       assert (sym_value == 0);
+      require_valid_section_index;
       sym_value = file->sec[section_index].shdr.sh_addr;
     }
 
@@ -178,6 +196,7 @@ do_one_relocation (elf_file const *file,
 			" (symtab index %d).\n", rel->symndx);
 	  else
 	    {
+	      require_valid_section_index;
 	      GElf_Shdr *shdr = &file->sec[section_index].shdr;
 	      if ((shdr->sh_flags & SHF_ALLOC) != SHF_ALLOC)
 		wr_message (mc_reloc | mc_impact_3, &reloc_where,
@@ -194,12 +213,8 @@ do_one_relocation (elf_file const *file,
     }
   else
     {
-      enum section_id id;
-      if (section_index == 0 || section_index >= file->size)
-	wr_error (reloc_where)
-	  << "invalid associated section #" << section_index
-	  << '.' << std::endl;
-      else if ((id = file->sec[section_index].id) != offset_into)
+      require_valid_section_index;
+      if (file->sec[section_index].id != offset_into)
 	// If symtab[symndx].st_shndx does not match the expected
 	// debug section's index, complain.
 	wr_error (reloc_where)
@@ -216,6 +231,9 @@ do_one_relocation (elf_file const *file,
       if (rel_width == 4)
 	*value = *value & (uint64_t)(uint32_t)-1;
     }
+
+#undef require_valid_section_index
+#undef require
 }
 
 /* SYMPTR may be NULL, otherwise (**SYMPTR) has to yield valid memory
