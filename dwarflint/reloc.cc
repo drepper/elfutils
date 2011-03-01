@@ -120,6 +120,104 @@ relocation_skip_rest (struct relocation_data *reloc,
     }
 }
 
+static void
+do_one_relocation (elf_file const *file,
+		   relocation_data *reloc,
+		   relocation *rel,
+		   unsigned rel_width,
+		   uint64_t *value,
+		   where const &reloc_where,
+		   section_id offset_into,
+		   GElf_Sym *symbol,
+		   GElf_Sym **symptr)
+{
+  symbol = gelf_getsym (reloc->symdata, rel->symndx, symbol);
+  if (symptr != NULL)
+    *symptr = symbol;
+  if (symbol == NULL)
+    {
+      wr_error (&reloc_where,
+		": couldn't obtain symbol #%d: %s.\n",
+		rel->symndx, elf_errmsg (-1));
+      return;
+    }
+
+  GElf_Section section_index = symbol->st_shndx;
+  /* XXX We should handle SHN_XINDEX here.  Or, instead, maybe it
+     would be possible to use dwfl, which already does XINDEX
+     translation.  */
+
+  /* For ET_REL files, we do section layout manually.  But we
+     don't update symbol table doing that.  So instead of looking
+     at symbol value, look at section address.  */
+  GElf_Addr sym_value = symbol->st_value;
+  if (file->ehdr.e_type == ET_REL
+      && ELF64_ST_TYPE (symbol->st_info) == STT_SECTION)
+    {
+      assert (sym_value == 0);
+      sym_value = file->sec[section_index].shdr.sh_addr;
+    }
+
+  /* It's target value, not section offset.  */
+  if (offset_into == rel_value
+      || offset_into == rel_address
+      || offset_into == rel_exec)
+    {
+      /* If a target value is what's expected, then complain if
+	 it's not either SHN_ABS, an SHF_ALLOC section, or
+	 SHN_UNDEF.  For data forms of address_size, an SHN_UNDEF
+	 reloc is acceptable, otherwise reject it.  */
+      if (!(section_index == SHN_ABS
+	    || (offset_into == rel_address
+		&& (section_index == SHN_UNDEF
+		    || section_index == SHN_COMMON))))
+	{
+	  if (offset_into != rel_address && section_index == SHN_UNDEF)
+	    wr_error (&reloc_where,
+			": relocation of an address is formed against SHN_UNDEF symbol"
+			" (symtab index %d).\n", rel->symndx);
+	  else
+	    {
+	      GElf_Shdr *shdr = &file->sec[section_index].shdr;
+	      if ((shdr->sh_flags & SHF_ALLOC) != SHF_ALLOC)
+		wr_message (mc_reloc | mc_impact_3, &reloc_where,
+			    ": associated section %s isn't SHF_ALLOC.\n",
+			    file->sec[section_index].name);
+	      if (offset_into == rel_exec
+		  && (shdr->sh_flags & SHF_EXECINSTR) != SHF_EXECINSTR)
+		/* This may still be kosher, but it's suspicious.  */
+		wr_message (mc_reloc | mc_impact_2, &reloc_where,
+			    ": relocation against %s is suspicious, expected executable section.\n",
+			    file->sec[section_index].name);
+	    }
+	}
+    }
+  else
+    {
+      enum section_id id;
+      if (section_index == 0 || section_index >= file->size)
+	wr_error (reloc_where)
+	  << "invalid associated section #" << section_index
+	  << '.' << std::endl;
+      else if ((id = file->sec[section_index].id) != offset_into)
+	// If symtab[symndx].st_shndx does not match the expected
+	// debug section's index, complain.
+	wr_error (reloc_where)
+	  << "relocation references section "
+	  << (file->sec[section_index].name ?: "<invalid>") << ", but "
+	  << WHERE (offset_into, NULL) << " was expected." << std::endl;
+    }
+
+  /* Only do the actual relocation if we have ET_REL files.  For
+     non-ET_REL files, only do the above checking.  */
+  if (file->ehdr.e_type == ET_REL)
+    {
+      *value = rel->addend + sym_value;
+      if (rel_width == 4)
+	*value = *value & (uint64_t)(uint32_t)-1;
+    }
+}
+
 /* SYMPTR may be NULL, otherwise (**SYMPTR) has to yield valid memory
    location.  When the function returns, (*SYMPTR) is either NULL, in
    which case we failed or didn't get around to obtain the symbol from
@@ -190,95 +288,10 @@ relocate_one (struct elf_file const *file,
 	      ": %d-byte relocation relocates %d-byte datum.\n",
 	      rel_width, width);
 
-  /* Tolerate that we might have failed to obtain the symbol table.  */
+  // Tolerate if we failed to obtain the symbol table.
   if (reloc->symdata != NULL)
-    {
-      symbol = gelf_getsym (reloc->symdata, rel->symndx, symbol);
-      if (symptr != NULL)
-	*symptr = symbol;
-      if (symbol == NULL)
-	{
-	  wr_error (&reloc_where,
-		    ": couldn't obtain symbol #%d: %s.\n",
-		    rel->symndx, elf_errmsg (-1));
-	  return;
-	}
-
-      GElf_Section section_index = symbol->st_shndx;
-      /* XXX We should handle SHN_XINDEX here.  Or, instead, maybe it
-	 would be possible to use dwfl, which already does XINDEX
-	 translation.  */
-
-      /* For ET_REL files, we do section layout manually.  But we
-	 don't update symbol table doing that.  So instead of looking
-	 at symbol value, look at section address.  */
-      GElf_Addr sym_value = symbol->st_value;
-      if (file->ehdr.e_type == ET_REL
-	  && ELF64_ST_TYPE (symbol->st_info) == STT_SECTION)
-	{
-	  assert (sym_value == 0);
-	  sym_value = file->sec[section_index].shdr.sh_addr;
-	}
-
-      /* It's target value, not section offset.  */
-      if (offset_into == rel_value
-	  || offset_into == rel_address
-	  || offset_into == rel_exec)
-	{
-	  /* If a target value is what's expected, then complain if
-	     it's not either SHN_ABS, an SHF_ALLOC section, or
-	     SHN_UNDEF.  For data forms of address_size, an SHN_UNDEF
-	     reloc is acceptable, otherwise reject it.  */
-	  if (!(section_index == SHN_ABS
-		|| (offset_into == rel_address
-		    && (section_index == SHN_UNDEF
-			|| section_index == SHN_COMMON))))
-	    {
-	      if (offset_into != rel_address && section_index == SHN_UNDEF)
-		wr_error (&reloc_where,
-			    ": relocation of an address is formed against SHN_UNDEF symbol"
-			    " (symtab index %d).\n", rel->symndx);
-	      else
-		{
-		  GElf_Shdr *shdr = &file->sec[section_index].shdr;
-		  if ((shdr->sh_flags & SHF_ALLOC) != SHF_ALLOC)
-		    wr_message (mc_reloc | mc_impact_3, &reloc_where,
-				": associated section %s isn't SHF_ALLOC.\n",
-				file->sec[section_index].name);
-		  if (offset_into == rel_exec
-		      && (shdr->sh_flags & SHF_EXECINSTR) != SHF_EXECINSTR)
-		    /* This may still be kosher, but it's suspicious.  */
-		    wr_message (mc_reloc | mc_impact_2, &reloc_where,
-				": relocation against %s is suspicious, expected executable section.\n",
-				file->sec[section_index].name);
-		}
-	    }
-	}
-      else
-	{
-	  enum section_id id;
-	  /* If symtab[symndx].st_shndx does not match the expected
-	     debug section's index, complain.  */
-	  if (section_index == 0 || section_index >= file->size)
-	    wr_error (reloc_where)
-	      << "invalid associated section #" << section_index
-	      << '.' << std::endl;
-	  else if ((id = file->sec[section_index].id) != offset_into)
-	    wr_error (reloc_where)
-	      << "relocation references section "
-	      << (file->sec[section_index].name ?: "<invalid>") << ", but "
-	      << WHERE (offset_into, NULL) << " was expected." << std::endl;
-	}
-
-      /* Only do the actual relocation if we have ET_REL files.  For
-	 non-ET_REL files, only do the above checking.  */
-      if (file->ehdr.e_type == ET_REL)
-	{
-	  *value = rel->addend + sym_value;
-	  if (rel_width == 4)
-	    *value = *value & (uint64_t)(uint32_t)-1;
-	}
-    }
+    do_one_relocation (file, reloc, rel, rel_width, value,
+		       reloc_where, offset_into, symbol, symptr);
 }
 
 static GElf_Rela *
