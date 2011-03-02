@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_info.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -109,8 +109,6 @@ class check_debug_info
 			    Elf_Data *strings,
 			    struct coverage *strings_coverage,
 			    struct relocation_data *reloc);
-
-  void check_info_structural ();
 
 public:
   static checkdescriptor const *descriptor ();

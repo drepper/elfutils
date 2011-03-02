@@ -970,8 +970,12 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   return retval;
 }
 
-void
-check_debug_info::check_info_structural ()
+check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
+  : _m_sec_info (lint.check (stack, _m_sec_info))
+  , _m_sec_str (lint.check (stack, _m_sec_str))
+  , _m_file (_m_sec_info->file)
+  , _m_abbrevs (lint.check (stack, _m_abbrevs))
+  , _m_cu_headers (lint.check (stack, _m_cu_headers))
 {
   std::vector <cu_head> const &cu_headers = _m_cu_headers->cu_headers;
   sec &sec = _m_sec_info->sect;
@@ -1069,26 +1073,27 @@ check_debug_info::check_info_structural ()
 		<< ": abbreviation is never used." << std::endl;
     }
 
-  // Relink the CU chain.
+  // re-link CUs so that they form a chain again.  This is to
+  // interface with legacy code.
   {
     cu *last = NULL;
     for (std::vector<cu>::iterator it = cus.begin ();
 	 it != cus.end (); ++it)
       {
+	cu *cur = &*it;
 	if (last != NULL)
-	  last->next = &*it;
-	last = &*it;
+	  last->next = cur;
+	last = cur;
       }
     if (last != NULL)
       last->next = NULL;
   }
 
-
   /* We used to check that all CUs have the same address size.  Now
      that we validate address_size of each CU against the ELF header,
      that's not necessary anymore.  */
 
-  check_global_die_references (&cus.front ());
+  check_global_die_references (!cus.empty () ? &cus.front () : NULL);
   ref_record_free (&die_refs);
 
   if (strings_coverage != NULL)
@@ -1100,29 +1105,10 @@ check_debug_info::check_info_structural ()
 	}
       delete strings_coverage;
     }
-}
 
-check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
-  : _m_sec_info (lint.check (stack, _m_sec_info))
-  , _m_sec_str (lint.check (stack, _m_sec_str))
-  , _m_file (_m_sec_info->file)
-  , _m_abbrevs (lint.check (stack, _m_abbrevs))
-  , _m_cu_headers (lint.check (stack, _m_cu_headers))
-{
-  check_info_structural ();
-
-  // re-link CUs so that they form a chain again.  This is to
-  // interface with C-level code.  The last CU's next is NULL, so we
-  // don't have to re-link it.
-  cu *last = NULL;
-  for (std::vector<cu>::iterator it = cus.begin ();
-       it != cus.end (); ++it)
-    {
-      cu *cur = &*it;
-      if (last != NULL)
-	last->next = cur;
-      last = cur;
-    }
+  // If we were unsuccessful, fail now.
+  if (!success)
+    throw check_base::failed ();
 
   if (cus.size () > 0)
     assert (cus.back ().next == NULL);
