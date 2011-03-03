@@ -101,7 +101,8 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-check_debug_info_refs.sh \
 	tests/run-aranges_terminate_early.sh \
 	tests/run-libdl-2.12.so.debug.sh \
-	tests/run-test-all-dies-it.sh
+	tests/run-test-all-dies-it.sh \
+	tests/run-bad.sh
 
 TESTS = $(EXTRA_TESTS) \
 	tests/test-coverage \
