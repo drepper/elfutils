@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2010 Red Hat, Inc.
+## Copyright (C) 1996-2011 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -36,7 +36,7 @@ AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 no_mudflap.os = -fmudflap
 
 bin_PROGRAMS = dwarflint
-noinst_PROGRAMS = tests/test-coverage tests/test-wrap
+noinst_PROGRAMS = tests/test-coverage tests/test-wrap tests/test-all-dies-it
 
 dwarflint_SOURCES = \
 	addr-record.cc addr-record.hh \
@@ -91,6 +91,7 @@ tests_test_coverage_SOURCES = tests/test-coverage.cc coverage.cc pri.cc \
 	../src/dwarfstrings.c
 
 tests_test_wrap_SOURCES = tests/test-wrap.cc wrap.cc
+tests_test_all_dies_it_SOURCES = tests/test-all-dies-it.cc
 
 EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-check_duplicate_DW_tag_variable.sh \
@@ -99,7 +100,8 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-check_range_out_of_scope.sh \
 	tests/run-check_debug_info_refs.sh \
 	tests/run-aranges_terminate_early.sh \
-	tests/run-libdl-2.12.so.debug.sh
+	tests/run-libdl-2.12.so.debug.sh \
+	tests/run-test-all-dies-it.sh
 
 TESTS = $(EXTRA_TESTS) \
 	tests/test-coverage \
@@ -148,6 +150,7 @@ libdwpp = ../libdw/libdwpp.a $(libdw)
 
 dwarflint_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 tests_test_coverage_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
+tests_test_all_dies_it_LDADD = $(libdwpp)
 
 installcheck-binPROGRAMS: $(bin_PROGRAMS)
 	bad=0; pid=$$$$; list="$(bin_PROGRAMS)"; for p in $$list; do \

@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -41,21 +41,17 @@ class all_dies_iterator
   die_it_stack_t _m_die_it_stack;
   bool _m_atend;
 
-  void nest ()
-  {
-    while (_m_die_it->has_children ())
-      {
-	_m_die_it_stack.push_back (std::make_pair (_m_die_it, _m_die_it_end));
-	_m_die_it_end = (*_m_die_it).children ().end ();
-	_m_die_it = (*_m_die_it).children ().begin ();
-      }
-  }
-
   void start ()
   {
-    _m_die_it = die_it_t (*_m_cu_it);
-    _m_die_it_end = die_it_t ();
-    nest ();
+    if (_m_cu_it == _m_cu_it_end)
+      _m_atend = true;
+    else
+      {
+	_m_die_it = die_it_t (*_m_cu_it);
+	_m_die_it_end = die_it_t ();
+	++_m_cu_it;
+	assert (_m_die_it != _m_die_it_end);
+      }
   }
 
 public:
@@ -67,9 +63,10 @@ public:
   explicit all_dies_iterator (T const &dw)
     : _m_cu_it (dw.compile_units ().begin ())
     , _m_cu_it_end (dw.compile_units ().end ())
-    , _m_atend (false)
+    , _m_atend (_m_cu_it == _m_cu_it_end)
   {
-    start ();
+    if (!_m_atend)
+      start ();
   }
 
   bool operator== (all_dies_iterator const &other)
@@ -89,21 +86,26 @@ public:
   {
     if (!_m_atend)
       {
-	if (++_m_die_it == _m_die_it_end)
+	if (_m_die_it->has_children ()
+	    && _m_die_it->children ().begin () != _m_die_it->children ().end ())
 	  {
-	    if (_m_die_it_stack.size () > 0)
-	      {
-		_m_die_it = _m_die_it_stack.back ().first;
-		_m_die_it_end = _m_die_it_stack.back ().second;
-		_m_die_it_stack.pop_back ();
-	      }
-	    else if (++_m_cu_it == _m_cu_it_end)
-	      _m_atend = true;
-	    else
-	      start ();
+	    _m_die_it_stack.push_back (std::make_pair (_m_die_it, _m_die_it_end));
+	    _m_die_it_end = _m_die_it->children ().end ();
+	    _m_die_it = _m_die_it->children ().begin ();
 	  }
 	else
-	  nest ();
+	  while (++_m_die_it == _m_die_it_end)
+
+	    {
+	      if (_m_die_it_stack.size () == 0)
+		{
+		  start ();
+		  break;
+		}
+	      _m_die_it = _m_die_it_stack.back ().first;
+	      _m_die_it_end = _m_die_it_stack.back ().second;
+	      _m_die_it_stack.pop_back ();
+	    }
       }
     return *this;
   }
@@ -117,7 +119,7 @@ public:
 
   typename T::debug_info_entry const &operator* () const
   {
-    if (/*unlikely*/ (_m_atend))
+    if (unlikely (_m_atend))
       throw std::runtime_error ("dereferencing end iterator");
     return *_m_die_it;
   }
