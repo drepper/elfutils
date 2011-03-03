@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2010 Red Hat, Inc.
+# Copyright (C) 2010, 2011 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -27,7 +27,7 @@
 
 srcdir=$srcdir/tests
 
-testfiles nodebug
+testfiles nodebug null.o
 
 testrun_compare ./dwarflint nodebug <<EOF
 error: .debug_abbrev: data not found.
@@ -68,4 +68,12 @@ nodebug:
 
 nodebug:
 warning: the rule \`oentuh' never matched.
+EOF
+
+testrun_compare ./dwarflint null.o <<EOF
+error: .debug_info: data not found.
+EOF
+
+testrun_compare ./dwarflint --nodebug:ignore null.o <<EOF
+No errors
 EOF

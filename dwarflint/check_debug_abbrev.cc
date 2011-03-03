@@ -125,10 +125,15 @@ namespace
   check_no_abbreviations (check_debug_abbrev::abbrev_map const &abbrevs)
   {
     bool ret = abbrevs.begin () == abbrevs.end ();
+
+    // It's not an error when the abbrev table contains no abbrevs.
+    // But since we got here, apparently there was a .debug_abbrev
+    // section with size of more than 0 bytes, which is wasteful.
     if (ret)
       {
 	where wh = WHERE (sec_abbrev, NULL);
-	wr_error (&wh, ": no abbreviations.\n");
+	wr_message (wh, cat (mc_abbrevs, mc_impact_1, mc_acc_bloat))
+	  << "no abbreviations." << std::endl;
       }
     return ret;
   }
@@ -148,13 +153,6 @@ namespace
 
     // Tolerate failure here.
     dwarf_version const *ver = NULL;
-    if (cu_headers == NULL)
-      {
-	wr_error (where)
-	  << "couldn't load CU headers; assuming CUs are of latest DWARF flavor."
-	  << std::endl;
-	ver = dwarf_version::get_latest ();
-      }
     where.addr1 = 0;
 
     bool failed = false;
@@ -277,6 +275,14 @@ namespace
 		    ver = dwarf_version::get_latest ();
 		  }
 	      }
+	    else if (ver == NULL)
+	      {
+		wr_error (where)
+		  << "couldn't load CU headers; assuming CUs are of latest DWARF flavor."
+		  << std::endl;
+		ver = dwarf_version::get_latest ();
+	      }
+
 	    assert (ver != NULL);
 	  }
 
