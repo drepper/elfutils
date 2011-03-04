@@ -1144,6 +1144,7 @@ check_debug_info_refs::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_info_refs")
      .groups ("@low")
+     .option (dump_die_offsets)
      .prereq<typeof (*_m_info)> ()
      .prereq<typeof (*_m_line)> ()
      .description (

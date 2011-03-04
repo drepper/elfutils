@@ -125,8 +125,8 @@ namespace
   }
 
   bool
-    use_file (files_t &files, uint64_t file_idx,
-	      where *where, char const *msg = "")
+  use_file (files_t &files, uint64_t file_idx,
+	    where *where, char const *msg = "")
   {
     if (file_idx == 0 || file_idx > files.size ())
       {
