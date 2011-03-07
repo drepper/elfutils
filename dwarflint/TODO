@@ -113,6 +113,13 @@
    through, the bottom part of the stack needs to be implemented via
    grepping, and that turns our messages into API.
 
+   It seems there are at least two trees of abstractness (area, check
+   and message in question form one, category potentially another,
+   albeit perhaps degenerated) that we may want to filter
+   independently.  E.g. I might want to filter out all
+   .debug_info/sev<1, or I might want to simply filter out sev<1 right
+   away.
+
 * quirks
 
   Some compilers produce files broken in various ways.  Not to be
