@@ -26,7 +26,7 @@
 #ifndef DWARFLINT_CHECKED_READ_HH
 #define DWARFLINT_CHECKED_READ_HH
 
-#include "readctx.h"
+#include "readctx.hh"
 #include "where.h"
 #include "dwarf_version.hh"
 

@@ -24,7 +24,7 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "readctx.h"
+#include "readctx.hh"
 #include "../libdw/dwarf.h"
 
 #include <stdlib.h>
@@ -47,7 +47,7 @@ union unaligned
 static uint16_t
 read_2ubyte_unaligned (const void *p, bool other_byte_order)
 {
-  const union unaligned *up = p;
+  const union unaligned *up = (const union unaligned *)p;
   if (other_byte_order)
     return bswap_16 (up->u2);
   return up->u2;
@@ -58,7 +58,7 @@ read_2ubyte_unaligned (const void *p, bool other_byte_order)
 uint32_t
 dwarflint_read_4ubyte_unaligned (const void *p, bool other_byte_order)
 {
-  const union unaligned *up = p;
+  const union unaligned *up = (const union unaligned *)p;
   if (other_byte_order)
     return bswap_32 (up->u4);
   return up->u4;
@@ -67,7 +67,7 @@ dwarflint_read_4ubyte_unaligned (const void *p, bool other_byte_order)
 uint64_t
 dwarflint_read_8ubyte_unaligned (const void *p, bool other_byte_order)
 {
-  const union unaligned *up = p;
+  const union unaligned *up = (const union unaligned *)p;
   if (other_byte_order)
     return bswap_64 (up->u8);
   return up->u8;
@@ -98,9 +98,9 @@ read_ctx_init (struct read_ctx *ctx, Elf_Data *data, bool other_byte_order)
     abort ();
 
   ctx->data = data;
-  ctx->begin = data->d_buf;
-  ctx->end = data->d_buf + data->d_size;
-  ctx->ptr = data->d_buf;
+  ctx->begin = (const unsigned char *)data->d_buf;
+  ctx->end = (const unsigned char *)data->d_buf + data->d_size;
+  ctx->ptr = (const unsigned char *)data->d_buf;
   ctx->other_byte_order = other_byte_order;
 }
 

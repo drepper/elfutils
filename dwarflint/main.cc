@@ -34,7 +34,7 @@
 #include <sstream>
 
 #include "dwarflint.hh"
-#include "readctx.h"
+#include "readctx.hh"
 #include "checks.hh"
 #include "option.hh"
 #include "messages.hh"

@@ -30,7 +30,7 @@
 #include "elf_file.hh"
 #include "messages.hh"
 #include "misc.hh"
-#include "readctx.h"
+#include "readctx.hh"
 
 #include <sstream>
 #include <libebl.h>

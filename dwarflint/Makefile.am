@@ -63,7 +63,7 @@ dwarflint_SOURCES = \
 	misc.cc misc.hh \
 	option.cc option.hh option.ii \
 	pri.cc pri.hh \
-	readctx.c readctx.h \
+	readctx.cc readctx.hh \
 	reloc.cc reloc.hh \
 	section_id.cc section_id.hh \
 	sections.cc sections.hh sections.ii \
