@@ -262,7 +262,8 @@ namespace
 	if (shdr == NULL)
 	  {
 	  invalid_elf:
-	    wr_error () << "Broken ELF." << std::endl;
+	    wr_error () << "Broken ELF: " << elf_errmsg (-1) << "."
+			<< std::endl;
 	    goto close_and_out;
 	  }
 
@@ -318,9 +319,10 @@ namespace
 	    const char *relocated_scnname
 	      = elf_strptr (elf, file->ehdr.e_shstrndx,
 			    relocated_shdr->sh_name);
+	    if (unlikely (relocated_scnname == NULL))
+	      goto invalid_elf;
 
 	    secentry *relocated = secinfo.get (relocated_scnname);
-
 	    if (relocated != NULL)
 	      {
 		if (relocated->reldata != NULL)

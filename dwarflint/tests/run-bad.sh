@@ -27,7 +27,7 @@
 
 srcdir=$srcdir/tests
 
-testfiles hello.bad-1 hello.bad-3
+testfiles hello.bad-1 hello.bad-3 garbage-1
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -39,4 +39,10 @@ error: .debug_info: DIE 0x98: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0x9e: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0xa4: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0xab: toplevel DIE chain contains more than one DIE.
+EOF
+
+testrun_compare ./dwarflint garbage-1 <<EOF
+error: Broken ELF: offset out of range.
+error: .debug_abbrev: data not found.
+error: .debug_info: data not found.
 EOF
