@@ -598,9 +598,6 @@ namespace
 	if (dump_die_offsets)
 	  std::cerr << "[" << level << "] "
 		    << where << ": abbrev " << abbr_code << std::endl;
-	if (level == 0 && ++die_count > 1)
-	  wr_error (where)
-	    << "toplevel DIE chain contains more than one DIE." << std::endl;
 
 	/* Find the abbrev matching the code.  */
 	abbrev = abbrevs->find_abbrev (abbr_code);
@@ -612,6 +609,23 @@ namespace
 	    return -1;
 	  }
 	abbrev->used = true;
+
+	// DWARF 4 Ch. 7.5: compilation unit header [is] followed by a
+	// single DW_TAG_compile_unit or DW_TAG_partial_unit.
+	bool is_cudie = level == 0
+	  && (abbrev->tag == DW_TAG_compile_unit
+	      || abbrev->tag == DW_TAG_partial_unit);
+	if (level == 0)
+	  {
+	    if (++die_count > 1)
+	      wr_error (where)
+		<< "toplevel DIE chain contains more than one DIE."
+		<< std::endl;
+	    else if (!is_cudie)
+	      wr_error (cu->head->where)
+		<< "toplevel DIE must be either compile_unit or partial_unit."
+		<< std::endl;
+	  }
 
 	addr_record_add (&cu->die_addrs, cu->head->offset + die_off);
 
@@ -869,9 +883,7 @@ namespace
 	where.ref = NULL;
 
 	/* Check PC coverage.  */
-	if ((abbrev->tag == DW_TAG_compile_unit
-	     || abbrev->tag == DW_TAG_partial_unit)
-	    && low_pc != (uint64_t)-1)
+	if (is_cudie && low_pc != (uint64_t)-1)
 	  {
 	    cu->low_pc = low_pc;
 
