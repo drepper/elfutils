@@ -27,7 +27,7 @@
 
 srcdir=$srcdir/tests
 
-testfiles hello.bad-1 hello.bad-3 garbage-1
+testfiles hello.bad-1 hello.bad-3 garbage-1 garbage-2
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -45,4 +45,8 @@ testrun_compare ./dwarflint garbage-1 <<EOF
 error: Broken ELF: offset out of range.
 error: .debug_abbrev: data not found.
 error: .debug_info: data not found.
+EOF
+
+testrun_compare ./dwarflint garbage-2 <<EOF
+error: .debug_info: CU 0: toplevel DIE must be either compile_unit or partial_unit.
 EOF

@@ -497,6 +497,8 @@ namespace
 
   /*
     Returns:
+    -2 in case of error that we have to note and return, but for now
+       we can carry on
     -1 in case of error
     +0 in case of no error, but the chain only consisted of a
        terminating zero die.
@@ -522,6 +524,7 @@ namespace
     struct abbrev *abbrev = NULL;
     struct where where = WHERE (sec_info, NULL);
     unsigned long die_count = 0;
+    int retval = 0;
 
     struct value_check_cb_ctx cb_ctx = {
       ctx, &where, cu,
@@ -622,9 +625,12 @@ namespace
 		<< "toplevel DIE chain contains more than one DIE."
 		<< std::endl;
 	    else if (!is_cudie)
-	      wr_error (cu->head->where)
-		<< "toplevel DIE must be either compile_unit or partial_unit."
-		<< std::endl;
+	      {
+		wr_error (cu->head->where)
+		  << "toplevel DIE must be either compile_unit or partial_unit."
+		  << std::endl;
+		retval = -2;
+	      }
 	  }
 
 	addr_record_add (&cu->die_addrs, cu->head->offset + die_off);
@@ -914,6 +920,8 @@ namespace
 				     pc_coverage, need_rangesp, level + 1);
 	    if (st == -1)
 	      return -1;
+	    else if (st == -2)
+	      retval = -2;
 	    else if (st == 0)
 	      wr_message (mc_impact_3 | mc_acc_suboptimal | mc_die_rel,
 			  &where,
@@ -926,7 +934,10 @@ namespace
 	<< "this DIE should have had its sibling at " << pri::hex (sibling_addr)
 	<< ", but the DIE chain ended." << std::endl;
 
-    return got_die ? 1 : 0;
+    if (retval != 0)
+      return retval;
+    else
+      return got_die ? 1 : 0;
   }
 }
 
