@@ -27,8 +27,16 @@
 
 srcdir=$srcdir/tests
 
-testfiles hello.bad-1
+testfiles hello.bad-1 hello.bad-3
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
+EOF
+
+testrun_compare ./dwarflint hello.bad-3 <<EOF
+error: .debug_info: DIE 0x91: toplevel DIE chain contains more than one DIE.
+error: .debug_info: DIE 0x98: toplevel DIE chain contains more than one DIE.
+error: .debug_info: DIE 0x9e: toplevel DIE chain contains more than one DIE.
+error: .debug_info: DIE 0xa4: toplevel DIE chain contains more than one DIE.
+error: .debug_info: DIE 0xab: toplevel DIE chain contains more than one DIE.
 EOF
