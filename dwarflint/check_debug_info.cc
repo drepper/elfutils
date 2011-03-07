@@ -519,7 +519,6 @@ namespace
     uint64_t sibling_addr = 0;
     uint64_t die_off, prev_die_off = 0;
     struct abbrev *abbrev = NULL;
-    struct abbrev *prev_abbrev = NULL;
     struct where where = WHERE (sec_info, NULL);
 
     struct value_check_cb_ctx cb_ctx = {
@@ -598,7 +597,6 @@ namespace
 	  std::cerr << where << ": abbrev " << abbr_code << std::endl;
 
 	/* Find the abbrev matching the code.  */
-	prev_abbrev = abbrev;
 	abbrev = abbrevs->find_abbrev (abbr_code);
 	if (abbrev == NULL)
 	  {
