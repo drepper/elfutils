@@ -513,13 +513,15 @@ namespace
 		  struct coverage *strings_coverage,
 		  struct relocation_data *reloc,
 		  struct coverage *pc_coverage,
-		  bool *need_rangesp)
+		  bool *need_rangesp,
+		  unsigned level)
   {
     bool got_die = false;
     uint64_t sibling_addr = 0;
     uint64_t die_off, prev_die_off = 0;
     struct abbrev *abbrev = NULL;
     struct where where = WHERE (sec_info, NULL);
+    unsigned long die_count = 0;
 
     struct value_check_cb_ctx cb_ctx = {
       ctx, &where, cu,
@@ -594,7 +596,11 @@ namespace
 	prev_die_off = die_off;
 	got_die = true;
 	if (dump_die_offsets)
-	  std::cerr << where << ": abbrev " << abbr_code << std::endl;
+	  std::cerr << "[" << level << "] "
+		    << where << ": abbrev " << abbr_code << std::endl;
+	if (level == 0 && ++die_count > 1)
+	  wr_error (where)
+	    << "toplevel DIE chain contains more than one DIE." << std::endl;
 
 	/* Find the abbrev matching the code.  */
 	abbrev = abbrevs->find_abbrev (abbr_code);
@@ -893,7 +899,7 @@ namespace
 	    int st = read_die_chain (ver, file, ctx, cu, abbrevs, strings,
 				     local_die_refs,
 				     strings_coverage, reloc,
-				     pc_coverage, need_rangesp);
+				     pc_coverage, need_rangesp, level + 1);
 	    if (st == -1)
 	      return -1;
 	    else if (st == 0)
@@ -956,7 +962,7 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   if (read_die_chain (ver, _m_file, ctx, cu, &abbrevs, strings,
 		      &local_die_refs, strings_coverage,
 		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      &_m_cov, &_m_need_ranges) < 0)
+		      &_m_cov, &_m_need_ranges, 0) < 0)
     {
       _m_abbr_skip.push_back (abbrevs.offset);
       retval = false;
