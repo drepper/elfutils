@@ -381,6 +381,15 @@ namespace
 	      break;
 
 	    /* Otherwise validate name and form.  */
+	    if (attrib_name == 0)
+	      {
+		wr_error (where) << "invalid attribute code 0." << std::endl;
+		// We can handle this, so keep going.  But this is not
+		// kosher for high-level checks.
+		failed = true;
+		continue;
+	      }
+
 	    attribute = ver->get_attribute (attrib_name);
 	    if (attribute == NULL)
 	      {

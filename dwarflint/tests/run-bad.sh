@@ -52,5 +52,5 @@ error: .debug_info: CU 0: toplevel DIE must be either compile_unit or partial_un
 EOF
 
 testrun_compare ./dwarflint --check=@low garbage-3 <<EOF
-error: .debug_abbrev: abbr. attribute 0xc: invalid or unknown name 0x0.
+error: .debug_abbrev: abbr. attribute 0xc: invalid attribute code 0.
 EOF
