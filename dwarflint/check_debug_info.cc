@@ -398,6 +398,7 @@ namespace
     struct coverage *strings_coverage;
     struct coverage *pc_coverage;
     bool *need_rangesp;
+    int *retval_p;
   };
 
   typedef void (*value_check_cb_t) (uint64_t addr,
@@ -451,9 +452,12 @@ namespace
 	while (strp < data_end && *strp != 0)
 	  ++strp;
 	if (strp == data_end)
-	  wr_error (*ctx->where)
-	    << "string at .debug_str: " << pri::hex (addr)
-	    << " is not zero-terminated." << std::endl;
+	  {
+	    wr_error (*ctx->where)
+	      << "string at .debug_str: " << pri::hex (addr)
+	      << " is not zero-terminated." << std::endl;
+	    *ctx->retval_p = -2;
+	  }
 
 	if (ctx->strings_coverage != NULL)
 	  ctx->strings_coverage->add (addr, strp - startp + 1);
@@ -532,7 +536,8 @@ namespace
       local_die_refs,
       strings, strings_coverage,
       pc_coverage,
-      need_rangesp
+      need_rangesp,
+      &retval
     };
 
     while (!read_ctx_eof (ctx))
