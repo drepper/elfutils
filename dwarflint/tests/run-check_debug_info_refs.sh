@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2010 Red Hat, Inc.
+# Copyright (C) 2010, 2011 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -34,11 +34,15 @@ error: .debug_aranges: table 48 (CU DIE 95): there has already been arange secti
 EOF
 
 testrun_compare ./dwarflint --strict --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
+warning: .debug_info: DIE 0xb (abbreviation 0): DIE chain not terminated with null entry.
+warning: .debug_info: DIE 0x5f (abbreviation 54): DIE chain not terminated with null entry.
 error: .debug_aranges: table 48 (CU DIE 95): there has already been arange section for this CU.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF
 
 testrun_compare ./dwarflint --strict --check=check_debug_info_refs check_debug_info_refs-2 <<EOF
+warning: .debug_info: DIE 0xb (abbreviation 0): DIE chain not terminated with null entry.
+warning: .debug_info: DIE 0x54 (abbreviation 48): DIE chain not terminated with null entry.
 warning: .debug_line: table 0: empty line number program.
 error: .debug_line: table 0: sequence of opcodes not terminated with DW_LNE_end_sequence.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.

@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2010 Red Hat, Inc.
+# Copyright (C) 2010, 2011 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -32,11 +32,13 @@ srcdir=$srcdir/tests
 testfiles aranges_terminate_early
 
 testrun_compare ./dwarflint --strict aranges_terminate_early <<EOF
+warning: .debug_info: DIE 0xb (abbreviation 0): DIE chain not terminated with null entry.
 warning: .debug_aranges: [0x20, 0x30): unnecessary padding with zero bytes.
 warning: .debug_aranges: addresses [0x400474, 0x400481) are covered with CUs, but not with aranges.
 EOF
 
 testrun_compare ./dwarflint --check=check_debug_aranges --strict aranges_terminate_early <<EOF
+warning: .debug_info: DIE 0xb (abbreviation 0): DIE chain not terminated with null entry.
 warning: .debug_aranges: [0x20, 0x30): unnecessary padding with zero bytes.
 warning: .debug_aranges: addresses [0x400474, 0x400481) are covered with CUs, but not with aranges.
 EOF

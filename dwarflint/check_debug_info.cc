@@ -589,13 +589,6 @@ namespace
 	/* The section ended.  */
 	if (abbr_code == 0)
 	  break;
-	if (read_ctx_eof (ctx))
-	  {
-	    wr_error (where)
-	      << "DIE chain not terminated with DIE with zero abbrev code."
-	      << std::endl;
-	    break;
-	  }
 
 	prev_die_off = die_off;
 	got_die = true;
@@ -927,6 +920,15 @@ namespace
 	      wr_message (mc_impact_3 | mc_acc_suboptimal | mc_die_rel,
 			  &where,
 			  ": abbrev has_children, but the chain was empty.\n");
+	  }
+
+	if (read_ctx_eof (ctx))
+	  {
+	    // DWARF 4 Ch. 2.3: A chain of sibling entries is
+	    // terminated by a null entry.
+	    wr_message (where, cat (mc_impact_1, mc_info))
+	      << "DIE chain not terminated with null entry." << std::endl;
+	    break;
 	  }
       }
 
