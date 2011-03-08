@@ -27,7 +27,7 @@
 
 srcdir=$srcdir/tests
 
-testfiles hello.bad-1 hello.bad-3 garbage-1 garbage-2 garbage-3
+testfiles hello.bad-1 hello.bad-3 garbage-1 garbage-2 garbage-3 garbage-4
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -53,4 +53,8 @@ EOF
 
 testrun_compare ./dwarflint --check=@low garbage-3 <<EOF
 error: .debug_abbrev: abbr. attribute 0xc: invalid attribute code 0.
+EOF
+
+testrun_compare ./dwarflint garbage-4 <<EOF
+error: .debug_info: DIE 0x6c: this DIE claims that its sibling is 0x80000085 but it's actually 0x85.
 EOF

@@ -571,6 +571,7 @@ namespace
 		  << "this DIE claims that its sibling is "
 		  << pri::hex (sibling_addr) << " but it's actually "
 		  << pri::hex (die_off) << '.' << std::endl;
+		retval = -2;
 	      }
 	    sibling_addr = 0;
 	  }
