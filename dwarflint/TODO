@@ -17,6 +17,13 @@
   So that's about the FORMs and ATs.  But there's more, e.g. DW_OP_
   support.
 
+* low-level checks
+** DW_TAG_type_unit
+   For each type defined in a compilation unit, a contribution may be
+   made to the .debug_types section of the object file. Each such
+   contribution consists of a type unit header (see Section 7.5.1.2)
+   followed by a DW_TAG_type_unit entry, together with its children.
+
 * high-level checks
 
 ** DW_OP_GNU_implicit_pointer
