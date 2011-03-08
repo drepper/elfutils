@@ -642,7 +642,7 @@ namespace
 
 	/* Attribute values.  */
 	for (struct abbrev_attrib *it = abbrev->attribs;
-	     it->name != 0; ++it)
+	     it->name != 0 || it->form != 0; ++it)
 	  {
 	    where.ref = &it->where;
 
@@ -1097,7 +1097,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
 	    if (!it->second.abbr[i].used)
 	      wr_message (it->second.abbr[i].where,
 			  cat (mc_impact_3, mc_acc_bloat, mc_abbrevs))
-		<< ": abbreviation is never used." << std::endl;
+		<< "abbreviation is never used." << std::endl;
     }
 
   // re-link CUs so that they form a chain again.  This is to
