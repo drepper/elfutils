@@ -54,12 +54,17 @@ read_cu_headers::descriptor ()
   return &cd;
 }
 
+static void_option
+  dump_die_offsets ("Dump DIE offsets to stderr as the tree is iterated.",
+		    "dump-offsets");
+
 checkdescriptor const *
 check_debug_info::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_info")
      .groups ("@low")
+     .option (dump_die_offsets)
      .prereq<typeof (*_m_sec_info)> ()
      .prereq<typeof (*_m_sec_str)> ()
      .prereq<typeof (*_m_abbrevs)> ()
@@ -96,10 +101,6 @@ check_debug_info::descriptor ()
 		   ));
   return &cd;
 }
-
-static void_option
-  dump_die_offsets ("Dump DIE offsets to stderr as the tree is iterated.",
-		    "dump-offsets");
 
 namespace
 {
@@ -1171,7 +1172,6 @@ check_debug_info_refs::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_info_refs")
      .groups ("@low")
-     .option (dump_die_offsets)
      .prereq<typeof (*_m_info)> ()
      .prereq<typeof (*_m_line)> ()
      .description (
