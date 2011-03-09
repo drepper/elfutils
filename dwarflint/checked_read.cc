@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -66,7 +66,7 @@ read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
   return true;
 }
 
-bool
+error_code
 read_address_size (struct read_ctx *ctx,
 		   bool addr_64,
 		   int *address_sizep,
@@ -76,9 +76,10 @@ read_address_size (struct read_ctx *ctx,
   if (!read_ctx_read_ubyte (ctx, &address_size))
     {
       wr_error (where, ": can't read address size.\n");
-      return false;
+      return err_fatal;
     }
 
+  error_code ret = err_ok;
   if (address_size != 4 && address_size != 8)
     {
       /* Keep going.  Deduce the address size from ELF header, and try
@@ -87,15 +88,19 @@ read_address_size (struct read_ctx *ctx,
 		": invalid address size: %d (only 4 or 8 allowed).\n",
 		address_size);
       address_size = addr_64 ? 8 : 4;
+      ret = err_nohl;
     }
   else if ((address_size == 8) != addr_64)
-    /* Keep going, we may still be able to parse it.  */
-    wr_error (where,
-	      ": CU reports address size of %d in %d-bit ELF.\n",
-	      address_size, addr_64 ? 64 : 32);
+    {
+      /* Keep going, we may still be able to parse it.  */
+      wr_error (where,
+		": CU reports address size of %d in %d-bit ELF.\n",
+		address_size, addr_64 ? 64 : 32);
+      ret = err_nohl;
+    }
 
   *address_sizep = address_size;
-  return true;
+  return ret;
 }
 
 bool

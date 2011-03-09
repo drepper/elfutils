@@ -28,7 +28,7 @@
 srcdir=$srcdir/tests
 
 testfiles hello.bad-1 hello.bad-3 garbage-1 garbage-2 garbage-3 garbage-4 \
-    garbage-5
+    garbage-5 garbage-6
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -63,4 +63,12 @@ EOF
 testrun_compare ./dwarflint garbage-5 <<EOF
 error: .debug_line: offset 0x3e: not enough data to read an opcode of length 5.
 error: .debug_info: DIE 0xb (abbr. attribute 0xc): unresolved reference to .debug_line table 0x0.
+EOF
+
+testrun_compare ./dwarflint garbage-6 <<EOF
+error: .debug_info: CU 0: invalid address size: 9 (only 4 or 8 allowed).
+error: .debug_info: couldn't load CU headers for processing .debug_abbrev; assuming latest DWARF flavor.
+error: .debug_abbrev: abbr. attribute 0xc: attribute stmt_list with invalid form data4.
+error: .debug_abbrev: abbr. attribute 0x23: attribute frame_base with invalid form block1.
+error: .debug_abbrev: abbr. attribute 0x34: attribute location with invalid form block1.
 EOF

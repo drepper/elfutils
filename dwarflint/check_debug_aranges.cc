@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_aranges.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -286,11 +286,12 @@ check_aranges_structural (struct elf_file *file,
 
       /* Address size.  */
       int address_size;
-      if (!read_address_size (&sub_ctx, file->addr_64, &address_size, &where))
-	{
-	  retval = false;
-	  goto next;
-	}
+      error_code err = read_address_size (&sub_ctx, file->addr_64,
+					  &address_size, &where);
+      if (err != err_ok)
+	retval = false;
+      if (err == err_fatal)
+	goto next;
 
       /* Segment size.  */
       uint8_t segment_size;

@@ -174,6 +174,7 @@ namespace
     struct read_ctx ctx;
     read_ctx_init (&ctx, sec->data, file->other_byte_order);
     uint64_t off_start, off_end;
+    bool fail = false;
 
     std::vector <cu_head> ret;
     while (!read_ctx_eof (&ctx))
@@ -278,9 +279,12 @@ namespace
 	    << pri::lacks_relocation ("abbrev table offset") << std::endl;
 
 	/* Address size.  */
-	if (!read_address_size (&ctx, file->addr_64, &head.address_size,
-				&head.where))
+	error_code err = read_address_size (&ctx, file->addr_64,
+					    &head.address_size, &head.where);
+	if (err == err_fatal)
 	  throw check_base::failed ();
+	else if (err == err_nohl)
+	  fail = true;
 
 	head.head_size = ctx.ptr - cu_begin; // Length of the headers itself.
 	head.total_size = cu_end - cu_begin; // Length including headers field.
@@ -294,6 +298,9 @@ namespace
 
 	ret.push_back (head);
       }
+
+    if (fail)
+      throw check_base::failed ();
 
     return ret;
   }

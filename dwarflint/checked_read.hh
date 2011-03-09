@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -30,13 +30,23 @@
 #include "where.h"
 #include "dwarf_version.hh"
 
+enum error_code
+  {
+    err_ok,     ///< The operation passed.
+    err_fatal,  ///< The operation ended in unrecoverable error.
+    err_nohl,   ///< There was an error, but low-level checks may continue.
+  };
+
 bool read_size_extra (read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 		      int *offset_sizep, where *where);
 
-bool read_address_size (read_ctx *ctx,
-			bool addr_64,
-			int *address_sizep,
-			where const *where);
+/// Read address size and return it via address_sizep and return 0.
+/// Address size may be 4 or 8; for other values it's set depending or
+/// addr_64, and err_nohl is returned.
+error_code read_address_size (read_ctx *ctx,
+			      bool addr_64,
+			      int *address_sizep,
+			      where const *where);
 
 bool checked_read_uleb128 (read_ctx *ctx, uint64_t *ret,
 			   where const *where, const char *what);
