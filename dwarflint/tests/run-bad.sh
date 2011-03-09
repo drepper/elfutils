@@ -27,7 +27,8 @@
 
 srcdir=$srcdir/tests
 
-testfiles hello.bad-1 hello.bad-3 garbage-1 garbage-2 garbage-3 garbage-4 \
+testfiles hello.bad-1 hello.bad-3 empty-1 \
+    garbage-1 garbage-2 garbage-3 garbage-4 \
     garbage-5 garbage-6 garbage-7 garbage-8
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
@@ -40,6 +41,12 @@ error: .debug_info: DIE 0x98: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0x9e: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0xa4: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0xab: toplevel DIE chain contains more than one DIE.
+EOF
+
+testrun_compare ./dwarflint empty-1 <<EOF
+warning: .debug_line: table 0: the file #1 \`empty.c' is not used.
+error: .debug_line: table 0: sequence of opcodes not terminated with DW_LNE_end_sequence.
+error: .debug_info: DIE 0x29 (abbr. attribute 0x13): references .debug_line table, but CU DIE lacks DW_AT_stmt_list.
 EOF
 
 testrun_compare ./dwarflint garbage-1 <<EOF

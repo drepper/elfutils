@@ -1234,9 +1234,13 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
   for (std::vector<cu>::iterator it = _m_info->cus.begin ();
        it != _m_info->cus.end (); ++it)
     {
-      if (it->stmt_list.addr != (uint64_t)-1
-	  && (_m_line == NULL
-	      || !_m_line->has_line_table (it->stmt_list.addr)))
+      if (it->stmt_list.addr == (uint64_t)-1)
+	for (size_t i = 0; i < it->decl_file_refs.size; ++i)
+	  wr_error (it->decl_file_refs.refs[i].who)
+	    << "references .debug_line table, but CU DIE lacks DW_AT_stmt_list."
+	    << std::endl;
+      else if (_m_line == NULL
+	       || !_m_line->has_line_table (it->stmt_list.addr))
 	wr_error (it->stmt_list.who)
 	  << "unresolved reference to .debug_line table "
 	  << pri::hex (it->stmt_list.addr) << '.' << std::endl;
