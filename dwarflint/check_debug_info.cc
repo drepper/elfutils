@@ -1021,14 +1021,18 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   WIPE (local_die_refs);
 
   cu->cudie_offset = read_ctx_get_offset (ctx) + cu->head->offset;
-  if (read_die_chain (ver, _m_file, ctx, cu, &abbrevs, strings,
-		      &local_die_refs, strings_coverage,
-		      (reloc != NULL && reloc->size > 0) ? reloc : NULL,
-		      &_m_cov, &_m_need_ranges, 0) < 0)
+  int st = read_die_chain (ver, _m_file, ctx, cu, &abbrevs, strings,
+			   &local_die_refs, strings_coverage,
+			   (reloc != NULL && reloc->size > 0) ? reloc : NULL,
+			   &_m_cov, &_m_need_ranges, 0);
+  if (st < 0)
     {
       _m_abbr_skip.push_back (abbrevs.offset);
       retval = false;
     }
+  else if (st == 0)
+    wr_error (cu->head->where)
+      << "CU contains no DIEs." << std::endl;
   else if (!check_die_references (cu, &local_die_refs))
     retval = false;
 
