@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_line.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -399,6 +399,14 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		if (!checked_read_uleb128 (&sub_ctx, &skip_len, &where,
 					   "length of extended opcode"))
 		  goto skip;
+		if (!read_ctx_need_data (&sub_ctx, skip_len))
+		  {
+		    wr_error (where)
+		      << "not enough data to read an opcode of length "
+		      << skip_len << '.' << std::endl;
+		    goto skip;
+		  }
+
 		const unsigned char *next = sub_ctx.ptr + skip_len;
 		if (!read_ctx_read_ubyte (&sub_ctx, &extended))
 		  {
@@ -627,4 +635,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
     relocation_skip_rest (&_m_sec->sect.rel, _m_sec->sect.id);
   else
     throw check_base::failed ();
+}
+
+bool
+check_debug_line::has_line_table (Dwarf_Off off) const
+{
+  return _m_line_tables.find (off) != _m_line_tables.end ();
 }

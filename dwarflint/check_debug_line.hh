@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_line
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -46,11 +46,7 @@ public:
 
   std::set<Dwarf_Off> const &line_tables () const { return _m_line_tables; }
 
-  bool
-  has_line_table (Dwarf_Off off) const
-  {
-    return _m_line_tables.find (off) != _m_line_tables.end ();
-  }
+  bool has_line_table (Dwarf_Off off) const;
 };
 
 #endif//DWARFLINT_CHECK_DEBUG_LINE_HH

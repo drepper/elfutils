@@ -1196,6 +1196,11 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
   , _m_line (lint.toplev_check (stack, _m_line))
   , _m_aranges (lint.toplev_check (stack, _m_aranges))
 {
+  // XXX if .debug_line is present and broken, we don't want to report
+  // every unsatisfied reference.  If .debug_line is absent and
+  // references are present, we want to diagnose that in one line.  If
+  // .debug_line is present and valid, then we want to check each
+  // reference separately.
   for (std::vector<cu>::iterator it = _m_info->cus.begin ();
        it != _m_info->cus.end (); ++it)
     {
