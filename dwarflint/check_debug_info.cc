@@ -507,6 +507,21 @@ namespace
     ref_record_add (&ctx->cu->decl_file_refs, value, ctx->where);
   }
 
+  /* The real sibling checking takes place down in read_die_chain.
+     Here we just make sure that the value is non-zero.  That value is
+     clearly invalid, and we use it to mark absent DW_AT_sibling.  */
+  void
+  check_sibling_non0 (uint64_t addr, struct value_check_cb_ctx const *ctx)
+  {
+    if (addr == 0)
+      {
+	wr_error (*ctx->where)
+	  << "DW_AT_sibling with a value of 0." << std::endl;
+	// Don't let this up.
+	*ctx->retval_p = -2;
+      }
+  }
+
   /*
     Returns:
     -2 in case of error that we have to note and return, but for now
@@ -889,9 +904,11 @@ namespace
 		   siblings.  */
 		assert (value_check_cb == check_die_ref_local
 			|| value_check_cb == check_die_ref_global);
+		value_check_cb = check_sibling_non0;
 		valuep = &sibling_addr;
 	      }
-	    else if (value_check_cb != NULL)
+
+	    if (value_check_cb != NULL)
 	      value_check_cb (value, &cb_ctx);
 
 	    /* Store the relocated value.  Note valuep may point to

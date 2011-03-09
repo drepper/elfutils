@@ -28,7 +28,7 @@
 srcdir=$srcdir/tests
 
 testfiles hello.bad-1 hello.bad-3 garbage-1 garbage-2 garbage-3 garbage-4 \
-    garbage-5 garbage-6 garbage-7
+    garbage-5 garbage-6 garbage-7 garbage-8
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -77,4 +77,8 @@ testrun_compare ./dwarflint garbage-7 <<EOF
 error: .debug_abbrev: abbr. attribute 0x7e: invalid or unknown name 0x703.
 error: .debug_abbrev: abbr. attribute 0x7e: invalid form 0x0.
 error: .debug_abbrev: abbreviation 122: missing zero to mark end-of-table.
+EOF
+
+testrun_compare ./dwarflint garbage-8 <<EOF
+error: .debug_info: DIE 0x6c (abbr. attribute 0x43): DW_AT_sibling with a value of 0.
 EOF
