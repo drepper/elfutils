@@ -28,7 +28,7 @@
 srcdir=$srcdir/tests
 
 testfiles hello.bad-1 hello.bad-3 garbage-1 garbage-2 garbage-3 garbage-4 \
-    garbage-5 garbage-6
+    garbage-5 garbage-6 garbage-7
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -71,4 +71,10 @@ error: .debug_info: couldn't load CU headers for processing .debug_abbrev; assum
 error: .debug_abbrev: abbr. attribute 0xc: attribute stmt_list with invalid form data4.
 error: .debug_abbrev: abbr. attribute 0x23: attribute frame_base with invalid form block1.
 error: .debug_abbrev: abbr. attribute 0x34: attribute location with invalid form block1.
+EOF
+
+testrun_compare ./dwarflint garbage-7 <<EOF
+error: .debug_abbrev: abbr. attribute 0x7e: invalid or unknown name 0x703.
+error: .debug_abbrev: abbr. attribute 0x7e: invalid form 0x0.
+error: .debug_abbrev: abbreviation 122: missing zero to mark end-of-table.
 EOF

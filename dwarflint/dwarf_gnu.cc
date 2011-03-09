@@ -80,15 +80,12 @@ namespace
     {}
 
     virtual bool
-    form_allowed (int attribute_name, int form_name) const
+    form_allowed (attribute const *attr, form const *form) const
     {
-      if (attribute_name == DW_AT_GNU_odr_signature)
-	{
-	  form const *f = get_form (form_name);
-	  return f->classes ()[cl_constant] && f->width (NULL) == fw_8;
-	}
+      if (attr->name () == DW_AT_GNU_odr_signature)
+	return form->classes ()[cl_constant] && form->width (NULL) == fw_8;
       else
-	return std_dwarf::form_allowed (attribute_name, form_name);
+	return std_dwarf::form_allowed (attr, form);
     }
   };
 }

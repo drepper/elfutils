@@ -652,9 +652,13 @@ namespace
 	     it->name != 0 || it->form != 0; ++it)
 	  {
 	    where.ref = &it->where;
-
-	    attribute const *attribute = ver->get_attribute (it->name);
 	    int form_name = it->form;
+
+	    // In following, attribute may be NULL, but form never
+	    // should.  We always need to know the form to be able to
+	    // read .debug_info, so we fail in check_debug_abbrev if
+	    // it's invalid or unknown.
+	    attribute const *attribute = ver->get_attribute (it->name);
 	    form const *form = ver->get_form (form_name);
 	    if (attribute != NULL
 		&& ver->form_class (form, attribute) == cl_indirect)
@@ -665,10 +669,12 @@ namespace
 		  return -1;
 		form_name = value;
 		form = check_debug_abbrev::check_form
-		  (ver, form_name, attribute, &where, true);
+		  (ver, attribute, form_name, &where, true);
+		// N.B. check_form emits appropriate error messages.
 		if (form == NULL)
 		  return -1;
 	      }
+	    assert (form != NULL);
 
 	    dw_class cls = attribute != NULL
 	      ? ver->form_class (form, attribute)
@@ -715,7 +721,7 @@ namespace
 	      (cl_reference, cl_loclistptr, cl_lineptr, cl_macptr,
 	       cl_rangelistptr);
 
-	    if (cls != max_dw_class && ref_classes.test (cls))
+	    if (form != NULL && cls != max_dw_class && ref_classes.test (cls))
 	      {
 		form_bitness_t bitness = form->bitness ();
 		if ((bitness == fb_32 && cu->head->offset_size == 8)

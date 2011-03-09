@@ -27,6 +27,13 @@
 # include <config.h>
 #endif
 
+#include <dwarf.h>
+#include <sstream>
+#include <cassert>
+#include <algorithm>
+
+#include "../libdw/c++/dwarf"
+
 #include "check_debug_info.hh"
 #include "check_debug_abbrev.hh"
 #include "pri.hh"
@@ -35,11 +42,6 @@
 #include "checked_read.hh"
 #include "messages.hh"
 #include "misc.hh"
-
-#include <dwarf.h>
-#include <sstream>
-#include <cassert>
-#include <algorithm>
 
 checkdescriptor const *
 check_debug_abbrev::descriptor ()
@@ -112,13 +114,14 @@ namespace
 
   void
   complain (where const *where,
-	    attribute const *attribute, form const *form,
+	    int attrib_name, int form_name,
 	    bool indirect, char const *qualifier)
   {
     wr_error (*where)
-      << "attribute " << *attribute << " with " << qualifier
-      << (indirect ? " indirect" : "") << " form "
-      << *form << '.' << std::endl;
+      << "attribute " << elfutils::dwarf::attributes::name (attrib_name)
+      << " with " << qualifier << (indirect ? " indirect" : "")
+      << " form " << elfutils::dwarf::forms::name (form_name)
+      << '.' << std::endl;
   }
 
   bool
@@ -369,7 +372,6 @@ namespace
 
 	    /* Now if both are zero, this was the last attribute.  */
 	    null_attrib = attrib_name == 0 && attrib_form == 0;
-	    attribute const *attribute = NULL;
 
 	    REALLOC (cur, attribs);
 
@@ -392,16 +394,24 @@ namespace
 		continue;
 	      }
 
-	    attribute = ver->get_attribute (attrib_name);
+	    attribute const *attribute = ver->get_attribute (attrib_name);
 	    if (attribute == NULL)
 	      {
 		wr_error (where)
 		  << "invalid or unknown name " << pri::hex (attrib_name)
 		  << '.' << std::endl;
 		// libdw should handle unknown attribute, as long as
-		// the form is kosher.
-		continue;
+		// the form is kosher, so don't fail the check.
 	      }
+
+	    form const *form = check_debug_abbrev::check_form
+	      (ver, attribute, attrib_form, &where, false);
+	    if (form == NULL)
+	      // Error message has been emitted in check_form.
+	      failed = true;
+
+	    if (form == NULL || attribute == NULL)
+	      continue;
 
 	    std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
 	      = seen.insert (std::make_pair (attrib_name, attr_off));
@@ -416,15 +426,6 @@ namespace
 		if (attrib_name == DW_AT_sibling)
 		  // ... unless it's DW_AT_sibling.
 		  failed = true;
-	      }
-
-	    form const *form = check_debug_abbrev::check_form
-	      (ver, attrib_form, attribute, &where, false);
-	    if (form == NULL)
-	      {
-		// Error message is emitted in check_form.
-		failed = true;
-		continue;
 	      }
 
 	    if (attrib_name == DW_AT_sibling)
@@ -483,9 +484,10 @@ check_debug_abbrev::check_debug_abbrev (checkstack &stack, dwarflint &lint)
 }
 
 form const *
-check_debug_abbrev::check_form (dwarf_version const *ver, int form_name,
-				attribute const *attribute, where const *where,
-				bool indirect)
+check_debug_abbrev::check_form (dwarf_version const *ver,
+				attribute const *attribute,
+				int form_name,
+				where const *where, bool indirect)
 {
   form const *form = ver->get_form (form_name);
   if (form == NULL)
@@ -496,14 +498,19 @@ check_debug_abbrev::check_form (dwarf_version const *ver, int form_name,
       return NULL;
     }
 
-  if (!ver->form_allowed (attribute->name (), form_name))
+  if (attribute != NULL)
     {
-      complain (where, attribute, form, indirect, "invalid");
-      return NULL;
+
+      int attrib_name = attribute->name ();
+      if (!ver->form_allowed (attribute, form))
+	{
+	  complain (where, attrib_name, form_name, indirect, "invalid");
+	  return NULL;
+	}
+      else if (attrib_name == DW_AT_sibling
+	       && sibling_form_suitable (ver, form) == sfs_long)
+	complain (where, attrib_name, form_name, indirect, "unsuitable");
     }
-  else if (attribute->name () == DW_AT_sibling
-	   && sibling_form_suitable (ver, form_name) == sfs_long)
-    complain (where, attribute, form, indirect, "unsuitable");
 
   return form;
 }

@@ -85,8 +85,8 @@ public:
 
   check_debug_abbrev (checkstack &stack, dwarflint &lint);
   static form const *check_form (dwarf_version const *ver,
+				 attribute const *attr,
 				 int form_name,
-				 attribute const *attribute,
 				 where const *where,
 				 bool indirect);
 

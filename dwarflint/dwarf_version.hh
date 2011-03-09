@@ -202,7 +202,8 @@ public:
 
   /// Figure out whether, in given DWARF version, given attribute is
   /// allowed to have given form.
-  virtual bool form_allowed (int attribute_name, int form_name) const;
+  virtual bool form_allowed (attribute const *attr, form const *form) const
+    __attribute__ ((nonnull (1, 2)));
 
   /// Answer a class of FORM given ATTRIBUTE as a context.  If there's
   /// exactly one candidate class, that's the one answered.  If
@@ -238,6 +239,7 @@ enum sibling_form_suitable_t
     sfs_invalid, ///< This form isn't allowed at DW_AT_sibling
   };
 sibling_form_suitable_t sibling_form_suitable (dwarf_version const *ver,
-					       int form);
+					       form const *form)
+  __attribute__ ((nonnull (1, 2)));
 
 #endif//DWARFLINT_DWARF_VERSION_HH

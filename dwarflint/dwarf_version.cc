@@ -150,25 +150,19 @@ dwarf_version::form_allowed (int form) const
 }
 
 bool
-dwarf_version::form_allowed (int attribute_name, int form_name) const
+dwarf_version::form_allowed (attribute const *attr, form const *form) const
 {
-  attribute const *attribute = this->get_attribute (attribute_name);
-  assert (attribute != NULL);
-  dw_class_set const &attr_classes = attribute->classes ();
-
-  form const *form = this->get_form (form_name);
-  assert (form != NULL);
+  dw_class_set const &attr_classes = attr->classes ();
   dw_class_set const &form_classes = form->classes ();
-
   return (attr_classes & form_classes).any ();
 }
 
 sibling_form_suitable_t
-sibling_form_suitable (dwarf_version const *ver, int form)
+sibling_form_suitable (dwarf_version const *ver, form const *form)
 {
-  if (!ver->form_allowed (DW_AT_sibling, form))
+  if (!ver->form_allowed (ver->get_attribute (DW_AT_sibling), form))
     return sfs_invalid;
-  else if (form == DW_FORM_ref_addr)
+  else if (form->name () == DW_FORM_ref_addr)
     return sfs_long;
   else
     return sfs_ok;
