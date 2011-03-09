@@ -277,8 +277,10 @@ namespace
 	      }
 	    else if (ver == NULL)
 	      {
-		wr_error (where)
-		  << "couldn't load CU headers; assuming CUs are of latest DWARF flavor."
+		struct where wh = WHERE (sec_info, NULL);
+		wr_error (wh)
+		  << "couldn't load CU headers for processing .debug_abbrev; "
+		     "assuming latest DWARF flavor."
 		  << std::endl;
 		ver = dwarf_version::get_latest ();
 	      }
