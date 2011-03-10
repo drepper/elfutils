@@ -36,12 +36,9 @@ error: .debug_abbrev: abbr. attribute 0x330: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0xa28: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x108e: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x1300: invalid or unknown name 0x2107.
-error: .debug_line: table 4508: sequence of opcodes not terminated with DW_LNE_end_sequence.
-error: .debug_line: table 4606: sequence of opcodes not terminated with DW_LNE_end_sequence.
 EOF
 
 # Here we test proper support for DW_AT_GNU_vector
 testrun_compare ./dwarflint --check=@low libdl-2.12.so.debug <<EOF
-error: .debug_line: table 4508: sequence of opcodes not terminated with DW_LNE_end_sequence.
-error: .debug_line: table 4606: sequence of opcodes not terminated with DW_LNE_end_sequence.
+No errors
 EOF

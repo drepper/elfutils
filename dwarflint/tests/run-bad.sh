@@ -46,7 +46,6 @@ EOF
 
 testrun_compare ./dwarflint empty-1 <<EOF
 warning: .debug_line: table 0: the file #1 \`empty.c' is not used.
-error: .debug_line: table 0: sequence of opcodes not terminated with DW_LNE_end_sequence.
 error: .debug_info: DIE 0x29 (abbr. attribute 0x13): references .debug_line table, but CU DIE lacks DW_AT_stmt_list.
 EOF
 

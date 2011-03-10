@@ -32,7 +32,6 @@ testfiles crc7.ko.debug
 testrun_compare ./dwarflint --check check_duplicate_DW_tag_variable crc7.ko.debug <<EOF
 warning: .debug_line: offset 0x3c4: the include #6 \`XXXXXX' is not used.
 warning: .debug_line: table 967: the include #6 \`XXXXXX' is not used.
-error: .debug_line: table 967: sequence of opcodes not terminated with DW_LNE_end_sequence.
 error: .debug_info: DIE 0x3d21: Redeclaration of variable 'console_printk', originally seen at DIE 37f3.
 error: .debug_info: DIE 0x3d2e: Redeclaration of variable 'hex_asc', originally seen at DIE 380b.
 error: .debug_info: DIE 0x3d41: Redeclaration of variable '__per_cpu_offset', originally seen at DIE 382e.

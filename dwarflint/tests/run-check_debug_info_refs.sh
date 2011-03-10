@@ -43,7 +43,5 @@ EOF
 testrun_compare ./dwarflint --strict --check=check_debug_info_refs check_debug_info_refs-2 <<EOF
 warning: .debug_info: DIE 0xb (abbreviation 0): DIE chain not terminated with null entry.
 warning: .debug_info: DIE 0x54 (abbreviation 48): DIE chain not terminated with null entry.
-warning: .debug_line: table 0: empty line number program.
-error: .debug_line: table 0: sequence of opcodes not terminated with DW_LNE_end_sequence.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF

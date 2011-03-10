@@ -33,5 +33,4 @@ testrun_compare ./dwarflint debug_abbrev-duplicate-attribute <<EOF
 error: .debug_abbrev: abbr. attribute 0x19: duplicate attribute byte_size (first was at 0x13).
 error: .debug_abbrev: abbr. attribute 0x1b: duplicate attribute decl_file (first was at 0x15).
 error: .debug_abbrev: abbr. attribute 0x1d: duplicate attribute decl_line (first was at 0x17).
-error: .debug_line: table 0: sequence of opcodes not terminated with DW_LNE_end_sequence.
 EOF
