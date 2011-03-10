@@ -1,3 +1,8 @@
+2011-03-10  Roland McGrath  <roland@redhat.com>
+
+	* gnuhash_xlate.h (elf_cvt_gnuhash): Avoid post-increment in bswap_32
+	argument, since some implementations are buggy macros.
+
 2011-01-05  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* elf_getdata_rawchunk.c (elf_getdata_rawchunk): Fix off64_t overflow
