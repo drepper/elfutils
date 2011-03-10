@@ -583,9 +583,16 @@ namespace
 	if (sibling_addr != 0)
 	  {
 	    if (abbr_code == 0)
-	      wr_error (&where,
-			": is the last sibling in chain, "
-			"but has a DW_AT_sibling attribute.\n");
+	      {
+		DEF_PREV_WHERE;
+		wr_error (&prev_where,
+			  ": is the last sibling in chain, "
+			  "but has a DW_AT_sibling attribute.\n");
+		/* dwarf_siblingof uses DW_AT_sibling to look for
+		   sibling DIEs.  The value can't be right (there _is_
+		   no sibling), so don't let this up.  */
+		retval = -2;
+	      }
 	    else if (sibling_addr != die_off)
 	      {
 		DEF_PREV_WHERE;

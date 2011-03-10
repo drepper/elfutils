@@ -29,7 +29,8 @@ srcdir=$srcdir/tests
 
 testfiles hello.bad-1 hello.bad-3 empty-1 \
     garbage-1 garbage-2 garbage-3 garbage-4 \
-    garbage-5 garbage-6 garbage-7 garbage-8
+    garbage-5 garbage-6 garbage-7 garbage-8 \
+    garbage-9
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -88,4 +89,9 @@ EOF
 
 testrun_compare ./dwarflint garbage-8 <<EOF
 error: .debug_info: DIE 0x6c (abbr. attribute 0x43): DW_AT_sibling with a value of 0.
+EOF
+
+testrun_compare ./dwarflint garbage-9 <<EOF
+error: .debug_info: DIE 0x84 (abbr. attribute 0x5f): invalid reference outside the CU: 0xef00ab.
+error: .debug_info: DIE 0x6c: is the last sibling in chain, but has a DW_AT_sibling attribute.
 EOF
