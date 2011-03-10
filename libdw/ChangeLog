@@ -1,3 +1,23 @@
+2011-03-10  Petr Machata  <pmachata@redhat.com>
+
+	* libdw/dwarf_tag.c (__libdw_findabbrev): Reject requests for
+	abbreviation with code 0.
+
+2011-03-09  Petr Machata  <pmachata@redhat.com>
+
+	* libdw/dwarf_child.c (dwarf_child): Check for section overrun.
+
+2011-02-23  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf) [USE_ZLIB]: New member sectiondata_gzip_mask.
+	Declare __libdw_free_zdata.
+	* dwarf_end.c [USE_ZLIB] (__libdw_free_zdata): New function.
+	(dwarf_end): Call it.
+
+	* dwarf_begin_elf.c (valid_p): Likewise.
+	(check_section, scngrp_read): Likewise.
+	(check_section) [USE_ZLIB]: Grok .z* flavors of sections.
+
 2010-10-13  Roland McGrath  <roland@redhat.com>
 
 	* dwarf.h: Add DW_LANG_Go.

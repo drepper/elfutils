@@ -1,5 +1,5 @@
 /* Print information from ELF file in human-readable form.
-   Copyright (C) 1999-2010 Red Hat, Inc.
+   Copyright (C) 1999-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 
@@ -1151,6 +1151,13 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
       /* Finish the line.  */
       fputc_unlocked ('\n', stdout);
     }
+}
+
+
+static const char *
+section_name (Ebl *ebl, GElf_Ehdr *ehdr, GElf_Shdr *shdr)
+{
+  return elf_strptr (ebl->elf, ehdr->e_shstrndx, shdr->sh_name) ?: "???";
 }
 
 
@@ -3507,6 +3514,38 @@ dwarf_attr_string (unsigned int attrnum)
 	result = "GNU_vector";
 	break;
 
+      case DW_AT_GNU_guarded_by:
+	result = "GNU_guarded_by";
+	break;
+
+      case DW_AT_GNU_pt_guarded_by:
+	result = "GNU_pt_guarded_by";
+	break;
+
+      case DW_AT_GNU_guarded:
+	result = "GNU_guarded";
+	break;
+
+      case DW_AT_GNU_pt_guarded:
+	result = "GNU_pt_guarded";
+	break;
+
+      case DW_AT_GNU_locks_excluded:
+	result = "GNU_locks_excluded";
+	break;
+
+      case DW_AT_GNU_exclusive_locks_required:
+	result = "GNU_exclusive_locks_required";
+	break;
+
+      case DW_AT_GNU_shared_locks_required:
+	result = "GNU_shared_locks_required";
+	break;
+
+      case DW_AT_GNU_odr_signature:
+	result = "GNU_odr_signature";
+	break;
+
       case DW_AT_GNU_template_name:
 	result = "GNU_template_name";
 	break;
@@ -3555,7 +3594,7 @@ dwarf_form_string (unsigned int form)
       [DW_FORM_sec_offset] = "sec_offset",
       [DW_FORM_exprloc] = "exprloc",
       [DW_FORM_flag_present] = "flag_present",
-      [DW_FORM_ref_sig8] = "ref_sig8"
+      [DW_FORM_ref_sig8] = "ref_sig8",
     };
   const unsigned int nknown_forms = (sizeof (known_forms)
 				     / sizeof (known_forms[0]));
@@ -3566,8 +3605,11 @@ dwarf_form_string (unsigned int form)
     result = known_forms[form];
 
   if (unlikely (result == NULL))
-    snprintf (buf, sizeof buf, gettext ("unknown form %" PRIx64),
-	      (uint64_t) form);
+    {
+      snprintf (buf, sizeof buf, gettext ("unknown form %#" PRIx64),
+		(uint64_t) form);
+      result = buf;
+    }
 
   return result;
 }
@@ -4322,6 +4364,7 @@ static void
 reset_listptr (struct listptr_table *table)
 {
   free (table->table);
+  table->table = NULL;
   table->n = table->alloc = 0;
 }
 
@@ -4406,16 +4449,16 @@ skip_listptr_hole (struct listptr_table *table, size_t *idxp,
 
 static void
 print_debug_abbrev_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			    Ebl *ebl __attribute__ ((unused)),
-			    GElf_Ehdr *ehdr __attribute__ ((unused)),
+			    Ebl *ebl, GElf_Ehdr *ehdr,
 			    Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"
 		   " [ Code]\n"),
-	  elf_ndxscn (scn), ".debug_abbrev", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   Dwarf_Off offset = 0;
-  while (offset < shdr->sh_size)
+  while (offset < dbg->sectiondata[IDX_debug_abbrev]->d_size)
     {
       printf (gettext ("\nAbbreviation section at offset %" PRIu64 ":\n"),
 	      offset);
@@ -4477,8 +4520,7 @@ print_debug_abbrev_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
    takes care of it.  */
 static void
 print_debug_aranges_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			     Ebl *ebl __attribute__ ((unused)),
-			     GElf_Ehdr *ehdr, Elf_Scn *scn,
+			     Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn,
 			     GElf_Shdr *shdr, Dwarf *dbg)
 {
   Dwarf_Aranges *aranges;
@@ -4495,7 +4537,8 @@ print_debug_aranges_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 		    "\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 " contains %zu entries:\n",
 		    cnt),
-	  elf_ndxscn (scn), ".debug_aranges", (uint64_t) shdr->sh_offset, cnt);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset, cnt);
 
   /* Compute floor(log16(cnt)).  */
   size_t tmp = cnt;
@@ -4533,8 +4576,8 @@ print_debug_aranges_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 /* Print content of DWARF .debug_ranges section.  */
 static void
 print_debug_ranges_section (Dwfl_Module *dwflmod,
-			    Ebl *ebl __attribute__ ((unused)),
-			    GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr,
+			    Ebl *ebl, GElf_Ehdr *ehdr,
+			    Elf_Scn *scn, GElf_Shdr *shdr,
 			    Dwarf *dbg)
 {
   Elf_Data *data = elf_rawdata (scn, NULL);
@@ -4548,7 +4591,8 @@ print_debug_ranges_section (Dwfl_Module *dwflmod,
 
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_ranges", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   sort_listptr (&known_rangelistptr, "rangelistptr");
   size_t listptr_idx = 0;
@@ -5644,14 +5688,12 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 
 static void
 print_debug_units (Dwfl_Module *dwflmod,
-		   Ebl *ebl __attribute__ ((unused)),
-		   GElf_Ehdr *ehdr __attribute__ ((unused)),
-		   Elf_Scn *scn,
-		   GElf_Shdr *shdr, Dwarf *dbg,
-		   bool debug_types)
+		   Ebl *ebl, GElf_Ehdr *ehdr,
+		   Elf_Scn *scn, GElf_Shdr *shdr,
+		   Dwarf *dbg, bool debug_types)
 {
   const bool silent = !(print_debug_sections & section_info);
-  const char *secname = debug_types ? ".debug_types" : ".debug_info";
+  const char *secname = section_name (ebl, ehdr, shdr);
 
   if (!silent)
     printf (gettext ("\
@@ -5814,13 +5856,13 @@ print_debug_types_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
 
 static void
-print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
-			  GElf_Ehdr *ehdr __attribute__ ((unused)),
+print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 			  Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_line", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   if (shdr->sh_size == 0)
     return;
@@ -5853,7 +5895,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 	    {
 	    invalid_data:
 	      error (0, 0, gettext ("invalid data in section [%zu] '%s'"),
-		     elf_ndxscn (scn), ".debug_line");
+		     elf_ndxscn (scn), section_name (ebl, ehdr, shdr));
 	      return;
 	    }
 	  unit_length = read_8ubyte_unaligned_inc (dbg, linep);
@@ -5921,7 +5963,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 	  error (0, 0,
 		 gettext ("invalid data at offset %tu in section [%zu] '%s'"),
 		 linep - (const unsigned char *) data->d_buf,
-		 elf_ndxscn (scn), ".debug_line");
+		 elf_ndxscn (scn), section_name (ebl, ehdr, shdr));
 	  linep = lineendp;
 	  continue;
 	}
@@ -6304,7 +6346,7 @@ advance address by fixed value %u to %s\n"),
 
 static void
 print_debug_loc_section (Dwfl_Module *dwflmod,
-			 Ebl *ebl __attribute__ ((unused)), GElf_Ehdr *ehdr,
+			 Ebl *ebl, GElf_Ehdr *ehdr,
 			 Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   Elf_Data *data = elf_rawdata (scn, NULL);
@@ -6318,7 +6360,8 @@ print_debug_loc_section (Dwfl_Module *dwflmod,
 
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_loc", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   sort_listptr (&known_loclistptr, "loclistptr");
   size_t listptr_idx = 0;
@@ -6427,13 +6470,13 @@ mac_compare (const void *p1, const void *p2)
 
 static void
 print_debug_macinfo_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			     Ebl *ebl __attribute__ ((unused)),
-			     GElf_Ehdr *ehdr __attribute__ ((unused)),
+			     Ebl *ebl, GElf_Ehdr *ehdr,
 			     Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_macinfo", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
   putc_unlocked ('\n', stdout);
 
   /* There is no function in libdw to iterate over the raw content of
@@ -6599,12 +6642,12 @@ print_pubnames (Dwarf *dbg __attribute__ ((unused)), Dwarf_Global *global,
 /* Print the known exported symbols in the DWARF section '.debug_pubnames'.  */
 static void
 print_debug_pubnames_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			      Ebl *ebl __attribute__ ((unused)),
-			      GElf_Ehdr *ehdr __attribute__ ((unused)),
+			      Ebl *ebl, GElf_Ehdr *ehdr,
 			      Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_pubnames", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   int n = 0;
   (void) dwarf_getpubnames (dbg, print_pubnames, &n, 0);
@@ -6613,12 +6656,13 @@ print_debug_pubnames_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 /* Print the content of the DWARF string section '.debug_str'.  */
 static void
 print_debug_str_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			 Ebl *ebl __attribute__ ((unused)),
-			 GElf_Ehdr *ehdr __attribute__ ((unused)),
+			 Ebl *ebl, GElf_Ehdr *ehdr,
 			 Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
+  const size_t sh_size = dbg->sectiondata[IDX_debug_str]->d_size;
+
   /* Compute floor(log16(shdr->sh_size)).  */
-  GElf_Addr tmp = shdr->sh_size;
+  GElf_Addr tmp = sh_size;
   int digits = 1;
   while (tmp >= 16)
     {
@@ -6630,12 +6674,12 @@ print_debug_str_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
   printf (gettext ("\nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"
 		   " %*s  String\n"),
 	  elf_ndxscn (scn),
-	  ".debug_str", (uint64_t) shdr->sh_offset,
+	  section_name (ebl, ehdr, shdr), (uint64_t) shdr->sh_offset,
 	  /* TRANS: the debugstr| prefix makes the string unique.  */
 	  digits + 2, sgettext ("debugstr|Offset"));
 
   Dwarf_Off offset = 0;
-  while (offset < shdr->sh_size)
+  while (offset < sh_size)
     {
       size_t len;
       const char *str = dwarf_getstring (dbg, offset, &len);
@@ -6981,7 +7025,13 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 	  int n;
 
 	  for (n = 0; n < ndebug_sections; ++n)
-	    if (strcmp (name, debug_sections[n].name) == 0)
+	    if (strcmp (name, debug_sections[n].name) == 0
+#if USE_ZLIB
+		|| (name[0] == '.' && name[1] == 'z'
+		    && debug_sections[n].name[1] == 'd'
+		    && strcmp (&name[2], &debug_sections[n].name[1]) == 0)
+#endif
+		)
 	      {
 		if ((print_debug_sections | implicit_debug_sections)
 		    & debug_sections[n].bitmask)
