@@ -57,6 +57,7 @@ EOF
 
 testrun_compare ./dwarflint garbage-2 <<EOF
 error: .debug_info: CU 0: toplevel DIE must be either compile_unit or partial_unit.
+error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with null entry.
 EOF
 
 testrun_compare ./dwarflint --check=@low garbage-3 <<EOF
@@ -65,9 +66,11 @@ EOF
 
 testrun_compare ./dwarflint garbage-4 <<EOF
 error: .debug_info: DIE 0x6c: this DIE claims that its sibling is 0x80000085 but it's actually 0x85.
+error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with null entry.
 EOF
 
 testrun_compare ./dwarflint garbage-5 <<EOF
+error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with null entry.
 error: .debug_line: offset 0x3e: not enough data to read an opcode of length 5.
 error: .debug_info: DIE 0xb (abbr. attribute 0xc): unresolved reference to .debug_line table 0x0.
 EOF
@@ -88,9 +91,11 @@ EOF
 
 testrun_compare ./dwarflint garbage-8 <<EOF
 error: .debug_info: DIE 0x6c (abbr. attribute 0x43): DW_AT_sibling with a value of 0.
+error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with null entry.
 EOF
 
 testrun_compare ./dwarflint garbage-9 <<EOF
 error: .debug_info: DIE 0x84 (abbr. attribute 0x5f): invalid reference outside the CU: 0xef00ab.
 error: .debug_info: DIE 0x6c: is the last sibling in chain, but has a DW_AT_sibling attribute.
+error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with null entry.
 EOF

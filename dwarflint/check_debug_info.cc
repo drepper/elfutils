@@ -967,10 +967,12 @@ namespace
 
 	if (read_ctx_eof (ctx))
 	  {
-	    // DWARF 4 Ch. 2.3: A chain of sibling entries is
-	    // terminated by a null entry.
-	    wr_message (where, cat (mc_impact_1, mc_info))
-	      << "DIE chain not terminated with null entry." << std::endl;
+	    if (level > 0)
+	      // DWARF 4 Ch. 2.3: A chain of sibling entries is
+	      // terminated by a null entry.  N.B. the CU DIE is a
+	      // singleton, not part of a DIE chain.
+	      wr_error (where)
+		<< "DIE chain not terminated with null entry." << std::endl;
 	    break;
 	  }
       }
