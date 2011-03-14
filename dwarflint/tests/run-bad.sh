@@ -30,7 +30,7 @@ srcdir=$srcdir/tests
 testfiles hello.bad-1 hello.bad-3 empty-1 \
     garbage-1 garbage-2 garbage-3 garbage-4 \
     garbage-5 garbage-6 garbage-7 garbage-8 \
-    garbage-9
+    garbage-9 garbage-10
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -98,4 +98,9 @@ testrun_compare ./dwarflint garbage-9 <<EOF
 error: .debug_info: DIE 0x84 (abbr. attribute 0x5f): invalid reference outside the CU: 0xef00ab.
 error: .debug_info: DIE 0x6c: is the last sibling in chain, but has a DW_AT_sibling attribute.
 error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with null entry.
+EOF
+
+testrun_compare ./dwarflint garbage-10 <<EOF
+warning: .rela.debug_info: offset 0xc: relocation formed using STT_SECTION symbol with non-zero value.
+error: .rela.debug_info: offset 0x11: couldn't obtain symbol #7208969: invalid section index.
 EOF

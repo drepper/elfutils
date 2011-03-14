@@ -179,7 +179,11 @@ do_one_relocation (elf_file const *file,
   if (file->ehdr.e_type == ET_REL
       && ELF64_ST_TYPE (symbol->st_info) == STT_SECTION)
     {
-      assert (sym_value == 0);
+      if (sym_value != 0)
+	wr_warning (reloc_where)
+	  << "relocation formed using STT_SECTION symbol with non-zero value."
+	  << std::endl;
+
       require_valid_section_index;
       sym_value = file->sec[section_index].shdr.sh_addr;
     }
@@ -200,7 +204,7 @@ do_one_relocation (elf_file const *file,
 	{
 	  if (offset_into != rel_address && section_index == SHN_UNDEF)
 	    wr_error (&reloc_where,
-			": relocation of an address is formed against SHN_UNDEF symbol"
+			": relocation of an address is formed using SHN_UNDEF symbol"
 			" (symtab index %d).\n", rel->symndx);
 	  else
 	    {
