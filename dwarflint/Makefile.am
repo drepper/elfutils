@@ -116,7 +116,21 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/check_range_out_of_scope-1.bz2 \
 	tests/check_debug_info_refs-1.bz2 \
 	tests/aranges_terminate_early.bz2
-	tests/libdl-2.12.so.debug.bz2
+	tests/libdl-2.12.so.debug.bz2 \
+	tests/hello.bad-1.bz2 \
+	tests/hello.bad-3.bz2 \
+	tests/empty-1.bz2 \
+	tests/garbage-1.bz2 \
+	tests/garbage-2.bz2 \
+	tests/garbage-3.bz2 \
+	tests/garbage-4.bz2 \
+	tests/garbage-5.bz2 \
+	tests/garbage-6.bz2 \
+	tests/garbage-7.bz2 \
+	tests/garbage-8.bz2 \
+	tests/garbage-9.bz2 \
+	tests/garbage-10.bz2 \
+	tests/garbage-11.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \

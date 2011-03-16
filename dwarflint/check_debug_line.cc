@@ -204,7 +204,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	  wr_error (where) << "can't read attribute value." << std::endl;
 	  goto skip;
 	}
-      const unsigned char *program_start = sub_ctx.ptr + header_length;
+      const unsigned char *header_start = sub_ctx.ptr;
 
       /* Minimum instruction length.  */
       uint8_t minimum_i_length;
@@ -349,8 +349,9 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	      << "no CU uses this line table." << std::endl;
 	}
 
-      /* Skip the rest of the header.  */
-      if (sub_ctx.ptr > program_start)
+      const unsigned char *program_start = header_start + header_length;
+      if (header_length > (uint64_t)(sub_ctx.end - header_start)
+	  || sub_ctx.ptr > program_start)
 	{
 	  wr_error (where)
 	    << "header claims that it has a size of " << header_length
@@ -364,6 +365,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	}
       else if (sub_ctx.ptr < program_start)
 	{
+	  /* Skip the rest of the header.  */
 	  struct where wh = WHERE (sec_line, NULL);
 	  uint64_t off_start, off_end;
 	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))

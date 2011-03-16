@@ -117,7 +117,6 @@ namespace
 
   elfutils::dwarf
   open_hl_dwarf (Dwarf *dw)
-  {
     try
       {
 	return dw;
@@ -128,7 +127,6 @@ namespace
 	  << "Couldn't initialize high-level DWARF descriptor." << std::endl;
 	throw check_base::failed ();
       }
-  }
 }
 
 open_highlevel_dwarf::open_highlevel_dwarf (checkstack &stack, dwarflint &lint)

@@ -30,7 +30,7 @@ srcdir=$srcdir/tests
 testfiles hello.bad-1 hello.bad-3 empty-1 \
     garbage-1 garbage-2 garbage-3 garbage-4 \
     garbage-5 garbage-6 garbage-7 garbage-8 \
-    garbage-9 garbage-10
+    garbage-9 garbage-10 garbage-11
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -103,4 +103,16 @@ EOF
 testrun_compare ./dwarflint garbage-10 <<EOF
 warning: .rela.debug_info: offset 0xc: relocation formed using STT_SECTION symbol with non-zero value.
 error: .rela.debug_info: offset 0x11: couldn't obtain symbol #7208969: invalid section index.
+EOF
+
+testrun_compare ./dwarflint garbage-11 <<EOF
+error: .rela.debug_info: offset 0x600: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela.debug_info: offset 0xc00: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela.debug_info: offset 0x1100: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela.debug_info: offset 0x1500: invalid relocation 256 (<INVALID RELOC>).
+error: .rela.debug_info: offset 0x1d00: invalid relocation 256 (<INVALID RELOC>).
+error: .rela.debug_info: offset 0x2500: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela.debug_info: offset 0x3600: invalid relocation 256 (<INVALID RELOC>).
+error: .debug_line: table 0: header claims that it has a size of 542, but in fact it has a size of 30.
+error: .debug_info: DIE 0xb (abbr. attribute 0xa): unresolved reference to .debug_line table 0x0.
 EOF
