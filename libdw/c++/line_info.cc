@@ -61,6 +61,15 @@ stringform (Dwarf_Attribute *attr)
   return false;
 }
 
+/* Returns true if the attribute represents a valid zero udata.
+   This represents "no-file".  */
+static bool
+zero_formudata (Dwarf_Attribute *attr)
+{
+  Dwarf_Word zero;
+  return dwarf_formudata (attr, &zero) == 0 && zero == 0;
+}
+
 /* Mock up a dummy attribute with a special kludge that get_files groks.
    We use these for source_file objects consed directly from an index
    rather than from a real attribute.  */
@@ -91,7 +100,7 @@ get_files (const Dwarf_Attribute *attr, Dwarf_Files **files, Dwarf_Word *idx)
 Dwarf_Word
 dwarf::source_file::mtime () const
 {
-  if (stringform (thisattr ()))
+  if (stringform (thisattr ()) || zero_formudata (thisattr ()))
     return 0;
 
   Dwarf_Files *files;
@@ -106,7 +115,7 @@ dwarf::source_file::mtime () const
 Dwarf_Word
 dwarf::source_file::size () const
 {
-  if (stringform (thisattr ()))
+  if (stringform (thisattr ()) || zero_formudata (thisattr ()))
     return 0;
 
   Dwarf_Files *files;
@@ -118,12 +127,16 @@ dwarf::source_file::size () const
   return result;
 }
 
+static const char *no_file = "";
+
 const char *
 dwarf::source_file::name () const
 {
   const char *result;
   if (stringform (thisattr ()))
     result = dwarf_formstring (thisattr ());
+  else if (zero_formudata (thisattr ()))
+    result = no_file;
   else
     {
       Dwarf_Files *files;
@@ -153,6 +166,9 @@ dwarf::source_file::to_string () const
       xif (thisattr (), result == NULL);
       return plain_string (result);
     }
+
+  if (zero_formudata (thisattr ()))
+    return plain_string (no_file);
 
   Dwarf_Files *files;
   Dwarf_Word idx;

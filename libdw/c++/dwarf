@@ -1126,7 +1126,8 @@ namespace elfutils
       }
 
       /* Return a value unique to us while we're in memory.
-	 This is a stable pointer into the Dwarf_Files data.  */
+	 This is a stable pointer into the Dwarf_Files data
+         or to a static empty string.  */
       inline uintptr_t identity () const
       {
 	return (uintptr_t) name ();

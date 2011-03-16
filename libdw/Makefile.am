@@ -101,7 +101,7 @@ libdwpp_a_SOURCES = c++/values.cc \
 		    c++/known.cc \
 		    c++/line_info.cc \
 		    c++/edit-values.cc \
-		    c++/output-values.cc c++/output-shape.cc
+		    c++/output-values.cc
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h

@@ -151,6 +151,12 @@ namespace elfutils
       friend class dwarf_output;
       friend class dwarf_output_collector;
 
+      __attribute__((used)) die_info_pair *info () const
+      {
+       return reinterpret_cast<die_info_pair *>
+         (const_cast<debug_info_entry *> (this));
+      }
+
     public:
       class attributes_type
 	: public dwarf_data::attributes_type<dwarf_output, value>
@@ -403,13 +409,18 @@ namespace elfutils
 	: _base (i, dummy)
       {}
 
-      /* The hash of a value_reference is its referent's identity,
-	 because we can have multiple value_reference objects that
-	 wind up pointing to the same entry.  This method is virtual
-	 for the circular_reference case, below.  */
-      virtual size_t hash () const
+      /* The hash of a value_reference is its referent's local hash,
+	 which only takes non-reference values into account.  This
+	 method is virtual for the circular_reference case, below.  */
+      inline size_t hash () const
       {
-	return ref->identity ();
+	struct die_info *info = get_die_info ();
+	return info->_m_reference_hash;
+      }
+
+      virtual die_info *get_die_info () const
+      {
+	return &ref->info ()->second;
       }
     };
 
@@ -584,10 +595,21 @@ namespace elfutils
       std::bitset<2> _m_with_sibling;
       unsigned int _m_uses;
 
-      inline die_info ()
+      /* The local hash of the die, set when die_info is created.
+	 Uses only none-reference values.  */
+      size_t _m_local_hash;
+
+      /* The reference hash of the die, based on just reference
+	 attribute values.  Needs all local hashes of referenced dies
+	 to be set.  */
+      size_t _m_reference_hash;
+
+      inline die_info (size_t local_hash)
 	: _m_parent (NULL), _m_refs (),
 	  _m_originals (), _m_original_cost (0),
-	  _m_with_sibling (), _m_uses (0)
+	  _m_with_sibling (), _m_uses (0),
+	  _m_local_hash (local_hash),
+	  _m_reference_hash (0)
       {}
 
       inline ~die_info ()
@@ -982,50 +1004,18 @@ namespace elfutils
 
     inline die_info_pair *add_entry (int tag,
 				     const children_type *children,
-				     const attrs_type *attrs)
+				     const attrs_type *attrs,
+				     die_info *info)
     {
       std::pair <die_map::iterator, bool>
 	ins = _m_unique.insert (std::make_pair (die_type (tag, children, attrs),
-						die_info ()));
+						*info));
       die_info_pair &x = *ins.first;
       if (ins.second)
 	x.second.assert_unused ();
 
       return &x;
     }
-
-    struct shape_type
-    {
-      typedef std::vector<std::pair<int, int> > attrs_type;
-      attrs_type _m_attrs;
-      bool _m_has_children;
-      size_t _m_hash;
-
-      friend class subr::hashed_hasher<shape_type>;
-      typedef subr::hashed_hasher<shape_type> hasher;
-
-      inline void hashnadd (int name, int form);
-      inline shape_type (const die_type &die, bool last_sibling);
-
-      inline bool operator== (const shape_type &other) const
-      {
-	return (_m_hash == other._m_hash
-		&& _m_has_children == other._m_has_children
-		&& _m_attrs == other._m_attrs);
-      }
-      inline bool operator!= (const shape_type &other) const
-      {
-	return !(*this == other);
-      }
-    };
-
-    typedef subr::nothing shape_info;
-
-    typedef std::tr1::unordered_map<shape_type, shape_info,
-				    shape_type::hasher> shape_map;
-    shape_map _m_shapes;
-
-    void add_shape (die_type &die, bool last_sibling);
 
     struct stats_cmp
       : public std::binary_function<const die_map::value_type *,
@@ -1206,6 +1196,7 @@ namespace elfutils
     {
     private:
       const std::vector<entry *> *_m_entry;
+      bool _m_final;
 
       inline circular_reference (const circular_reference &)
 	: value::value_reference ()
@@ -1216,14 +1207,16 @@ namespace elfutils
     public:
       inline circular_reference (const entry *die, copier *)
 	: value::value_reference (),
-	  _m_entry (new std::vector<entry *> (1, const_cast<entry *> (die)))
+	  _m_entry (new std::vector<entry *> (1, const_cast<entry *> (die))),
+	  _m_final (false)
       {
 	die->dump () << " new circular_reference " << this << "\n";
       }
 
       inline bool final () const
       {
-	return _m_entry == NULL;
+	// XXX was return _m_entry == NULL;
+	return _m_final;
       }
 
       inline typename std::vector<entry *>::const_iterator pending () const
@@ -1241,8 +1234,10 @@ namespace elfutils
       {
 	pending_entry ()->dump () << " placed circular_reference "
 				  << this << "\n";
-	delete _m_entry;
-	_m_entry = NULL;
+	// XXX Keeping around for local hash...
+	_m_final = true;
+	// delete _m_entry;
+	// _m_entry = NULL;
       }
 
       inline ~circular_reference ()
@@ -1256,14 +1251,11 @@ namespace elfutils
       }
 
       /* We have a special case for a reference attribute that is part
-	 of a circular chain.  That value always hashes as zero, so that
-	 each entry in a circular chain of references has the same hash
-	 value as any entry that it otherwise matches and that has any
-	 (eventually) circular reference as the corresponding
-	 attribute's value.  */
-      virtual size_t hash () const
+	 of a circular chain.  It gets calculated from the
+	 pending_entry. */
+      virtual die_info *get_die_info () const
       {
-	return 0;
+	return pending_entry ()->get_die_info ();
       }
     };
 
@@ -1298,9 +1290,14 @@ namespace elfutils
       // Set if _m_children contains any entries not already final.
       bool _m_unfinished_children;
 
+      // The die_info that will be used when putting the die into
+      // the collector. Stores local hash as soon as all children
+      // are defined in defined_self ().
+      die_info *_m_info;
+
       inline pending_entry (int tag)
 	: _m_finalizing (NULL), _m_self (NULL), _m_matched (NULL),
-	  _m_tag (tag), _m_unfinished_children (false)
+	  _m_tag (tag), _m_unfinished_children (false), _m_info (NULL)
       {}
 
       inline ~pending_entry ()
@@ -1385,6 +1382,84 @@ namespace elfutils
       typedef typename final_children_getter::
       template copy<debug_info_entry::children_type> get_final_children;
 
+      inline size_t get_reference_hash (std::vector<const entry *> &stack) const
+      {
+	assert (_m_info != NULL);
+
+	// Could already have been set by forward reference.
+	if (_m_info->_m_reference_hash != 0)
+	  return _m_info->_m_reference_hash;
+
+	size_t rhash = _m_info->_m_local_hash;
+	size_t attr_rhashes = 0;
+	for (attr_map::const_iterator it = _m_attributes.begin ();
+             it != _m_attributes.end ();
+             ++it)
+          {
+	    // XXX XOR is for order irrelevance, but shouldn't be necessary.
+	    // See also calculate_local_hash, which does the same.
+	    const entry *ref
+	      = dynamic_cast<const entry *> (it->second._m_value);
+	    if (ref != NULL)
+	      {
+		// Workaround weird case (bug?)
+		// https://fedorahosted.org/pipermail/elfutils-devel/2011-February/001792.html
+		if (it->first == DW_AT_containing_type
+		    && ref->_m_pending == this)
+		  continue;
+		else
+		  attr_rhashes ^= ref->get_reference_hash (stack);
+	      }
+          }
+	subr::hash_combine (rhash, attr_rhashes);
+
+	return rhash;
+      }
+
+      inline size_t calculate_local_hash ()
+      {
+	// Calculate the local hash for this new die.
+	// XOR the attribute values together (so order doesn't matter)
+	// but exclude reference attributes values (just include
+	// their tag). XXX - shouldn't be necessary, double check.
+	size_t lhash = _m_tag;
+	size_t attr_hash = 0;
+	for (attr_map::const_iterator it = _m_attributes.begin ();
+	     it != _m_attributes.end ();
+	     ++it)
+	  {
+	    if (it->second.what_space () != dwarf::VS_reference)
+	      attr_hash ^= subr::hash_this (*it);
+	    else
+	      attr_hash ^= (it->first << 3);
+	  }
+	subr::hash_combine (lhash, attr_hash);
+
+	size_t children_hash = 0;
+	for (typename std::vector<entry *>::const_iterator it
+	       = _m_children.begin ();
+	     it != _m_children.end ();
+	     ++it)
+	  {
+	    // child lhash is always in the die_info, which might
+	    // be in the pending_entry when not yet finalized, or
+	    // part of the finalized child die_info.
+	    size_t child_lhash;
+	    struct pending_entry *pending = (*it)->_m_pending;
+	    if (pending)
+	      child_lhash = pending->_m_info->_m_local_hash;
+	    else
+	      {
+		die_info_pair *final_child = get_final_child (*it);
+		child_lhash = final_child->second._m_local_hash;
+	      }
+	    subr::hash_combine (children_hash, child_lhash);
+	  }
+	subr::hash_combine (lhash, children_hash);
+
+	return lhash;
+      }
+
       inline die_info_pair *final (copier *c,
 				   ::Dwarf_Off offset, ::Dwarf_Off cost)
       {
@@ -1404,7 +1479,7 @@ namespace elfutils
 				  (_m_children, std::ptr_fun (get_final_child)),
 				  fresh);
 
-	    _m_matched = co->add_entry (_m_tag, children, attrs);
+	    _m_matched = co->add_entry (_m_tag, children, attrs, _m_info);
 	  }
 
 	// Final bookkeeping in the collector for this copied entry.
@@ -1514,7 +1589,7 @@ namespace elfutils
        built in the output has one of these in place of a value_reference.
        These all live in the _m_entries map, one per input-side DIE.  */
     struct entry
-      : public value::value_dispatch
+      : public value::value_reference
     {
       ::Dwarf_Off _m_offset; // For debugging and statistics only.
       ::Dwarf_Off _m_cost;   // For statistics only.
@@ -1603,10 +1678,9 @@ namespace elfutils
       }
 
       /* We are no longer an undefined entry, so decrement the count.
-	 Then finalize as much as we can now.  We attempt finalization
-	 even when the count is nonzero, so that a leaf entry with no
-	 forward references finishes immediately, and so then can its
-	 parents and on up if they don't own any pending references.  */
+	 But don't finalize yet. Since all children are known now we
+	 can create a candidate die_info that includes the local hash
+	 for this entry.  */
       inline void defined_self (copier *c)
       {
 	assert (_m_final == NULL);
@@ -1614,9 +1688,9 @@ namespace elfutils
 	assert (c->_m_undefined_entries > 0);
 	--c->_m_undefined_entries;
 	dump () << " defined_self => " << c->_m_undefined_entries << "\n";
-	finalize (c);
-	if (_m_final == NULL)
-	  assert (c->_m_undefined_entries > 0);
+
+	size_t lhash = _m_pending->calculate_local_hash ();
+	_m_pending->_m_info = new die_info (lhash);
       }
 
       /* A reference-following matching operation noticed along
@@ -1647,6 +1721,48 @@ namespace elfutils
 	  finalize (p.first);
 	if (_m_final == NULL)
 	  *p.second = true;
+      }
+
+      /* Recursively sets up reference hashes for the die_info of this
+	 pending_entry.  Depends on all local hashes having been setup
+	 already.  At this point all entries are still pending.  */
+      inline void setup_reference_hash () const
+      {
+	std::vector<const entry *> stack;
+	_m_pending->_m_info->_m_reference_hash = get_reference_hash (stack);
+	assert (stack.empty ());
+
+        for (typename std::vector<entry *>::const_iterator it
+               = _m_pending->_m_children.begin ();
+             it != _m_pending->_m_children.end ();
+             ++it)
+	  (*it)->setup_reference_hash ();
+      }
+
+      inline size_t get_reference_hash (std::vector<const entry *> &stack) const
+      {
+	if (std::find (stack.begin (), stack.end (), this) != stack.end ())
+	  {
+	    std::cout << "Reference chain cycle detected\n"
+		      << "offset=[0x" << std::hex << _m_offset << std::dec
+		      << "] already on the reference chain stack\n";
+	    typename std::vector<const entry *>::iterator it;
+	    for (it = stack.begin ();
+		 it != stack.end ();
+		 it++)
+	      {
+		std::cout << "offset=[0x" << std::hex << (*it)->_m_offset
+			  << std::dec << "] "
+			  << dwarf::tags::name ((*it)->_m_pending->_m_tag)
+			  << "\n";
+	      }
+	    abort ();
+	  }
+
+	stack.push_back (this);
+	size_t res = _m_pending->get_reference_hash (stack);
+	stack.pop_back ();
+	return res;
       }
 
       // Attempt to turn the pending entry into a final entry.
@@ -1780,6 +1896,15 @@ namespace elfutils
 	assert (_m_pending != NULL);
 	return _m_parent->_m_pending->child (_m_self_idx);
       }
+
+      /* The local hash of the debug_info_entry if we are already
+	 final, otherwise get it from the pending_entry. */
+      inline die_info *get_die_info () const
+      {
+	if (_m_final)
+	  return &_m_final->second;
+	return _m_pending->_m_info;
+      }
     };
 
     // This object lives while we are copying one particular input DIE.
@@ -1874,11 +1999,22 @@ namespace elfutils
 	return *_m_copier;
       }
 
-      /* Complain if we still have dangling references.
+      /* Walk over the whole cu again to set reference hashes up.
+	 Then try to finalize everything at once.
+	 Complain if we still have dangling references.
 	 If not, it should be impossible to have pending entries left.  */
       inline die_info_pair *final_unit () const
       {
 	assert (_m_out == NULL);
+
+	// First walk over the whole CU tree again to setup the
+	// reference hash for each die_info.
+	_m_in->setup_reference_hash ();
+
+	// We should now be able to finalize everything at once.
+	if (_m_copier->_m_undefined_entries == 0)
+	  _m_in->finalize (_m_copier);
+
 	if (unlikely (_m_in->_m_final == NULL))
 	  {
 	    _m_in->dump_entry ();
