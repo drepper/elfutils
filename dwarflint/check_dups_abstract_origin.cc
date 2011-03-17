@@ -28,7 +28,6 @@
 #endif
 
 #include "highlevel_check.hh"
-#include "../src/dwarfstrings.h"
 #include "all-dies-it.hh"
 #include "pri.hh"
 #include "messages.hh"
@@ -55,39 +54,38 @@ namespace
       return &cd;
     }
 
+    void
+    check_die_attr (dwarf::debug_info_entry const &die,
+		    dwarf::attribute const &attr)
+    {
+      std::map<unsigned int, dwarf::attr_value> m;
+      for (dwarf::debug_info_entry::attributes_type::const_iterator
+	     at = die.attributes ().begin ();
+	   at != die.attributes ().end (); ++at)
+	m.insert (std::make_pair ((*at).first, (*at).second));
+
+      dwarf::attr_value const &val = attr.second;
+      // xxx Referree can't be const&, gives memory errors.
+      dwarf::debug_info_entry referree = *val.reference ();
+
+      std::map<unsigned int, dwarf::attr_value>::const_iterator at2;
+      for (dwarf::debug_info_entry::attributes_type::const_iterator
+	     at = referree.attributes ().begin ();
+	   at != referree.attributes ().end (); ++at)
+	if ((at2 = m.find ((*at).first)) != m.end ())
+	  wr_message (to_where (die),
+		      cat (mc_impact_3, mc_acc_bloat, mc_die_rel))
+	    << "Attribute " << dwarf::attributes::name (at2->first)
+	    << " is duplicated at " << dwarf::attributes::name (attr.first)
+	    << " (" << pri::ref (referree) << ")"
+	    << (at2->second == (*at).second
+		? "." : " with different value.")
+	    << std::endl;
+    }
+
     explicit check_dups_abstract_origin (checkstack &stack, dwarflint &lint)
       : highlevel_check<check_dups_abstract_origin> (stack, lint)
     {
-      struct {
-	void operator () (dwarf::debug_info_entry const &die,
-			  dwarf::attribute const &attr)
-	{
-	  std::map<unsigned int, dwarf::attr_value> m;
-	  for (dwarf::debug_info_entry::attributes_type::const_iterator
-		 at = die.attributes ().begin ();
-	       at != die.attributes ().end (); ++at)
-	    m.insert (std::make_pair ((*at).first, (*at).second));
-
-	  dwarf::attr_value const &val = attr.second;
-	  // xxx Referree can't be const&, gives memory errors.
-	  dwarf::debug_info_entry referree = *val.reference ();
-
-	  std::map<unsigned int, dwarf::attr_value>::const_iterator at2;
-	  for (dwarf::debug_info_entry::attributes_type::const_iterator
-		 at = referree.attributes ().begin ();
-	       at != referree.attributes ().end (); ++at)
-	    if ((at2 = m.find ((*at).first)) != m.end ())
-	      wr_message (to_where (die),
-			  cat (mc_impact_3, mc_acc_bloat, mc_die_rel))
-		<< "Attribute " << dwarf::attributes::name (at2->first)
-		<< " is duplicated at " << dwarf::attributes::name (attr.first)
-		<< " (" << pri::ref (referree) << ")"
-		<< (at2->second == (*at).second
-		    ? "." : " with different value.")
-		<< std::endl;
-	}
-      } check_die_attr;
-
       for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
 	   it != all_dies_iterator<dwarf> (); ++it)
 	{
