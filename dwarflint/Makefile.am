@@ -103,7 +103,8 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-aranges_terminate_early.sh \
 	tests/run-libdl-2.12.so.debug.sh \
 	tests/run-test-all-dies-it.sh \
-	tests/run-bad.sh
+	tests/run-bad.sh \
+	tests/run-check_self_referential_die.sh
 
 TESTS = $(EXTRA_TESTS) \
 	tests/test-coverage \
@@ -132,7 +133,8 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/garbage-9.bz2 \
 	tests/garbage-10.bz2 \
 	tests/garbage-11.bz2 \
-	tests/garbage-12.bz2
+	tests/garbage-12.bz2 \
+	tests/check_self_referential_die.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
