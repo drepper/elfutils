@@ -1,5 +1,5 @@
 /* Low-level section handling.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -252,6 +252,17 @@ namespace
 
     bool check_rel = true;
 
+    /* Try to obtain .shstrtab, which we will need in following.  If
+       we fail, elf is broken.  */
+    Elf_Scn *shstrscn = elf_getscn (elf, file->ehdr.e_shstrndx);
+    if (shstrscn == NULL || elf_rawdata (shstrscn, NULL) == NULL)
+      {
+      invalid_elf:
+	wr_error () << "Broken ELF: " << elf_errmsg (-1) << "."
+		    << std::endl;
+	goto close_and_out;
+      }
+
     for (Elf_Scn *scn = NULL; (scn = elf_nextscn (elf, scn)); )
       {
 	REALLOC (file, sec);
@@ -260,15 +271,11 @@ namespace
 
 	GElf_Shdr *shdr = gelf_getshdr (scn, &cursec->shdr);
 	if (shdr == NULL)
-	  {
-	  invalid_elf:
-	    wr_error () << "Broken ELF: " << elf_errmsg (-1) << "."
-			<< std::endl;
-	    goto close_and_out;
-	  }
+	  goto invalid_elf;
 
 	const char *scnname = elf_strptr (elf, file->ehdr.e_shstrndx,
 					  shdr->sh_name);
+	// Validate the section name
 	if (scnname == NULL)
 	  goto invalid_elf;
 

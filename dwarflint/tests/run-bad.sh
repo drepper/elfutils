@@ -30,7 +30,7 @@ srcdir=$srcdir/tests
 testfiles hello.bad-1 hello.bad-3 empty-1 \
     garbage-1 garbage-2 garbage-3 garbage-4 \
     garbage-5 garbage-6 garbage-7 garbage-8 \
-    garbage-9 garbage-10 garbage-11
+    garbage-9 garbage-10 garbage-11 garbage-12
 
 testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
@@ -115,4 +115,10 @@ error: .rela.debug_info: offset 0x2500: invalid relocation 2560 (<INVALID RELOC>
 error: .rela.debug_info: offset 0x3600: invalid relocation 256 (<INVALID RELOC>).
 error: .debug_line: table 0: header claims that it has a size of 542, but in fact it has a size of 30.
 error: .debug_info: DIE 0xb (abbr. attribute 0xa): unresolved reference to .debug_line table 0x0.
+EOF
+
+testrun_compare ./dwarflint garbage-12 <<EOF
+error: Broken ELF: invalid section header.
+error: .debug_abbrev: data not found.
+error: .debug_info: data not found.
 EOF

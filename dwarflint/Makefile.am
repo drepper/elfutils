@@ -130,7 +130,8 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/garbage-8.bz2 \
 	tests/garbage-9.bz2 \
 	tests/garbage-10.bz2 \
-	tests/garbage-11.bz2
+	tests/garbage-11.bz2 \
+	tests/garbage-12.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
