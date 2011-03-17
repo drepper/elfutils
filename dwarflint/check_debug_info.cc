@@ -342,6 +342,7 @@ namespace
 
       case DW_FORM_data4:
       case DW_FORM_data8:
+      case DW_FORM_sec_offset:
 
 	switch (attribute->name ())
 	  {
@@ -666,6 +667,7 @@ namespace
 
 	uint64_t low_pc = (uint64_t)-1, high_pc = (uint64_t)-1;
 	bool low_pc_relocated = false, high_pc_relocated = false;
+	bool high_pc_relative = false;
 	GElf_Sym low_pc_symbol_mem, *low_pc_symbol = &low_pc_symbol_mem;
 	GElf_Sym high_pc_symbol_mem, *high_pc_symbol = &high_pc_symbol_mem;
 
@@ -793,6 +795,10 @@ namespace
 		relocatedp = &high_pc_relocated;
 		symbolp = &high_pc_symbol;
 		valuep = &high_pc;
+		if (cls == cl_constant)
+		  high_pc_relative = true;
+		else
+		  assert (cls == cl_address);
 		break;
 
 	      case DW_AT_decl_file:
@@ -925,6 +931,16 @@ namespace
 	  }
 	where.ref = NULL;
 
+	if (high_pc != (uint64_t)-1 && low_pc != (uint64_t)-1
+	    && high_pc_relative)
+	  {
+	    if (high_pc_relocated)
+	      wr_message (where, mc_die_other | mc_impact_2 | mc_reloc)
+		<< "DW_AT_high_pc is a constant (=relative), but is relocated."
+		<< std::endl;
+	    high_pc += low_pc;
+	  }
+
 	/* Check PC coverage.  */
 	if (is_cudie && low_pc != (uint64_t)-1)
 	  {
@@ -936,15 +952,22 @@ namespace
 
 	if (high_pc != (uint64_t)-1 && low_pc != (uint64_t)-1)
 	  {
-	    if (high_pc_relocated != low_pc_relocated)
-	      wr_message (where, cat (mc_die_other, mc_impact_2, mc_reloc))
+	    if (!high_pc_relative && high_pc_relocated != low_pc_relocated)
+	      wr_message (where, mc_die_other | mc_impact_2 | mc_reloc)
 		<< "only one of DW_AT_low_pc and DW_AT_high_pc is relocated."
 		<< std::endl;
 	    else
-	      check_range_relocations (mc_die_other, &where,
-				       &file,
-				       low_pc_symbol, high_pc_symbol,
-				       "DW_AT_low_pc and DW_AT_high_pc");
+	      {
+		if (!high_pc_relative)
+		  check_range_relocations (mc_die_other, &where,
+					   &file,
+					   low_pc_symbol, high_pc_symbol,
+					   "DW_AT_low_pc and DW_AT_high_pc");
+		if (low_pc > high_pc)
+		  wr_message (where, mc_die_other | mc_impact_3)
+		    << "DW_AT_low_pc value not below DW_AT_high_pc."
+		    << std::endl;
+	      }
 	  }
 
 	where.ref = &abbrev->where;
