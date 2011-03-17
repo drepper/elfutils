@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2010 Red Hat, Inc.
+# Copyright (C) 2010, 2011 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -30,6 +30,7 @@ srcdir=$srcdir/tests
 testfiles location-leaks
 
 testrun_compare ./dwarflint location-leaks <<EOF
+warning: .debug_loc: loclist 0x38: entry covers no range.
 error: .debug_info: DIE 0x62: attribute \`location': PC range [0x400495, 0x40049a) outside containing scope.
 error: .debug_info: DIE 0x51: in this context: [0x400498, 0x4004b2).
 EOF

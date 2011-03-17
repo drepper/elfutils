@@ -71,9 +71,11 @@ warning: the rule \`oentuh' never matched.
 EOF
 
 testrun_compare ./dwarflint null.o <<EOF
+warning: .debug_abbrev: [0x0, 0x1): unnecessary padding with zero bytes.
+warning: .debug_abbrev: no abbreviations.
 error: .debug_info: data not found.
 EOF
 
-testrun_compare ./dwarflint --nodebug:ignore null.o <<EOF
+testrun_compare ./dwarflint --ignore-bloat --nodebug:ignore null.o <<EOF
 No errors
 EOF

@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2010 Red Hat, Inc.
+# Copyright (C) 2010, 2011 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -30,15 +30,18 @@ srcdir=$srcdir/tests
 testfiles libdl-2.12.so.debug
 
 # Here we test that dwarflint can tolerate invalid attribute name.
-testrun_compare ./dwarflint --check=@low --nognu libdl-2.12.so.debug <<EOF
+testrun_compare ./dwarflint --check=@low --nognu --ignore-bloat libdl-2.12.so.debug <<EOF
 error: .debug_abbrev: abbr. attribute 0xbe: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x330: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0xa28: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x108e: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x1300: invalid or unknown name 0x2107.
+warning: .debug_info: CU 55709: no aranges table is associated with this CU.
+warning: .debug_info: CU 56524: no aranges table is associated with this CU.
 EOF
 
 # Here we test proper support for DW_AT_GNU_vector
-testrun_compare ./dwarflint --check=@low libdl-2.12.so.debug <<EOF
-No errors
+testrun_compare ./dwarflint --check=@low --ignore-bloat libdl-2.12.so.debug <<EOF
+warning: .debug_info: CU 55709: no aranges table is associated with this CU.
+warning: .debug_info: CU 56524: no aranges table is associated with this CU.
 EOF

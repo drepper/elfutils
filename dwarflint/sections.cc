@@ -250,18 +250,18 @@ namespace
     REALLOC (file, sec);
     file->sec[file->size++].id = sec_invalid;
 
-    bool check_rel = true;
-
-    /* Try to obtain .shstrtab, which we will need in following.  If
-       we fail, elf is broken.  */
-    Elf_Scn *shstrscn = elf_getscn (elf, file->ehdr.e_shstrndx);
-    if (shstrscn == NULL || elf_rawdata (shstrscn, NULL) == NULL)
+    if (false)
       {
       invalid_elf:
 	wr_error () << "Broken ELF: " << elf_errmsg (-1) << "."
 		    << std::endl;
 	goto close_and_out;
       }
+
+    /* Check that the ELF file is sound.  */
+    for (Elf_Scn *scn = NULL; (scn = elf_nextscn (elf, scn)); )
+      if (elf_rawdata (scn, NULL) == NULL)
+	goto invalid_elf;
 
     for (Elf_Scn *scn = NULL; (scn = elf_nextscn (elf, scn)); )
       {
@@ -366,7 +366,7 @@ namespace
       if (it->second.secndx != 0)
 	file->debugsec[it->second.id] = file->sec + it->second.secndx;
 
-    if (check_rel)
+    if (true)
       {
 	Elf_Data *reloc_symdata = NULL;
 	if (reloc_symtab != NULL)

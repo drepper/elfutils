@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -39,13 +39,14 @@ bool
 message_accept (struct message_criteria const *cri,
 		unsigned long cat)
 {
-  for (size_t i = 0; i < cri->size; ++i)
+  for (size_t i = 0; i < cri->size (); ++i)
     {
-      struct message_term *t = cri->terms + i;
-      if ((t->positive & cat) == t->positive
-	  && (t->negative & cat) == 0)
+      message_term const &t = cri->at (i);
+      if ((t.positive & cat) == t.positive
+	  && (t.negative & cat) == 0)
 	return true;
     }
+
   return false;
 }
 
@@ -66,20 +67,32 @@ namespace
       MESSAGE_CATEGORIES
 #undef MC
     }
-  };
+  } cat_names;
+  size_t cat_max = cat_names.size ();
+}
+
+
+message_category
+operator | (message_category a, message_category b)
+{
+  return static_cast<message_category> ((unsigned long)a | b);
+}
+
+message_category &
+operator |= (message_category &a, message_category b)
+{
+  a = a | b;
+  return a;
 }
 
 std::string
 message_term::str () const
 {
-  static cat_to_str names;
-  static size_t max = names.size ();
-
   std::ostringstream os;
   os << '(';
 
   bool got = false;
-  for (size_t i = 0; i <= max; ++i)
+  for (size_t i = 0; i <= cat_max; ++i)
     {
       size_t mask = 1u << i;
       if ((positive & mask) != 0
@@ -89,7 +102,7 @@ message_term::str () const
 	    os << " & ";
 	  if ((negative & (1u << i)) != 0)
 	    os << '~';
-	  os << names[i];
+	  os << cat_names[i];
 	  got = true;
 	}
     }
@@ -106,9 +119,9 @@ message_criteria::str () const
 {
   std::ostringstream os;
 
-  for (size_t i = 0; i < size; ++i)
+  for (size_t i = 0; i < size (); ++i)
     {
-      message_term const &t = terms[i];
+      message_term const &t = at (i);
       if (i > 0)
 	os << " | ";
       os << t.str ();
@@ -121,14 +134,14 @@ void
 message_criteria::operator &= (message_term const &term)
 {
   assert ((term.positive & term.negative) == 0);
-  for (size_t i = 0; i < size; )
+  for (size_t i = 0; i < size (); )
     {
-      message_term &t = terms[i];
-      t.positive |= term.positive;
-      t.negative |= term.negative;
+      message_term &t = at (i);
+      t.positive = cat (t.positive, term.positive);
+      t.negative = cat (t.negative, term.negative);
       if ((t.positive & t.negative) != 0)
 	/* A ^ ~A -> drop the term.  */
-	terms[i] = terms[--size];
+	erase (begin () + i);
       else
 	++i;
     }
@@ -138,8 +151,7 @@ void
 message_criteria::operator |= (message_term const &term)
 {
   assert ((term.positive & term.negative) == 0);
-  REALLOC (this, terms);
-  terms[size++] = term;
+  push_back (term);
 }
 
 // xxx this one is inaccessible from the outside.  Make it like &=, |=
@@ -150,57 +162,86 @@ operator ! (message_term const &term)
 {
   assert ((term.positive & term.negative) == 0);
 
-  unsigned max = 0;
-#define MC(CAT, ID) max = ID;
-  MESSAGE_CATEGORIES
-#undef MC
-
   message_criteria ret;
-  for (size_t i = 0; i < max; ++i)
+  for (size_t i = 0; i < cat_max; ++i)
     {
       unsigned mask = 1u << i;
       if ((term.positive & mask) != 0)
-	ret |= message_term (1u << i, mc_none);
+	ret |= message_term ((message_category)(1u << i), mc_none);
       else if ((term.negative & mask) != 0)
-	ret |= message_term (mc_none, 1u << i);
+	ret |= message_term (mc_none, (message_category)(1u << i));
     }
 
   return ret;
 }
 
-// xxx this one is inaccessible from the outside.  Make it like &=, |=
-// above
+std::ostream &
+operator<< (std::ostream &o, message_category cat)
+{
+  o << '(';
+
+  bool got = false;
+  for (size_t i = 0; i <= cat_max; ++i)
+    {
+      size_t mask = 1u << i;
+      if ((cat & mask) != 0)
+	{
+	  if (got)
+	    o << ",";
+	  o << cat_names[i];
+	  got = true;
+	}
+    }
+
+  if (!got)
+    o << "none";
+
+  return o << ')';
+}
+
+std::ostream &
+operator<< (std::ostream &o, message_term const &term)
+{
+  return o << term.str ();
+}
+
+std::ostream &
+operator<< (std::ostream &o, __attribute__ ((unused)) message_criteria const &criteria)
+{
+  return o << criteria.str ();
+}
+
 /* MUL((a&b + c&d), (e&f + g&h)) -> (a&b&e&f + a&b&g&h + c&d&e&f + c&d&g&h) */
 void
-message_cri_mul (struct message_criteria *cri, struct message_criteria *rhs)
+message_criteria::operator *= (message_criteria const &rhs)
 {
   struct message_criteria ret;
   WIPE (ret);
 
-  for (size_t i = 0; i < cri->size; ++i)
-    for (size_t j = 0; j < rhs->size; ++j)
+  for (size_t i = 0; i < size (); ++i)
+    for (size_t j = 0; j < rhs.size (); ++j)
       {
-	struct message_term t1 = cri->terms[i];
-	struct message_term *t2 = rhs->terms + j;
-	t1.positive |= t2->positive;
-	t1.negative |= t2->negative;
+	message_term t1 = at (i);
+	message_term const &t2 = rhs.at (j);
+	t1.positive |= t2.positive;
+	t1.negative |= t2.negative;
 	if (t1.positive & t1.negative)
 	  /* A ^ ~A -> drop the term.  */
 	  continue;
 	ret |= t1;
       }
 
-  free (cri->terms);
-  *cri = ret;
+  *this = ret;
 }
 
 // xxx this one is inaccessible from the outside.  Bind it properly
 /* Reject message if TERM passes.  */
 void
-message_cri_and_not (message_criteria &cri, message_term const &term)
+message_criteria::and_not (message_term const &term)
 {
+  // xxxxx really??  "!"??
   message_criteria tmp = !message_term (term.negative, term.positive);
-  message_cri_mul (&cri, &tmp);
+  *this *= tmp;
 }
 
 static void

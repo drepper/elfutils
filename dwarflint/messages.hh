@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -29,6 +29,8 @@
 #include "where.h"
 #include "libdw.h"
 #include <string>
+#include <iosfwd>
+#include <vector>
 
 #define MESSAGE_CATEGORIES						\
   /* Severity: */							\
@@ -60,7 +62,7 @@
   MC (line,      19) /* messages related to .debug_line */		\
   MC (reloc,     20) /* messages related to relocation handling */	\
   MC (header,    21) /* messages related to header portions in general */ \
-  MC (mac,       22) /* messages related to .debug_mac */ \
+  MC (mac,       22) /* messages related to .debug_mac */		\
   MC (other,     31) /* messages unrelated to any of the above */
 
 enum message_category
@@ -73,37 +75,40 @@ enum message_category
 #undef MC
   };
 
+message_category operator | (message_category a, message_category b);
+message_category &operator |= (message_category &a, message_category b);
+std::ostream &operator<< (std::ostream &o, message_category cat);
+
 struct message_term
 {
   /* Given a term like A && !B && C && !D, we decompose it thus: */
-  unsigned long positive; /* non-zero bits for plain predicates */
-  unsigned long negative; /* non-zero bits for negated predicates */
+  message_category positive; /* non-zero bits for plain predicates */
+  message_category negative; /* non-zero bits for negated predicates */
 
-  message_term (unsigned long pos, unsigned long neg)
+  message_term (message_category pos, message_category neg = mc_none)
     : positive (pos), negative (neg)
   {}
+
   std::string str () const;
 };
 
+std::ostream &operator<< (std::ostream &o, message_term const &term);
+
 struct message_criteria
+  : protected std::vector<message_term>
 {
-  struct message_term *terms;
-  size_t size;
-  size_t alloc;
-
-  message_criteria ()
-    : terms (NULL), size (0), alloc (0)
-  {}
-
-  ~message_criteria ()
-  {
-    free (terms);
-  }
+  using std::vector<message_term>::at;
+  using std::vector<message_term>::size;
 
   void operator |= (message_term const &term);
   void operator &= (message_term const &term);
+  void operator *= (message_criteria const &term);
+  void and_not (message_term const &term);
+
   std::string str () const;
 };
+
+std::ostream &operator<< (std::ostream &o, message_criteria const &criteria);
 
 message_criteria operator ! (message_term const &);
 
@@ -154,7 +159,7 @@ cat (message_category c1,
      message_category c3 = mc_none,
      message_category c4 = mc_none)
 {
-  return static_cast<message_category> (c1 | c2 | c3 | c4);
+  return c1 | c2 | c3 | c4;
 }
 
 std::ostream &wr_warning (where const &wh);

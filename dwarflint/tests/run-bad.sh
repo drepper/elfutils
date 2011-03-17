@@ -36,7 +36,9 @@ testrun_compare ./dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
 EOF
 
-testrun_compare ./dwarflint hello.bad-3 <<EOF
+testrun_compare ./dwarflint --check=@low hello.bad-3 <<EOF
+error: .debug_info: DIE 0x2d: This DIE had children, but no DW_AT_sibling attribute.
+error: .debug_info: DIE 0xb: This DIE had children, but no DW_AT_sibling attribute.
 error: .debug_info: DIE 0x91: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0x98: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0x9e: toplevel DIE chain contains more than one DIE.
@@ -45,7 +47,7 @@ error: .debug_info: DIE 0xab: toplevel DIE chain contains more than one DIE.
 EOF
 
 testrun_compare ./dwarflint empty-1 <<EOF
-warning: .debug_line: table 0: the file #1 \`empty.c' is not used.
+warning: .debug_line: table 0: no CU uses this line table.
 error: .debug_info: DIE 0x29 (abbr. attribute 0x13): references .debug_line table, but CU DIE lacks DW_AT_stmt_list.
 EOF
 
@@ -91,6 +93,7 @@ EOF
 
 testrun_compare ./dwarflint garbage-8 <<EOF
 error: .debug_info: DIE 0x6c (abbr. attribute 0x43): DW_AT_sibling with a value of 0.
+error: .debug_info: DIE 0x6c: This DIE had children, but no DW_AT_sibling attribute.
 error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with null entry.
 EOF
 
@@ -113,6 +116,10 @@ error: .rela.debug_info: offset 0x1500: invalid relocation 256 (<INVALID RELOC>)
 error: .rela.debug_info: offset 0x1d00: invalid relocation 256 (<INVALID RELOC>).
 error: .rela.debug_info: offset 0x2500: invalid relocation 2560 (<INVALID RELOC>).
 error: .rela.debug_info: offset 0x3600: invalid relocation 256 (<INVALID RELOC>).
+warning: .debug_info: CU 0: abbrev table offset seems to lack a relocation
+warning: .debug_info: DIE 0xb (abbr. attribute 0): strp seems to lack a relocation
+warning: .debug_info: DIE 0xb (abbr. attribute 0x4): strp seems to lack a relocation
+warning: .debug_info: DIE 0xb (abbr. attribute 0xa): data4 seems to lack a relocation
 error: .debug_line: table 0: header claims that it has a size of 542, but in fact it has a size of 30.
 error: .debug_info: DIE 0xb (abbr. attribute 0xa): unresolved reference to .debug_line table 0x0.
 EOF

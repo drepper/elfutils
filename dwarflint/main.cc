@@ -183,8 +183,7 @@ main (int argc, char *argv[])
   if (!be_strict)
     {
       warning_criteria &= message_term (mc_none, mc_strings);
-      warning_criteria
-	&= message_term (cat (mc_line, mc_header, mc_acc_bloat), mc_none);
+      warning_criteria.and_not (mc_line | mc_acc_bloat);
       warning_criteria &= message_term (mc_none, mc_pubtypes);
     }
 
@@ -196,8 +195,8 @@ main (int argc, char *argv[])
 
   if (false) // for debugging
     {
-      std::cout << "warning criteria: " << warning_criteria.str () << std::endl;
-      std::cout << "error criteria:   " << error_criteria.str () << std::endl;
+      std::cout << "warning criteria: " << warning_criteria << std::endl;
+      std::cout << "error criteria:   " << error_criteria << std::endl;
     }
 
   /* Before we start tell the ELF library which version we are using.  */

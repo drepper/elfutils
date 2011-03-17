@@ -31,13 +31,14 @@ testfiles check_debug_info_refs-{1,2}
 
 testrun_compare ./dwarflint --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
 error: .debug_aranges: table 48 (CU DIE 95): there has already been arange section for this CU.
+warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF
 
-testrun_compare ./dwarflint --strict --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
+testrun_compare ./dwarflint --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
 error: .debug_aranges: table 48 (CU DIE 95): there has already been arange section for this CU.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF
 
-testrun_compare ./dwarflint --strict --check=check_debug_info_refs check_debug_info_refs-2 <<EOF
+testrun_compare ./dwarflint --check=check_debug_info_refs check_debug_info_refs-2 <<EOF
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF
