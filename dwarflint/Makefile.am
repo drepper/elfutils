@@ -105,7 +105,8 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-test-all-dies-it.sh \
 	tests/run-bad.sh \
 	tests/run-check_self_referential_die.sh \
-	tests/run-DW_AT_high_pc-relative.sh
+	tests/run-DW_AT_high_pc-relative.sh \
+	tests/run-DW_AT_high_pc-below.sh
 
 TESTS = $(EXTRA_TESTS) \
 	tests/test-coverage \
@@ -136,7 +137,8 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/garbage-11.bz2 \
 	tests/garbage-12.bz2 \
 	tests/check_self_referential_die.bz2 \
-	tests/DW_AT_high_pc-relative.bz2
+	tests/DW_AT_high_pc-relative.bz2 \
+	tests/DW_AT_high_pc-below.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \

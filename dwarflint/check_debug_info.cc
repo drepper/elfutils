@@ -780,7 +780,7 @@ namespace
 
 	      default:
 		;
-	      };
+	      }
 
 	    /* Setup low_pc / high_pc checking.  */
 	    switch (it->name)
