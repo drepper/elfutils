@@ -1402,10 +1402,11 @@ namespace elfutils
 	      = dynamic_cast<const entry *> (it->second._m_value);
 	    if (ref != NULL)
 	      {
-		// Workaround weird case (bug?)
-		// https://fedorahosted.org/pipermail/elfutils-devel/2011-February/001792.html
-		if (it->first == DW_AT_containing_type
-		    && ref->_m_pending == this)
+		// Workaround weird cases of self-referential DIE.
+		// This really is a bug in the producer and dwarflint
+		// should warn about it. But it is easy to work around
+		// so just do it for now, by ignoring such values.
+		if (ref->_m_pending == this)
 		  continue;
 		else
 		  attr_rhashes ^= ref->get_reference_hash (stack);
