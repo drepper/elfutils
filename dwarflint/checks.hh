@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -29,6 +29,7 @@
 #include "where.h"
 #include "dwarflint.hh"
 #include "checkdescriptor.hh"
+#include "messages.hh"
 #include <string>
 #include <cassert>
 
@@ -84,6 +85,11 @@ dwarflint::check (checkstack &stack)
 	= _m_checks.insert (std::make_pair (key, (T *)marker)).second;
       assert (inserted || !"duplicate key");
 
+#define FAIL					\
+      /* Put the anchor in the table.  */	\
+	_m_checks[key] = NULL;			\
+	report ("FAIL")
+
       reporter report (stack, cd);
       try
 	{
@@ -102,13 +108,28 @@ dwarflint::check (checkstack &stack)
 	  _m_checks.erase (key);
 	  throw;
 	}
-      catch (...)
+      catch (check_base::failed &e)
 	{
-	  // Nope, we failed.  Put the anchor there.
-	  _m_checks[key] = NULL;
-	  report ("FAIL");
+	  // We can assume that the check emitted error message.
+	  FAIL;
 	  throw;
 	}
+      catch (std::exception &e)
+	{
+	  wr_error () << "A check failed: " << (cd.name () ?: "(nil)") << ": "
+		      << e.what () << std::endl;
+	  FAIL;
+	  throw check_base::failed ();
+	}
+      catch (...)
+	{
+	  wr_error () << "A check failed: " << (cd.name () ?: "(nil)") << "."
+		      << std::endl;
+	  FAIL;
+	  throw check_base::failed ();
+	}
+
+#undef FAIL
 
       report ("done");
 

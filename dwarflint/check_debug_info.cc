@@ -628,9 +628,6 @@ namespace
 
 	prev_die_off = die_off;
 	got_die = true;
-	if (dump_die_offsets)
-	  std::cerr << "[" << level << "] "
-		    << where << ": abbrev " << abbr_code << std::endl;
 
 	/* Find the abbrev matching the code.  */
 	abbrev = abbrevs->find_abbrev (abbr_code);
@@ -642,6 +639,11 @@ namespace
 	    return -1;
 	  }
 	abbrev->used = true;
+
+	if (dump_die_offsets)
+	  std::cerr << "[" << level << "] "
+		    << where << ": abbrev " << abbr_code
+		    << "; DIE tag 0x" << std::hex << abbrev->tag << std::endl;
 
 	// DWARF 4 Ch. 7.5: compilation unit header [is] followed by a
 	// single DW_TAG_compile_unit or DW_TAG_partial_unit.
