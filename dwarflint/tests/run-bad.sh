@@ -47,6 +47,7 @@ error: .debug_info: DIE 0xab: toplevel DIE chain contains more than one DIE.
 EOF
 
 testrun_compare ./dwarflint empty-1 <<EOF
+warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_line: table 0: no CU uses this line table.
 error: .debug_info: DIE 0x29 (abbr. attribute 0x13): references .debug_line table, but CU DIE lacks DW_AT_stmt_list.
 EOF
@@ -106,6 +107,7 @@ EOF
 testrun_compare ./dwarflint garbage-10 <<EOF
 warning: .rela.debug_info: offset 0xc: relocation formed using STT_SECTION symbol with non-zero value.
 error: .rela.debug_info: offset 0x11: couldn't obtain symbol #7208969: invalid section index.
+warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 EOF
 
 testrun_compare ./dwarflint garbage-11 <<EOF
@@ -120,6 +122,7 @@ warning: .debug_info: CU 0: abbrev table offset seems to lack a relocation
 warning: .debug_info: DIE 0xb (abbr. attribute 0): strp seems to lack a relocation
 warning: .debug_info: DIE 0xb (abbr. attribute 0x4): strp seems to lack a relocation
 warning: .debug_info: DIE 0xb (abbr. attribute 0xa): data4 seems to lack a relocation
+warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 error: .debug_line: table 0: header claims that it has a size of 542, but in fact it has a size of 30.
 error: .debug_info: DIE 0xb (abbr. attribute 0xa): unresolved reference to .debug_line table 0x0.
 EOF
