@@ -36,12 +36,16 @@ error: .debug_abbrev: abbr. attribute 0x330: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0xa28: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x108e: invalid or unknown name 0x2107.
 error: .debug_abbrev: abbr. attribute 0x1300: invalid or unknown name 0x2107.
+warning: .debug_info: DIE 0xd9a8: DW_AT_low_pc value not below DW_AT_high_pc.
+warning: .debug_info: DIE 0xdcd7: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_info: CU 55709: no aranges table is associated with this CU.
 warning: .debug_info: CU 56524: no aranges table is associated with this CU.
 EOF
 
 # Here we test proper support for DW_AT_GNU_vector
 testrun_compare ./dwarflint --check=@low --ignore-bloat libdl-2.12.so.debug <<EOF
+warning: .debug_info: DIE 0xd9a8: DW_AT_low_pc value not below DW_AT_high_pc.
+warning: .debug_info: DIE 0xdcd7: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_info: CU 55709: no aranges table is associated with this CU.
 warning: .debug_info: CU 56524: no aranges table is associated with this CU.
 EOF

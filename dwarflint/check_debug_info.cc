@@ -965,7 +965,9 @@ namespace
 					   &file,
 					   low_pc_symbol, high_pc_symbol,
 					   "DW_AT_low_pc and DW_AT_high_pc");
-		if (low_pc > high_pc)
+		/* If there is no coverage, these attributes should
+		   not ever be there.  */
+		if (low_pc > high_pc || (low_pc == high_pc && low_pc > 0))
 		  wr_message (where, mc_die_other | mc_impact_3)
 		    << "DW_AT_low_pc value not below DW_AT_high_pc."
 		    << std::endl;

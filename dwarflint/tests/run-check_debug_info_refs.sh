@@ -40,5 +40,6 @@ warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF
 
 testrun_compare ./dwarflint --check=check_debug_info_refs check_debug_info_refs-2 <<EOF
+warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF

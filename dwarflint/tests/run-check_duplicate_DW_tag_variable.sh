@@ -30,6 +30,7 @@ srcdir=$srcdir/tests
 testfiles crc7.ko.debug
 
 testrun_compare ./dwarflint --check check_duplicate_DW_tag_variable crc7.ko.debug <<EOF
+warning: .debug_info: DIE 0x40f1: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_info: CU 16614: no aranges table is associated with this CU.
 error: .debug_info: DIE 0x3d21: Redeclaration of variable 'console_printk', originally seen at DIE 37f3.
 error: .debug_info: DIE 0x3d2e: Redeclaration of variable 'hex_asc', originally seen at DIE 380b.
