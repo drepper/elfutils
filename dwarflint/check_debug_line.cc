@@ -515,6 +515,15 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 	      /* Standard opcodes that need validation or have
 		 non-ULEB operands.  */
+	    case DW_LNS_advance_line:
+	      {
+		int64_t line_delta;
+		if (!checked_read_sleb128 (&sub_ctx, &line_delta, &where,
+					   "DW_LNS_advance_line operand"))
+		  goto skip;
+	      }
+	      break;
+
 	    case DW_LNS_fixed_advance_pc:
 	      {
 		uint16_t a;
