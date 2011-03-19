@@ -68,7 +68,7 @@ namespace
 
     /* Taken from libdwfl. */
     GElf_Addr base = 0;
-    GElf_Addr start = 0, end = 0, bias = 0;
+    GElf_Addr start = 0x1000, end = 0x1000, bias = 0;
 
     bool first = true;
     Elf_Scn *scn = NULL;
