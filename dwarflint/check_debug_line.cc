@@ -443,9 +443,19 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 				      addr_64 ? 8 : 4,
 				      &addr, &where, rel_address, NULL);
 		      else if (_m_sec->file.ehdr.e_type == ET_REL)
-			wr_message (where, cat (mc_impact_2, mc_line, mc_reloc))
-			  << pri::lacks_relocation ("DW_LNE_set_address")
-			  << '.' << std::endl;
+			{
+			  wr_message (where, mc_impact_2 | mc_line | mc_reloc)
+			    << pri::lacks_relocation ("DW_LNE_set_address")
+			    << '.' << std::endl;
+
+			  // Don't do the addr checking in this case.
+			  break;
+			}
+
+		      if (addr == 0)
+			wr_message (where, mc_line | mc_impact_1)
+			  << "DW_LNE_set_address with zero operand."
+			  << std::endl;
 		      break;
 		    }
 
