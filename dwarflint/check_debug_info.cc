@@ -943,7 +943,9 @@ namespace
 	    high_pc += low_pc;
 	  }
 
-	/* Check PC coverage.  */
+	/* Check PC coverage.  We do that only for CU DIEs.  Any DIEs
+	   lower in the tree (should) take subset of addresses taken
+	   by the CU DIE.  */
 	if (is_cudie && low_pc != (uint64_t)-1)
 	  {
 	    cu->low_pc = low_pc;

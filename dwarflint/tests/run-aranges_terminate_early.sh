@@ -33,10 +33,10 @@ testfiles aranges_terminate_early
 
 testrun_compare ./dwarflint --strict aranges_terminate_early <<EOF
 warning: .debug_aranges: [0x20, 0x30): unnecessary padding with zero bytes.
-warning: .debug_aranges: addresses [0x400474, 0x400481) are covered with CUs, but not with aranges.
+warning: .debug_aranges: addresses [0x400474, 0x400481) are covered with CU DIEs, but not with aranges.
 EOF
 
 testrun_compare ./dwarflint --check=check_debug_aranges --strict aranges_terminate_early <<EOF
 warning: .debug_aranges: [0x20, 0x30): unnecessary padding with zero bytes.
-warning: .debug_aranges: addresses [0x400474, 0x400481) are covered with CUs, but not with aranges.
+warning: .debug_aranges: addresses [0x400474, 0x400481) are covered with CU DIEs, but not with aranges.
 EOF

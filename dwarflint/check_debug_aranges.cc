@@ -122,7 +122,7 @@ hole (uint64_t start, uint64_t length, void *user)
       char buf[128];
       where where = WHERE (info.id, NULL);
       char const *what = info.what;
-      char const *cu = "CUs";
+      char const *cu = "CU DIEs";
       if (info.reverse)
 	{
 	  char const *tmp = what;
@@ -158,7 +158,7 @@ compare_coverage (struct elf_file *file,
 		  enum section_id id, char const *what)
 {
   compare_coverage_1 (file, coverage, other, id, what, false);
-  compare_coverage_1 (file, other, coverage, id, what, false);
+  compare_coverage_1 (file, other, coverage, id, what, true);
 }
 
 inline static void
