@@ -950,7 +950,7 @@ namespace
 	  {
 	    cu->low_pc = low_pc;
 
-	    if (high_pc != (uint64_t)-1)
+	    if (high_pc != (uint64_t)-1 && high_pc > low_pc)
 	      pc_coverage->add (low_pc, high_pc - low_pc);
 	  }
 
