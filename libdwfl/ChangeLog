@@ -1,3 +1,8 @@
+2011-03-23  Petr Machata  <pmachata@redhat.com>
+
+	* relocate.c (relocate_section): Use gelf_fsize instead of relying
+	on shdr->sh_entsize.
+
 2011-02-11  Roland McGrath  <roland@redhat.com>
 
 	* linux-kernel-modules.c (try_kernel_name): Try .gz, .bz2, .xz

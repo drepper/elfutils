@@ -1,5 +1,5 @@
 /* Print information from ELF file in human-readable form.
-   Copyright (C) 1999-2010 Red Hat, Inc.
+   Copyright (C) 1999-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 
@@ -1349,6 +1349,7 @@ handle_dynamic (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
   Elf_Data *data;
   size_t cnt;
   size_t shstrndx;
+  size_t sh_entsize;
 
   /* Get the data of the section.  */
   data = elf_getdata (scn, NULL);
@@ -1360,6 +1361,8 @@ handle_dynamic (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
+  sh_entsize = gelf_fsize (ebl->elf, ELF_T_DYN, 1, EV_CURRENT);
+
   glink = gelf_getshdr (elf_getscn (ebl->elf, shdr->sh_link), &glink_mem);
   if (glink == NULL)
     error (EXIT_FAILURE, 0, gettext ("invalid sh_link value in section %Zu"),
@@ -1369,15 +1372,15 @@ handle_dynamic (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 \nDynamic segment contains %lu entry:\n Addr: %#0*" PRIx64 "  Offset: %#08" PRIx64 "  Link to section: [%2u] '%s'\n",
 		    "\
 \nDynamic segment contains %lu entries:\n Addr: %#0*" PRIx64 "  Offset: %#08" PRIx64 "  Link to section: [%2u] '%s'\n",
-		    shdr->sh_size / shdr->sh_entsize),
-	  (unsigned long int) (shdr->sh_size / shdr->sh_entsize),
+		    shdr->sh_size / sh_entsize),
+	  (unsigned long int) (shdr->sh_size / sh_entsize),
 	  class == ELFCLASS32 ? 10 : 18, shdr->sh_addr,
 	  shdr->sh_offset,
 	  (int) shdr->sh_link,
 	  elf_strptr (ebl->elf, shstrndx, glink->sh_name));
   fputs_unlocked (gettext ("  Type              Value\n"), stdout);
 
-  for (cnt = 0; cnt < shdr->sh_size / shdr->sh_entsize; ++cnt)
+  for (cnt = 0; cnt < shdr->sh_size / sh_entsize; ++cnt)
     {
       GElf_Dyn dynmem;
       GElf_Dyn *dyn = gelf_getdyn (data, cnt, &dynmem);
@@ -1524,7 +1527,8 @@ static void
 handle_relocs_rel (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 {
   int class = gelf_getclass (ebl->elf);
-  int nentries = shdr->sh_size / shdr->sh_entsize;
+  size_t sh_entsize = gelf_fsize (ebl->elf, ELF_T_REL, 1, EV_CURRENT);
+  int nentries = shdr->sh_size / sh_entsize;
 
   /* Get the data of the section.  */
   Elf_Data *data = elf_getdata (scn, NULL);
@@ -1710,7 +1714,8 @@ static void
 handle_relocs_rela (Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr)
 {
   int class = gelf_getclass (ebl->elf);
-  int nentries = shdr->sh_size / shdr->sh_entsize;
+  size_t sh_entsize = gelf_fsize (ebl->elf, ELF_T_RELA, 1, EV_CURRENT);
+  int nentries = shdr->sh_size / sh_entsize;
 
   /* Get the data of the section.  */
   Elf_Data *data = elf_getdata (scn, NULL);
@@ -2569,6 +2574,7 @@ handle_versym (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
   GElf_Shdr glink_mem;
   GElf_Shdr *glink = gelf_getshdr (elf_getscn (ebl->elf, shdr->sh_link),
 				   &glink_mem);
+  size_t sh_entsize = gelf_fsize (ebl->elf, ELF_T_HALF, 1, EV_CURRENT);
   if (glink == NULL)
     error (EXIT_FAILURE, 0, gettext ("invalid sh_link value in section %Zu"),
 	   elf_ndxscn (scn));
@@ -2578,17 +2584,17 @@ handle_versym (Ebl *ebl, Elf_Scn *scn, GElf_Shdr *shdr)
 \nVersion symbols section [%2u] '%s' contains %d entry:\n Addr: %#0*" PRIx64 "  Offset: %#08" PRIx64 "  Link to section: [%2u] '%s'",
 		    "\
 \nVersion symbols section [%2u] '%s' contains %d entries:\n Addr: %#0*" PRIx64 "  Offset: %#08" PRIx64 "  Link to section: [%2u] '%s'",
-		    shdr->sh_size / shdr->sh_entsize),
+		    shdr->sh_size / sh_entsize),
 	  (unsigned int) elf_ndxscn (scn),
 	  elf_strptr (ebl->elf, shstrndx, shdr->sh_name),
-	  (int) (shdr->sh_size / shdr->sh_entsize),
+	  (int) (shdr->sh_size / sh_entsize),
 	  class == ELFCLASS32 ? 10 : 18, shdr->sh_addr,
 	  shdr->sh_offset,
 	  (unsigned int) shdr->sh_link,
 	  elf_strptr (ebl->elf, shstrndx, glink->sh_name));
 
   /* Now we can finally look at the actual contents of this section.  */
-  for (unsigned int cnt = 0; cnt < shdr->sh_size / shdr->sh_entsize; ++cnt)
+  for (unsigned int cnt = 0; cnt < shdr->sh_size / sh_entsize; ++cnt)
     {
       if (cnt % 2 == 0)
 	printf ("\n %4d:", cnt);
@@ -2920,7 +2926,8 @@ print_liblist (Ebl *ebl)
 
       if (shdr != NULL && shdr->sh_type == SHT_GNU_LIBLIST)
 	{
-	  int nentries = shdr->sh_size / shdr->sh_entsize;
+	  size_t sh_entsize = gelf_fsize (ebl->elf, ELF_T_LIB, 1, EV_CURRENT);
+	  int nentries = shdr->sh_size / sh_entsize;
 	  printf (ngettext ("\
 \nLibrary list section [%2zu] '%s' at offset %#0" PRIx64 " contains %d entry:\n",
 			    "\

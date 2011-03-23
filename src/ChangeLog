@@ -1,3 +1,9 @@
+2011-03-23  Petr Machata  <pmachata@redhat.com>
+
+	* readelf.c (handle_dynamic, handle_relocs_rel)
+	(handle_relocs_rela, handle_versym, print_liblist):
+	Use gelf_fsize instead of relying on shdr->sh_entsize.
+
 2011-02-11  Roland McGrath  <roland@redhat.com>
 
 	* elfcmp.c (verbose): New variable.
