@@ -149,6 +149,14 @@ dwarf_tag_string (unsigned int tag)
 	result = "GNU_formal_parameter_pack";
 	break;
 
+      case DW_TAG_GNU_call_site:
+	result = "DW_TAG_GNU_call_site";
+	break;
+
+      case DW_TAG_GNU_call_site_parameter:
+	result = "DW_TAG_GNU_call_site_parameter";
+	break;
+
       default:
 	if (tag < DW_TAG_lo_user)
 	  snprintf (buf, sizeof buf, gettext ("unknown tag %hx"), tag);
@@ -405,6 +413,38 @@ dwarf_attr_string (unsigned int attrnum)
 
       case DW_AT_GNU_template_name:
 	result = "GNU_template_name";
+	break;
+
+      case DW_AT_GNU_call_site_value:
+	result = "GNU_call_site_value";
+	break;
+
+      case DW_AT_GNU_call_site_data_value:
+	result = "GNU_call_site_data_value";
+	break;
+
+      case DW_AT_GNU_call_site_target:
+	result = "GNU_call_site_target";
+	break;
+
+      case DW_AT_GNU_call_site_target_clobbered:
+	result = "GNU_call_site_target_clobbered";
+	break;
+
+      case DW_AT_GNU_tail_call:
+	result = "GNU_tail_call";
+	break;
+
+      case DW_AT_GNU_all_tail_call_sites:
+	result = "GNU_all_tail_call_sites";
+	break;
+
+      case DW_AT_GNU_all_call_sites:
+	result = "GNU_all_call_sites";
+	break;
+
+      case DW_AT_GNU_all_source_call_sites:
+	result = "GNU_all_source_call_sites";
 	break;
 
       default:

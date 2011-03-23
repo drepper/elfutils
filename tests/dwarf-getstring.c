@@ -1,7 +1,6 @@
-/* Initialization of Alpha specific backend library.
-   Copyright (C) 2002-2011 Red Hat, Inc.
+/* Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
+   Written by Marek Polacek <mpolacek@redhat.com>, 2011.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -28,40 +27,59 @@
 # include <config.h>
 #endif
 
-#define BACKEND		alpha_
-#define RELOC_PREFIX	R_ALPHA_
-#include "libebl_CPU.h"
+#include ELFUTILS_HEADER(dwfl)
+#include <assert.h>
+#include <dwarf.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
 
-/* This defines the common reloc hooks based on alpha_reloc.def.  */
-#include "common-reloc.c"
 
-
-const char *
-alpha_init (elf, machine, eh, ehlen)
-     Elf *elf __attribute__ ((unused));
-     GElf_Half machine __attribute__ ((unused));
-     Ebl *eh;
-     size_t ehlen;
+int
+main (int argc, char *argv[])
 {
-  /* Check whether the Elf_BH object has a sufficent size.  */
-  if (ehlen < sizeof (Ebl))
-    return NULL;
+  int cnt;
 
-  /* We handle it.  */
-  eh->name = "Alpha";
-  alpha_init_reloc (eh);
-  HOOK (eh, dynamic_tag_name);
-  HOOK (eh, dynamic_tag_check);
-  HOOK (eh, reloc_simple_type);
-  HOOK (eh, return_value_location);
-  HOOK (eh, machine_section_flag_check);
-  HOOK (eh, check_special_section);
-  HOOK (eh, check_special_symbol);
-  HOOK (eh, check_st_other_bits);
-  HOOK (eh, register_info);
-  HOOK (eh, core_note);
-  HOOK (eh, auxv_info);
-  eh->sysvhash_entrysize = sizeof (Elf64_Xword);
+  for (cnt = 1; cnt < argc; ++cnt)
+    {
+      Dwarf_Off offset = 0;
+      size_t len;
 
-  return MODVERSION;
+      int fd = open64 (argv[cnt], O_RDONLY);
+      if (fd == -1)
+	{
+	  printf ("cannot open '%s': %m\n", argv[cnt]);
+	  return 1;
+	}
+
+      Dwarf *dbg = dwarf_begin (fd, DWARF_C_READ);
+      if (dbg == NULL)
+	{
+	  printf ("%s not usable: %s\n", argv[cnt], dwarf_errmsg (-1));
+	  close (fd);
+	  return 1;
+	}
+
+      /* Try to use NULL Dwarf object.  */
+      const char *str = dwarf_getstring (NULL, offset, &len);
+      assert (str == NULL);
+
+      /* Use insane offset.  */
+      str = dwarf_getstring (dbg, ~0UL, &len);
+      assert (str == NULL);
+
+      /* Now do some real work.  */
+      for (int i = 0; i < 100; ++i)
+	{
+	  str = dwarf_getstring (dbg, offset, &len);
+	  puts (str);
+
+	  /* Advance.  */
+	  offset += len + 1;
+	}
+
+      close (fd);
+    }
+
+  return 0;
 }

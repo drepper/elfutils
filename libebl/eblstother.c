@@ -1,7 +1,6 @@
-/* Release debugging handling context.
-   Copyright (C) 2002-2011 Red Hat, Inc.
+/* Check st_other flag.
+   Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,90 +51,14 @@
 # include <config.h>
 #endif
 
-#include <search.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <string.h>
-
-#include "libdwP.h"
-#include "cfi.h"
+#include <libeblP.h>
 
 
-static void
-noop_free (void *arg __attribute__ ((unused)))
+bool
+ebl_check_st_other_bits (ebl, st_other)
+     Ebl *ebl;
+     unsigned char st_other;
 {
+  return ((st_other ^ GELF_ST_VISIBILITY (st_other)) == 0
+	  || ebl->check_st_other_bits (st_other ^ GELF_ST_VISIBILITY (st_other)));
 }
-
-
-static void
-cu_free (void *arg)
-{
-  struct Dwarf_CU *p = (struct Dwarf_CU *) arg;
-
-  Dwarf_Abbrev_Hash_free (&p->abbrev_hash);
-
-  tdestroy (p->locs, noop_free);
-}
-
-
-#if USE_ZLIB
-void
-internal_function
-__libdw_free_zdata (Dwarf *dwarf)
-{
-  unsigned int gzip_mask = dwarf->sectiondata_gzip_mask;
-  while (gzip_mask != 0)
-    {
-      int i = ffs (gzip_mask);
-      assert (i > 0);
-      --i;
-      assert (i < IDX_last);
-      free (dwarf->sectiondata[i]);
-      gzip_mask &= ~(1U << i);
-    }
-}
-#endif
-
-int
-dwarf_end (dwarf)
-     Dwarf *dwarf;
-{
-  if (dwarf != NULL)
-    {
-      if (dwarf->cfi != NULL)
-	/* Clean up the CFI cache.  */
-	__libdw_destroy_frame_cache (dwarf->cfi);
-
-      Dwarf_Sig8_Hash_free (&dwarf->sig8_hash);
-
-      /* The search tree for the CUs.  NB: the CU data itself is
-	 allocated separately, but the abbreviation hash tables need
-	 to be handled.  */
-      tdestroy (dwarf->cu_tree, cu_free);
-      tdestroy (dwarf->tu_tree, cu_free);
-
-      struct libdw_memblock *memp = dwarf->mem_tail;
-      /* The first block is allocated together with the Dwarf object.  */
-      while (memp->prev != NULL)
-	{
-	  struct libdw_memblock *prevp = memp->prev;
-	  free (memp);
-	  memp = prevp;
-	}
-
-      /* Free the pubnames helper structure.  */
-      free (dwarf->pubnames_sets);
-
-      __libdw_free_zdata (dwarf);
-
-      /* Free the ELF descriptor if necessary.  */
-      if (dwarf->free_elf)
-	elf_end (dwarf->elf);
-
-      /* Free the context descriptor.  */
-      free (dwarf);
-    }
-
-  return 0;
-}
-INTDEF(dwarf_end)
