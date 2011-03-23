@@ -206,4 +206,7 @@
   DW_OP_0 (DW_OP_stack_value)					\
   DW_OP_1 (DW_OP_implicit_value, DW_FORM_block)			\
   /* GNU extensions */						\
-  DW_OP_2 (DW_OP_GNU_implicit_pointer, DW_FORM_ref_addr, DW_FORM_sdata)
+  DW_OP_2 (DW_OP_GNU_implicit_pointer, DW_FORM_ref_addr, DW_FORM_sdata) \
+  /* GNU variant for tracking of values passed as arguments to functions.  */ \
+  /* http://www.dwarfstd.org/ShowIssue.php?issue=100909.1 */	\
+  DW_OP_1 (DW_OP_GNU_entry_value, DW_FORM_block)
