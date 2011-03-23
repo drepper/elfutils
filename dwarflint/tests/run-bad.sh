@@ -87,7 +87,7 @@ error: .debug_abbrev: abbr. attribute 0x34: attribute location with invalid form
 EOF
 
 testrun_compare ./dwarflint garbage-7 <<EOF
-error: .debug_abbrev: abbr. attribute 0x7e: invalid or unknown name 0x703.
+warning: .debug_abbrev: abbr. attribute 0x7e: invalid or unknown name 0x703.
 error: .debug_abbrev: abbr. attribute 0x7e: invalid form 0x0.
 error: .debug_abbrev: abbreviation 122: missing zero to mark end-of-table.
 EOF

@@ -31,6 +31,9 @@
 #include <iosfwd>
 #include "check_debug_info.ii"
 #include "dwarf_version.ii"
+#include "option.hh"
+
+extern global_opt<void_option> opt_nognu;
 
 enum dw_class
   {

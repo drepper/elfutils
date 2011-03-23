@@ -45,6 +45,9 @@
 #include "dwarf_mips.hh"
 #include "check_debug_info.hh"
 
+global_opt<void_option>
+  opt_nognu ("Don't use GNU extension.", "nognu");
+
 dw_class_set::dw_class_set (dw_class a, dw_class b, dw_class c,
 			    dw_class d, dw_class e)
 {
@@ -118,7 +121,7 @@ form::width (cu_head const *cu_head) const
 std::ostream &
 operator << (std::ostream &os, form const &obj)
 {
-  return os << elfutils::dwarf::forms::name (obj.name ());
+  return os << elfutils::dwarf::forms::identifier (obj.name ());
 }
 
 namespace
@@ -139,7 +142,7 @@ attribute::attribute (int a_name, dw_class_set const &a_classes)
 std::ostream &
 operator << (std::ostream &os, attribute const &obj)
 {
-  return os << elfutils::dwarf::attributes::name (obj.name ());
+  return os << elfutils::dwarf::attributes::identifier (obj.name ());
 }
 
 
@@ -230,9 +233,6 @@ dwarf_version::extend (dwarf_version const *source,
   return new dwarf_version_union (source, extension);
 }
 
-global_opt<void_option>
-  nognu ("Don't use GNU extension.", "nognu");
-
 namespace
 {
   dwarf_version const *get_ext ()
@@ -244,7 +244,7 @@ namespace
     // need the version to know how to read these attributes in the
     // first place.
 
-    if (nognu)
+    if (opt_nognu)
       return dwarf_mips_ext ();
     else
       return dwarf_version::extend (dwarf_mips_ext (), dwarf_gnu_ext ());

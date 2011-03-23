@@ -156,6 +156,7 @@ namespace
 
     // Tolerate failure here.
     dwarf_version const *ver = NULL;
+    static dwarf_version const *latest_ver = dwarf_version::get_latest ();
     where.addr1 = 0;
 
     bool failed = false;
@@ -285,7 +286,7 @@ namespace
 		  << "couldn't load CU headers for processing .debug_abbrev; "
 		     "assuming latest DWARF flavor."
 		  << std::endl;
-		ver = dwarf_version::get_latest ();
+		ver = latest_ver;
 	      }
 
 	    assert (ver != NULL);
@@ -397,11 +398,24 @@ namespace
 	    attribute const *attribute = ver->get_attribute (attrib_name);
 	    if (attribute == NULL)
 	      {
-		wr_error (where)
-		  << "invalid or unknown name " << pri::hex (attrib_name)
-		  << '.' << std::endl;
-		// libdw should handle unknown attribute, as long as
-		// the form is kosher, so don't fail the check.
+		// GCC commonly emits DWARF 2 with trivial extensions
+		// (such as attribute names) from newer versions.  In
+		// GNU mode, don't even mind this.  In non-gnu, emit
+		// warning.  We explicitly don't do this for forms,
+		// where the consumer wouldn't know how to read or
+		// skip the datum.
+		attribute = latest_ver->get_attribute (attrib_name);
+		if (attribute == NULL)
+		  // libdw should handle unknown attribute, as long as
+		  // the form is kosher, so don't fail the check.
+		  wr_message (where, mc_abbrevs | mc_impact_1)
+		    << "invalid or unknown name " << pri::hex (attrib_name)
+		    << '.' << std::endl;
+		else if (opt_nognu)
+		  wr_message (where, mc_abbrevs | mc_impact_1)
+		    << "attribute " << *attribute
+		    << " from later DWARF version."
+		    << std::endl;
 	      }
 
 	    form const *form = check_debug_abbrev::check_form
@@ -410,7 +424,7 @@ namespace
 	      // Error message has been emitted in check_form.
 	      failed = true;
 
-	    if (form == NULL || attribute == NULL)
+	    if (form == NULL)
 	      continue;
 
 	    std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
@@ -418,7 +432,8 @@ namespace
 	    if (!inserted.second)
 	      {
 		wr_error (where)
-		  << "duplicate attribute " << *attribute
+		  << "duplicate attribute "
+		  << elfutils::dwarf::attributes::name (attrib_name)
 		  << " (first was at " << pri::hex (inserted.first->second)
 		  << ")." << std::endl;
 		// I think we may allow such files for high-level
