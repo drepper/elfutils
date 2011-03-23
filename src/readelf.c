@@ -1,5 +1,5 @@
 /* Print information from ELF file in human-readable form.
-   Copyright (C) 1999-2010 Red Hat, Inc.
+   Copyright (C) 1999-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 
@@ -1152,6 +1152,13 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
       /* Finish the line.  */
       fputc_unlocked ('\n', stdout);
     }
+}
+
+
+static const char *
+section_name (Ebl *ebl, GElf_Ehdr *ehdr, GElf_Shdr *shdr)
+{
+  return elf_strptr (ebl->elf, ehdr->e_shstrndx, shdr->sh_name) ?: "???";
 }
 
 
@@ -3351,6 +3358,7 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
       [DW_OP_implicit_value] = "implicit_value",
       [DW_OP_stack_value] = "stack_value",
       [DW_OP_GNU_implicit_pointer] = "GNU_implicit_pointer",
+      [DW_OP_GNU_entry_value] = "GNU_entry_value",
     };
 
   if (len == 0)
@@ -3615,6 +3623,21 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	  offset += 1 + (data - start);
 	  break;
 
+	case DW_OP_GNU_entry_value:
+	  /* Size plus expression block.  */
+	  start = data;
+	  NEED (1);
+	  get_uleb128 (uleb, data); /* XXX check overrun */
+	  printf ("%*s[%4" PRIuMAX "] %s:\n",
+		  indent, "", (uintmax_t) offset, known[op]);
+	  NEED (uleb);
+	  print_ops (dwflmod, dbg, indent + 6, indent + 6, vers,
+		     addrsize, offset_size, uleb, data);
+	  data += uleb;
+	  CONSUME (data - start);
+	  offset += 1 + (data - start);
+	  break;
+
 	default:
 	  /* No Operand.  */
 	  if (op < sizeof known / sizeof known[0] && known[op] != NULL)
@@ -3696,6 +3719,7 @@ static void
 reset_listptr (struct listptr_table *table)
 {
   free (table->table);
+  table->table = NULL;
   table->n = table->alloc = 0;
 }
 
@@ -3777,16 +3801,16 @@ skip_listptr_hole (struct listptr_table *table, size_t *idxp,
 
 static void
 print_debug_abbrev_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			    Ebl *ebl __attribute__ ((unused)),
-			    GElf_Ehdr *ehdr __attribute__ ((unused)),
+			    Ebl *ebl, GElf_Ehdr *ehdr,
 			    Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"
 		   " [ Code]\n"),
-	  elf_ndxscn (scn), ".debug_abbrev", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   Dwarf_Off offset = 0;
-  while (offset < shdr->sh_size)
+  while (offset < dbg->sectiondata[IDX_debug_abbrev]->d_size)
     {
       printf (gettext ("\nAbbreviation section at offset %" PRIu64 ":\n"),
 	      offset);
@@ -3848,8 +3872,7 @@ print_debug_abbrev_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
    takes care of it.  */
 static void
 print_debug_aranges_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			     Ebl *ebl __attribute__ ((unused)),
-			     GElf_Ehdr *ehdr, Elf_Scn *scn,
+			     Ebl *ebl, GElf_Ehdr *ehdr, Elf_Scn *scn,
 			     GElf_Shdr *shdr, Dwarf *dbg)
 {
   Dwarf_Aranges *aranges;
@@ -3866,7 +3889,8 @@ print_debug_aranges_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 		    "\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 " contains %zu entries:\n",
 		    cnt),
-	  elf_ndxscn (scn), ".debug_aranges", (uint64_t) shdr->sh_offset, cnt);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset, cnt);
 
   /* Compute floor(log16(cnt)).  */
   size_t tmp = cnt;
@@ -3904,8 +3928,8 @@ print_debug_aranges_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 /* Print content of DWARF .debug_ranges section.  */
 static void
 print_debug_ranges_section (Dwfl_Module *dwflmod,
-			    Ebl *ebl __attribute__ ((unused)),
-			    GElf_Ehdr *ehdr, Elf_Scn *scn, GElf_Shdr *shdr,
+			    Ebl *ebl, GElf_Ehdr *ehdr,
+			    Elf_Scn *scn, GElf_Shdr *shdr,
 			    Dwarf *dbg)
 {
   Elf_Data *data = elf_rawdata (scn, NULL);
@@ -3919,7 +3943,8 @@ print_debug_ranges_section (Dwfl_Module *dwflmod,
 
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_ranges", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   sort_listptr (&known_rangelistptr, "rangelistptr");
   size_t listptr_idx = 0;
@@ -4864,6 +4889,10 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	case DW_AT_frame_base:
 	case DW_AT_return_addr:
 	case DW_AT_static_link:
+	case DW_AT_GNU_call_site_value:
+	case DW_AT_GNU_call_site_data_value:
+	case DW_AT_GNU_call_site_target:
+	case DW_AT_GNU_call_site_target_clobbered:
 	  notice_listptr (section_loc, &known_loclistptr,
 			  cbargs->addrsize, cbargs->offset_size, num);
 	  if (!cbargs->silent)
@@ -4993,6 +5022,11 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	case DW_AT_count:
 	case DW_AT_lower_bound:
 	case DW_AT_upper_bound:
+	case DW_AT_GNU_call_site_value:
+	case DW_AT_GNU_call_site_data_value:
+	case DW_AT_GNU_call_site_target:
+	case DW_AT_GNU_call_site_target_clobbered:
+	  putchar ('\n');
 	  print_ops (cbargs->dwflmod, cbargs->dbg,
 		     12 + level * 2, 12 + level * 2,
 		     cbargs->version, cbargs->addrsize, cbargs->offset_size,
@@ -5015,14 +5049,12 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 
 static void
 print_debug_units (Dwfl_Module *dwflmod,
-		   Ebl *ebl __attribute__ ((unused)),
-		   GElf_Ehdr *ehdr __attribute__ ((unused)),
-		   Elf_Scn *scn,
-		   GElf_Shdr *shdr, Dwarf *dbg,
-		   bool debug_types)
+		   Ebl *ebl, GElf_Ehdr *ehdr,
+		   Elf_Scn *scn, GElf_Shdr *shdr,
+		   Dwarf *dbg, bool debug_types)
 {
   const bool silent = !(print_debug_sections & section_info);
-  const char *secname = debug_types ? ".debug_types" : ".debug_info";
+  const char *secname = section_name (ebl, ehdr, shdr);
 
   if (!silent)
     printf (gettext ("\
@@ -5185,13 +5217,13 @@ print_debug_types_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
 
 static void
-print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
-			  GElf_Ehdr *ehdr __attribute__ ((unused)),
+print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 			  Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_line", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   if (shdr->sh_size == 0)
     return;
@@ -5224,7 +5256,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 	    {
 	    invalid_data:
 	      error (0, 0, gettext ("invalid data in section [%zu] '%s'"),
-		     elf_ndxscn (scn), ".debug_line");
+		     elf_ndxscn (scn), section_name (ebl, ehdr, shdr));
 	      return;
 	    }
 	  unit_length = read_8ubyte_unaligned_inc (dbg, linep);
@@ -5292,7 +5324,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl,
 	  error (0, 0,
 		 gettext ("invalid data at offset %tu in section [%zu] '%s'"),
 		 linep - (const unsigned char *) data->d_buf,
-		 elf_ndxscn (scn), ".debug_line");
+		 elf_ndxscn (scn), section_name (ebl, ehdr, shdr));
 	  linep = lineendp;
 	  continue;
 	}
@@ -5675,7 +5707,7 @@ advance address by fixed value %u to %s\n"),
 
 static void
 print_debug_loc_section (Dwfl_Module *dwflmod,
-			 Ebl *ebl __attribute__ ((unused)), GElf_Ehdr *ehdr,
+			 Ebl *ebl, GElf_Ehdr *ehdr,
 			 Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   Elf_Data *data = elf_rawdata (scn, NULL);
@@ -5689,7 +5721,8 @@ print_debug_loc_section (Dwfl_Module *dwflmod,
 
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_loc", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   sort_listptr (&known_loclistptr, "loclistptr");
   size_t listptr_idx = 0;
@@ -5798,13 +5831,13 @@ mac_compare (const void *p1, const void *p2)
 
 static void
 print_debug_macinfo_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			     Ebl *ebl __attribute__ ((unused)),
-			     GElf_Ehdr *ehdr __attribute__ ((unused)),
+			     Ebl *ebl, GElf_Ehdr *ehdr,
 			     Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\
 \nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_macinfo", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
   putc_unlocked ('\n', stdout);
 
   /* There is no function in libdw to iterate over the raw content of
@@ -5970,12 +6003,12 @@ print_pubnames (Dwarf *dbg __attribute__ ((unused)), Dwarf_Global *global,
 /* Print the known exported symbols in the DWARF section '.debug_pubnames'.  */
 static void
 print_debug_pubnames_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			      Ebl *ebl __attribute__ ((unused)),
-			      GElf_Ehdr *ehdr __attribute__ ((unused)),
+			      Ebl *ebl, GElf_Ehdr *ehdr,
 			      Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
   printf (gettext ("\nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"),
-	  elf_ndxscn (scn), ".debug_pubnames", (uint64_t) shdr->sh_offset);
+	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
+	  (uint64_t) shdr->sh_offset);
 
   int n = 0;
   (void) dwarf_getpubnames (dbg, print_pubnames, &n, 0);
@@ -5984,12 +6017,13 @@ print_debug_pubnames_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 /* Print the content of the DWARF string section '.debug_str'.  */
 static void
 print_debug_str_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
-			 Ebl *ebl __attribute__ ((unused)),
-			 GElf_Ehdr *ehdr __attribute__ ((unused)),
+			 Ebl *ebl, GElf_Ehdr *ehdr,
 			 Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
+  const size_t sh_size = dbg->sectiondata[IDX_debug_str]->d_size;
+
   /* Compute floor(log16(shdr->sh_size)).  */
-  GElf_Addr tmp = shdr->sh_size;
+  GElf_Addr tmp = sh_size;
   int digits = 1;
   while (tmp >= 16)
     {
@@ -6001,12 +6035,12 @@ print_debug_str_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
   printf (gettext ("\nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"
 		   " %*s  String\n"),
 	  elf_ndxscn (scn),
-	  ".debug_str", (uint64_t) shdr->sh_offset,
+	  section_name (ebl, ehdr, shdr), (uint64_t) shdr->sh_offset,
 	  /* TRANS: the debugstr| prefix makes the string unique.  */
 	  digits + 2, sgettext ("debugstr|Offset"));
 
   Dwarf_Off offset = 0;
-  while (offset < shdr->sh_size)
+  while (offset < sh_size)
     {
       size_t len;
       const char *str = dwarf_getstring (dbg, offset, &len);
@@ -6352,7 +6386,13 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 	  int n;
 
 	  for (n = 0; n < ndebug_sections; ++n)
-	    if (strcmp (name, debug_sections[n].name) == 0)
+	    if (strcmp (name, debug_sections[n].name) == 0
+#if USE_ZLIB
+		|| (name[0] == '.' && name[1] == 'z'
+		    && debug_sections[n].name[1] == 'd'
+		    && strcmp (&name[2], &debug_sections[n].name[1]) == 0)
+#endif
+		)
 	      {
 		if ((print_debug_sections | implicit_debug_sections)
 		    & debug_sections[n].bitmask)

@@ -28,7 +28,7 @@ include $(top_srcdir)/config/eu.am
 if MUDFLAP
 BUILD_RPATH = \$$ORIGIN/../backends
 else
-BUILT_RPATH = \$$ORIGIN/../libasm:\$$ORIGIN/../libdw:\$$ORIGIN/../backends:\$$ORIGIN/../libelf
+BUILD_RPATH = \$$ORIGIN/../libasm:\$$ORIGIN/../libdw:\$$ORIGIN/../backends:\$$ORIGIN/../libelf
 endif
 
 AM_LDFLAGS =
@@ -42,7 +42,7 @@ AM_LDFLAGS += -Wl,-rpath-link,../libasm:../libdw:../libelf
 endif
 
 if TESTS_RPATH
-AM_LDFLAGS += -Wl,-rpath,$(BUILT_RPATH)
+AM_LDFLAGS += -Wl,-rpath,$(BUILD_RPATH)
 tests_rpath = yes
 else
 tests_rpath = no
@@ -60,7 +60,7 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  dwarf-print dwarf_edit dwarf_edit_output \
-		  test-flag-nobits
+		  test-flag-nobits dwarf-getstring rerequest_tag
 
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -80,7 +80,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
 	run-find-prologues.sh run-allregs.sh \
 	run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
-	run-readelf-test4.sh \
+	run-readelf-test4.sh run-readelf-twofiles.sh \
 	run-native-test.sh run-bug1-test.sh \
 	dwfl-bug-addr-overflow run-addrname-test.sh \
 	dwfl-bug-fd-leak dwfl-bug-report \
@@ -90,6 +90,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwarf-attributes.sh \
 	run-dwarf_edit.sh dwarf_edit_output \
 	run-test-flag-nobits.sh run-prelink-addr-test.sh \
+	run-dwarf-getstring.sh run-rerequest_tag.sh \
 	run-dwarflint-self.sh \
 	run-dwarfcmp-self.sh run-dwarfcmp-test-self.sh
 # run-show-ciefde.sh
@@ -127,6 +128,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-dwarf-getmacros.sh run-test-flag-nobits.sh \
 	     run-dwarfcmp-self.sh run-dwarfcmp-test-self.sh \
 	     run-dwarflint-self.sh run-dwarf-attributes.sh run-dwarf_edit.sh \
+	     run-dwarf-getstring.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -164,7 +166,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile54-64.prelink.so.bz2 testfile54-64.noshdrs.so.bz2 \
 	     testfile55-32.bz2 testfile55-32.debug.bz2 \
 	     testfile55-32.prelink.bz2 testfile55-64.bz2 \
-	     testfile55-64.debug.bz2 testfile55-64.prelink.bz2
+	     testfile55-64.debug.bz2 testfile55-64.prelink.bz2 \
+	     testfile56.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
@@ -268,8 +271,10 @@ dwfl_bug_getmodules_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 dwfl_addr_sect_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 sha1_tst_LDADD = $(libeu) $(libmudflap)
 dwarf_getmacros_LDADD = $(libdw) $(libmudflap)
+dwarf_getstring_LDADD = $(libdw) $(libmudflap)
 addrcfi_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 test_flag_nobits_LDADD = $(libelf) $(libmudflap)
+rerequest_tag_LDADD = $(libdw) $(libmudflap)
 
 if GCOV
 check: check-am coverage
