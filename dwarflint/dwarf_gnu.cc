@@ -69,6 +69,17 @@ namespace
       add (const_attribute (DW_AT_GNU_odr_signature));
 
       add (string_attribute (DW_AT_GNU_template_name)); // xxx ???
+
+      // GNU extensions for representation of call sites
+      // http://www.dwarfstd.org/ShowIssue.php?issue=100909.2
+      add (attribute (DW_AT_GNU_call_site_value, cl_exprloc));
+      add (attribute (DW_AT_GNU_call_site_data_value, cl_exprloc));
+      add (attribute (DW_AT_GNU_call_site_target, cl_exprloc));
+      add (attribute (DW_AT_GNU_call_site_target_clobbered, cl_exprloc));
+      add (flag_attribute (DW_AT_GNU_tail_call));
+      add (flag_attribute (DW_AT_GNU_all_tail_call_sites));
+      add (flag_attribute (DW_AT_GNU_all_call_sites));
+      add (flag_attribute (DW_AT_GNU_all_source_call_sites));
     }
   };
 
