@@ -159,7 +159,7 @@ main (int argc, char *argv[])
 
   if (opt_list_checks.seen ())
     {
-      dwarflint::check_registrar::inst ()->list_checks ();
+      dwarflint::list_checks ();
       std::exit (0);
     }
   else if (remaining == argc)
@@ -210,7 +210,6 @@ main (int argc, char *argv[])
       try
 	{
 	  char const *fname = argv[remaining];
-	  /* Create an `Elf' descriptor.  */
 	  unsigned int prev_error_count = error_count;
 	  if (!only_one)
 	    std::cout << std::endl << fname << ":" << std::endl;

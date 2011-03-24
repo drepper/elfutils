@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -59,6 +59,7 @@ struct checkdescriptor
 
   public:
     create (char const *name = NULL);
+    create (checkdescriptor const &base); ///< For construction of overrides.
     create &groups (char const *name);
 
     create &description (char const *d)
