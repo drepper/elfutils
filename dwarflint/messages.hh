@@ -31,6 +31,8 @@
 #include <string>
 #include <iosfwd>
 #include <vector>
+#include <sstream>
+#include <map>
 
 #define MESSAGE_CATEGORIES						\
   /* Severity: */							\
@@ -119,7 +121,7 @@ extern void wr_message (unsigned long category, const struct where *wh,
 			const char *format, ...)
   __attribute__ ((format (printf, 3, 4)));
 
-extern void wr_format_padding_message (unsigned long category,
+extern void wr_format_padding_message (message_category category,
 				       struct where const *wh,
 				       uint64_t start, uint64_t end,
 				       char const *kind);
@@ -130,11 +132,11 @@ extern void wr_format_leb128_message (struct where const *where,
 				      const unsigned char *begin,
 				      const unsigned char *end);
 
-extern void wr_message_padding_0 (unsigned long category,
+extern void wr_message_padding_0 (message_category category,
 				  struct where const *wh,
 				  uint64_t start, uint64_t end);
 
-extern void wr_message_padding_n0 (unsigned long category,
+extern void wr_message_padding_n0 (message_category category,
 				   struct where const *wh,
 				   uint64_t start, uint64_t end);
 
@@ -150,9 +152,66 @@ extern struct message_criteria warning_criteria;
 /* Accepted (warning) messages, that are turned into errors.  */
 extern struct message_criteria error_criteria;
 
+class message_count_filter
+{
+  struct counter
+  {
+    unsigned value;
+    counter () : value (0) {}
+    unsigned operator++ () { return ++value; }
+  };
+
+  typedef std::map<void const *, counter> counters_t;
+
+  // NULL for filtered-out message, otherwise array of <key, count>
+  // pairs sorted by key.
+  counters_t _m_counters;
+
+public:
+
+  int should_emit (void const *key);
+  static message_count_filter *
+  inst ()
+  {
+    static message_count_filter inst;
+    return &inst;
+  }
+};
+
+class message_context
+{
+  message_count_filter *_m_filter;
+  where const *_m_where;
+  char const *_m_prefix;
+
+  friend message_context wr_message (where const &wh, message_category cat);
+  friend message_context wr_message (message_category cat);
+
+  std::ostream &emit (char const *str);
+
+  message_context (message_count_filter *filter,
+		   where const *where, char const *prefix);
+
+public:
+  static message_context filter_message (where const *wh,
+					 message_category category);
+
+  std::ostream &operator << (char const *message);
+  std::ostream &operator << (std::string const &message);
+
+  template<class T>
+  std::ostream &
+  operator << (T const &t)
+  {
+    std::stringstream ss;
+    ss << t;
+    return (*this) << ss.str ();
+  }
+};
+
 std::ostream &wr_error (where const &wh);
 std::ostream &wr_error ();
-std::ostream &wr_message (where const &wh, message_category cat);
-std::ostream &wr_message (message_category cat);
+message_context wr_message (where const &wh, message_category cat);
+message_context wr_message (message_category cat);
 
 #endif//DWARFLINT_MESSAGES_HH

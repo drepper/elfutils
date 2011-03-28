@@ -311,9 +311,9 @@ namespace
 	    && cov->is_overlap (cov_begin, cov_end - cov_begin))
 	  {
 	    /* Not a show stopper, this shouldn't derail high-level.  */
-	    wr_message (cat | mc_impact_2 | mc_error, where,
-			": the range %s overlaps with another one.\n",
-			range_fmt (buf, sizeof buf, address, end));
+	    wr_message (*where, cat | mc_aranges | mc_impact_2 | mc_error)
+	      << "the range " << range_fmt (buf, sizeof buf, address, end)
+	      << " overlaps with another one." << std::endl;
 	    overlap = true;
 	  }
 

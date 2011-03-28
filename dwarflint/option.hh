@@ -1,5 +1,5 @@
 /* Pedantic checker for DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -201,8 +201,22 @@ struct value_converter<std::string>
   }
 };
 
+template<>
+struct value_converter<unsigned>
+{
+  static unsigned convert (char const *arg)
+  {
+    unsigned u;
+    if (std::sscanf (arg, "%u", &u) == 1)
+      return u;
+    else
+      return -1;
+  }
+};
+
 typedef xoption<void> void_option;
 typedef xoption<std::string> string_option;
+typedef xoption<unsigned> unsigned_option;
 
 extern options global_opts;
 

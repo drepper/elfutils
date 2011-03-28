@@ -26,6 +26,7 @@
 #include "messages.hh"
 #include "misc.hh"
 #include "coverage.hh"
+#include "option.hh"
 
 #include <vector>
 #include <sstream>
@@ -290,19 +291,81 @@ wr_message (unsigned long category, const struct where *wh,
 namespace
 {
   class nostream: public std::ostream {};
-  nostream nostr;
+  static nostream nostream;
 
-  std::ostream &get_stream ()
+  std::ostream &
+  get_stream ()
   {
     return std::cout;
   }
 }
 
-static std::ostream &
-wr_warning ()
+global_opt<unsigned_option>
+  dup_threshold_opt ("Threshold for duplicate messages.",
+		     "count", "dups");
+
+namespace
+{
+  unsigned
+  dup_threshold ()
+  {
+    static unsigned t = dup_threshold_opt.value ();
+    if (t == 0)
+      t = -1;
+    return t;
+  }
+}
+
+int
+message_count_filter::should_emit (void const *key)
+{
+  unsigned count = ++_m_counters[key];
+  if (count > dup_threshold ())
+    return 0;
+  else if (count == dup_threshold ())
+    return -1;
+  else
+    return 1;
+}
+
+std::ostream &
+message_context::emit (char const *str)
 {
   ++error_count;
-  return get_stream () << gettext ("warning: ");
+  std::ostream &ret = get_stream ();
+  ret << _m_prefix;
+  if (_m_where)
+    ret << *_m_where << ": ";
+  return ret << str;
+}
+
+message_context::message_context (message_count_filter *filter,
+				  where const *where, char const *prefix)
+  : _m_filter (filter)
+  , _m_where (where)
+  , _m_prefix (prefix)
+{}
+
+std::ostream &
+message_context::operator << (char const *message)
+{
+  if (_m_filter == NULL)
+    return nostream;
+  else if (int status = _m_filter->should_emit (message))
+    {
+      if (status == -1)
+	get_stream () << "(threshold reached for the following message)"
+		      << std::endl;
+      return emit (message);
+    }
+  else
+    return nostream;
+}
+
+std::ostream &
+message_context::operator << (std::string const &message)
+{
+  return *this << message.c_str ();
 }
 
 std::ostream &
@@ -313,36 +376,45 @@ wr_error ()
 }
 
 std::ostream &
-wr_message (message_category category)
-{
-  if (!message_accept (&warning_criteria, category))
-    return nostr;
-  else if (message_accept (&error_criteria, category))
-    return wr_error ();
-  else
-    return wr_warning ();
-}
-
-std::ostream &
 wr_error (where const &wh)
 {
   return wr_error () << wh << ": ";
 }
 
-std::ostream &
+message_context
+message_context::filter_message (where const *wh, message_category category)
+{
+  if (!message_accept (&warning_criteria, category))
+    return message_context (NULL, NULL, NULL);
+  else if (message_accept (&error_criteria, category))
+    return message_context (message_count_filter::inst (),
+			    wh, "error: ");
+  else
+    return message_context (message_count_filter::inst (),
+			    wh, "warning: ");
+}
+
+message_context
+wr_message (message_category category)
+{
+  return message_context::filter_message (NULL, category);
+}
+
+message_context
 wr_message (where const &wh, message_category category)
 {
-  return wr_message (category) << wh << ": ";
+  return message_context::filter_message (&wh, category);
 }
 
 void
-wr_format_padding_message (unsigned long category,
+wr_format_padding_message (message_category category,
 			   struct where const *wh,
 			   uint64_t start, uint64_t end, char const *kind)
 {
   char msg[128];
-  wr_message (category, wh, ": %s: %s.\n",
-	      range_fmt (msg, sizeof msg, start, end), kind);
+  wr_message (*wh, category)
+    << range_fmt (msg, sizeof msg, start, end)
+    << ": " << kind << "." << std::endl;
 }
 
 void
@@ -362,7 +434,7 @@ wr_format_leb128_message (struct where const *where,
 }
 
 void
-wr_message_padding_0 (unsigned long category,
+wr_message_padding_0 (message_category category,
 		      struct where const *wh,
 		      uint64_t start, uint64_t end)
 {
@@ -372,7 +444,7 @@ wr_message_padding_0 (unsigned long category,
 }
 
 void
-wr_message_padding_n0 (unsigned long category,
+wr_message_padding_n0 (message_category category,
 		       struct where const *wh,
 		       uint64_t start, uint64_t end)
 {

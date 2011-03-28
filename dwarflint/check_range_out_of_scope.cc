@@ -176,12 +176,12 @@ check_range_out_of_scope::recursively_validate
 
 	    if (!result.empty ())
 	      {
-		wr_error (wh)
+		wr_message (wh, mc_error)
 		  << "PC range " << cov::format_ranges (cov1)
 		  << " is not a sub-range of containing scope."
 		  << std::endl;
 
-		wr_error (wh_parent)
+		wr_message (wh_parent, mc_error)
 		  << "in this context: " << cov::format_ranges (cov2)
 		  << std::endl;
 	      }
@@ -223,7 +223,7 @@ check_range_out_of_scope::recursively_validate
 		      && !cov.is_covered (start, length))
 		    {
 		      runoff = true;
-		      wr_error (wh)
+		      wr_message (wh, mc_error)
 			<< "attribute `"
 			<< elfutils::dwarf::attributes::name ((*at).first)
 			<< "': PC range " << pri::range (start, end)
@@ -231,7 +231,7 @@ check_range_out_of_scope::recursively_validate
 		    }
 		}
 	      if (runoff)
-		wr_error (wh_parent)
+		wr_message (wh_parent, mc_error)
 		  << "in this context: " << cov::format_ranges (cov)
 		  << '.' << std::endl;
 	    }

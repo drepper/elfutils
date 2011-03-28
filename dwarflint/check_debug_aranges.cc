@@ -129,10 +129,10 @@ hole (uint64_t start, uint64_t length, void *user)
 	  what = cu;
 	  cu = tmp;
 	}
-      wr_message (mc_aranges | mc_impact_3, &where,
-		  ": addresses %s are covered with %s, but not with %s.\n",
-		  range_fmt (buf, sizeof (buf), start, start + length),
-		  cu, what);
+      wr_message (where, mc_aranges | mc_impact_3)
+	<< "addresses " << range_fmt (buf, sizeof (buf), start, start + length)
+	<< " are covered with " << cu << ", but not with " << what << "."
+	<< std::endl;
     }
 
   if (sec == NULL)
@@ -170,9 +170,9 @@ aranges_coverage_add (struct coverage *aranges_coverage,
     {
       char buf[128];
       /* Not a show stopper, this shouldn't derail high-level.  */
-      wr_message (mc_aranges | mc_impact_2 | mc_error, where,
-		  ": the range %s overlaps with another one.\n",
-		  range_fmt (buf, sizeof buf, begin, begin + length));
+      wr_message (*where, mc_aranges | mc_impact_2 | mc_error)
+	<< "the range " << range_fmt (buf, sizeof buf, begin, begin + length)
+	<< " overlaps with another one." << std::endl;
     }
 
   aranges_coverage->add (begin, length);

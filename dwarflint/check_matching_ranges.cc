@@ -94,9 +94,10 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 
 	  for (range_vec::iterator it = missing.begin ();
 	       it != missing.end (); ++it)
-	    wr_message (mc_ranges | mc_aranges | mc_impact_3, &where_r,
-			": missing range %s, present in .debug_aranges.\n",
-			range_fmt (buf, sizeof buf, it->first, it->second));
+	    wr_message (where_r, mc_ranges | mc_aranges | mc_impact_3)
+	      << "missing range "
+	      << range_fmt (buf, sizeof buf, it->first, it->second)
+	      << ", present in .debug_aranges." << std::endl;
 
 	  missing.clear ();
 	  std::set_difference (cu_ranges.begin (), cu_ranges.end (),
@@ -105,9 +106,10 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 
 	  for (range_vec::iterator it = missing.begin ();
 	       it != missing.end (); ++it)
-	    wr_message (mc_ranges | mc_aranges | mc_impact_3, &where_ar,
-			": missing range %s, present in .debug_ranges.\n",
-			range_fmt (buf, sizeof buf, it->first, it->second));
+	    wr_message (where_ar, mc_ranges | mc_aranges | mc_impact_3)
+	      << "missing range "
+	      << range_fmt (buf, sizeof buf, it->first, it->second)
+	      << ", present in .debug_ranges." << std::endl;
 	}
     }
   // XXX more specific class when <dwarf> has it
