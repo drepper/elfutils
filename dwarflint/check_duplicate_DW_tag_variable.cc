@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,8 +23,7 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "highlevel_check.hh"
-#include "all-dies-it.hh"
+#include "check_die_tree.hh"
 #include "pri.hh"
 #include "messages.hh"
 #include <map>
@@ -34,7 +33,7 @@ using elfutils::dwarf;
 namespace
 {
   class check_duplicate_DW_tag_variable
-    : public highlevel_check<check_duplicate_DW_tag_variable>
+    : public die_check
   {
     struct varinfo
     {
@@ -65,18 +64,10 @@ namespace
       return &cd;
     }
 
-    check_duplicate_DW_tag_variable (checkstack &stack, dwarflint &lint);
-  };
+    check_duplicate_DW_tag_variable (checkstack &, dwarflint &) {}
 
-  reg<check_duplicate_DW_tag_variable> reg_duplicate_DW_tag_variable;
-}
-
-check_duplicate_DW_tag_variable
-::check_duplicate_DW_tag_variable (checkstack &stack, dwarflint &lint)
-  : highlevel_check<check_duplicate_DW_tag_variable> (stack, lint)
-{
-  for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
-       it != all_dies_iterator<dwarf> (); ++it)
+    virtual void
+    die (all_dies_iterator<dwarf> const &it)
     {
       dwarf::debug_info_entry::children_type const &children
 	= it->children ();
@@ -91,7 +82,7 @@ check_duplicate_DW_tag_variable
 	    {
 	      dwarf::debug_info_entry::attributes_type const &
 		attrs = jt->attributes ();
-    	      dwarf::debug_info_entry::attributes_type::const_iterator
+	      dwarf::debug_info_entry::attributes_type::const_iterator
 		at, et = attrs.end ();
 	      if ((at = attrs.find (DW_AT_name)) == et)
 		continue;
@@ -136,4 +127,6 @@ check_duplicate_DW_tag_variable
 	    }
 	}
     }
+  };
+  reg_die_check<check_duplicate_DW_tag_variable> reg;
 }
