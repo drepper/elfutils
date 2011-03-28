@@ -71,9 +71,8 @@ namespace
 		{
 		  dwarf::debug_info_entry ref = *val.reference ();
 		  if (ref.identity () == die.identity ())
-		    wr_message (to_where (die), cat (mc_impact_3,
-						     mc_acc_suboptimal,
-						     mc_die_rel))
+		    wr_message (to_where (die),
+				mc_impact_3 | mc_acc_suboptimal | mc_die_rel)
 		      << "attribute " << dwarf::attributes::name ((*at).first)
 		      << " references DIE itself." << std::endl;
 		}

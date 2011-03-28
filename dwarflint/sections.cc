@@ -397,7 +397,7 @@ namespace
 
 	if (secentry *str = secinfo.get (".debug_str"))
 	  if (str->reldata != NULL)
-	    wr_message (WHERE (sec_str, NULL), cat (mc_impact_2, mc_elf))
+	    wr_message (WHERE (sec_str, NULL), mc_impact_2 | mc_elf)
 	      << "there's a relocation section associated with this section."
 	      << std::endl;
       }

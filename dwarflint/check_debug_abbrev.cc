@@ -135,7 +135,7 @@ namespace
     if (ret)
       {
 	where wh = WHERE (sec_abbrev, NULL);
-	wr_message (wh, cat (mc_abbrevs, mc_impact_1, mc_acc_bloat))
+	wr_message (wh, mc_abbrevs | mc_impact_1 | mc_acc_bloat)
 	  << "no abbreviations." << std::endl;
       }
     return ret;
@@ -446,8 +446,7 @@ namespace
 	    if (attrib_name == DW_AT_sibling)
 	      {
 		if (!cur->has_children)
-		  wr_message (where,
-			      cat (mc_die_rel, mc_acc_bloat, mc_impact_1))
+		  wr_message (where, mc_die_rel | mc_acc_bloat | mc_impact_1)
 		    << "superfluous DW_AT_sibling attribute at childless abbrev."
 		    << std::endl;
 	      }

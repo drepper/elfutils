@@ -138,7 +138,7 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 		  case opt_expected:
 		    if (what == NULL)
 		      what = " should contain attribute ";
-		    wr_message (where, cat (mc_impact_2, mc_info))
+		    wr_message (where, mc_impact_2 | mc_info)
 		      << elfutils::dwarf::tags::name (parent_tag) << what
 		      << elfutils::dwarf::attributes::name (jt->first) << '.'
 		      << std::endl;
@@ -161,7 +161,7 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 	      expected_set::expectation_map::const_iterator
 		kt = expect.find (name);
 	      if (kt == expect.end ())
-		wr_message (where, cat (mc_impact_3, mc_info))
+		wr_message (where, mc_impact_3 | mc_info)
 		  << ": DIE \"" << dwarf::tags::name (parent_tag)
 		  << "\" has attribute \"" << dwarf::attributes::name (name)
 		  << "\", which is not expected." << std::endl;
@@ -171,7 +171,7 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 		  unsigned exp_vs = expected_value_space (name, parent_tag);
 		  dwarf::value_space vs = (*jt).second.what_space ();
 		  if ((exp_vs & (1U << vs)) == 0)
-		    wr_message (where, cat (mc_impact_3, mc_info))
+		    wr_message (where, mc_impact_3 | mc_info)
 		      << ": in DIE \"" << dwarf::tags::name (parent_tag)
 		      << "\", attribute \"" << dwarf::attributes::name (name)
 		      << "\" has value of unexpected type \"" << vs
@@ -180,7 +180,7 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 	      // XXX more specific class when <dwarf> has it
 	      catch (...)
 		{
-		  wr_message (where, cat (mc_impact_4, mc_info, mc_error))
+		  wr_message (where, mc_impact_4 | mc_info | mc_error)
 		    << ": in DIE \"" << dwarf::tags::name (parent_tag)
 		    << "\", couldn't obtain type of attribute \""
 		    << dwarf::attributes::name (name) << "\"."

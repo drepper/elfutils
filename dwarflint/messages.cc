@@ -137,8 +137,8 @@ message_criteria::operator &= (message_term const &term)
   for (size_t i = 0; i < size (); )
     {
       message_term &t = at (i);
-      t.positive = cat (t.positive, term.positive);
-      t.negative = cat (t.negative, term.negative);
+      t.positive = t.positive | term.positive;
+      t.negative = t.negative | term.negative;
       if ((t.positive & t.negative) != 0)
 	/* A ^ ~A -> drop the term.  */
 	erase (begin () + i);

@@ -890,7 +890,7 @@ check_location_expression (dwarf_version const *ver,
 	    int16_t skip = (uint16_t)value1;
 
 	    if (skip == 0)
-	      wr_message (where, cat (mc_loc, mc_acc_bloat, mc_impact_3))
+	      wr_message (where, mc_loc | mc_acc_bloat | mc_impact_3)
 		<< elfutils::dwarf::ops::name (opcode)
 		<< " with skip 0." << std::endl;
 	    else if (skip > 0 && !read_ctx_need_data (&ctx, (size_t)skip))
@@ -927,7 +927,7 @@ check_location_expression (dwarf_version const *ver,
 		  || opcode == DW_OP_deref_size
 		  || opcode == DW_OP_plus_uconst)
 	      && (value1 > (uint64_t)(uint32_t)-1))
-	    wr_message (where, cat (mc_loc, mc_acc_bloat, mc_impact_3))
+	    wr_message (where, mc_loc | mc_acc_bloat | mc_impact_3)
 	      << elfutils::dwarf::ops::name (opcode)
 	      << " with operand " << pri::hex (value1)
 	      << " on a 32-bit machine." << std::endl;

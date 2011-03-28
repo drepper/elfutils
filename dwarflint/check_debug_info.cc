@@ -157,8 +157,7 @@ namespace
 	       reference is valid, which it is.  But warn about this
 	       anyway, perhaps local reference could be formed on
 	       smaller number of bytes.  */
-	    wr_message (ref->who,
-			cat (mc_impact_2, mc_acc_suboptimal, mc_die_rel))
+	    wr_message (ref->who, mc_impact_2 | mc_acc_suboptimal | mc_die_rel)
 	      << "local reference to " << pri::DIE (ref->addr)
 	      << " formed as global." << std::endl;
 	}
@@ -194,7 +193,7 @@ namespace
 	if (!read_ctx_need_data (&ctx, 4)
 	    && read_check_zero_padding (&ctx, &off_start, &off_end))
 	  {
-	    wr_message_padding_0 (cat (mc_info, mc_header), &where,
+	    wr_message_padding_0 (mc_info | mc_header, &where,
 				  off_start, off_end);
 	    break;
 	  }
@@ -213,7 +212,7 @@ namespace
 	if (size32 == 0
 	    && read_check_zero_padding (&ctx, &off_start, &off_end))
 	  {
-	    wr_message_padding_0 (cat (mc_info, mc_header), &where,
+	    wr_message_padding_0 (mc_info | mc_header, &where,
 				  off_start, off_end);
 	    break;
 	  }
@@ -275,7 +274,7 @@ namespace
 				 // next time we pass by this
 	  }
 	else if (file->ehdr.e_type == ET_REL)
-	  wr_message (head.where, cat (mc_impact_2, mc_info, mc_reloc))
+	  wr_message (head.where, mc_impact_2 | mc_info | mc_reloc)
 	    << pri::lacks_relocation ("abbrev table offset") << std::endl;
 
 	/* Address size.  */
@@ -477,7 +476,7 @@ namespace
   check_rangeptr (uint64_t value, struct value_check_cb_ctx const *ctx)
   {
     if ((value % ctx->cu->head->address_size) != 0)
-      wr_message (*ctx->where, cat (mc_ranges, mc_impact_2))
+      wr_message (*ctx->where, mc_ranges | mc_impact_2)
 	<< "rangeptr value " << pri::hex (value)
 	<< " not aligned to CU address size." << std::endl;
     *ctx->need_rangesp = true;
@@ -613,8 +612,7 @@ namespace
 	       reason we can't simply check this when loading
 	       abbrevs.  */
 	    DEF_PREV_WHERE;
-	    wr_message (prev_where, cat (mc_die_rel, mc_acc_suboptimal,
-					 mc_impact_4))
+	    wr_message (prev_where, mc_die_rel | mc_acc_suboptimal | mc_impact_4)
 	      << "This DIE had children, but no DW_AT_sibling attribute."
 	      << std::endl;
 	  }
@@ -880,8 +878,8 @@ namespace
 					&where, skip_mismatched)))
 	      {
 		if (relocate == rel_no)
-		  wr_message (where, cat (mc_impact_4, mc_die_other,
-					  mc_reloc, extra_mc))
+		  wr_message (where, (mc_impact_4 | mc_die_other
+				      | mc_reloc | extra_mc))
 		    << "unexpected relocation of "
 		    << elfutils::dwarf::forms::name (form_name)
 		    << '.' << std::endl;
@@ -904,8 +902,8 @@ namespace
 		    && (relocate == rel_require
 			|| (relocate == rel_nonzero
 			    && value != 0)))
-		  wr_message (where, cat (mc_impact_2, mc_die_other,
-					  mc_reloc, extra_mc))
+		  wr_message (where, (mc_impact_2 | mc_die_other
+				      | mc_reloc | extra_mc))
 		    << pri::lacks_relocation
 		        (elfutils::dwarf::forms::name (form_name))
 		    << std::endl;
@@ -1159,7 +1157,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
 	/* Did we read up everything?  */
 	{
 	  where wh = WHERE (sec_info, NULL);
-	  wr_message (cat (mc_die_other, mc_impact_4), &wh,
+	  wr_message (mc_die_other | mc_impact_4, &wh,
 		      ": CU lengths don't exactly match Elf_Data contents.");
 	}
       else
@@ -1177,7 +1175,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
 	  for (size_t i = 0; i < it->second.size; ++i)
 	    if (!it->second.abbr[i].used)
 	      wr_message (it->second.abbr[i].where,
-			  cat (mc_impact_3, mc_acc_bloat, mc_abbrevs))
+			  mc_impact_3 | mc_acc_bloat | mc_abbrevs)
 		<< "abbreviation is never used." << std::endl;
     }
 
@@ -1289,7 +1287,7 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
 
       if (_m_aranges != NULL && !it->has_arange)
 	wr_message (it->head->where,
-		    cat (mc_impact_3, mc_acc_suboptimal, mc_aranges, mc_info))
+		    mc_impact_3 | mc_acc_suboptimal | mc_aranges | mc_info)
 	  << "no aranges table is associated with this CU." << std::endl;
     }
 }

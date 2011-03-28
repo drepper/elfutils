@@ -103,7 +103,7 @@ namespace
       return false;
 
     if (*name == '/' && *ptr != 0)
-      wr_message (*where, cat (mc_impact_2, mc_line, mc_header))
+      wr_message (*where, mc_impact_2 | mc_line | mc_header)
 	<< "file #" << nfile
 	<< " has absolute pathname, but refers to directory != 0."
 	<< std::endl;
@@ -111,7 +111,7 @@ namespace
     if (*ptr > include_directories.size ())
       /* Not >=, dirs are indexed from 1.  */
       {
-	wr_message (*where, cat (mc_impact_4, mc_line, mc_header))
+	wr_message (*where, mc_impact_4 | mc_line | mc_header)
 	  << "file #" << nfile
 	  << " refers to directory #" << *ptr
 	  << ", which wasn't defined." << std::endl;
@@ -228,7 +228,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	 "true."  [But give a notice if it's not 0 or 1.]  */
       if (default_is_stmt != 0
 	  && default_is_stmt != 1)
-	wr_message (where, cat (mc_line, mc_impact_2, mc_header))
+	wr_message (where, mc_line | mc_impact_2 | mc_header)
 	  << "default_is_stmt should be 0 or 1, not "
 	  << default_is_stmt << '.' << std::endl;
 
@@ -369,10 +369,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	  struct where wh = WHERE (sec_line, NULL);
 	  uint64_t off_start, off_end;
 	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-	    wr_message_padding_0 (cat (mc_line, mc_header), &wh,
+	    wr_message_padding_0 (mc_line | mc_header, &wh,
 				  off_start, off_end);
 	  else
-	    wr_message_padding_n0 (cat (mc_line, mc_header), &wh,
+	    wr_message_padding_n0 (mc_line | mc_header, &wh,
 				   off_start, program_start - sub_ctx.begin);
 	  sub_ctx.ptr = program_start;
 	}
@@ -489,7 +489,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 #undef ONE_KNOWN_DW_LNE
 		      default:
 			/* No we don't, emit a warning.  */
-			wr_message (where, cat (mc_impact_2, mc_line))
+			wr_message (where, mc_impact_2 | mc_line)
 			  << "unknown extended opcode #" << extended
 			  << '.' << std::endl;
 		      };
@@ -577,7 +577,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 		default:
 		  if (opcode < opcode_base)
-		    wr_message (where, cat (mc_impact_2, mc_line))
+		    wr_message (where, mc_impact_2 | mc_line)
 		      << "unknown standard opcode #" << opcode
 		      << '.' << std::endl;
 		};
@@ -612,7 +612,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
       for (size_t i = 0; i < include_directories.size (); ++i)
 	if (!include_directories[i].used)
 	  wr_message (where,
-		      cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
+		      mc_impact_3 | mc_acc_bloat | mc_line | mc_header)
 	    << "the include #" << i + 1
 	    << " `" << include_directories[i].name
 	    << "' is not used." << std::endl;
@@ -626,14 +626,14 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	  for (size_t i = 0; i < files.size (); ++i)
 	    if (!files[i].used)
 	      wr_message (where,
-			  cat (mc_impact_3, mc_acc_bloat, mc_line, mc_header))
+			  mc_impact_3 | mc_acc_bloat | mc_line | mc_header)
 		<< "the file #" << i + 1
 		<< " `" << files[i].name << "' is not used." << std::endl;
 	    else
 	      useful = true;
 
 	  if (!seen_opcode && !useful)
-	    wr_message (where, cat (mc_line, mc_acc_bloat, mc_impact_3))
+	    wr_message (where, mc_line | mc_acc_bloat | mc_impact_3)
 	      << "empty line number program and no references from .debug_info."
 	      << std::endl;
 	}

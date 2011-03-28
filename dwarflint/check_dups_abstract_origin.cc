@@ -73,8 +73,7 @@ namespace
 	     at = referree.attributes ().begin ();
 	   at != referree.attributes ().end (); ++at)
 	if ((at2 = m.find ((*at).first)) != m.end ())
-	  wr_message (to_where (die),
-		      cat (mc_impact_3, mc_acc_bloat, mc_die_rel))
+	  wr_message (to_where (die), mc_impact_3 | mc_acc_bloat | mc_die_rel)
 	    << "Attribute " << dwarf::attributes::name (at2->first)
 	    << " is duplicated at " << dwarf::attributes::name (attr.first)
 	    << " (" << pri::ref (referree) << ")"

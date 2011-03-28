@@ -153,15 +153,6 @@ extern struct message_criteria warning_criteria;
 /* Accepted (warning) messages, that are turned into errors.  */
 extern struct message_criteria error_criteria;
 
-inline message_category
-cat (message_category c1,
-     message_category c2,
-     message_category c3 = mc_none,
-     message_category c4 = mc_none)
-{
-  return c1 | c2 | c3 | c4;
-}
-
 std::ostream &wr_warning (where const &wh);
 std::ostream &wr_warning ();
 std::ostream &wr_error (where const &wh);

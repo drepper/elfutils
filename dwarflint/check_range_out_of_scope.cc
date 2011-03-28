@@ -137,7 +137,7 @@ check_range_out_of_scope::recursively_validate
       if (high_pc != ::noaddr)
 	{
 	  if (my_ranges.size () != 0)
-	    wr_message (wh, cat (mc_impact_4, mc_info, mc_error))
+	    wr_message (wh, mc_impact_4 | mc_info | mc_error)
 	      << "both low_pc/high_pc pair and ranges present."
 	      << std::endl;
 	  else

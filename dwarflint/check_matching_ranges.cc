@@ -94,7 +94,7 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 
 	  for (range_vec::iterator it = missing.begin ();
 	       it != missing.end (); ++it)
-	    wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_r,
+	    wr_message (mc_ranges | mc_aranges | mc_impact_3, &where_r,
 			": missing range %s, present in .debug_aranges.\n",
 			range_fmt (buf, sizeof buf, it->first, it->second));
 
@@ -105,7 +105,7 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 
 	  for (range_vec::iterator it = missing.begin ();
 	       it != missing.end (); ++it)
-	    wr_message (cat (mc_ranges, mc_aranges, mc_impact_3), &where_ar,
+	    wr_message (mc_ranges | mc_aranges | mc_impact_3, &where_ar,
 			": missing range %s, present in .debug_ranges.\n",
 			range_fmt (buf, sizeof buf, it->first, it->second));
 	}
