@@ -303,7 +303,7 @@ check_aranges_structural (struct elf_file *file,
 	}
       if (segment_size != 0)
 	{
-	  wr_warning (&where, ": dwarflint can't handle segment_size != 0.\n");
+	  wr_error (&where, ": dwarflint can't handle segment_size != 0.\n");
 	  retval = false;
 	  goto next;
 	}

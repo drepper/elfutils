@@ -180,7 +180,7 @@ do_one_relocation (elf_file const *file,
       && ELF64_ST_TYPE (symbol->st_info) == STT_SECTION)
     {
       if (sym_value != 0)
-	wr_warning (reloc_where)
+	wr_message (reloc_where, mc_reloc | mc_impact_1)
 	  << "relocation formed using STT_SECTION symbol with non-zero value."
 	  << std::endl;
 

@@ -115,9 +115,6 @@ message_criteria operator ! (message_term const &);
 extern void wr_error (const struct where *wh, const char *format, ...)
   __attribute__ ((format (printf, 2, 3)));
 
-extern void wr_warning (const struct where *wh, const char *format, ...)
-  __attribute__ ((format (printf, 2, 3)));
-
 extern void wr_message (unsigned long category, const struct where *wh,
 			const char *format, ...)
   __attribute__ ((format (printf, 3, 4)));
@@ -153,8 +150,6 @@ extern struct message_criteria warning_criteria;
 /* Accepted (warning) messages, that are turned into errors.  */
 extern struct message_criteria error_criteria;
 
-std::ostream &wr_warning (where const &wh);
-std::ostream &wr_warning ();
 std::ostream &wr_error (where const &wh);
 std::ostream &wr_error ();
 std::ostream &wr_message (where const &wh, message_category cat);

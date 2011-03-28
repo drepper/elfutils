@@ -272,15 +272,6 @@ wr_error (const struct where *wh, const char *format, ...)
 }
 
 void
-wr_warning (const struct where *wh, const char *format, ...)
-{
-  va_list ap;
-  va_start (ap, format);
-  wr_vwarning (wh, format, ap);
-  va_end (ap);
-}
-
-void
 wr_message (unsigned long category, const struct where *wh,
 	    const char *format, ...)
 {
@@ -307,7 +298,7 @@ namespace
   }
 }
 
-std::ostream &
+static std::ostream &
 wr_warning ()
 {
   ++error_count;
@@ -330,12 +321,6 @@ wr_message (message_category category)
     return wr_error ();
   else
     return wr_warning ();
-}
-
-std::ostream &
-wr_warning (where const &wh)
-{
-  return wr_warning () << wh << ": ";
 }
 
 std::ostream &
