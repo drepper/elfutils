@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -60,6 +60,15 @@ checkdescriptor::create::create (char const *name)
   : _m_name (name)
   , _m_description (NULL)
   , _m_hidden (false)
+{}
+
+checkdescriptor::create::create (checkdescriptor const &base)
+  : _m_groups (base.groups ())
+  , _m_prereq (base.prereq ())
+  , _m_name (base.name ())
+  , _m_description (base.description ())
+  , _m_hidden (base.hidden ())
+  , _m_opts (base.opts ())
 {}
 
 checkdescriptor::create &

@@ -1,5 +1,5 @@
-/*
-   Copyright (C) 2010 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,32 +23,49 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "checks.hh"
-#include "option.hh"
+#ifndef _CHECK_REGISTRAR_H_
+#define _CHECK_REGISTRAR_H_
 
-static global_opt<void_option> show_progress
-  ("Print out checks as they are performed, their context and result.",
-   "show-progress");
+#include "dwarflint.ii"
+#include "checkdescriptor.ii"
 
-reporter::reporter (checkstack const &s, checkdescriptor const &a_cd)
-  : stack (s)
-  , cd (a_cd)
+#include <vector>
+#include <set>
+#include <iostream>
+
+namespace check_registrar_aux
 {
-  (*this) ("...", true);
+  bool be_verbose ();
+  void list_one_check (checkdescriptor const &cd);
+
+  void include (std::set<checkdescriptor const *> &to,
+		checkdescriptor const *cd);
+  void add_deps (std::set<checkdescriptor const *> &to,
+		 checkdescriptor const *cd);
 }
 
-void
-reporter::operator () (char const *what, bool ext)
+template <class Item>
+class check_registrar_T
+  : protected std::vector<Item *>
 {
-  if (!show_progress)
-    return;
+  typedef std::vector<Item *> _super_t;
+public:
 
-  if (false)
-    for (size_t i = 0; i < stack.size (); ++i)
-      std::cout << ' ';
+  using _super_t::push_back;
+  using _super_t::const_iterator;
+  using _super_t::begin;
+  using _super_t::end;
 
-  std::cout << cd.name () << ' ' << what;
-  if (ext)
-    std::cout << ' ' << cd.groups () << ' ' << stack;
-  std::cout << std::endl;
-}
+  typedef std::vector<checkdescriptor const *> checkdescriptors_t;
+
+  checkdescriptors_t
+  get_descriptors () const
+  {
+    std::set<checkdescriptor const *> descriptors;
+    for (typename _super_t::const_iterator it = begin (); it != end (); ++it)
+      check_registrar_aux::include (descriptors, (*it)->descriptor ());
+    return checkdescriptors_t (descriptors.begin (), descriptors.end ());
+  }
+};
+
+#endif /* _CHECK_REGISTRAR_H_ */

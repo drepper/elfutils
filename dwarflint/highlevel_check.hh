@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -40,7 +40,9 @@ class open_highlevel_dwarf
   Dwfl *const _m_dwfl;
 public:
   static checkdescriptor const *descriptor () {
-    static checkdescriptor cd ("open_highlevel_dwarf");
+    static checkdescriptor cd
+      (checkdescriptor::create ("open_highlevel_dwarf")
+       .hidden ());
     return &cd;
   }
 

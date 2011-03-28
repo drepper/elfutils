@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -35,11 +35,47 @@
 #include "checks.ii"
 #include "checkdescriptor.ii"
 #include "checkrule.hh"
+#include "check_registrar.hh"
+#include "dwarflint.ii"
+
+// Classes for full-blown check passes.
+struct main_check_item
+{
+  virtual checkdescriptor const *descriptor () const = 0;
+  virtual ~main_check_item () {}
+  virtual void run (checkstack &stack, dwarflint &lint) = 0;
+};
+
+class main_check_registrar
+  : public check_registrar_T<main_check_item>
+{
+public:
+  friend class dwarflint;
+  void run (dwarflint &lint);
+};
+
+// Classes for simplified single-die passes.
+struct die_check_item
+{
+  virtual checkdescriptor const *descriptor () const = 0;
+  virtual ~die_check_item () {}
+  virtual die_check *create (checkstack &stack, dwarflint &lint) = 0;
+};
+
+class die_check_registrar
+  : public check_registrar_T<die_check_item>
+{
+public:
+  friend class dwarflint;
+  void run (checkstack &stack, dwarflint &lint);
+};
+
 
 class checkstack
   : public std::vector <checkdescriptor const *>
 {};
 std::ostream &operator << (std::ostream &o, checkstack const &stack);
+
 
 class dwarflint
 {
@@ -57,56 +93,47 @@ class dwarflint
   // was detected.
   void *find_check (void const *key);
 
-public:
-  struct check_registrar
+  template <class T>
+  static check_base *
+  create_check_object (checkstack &stack, dwarflint &lint)
   {
-    struct item
-    {
-      virtual void run (checkstack &stack, dwarflint &lint) = 0;
-      virtual checkdescriptor const *descriptor () const = 0;
-    };
+    return new T (stack, lint);
+  }
 
-    static check_registrar *inst ()
-    {
-      static check_registrar inst;
-      return &inst;
-    }
+  void *dispatch_check (checkstack &stack,
+			checkdescriptor const &cd,
+			void const *key,
+			check_base *(* create) (checkstack &, dwarflint &));
 
-    void add (item *i)
-    {
-      _m_items.push_back (i);
-    }
-
-    void list_checks () const;
-
-    typedef std::vector<checkdescriptor const *> checkdescriptors_t;
-    checkdescriptors_t get_descriptors () const;
-
-  private:
-    friend class dwarflint;
-    void enroll (dwarflint &lint);
-
-    std::vector <item *> _m_items;
-  };
-
+public:
   dwarflint (char const *fname, checkrules const &rules);
   ~dwarflint ();
   int fd () { return _m_fd; }
   char const *fname () { return _m_fname; }
 
-  template <class T> T *check (checkstack &stack);
+  template <class T>
+  T *
+  check (checkstack &stack)
+  {
+    void const *key = T::key ();
+    T *c = static_cast <T *> (find_check (key));
+    checkdescriptor const &cd = *T::descriptor ();
+
+    if (c == NULL)
+      c = (T *)dispatch_check (stack, cd, key, &create_check_object<T>);
+
+    return c;
+  }
 
   template <class T>
   T *
-  check (checkstack &stack,
-	 __attribute__ ((unused)) T *fake)
+  check (checkstack &stack, T *)
   {
     return check<T> (stack);
   }
 
   template <class T>
-  T *toplev_check (checkstack &stack,
-		   __attribute__ ((unused)) T *fake = NULL);
+  T *toplev_check (checkstack &stack, T *fake = NULL);
 
   template <class T>
   T *
@@ -118,6 +145,17 @@ public:
     else
       return NULL;
   }
+
+  checkrules const &
+  rules () const
+  {
+    return _m_rules;
+  }
+
+  static main_check_registrar *main_registrar ();
+  static die_check_registrar *die_registrar ();
+
+  static void list_checks ();
 };
 
 #endif//DWARFLINT_HH

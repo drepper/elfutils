@@ -30,6 +30,8 @@
 #include "dwarflint.hh"
 #include "checkdescriptor.hh"
 #include "messages.hh"
+#include "check_registrar.hh"
+
 #include <string>
 #include <cassert>
 
@@ -53,97 +55,24 @@ private:
   }
 };
 
-struct reporter
+class popper
 {
-  checkstack const &stack;
-  checkdescriptor const &cd;
+  checkstack &_m_guard_stack;
 
-  reporter (checkstack const &s, checkdescriptor const &a_cd);
-  void operator () (char const *what, bool ext = false);
+public:
+  popper (checkstack &guard_stack)
+    : _m_guard_stack (guard_stack)
+  {}
+
+  ~popper ()
+  {
+    _m_guard_stack.pop_back ();
+  }
 };
 
 template <class T>
-T *
-dwarflint::check (checkstack &stack)
-{
-  void const *key = T::key ();
-  T *c = static_cast <T *> (find_check (key));
-
-  if (c == NULL)
-    {
-      checkdescriptor const &cd = *T::descriptor ();
-
-      struct popper {
-	checkstack &guard_stack;
-	popper (checkstack &a_guard_stack) : guard_stack (a_guard_stack) {}
-	~popper () { guard_stack.pop_back (); }
-      };
-
-      // Put a marker there indicating that we are trying to satisfy
-      // that dependency.
-      bool inserted
-	= _m_checks.insert (std::make_pair (key, (T *)marker)).second;
-      assert (inserted || !"duplicate key");
-
-#define FAIL					\
-      /* Put the anchor in the table.  */	\
-	_m_checks[key] = NULL;			\
-	report ("FAIL")
-
-      reporter report (stack, cd);
-      try
-	{
-	  stack.push_back (&cd);
-	  popper p (stack);
-
-	  if (!_m_rules.should_check (stack))
-	    throw check_base::unscheduled ();
-
-	  // Now do the check.
-	  c = new T (stack, *this);
-	}
-      catch (check_base::unscheduled &e)
-	{
-	  report ("skipped");
-	  _m_checks.erase (key);
-	  throw;
-	}
-      catch (check_base::failed &e)
-	{
-	  // We can assume that the check emitted error message.
-	  FAIL;
-	  throw;
-	}
-      catch (std::exception &e)
-	{
-	  wr_error () << "A check failed: " << (cd.name () ?: "(nil)") << ": "
-		      << e.what () << std::endl;
-	  FAIL;
-	  throw check_base::failed ();
-	}
-      catch (...)
-	{
-	  wr_error () << "A check failed: " << (cd.name () ?: "(nil)") << "."
-		      << std::endl;
-	  FAIL;
-	  throw check_base::failed ();
-	}
-
-#undef FAIL
-
-      report ("done");
-
-      // On success, put the actual check object there instead of the
-      // marker.
-      _m_checks[key] = c;
-    }
-  return c;
-}
-
-template <class T>
 inline T *
-dwarflint::toplev_check (checkstack &stack,
-			 __attribute__ ((unused)) T *tag)
+dwarflint::toplev_check (checkstack &stack, T *)
 {
   try
     {
@@ -157,11 +86,10 @@ dwarflint::toplev_check (checkstack &stack,
 
 template <class T>
 struct reg
-  : public dwarflint::check_registrar::item
+  : public main_check_item
 {
-  reg ()
-  {
-    dwarflint::check_registrar::inst ()->add (this);
+  reg () {
+    dwarflint::main_registrar ()->push_back (this);
   }
 
   virtual void run (checkstack &stack, dwarflint &lint)

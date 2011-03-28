@@ -41,10 +41,11 @@ noinst_PROGRAMS = tests/test-coverage tests/test-wrap tests/test-all-dies-it
 dwarflint_SOURCES = \
 	addr-record.cc addr-record.hh \
 	all-dies-it.hh \
+	check_registrar.cc check_registrar.hh check_registrar.ii \
 	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
 	checked_read.cc checked_read.hh \
 	checkrule.cc checkrule.hh \
-	checks.cc checks.hh checks.ii \
+	checks.hh checks.ii \
 	coverage.cc coverage.hh \
 	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
 	dwarf_2.cc dwarf_2.hh \
@@ -76,6 +77,7 @@ dwarflint_SOURCES = \
 	check_debug_line.cc check_debug_line.hh check_debug_line.ii \
 	check_debug_loc_range.cc check_debug_loc_range.hh check_debug_loc_range.ii \
 	check_debug_pub.cc check_debug_pub.hh \
+	check_die_tree.cc check_die_tree.hh check_die_tree.ii \
 	check_duplicate_DW_tag_variable.cc \
 	check_dups_abstract_origin.cc \
 	check_expected_trees.cc \

@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -30,6 +30,7 @@
 #include "option.hh"
 #include "dwarflint.hh"
 #include "checkdescriptor.hh"
+#include "check_registrar.hh"
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -91,8 +92,7 @@ argppp &
 argppp::inst ()
 {
   static argppp my
-    (global_opts,
-     dwarflint::check_registrar::inst ()->get_descriptors ());
+    (global_opts, dwarflint::main_registrar ()->get_descriptors ());
   return my;
 }
 
@@ -102,7 +102,7 @@ argppp::argppp (options const &global,
 {
   argp main = global.build_argp (true);
 
-  typedef dwarflint::check_registrar::checkdescriptors_t checkdescriptors_t;
+  typedef main_check_registrar::checkdescriptors_t checkdescriptors_t;
   for (checkdescriptors_t::const_iterator it = checkdescriptors.begin ();
        it != checkdescriptors.end (); ++it)
     if (!(*it)->opts ().empty ())
