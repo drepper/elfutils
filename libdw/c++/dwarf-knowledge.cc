@@ -39,6 +39,10 @@ expected_value_space (int attr, int tag)
     case DW_AT_segment:
     case DW_AT_static_link:
     case DW_AT_vtable_elem_location:
+    case DW_AT_GNU_call_site_value:
+    case DW_AT_GNU_call_site_data_value:
+    case DW_AT_GNU_call_site_target:
+    case DW_AT_GNU_call_site_target_clobbered:
       return VS(location);
 
     case DW_AT_data_member_location:
@@ -120,6 +124,10 @@ expected_value_space (int attr, int tag)
     case DW_AT_elemental:
     case DW_AT_pure:
     case DW_AT_recursive:
+    case DW_AT_GNU_tail_call:
+    case DW_AT_GNU_all_tail_call_sites:
+    case DW_AT_GNU_all_call_sites:
+    case DW_AT_GNU_all_source_call_sites:
       return VS(flag);
 
     case DW_AT_producer:
