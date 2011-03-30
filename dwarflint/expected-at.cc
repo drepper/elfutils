@@ -191,6 +191,9 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_sibling)
     .optional (DW_AT_static_link)
     .optional (DW_AT_type)
+    .optional (DW_AT_GNU_all_tail_call_sites)
+    .optional (DW_AT_GNU_all_call_sites)
+    .optional (DW_AT_GNU_all_source_call_sites)
     ;
 
   m_map [DW_TAG_enumeration_type]
@@ -570,6 +573,9 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_vtable_elem_location)
     .optional (DW_AT_MIPS_linkage_name) // XXX added to reflect reality
     .optional (DW_AT_containing_type) // XXX added to reflect reality
+    .optional (DW_AT_GNU_all_tail_call_sites)
+    .optional (DW_AT_GNU_all_call_sites)
+    .optional (DW_AT_GNU_all_source_call_sites)
     ;
 
   m_map [DW_TAG_subrange_type]
@@ -756,5 +762,29 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_sibling)
     .optional (DW_AT_type)
     .optional (DW_AT_visibility)
+    ;
+
+  m_map [DW_TAG_GNU_call_site]
+    .optional (DW_AT_abstract_origin)
+    .optional (DW_AT_call_column)
+    .optional (DW_AT_call_file)
+    .optional (DW_AT_call_line)
+    .optional (DW_AT_GNU_call_site_target)
+    .optional (DW_AT_GNU_call_site_target_clobbered)
+    .required (DW_AT_low_pc)
+    .optional (DW_AT_sibling)
+    .optional (DW_AT_GNU_tail_call)
+    .optional (DW_AT_type)
+    ;
+
+  m_map [DW_TAG_GNU_call_site_parameter]
+    .optional (DW_AT_abstract_origin)
+    .optional (DW_AT_GNU_call_site_data_value)
+    .optional (DW_AT_GNU_call_site_value)
+    .optional (DW_AT_data_location)
+    .required (DW_AT_location)
+    .optional (DW_AT_name)
+    .optional (DW_AT_sibling)
+    .optional (DW_AT_type)
     ;
 }
