@@ -86,13 +86,27 @@ namespace
   struct dwarf_gnu_ext_t
     : public std_dwarf
   {
-    dwarf_gnu_ext_t ()
-      : std_dwarf (dwarf_gnu_attributes (), form_table ())
-    {}
+    unsigned _m_version;
 
-    virtual bool
+    dwarf_gnu_ext_t (unsigned version)
+      : std_dwarf (dwarf_gnu_attributes (), form_table ()),
+	_m_version (version)
+    { }
+
+    bool
     form_allowed (attribute const *attr, form const *form) const
     {
+      // Without -gstrict-dwarf gcc allows usage of attributes from
+      // later versions. One strange case is DW_AT_ranges in version 2
+      // since that version doesn't actually define a rangelistptr
+      // class. So we just allow data4 or data8 here.
+      if (_m_version == 2 && attr->name () == DW_AT_ranges)
+	{
+	  form_width_t width = form->width (NULL);
+	  return (form->classes ()[cl_constant]
+		  && (width == fw_4 || width == fw_8));
+	}
+
       if (attr->name () == DW_AT_GNU_odr_signature)
 	return form->classes ()[cl_constant] && form->width (NULL) == fw_8;
       else
@@ -102,8 +116,8 @@ namespace
 }
 
 dwarf_version const *
-dwarf_gnu_ext ()
+dwarf_gnu_ext (unsigned version)
 {
-  static dwarf_gnu_ext_t dw;
+  static dwarf_gnu_ext_t dw (version);
   return &dw;
 }

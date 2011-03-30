@@ -28,6 +28,6 @@
 
 #include "dwarf_version.ii"
 
-dwarf_version const *dwarf_gnu_ext ();
+dwarf_version const *dwarf_gnu_ext (unsigned version);
 
 #endif//DWARFLINT_DWARF_GNU_HH

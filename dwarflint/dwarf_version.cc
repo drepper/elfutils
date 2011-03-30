@@ -219,6 +219,18 @@ namespace
 	ret = _m_source->ambiguous_class (form, attribute, candidates);
       return ret;
     }
+
+    bool
+    form_allowed (attribute const *attr, form const *form) const
+    {
+      // In GNU mode any combination of new attribute/old form goes,
+      // in strict mode only the latest.
+      if (opt_nognu)
+	return _m_extension->form_allowed (attr, form);
+      else
+	return (_m_source->form_allowed (attr, form)
+		|| _m_extension->form_allowed (attr, form));
+    }
   };
 }
 
@@ -235,7 +247,7 @@ dwarf_version::extend (dwarf_version const *source,
 
 namespace
 {
-  dwarf_version const *get_ext ()
+  dwarf_version const *get_ext (unsigned version)
   {
     // xxx The GNU toolchain commonly uses DW_AT_MIPS_linkage_name,
     // which is part of the MIPS extensions.  So that's what we
@@ -247,31 +259,33 @@ namespace
     if (opt_nognu)
       return dwarf_mips_ext ();
     else
-      return dwarf_version::extend (dwarf_mips_ext (), dwarf_gnu_ext ());
+      return dwarf_version::extend (dwarf_mips_ext (),
+                                    dwarf_gnu_ext (version));
   }
 }
 
 dwarf_version const *
 dwarf_version::get (unsigned version)
 {
-  static dwarf_version const *ext = get_ext ();
-
   switch (version)
     {
     case 2:
       {
+	static dwarf_version const *ext = get_ext (2);
 	static dwarf_version const *dw = extend (dwarf_2 (), ext);
 	return dw;
       }
 
     case 3:
       {
+	static dwarf_version const *ext = get_ext (3);
 	static dwarf_version const *dw = extend (dwarf_3 (), ext);
 	return dw;
       }
 
     case 4:
       {
+	static dwarf_version const *ext = get_ext (4);
 	static dwarf_version const *dw = extend (dwarf_4 (), ext);
 	return dw;
       }
