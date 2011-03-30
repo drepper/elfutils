@@ -94,6 +94,17 @@ namespace
     virtual bool
     form_allowed (attribute const *attr, form const *form) const
     {
+      // Without -gstrict-dwarf gcc allows usage of attributes from
+      // later versions. One strange case is DW_AT_ranges in version 2
+      // since that version doesn't actually define a rangelistptr
+      // class. So we just allow data4 or data8 here.
+      if (attr->name () == DW_AT_ranges)
+	{
+	  form_width_t width = form->width (NULL);
+	  return (form->classes ()[cl_constant]
+		  && (width == fw_4 || width == fw_8));
+	}
+
       if (attr->name () == DW_AT_GNU_odr_signature)
 	return form->classes ()[cl_constant] && form->width (NULL) == fw_8;
       else

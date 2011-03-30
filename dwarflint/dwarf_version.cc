@@ -219,6 +219,18 @@ namespace
 	ret = _m_source->ambiguous_class (form, attribute, candidates);
       return ret;
     }
+
+    bool
+    form_allowed (attribute const *attr, form const *form) const
+    {
+      // In GNU mode any combination of new attribute/old form goes,
+      // in strict mode only the latest.
+      if (opt_nognu)
+	return _m_extension->form_allowed (attr, form);
+      else
+	return (_m_source->form_allowed (attr, form)
+		|| _m_extension->form_allowed (attr, form));
+    }
   };
 }
 
