@@ -174,7 +174,6 @@ namespace
 	uint64_t abbr_off;
 	uint64_t abbr_code;
 	{
-	  uint64_t prev_abbr_off = (uint64_t)-1;
 	  uint64_t prev_abbr_code = (uint64_t)-1;
 	  uint64_t zero_seq_off = (uint64_t)-1;
 
@@ -203,7 +202,6 @@ namespace
 		section = NULL;
 
 	      prev_abbr_code = abbr_code;
-	      prev_abbr_off = abbr_off;
 	    }
 	  while (!read_ctx_eof (&ctx)
 		 /* On EOF, shift the offset so that beyond-EOF
