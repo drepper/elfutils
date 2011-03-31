@@ -54,6 +54,19 @@ namespace
       return &cd;
     }
 
+    bool
+    duplicate_ok (int tag, int at, int from)
+    {
+      // A call site entry has a DW_AT_low_pc attribute which is the return
+      // address after the call and a DW_AT_abstract_origin that is a
+      // pointer to the reference it calls directly or indirectly.
+      if (tag == DW_TAG_GNU_call_site)
+	if (at == DW_AT_low_pc && from == DW_AT_abstract_origin)
+	  return true;
+
+      return false;
+    }
+
     void
     check_die_attr (dwarf::debug_info_entry const &die,
 		    dwarf::attribute const &attr)
@@ -72,7 +85,8 @@ namespace
       for (dwarf::debug_info_entry::attributes_type::const_iterator
 	     at = referree.attributes ().begin ();
 	   at != referree.attributes ().end (); ++at)
-	if ((at2 = m.find ((*at).first)) != m.end ())
+	if ((at2 = m.find ((*at).first)) != m.end ()
+	    && ! duplicate_ok (die.tag (), at2->first, attr.first))
 	  wr_message (to_where (die), mc_impact_3 | mc_acc_bloat | mc_die_rel)
 	    << "Attribute " << dwarf::attributes::name (at2->first)
 	    << " is duplicated at " << dwarf::attributes::name (attr.first)
