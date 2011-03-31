@@ -89,6 +89,25 @@ check_range_out_of_scope::check_range_out_of_scope (checkstack &stack, dwarflint
     }
 }
 
+/* These PC-ful DIEs should be wholly contained by PC-ful parental DIE.  */
+bool
+is_pc_contained_die (dwarf::debug_info_entry const &die)
+{
+  switch (die.tag ())
+    {
+      case DW_TAG_inlined_subroutine:
+      case DW_TAG_lexical_block:
+      case DW_TAG_entry_point:
+      case DW_TAG_label:
+      case DW_TAG_with_stmt:
+      case DW_TAG_try_block:
+      case DW_TAG_catch_block:
+        return true;
+      default:
+        return false;
+    }
+}
+
 void
 check_range_out_of_scope::recursively_validate
   (dwarf::compile_unit const &cu,
@@ -147,45 +166,30 @@ check_range_out_of_scope::recursively_validate
 
   // If my_ranges is non-empty, check that it's a subset of
   // ranges.
-  if (my_ranges.size () != 0)
+  if (is_pc_contained_die (die) && my_ranges.size () != 0)
     {
-      // xxx Extract this logic to some table.
-      switch (die.tag ())
+      coverage cov1;
+      for (ranges_t::const_iterator it = my_ranges.begin ();
+	   it != my_ranges.end (); ++it)
+	cov1.add ((*it).first, (*it).second - (*it).first);
+
+      coverage cov2;
+      for (ranges_t::const_iterator it = ranges.begin ();
+	   it != ranges.end (); ++it)
+	cov2.add ((*it).first, (*it).second - (*it).first);
+
+      coverage result = cov1 - cov2;
+
+      if (!result.empty ())
 	{
-	  /* These PC-ful DIEs should be wholly contained by
-	     PC-ful parental DIE.  */
-	case DW_TAG_inlined_subroutine:
-	case DW_TAG_lexical_block:
-	case DW_TAG_entry_point:
-	case DW_TAG_label:
-	case DW_TAG_with_stmt:
-	case DW_TAG_try_block:
-	case DW_TAG_catch_block:
-	  {
-	    coverage cov1;
-	    for (ranges_t::const_iterator it = my_ranges.begin ();
-		 it != my_ranges.end (); ++it)
-	      cov1.add ((*it).first, (*it).second - (*it).first);
+	  wr_message (wh, mc_error)
+	    << "PC range " << cov::format_ranges (cov1)
+	    << " is not a sub-range of containing scope."
+	    << std::endl;
 
-	    coverage cov2;
-	    for (ranges_t::const_iterator it = ranges.begin ();
-		 it != ranges.end (); ++it)
-	      cov2.add ((*it).first, (*it).second - (*it).first);
-
-	    coverage result = cov1 - cov2;
-
-	    if (!result.empty ())
-	      {
-		wr_message (wh, mc_error)
-		  << "PC range " << cov::format_ranges (cov1)
-		  << " is not a sub-range of containing scope."
-		  << std::endl;
-
-		wr_message (wh_parent, mc_error)
-		  << "in this context: " << cov::format_ranges (cov2)
-		  << std::endl;
-	      }
-	  }
+	  wr_message (wh_parent, mc_error)
+	    << "in this context: " << cov::format_ranges (cov2)
+	    << std::endl;
 	}
     }
 
@@ -200,40 +204,43 @@ check_range_out_of_scope::recursively_validate
 
   // Now finally look for location attributes and check that
   // _their_ PCs form a subset of ranges of this DIE.
-  for (dwarf::debug_info_entry::attributes_type::const_iterator
-	 at = die.attributes ().begin ();
-       at != die.attributes ().end (); ++at)
+  if (is_pc_contained_die (die))
     {
-      dwarf::attr_value const &value = (*at).second;
-      dwarf::value_space vs = value.what_space ();
-
-      if (vs == dwarf::VS_location)
+      for (dwarf::debug_info_entry::attributes_type::const_iterator
+	     at = die.attributes ().begin ();
+	   at != die.attributes ().end (); ++at)
 	{
-	  dwarf::location_attr const &loc = value.location ();
-	  if (loc.is_list ())
+	  dwarf::attr_value const &value = (*at).second;
+	  dwarf::value_space vs = value.what_space ();
+
+	  if (vs == dwarf::VS_location)
 	    {
-	      bool runoff = false;
-	      for (dwarf::location_attr::const_iterator
-		     lt = loc.begin (); lt != loc.end (); ++lt)
+	      dwarf::location_attr const &loc = value.location ();
+	      if (loc.is_list ())
 		{
-		  ::Dwarf_Addr start = (*lt).first.first; //1st insn
-		  ::Dwarf_Addr end = (*lt).first.second; //1st past end
-		  ::Dwarf_Addr length = end - start;
-		  if (length > 0 // skip empty ranges
-		      && !cov.is_covered (start, length))
+		  bool runoff = false;
+		  for (dwarf::location_attr::const_iterator
+			 lt = loc.begin (); lt != loc.end (); ++lt)
 		    {
-		      runoff = true;
-		      wr_message (wh, mc_error)
-			<< "attribute `"
-			<< elfutils::dwarf::attributes::name ((*at).first)
-			<< "': PC range " << pri::range (start, end)
-			<< " outside containing scope." << std::endl;
+		      ::Dwarf_Addr start = (*lt).first.first; //1st insn
+		      ::Dwarf_Addr end = (*lt).first.second; //1st past end
+		      ::Dwarf_Addr length = end - start;
+		      if (length > 0 // skip empty ranges
+			  && !cov.is_covered (start, length))
+			{
+			  runoff = true;
+			  wr_message (wh, mc_error)
+			    << "attribute `"
+			    << elfutils::dwarf::attributes::name ((*at).first)
+			    << "': PC range " << pri::range (start, end)
+			    << " outside containing scope." << std::endl;
+			}
 		    }
+		  if (runoff)
+		    wr_message (wh_parent, mc_error)
+		      << "in this context: " << cov::format_ranges (cov)
+		      << '.' << std::endl;
 		}
-	      if (runoff)
-		wr_message (wh_parent, mc_error)
-		  << "in this context: " << cov::format_ranges (cov)
-		  << '.' << std::endl;
 	    }
 	}
     }
