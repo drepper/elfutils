@@ -92,7 +92,7 @@ argppp &
 argppp::inst ()
 {
   static argppp my
-    (global_opts, dwarflint::main_registrar ()->get_descriptors ());
+    (global_opts (), dwarflint::main_registrar ()->get_descriptors ());
   return my;
 }
 
@@ -165,7 +165,7 @@ void
 argppp::parse (int argc, char **argv, unsigned flags, int *remaining)
 {
   assert (!_m_inited);
-  argp_parse (&_m_argp, argc, argv, flags, remaining, &global_opts);
+  argp_parse (&_m_argp, argc, argv, flags, remaining, &global_opts ());
 }
 
 void
@@ -209,4 +209,12 @@ option_common::option_common (char const *description,
   , _m_seen (false)
 {}
 
-options global_opts;
+// Trick to make sure the static options are always initialized
+// before access (it is used from various global initializers.
+
+options &
+global_opts ()
+{
+  static options inst;
+  return inst;
+}

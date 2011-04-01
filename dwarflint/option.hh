@@ -218,7 +218,7 @@ typedef xoption<void> void_option;
 typedef xoption<std::string> string_option;
 typedef xoption<unsigned> unsigned_option;
 
-extern options global_opts;
+options & global_opts ();
 
 template<class OPT>
 struct global_opt
@@ -228,7 +228,7 @@ struct global_opt
   global_opt (Args const&... args)
     : OPT (args...)
   {
-    global_opts.add (this);
+    global_opts ().add (this);
   }
 };
 
