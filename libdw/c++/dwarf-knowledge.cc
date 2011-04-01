@@ -128,6 +128,7 @@ expected_value_space (int attr, int tag)
     case DW_AT_GNU_all_tail_call_sites:
     case DW_AT_GNU_all_call_sites:
     case DW_AT_GNU_all_source_call_sites:
+    case DW_AT_GNU_vector:
       return VS(flag);
 
     case DW_AT_producer:

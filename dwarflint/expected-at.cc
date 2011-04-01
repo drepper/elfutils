@@ -61,6 +61,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_start_scope)
     .optional (DW_AT_type)
     .optional (DW_AT_visibility)
+    .optional (DW_AT_GNU_vector)
     ;
 
   m_map [DW_TAG_base_type]
