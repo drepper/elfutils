@@ -59,10 +59,13 @@ namespace
     {
       // A call site entry has a DW_AT_low_pc attribute which is the return
       // address after the call and a DW_AT_abstract_origin that is a
-      // pointer to the reference it calls directly or indirectly.
-      if (tag == DW_TAG_GNU_call_site)
-	if (at == DW_AT_low_pc && from == DW_AT_abstract_origin)
-	  return true;
+      // pointer to the reference it calls directly or indirectly. So
+      // both may be available also at the abstract_origin (with different
+      // values).
+      if (tag == DW_TAG_GNU_call_site
+	  && (at == DW_AT_low_pc || at == DW_AT_abstract_origin)
+	  && from == DW_AT_abstract_origin)
+	return true;
 
       return false;
     }
