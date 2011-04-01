@@ -89,7 +89,8 @@ check_debug_pub<sec_id>::check_pub_structural ()
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (_m_sec->sect.id, NULL);
+      enum section_id sid = _m_sec->sect.id;
+      struct where where = WHERE (sid, NULL);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
       const unsigned char *set_begin = ctx.ptr;
 
@@ -219,7 +220,8 @@ check_debug_pub<sec_id>::check_pub_structural ()
 	  while (c);
 	}
 
-	struct where wh = WHERE (_m_sec->sect.id, NULL);
+	sid = _m_sec->sect.id;
+	struct where wh = WHERE (sid, NULL);
 	if (sub_ctx.ptr != sub_ctx.end)
 	  {
 	    uint64_t off_start, off_end;
