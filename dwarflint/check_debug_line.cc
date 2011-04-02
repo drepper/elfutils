@@ -459,6 +459,25 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      break;
 		    }
 
+		  case DW_LNE_set_discriminator:
+		    {
+		      /* XXX Is there anything interesting we should
+			 check here?  */
+		      uint64_t disc;
+		      if (!checked_read_uleb128 (&sub_ctx, &disc, &where,
+						 "set_discriminator operand"))
+			goto skip;
+
+		      /* The discriminator is reset to zero on any
+			 sequence change.  So setting to zero is never
+			 necessary.  */
+		      if (disc == 0)
+			wr_message (where, mc_line | mc_impact_1)
+			  << "DW_LNE_set_discriminator with zero operand."
+			  << std::endl;
+		      break;
+		    }
+
 		  case DW_LNE_define_file:
 		    {
 		      const char *name;
@@ -490,7 +509,8 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      default:
 			/* No we don't, emit a warning.  */
 			wr_message (where, mc_impact_2 | mc_line)
-			  << "unknown extended opcode #" << extended
+			  << "unknown extended opcode 0x"
+			  << std::hex << +extended << std::dec
 			  << '.' << std::endl;
 		      };
 		  };
@@ -578,7 +598,8 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		default:
 		  if (opcode < opcode_base)
 		    wr_message (where, mc_impact_2 | mc_line)
-		      << "unknown standard opcode #" << opcode
+		      << "unknown standard opcode 0x"
+		      << std::hex << +opcode << std::dec
 		      << '.' << std::endl;
 		};
 	    };
@@ -591,8 +612,8 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		sprintf (buf, "operand #%d of DW_LNS_%s",
 			 i, dwarf_line_standard_opcode_string (opcode));
 	      else
-		sprintf (buf, "operand #%d of extended opcode %d",
-			 i, extended);
+		sprintf (buf, "operand #%d of DW_LNE_%s",
+			 i, dwarf_line_extended_opcode_string (extended));
 	      if (!checked_read_uleb128 (&sub_ctx, &operand, &where, buf))
 		goto skip;
 	    }

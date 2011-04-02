@@ -61,6 +61,8 @@ const char *dwarf_locexpr_opcode_string (unsigned int code);
 
 const char *dwarf_line_standard_opcode_string (unsigned int code);
 
+const char *dwarf_line_extended_opcode_string (unsigned int code);
+
 #ifdef __cplusplus
 }
 #endif
