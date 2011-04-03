@@ -162,6 +162,7 @@ expected_value_space (int attr, int tag)
 
     case DW_AT_linkage_name:
     case DW_AT_MIPS_linkage_name:
+    case DW_AT_GNU_template_name:
       return VS(identifier);
 
     case DW_AT_GNU_odr_signature:

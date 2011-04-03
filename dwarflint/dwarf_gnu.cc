@@ -68,7 +68,8 @@ namespace
       // http://gcc.gnu.org/wiki/DwarfSeparateTypeInfo
       add (const_attribute (DW_AT_GNU_odr_signature));
 
-      add (string_attribute (DW_AT_GNU_template_name)); // xxx ???
+      // http://gcc.gnu.org/wiki/TemplateParmsDwarf
+      add (string_attribute (DW_AT_GNU_template_name));
 
       // GNU extensions for representation of call sites
       // http://www.dwarfstd.org/ShowIssue.php?issue=100909.2

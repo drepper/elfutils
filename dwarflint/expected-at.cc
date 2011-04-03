@@ -788,4 +788,23 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_sibling)
     .optional (DW_AT_type)
     ;
+
+  // http://gcc.gnu.org/wiki/TemplateParmsDwarf
+  m_map [DW_TAG_GNU_template_template_param]
+    .required (DW_AT_name)
+    .required (DW_AT_GNU_template_name)
+    ;
+
+  m_map [DW_TAG_GNU_template_parameter_pack]
+    .optional (at_set_decl)
+    .optional (DW_AT_name)
+    .optional (DW_AT_sibling)
+    ;
+
+  m_map [DW_TAG_GNU_formal_parameter_pack]
+    .optional (at_set_decl)
+    .optional (DW_AT_name)
+    .optional (DW_AT_sibling)
+    ;
+
 }
