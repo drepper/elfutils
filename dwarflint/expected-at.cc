@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Petr Machata <pmachata@redhat.com>, 2009.
 
@@ -34,6 +34,10 @@ expected_at_map::expected_at_map ()
   at_set_decl.insert (DW_AT_decl_column);
   at_set_decl.insert (DW_AT_decl_file);
   at_set_decl.insert (DW_AT_decl_line);
+
+  std::set <int> at_linkage_name;
+  at_linkage_name.insert (DW_AT_MIPS_linkage_name);
+  at_linkage_name.insert (DW_AT_linkage_name);
 
   m_map [DW_TAG_access_declaration]
     .optional (at_set_decl)
@@ -120,6 +124,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_segment)
     .optional (DW_AT_sibling)
     .optional (DW_AT_visibility)
+    .optional (at_linkage_name)
     ;
 
   m_map [DW_TAG_common_inclusion]
@@ -175,6 +180,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_start_scope)
     .optional (DW_AT_type)
     .optional (DW_AT_visibility)
+    .optional (at_linkage_name)
     ;
 
   m_map [DW_TAG_dwarf_procedure]
@@ -195,6 +201,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_GNU_all_tail_call_sites)
     .optional (DW_AT_GNU_all_call_sites)
     .optional (DW_AT_GNU_all_source_call_sites)
+    .optional (at_linkage_name)
     ;
 
   m_map [DW_TAG_enumeration_type]
@@ -341,6 +348,9 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_sibling)
     ;
 
+  // At one time gcc did emit at_linkage_name for members, but that
+  // has been corrected:
+  // http://gcc.gnu.org/ml/gcc-patches/2010-06/msg01713.html
   m_map [DW_TAG_member]
     .optional (at_set_decl)
     .optional (DW_AT_accessibility)
@@ -355,10 +365,6 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_sibling)
     .optional (DW_AT_type)
     .optional (DW_AT_visibility)
-    .optional (DW_AT_MIPS_linkage_name) // xxx
-    .optional (DW_AT_external) // xxx
-    .optional (DW_AT_const_value) // xxx
-    .optional (DW_AT_artificial) // xxx
     ;
 
   m_map [DW_TAG_module]
@@ -572,7 +578,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_visibility)
     .optional (DW_AT_virtuality)
     .optional (DW_AT_vtable_elem_location)
-    .optional (DW_AT_MIPS_linkage_name) // XXX added to reflect reality
+    .optional (at_linkage_name)
     .optional (DW_AT_containing_type) // XXX added to reflect reality
     .optional (DW_AT_GNU_all_tail_call_sites)
     .optional (DW_AT_GNU_all_call_sites)
@@ -717,7 +723,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_start_scope)
     .optional (DW_AT_type)
     .optional (DW_AT_visibility)
-    .optional (DW_AT_MIPS_linkage_name) // XXX added to reflect reality
+    .optional (at_linkage_name)
     .optional (DW_AT_artificial) // XXX added to reflect reality
     ;
 

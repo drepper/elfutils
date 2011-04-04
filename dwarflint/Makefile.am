@@ -85,6 +85,7 @@ dwarflint_SOURCES = \
 	check_nodebug.cc \
 	check_range_out_of_scope.cc \
 	check_self_referential_die.cc \
+	check_linkage_external_die.cc \
 	locstats.cc \
 	lowlevel_checks.cc lowlevel_checks.hh \
 	\
