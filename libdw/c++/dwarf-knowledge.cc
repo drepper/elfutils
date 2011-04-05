@@ -7,7 +7,8 @@ using namespace elfutils;
 #define VS(what)	(1U << dwarf::VS_##what)
 
 /* Return a bitmask of value spaces expected for this attribute of this tag.
-   Primarily culled from the DWARF 3 spec: 7.5.4, Figure 20.  */
+   Primarily culled from the DWARF 3 spec: 7.5.4, Figure 20.  Updated to
+   DWARF 4, plus some GNU additions.  */
 
 static unsigned int
 expected_value_space (int attr, int tag)
@@ -119,11 +120,14 @@ expected_value_space (int attr, int tag)
     case DW_AT_variable_parameter:
     case DW_AT_use_UTF8:
     case DW_AT_mutable:
+    case DW_AT_main_subprogram:
     case DW_AT_threads_scaled:
     case DW_AT_explicit:
     case DW_AT_elemental:
     case DW_AT_pure:
     case DW_AT_recursive:
+    case DW_AT_const_expr:
+    case DW_AT_enum_class:
     case DW_AT_GNU_tail_call:
     case DW_AT_GNU_all_tail_call_sites:
     case DW_AT_GNU_all_call_sites:
@@ -135,6 +139,7 @@ expected_value_space (int attr, int tag)
       return VS(string);
 
     case DW_AT_start_scope:
+    case DW_AT_data_bit_offset:
       return VS(constant);
 
     case DW_AT_binary_scale:
@@ -165,8 +170,13 @@ expected_value_space (int attr, int tag)
     case DW_AT_GNU_template_name:
       return VS(identifier);
 
+    /* XXX Note these are not the same, the first is related to C++
+       ODR (one-definition-rule checking), the later to .debug_type
+       references. Should be its own class really.  */
     case DW_AT_GNU_odr_signature:
       return VS(constant);
+    case DW_AT_signature:
+      return VS(reference);
     }
 
   return 0;
