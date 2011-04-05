@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2008,2009,2010 Red Hat, Inc.
+   Copyright (C) 2008,2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,16 +23,20 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "dwarflint.hh"
 #include "messages.hh"
 #include "checks.hh"
 #include "check_registrar.hh"
+#include "files.hh"
 
 #include <fcntl.h>
 #include <cstring>
 #include <cerrno>
 #include <stdexcept>
-#include <sstream>
 
 std::ostream &
 operator << (std::ostream &o, checkstack const &stack)
@@ -49,24 +53,6 @@ operator << (std::ostream &o, checkstack const &stack)
   return o;
 }
 
-namespace
-{
-  int
-  get_fd (char const *fname)
-  {
-    /* Open the file.  */
-    int fd = open (fname, O_RDONLY);
-    if (fd == -1)
-      {
-	std::stringstream ss;
-	ss << "Cannot open input file: " << strerror (errno) << ".";
-	throw std::runtime_error (ss.str ());
-      }
-
-    return fd;
-  }
-}
-
 void
 main_check_registrar::run (dwarflint &lint)
 {
@@ -79,7 +65,7 @@ main_check_registrar::run (dwarflint &lint)
 
 dwarflint::dwarflint (char const *a_fname, checkrules const &a_rules)
   : _m_fname (a_fname)
-  , _m_fd (get_fd (_m_fname))
+  , _m_fd (files::open (_m_fname))
   , _m_rules (a_rules)
 {
   main_registrar ()->run (*this);

@@ -23,64 +23,49 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "highlevel_check.hh"
 #include "all-dies-it.hh"
 #include "option.hh"
-#include "messages.hh"
 #include "pri.hh"
+#include "files.hh"
+
+#include <libintl.h>
 
 #include <sstream>
 #include <bitset>
 
 using elfutils::dwarf;
 
-namespace
-{
-
-#define DIE_OPTSTRING					\
+#define DIE_OPTSTRING				\
   "}[,...]"
 
-  string_option opt_ignore
+global_opt<string_option> opt_ignore
   ("Skip certain DIEs.  class may be one of single_addr, artificial, inlined, \
 inlined_subroutine, no_coverage, mutable, or immutable.",
-   "class[,...]", "locstats:ignore");
+   "class[,...]", "ignore");
 
-  string_option opt_dump
+global_opt<string_option> opt_dump
   ("Dump certain DIEs.  For classes, see option 'ignore'.",
-   "class[,...]", "locstats:dump");
+   "class[,...]", "dump");
 
-  string_option opt_tabulation_rule
+global_opt<string_option> opt_tabulation_rule
   ("Rule for sorting results into buckets. start is either integer 0..100, \
 or special value 0.0 indicating cases with no coverage whatsoever \
 (i.e. not those that happen to round to 0%).",
-   "start[:step][,...]", "locstats:tabulate");
+   "start[:step][,...]", "tabulate");
 
-  class locstats
-    : public highlevel_check<locstats>
-  {
-  public:
-    static checkdescriptor const *descriptor () {
-      static checkdescriptor cd
-	(checkdescriptor::create ("locstats")
-	 .groups ("@nodefault")
-	 .option (opt_ignore)
-	 .option (opt_dump)
-	 .option (opt_tabulation_rule)
-	 .description (
-"Computes a location info coverage statistics.  Goes through the whole "
-"DIE graph, looking at each variable and formal parameter, and "
-"determining scope coverage of its location information.  In other "
-"words for how big a part of scope we know, where the variable "
-"\"lives\".\n"
-" - https://fedorahosted.org/pipermail/elfutils-devel/2010-July/001498.html\n"
-" - https://fedorahosted.org/pipermail/elfutils-devel/2010-September/001602.html\n"));
-      return &cd;
-    }
-
-    locstats (checkstack &stack, dwarflint &lint);
-  };
-
-  reg<locstats> reg_locstats;
+// where.c needs to know how to format certain wheres.  The module
+// doesn't know that we don't use these :)
+extern "C"
+bool
+show_refs ()
+{
+  return false;
+}
 
 #define DIE_TYPES		\
   TYPE(single_addr)		\
@@ -91,98 +76,98 @@ or special value 0.0 indicating cases with no coverage whatsoever \
   TYPE(mutable)			\
   TYPE(immutable)
 
-  struct tabrule
+struct tabrule
+{
+  int start;
+  int step;
+  tabrule (int a_start, int a_step)
+    : start (a_start), step (a_step)
+  {}
+  bool operator < (tabrule const &other) const {
+    return start < other.start;
+  }
+};
+
+// Sharp 0.0% coverage (i.e. not a single address byte is covered)
+const int cov_00 = -1;
+
+struct tabrules_t
+  : public std::vector<tabrule>
+{
+  tabrules_t (std::string const &rule)
   {
-    int start;
-    int step;
-    tabrule (int a_start, int a_step)
-      : start (a_start), step (a_step)
-    {}
-    bool operator < (tabrule const &other) const {
-      return start < other.start;
-    }
-  };
+    std::stringstream ss;
+    ss << rule;
 
-  // Sharp 0.0% coverage (i.e. not a single address byte is covered)
-  const int cov_00 = -1;
+    std::string item;
+    while (std::getline (ss, item, ','))
+      {
+	if (item.empty ())
+	  continue;
+	int start;
+	int step;
+	char const *ptr = item.c_str ();
 
-  struct tabrules_t
-    : public std::vector<tabrule>
+	if (item.length () >= 3
+	    && std::strncmp (ptr, "0.0", 3) == 0)
+	  {
+	    start = cov_00;
+	    ptr += 3;
+	  }
+	else
+	  start = std::strtol (ptr, const_cast<char **> (&ptr), 10);
+
+	if (*ptr == 0)
+	  step = 0;
+	else
+	  {
+	    if (*ptr != ':')
+	      {
+		step = 0;
+		goto garbage;
+	      }
+	    else
+	      ptr++;
+
+	    step = std::strtol (ptr, const_cast<char **> (&ptr), 10);
+	    if (*ptr != 0)
+	    garbage:
+	      std::cerr << "Ignoring garbage at the end of the rule item: '"
+			<< ptr << '\'' << std::endl;
+	  }
+
+	push_back (tabrule (start, step));
+      }
+
+    push_back (tabrule (100, 0));
+    std::sort (begin (), end ());
+  }
+
+  void next ()
   {
-    tabrules_t (std::string const &rule)
-    {
-      std::stringstream ss;
-      ss << rule;
+    if (at (0).step == 0)
+      erase (begin ());
+    else
+      {
+	if (at (0).start == cov_00)
+	  at (0).start = 0;
+	at (0).start += at (0).step;
+	if (size () > 1)
+	  {
+	    if (at (0).start > at (1).start)
+	      erase (begin ());
+	    while (size () > 1
+		   && at (0).start == at (1).start)
+	      erase (begin ());
+	  }
+      }
+  }
 
-      std::string item;
-      while (std::getline (ss, item, ','))
-	{
-	  if (item.empty ())
-	    continue;
-	  int start;
-	  int step;
-	  char const *ptr = item.c_str ();
-
-	  if (item.length () >= 3
-	      && std::strncmp (ptr, "0.0", 3) == 0)
-	    {
-	      start = cov_00;
-	      ptr += 3;
-	    }
-	  else
-	    start = std::strtol (ptr, const_cast<char **> (&ptr), 10);
-
-	  if (*ptr == 0)
-	    step = 0;
-	  else
-	    {
-	      if (*ptr != ':')
-		{
-		  step = 0;
-		  goto garbage;
-		}
-	      else
-		ptr++;
-
-	      step = std::strtol (ptr, const_cast<char **> (&ptr), 10);
-	      if (*ptr != 0)
-	      garbage:
-		std::cerr << "Ignoring garbage at the end of the rule item: '"
-			  << ptr << '\'' << std::endl;
-	    }
-
-	  push_back (tabrule (start, step));
-	}
-
-      push_back (tabrule (100, 0));
-      std::sort (begin (), end ());
-    }
-
-    void next ()
-    {
-      if (at (0).step == 0)
-	erase (begin ());
-      else
-	{
-	  if (at (0).start == cov_00)
-	    at (0).start = 0;
-	  at (0).start += at (0).step;
-	  if (size () > 1)
-	    {
-	      if (at (0).start > at (1).start)
-		erase (begin ());
-	      while (size () > 1
-		     && at (0).start == at (1).start)
-		erase (begin ());
-	    }
-	}
-    }
-
-    bool match (int value) const
-    {
-      return at (0).start == value;
-    }
-  };
+  bool match (int value) const
+  {
+    return at (0).start == value;
+  }
+};
 
 #define TYPE(T) dt_##T,
   enum die_type_e
@@ -192,134 +177,133 @@ or special value 0.0 indicating cases with no coverage whatsoever \
     };
 #undef TYPE
 
-  class die_type_matcher
-    : public std::bitset<dt__count>
+class die_type_matcher
+  : public std::bitset<dt__count>
+{
+  class invalid {};
+  std::pair<die_type_e, bool>
+  parse (std::string &desc)
   {
-    class invalid {};
-    std::pair<die_type_e, bool>
-    parse (std::string &desc)
-    {
-      bool val = true;
-      if (desc == "")
-	throw invalid ();
+    bool val = true;
+    if (desc == "")
+      throw invalid ();
 
 #define TYPE(T)					\
-      if (desc == #T)				\
-	return std::make_pair (dt_##T, val);
-      DIE_TYPES
+    if (desc == #T)				\
+      return std::make_pair (dt_##T, val);
+    DIE_TYPES
 #undef TYPE
 
       throw invalid ();
-    }
-
-  public:
-    die_type_matcher (std::string const &rule)
-    {
-      std::stringstream ss;
-      ss << rule;
-
-      std::string item;
-      while (std::getline (ss, item, ','))
-	try
-	  {
-	    std::pair<die_type_e, bool> const &ig = parse (item);
-	    set (ig.first, ig.second);
-	  }
-	catch (invalid &i)
-	  {
-	    std::cerr << "Invalid die type: " << item << std::endl;
-	  }
-    }
-  };
-
-  class mutability_t
-  {
-    bool _m_is_mutable;
-    bool _m_is_immutable;
-
-  public:
-    mutability_t ()
-      : _m_is_mutable (false)
-      , _m_is_immutable (false)
-    {
-    }
-
-    void set (bool what)
-    {
-      if (what)
-	_m_is_mutable = true;
-      else
-	_m_is_immutable = true;
-    }
-
-    void set_both ()
-    {
-      set (true);
-      set (false);
-    }
-
-    void locexpr (Dwarf_Op *expr, size_t len)
-    {
-      // We scan the expression looking for DW_OP_{bit_,}piece
-      // operators which mark ends of sub-expressions to us.
-      bool m = false;
-      for (size_t i = 0; i < len; ++i)
-	switch (expr[i].atom)
-	  {
-	  case DW_OP_implicit_value:
-	  case DW_OP_stack_value:
-	    m = true;
-	    break;
-
-	  case DW_OP_bit_piece:
-	  case DW_OP_piece:
-	    set (m);
-	    m = false;
-	    break;
-	  };
-      set (m);
-    }
-
-    bool is_mutable () const { return _m_is_mutable; }
-    bool is_immutable () const { return _m_is_immutable; }
-  };
-
-  struct error
-    : public std::runtime_error
-  {
-    explicit error (std::string const &what_arg)
-      : std::runtime_error (what_arg)
-    {}
-  };
-
-  // Look through the stack of parental dies and return the non-empty
-  // ranges instance closest to the stack top (i.e. die_stack.end ()).
-  dwarf::ranges
-  find_ranges (std::vector<dwarf::debug_info_entry> const &die_stack)
-  {
-    for (auto it = die_stack.rbegin (); it != die_stack.rend (); ++it)
-      if (!it->ranges ().empty ())
-	return it->ranges ();
-    throw error ("no ranges for this DIE");
   }
 
-  bool
-  is_inlined (dwarf::debug_info_entry const &die)
+public:
+  die_type_matcher (std::string const &rule)
   {
-    dwarf::debug_info_entry::attributes_type::const_iterator it
-      = die.attributes ().find (DW_AT_inline);
-    if (it != die.attributes ().end ())
-      {
-	char const *name = (*it).second.dwarf_constant ().name ();
-	return std::strcmp (name, "declared_inlined") == 0
-	  || std::strcmp (name, "inlined") == 0;
-      }
-    return false;
+    std::stringstream ss;
+    ss << rule;
+
+    std::string item;
+    while (std::getline (ss, item, ','))
+      try
+	{
+	  std::pair<die_type_e, bool> const &ig = parse (item);
+	  set (ig.first, ig.second);
+	}
+      catch (invalid &i)
+	{
+	  std::cerr << "Invalid die type: " << item << std::endl;
+	}
   }
+};
+
+class mutability_t
+{
+  bool _m_is_mutable;
+  bool _m_is_immutable;
+
+public:
+  mutability_t ()
+    : _m_is_mutable (false)
+    , _m_is_immutable (false)
+  {
+  }
+
+  void set (bool what)
+  {
+    if (what)
+      _m_is_mutable = true;
+    else
+      _m_is_immutable = true;
+  }
+
+  void set_both ()
+  {
+    set (true);
+    set (false);
+  }
+
+  void locexpr (Dwarf_Op *expr, size_t len)
+  {
+    // We scan the expression looking for DW_OP_{bit_,}piece
+    // operators which mark ends of sub-expressions to us.
+    bool m = false;
+    for (size_t i = 0; i < len; ++i)
+      switch (expr[i].atom)
+	{
+	case DW_OP_implicit_value:
+	case DW_OP_stack_value:
+	  m = true;
+	  break;
+
+	case DW_OP_bit_piece:
+	case DW_OP_piece:
+	  set (m);
+	  m = false;
+	  break;
+	};
+    set (m);
+  }
+
+  bool is_mutable () const { return _m_is_mutable; }
+  bool is_immutable () const { return _m_is_immutable; }
+};
+
+struct error
+  : public std::runtime_error
+{
+  explicit error (std::string const &what_arg)
+    : std::runtime_error (what_arg)
+  {}
+};
+
+// Look through the stack of parental dies and return the non-empty
+// ranges instance closest to the stack top (i.e. die_stack.end ()).
+dwarf::ranges
+find_ranges (std::vector<dwarf::debug_info_entry> const &die_stack)
+{
+  for (auto it = die_stack.rbegin (); it != die_stack.rend (); ++it)
+    if (!it->ranges ().empty ())
+      return it->ranges ();
+  throw error ("no ranges for this DIE");
 }
 
-locstats::locstats (checkstack &stack, dwarflint &lint)
-  : highlevel_check<locstats> (stack, lint)
+bool
+is_inlined (dwarf::debug_info_entry const &die)
+{
+  dwarf::debug_info_entry::attributes_type::const_iterator it
+    = die.attributes ().find (DW_AT_inline);
+  if (it != die.attributes ().end ())
+    {
+      char const *name = (*it).second.dwarf_constant ().name ();
+      return std::strcmp (name, "declared_inlined") == 0
+	|| std::strcmp (name, "inlined") == 0;
+    }
+  return false;
+}
+
+void
+process(Dwarf *c_dw, dwarf const &dw)
 {
   // map percentage->occurrences.  Percentage is cov_00..100, where
   // 0..100 is rounded-down integer division.
@@ -328,14 +312,13 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
   for (int i = 0; i <= 100; ++i)
     tally[i] = 0;
 
-  tabrules_t tabrules (/*opt_tabulation_rule.seen ()
-			 ? opt_tabulation_rule.value () :*/ "10:10");
-  die_type_matcher ignore (/*opt_ignore.seen () ? opt_ignore.value () :*/ "");
-  die_type_matcher dump (/*opt_dump.seen () ? opt_dump.value () :*/ "");
+  tabrules_t tabrules (opt_tabulation_rule.seen ()
+		       ? opt_tabulation_rule.value () : "10:10");
+  die_type_matcher ignore (opt_ignore.seen () ? opt_ignore.value () : "");
+  die_type_matcher dump (opt_dump.seen () ? opt_dump.value () : "");
   std::bitset<dt__count> interested = ignore | dump;
   bool interested_mutability
     = interested.test (dt_mutable) || interested.test (dt_immutable);
-
 
   for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
        it != all_dies_iterator<dwarf> (); ++it)
@@ -413,7 +396,7 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
       // Unfortunately the location expression is not yet wrapped
       // in c++, so we need to revert back to C code.
       Dwarf_Die die_c_mem,
-	*die_c = dwarf_offdie (this->c_dw, die.offset (), &die_c_mem);
+	*die_c = dwarf_offdie (c_dw, die.offset (), &die_c_mem);
       assert (die_c != NULL);
 
       Dwarf_Attribute locattr_mem,
@@ -533,7 +516,8 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	      struct where where = WHERE (sec_info, NULL);
 	      where_reset_1 (&where, it.cu ().offset ());
 	      where_reset_2 (&where, die.offset ());
-	      wr_error (where) << e.what () << '.' << std::endl;
+	      std::cerr << "error: " << where << ": "
+			<< e.what () << '.' << std::endl;
 	      continue;
 	    }
 	}
@@ -594,6 +578,12 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
   unsigned long cumulative = 0;
   unsigned long last = 0;
   int last_pct = cov_00;
+  if (total == 0)
+    {
+      std::cout << "No coverage recorded." << std::endl;
+      return;
+    }
+
   std::cout << "cov%\tsamples\tcumul" << std::endl;
   for (int i = cov_00; i <= 100; ++i)
     {
@@ -624,4 +614,55 @@ locstats::locstats (checkstack &stack, dwarflint &lint)
 	  tabrules.next ();
 	}
     }
+}
+
+int
+main(int argc, char *argv[])
+{
+  /* Set locale.  */
+  setlocale (LC_ALL, "");
+
+  /* Initialize the message catalog.  */
+  textdomain (PACKAGE_TARNAME);
+
+  /* Parse and process arguments.  */
+  argppp argp (global_opts ());
+  int remaining;
+  argp.parse (argc, argv, 0, &remaining);
+
+  if (remaining == argc)
+    {
+      fputs (gettext ("Missing file name.\n"), stderr);
+      argp.help (stderr, ARGP_HELP_SEE | ARGP_HELP_EXIT_ERR,
+		 program_invocation_short_name);
+      std::exit (1);
+    }
+
+  bool only_one = remaining + 1 == argc;
+  do
+    {
+      try
+	{
+	  char const *fname = argv[remaining];
+	  if (!only_one)
+	    std::cout << std::endl << fname << ":" << std::endl;
+
+	  int fd = files::open (fname);
+	  Dwfl *dwfl = files::open_dwfl ();
+	  Dwarf *c_dw = files::open_dwarf (dwfl, fname, fd);
+	  dwarf dw = files::open_dwarf (c_dw);
+
+	  process (c_dw, dw);
+
+	  close (fd);
+	  dwfl_end (dwfl);
+	}
+      catch (std::runtime_error &e)
+	{
+	  std::cerr << "error: "
+		    << e.what () << '.' << std::endl;
+	  continue;
+	}
+    }
+  while (++remaining < argc);
 }

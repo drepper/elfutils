@@ -35,7 +35,7 @@ AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 
 no_mudflap.os = -fmudflap
 
-bin_PROGRAMS = dwarflint
+bin_PROGRAMS = dwarflint locstats
 noinst_PROGRAMS = tests/test-coverage tests/test-wrap tests/test-all-dies-it
 
 dwarflint_SOURCES = \
@@ -58,6 +58,7 @@ dwarflint_SOURCES = \
 	dwarflint.cc dwarflint.hh dwarflint.ii \
 	elf_file.hh elf_file.ii \
 	expected-at.cc expected.hh \
+	files.cc files.hh \
 	highlevel_check.cc highlevel_check.hh \
 	main.cc \
 	messages.cc messages.hh \
@@ -86,10 +87,16 @@ dwarflint_SOURCES = \
 	check_range_out_of_scope.cc \
 	check_self_referential_die.cc \
 	check_linkage_external_die.cc \
-	locstats.cc \
 	lowlevel_checks.cc lowlevel_checks.hh \
 	\
 	../src/dwarfstrings.c
+
+locstats_SOURCES = \
+	locstats.cc \
+	files.cc files.hh \
+	option.cc option.hh option.ii \
+	pri.cc pri.hh \
+	where.c where.h
 
 tests_test_coverage_SOURCES = tests/test-coverage.cc coverage.cc pri.cc \
 	../src/dwarfstrings.c
@@ -177,6 +184,7 @@ libeu = ../lib/libeu.a
 libdwpp = ../libdw/libdwpp.a $(libdw)
 
 dwarflint_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
+locstats_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 tests_test_coverage_LDADD  = $(libebl) $(libelf) $(libdwpp) $(libeu) $(libmudflap) -ldl
 tests_test_all_dies_it_LDADD = $(libdwpp)
 

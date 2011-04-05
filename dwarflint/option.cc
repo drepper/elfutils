@@ -35,6 +35,8 @@
 #include <cstring>
 #include <iostream>
 
+argppp *argppp::instance = NULL;
+
 option_i *
 options::find_opt (int key) const
 {
@@ -88,12 +90,16 @@ Pedantic checking of DWARF stored in ELF files.",
   return a;
 }
 
-argppp &
-argppp::inst ()
+argppp::argppp (options const &global)
+  : _m_inited (false)
 {
-  static argppp my
-    (global_opts (), dwarflint::main_registrar ()->get_descriptors ());
-  return my;
+  argp main = global.build_argp (true);
+  main.parser = &parse_opt;
+  _m_argp = main;
+
+  // Only one instance is allowed per program.
+  assert (instance == NULL);
+  instance = this;
 }
 
 argppp::argppp (options const &global,
@@ -135,18 +141,23 @@ argppp::argppp (options const &global,
 
   main.parser = &parse_opt;
   _m_argp = main;
+
+  // Only one instance is allowed per program.
+  assert (instance == NULL);
+  instance = this;
 }
 
 error_t
 argppp::parse_opt (int key, char *arg, argp_state *state)
 {
-  if (key == ARGP_KEY_INIT && !inst ()._m_inited)
+  assert (instance != NULL);
+  if (key == ARGP_KEY_INIT && !instance->_m_inited)
     {
-      inst ()._m_inited = true;
+      instance->_m_inited = true;
       unsigned i = 0;
       for (std::vector<options const *>::const_iterator it
-	     = inst ()._m_children_inputs.begin ();
-	   it != inst ()._m_children_inputs.end (); ++it)
+	     = instance->_m_children_inputs.begin ();
+	   it != instance->_m_children_inputs.end (); ++it)
 	state->child_inputs[i++] = const_cast<options *> (*it);
       return 0;
     }

@@ -1,5 +1,5 @@
-/* Initialization of high-level check context
-   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
+/* Pedantic checking of DWARF files.
+   Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,18 +23,25 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "highlevel_check.hh"
-#include "lowlevel_checks.hh"
-#include "files.hh"
+#ifndef _DWARFLINT_FILES_H_
+#define _DWARFLINT_FILES_H_
 
-open_highlevel_dwarf::open_highlevel_dwarf (checkstack &stack, dwarflint &lint)
-  : _m_dwfl ((lint.check<lowlevel_checks> (stack),
-	      files::open_dwfl ()))
-  , c_dw (files::open_dwarf (_m_dwfl, lint.fname (), lint.fd ()))
-  , dw (files::open_dwarf (c_dw))
-{}
+#include "../libdwfl/libdwfl.h"
+#include "../libdw/c++/dwarf"
 
-open_highlevel_dwarf::~open_highlevel_dwarf ()
+// The functions in this module do their own error handling, and throw
+// std::runtime_error with descriptive error message on error.
+namespace files
 {
-  dwfl_end (_m_dwfl);
+  int open (char const *fname);
+
+  Dwfl *open_dwfl ()
+    __attribute__ ((nonnull, malloc));
+
+  Dwarf *open_dwarf (Dwfl *dwfl, char const *fname, int fd)
+    __attribute__ ((nonnull, malloc));
+
+  elfutils::dwarf open_dwarf (Dwarf *dw);
 }
+
+#endif /* _DWARFLINT_FILES_H_ */

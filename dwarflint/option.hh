@@ -70,13 +70,15 @@ class argppp
   std::vector<options const *> _m_children_inputs;
   argp _m_argp;
   bool _m_inited;
+
+  static error_t parse_opt (int key, char *arg, argp_state *state);
+  static argppp *instance;
+
+public:
+  argppp (options const &global);
   argppp (options const &global,
 	  std::vector<checkdescriptor const *> checkdescriptors);
 
-  static error_t parse_opt (int key, char *arg, argp_state *state);
-
-public:
-  static argppp &inst ();
   void parse (int argc, char **argv, unsigned flags, int *remaining);
   void help (FILE *stream, unsigned flags, char *name);
 };

@@ -1,5 +1,5 @@
 /* Main entry point for dwarflint, a pedantic checker for DWARF files.
-   Copyright (C) 2008,2009,2010 Red Hat, Inc.
+   Copyright (C) 2008,2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -152,7 +152,8 @@ main (int argc, char *argv[])
   textdomain (PACKAGE_TARNAME);
 
   /* Parse and process arguments.  */
-  argppp &argp = argppp::inst ();
+  argppp argp (global_opts (),
+	       dwarflint::main_registrar ()->get_descriptors ());
 
   int remaining;
   argp.parse (argc, argv, 0, &remaining);
