@@ -419,11 +419,11 @@ namespace
 	    form const *form = check_debug_abbrev::check_form
 	      (ver, attribute, attrib_form, &where, false);
 	    if (form == NULL)
-	      // Error message has been emitted in check_form.
-	      failed = true;
-
-	    if (form == NULL)
-	      continue;
+	      {
+		// Error message has been emitted in check_form.
+		failed = true;
+		continue;
+	      }
 
 	    std::pair<std::map<unsigned, uint64_t>::iterator, bool> inserted
 	      = seen.insert (std::make_pair (attrib_name, attr_off));

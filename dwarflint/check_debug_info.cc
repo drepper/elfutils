@@ -1082,6 +1082,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
   , _m_file (_m_sec_info->file)
   , _m_abbrevs (lint.check (stack, _m_abbrevs))
   , _m_cu_headers (lint.check (stack, _m_cu_headers))
+  , _m_need_ranges (false)
 {
   std::vector <cu_head> const &cu_headers = _m_cu_headers->cu_headers;
   sec &sec = _m_sec_info->sect;
