@@ -60,7 +60,7 @@ class highlevel_check
 public:
   static checkdescriptor const *descriptor () {
     static checkdescriptor cd
-      (checkdescriptor::create ("open_highlevel_dwarf")
+      (checkdescriptor::create ("highlevel_check")
        .prereq<typeof (*_m_loader)> ());
     return &cd;
   }

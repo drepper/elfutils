@@ -38,10 +38,12 @@ class die_check_context
   : protected std::vector<die_check *>
 {
   typedef std::vector<die_check *> _super_t;
+  checkdescriptor const *_m_cd;
 
 public:
   die_check_context (checkdescriptor const *cd, dwarflint &lint,
 		     die_check_registrar const &registrar)
+    : _m_cd (cd)
   {
     // For per-DIE runs, we are only interested in limited context:
     // the main iteration check, and the per-DIE check.  This should
@@ -64,10 +66,53 @@ public:
   }
 
   void
+  error (all_dies_iterator<dwarf> const &a_d_it,
+	 char const *reason = NULL)
+  {
+    std::string r;
+    if (reason)
+      {
+	r += ": ";
+	r += reason;
+      }
+
+    wr_error (to_where (*a_d_it))
+      << "A check failed: " << (_m_cd->name () ?: "(nil)")
+      << r << std::endl;
+  }
+
+  void
   die (all_dies_iterator<dwarf> const &a_d_it)
   {
     for (iterator it = begin (); it != end (); ++it)
-      (*it)->die (a_d_it);
+    again:
+      try
+	{
+	  (*it)->die (a_d_it);
+	}
+      catch (check_base::unscheduled &e)
+	{
+	  // Turn the check off.
+	  size_t pos = it - begin ();
+	  delete *it;
+	  erase (it);
+	  it = begin () + pos;
+	  if (it == end ())
+	    break;
+	  goto again;
+	}
+      catch (check_base::failed &e)
+	{
+	  // The check was supposed to emit an error message.
+	}
+      catch (std::exception &e)
+	{
+	  error (a_d_it, e.what ());
+	}
+      catch (...)
+	{
+	  error (a_d_it);
+	}
   }
 
   ~die_check_context ()
@@ -80,7 +125,6 @@ public:
 check_die_tree::check_die_tree (checkstack &stack, dwarflint &lint)
   : highlevel_check<check_die_tree> (stack, lint)
 {
-  //std::cout << "check_die_tree" << std::endl;
   die_check_context ctx (descriptor (), lint, *dwarflint::die_registrar ());
 
   for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
