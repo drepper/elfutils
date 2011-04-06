@@ -1,4 +1,4 @@
-/* Pedantic checking of DWARF files.
+/* Check for DIEs with attributes referencing the DIE itself.
    Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
@@ -23,23 +23,16 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#include "highlevel_check.hh"
-#include "../src/dwarfstrings.h"
-#include "all-dies-it.hh"
+#include "check_die_tree.hh"
 #include "pri.hh"
 #include "messages.hh"
-#include <map>
 
 using elfutils::dwarf;
 
 namespace
 {
   class check_self_referential_die
-    : public highlevel_check<check_self_referential_die>
+    : public die_check
   {
   public:
     static checkdescriptor const *descriptor ()
@@ -55,31 +48,33 @@ namespace
       return &cd;
     }
 
-    explicit check_self_referential_die (checkstack &stack, dwarflint &lint)
-      : highlevel_check<check_self_referential_die> (stack, lint)
+    check_self_referential_die (highlevel_check_i *, checkstack &, dwarflint &)
     {
-      for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
-	   it != all_dies_iterator<dwarf> (); ++it)
+      // We don't keep any state for this die check.
+    }
+
+    virtual void
+    die (all_dies_iterator<dwarf> const &it)
+    {
+      dwarf::debug_info_entry const &entry = *it;
+      for (dwarf::debug_info_entry::attributes_type::const_iterator
+	     at = entry.attributes ().begin ();
+	   at != entry.attributes ().end (); ++at)
 	{
-	  dwarf::debug_info_entry const &die = *it;
-	  for (dwarf::debug_info_entry::attributes_type::const_iterator
-		 at = die.attributes ().begin ();
-	       at != die.attributes ().end (); ++at)
+	  dwarf::attr_value const &val = (*at).second;
+	  if (val.what_space () == dwarf::VS_reference)
 	    {
-	      dwarf::attr_value const &val = (*at).second;
-	      if (val.what_space () == dwarf::VS_reference)
-		{
-		  dwarf::debug_info_entry ref = *val.reference ();
-		  if (ref.identity () == die.identity ())
-		    wr_message (to_where (die),
-				mc_impact_3 | mc_acc_suboptimal | mc_die_rel)
-		      << "attribute " << dwarf::attributes::name ((*at).first)
-		      << " references DIE itself." << std::endl;
-		}
+	      dwarf::debug_info_entry ref = *val.reference ();
+	      if (ref.identity () == entry.identity ())
+		wr_message (to_where (entry),
+			    mc_impact_3 | mc_acc_suboptimal | mc_die_rel)
+		  << dwarf::tags::name (entry.tag ())
+		  << " attribute " << dwarf::attributes::name ((*at).first)
+		  << " references DIE itself." << std::endl;
 	    }
 	}
     }
   };
 
-  reg<check_self_referential_die> reg;
+  reg_die_check<check_self_referential_die> reg;
 }

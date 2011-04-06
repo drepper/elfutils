@@ -23,23 +23,16 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
-#include "highlevel_check.hh"
-#include "../src/dwarfstrings.h"
-#include "all-dies-it.hh"
+#include "check_die_tree.hh"
 #include "pri.hh"
 #include "messages.hh"
-#include <map>
 
 using elfutils::dwarf;
 
 namespace
 {
   class check_linkage_external_die
-    : public highlevel_check<check_linkage_external_die>
+    : public die_check
   {
   public:
     static checkdescriptor const *descriptor ()
@@ -53,27 +46,28 @@ namespace
       return &cd;
     }
 
-    explicit check_linkage_external_die (checkstack &stack, dwarflint &lint)
-      : highlevel_check<check_linkage_external_die> (stack, lint)
+    check_linkage_external_die (highlevel_check_i *, checkstack &, dwarflint &)
     {
-      for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
-	   it != all_dies_iterator<dwarf> (); ++it)
+      // We don't keep any state for this die check.
+    }
+
+    virtual void
+    die (all_dies_iterator<dwarf> const &it)
+    {
+      dwarf::debug_info_entry const &entry = *it;
+      dwarf::debug_info_entry::attributes_type attrs = entry.attributes ();
+      if ((attrs.find (DW_AT_linkage_name) != attrs.end ()
+	   || attrs.find (DW_AT_MIPS_linkage_name) != attrs.end ())
+	  && attrs.find (DW_AT_external) == attrs.end ())
 	{
-	  dwarf::debug_info_entry const &die = *it;
-	  dwarf::debug_info_entry::attributes_type attrs = die.attributes ();
-	  if ((attrs.find (DW_AT_linkage_name) != attrs.end ()
-	       || attrs.find (DW_AT_MIPS_linkage_name) != attrs.end ())
-	      && attrs.find (DW_AT_external) == attrs.end ())
-	    {
-	      wr_message (to_where (die),
-			  mc_impact_3 | mc_acc_suboptimal | mc_die_other)
-		<< elfutils::dwarf::tags::name (die.tag ())
-		<< " has linkage_name attribute, but no external attribute."
-		<< std::endl;
-	    }
+	  wr_message (to_where (entry),
+		      mc_impact_3 | mc_acc_suboptimal | mc_die_other)
+	    << elfutils::dwarf::tags::name (entry.tag ())
+	    << " has linkage_name attribute, but no external attribute."
+	    << std::endl;
 	}
     }
   };
 
-  reg<check_linkage_external_die> reg;
+  reg_die_check<check_linkage_external_die> reg;
 }
