@@ -328,17 +328,6 @@ message_count_filter::should_emit (void const *key)
     return 1;
 }
 
-std::ostream &
-message_context::emit (char const *str)
-{
-  ++error_count;
-  std::ostream &ret = get_stream ();
-  ret << _m_prefix;
-  if (_m_where)
-    ret << *_m_where << ": ";
-  return ret << str;
-}
-
 message_context::message_context (message_count_filter *filter,
 				  where const *where, char const *prefix)
   : _m_filter (filter)
@@ -347,19 +336,47 @@ message_context::message_context (message_count_filter *filter,
 {}
 
 std::ostream &
-message_context::operator << (char const *message)
+message_context::when (bool whether)
+{
+  if (whether)
+    return get_stream ();
+  else
+    return nostream;
+}
+
+std::ostream &
+message_context::id (void const *key, bool &whether)
 {
   if (_m_filter == NULL)
     return nostream;
-  else if (int status = _m_filter->should_emit (message))
+  else if (int status = _m_filter->should_emit (key))
     {
+      ++error_count;
       if (status == -1)
 	get_stream () << "(threshold reached for the following message)"
 		      << std::endl;
-      return emit (message);
+      whether = true;
+      return get_stream ();
     }
   else
     return nostream;
+}
+
+std::ostream &
+message_context::id (void const *key)
+{
+  bool whether;
+  return id (key, whether);
+}
+
+std::ostream &
+message_context::operator << (char const *message)
+{
+  std::ostream &ret = id (message);
+  ret << _m_prefix;
+  if (_m_where)
+    ret << *_m_where << ": ";
+  return ret << message;
 }
 
 std::ostream &

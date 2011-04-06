@@ -187,8 +187,6 @@ class message_context
   friend message_context wr_message (where const &wh, message_category cat);
   friend message_context wr_message (message_category cat);
 
-  std::ostream &emit (char const *str);
-
   message_context (message_count_filter *filter,
 		   where const *where, char const *prefix);
 
@@ -207,6 +205,17 @@ public:
     ss << t;
     return (*this) << ss.str ();
   }
+
+  // Use KEY for count filtering.
+  std::ostream &id (void const *key);
+
+  // Use KEY for count filtering.  WHETHER is true if the message will
+  // be emitted.  It doesn't touch that value otherwise, so WHETHER
+  // must be pre-initialized to false.
+  std::ostream &id (void const *key, bool &whether);
+
+  // Return either the full stream, or a sink, depending on WHETHER.
+  std::ostream &when (bool whether);
 };
 
 std::ostream &wr_error (where const &wh);
