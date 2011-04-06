@@ -31,7 +31,28 @@ using namespace elfutils;
 
 namespace
 {
+  class die_check_registrar
+    : public check_registrar_T<die_check_item>
+  {
+  public:
+    friend class dwarflint;
+    void run (checkstack &stack, dwarflint &lint);
+
+    static die_check_registrar *
+    inst ()
+    {
+      static die_check_registrar inst;
+      return &inst;
+    }
+  };
+
   reg<check_die_tree> reg;
+}
+
+void
+check_die_tree::register_check (die_check_item *check)
+{
+  die_check_registrar::inst ()->push_back (check);
 }
 
 class die_check_context
@@ -127,7 +148,8 @@ public:
 check_die_tree::check_die_tree (checkstack &stack, dwarflint &lint)
   : highlevel_check<check_die_tree> (stack, lint)
 {
-  die_check_context ctx (this, descriptor (), lint, *dwarflint::die_registrar ());
+  die_check_context ctx (this, descriptor (), lint,
+			 *die_check_registrar::inst ());
 
   for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
        it != all_dies_iterator<dwarf> (); ++it)

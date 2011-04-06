@@ -113,13 +113,6 @@ dwarflint::main_registrar ()
   return &inst;
 }
 
-die_check_registrar *
-dwarflint::die_registrar ()
-{
-  static die_check_registrar inst;
-  return &inst;
-}
-
 namespace
 {
   template <class T>

@@ -55,24 +55,6 @@ public:
   void run (dwarflint &lint);
 };
 
-// Classes for simplified single-die passes.
-struct die_check_item
-{
-  virtual checkdescriptor const *descriptor () const = 0;
-  virtual ~die_check_item () {}
-  virtual die_check *create (highlevel_check_i *check,
-			     checkstack &stack, dwarflint &lint) = 0;
-};
-
-class die_check_registrar
-  : public check_registrar_T<die_check_item>
-{
-public:
-  friend class dwarflint;
-  void run (checkstack &stack, dwarflint &lint);
-};
-
-
 class checkstack
   : public std::vector <checkdescriptor const *>
 {};
@@ -155,7 +137,6 @@ public:
   }
 
   static main_check_registrar *main_registrar ();
-  static die_check_registrar *die_registrar ();
 
   static void list_checks ();
 };

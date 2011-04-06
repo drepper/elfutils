@@ -32,6 +32,14 @@
 
 #include <c++/dwarf>
 
+struct die_check_item
+{
+  virtual checkdescriptor const *descriptor () const = 0;
+  virtual ~die_check_item () {}
+  virtual die_check *create (highlevel_check_i *check,
+			     checkstack &stack, dwarflint &lint) = 0;
+};
+
 /// Top-level check that iterates over all DIEs in a file and
 /// dispatches per-DIE checks on each one.  Per-DIE checks are written
 /// as subclasses of die_check (see below) and registered using
@@ -40,6 +48,8 @@ class check_die_tree
   : public highlevel_check<check_die_tree>
 {
 public:
+  static void register_check (die_check_item *check);
+
   static checkdescriptor const *descriptor ()
   {
     static checkdescriptor cd
@@ -66,7 +76,7 @@ struct reg_die_check
 {
   reg_die_check ()
   {
-    dwarflint::die_registrar ()->push_back (this);
+    check_die_tree::register_check (this);
   }
 
   virtual die_check *create (highlevel_check_i *check,
