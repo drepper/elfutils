@@ -26,8 +26,8 @@
 #ifndef DWARFLINT_CHECK_DEBUG_LINE_HH
 #define DWARFLINT_CHECK_DEBUG_LINE_HH
 
-#include "check_debug_info.ii"
-#include "sections.ii"
+#include "check_debug_info_i.hh"
+#include "sections_i.hh"
 #include "checks.hh"
 
 #include "../libdw/libdw.h"

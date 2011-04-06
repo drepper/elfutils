@@ -27,9 +27,9 @@
 #define DWARFLINT_CHECK_DEBUG_ARANGES_HH
 
 #include "checks.hh"
-#include "sections.ii"
-#include "check_debug_info.ii"
-#include "cu_coverage.ii"
+#include "sections_i.hh"
+#include "check_debug_info_i.hh"
+#include "cu_coverage_i.hh"
 
 class check_debug_aranges
   : public check<check_debug_aranges>

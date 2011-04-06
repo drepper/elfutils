@@ -27,9 +27,9 @@
 #define DWARFLINT_CHECK_DEBUG_ABBREV_HH
 
 #include "checks.hh"
-#include "sections.ii"
-#include "check_debug_info.ii"
-#include "dwarf_version.ii"
+#include "sections_i.hh"
+#include "check_debug_info_i.hh"
+#include "dwarf_version_i.hh"
 
 struct abbrev_attrib
 {

@@ -24,11 +24,11 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "checks.hh"
-#include "sections.ii"
-#include "check_debug_info.ii"
+#include "sections_i.hh"
+#include "check_debug_info_i.hh"
 #include "messages.hh"
 #include "coverage.hh"
-#include "dwarf_version.ii"
+#include "dwarf_version_i.hh"
 
 struct section_coverage
 {

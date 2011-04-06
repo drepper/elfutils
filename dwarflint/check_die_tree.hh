@@ -28,7 +28,7 @@
 
 #include "all-dies-it.hh"
 #include "highlevel_check.hh"
-#include "check_die_tree.ii"
+#include "check_die_tree_i.hh"
 
 #include <c++/dwarf>
 

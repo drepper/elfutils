@@ -26,8 +26,8 @@
 #ifndef DWARFLINT_CU_COVERAGE_HH
 #define DWARFLINT_CU_COVERAGE_HH
 
-#include "check_debug_info.ii"
-#include "check_debug_loc_range.ii"
+#include "check_debug_info_i.hh"
+#include "check_debug_loc_range_i.hh"
 #include "coverage.hh"
 #include "checks.hh"
 

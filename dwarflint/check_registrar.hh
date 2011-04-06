@@ -26,8 +26,7 @@
 #ifndef _CHECK_REGISTRAR_H_
 #define _CHECK_REGISTRAR_H_
 
-#include "dwarflint.ii"
-#include "checkdescriptor.ii"
+#include "checkdescriptor_i.hh"
 
 #include <vector>
 #include <set>

@@ -27,7 +27,7 @@
 #define DWARFLINT_RELOC_H
 
 #include "where.h"
-#include "elf_file.ii"
+#include "elf_file_i.hh"
 #include <libelf.h>
 #include <gelf.h>
 

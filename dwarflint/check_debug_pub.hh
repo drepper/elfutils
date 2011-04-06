@@ -26,10 +26,10 @@
 #ifndef DWARFLINT_CHECK_DEBUG_PUB_HH
 #define DWARFLINT_CHECK_DEBUG_PUB_HH
 
-#include "sections.ii"
-#include "check_debug_info.ii"
+#include "sections_i.hh"
+#include "check_debug_info_i.hh"
 #include "checks.hh"
-#include "elf_file.ii"
+#include "elf_file_i.hh"
 
 template<section_id sec_id>
 class check_debug_pub

@@ -88,7 +88,8 @@ template <class T>
 struct reg
   : public main_check_item
 {
-  reg () {
+  reg ()
+  {
     dwarflint::main_registrar ()->push_back (this);
   }
 

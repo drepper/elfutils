@@ -28,7 +28,7 @@
 
 #include <vector>
 #include <string>
-#include "dwarflint.ii"
+#include "dwarflint_i.hh"
 
 struct checkrule
 {

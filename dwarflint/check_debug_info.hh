@@ -28,13 +28,13 @@
 
 #include <libdw.h>
 #include "addr-record.hh"
-#include "elf_file.ii"
+#include "elf_file_i.hh"
 #include "coverage.hh"
 #include "checks.hh"
-#include "check_debug_abbrev.ii"
-#include "check_debug_line.ii"
-#include "check_debug_aranges.ii"
-#include "sections.ii"
+#include "check_debug_abbrev_i.hh"
+#include "check_debug_line_i.hh"
+#include "check_debug_aranges_i.hh"
+#include "sections_i.hh"
 
 struct cu_head
 {

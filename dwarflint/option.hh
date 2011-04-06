@@ -33,8 +33,8 @@
 #include <cassert>
 #include <iostream>
 
-#include "option.ii"
-#include "checkdescriptor.ii"
+#include "option_i.hh"
+#include "checkdescriptor_i.hh"
 
 class options
   : private std::map<int, option_i *>

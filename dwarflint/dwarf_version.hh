@@ -29,8 +29,8 @@
 
 #include <bitset>
 #include <iosfwd>
-#include "check_debug_info.ii"
-#include "dwarf_version.ii"
+#include "check_debug_info_i.hh"
+#include "dwarf_version_i.hh"
 #include "option.hh"
 
 extern global_opt<void_option> opt_nognu;

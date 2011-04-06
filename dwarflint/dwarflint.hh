@@ -32,12 +32,12 @@
 #include <iosfwd>
 
 #include "../libelf/libelf.h"
-#include "checks.ii"
-#include "checkdescriptor.ii"
+#include "checks_i.hh"
+#include "checkdescriptor_i.hh"
 #include "checkrule.hh"
 #include "check_registrar.hh"
-#include "dwarflint.ii"
-#include "highlevel_check.ii"
+#include "dwarflint_i.hh"
+#include "highlevel_check_i.hh"
 
 // Classes for full-blown check passes.
 struct main_check_item

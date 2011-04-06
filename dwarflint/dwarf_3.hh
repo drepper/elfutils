@@ -26,7 +26,7 @@
 #ifndef DWARFLINT_DWARF_3_HH
 #define DWARFLINT_DWARF_3_HH
 
-#include "dwarf_version.ii"
+#include "dwarf_version_i.hh"
 
 /// Pure DWARF 3 extension.
 dwarf_version const *dwarf_3_ext ();

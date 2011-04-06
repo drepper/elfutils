@@ -26,7 +26,7 @@
 #ifndef DWARFLINT_DWARF_2_HH
 #define DWARFLINT_DWARF_2_HH
 
-#include "dwarf_version.ii"
+#include "dwarf_version_i.hh"
 
 dwarf_version const *dwarf_2 ();
 

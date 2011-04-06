@@ -41,44 +41,44 @@ noinst_PROGRAMS = tests/test-coverage tests/test-wrap tests/test-all-dies-it
 dwarflint_SOURCES = \
 	addr-record.cc addr-record.hh \
 	all-dies-it.hh \
-	check_registrar.cc check_registrar.hh check_registrar.ii \
-	checkdescriptor.cc checkdescriptor.hh checkdescriptor.ii \
+	check_registrar.cc check_registrar.hh check_registrar_i.hh \
+	checkdescriptor.cc checkdescriptor.hh checkdescriptor_i.hh \
 	checked_read.cc checked_read.hh \
 	checkrule.cc checkrule.hh \
-	checks.hh checks.ii \
+	checks.hh checks_i.hh \
 	coverage.cc coverage.hh \
-	cu_coverage.cc cu_coverage.hh cu_coverage.ii \
+	cu_coverage.cc cu_coverage.hh cu_coverage_i.hh \
 	dwarf_2.cc dwarf_2.hh \
 	dwarf_3.cc dwarf_3.hh \
 	dwarf_4.cc dwarf_4.hh \
 	dwarf_gnu.cc dwarf_gnu.hh \
 	dwarf_mips.cc dwarf_mips.hh \
 	dwarf_version-imp.cc dwarf_version-imp.hh \
-	dwarf_version.cc dwarf_version.hh dwarf_version.ii \
-	dwarflint.cc dwarflint.hh dwarflint.ii \
-	elf_file.hh elf_file.ii \
+	dwarf_version.cc dwarf_version.hh dwarf_version_i.hh \
+	dwarflint.cc dwarflint.hh dwarflint_i.hh \
+	elf_file.hh elf_file_i.hh \
 	expected-at.cc expected.hh \
 	files.cc files.hh \
-	highlevel_check.cc highlevel_check.hh highlevel_check.ii \
+	highlevel_check.cc highlevel_check.hh highlevel_check_i.hh \
 	main.cc \
 	messages.cc messages.hh \
 	misc.cc misc.hh \
-	option.cc option.hh option.ii \
+	option.cc option.hh option_i.hh \
 	pri.cc pri.hh \
 	readctx.cc readctx.hh \
 	reloc.cc reloc.hh \
 	section_id.cc section_id.hh \
-	sections.cc sections.hh sections.ii \
+	sections.cc sections.hh sections_i.hh \
 	where.c where.h \
 	wrap.cc wrap.hh \
 	\
-	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev.ii \
-	check_debug_aranges.cc check_debug_aranges.hh check_debug_aranges.ii \
-	check_debug_info.cc check_debug_info.hh check_debug_info.ii \
-	check_debug_line.cc check_debug_line.hh check_debug_line.ii \
-	check_debug_loc_range.cc check_debug_loc_range.hh check_debug_loc_range.ii \
+	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev_i.hh \
+	check_debug_aranges.cc check_debug_aranges.hh check_debug_aranges_i.hh \
+	check_debug_info.cc check_debug_info.hh check_debug_info_i.hh \
+	check_debug_line.cc check_debug_line.hh check_debug_line_i.hh \
+	check_debug_loc_range.cc check_debug_loc_range.hh check_debug_loc_range_i.hh \
 	check_debug_pub.cc check_debug_pub.hh \
-	check_die_tree.cc check_die_tree.hh check_die_tree.ii \
+	check_die_tree.cc check_die_tree.hh check_die_tree_i.hh \
 	check_duplicate_DW_tag_variable.cc \
 	check_dups_abstract_origin.cc \
 	check_expected_trees.cc \
@@ -94,7 +94,7 @@ dwarflint_SOURCES = \
 locstats_SOURCES = \
 	locstats.cc \
 	files.cc files.hh \
-	option.cc option.hh option.ii \
+	option.cc option.hh option_i.hh \
 	pri.cc pri.hh \
 	where.c where.h
 
