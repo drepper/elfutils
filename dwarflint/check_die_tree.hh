@@ -69,9 +69,10 @@ struct reg_die_check
     dwarflint::die_registrar ()->push_back (this);
   }
 
-  virtual die_check *create (checkstack &stack, dwarflint &lint)
+  virtual die_check *create (highlevel_check_i *check,
+			     checkstack &stack, dwarflint &lint)
   {
-    return new T (stack, lint);
+    return new T (check, stack, lint);
   }
 
   virtual checkdescriptor const *descriptor () const

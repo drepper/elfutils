@@ -41,7 +41,9 @@ class die_check_context
   checkdescriptor const *_m_cd;
 
 public:
-  die_check_context (checkdescriptor const *cd, dwarflint &lint,
+  die_check_context (highlevel_check_i *check,
+		     checkdescriptor const *cd,
+		     dwarflint &lint,
 		     die_check_registrar const &registrar)
     : _m_cd (cd)
   {
@@ -61,7 +63,7 @@ public:
 	stack.push_back ((*it)->descriptor ());
 	popper p (stack);
 	if (lint.rules ().should_check (stack))
-	  push_back ((*it)->create (stack, lint));
+	  push_back ((*it)->create (check, stack, lint));
       }
   }
 
@@ -125,7 +127,7 @@ public:
 check_die_tree::check_die_tree (checkstack &stack, dwarflint &lint)
   : highlevel_check<check_die_tree> (stack, lint)
 {
-  die_check_context ctx (descriptor (), lint, *dwarflint::die_registrar ());
+  die_check_context ctx (this, descriptor (), lint, *dwarflint::die_registrar ());
 
   for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
        it != all_dies_iterator<dwarf> (); ++it)

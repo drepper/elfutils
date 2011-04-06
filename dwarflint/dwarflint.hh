@@ -37,6 +37,7 @@
 #include "checkrule.hh"
 #include "check_registrar.hh"
 #include "dwarflint.ii"
+#include "highlevel_check.ii"
 
 // Classes for full-blown check passes.
 struct main_check_item
@@ -59,7 +60,8 @@ struct die_check_item
 {
   virtual checkdescriptor const *descriptor () const = 0;
   virtual ~die_check_item () {}
-  virtual die_check *create (checkstack &stack, dwarflint &lint) = 0;
+  virtual die_check *create (highlevel_check_i *check,
+			     checkstack &stack, dwarflint &lint) = 0;
 };
 
 class die_check_registrar

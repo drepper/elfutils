@@ -59,7 +59,7 @@ dwarflint_SOURCES = \
 	elf_file.hh elf_file.ii \
 	expected-at.cc expected.hh \
 	files.cc files.hh \
-	highlevel_check.cc highlevel_check.hh \
+	highlevel_check.cc highlevel_check.hh highlevel_check.ii \
 	main.cc \
 	messages.cc messages.hh \
 	misc.cc misc.hh \

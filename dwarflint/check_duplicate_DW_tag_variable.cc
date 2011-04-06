@@ -64,7 +64,8 @@ namespace
       return &cd;
     }
 
-    check_duplicate_DW_tag_variable (checkstack &, dwarflint &) {}
+    check_duplicate_DW_tag_variable (highlevel_check_i *,
+				     checkstack &, dwarflint &) {}
 
     virtual void
     die (all_dies_iterator<dwarf> const &it)

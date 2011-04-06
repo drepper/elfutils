@@ -52,26 +52,35 @@ public:
   ~open_highlevel_dwarf ();
 };
 
+struct highlevel_check_i
+{
+  open_highlevel_dwarf *_m_loader;
+  Dwarf *const c_dw;
+  elfutils::dwarf const &dw;
+
+  highlevel_check_i (checkstack &stack, dwarflint &lint)
+    : _m_loader (lint.check (stack, _m_loader))
+    , c_dw (_m_loader->c_dw)
+    , dw (_m_loader->dw)
+  {}
+};
+
 template<class T>
 class highlevel_check
   : public check<highlevel_check<T> >
+  , public highlevel_check_i
 {
   open_highlevel_dwarf *_m_loader;
 public:
   static checkdescriptor const *descriptor () {
     static checkdescriptor cd
       (checkdescriptor::create ("highlevel_check")
-       .prereq<typeof (*_m_loader)> ());
+       .prereq<typeof (*highlevel_check_i::_m_loader)> ());
     return &cd;
   }
 
-  Dwarf *const c_dw;
-  elfutils::dwarf const &dw;
-
   highlevel_check (checkstack &stack, dwarflint &lint)
-    : _m_loader (lint.check (stack, _m_loader))
-    , c_dw (_m_loader->c_dw)
-    , dw (_m_loader->dw)
+    : highlevel_check_i (stack, lint)
   {}
 };
 
