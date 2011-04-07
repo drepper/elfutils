@@ -27,8 +27,7 @@
 # include <config.h>
 #endif
 
-#include "highlevel_check.hh"
-#include "all-dies-it.hh"
+#include "check_die_tree.hh"
 #include "pri.hh"
 #include "messages.hh"
 #include <map>
@@ -38,7 +37,7 @@ using elfutils::dwarf;
 namespace
 {
   class check_dups_abstract_origin
-    : public highlevel_check<check_dups_abstract_origin>
+    : public die_check
   {
   public:
     static checkdescriptor const *descriptor ()
@@ -79,13 +78,13 @@ namespace
     }
 
     void
-    check_die_attr (dwarf::debug_info_entry const &die,
+    check_die_attr (dwarf::debug_info_entry const &entry,
 		    dwarf::attribute const &attr)
     {
       std::map<unsigned int, dwarf::attr_value> m;
       for (dwarf::debug_info_entry::attributes_type::const_iterator
-	     at = die.attributes ().begin ();
-	   at != die.attributes ().end (); ++at)
+	     at = entry.attributes ().begin ();
+	   at != entry.attributes ().end (); ++at)
 	m.insert (std::make_pair ((*at).first, (*at).second));
 
       dwarf::attr_value const &val = attr.second;
@@ -97,9 +96,9 @@ namespace
 	     at = referree.attributes ().begin ();
 	   at != referree.attributes ().end (); ++at)
 	if ((at2 = m.find ((*at).first)) != m.end ()
-	    && ! duplicate_ok (die.tag (), at2->first, attr.first,
+	    && ! duplicate_ok (entry.tag (), at2->first, attr.first,
 			       at2->second == (*at).second))
-	  wr_message (to_where (die), mc_impact_3 | mc_acc_bloat | mc_die_rel)
+	  wr_message (to_where (entry), mc_impact_3 | mc_acc_bloat | mc_die_rel)
 	    << "Attribute " << dwarf::attributes::name (at2->first)
 	    << " is duplicated at " << dwarf::attributes::name (attr.first)
 	    << " (" << pri::ref (referree) << ")"
@@ -108,26 +107,28 @@ namespace
 	    << std::endl;
     }
 
-    explicit check_dups_abstract_origin (checkstack &stack, dwarflint &lint)
-      : highlevel_check<check_dups_abstract_origin> (stack, lint)
+    explicit
+    check_dups_abstract_origin (highlevel_check_i *, checkstack &, dwarflint &)
     {
-      for (all_dies_iterator<dwarf> it = all_dies_iterator<dwarf> (dw);
-	   it != all_dies_iterator<dwarf> (); ++it)
-	{
-	  // Do we have DW_AT_abstract_origin or DW_AT_specification?
-	  dwarf::debug_info_entry const &die = *it;
-	  for (dwarf::debug_info_entry::attributes_type::const_iterator
-		 at = die.attributes ().begin ();
-	       at != die.attributes ().end (); ++at)
-	    if ((*at).first == DW_AT_abstract_origin
-		|| (*at).first == DW_AT_specification)
-	      {
-		assert ((*at).second.what_space () == dwarf::VS_reference);
-		check_die_attr (die, *at);
-	      }
-	}
+      // No state necessary.
+    }
+
+    virtual void
+    die (all_dies_iterator<dwarf> const &it)
+    {
+      // Do we have DW_AT_abstract_origin or DW_AT_specification?
+      dwarf::debug_info_entry const &entry = *it;
+      for (dwarf::debug_info_entry::attributes_type::const_iterator
+	     at = entry.attributes ().begin ();
+	   at != entry.attributes ().end (); ++at)
+	if ((*at).first == DW_AT_abstract_origin
+	    || (*at).first == DW_AT_specification)
+	  {
+	    assert ((*at).second.what_space () == dwarf::VS_reference);
+	    check_die_attr (entry, *at);
+	  }
     }
   };
 
-  reg<check_dups_abstract_origin> reg;
+  reg_die_check<check_dups_abstract_origin> reg;
 }
