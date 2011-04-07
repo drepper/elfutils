@@ -336,6 +336,7 @@ dwarf::attr_value::constant_block () const
     case DW_FORM_block1:
     case DW_FORM_block2:
     case DW_FORM_block4:
+    case DW_FORM_exprloc:
       xif (thisattr(), dwarf_formblock (thisattr (), &block) < 0);
       break;
 
