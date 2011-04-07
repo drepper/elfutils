@@ -440,14 +440,14 @@ wr_format_leb128_message (struct where const *where,
 			  const char *purpose,
 			  const unsigned char *begin, const unsigned char *end)
 {
-  unsigned long category = mc_leb128 | mc_acc_bloat | mc_impact_3;
+  message_category category = mc_leb128 | mc_acc_bloat | mc_impact_3;
   char buf[(end - begin) * 3 + 1]; // 2 hexa digits+" " per byte, and term. 0
   char *ptr = buf;
   for (; begin < end; ++begin)
     ptr += sprintf (ptr, " %02x", *begin);
-  wr_message (category, where,
-	      ": %s: value %s encoded as `%s'.\n",
-	      what, purpose, buf + 1);
+  wr_message (*where, category)
+    << what << ": value " << purpose << " encoded as `"
+    << (buf + 1) << "'." << std::endl;
 }
 
 void
