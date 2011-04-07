@@ -55,7 +55,7 @@ namespace
     }
 
     bool
-    duplicate_ok (int tag, int at, int from)
+    duplicate_ok (int tag, int at, int from, bool same)
     {
       // A call site entry has a DW_AT_low_pc attribute which is the return
       // address after the call and a DW_AT_abstract_origin that is a
@@ -64,7 +64,15 @@ namespace
       // values).
       if (tag == DW_TAG_GNU_call_site
 	  && (at == DW_AT_low_pc || at == DW_AT_abstract_origin)
-	  && from == DW_AT_abstract_origin)
+	  && from == DW_AT_abstract_origin
+	  && ! same)
+	return true;
+
+      // A subprogram that has been inlined can have a different
+      // object_pointer than the original variant of the subprogram.
+      if (tag == DW_TAG_subprogram
+	  && at == DW_AT_object_pointer
+	  && ! same)
 	return true;
 
       return false;
@@ -89,7 +97,8 @@ namespace
 	     at = referree.attributes ().begin ();
 	   at != referree.attributes ().end (); ++at)
 	if ((at2 = m.find ((*at).first)) != m.end ()
-	    && ! duplicate_ok (die.tag (), at2->first, attr.first))
+	    && ! duplicate_ok (die.tag (), at2->first, attr.first,
+			       at2->second == (*at).second))
 	  wr_message (to_where (die), mc_impact_3 | mc_acc_bloat | mc_die_rel)
 	    << "Attribute " << dwarf::attributes::name (at2->first)
 	    << " is duplicated at " << dwarf::attributes::name (attr.first)
