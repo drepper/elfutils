@@ -62,6 +62,7 @@ namespace
 	{
 	  wr_message (to_where (entry),
 		      mc_impact_3 | mc_acc_suboptimal | mc_die_other)
+	    .id (descriptor ())
 	    << elfutils::dwarf::tags::name (entry.tag ())
 	    << " has linkage_name attribute, but no external attribute."
 	    << std::endl;

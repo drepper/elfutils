@@ -176,12 +176,12 @@ check_range_out_of_scope::recursively_validate
 
 	    if (!result.empty ())
 	      {
-		wr_message (wh, mc_error)
+		wr_message (wh, mc_error).id (descriptor ())
 		  << "PC range " << cov::format_ranges (cov1)
 		  << " is not a sub-range of containing scope."
 		  << std::endl;
 
-		wr_message (wh_parent, mc_error)
+		wr_message (wh_parent, mc_error).when_prev ()
 		  << "in this context: " << cov::format_ranges (cov2)
 		  << std::endl;
 	      }
@@ -221,19 +221,17 @@ check_range_out_of_scope::recursively_validate
 		  ::Dwarf_Addr length = end - start;
 		  if (length > 0 // skip empty ranges
 		      && !cov.is_covered (start, length))
-		    {
-		      runoff = true;
-		      wr_message (wh, mc_error)
-			<< "attribute `"
-			<< elfutils::dwarf::attributes::name ((*at).first)
-			<< "': PC range " << pri::range (start, end)
-			<< " outside containing scope." << std::endl;
-		    }
+		    wr_message (wh, mc_error)
+		      .id (descriptor (), runoff)
+		      << "attribute `"
+		      << elfutils::dwarf::attributes::name ((*at).first)
+		      << "': PC range " << pri::range (start, end)
+		      << " outside containing scope." << std::endl;
 		}
-	      if (runoff)
-		wr_message (wh_parent, mc_error)
-		  << "in this context: " << cov::format_ranges (cov)
-		  << '.' << std::endl;
+	      wr_message (wh_parent, mc_error)
+		.when (runoff)
+		<< "in this context: " << cov::format_ranges (cov)
+		<< '.' << std::endl;
 	    }
 	}
     }
