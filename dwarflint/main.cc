@@ -211,13 +211,13 @@ main (int argc, char *argv[])
       try
 	{
 	  char const *fname = argv[remaining];
-	  unsigned int prev_error_count = error_count;
 	  if (!only_one)
 	    std::cout << std::endl << fname << ":" << std::endl;
+	  wr_reset_counters ();
 	  dwarflint lint (fname, check_option.rules);
 	  one_passed = true;
 
-	  if (prev_error_count == error_count && !be_quiet)
+	  if (error_count == 0 && !be_quiet)
 	    puts (gettext ("No errors"));
 	}
       catch (std::runtime_error &e)

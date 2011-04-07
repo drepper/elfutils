@@ -35,6 +35,7 @@
 #include <libintl.h>
 
 unsigned error_count = 0;
+bool message_context::_m_last_emitted;
 
 bool
 message_accept (struct message_criteria const *cri,
@@ -336,12 +337,28 @@ message_context::message_context (message_count_filter *filter,
 {}
 
 std::ostream &
-message_context::when (bool whether)
+message_context::when (bool whether) const
 {
+  _m_last_emitted = false;
   if (whether)
-    return get_stream ();
+    {
+      ++error_count;
+      _m_last_emitted = true;
+
+      std::ostream &ret = get_stream ();
+      ret << _m_prefix;
+      if (_m_where)
+	ret << *_m_where << ": ";
+      return ret;
+    }
   else
     return nostream;
+}
+
+std::ostream &
+message_context::when_prev () const
+{
+  return when (wr_prev_emitted ());
 }
 
 std::ostream &
@@ -351,12 +368,11 @@ message_context::id (void const *key, bool &whether)
     return nostream;
   else if (int status = _m_filter->should_emit (key))
     {
-      ++error_count;
       if (status == -1)
 	get_stream () << "(threshold reached for the following message)"
 		      << std::endl;
       whether = true;
-      return get_stream ();
+      return when (true);
     }
   else
     return nostream;
@@ -372,11 +388,7 @@ message_context::id (void const *key)
 std::ostream &
 message_context::operator << (char const *message)
 {
-  std::ostream &ret = id (message);
-  ret << _m_prefix;
-  if (_m_where)
-    ret << *_m_where << ": ";
-  return ret << message;
+  return id (message) << message;
 }
 
 std::ostream &
@@ -440,14 +452,14 @@ wr_format_leb128_message (struct where const *where,
 			  const char *purpose,
 			  const unsigned char *begin, const unsigned char *end)
 {
-  unsigned long category = mc_leb128 | mc_acc_bloat | mc_impact_3;
+  message_category category = mc_leb128 | mc_acc_bloat | mc_impact_3;
   char buf[(end - begin) * 3 + 1]; // 2 hexa digits+" " per byte, and term. 0
   char *ptr = buf;
   for (; begin < end; ++begin)
     ptr += sprintf (ptr, " %02x", *begin);
-  wr_message (category, where,
-	      ": %s: value %s encoded as `%s'.\n",
-	      what, purpose, buf + 1);
+  wr_message (*where, category)
+    << what << ": value " << purpose << " encoded as `"
+    << (buf + 1) << "'." << std::endl;
 }
 
 void
@@ -468,4 +480,17 @@ wr_message_padding_n0 (message_category category,
   wr_format_padding_message (category | mc_acc_bloat | mc_impact_1,
 			     wh, start, end,
 			     "unreferenced non-zero bytes");
+}
+
+void
+wr_reset_counters ()
+{
+  error_count = 0;
+  message_count_filter::inst ()->clear ();
+}
+
+bool
+wr_prev_emitted ()
+{
+  return message_context::_m_last_emitted;
 }

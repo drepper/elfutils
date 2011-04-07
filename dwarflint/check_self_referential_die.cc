@@ -68,6 +68,7 @@ namespace
 	      if (ref.identity () == entry.identity ())
 		wr_message (to_where (entry),
 			    mc_impact_3 | mc_acc_suboptimal | mc_die_rel)
+		  .id (descriptor ())
 		  << dwarf::tags::name (entry.tag ())
 		  << " attribute " << dwarf::attributes::name ((*at).first)
 		  << " references DIE itself." << std::endl;

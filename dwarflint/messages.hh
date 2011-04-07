@@ -166,6 +166,14 @@ class message_count_filter
   // NULL for filtered-out message, otherwise array of <key, count>
   // pairs sorted by key.
   counters_t _m_counters;
+  friend void wr_reset_counters ();
+
+  void
+  clear ()
+  {
+    counters_t empty;
+    _m_counters.swap (empty);
+  }
 
 public:
 
@@ -180,12 +188,15 @@ public:
 
 class message_context
 {
+  static bool _m_last_emitted;
+
   message_count_filter *_m_filter;
   where const *_m_where;
   char const *_m_prefix;
 
   friend message_context wr_message (where const &wh, message_category cat);
   friend message_context wr_message (message_category cat);
+  friend bool wr_prev_emitted ();
 
   message_context (message_count_filter *filter,
 		   where const *where, char const *prefix);
@@ -215,12 +226,16 @@ public:
   std::ostream &id (void const *key, bool &whether);
 
   // Return either the full stream, or a sink, depending on WHETHER.
-  std::ostream &when (bool whether);
+  std::ostream &when (bool whether) const;
+
+  std::ostream &when_prev () const;
 };
 
 std::ostream &wr_error (where const &wh);
 std::ostream &wr_error ();
 message_context wr_message (where const &wh, message_category cat);
 message_context wr_message (message_category cat);
+void wr_reset_counters ();
+bool wr_prev_emitted ();
 
 #endif//DWARFLINT_MESSAGES_HH

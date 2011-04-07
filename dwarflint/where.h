@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -55,12 +55,6 @@ extern "C"
     struct where const *next; // For forming "caused-by" chains.
   };
 
-# define WHERE(SECTION, NEXT)						\
-  ((struct where)							\
-   {(SECTION), wf_plain,						\
-    (uint64_t)-1, (uint64_t)-1, (uint64_t)-1,				\
-    NULL, NEXT})
-
   extern const char *where_fmt (const struct where *wh,	char *ptr);
   extern void where_fmt_chain (const struct where *wh, const char *severity);
   extern void where_reset_1 (struct where *wh, uint64_t addr);
@@ -71,6 +65,18 @@ extern "C"
 }
 
 #include <iostream>
+
+inline where
+WHERE (section_id sec, where const *next = NULL)
+{
+  where ret = {sec, wf_plain,
+	       (uint64_t)-1,
+	       (uint64_t)-1,
+	       (uint64_t)-1,
+	       NULL, next};
+  return ret;
+}
+
 
 inline std::ostream &
 operator << (std::ostream &os, where const &wh)
