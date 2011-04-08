@@ -74,6 +74,15 @@ namespace
 	  && ! same)
 	return true;
 
+      // A subprogram can be defined outside the body of the enclosing
+      // class, then file and/or line attributes can differ.
+      if (tag == DW_TAG_subprogram
+	  && from == DW_AT_specification
+	  && (at == DW_AT_decl_line || at == DW_AT_decl_file)
+	  && ! same)
+	return true;
+
+
       return false;
     }
 
