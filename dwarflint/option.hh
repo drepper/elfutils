@@ -159,6 +159,11 @@ public:
     return _m_arg;
   }
 
+  arg_type const &value (arg_type arg)
+  {
+    return seen () ? _m_arg : arg;
+  }
+
   error_t parse_opt (char *arg, __attribute__ ((unused)) argp_state *state)
   {
     _m_seen = true;
