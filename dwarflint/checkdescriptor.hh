@@ -38,23 +38,16 @@ struct checkgroups
 {};
 std::ostream &operator << (std::ostream &o, checkgroups const &groups);
 
-struct checkdescriptor;
-
-struct prereqs
-  : public std::set<checkdescriptor const *>
-{};
-std::ostream &operator << (std::ostream &o, prereqs const &p);
-
 struct checkdescriptor
 {
   class create
   {
     friend class checkdescriptor;
     checkgroups _m_groups;
-    prereqs _m_prereq;
     char const *const _m_name;
     char const *_m_description;
     bool _m_hidden;
+    bool _m_schedule;
     options _m_opts;
 
   public:
@@ -68,10 +61,6 @@ struct checkdescriptor
       return *this;
     }
 
-    template <class T> create &prereq ();
-
-    template <class T> create &inherit ();
-
     create hidden ()
     {
       _m_hidden = true;
@@ -83,47 +72,37 @@ struct checkdescriptor
       _m_opts.add (&opt);
       return *this;
     }
+
+    create schedule (bool whether)
+    {
+      _m_schedule = whether;
+      return *this;
+    }
   };
 
+  checkdescriptor ();
   checkdescriptor (create const &c);
 
   char const *name () const { return _m_name; }
   char const *description () const { return _m_description; }
-  prereqs const &prereq () const { return _m_prereq; }
 
   checkgroups const &groups () const { return _m_groups; }
   bool in_group (std::string const &group) const;
 
   bool hidden () const { return _m_hidden; }
+  bool schedule () const { return _m_schedule; }
 
   options const &opts () const { return _m_opts; }
+
+  void list (bool verbose) const;
 
 private:
   char const *const _m_name;
   char const *const _m_description;
   checkgroups const _m_groups;
-  prereqs const _m_prereq;
-  bool _m_hidden;
+  bool const _m_hidden;
+  bool const _m_schedule;
   options const _m_opts;
 };
-
-template <class T>
-checkdescriptor::create &
-checkdescriptor::create::prereq ()
-{
-  _m_prereq.insert (T::descriptor ());
-  return *this;
-}
-
-template <class T>
-checkdescriptor::create &
-checkdescriptor::create::inherit ()
-{
-  checkdescriptor const &cd = *T::descriptor ();
-  for (prereqs::const_iterator it = cd.prereq ().begin ();
-       it != cd.prereq ().end (); ++it)
-    _m_prereq.insert (*it);
-  return *this;
-}
 
 #endif//DWARFLINT_CHECKDESCRIPTOR_HH

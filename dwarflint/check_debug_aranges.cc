@@ -48,9 +48,6 @@ check_debug_aranges::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_aranges")
      .groups ("@low")
-     .prereq<typeof (*_m_sec_aranges)> ()
-     .prereq<typeof (*_m_info)> ()
-     .prereq<typeof (*_m_cu_coverage)> ()
      .description (
 "Checks for low-level structure of .debug_aranges.  In addition it "
 "checks:\n"
@@ -63,6 +60,8 @@ check_debug_aranges::descriptor ()
 		   ));
   return &cd;
 }
+
+static reg<check_debug_aranges> reg_debug_aranges;
 
 static struct cu *
 cu_find_cu (struct cu *cu_chain, uint64_t offset)

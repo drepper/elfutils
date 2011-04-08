@@ -32,6 +32,7 @@
 #include "checks.hh"
 #include "check_registrar.hh"
 #include "files.hh"
+#include "main.hh"
 
 #include <fcntl.h>
 #include <cstring>
@@ -57,10 +58,11 @@ void
 main_check_registrar::run (dwarflint &lint)
 {
   for (const_iterator it = begin (); it != end (); ++it)
-    {
-      checkstack stack;
-      (*it)->run (stack, lint);
-    }
+    if ((*it)->descriptor ()->schedule ())
+      {
+	checkstack stack;
+	(*it)->run (stack, lint);
+      }
 }
 
 dwarflint::dwarflint (char const *a_fname, checkrules const &a_rules)
@@ -115,13 +117,23 @@ dwarflint::main_registrar ()
 
 namespace
 {
+  bool
+  be_verbose ()
+  {
+    // We can hopefully assume that the option doesn't change during
+    // execution, so we can simply cache it this was.
+    static bool be_verbose = opt_list_checks.value () == "full";
+    return be_verbose;
+  }
+
   template <class T>
   void
   list_part_checks (T const &descriptors)
   {
     for (typename T::const_iterator it = descriptors.begin ();
 	 it != descriptors.end (); ++it)
-      check_registrar_aux::list_one_check (**it);
+      if (!(*it)->hidden ())
+	(*it)->list (be_verbose ());
   }
 }
 
@@ -130,7 +142,7 @@ dwarflint::list_checks ()
 {
   list_part_checks (dwarflint::main_registrar ()->get_descriptors ());
 
-  if (!check_registrar_aux::be_verbose ())
+  if (!be_verbose ())
     std::cout
       << "Use --list-checks=full to get more detailed description."
       << std::endl;

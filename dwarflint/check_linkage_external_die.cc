@@ -39,10 +39,8 @@ namespace
     {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_linkage_external_die")
-	 .inherit<highlevel_check<check_linkage_external_die> > ()
-	 .description (
-"Check that each DIE that has a linkage_name also has an external attribute.\n"
-		       ));
+	 .description ("Check that each DIE that has a linkage_name "
+		       "also has an external attribute.\n"));
       return &cd;
     }
 

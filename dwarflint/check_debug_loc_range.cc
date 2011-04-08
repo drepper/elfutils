@@ -55,8 +55,7 @@ check_debug_ranges::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_ranges")
      .groups ("@low")
-     .prereq<typeof (*_m_sec_ranges)> ()
-     .prereq<typeof (*_m_info)> ()
+     .schedule (false)
      .description (
 "Checks for low-level structure of .debug_ranges.  In addition it "
 "checks:\n"
@@ -72,14 +71,15 @@ check_debug_ranges::descriptor ()
   return &cd;
 }
 
+static reg<check_debug_ranges> reg_debug_ranges;
+
 checkdescriptor const *
 check_debug_loc::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_loc")
      .groups ("@low")
-     .prereq<typeof (*_m_sec_loc)> ()
-     .prereq<typeof (*_m_info)> ()
+     .schedule (false)
      .description (
 "Checks for low-level structure of .debug_loc.  In addition it "
 "makes the same checks as .debug_ranges.  For location expressions "
@@ -94,6 +94,8 @@ check_debug_loc::descriptor ()
 "quantities that don't fit into 32 bits\n"));
   return &cd;
 }
+
+static reg<check_debug_loc> reg_debug_loc;
 
 namespace
 {

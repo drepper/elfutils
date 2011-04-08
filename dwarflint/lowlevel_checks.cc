@@ -1,5 +1,5 @@
 /* Scheduler for low_level checks
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -37,19 +37,10 @@ lowlevel_checks::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("lowlevel_checks")
-     .prereq<check_debug_info> ()
-     .prereq<check_debug_abbrev> ()
-     .prereq<check_debug_aranges> ()
-     .prereq<check_debug_pubnames> ()
-     .prereq<check_debug_pubtypes> ()
-     .prereq<check_debug_line> ()
-     .prereq<check_debug_loc> ()
-     .prereq<check_debug_ranges> ()
-     .prereq<check_debug_info_refs> ()
-     .hidden ()
-     );
+     .hidden ());
   return &cd;
 }
+
 static reg<lowlevel_checks> reg_lowlevel_checks;
 
 namespace

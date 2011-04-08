@@ -24,6 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "checkdescriptor.hh"
+#include "wrap.hh"
 #include <sstream>
 #include <cassert>
 
@@ -42,32 +43,19 @@ operator << (std::ostream &o, checkgroups const &groups)
   return o;
 }
 
-std::ostream &
-operator << (std::ostream &o, prereqs const &p)
-{
-  o << "(";
-  for (prereqs::const_iterator it = p.begin (); it != p.end (); ++it)
-    {
-      if (it != p.begin ())
-	o << ',';
-      o << (*it)->name ();
-    }
-  o << ")";
-  return o;
-}
-
 checkdescriptor::create::create (char const *name)
   : _m_name (name)
   , _m_description (NULL)
   , _m_hidden (false)
+  , _m_schedule (true)
 {}
 
 checkdescriptor::create::create (checkdescriptor const &base)
   : _m_groups (base.groups ())
-  , _m_prereq (base.prereq ())
   , _m_name (base.name ())
   , _m_description (base.description ())
   , _m_hidden (base.hidden ())
+  , _m_schedule (base.schedule ())
   , _m_opts (base.opts ())
 {}
 
@@ -81,12 +69,21 @@ checkdescriptor::create::groups (char const *a_groups)
   return *this;
 }
 
+checkdescriptor::checkdescriptor ()
+  : _m_name (NULL)
+  , _m_description (NULL)
+  , _m_groups ()
+  , _m_hidden (false)
+  , _m_schedule (true)
+  , _m_opts ()
+{}
+
 checkdescriptor::checkdescriptor (create const &c)
   : _m_name (c._m_name)
   , _m_description (c._m_description)
   , _m_groups (c._m_groups)
-  , _m_prereq (c._m_prereq)
   , _m_hidden (c._m_hidden)
+  , _m_schedule (c._m_schedule)
   , _m_opts (c._m_opts)
 {}
 
@@ -94,4 +91,43 @@ bool
 checkdescriptor::in_group (std::string const &group) const
 {
   return _m_groups.find (group) != _m_groups.end ();
+}
+
+void
+checkdescriptor::list (bool verbose) const
+{
+  const size_t columns = 70;
+
+  if (verbose)
+    std::cout << "=== " << name () << " ===";
+  else
+    std::cout << name ();
+
+  checkgroups const &g = groups ();
+  if (!g.empty ())
+    {
+      if (verbose)
+	std::cout << std::endl << "groups: ";
+      else
+	std::cout << ' ';
+      std::cout << g;
+    }
+  std::cout << std::endl;
+
+  if (verbose)
+    {
+      char const *desc = description ();
+      if (desc != NULL)
+	std::cout << wrap_str (desc, columns).join ();
+
+      options const &o = opts ();
+      if (!o.empty ())
+	{
+	  std::cout << "recognized options:" << std::endl;
+	  argp a = o.build_argp ();
+	  argp_help (&a, stdout, ARGP_HELP_LONG, NULL);
+	}
+
+      std::cout << std::endl;
+    }
 }

@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_pub*.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -47,8 +47,7 @@ check_debug_pubnames::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_pubnames")
      .groups ("@low")
-     .prereq<typeof (*_m_sec)> ()
-     .prereq<check_debug_info> ()
+     .schedule (false)
      .description (
 "Checks for low-level structure of .debug_pubnames.  In addition it "
 "checks:\n"
@@ -60,8 +59,11 @@ check_debug_pubnames::descriptor ()
 " - that there's only one pub section per CU\n"));
   return &cd;
 }
+
 template check_debug_pub<sec_pubnames>::check_debug_pub (checkstack &stack,
 							 dwarflint &lint);
+
+static reg<check_debug_pubnames> reg_debug_pubnames;
 
 checkdescriptor const *
 check_debug_pubtypes::descriptor ()
@@ -69,15 +71,18 @@ check_debug_pubtypes::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_pubtypes")
      .groups ("@low")
-     .prereq<typeof (*_m_sec)> ()
-     .prereq<check_debug_info> ()
+     .schedule (false)
      .description (
 "Checks for low-level structure of .debug_pubtypes.  In addition it "
 "makes the same checks as check_debug_pubnames.\n"));
   return &cd;
 }
+
 template check_debug_pub<sec_pubtypes>::check_debug_pub (checkstack &stack,
 							 dwarflint &lint);
+
+static reg<check_debug_pubtypes> reg_debug_pubtypes;
+
 
 template <section_id sec_id>
 bool

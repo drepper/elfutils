@@ -54,7 +54,6 @@ public:
   {
     static checkdescriptor cd
       (checkdescriptor::create ("check_die_tree")
-       .inherit<highlevel_check<check_die_tree> > ()
        .hidden ()
        .description ("A pass over the DIE tree that dispatches to various per-DIE checks.\n"));
     return &cd;
@@ -103,11 +102,7 @@ private:
   public:
     static checkdescriptor const *descriptor ()
     {
-      static checkdescriptor cd
-	(checkdescriptor::create (*T::descriptor ())
-	 .prereq<typeof (*_m_die_tree_check)> ()
-	 .inherit<highlevel_check<check_stub> > ());
-      return &cd;
+      return T::descriptor ();
     }
 
     check_stub (checkstack &stack, dwarflint &lint)
