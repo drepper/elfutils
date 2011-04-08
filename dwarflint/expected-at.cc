@@ -232,6 +232,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_start_scope)
     .optional (DW_AT_type)
     .optional (DW_AT_visibility)
+    .optional (at_linkage_name) // GNU extension for anonymous typedef enums.
     ;
 
   m_map [DW_TAG_enumerator]
@@ -571,6 +572,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_start_scope)
     .optional (DW_AT_visibility)
     .optional (DW_AT_containing_type) // XXX added to reflect reality
+    .optional (at_linkage_name) // GNU extension for anonymous typedef structs.
     ;
 
   m_map [DW_TAG_subprogram]
