@@ -53,7 +53,7 @@ namespace
     }
 
     bool
-    duplicate_ok (int tag, int at, int from, bool same)
+    duplicate_ok (int tag, int at, int from, int ref_tag, bool same)
     {
       // A call site entry has a DW_AT_low_pc attribute which is the return
       // address after the call and a DW_AT_abstract_origin that is a
@@ -66,10 +66,16 @@ namespace
 	  && ! same)
 	return true;
 
-      // A subprogram that has been inlined can have a different
-      // object_pointer than the original variant of the subprogram.
+      // A subprogram that has a concrete out-of-line instance might
+      // have an object_pointer different from the original variant
+      // of the subprogram. Similar for a subprogram specification,
+      // which may refer to the specification die of the object_pointer,
+      // while the instance of the subprogram will refer to the
+      // actual instance of the object_pointer die.
       if (tag == DW_TAG_subprogram
 	  && at == DW_AT_object_pointer
+	  && (from == DW_AT_abstract_origin || from == DW_AT_specification)
+	  && ref_tag == DW_TAG_subprogram
 	  && ! same)
 	return true;
 
@@ -78,6 +84,16 @@ namespace
       if (tag == DW_TAG_subprogram
 	  && from == DW_AT_specification
 	  && (at == DW_AT_decl_line || at == DW_AT_decl_file)
+	  && ref_tag == DW_TAG_subprogram
+	  && ! same)
+	return true;
+
+      // Same for a member variable can be defined outside the body of the
+      // enclosing class, then file and/or line attributes can differ.
+      if (tag == DW_TAG_variable
+	  && from == DW_AT_specification
+	  && (at == DW_AT_decl_line || at == DW_AT_decl_file)
+	  && ref_tag == DW_TAG_member
 	  && ! same)
 	return true;
 
@@ -105,9 +121,10 @@ namespace
 	   at != referree.attributes ().end (); ++at)
 	if ((at2 = m.find ((*at).first)) != m.end ()
 	    && ! duplicate_ok (entry.tag (), at2->first, attr.first,
-			       at2->second == (*at).second))
+			       referree.tag (), at2->second == (*at).second))
 	  wr_message (to_where (entry), mc_impact_3 | mc_acc_bloat | mc_die_rel)
-	    << "Attribute " << dwarf::attributes::name (at2->first)
+	    << dwarf::tags::name (entry.tag ())
+	    << " attribute " << dwarf::attributes::name (at2->first)
 	    << " is duplicated at " << dwarf::attributes::name (attr.first)
 	    << " (" << pri::ref (referree) << ")"
 	    << (at2->second == (*at).second
