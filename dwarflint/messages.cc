@@ -302,7 +302,9 @@ namespace
 }
 
 global_opt<unsigned_option>
-  dup_threshold_opt ("Threshold for duplicate messages.",
+  dup_threshold_opt ("Threshold for duplicate messages."
+		     " Defaults to 16."
+		     " Use zero for no limit.",
 		     "count", "dups");
 
 namespace
@@ -310,7 +312,7 @@ namespace
   unsigned
   dup_threshold ()
   {
-    static unsigned t = dup_threshold_opt.value ();
+    static unsigned t = dup_threshold_opt.value (16);
     if (t == 0)
       t = -1;
     return t;
@@ -369,7 +371,8 @@ message_context::id (void const *key, bool &whether)
   else if (int status = _m_filter->should_emit (key))
     {
       if (status == -1)
-	get_stream () << "(threshold reached for the following message)"
+	get_stream () << "(threshold [--dups=" << dup_threshold ()
+		      << "] reached for the following message)"
 		      << std::endl;
       whether = true;
       return when (true);
