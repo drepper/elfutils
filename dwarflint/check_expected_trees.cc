@@ -46,7 +46,6 @@ namespace
     static checkdescriptor const *descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_expected_trees")
-	 .inherit<highlevel_check<check_expected_trees> > ()
 	 .description (
 "Checks whether all DIEs have the right attributes and the right children.\n"
 "Currently this is very much a work in progress.\n"));

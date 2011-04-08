@@ -43,7 +43,7 @@ check_debug_line::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_line")
      .groups ("@low")
-     .prereq<typeof (*_m_sec)> ()
+     .schedule (false)
      .description (
 "Checks for low-level structure of .debug_line.  In addition it\n"
 "checks:\n"
@@ -73,6 +73,8 @@ check_debug_line::descriptor ()
 		   ));
   return &cd;
 }
+
+static reg<check_debug_line> reg_debug_line;
 
 namespace
 {

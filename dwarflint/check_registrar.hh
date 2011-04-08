@@ -36,11 +36,6 @@ namespace check_registrar_aux
 {
   bool be_verbose ();
   void list_one_check (checkdescriptor const &cd);
-
-  void include (std::set<checkdescriptor const *> &to,
-		checkdescriptor const *cd);
-  void add_deps (std::set<checkdescriptor const *> &to,
-		 checkdescriptor const *cd);
 }
 
 template <class Item>
@@ -60,10 +55,10 @@ public:
   checkdescriptors_t
   get_descriptors () const
   {
-    std::set<checkdescriptor const *> descriptors;
+    checkdescriptors_t ret;
     for (typename _super_t::const_iterator it = begin (); it != end (); ++it)
-      check_registrar_aux::include (descriptors, (*it)->descriptor ());
-    return checkdescriptors_t (descriptors.begin (), descriptors.end ());
+      ret.push_back ((*it)->descriptor ());
+    return ret;
   }
 };
 

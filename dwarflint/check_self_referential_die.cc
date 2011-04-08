@@ -39,7 +39,6 @@ namespace
     {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_self_referential_die")
-	 .inherit<highlevel_check<check_self_referential_die> > ()
 	 .description (
 "A reference attribute referencing the DIE itself is suspicious.\n"
 "One example is a DW_AT_containing_type pointing to itself.\n"

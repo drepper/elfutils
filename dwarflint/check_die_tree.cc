@@ -45,8 +45,6 @@ namespace
       return &inst;
     }
   };
-
-  reg<check_die_tree> reg;
 }
 
 void

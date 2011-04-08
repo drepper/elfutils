@@ -48,9 +48,7 @@ load_sections::descriptor ()
 checkdescriptor const *
 section_base::descriptor ()
 {
-  static checkdescriptor cd
-    (checkdescriptor::create ()
-     .prereq<typeof (*sections)> ());
+  static checkdescriptor cd;
   return &cd;
 }
 

@@ -49,8 +49,7 @@ check_debug_abbrev::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_abbrev")
      .groups ("@low")
-     .prereq <typeof (*_m_sec_abbr)> ()
-     .prereq <typeof (*_m_cu_headers)> ()
+     .schedule (false)
      .description (
 "Checks for low-level structure of .debug_abbrev.  In addition it "
 "checks:\n"
@@ -78,6 +77,8 @@ check_debug_abbrev::descriptor ()
 "inaccurate.\n"));
   return &cd;
 }
+
+static reg<check_debug_abbrev> reg_debug_abbrev;
 
 abbrev *
 abbrev_table::find_abbrev (uint64_t abbrev_code) const

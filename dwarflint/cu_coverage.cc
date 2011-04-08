@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2010 Red Hat, Inc.
+   Copyright (C) 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -33,8 +33,7 @@ cu_coverage::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("cu_coverage")
-     .prereq<typeof (*_m_info)> ()
-     .prereq<typeof (*_m_ranges)> ());
+     .hidden ());
   return &cd;
 }
 

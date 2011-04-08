@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2008,2009,2010 Red Hat, Inc.
+   Copyright (C) 2008,2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -33,6 +33,48 @@
 
 extern bool show_refs (void);
 
+struct section_info
+{
+  const char *name;
+  const char *addr1f;
+  const char *addr2f;
+  const char *addr3f;
+};
+
+static struct section_info section_names[] =
+  {
+    [sec_info] = {".debug_info", "CU %"PRId64, "DIE %#"PRIx64, NULL},
+
+    [sec_abbrev] = {".debug_abbrev", "section %"PRId64,
+		    "abbreviation %"PRId64, "abbr. attribute %#"PRIx64},
+
+    [sec_aranges] = {".debug_aranges", "table %"PRId64,
+		     "arange %#"PRIx64, NULL},
+
+    [sec_pubnames] = {".debug_pubnames", "pubname table %"PRId64,
+		      "pubname %#"PRIx64, NULL},
+
+    [sec_pubtypes] = {".debug_pubtypes", "pubtype table %"PRId64,
+		      "pubtype %#"PRIx64, NULL},
+
+    [sec_str] = {".debug_str", "offset %#"PRIx64, NULL, NULL},
+
+    [sec_line] = {".debug_line", "table %"PRId64, "offset %#"PRIx64, NULL},
+
+    [sec_loc] = {".debug_loc", "loclist %#"PRIx64, "offset %#"PRIx64, NULL},
+
+    [sec_mac] = {".debug_mac", NULL, NULL, NULL},
+
+    [sec_ranges] = {".debug_ranges", "rangelist %#"PRIx64,
+		    "offset %#"PRIx64, NULL},
+
+    [sec_locexpr] = {"location expression", "offset %#"PRIx64, NULL, NULL},
+
+    [sec_rel] = {".rel", "relocation %"PRId64, "offset %#"PRIx64, NULL},
+
+    [sec_rela] = {".rela", "relocation %"PRId64, "offset %#"PRIx64, NULL},
+  };
+
 const char *
 where_fmt (const struct where *wh, char *ptr)
 {
@@ -41,60 +83,9 @@ where_fmt (const struct where *wh, char *ptr)
 
   static char buf[256];
 
-  struct section_info
-  {
-    const char *name;
-    const char *addr1n;
-    const char *addr1f;
-    const char *addr2n;
-    const char *addr2f;
-    const char *addr3n;
-    const char *addr3f;
-  };
-
-  static struct section_info section_names[] =
-    {
-      [sec_info] = {".debug_info", "CU", "%"PRId64,
-		    "DIE", "%#"PRIx64, NULL, NULL},
-
-      [sec_abbrev] = {".debug_abbrev", "section", "%"PRId64,
-		      "abbreviation", "%"PRId64, "abbr. attribute", "%#"PRIx64},
-
-      [sec_aranges] = {".debug_aranges", "table", "%"PRId64,
-		       "arange", "%#"PRIx64, NULL, NULL},
-
-      [sec_pubnames] = {".debug_pubnames", "pubname table", "%"PRId64,
-			"pubname", "%#"PRIx64, NULL, NULL},
-
-      [sec_pubtypes] = {".debug_pubtypes", "pubtype table", "%"PRId64,
-			"pubtype", "%#"PRIx64, NULL, NULL},
-
-      [sec_str] = {".debug_str", "offset", "%#"PRIx64,
-		   NULL, NULL, NULL, NULL},
-
-      [sec_line] = {".debug_line", "table", "%"PRId64,
-		    "offset", "%#"PRIx64, NULL, NULL},
-
-      [sec_loc] = {".debug_loc", "loclist", "%#"PRIx64,
-		   "offset", "%#"PRIx64, NULL, NULL},
-
-      [sec_mac] = {".debug_mac", NULL, NULL, NULL, NULL, NULL, NULL},
-
-      [sec_ranges] = {".debug_ranges", "rangelist", "%#"PRIx64,
-		      "offset", "%#"PRIx64, NULL, NULL},
-
-      [sec_locexpr] = {"location expression", "offset", "%#"PRIx64,
-		       NULL, NULL, NULL, NULL},
-
-      [sec_rel] = {".rel", "relocation", "%"PRId64,
-		   "offset", "%#"PRIx64, NULL, NULL},
-      [sec_rela] = {".rela", "relocation", "%"PRId64,
-		    "offset", "%#"PRIx64, NULL, NULL},
-    };
-
   static struct section_info special_formats[] =
     {
-      [wf_cudie] = {".debug_info", "CU DIE", "%"PRId64, NULL, NULL, NULL, NULL}
+      [wf_cudie] = {".debug_info", "CU DIE %"PRId64, NULL, NULL}
     };
 
   assert (wh->section < sizeof (section_names) / sizeof (*section_names));
@@ -105,13 +96,9 @@ where_fmt (const struct where *wh, char *ptr)
 
   assert (inf->name);
 
-  assert ((inf->addr1n == NULL) == (inf->addr1f == NULL));
-  assert ((inf->addr2n == NULL) == (inf->addr2f == NULL));
-  assert ((inf->addr3n == NULL) == (inf->addr3f == NULL));
-
-  assert ((wh->addr1 != (uint64_t)-1) ? inf->addr1n != NULL : true);
-  assert ((wh->addr2 != (uint64_t)-1) ? inf->addr2n != NULL : true);
-  assert ((wh->addr3 != (uint64_t)-1) ? inf->addr3n != NULL : true);
+  assert ((wh->addr1 != (uint64_t)-1) ? inf->addr1f != NULL : true);
+  assert ((wh->addr2 != (uint64_t)-1) ? inf->addr2f != NULL : true);
+  assert ((wh->addr3 != (uint64_t)-1) ? inf->addr3f != NULL : true);
 
   assert ((wh->addr3 != (uint64_t)-1) ? (wh->addr2 != (uint64_t)-1) : true);
   assert ((wh->addr2 != (uint64_t)-1) ? (wh->addr1 != (uint64_t)-1) : true);
@@ -160,11 +147,11 @@ where_fmt (const struct where *wh, char *ptr)
     }
 
   if (addr3s != NULL)
-    ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr3n), " "), addr3s);
+    ptr = stpcpy (ptr, addr3s);
   else if (addr2s != NULL)
-    ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr2n), " "), addr2s);
+    ptr = stpcpy (ptr, addr2s);
   else if (addr1s != NULL)
-    ptr = stpcpy (stpcpy (stpcpy (ptr, inf->addr1n), " "), addr1s);
+    ptr = stpcpy (ptr, addr1s);
 
   if (free_s1)
     free (addr1s);

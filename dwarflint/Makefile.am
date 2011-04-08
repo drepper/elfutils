@@ -41,7 +41,7 @@ noinst_PROGRAMS = tests/test-coverage tests/test-wrap tests/test-all-dies-it
 dwarflint_SOURCES = \
 	addr-record.cc addr-record.hh \
 	all-dies-it.hh \
-	check_registrar.cc check_registrar.hh check_registrar_i.hh \
+	check_registrar.hh check_registrar_i.hh \
 	checkdescriptor.cc checkdescriptor.hh checkdescriptor_i.hh \
 	checked_read.cc checked_read.hh \
 	checkrule.cc checkrule.hh \

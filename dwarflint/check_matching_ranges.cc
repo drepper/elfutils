@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -42,7 +42,6 @@ namespace
     static checkdescriptor const *descriptor () {
       static checkdescriptor cd
 	(checkdescriptor::create ("check_matching_ranges")
-	 .inherit<highlevel_check<check_matching_ranges> > ()
 	 .description (
 "Check that the ranges in .debug_aranges and .debug_ranges match.\n"
 ));

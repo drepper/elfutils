@@ -50,7 +50,7 @@ read_cu_headers::descriptor ()
 {
   static checkdescriptor cd
     (checkdescriptor::create ("read_cu_headers")
-     .prereq<typeof (*_m_sec_info)> ());
+     .hidden ());
   return &cd;
 }
 
@@ -64,11 +64,8 @@ check_debug_info::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_info")
      .groups ("@low")
+     .schedule (false)
      .option (dump_die_offsets)
-     .prereq<typeof (*_m_sec_info)> ()
-     .prereq<typeof (*_m_sec_str)> ()
-     .prereq<typeof (*_m_abbrevs)> ()
-     .prereq<typeof (*_m_cu_headers)> ()
      .description (
 "Checks for low-level structure of .debug_info.  In addition it "
 "checks:\n"
@@ -101,6 +98,8 @@ check_debug_info::descriptor ()
 		   ));
   return &cd;
 }
+
+static reg<check_debug_info> reg_debug_info;
 
 namespace
 {
@@ -1251,8 +1250,7 @@ check_debug_info_refs::descriptor ()
   static checkdescriptor cd
     (checkdescriptor::create ("check_debug_info_refs")
      .groups ("@low")
-     .prereq<typeof (*_m_info)> ()
-     .prereq<typeof (*_m_line)> ()
+     .schedule (false)
      .description (
 "This pass checks:\n"
 " - for outstanding unresolved references from .debug_info to .debug_line\n"
@@ -1260,6 +1258,8 @@ check_debug_info_refs::descriptor ()
 "no .debug_aranges to begin with).\n"));
   return &cd;
 }
+
+static reg<check_debug_info_refs> reg_debug_info_refs;
 
 check_debug_info_refs::check_debug_info_refs (checkstack &stack,
 					      dwarflint &lint)
@@ -1292,5 +1292,3 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
 	  << "no aranges table is associated with this CU." << std::endl;
     }
 }
-
-static reg<check_debug_info_refs> reg_debug_info_refs;
