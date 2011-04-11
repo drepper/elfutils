@@ -123,6 +123,7 @@ namespace
 	    && ! duplicate_ok (entry.tag (), at2->first, attr.first,
 			       referree.tag (), at2->second == (*at).second))
 	  wr_message (to_where (entry), mc_impact_3 | mc_acc_bloat | mc_die_rel)
+	    .id (descriptor ())
 	    << dwarf::tags::name (entry.tag ())
 	    << " attribute " << dwarf::attributes::name (at2->first)
 	    << " is duplicated at " << dwarf::attributes::name (attr.first)
