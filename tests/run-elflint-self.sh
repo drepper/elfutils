@@ -37,6 +37,7 @@ runtest() {
 }
 
 runtest ../src/addr2line
+runtest ../src/dwarfcmp
 runtest ../src/elfcmp
 runtest ../src/elflint
 runtest ../src/findtextrel
@@ -46,6 +47,7 @@ runtest ../src/objdump
 runtest ../src/readelf
 runtest ../src/size
 runtest ../src/strip
+runtest ../src/unstrip
 runtest ../libelf/libelf.so
 runtest ../libdw/libdw.so
 runtest ../libasm/libasm.so
@@ -58,5 +60,6 @@ runtest ../libebl/libebl_ppc64.so
 runtest ../libebl/libebl_sh.so
 runtest ../libebl/libebl_sparc.so
 runtest ../libebl/libebl_x86_64.so
+runtest ../dwarflint/dwarflint
 
 exit $status
