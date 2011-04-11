@@ -87,7 +87,6 @@ dwarf_version::form_class (form const *form, attribute const *attribute) const
   assert (attribute != NULL);
   dw_class_set result = form->classes ();
   result &= attribute->classes ();
-  assert (result.any ());
   if (result.count () > 1)
     {
       dw_class ret = this->ambiguous_class (form, attribute, result);
@@ -95,8 +94,10 @@ dwarf_version::form_class (form const *form, attribute const *attribute) const
       assert (result[ret]);
       return ret;
     }
-  else
+  else if (result.count () == 1)
     return static_cast<dw_class> (ffsl (result.to_ulong ()) - 1);
+  else
+    return max_dw_class;
 }
 
 form_width_t
