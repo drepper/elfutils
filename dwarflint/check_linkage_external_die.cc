@@ -99,27 +99,12 @@ namespace
 
     static bool is_external (all_dies_iterator<dwarf> const &it)
     {
-      bool candidates = true;
       dwarf::debug_info_entry entry = *it;
-      do
-	{
-	  dwarf::debug_info_entry::attributes_type attrs = entry.attributes ();
-	  if (attrs.find (DW_AT_external) != attrs.end ())
-	    return true;
+      dwarf::debug_info_entry::attributes_type attrs = (*it).attributes ();
+      dwarf::debug_info_entry::attributes_type::const_iterator external
+	= attrs.find_integrate (DW_AT_external);
 
-	  dwarf::debug_info_entry::attributes_type::const_iterator origin
-	    = attrs.find (DW_AT_abstract_origin);
-	  if (origin == attrs.end ())
-	    origin = attrs.find (DW_AT_specification);
-
-	  if (origin != attrs.end ())
-	    entry = *(*origin).second.reference ();
-	  else
-	    candidates = false;
-	}
-      while (candidates);
-
-      return false;
+      return external != attrs.end () && (*external).second.flag ();
     }
 
     virtual void
