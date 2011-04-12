@@ -30,61 +30,83 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-
-#ifdef __cplusplus
 #include <iosfwd>
-extern "C"
-{
-#endif
-
-  enum where_formatting
-  {
-    wf_plain = 0, /* Default formatting for given section.  */
-    wf_cudie,
-  };
-
-  struct where
-  {
-    enum section_id section;
-    enum where_formatting formatting;
-    uint64_t addr1; // E.g. a CU offset.
-    uint64_t addr2; // E.g. a DIE address.
-    uint64_t addr3; // E.g. an attribute.
-    struct where const *ref; // Related reference, e.g. an abbrev
-			     // related to given DIE.
-    struct where const *next; // For forming "caused-by" chains.
-  };
-
-  extern const char *where_fmt (const struct where *wh,	char *ptr);
-  extern void where_fmt_chain (const struct where *wh, const char *severity);
-  extern void where_reset_1 (struct where *wh, uint64_t addr);
-  extern void where_reset_2 (struct where *wh, uint64_t addr);
-  extern void where_reset_3 (struct where *wh, uint64_t addr);
-
-#ifdef __cplusplus
-}
-
 #include <iostream>
+#include <cassert>
 
-inline where
-WHERE (section_id sec, where const *next = NULL)
+class locus
 {
-  where ret = {sec, wf_plain,
-	       (uint64_t)-1,
-	       (uint64_t)-1,
-	       (uint64_t)-1,
-	       NULL, next};
-  return ret;
-}
+public:
+  virtual std::string format (bool brief = false) const = 0;
 
+  virtual locus const *next () const
+  {
+    return NULL;
+  }
+
+  virtual ~locus () {}
+};
+
+struct where
+  : public locus
+{
+  class formatter
+  {
+  public:
+    virtual ~formatter () {}
+    virtual std::string format (where const &wh, bool brief = false) const = 0;
+  };
+
+  class simple_formatter;
+
+private:
+  formatter const *_m_formatter;
+
+  uint64_t _m_addr1; // E.g. a CU offset.
+  uint64_t _m_addr2; // E.g. a DIE address.
+  uint64_t _m_addr3; // E.g. an attribute.
+
+public:
+  locus const *ref; // Related reference, e.g. an abbrev related to
+		    // given DIE.
+  locus const *_m_next; // For forming "caused-by" chains.
+
+  explicit where (formatter const *fmt = NULL,
+		  locus const *nxt = NULL);
+
+  where &operator= (where const &copy);
+
+  std::string format (bool brief = false) const;
+
+  locus const *
+  next () const
+  {
+    return _m_next;
+  }
+
+  void
+  set_next (locus const *nxt)
+  {
+    assert (_m_next == NULL);
+    _m_next = nxt;
+  }
+
+  friend void where_reset_1 (struct where *wh, uint64_t addr);
+  friend void where_reset_2 (struct where *wh, uint64_t addr);
+  friend void where_reset_3 (struct where *wh, uint64_t addr);
+};
+
+void where_reset_1 (struct where *wh, uint64_t addr);
+void where_reset_2 (struct where *wh, uint64_t addr);
+void where_reset_3 (struct where *wh, uint64_t addr);
+
+where WHERE (section_id sec, where const *next = NULL);
 
 inline std::ostream &
 operator << (std::ostream &os, where const &wh)
 {
-  os << where_fmt (&wh, NULL);
+  os << wh.format ();
   return os;
 }
-
-#endif
 
 #endif//DWARFLINT_WHERE_H

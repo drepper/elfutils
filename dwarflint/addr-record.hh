@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -28,55 +28,57 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <vector>
+
 #include "where.h"
-#ifdef __cplusplus
-extern "C"
+
+/* Functions and data structures for address record handling.  We
+   use that to check that all DIE references actually point to an
+   existing die, not somewhere mid-DIE, where it just happens to be
+   interpretable as a DIE.  */
+
+struct addr_record
 {
-#else
-# include <stdbool.h>
-#endif
+  size_t size;
+  size_t alloc;
+  uint64_t *addrs;
+};
 
-  /* Functions and data structures for address record handling.  We
-     use that to check that all DIE references actually point to an
-     existing die, not somewhere mid-DIE, where it just happens to be
-     interpretable as a DIE.  */
+size_t addr_record_find_addr (struct addr_record *ar, uint64_t addr);
+bool addr_record_has_addr (struct addr_record *ar, uint64_t addr);
+void addr_record_add (struct addr_record *ar, uint64_t addr);
+void addr_record_free (struct addr_record *ar);
 
-  struct addr_record
-  {
-    size_t size;
-    size_t alloc;
-    uint64_t *addrs;
-  };
+/* Functions and data structures for reference handling.  Just like
+   the above, we use this to check validity of DIE references.
+   Unlike the above, this is not stored as sorted set, but simply as
+   an array of records, because duplicates are unlikely.  */
 
-  size_t addr_record_find_addr (struct addr_record *ar, uint64_t addr);
-  bool addr_record_has_addr (struct addr_record *ar, uint64_t addr);
-  void addr_record_add (struct addr_record *ar, uint64_t addr);
-  void addr_record_free (struct addr_record *ar);
+struct ref
+{
+  uint64_t addr; // Referree address
+  ::where who;  // Referrer
 
-  /* Functions and data structures for reference handling.  Just like
-     the above, we use this to check validity of DIE references.
-     Unlike the above, this is not stored as sorted set, but simply as
-     an array of records, because duplicates are unlikely.  */
+  ref ()
+    : addr (-1)
+    , who ()
+  {}
 
-  struct ref
-  {
-    uint64_t addr; // Referree address
-    struct where who;  // Referrer
-  };
+  ref (uint64_t a_addr, where const &a_who)
+    : addr (a_addr)
+    , who (a_who)
+  {}
+};
 
-  struct ref_record
-  {
-    size_t size;
-    size_t alloc;
-    struct ref *refs;
-  };
-
-  void ref_record_add (struct ref_record *rr, uint64_t addr,
-		       struct where *referrer);
-  void ref_record_free (struct ref_record *rr);
-
-#ifdef __cplusplus
-}
-#endif
+class ref_record
+  : private std::vector<struct ref>
+{
+  typedef std::vector<struct ref> _super_t;
+public:
+  using _super_t::const_iterator;
+  using _super_t::begin;
+  using _super_t::end;
+  using _super_t::push_back;
+};
 
 #endif//DWARFLINT_ADDR_RECORD_H

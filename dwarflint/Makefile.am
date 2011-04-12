@@ -69,7 +69,7 @@ dwarflint_SOURCES = \
 	reloc.cc reloc.hh \
 	section_id.cc section_id.hh \
 	sections.cc sections.hh sections_i.hh \
-	where.c where.h \
+	where.cc where.h \
 	wrap.cc wrap.hh \
 	\
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev_i.hh \
@@ -96,7 +96,7 @@ locstats_SOURCES = \
 	files.cc files.hh \
 	option.cc option.hh option_i.hh \
 	pri.cc pri.hh \
-	where.c where.h
+	where.cc where.h
 
 tests_test_coverage_SOURCES = tests/test-coverage.cc coverage.cc pri.cc \
 	../src/dwarfstrings.c

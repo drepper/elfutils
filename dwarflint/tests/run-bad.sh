@@ -105,19 +105,19 @@ error: .debug_info: DIE 0xab (abbreviation 113): DIE chain not terminated with n
 EOF
 
 testrun_compare ./dwarflint garbage-10 <<EOF
-warning: .rela.debug_info: offset 0xc: relocation formed using STT_SECTION symbol with non-zero value.
-error: .rela.debug_info: offset 0x11: couldn't obtain symbol #7208969: invalid section index.
+warning: .rela 0xc of .debug_info: DIE 0xb (abbr. attribute 0): relocation formed using STT_SECTION symbol with non-zero value.
+error: .rela 0x11 of .debug_info: DIE 0xb (abbr. attribute 0x4): couldn't obtain symbol #7208969: invalid section index.
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 EOF
 
 testrun_compare ./dwarflint garbage-11 <<EOF
-error: .rela.debug_info: offset 0x600: invalid relocation 2560 (<INVALID RELOC>).
-error: .rela.debug_info: offset 0xc00: invalid relocation 2560 (<INVALID RELOC>).
-error: .rela.debug_info: offset 0x1100: invalid relocation 2560 (<INVALID RELOC>).
-error: .rela.debug_info: offset 0x1500: invalid relocation 256 (<INVALID RELOC>).
-error: .rela.debug_info: offset 0x1d00: invalid relocation 256 (<INVALID RELOC>).
-error: .rela.debug_info: offset 0x2500: invalid relocation 2560 (<INVALID RELOC>).
-error: .rela.debug_info: offset 0x3600: invalid relocation 256 (<INVALID RELOC>).
+error: .rela 0x600 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela 0xc00 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela 0x1100 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela 0x1500 of .debug_info: invalid relocation 256 (<INVALID RELOC>).
+error: .rela 0x1d00 of .debug_info: invalid relocation 256 (<INVALID RELOC>).
+error: .rela 0x2500 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
+error: .rela 0x3600 of .debug_info: invalid relocation 256 (<INVALID RELOC>).
 warning: .debug_info: CU 0: abbrev table offset seems to lack a relocation
 warning: .debug_info: DIE 0xb (abbr. attribute 0): strp seems to lack a relocation
 warning: .debug_info: DIE 0xb (abbr. attribute 0x4): strp seems to lack a relocation

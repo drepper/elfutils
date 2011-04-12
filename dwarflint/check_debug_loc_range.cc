@@ -392,7 +392,8 @@ namespace
     while (!read_ctx_eof (&ctx))
       {
 	struct where where = WHERE (sec->id, wh);
-	where_reset_1 (&where, read_ctx_get_offset (&ctx));
+	uint64_t offset = read_ctx_get_offset (&ctx);
+	where_reset_1 (&where, offset);
 
 #define HAVE_OVERLAP						\
 	do {							\
@@ -542,7 +543,7 @@ namespace
 	  }
 #undef HAVE_OVERLAP
 
-	coverage->add (where.addr1, read_ctx_get_offset (&ctx) - where.addr1);
+	coverage->add (offset, read_ctx_get_offset (&ctx) - offset);
 	if (done)
 	  break;
       }
@@ -602,9 +603,10 @@ namespace
       {
 	struct ref_record *rec
 	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
-	for (size_t i = 0; i < rec->size; ++i)
+	for (ref_record::const_iterator it = rec->begin ();
+	     it != rec->end (); ++it)
 	  {
-	    ref_cu ref = {rec->refs[i], cu};
+	    ref_cu ref = {*it, cu};
 	    refs.push_back (ref);
 	  }
       }
@@ -785,7 +787,7 @@ namespace
 		form const *form,
 		uint64_t *valuep,
 		char const *str,
-		struct where *where)
+		struct where const &where)
   {
     if (form == NULL)
       return true;
@@ -797,7 +799,7 @@ namespace
     if (!read_generic_value (ctx, form->width (cu->head), storclass,
 			     where, valuep, NULL))
       {
-	wr_error (*where)
+	wr_error (where)
 	  << "opcode \"" << elfutils::dwarf::ops::name (opcode)
 	  << "\": can't read " << str << " (form \""
 	  << *form << "\")." << std::endl;
@@ -810,19 +812,19 @@ namespace
 
     struct relocation *rel;
     if ((rel = relocation_next (reloc, off,
-				where, skip_mismatched)))
+				&where, skip_mismatched)))
       {
 	if (storclass != sc_block)
 	  relocate_one (&file, reloc, rel,
-			cu->head->address_size, valuep, where,
+			cu->head->address_size, valuep, &where,
 			reloc_target_loc (opcode), NULL);
 	else
-	  wr_error (where, ": relocation relocates a length field.\n");
+	  wr_error (where) << "relocation relocates a length field.\n";
       }
     if (storclass == sc_block)
       {
 	uint64_t off_block_end = read_ctx_get_offset (ctx) + init_off - 1;
-	relocation_next (reloc, off_block_end, where, skip_ok);
+	relocation_next (reloc, off_block_end, &where, skip_ok);
       }
 
     return true;
@@ -847,8 +849,7 @@ check_location_expression (dwarf_version const *ver,
       return false;
     }
 
-  struct ref_record oprefs;
-  WIPE (oprefs);
+  ref_record oprefs;
 
   struct addr_record opaddrs;
   WIPE (opaddrs);
@@ -879,9 +880,9 @@ check_location_expression (dwarf_version const *ver,
 
       uint64_t value1, value2;
       if (!op_read_form (file, &ctx, cu, init_off, reloc,
-			 opcode, form1, &value1, "1st operand", &where)
+			 opcode, form1, &value1, "1st operand", where)
 	  || !op_read_form (file, &ctx, cu, init_off, reloc,
-			    opcode, form2, &value2, "2st operand", &where))
+			    opcode, form2, &value2, "2st operand", where))
 	goto out;
 
       switch (opcode)
@@ -908,7 +909,7 @@ check_location_expression (dwarf_version const *ver,
 	    else
 	      {
 		uint64_t off_after = read_ctx_get_offset (&ctx) + init_off;
-		ref_record_add (&oprefs, off_after + skip, &where);
+		oprefs.push_back (ref (off_after + skip, where));
 	      }
 
 	    break;
@@ -937,17 +938,15 @@ check_location_expression (dwarf_version const *ver,
     }
 
  out:
-  for (size_t i = 0; i < oprefs.size; ++i)
+  for (ref_record::const_iterator it = oprefs.begin ();
+       it != oprefs.end (); ++it)
     {
-      struct ref *ref = oprefs.refs + i;
-      if (!addr_record_has_addr (&opaddrs, ref->addr))
-	wr_error (&ref->who,
-		  ": unresolved reference to opcode at %#" PRIx64 ".\n",
-		  ref->addr);
+      if (!addr_record_has_addr (&opaddrs, it->addr))
+	wr_error (it->who) << "unresolved reference to opcode at "
+			   << pri::hex (it->addr) << ".\n";
     }
 
   addr_record_free (&opaddrs);
-  ref_record_free (&oprefs);
 
   return true;
 }
@@ -974,7 +973,7 @@ found_hole (uint64_t start, uint64_t length, void *data)
 	    && (length < info->align)))
 	{
 	  struct where wh = WHERE (info->section, NULL);
-	  wr_message_padding_0 (info->category, &wh, start, end);
+	  wr_message_padding_0 (info->category, wh, start, end);
 	}
     }
   else
@@ -982,7 +981,7 @@ found_hole (uint64_t start, uint64_t length, void *data)
       /* XXX: This actually lies when the unreferenced portion is
 	 composed of sequences of zeroes and non-zeroes.  */
       struct where wh = WHERE (info->section, NULL);
-      wr_message_padding_n0 (info->category, &wh, start, end);
+      wr_message_padding_n0 (info->category, wh, start, end);
     }
 
   return true;

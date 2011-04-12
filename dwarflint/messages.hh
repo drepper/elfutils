@@ -114,30 +114,30 @@ std::ostream &operator<< (std::ostream &o, message_criteria const &criteria);
 
 message_criteria operator ! (message_term const &);
 
-extern void wr_error (const struct where *wh, const char *format, ...)
+extern void wr_error (locus const *wh, const char *format, ...)
   __attribute__ ((format (printf, 2, 3)));
 
-extern void wr_message (unsigned long category, const struct where *wh,
+extern void wr_message (unsigned long category, locus const *loc,
 			const char *format, ...)
   __attribute__ ((format (printf, 3, 4)));
 
 extern void wr_format_padding_message (message_category category,
-				       struct where const *wh,
+				       locus const &loc,
 				       uint64_t start, uint64_t end,
 				       char const *kind);
 
-extern void wr_format_leb128_message (struct where const *where,
+extern void wr_format_leb128_message (locus const &loc,
 				      const char *what,
 				      const char *purpose,
 				      const unsigned char *begin,
 				      const unsigned char *end);
 
 extern void wr_message_padding_0 (message_category category,
-				  struct where const *wh,
+				  locus const &loc,
 				  uint64_t start, uint64_t end);
 
 extern void wr_message_padding_n0 (message_category category,
-				   struct where const *wh,
+				   locus const &loc,
 				   uint64_t start, uint64_t end);
 
 extern bool message_accept (struct message_criteria const *cri,
@@ -191,18 +191,18 @@ class message_context
   static bool _m_last_emitted;
 
   message_count_filter *_m_filter;
-  where const *_m_where;
+  locus const *_m_loc;
   char const *_m_prefix;
 
-  friend message_context wr_message (where const &wh, message_category cat);
+  friend message_context wr_message (locus const &loc, message_category cat);
   friend message_context wr_message (message_category cat);
   friend bool wr_prev_emitted ();
 
   message_context (message_count_filter *filter,
-		   where const *where, char const *prefix);
+		   locus const *loc, char const *prefix);
 
 public:
-  static message_context filter_message (where const *wh,
+  static message_context filter_message (locus const *loc,
 					 message_category category);
 
   std::ostream &operator << (char const *message);
@@ -231,9 +231,9 @@ public:
   std::ostream &when_prev () const;
 };
 
-std::ostream &wr_error (where const &wh);
+std::ostream &wr_error (locus const &loc);
 std::ostream &wr_error ();
-message_context wr_message (where const &wh, message_category cat);
+message_context wr_message (locus const &loc, message_category cat);
 message_context wr_message (message_category cat);
 void wr_reset_counters ();
 bool wr_prev_emitted ();

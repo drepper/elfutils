@@ -114,17 +114,15 @@ namespace
 			struct ref_record *die_refs)
   {
     bool retval = true;
-    for (size_t i = 0; i < die_refs->size; ++i)
-      {
-	struct ref *ref = die_refs->refs + i;
-	if (!addr_record_has_addr (&cu->die_addrs, ref->addr))
-	  {
-	    wr_error (ref->who)
-	      << "unresolved reference to " << pri::DIE (ref->addr)
-	      << '.' << std::endl;
-	    retval = false;
-	  }
-      }
+    for (ref_record::const_iterator it = die_refs->begin ();
+	 it != die_refs->end (); ++it)
+      if (!addr_record_has_addr (&cu->die_addrs, it->addr))
+	{
+	  wr_error (it->who)
+	    << "unresolved reference to " << pri::DIE (it->addr)
+	    << '.' << std::endl;
+	  retval = false;
+	}
     return retval;
   }
 
@@ -133,12 +131,12 @@ namespace
   {
     bool retval = true;
     for (struct cu *it = cu_chain; it != NULL; it = it->next)
-      for (size_t i = 0; i < it->die_refs.size; ++i)
+      for (ref_record::const_iterator rt = it->die_refs.begin ();
+	   rt != it->die_refs.end (); ++rt)
 	{
-	  struct ref *ref = it->die_refs.refs + i;
 	  struct cu *ref_cu = NULL;
 	  for (struct cu *jt = cu_chain; jt != NULL; jt = jt->next)
-	    if (addr_record_has_addr (&jt->die_addrs, ref->addr))
+	    if (addr_record_has_addr (&jt->die_addrs, rt->addr))
 	      {
 		ref_cu = jt;
 		break;
@@ -146,9 +144,9 @@ namespace
 
 	  if (ref_cu == NULL)
 	    {
-	      wr_error (ref->who)
+	      wr_error (rt->who)
 		<< "unresolved (non-CU-local) reference to "
-		<< pri::hex (ref->addr) << '.' << std::endl;
+		<< pri::hex (rt->addr) << '.' << std::endl;
 	      retval = false;
 	    }
 	  else if (ref_cu == it)
@@ -156,8 +154,8 @@ namespace
 	       reference is valid, which it is.  But warn about this
 	       anyway, perhaps local reference could be formed on
 	       smaller number of bytes.  */
-	    wr_message (ref->who, mc_impact_2 | mc_acc_suboptimal | mc_die_rel)
-	      << "local reference to " << pri::DIE (ref->addr)
+	    wr_message (rt->who, mc_impact_2 | mc_acc_suboptimal | mc_die_rel)
+	      << "local reference to " << pri::DIE (rt->addr)
 	      << " formed as global." << std::endl;
 	}
 
@@ -179,10 +177,11 @@ namespace
       {
 	const unsigned char *cu_begin = ctx.ptr;
 	struct where where = WHERE (sec_info, NULL);
-	where_reset_1 (&where, read_ctx_get_offset (&ctx));
+	uint64_t offset = read_ctx_get_offset (&ctx);
+	where_reset_1 (&where, offset);
 
 	cu_head head;
-	head.offset = where.addr1;
+	head.offset = offset;
 	head.where = where;
 
 	/* Reading CU head is a bit tricky, because we don't know if
@@ -192,7 +191,7 @@ namespace
 	if (!read_ctx_need_data (&ctx, 4)
 	    && read_check_zero_padding (&ctx, &off_start, &off_end))
 	  {
-	    wr_message_padding_0 (mc_info | mc_header, &where,
+	    wr_message_padding_0 (mc_info | mc_header, where,
 				  off_start, off_end);
 	    break;
 	  }
@@ -211,7 +210,7 @@ namespace
 	if (size32 == 0
 	    && read_check_zero_padding (&ctx, &off_start, &off_end))
 	  {
-	    wr_message_padding_0 (mc_info | mc_header, &where,
+	    wr_message_padding_0 (mc_info | mc_header, where,
 				  off_start, off_end);
 	    break;
 	  }
@@ -426,15 +425,15 @@ namespace
     if (ctx->local_die_refs != NULL)
       /* Address holds a CU-local reference, so add CU offset
 	 to turn it into section offset.  */
-      ref_record_add (ctx->local_die_refs,
-		      addr + ctx->cu->head->offset, ctx->where);
+      ctx->local_die_refs->push_back (ref (addr + ctx->cu->head->offset,
+					   *ctx->where));
   }
 
   /* Callback for global DIE references.  */
   void
   check_die_ref_global (uint64_t addr, struct value_check_cb_ctx const *ctx)
   {
-    ref_record_add (&ctx->cu->die_refs, addr, ctx->where);
+    ctx->cu->die_refs.push_back (ref (addr, *ctx->where));
   }
 
   /* Callback for strp values.  */
@@ -479,7 +478,7 @@ namespace
 	<< "rangeptr value " << pri::hex (value)
 	<< " not aligned to CU address size." << std::endl;
     *ctx->need_rangesp = true;
-    ref_record_add (&ctx->cu->range_refs, value, ctx->where);
+    ctx->cu->range_refs.push_back (ref (value, *ctx->where));
   }
 
   /* Callback for lineptr values.  */
@@ -497,13 +496,13 @@ namespace
   void
   check_locptr (uint64_t value, struct value_check_cb_ctx const *ctx)
   {
-    ref_record_add (&ctx->cu->loc_refs, value, ctx->where);
+    ctx->cu->loc_refs.push_back (ref (value, *ctx->where));
   }
 
   void
   check_decl_file (uint64_t value, struct value_check_cb_ctx const *ctx)
   {
-    ref_record_add (&ctx->cu->decl_file_refs, value, ctx->where);
+    ctx->cu->decl_file_refs.push_back (ref (value, *ctx->where));
   }
 
   /* The real sibling checking takes place down in read_die_chain.
@@ -571,7 +570,7 @@ namespace
 
 	uint64_t abbr_code;
 
-	if (!checked_read_uleb128 (ctx, &abbr_code, &where, "abbrev code"))
+	if (!checked_read_uleb128 (ctx, &abbr_code, where, "abbrev code"))
 	  return -1;
 
 #define DEF_PREV_WHERE							\
@@ -688,7 +687,7 @@ namespace
 	      {
 		uint64_t value;
 		if (!read_sc_value (&value, form->width (cu->head),
-				    ctx, &where))
+				    ctx, where))
 		  return -1;
 		form_name = value;
 		form = check_debug_abbrev::check_form
@@ -843,7 +842,7 @@ namespace
 
 	    storage_class_t storclass = form->storage_class ();
 	    if (!read_generic_value (ctx, form->width (cu->head), storclass,
-				     &where, &value, &block))
+				     where, &value, &block))
 	      {
 		// Note that for fw_uleb and fw_sleb we report the
 		// error the second time now.
@@ -1033,7 +1032,7 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   check_debug_abbrev::abbrev_map const &abbrev_tables = _m_abbrevs->abbrevs;
 
   if (dump_die_offsets)
-    fprintf (stderr, "%s: CU starts\n", where_fmt (&cu->head->where, NULL));
+    fprintf (stderr, "%s: CU starts\n", cu->head->where.format ().c_str ());
   bool retval = true;
 
   dwarf_version const *ver = dwarf_version::get (cu->head->version);
@@ -1052,8 +1051,7 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   struct abbrev_table const &abbrevs = abbrev_it->second;
 
   /* Read DIEs.  */
-  struct ref_record local_die_refs;
-  WIPE (local_die_refs);
+  ref_record local_die_refs;
 
   cu->cudie_offset = read_ctx_get_offset (ctx) + cu->head->offset;
   int st = read_die_chain (ver, _m_file, ctx, cu, &abbrevs, strings,
@@ -1071,7 +1069,6 @@ check_debug_info::check_cu_structural (struct read_ctx *ctx,
   else if (!check_die_references (cu, &local_die_refs))
     retval = false;
 
-  ref_record_free (&local_die_refs);
   return retval;
 }
 
@@ -1088,7 +1085,6 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
   Elf_Data *const strings = _m_sec_str->sect.data;
 
   struct ref_record die_refs;
-  WIPE (die_refs);
 
   bool success = true;
 
@@ -1137,13 +1133,13 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
 	{
 	  uint64_t off_start, off_end;
 	  if (read_check_zero_padding (&cu_ctx, &off_start, &off_end))
-	    wr_message_padding_0 (mc_info, &where, off_start, off_end);
+	    wr_message_padding_0 (mc_info, where, off_start, off_end);
 	  else
 	    {
 	      // Garbage coordinates:
 	      uint64_t start = read_ctx_get_offset (&ctx) + off_start;
 	      uint64_t end = read_ctx_get_offset (&ctx) + head.total_size;
-	      wr_message_padding_n0 (mc_info, &where, start, end);
+	      wr_message_padding_n0 (mc_info, where, start, end);
 	    }
 	}
 
@@ -1200,7 +1196,6 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
      that's not necessary anymore.  */
 
   check_global_die_references (!cus.empty () ? &cus.front () : NULL);
-  ref_record_free (&die_refs);
 
   if (strings_coverage != NULL)
     {
@@ -1224,13 +1219,7 @@ check_debug_info::~check_debug_info ()
 {
   for (std::vector<cu>::iterator it = cus.begin ();
        it != cus.end (); ++it)
-    {
-      addr_record_free (&it->die_addrs);
-      ref_record_free (&it->die_refs);
-      ref_record_free (&it->range_refs);
-      ref_record_free (&it->loc_refs);
-      ref_record_free (&it->decl_file_refs);
-    }
+    addr_record_free (&it->die_addrs);
 }
 
 cu *
@@ -1276,8 +1265,9 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
        it != _m_info->cus.end (); ++it)
     {
       if (it->stmt_list.addr == (uint64_t)-1)
-	for (size_t i = 0; i < it->decl_file_refs.size; ++i)
-	  wr_error (it->decl_file_refs.refs[i].who)
+	for (ref_record::const_iterator jt = it->decl_file_refs.begin ();
+	     jt != it->decl_file_refs.end (); ++jt)
+	  wr_error (jt->who)
 	    << "references .debug_line table, but CU DIE lacks DW_AT_stmt_list."
 	    << std::endl;
       else if (_m_line == NULL

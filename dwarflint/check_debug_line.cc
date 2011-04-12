@@ -101,7 +101,7 @@ namespace
   {
     size_t nfile = files.size () + 1;
     if (!checked_read_uleb128 (ctx, ptr,
-			       where, "directory index"))
+			       *where, "directory index"))
       return false;
 
     if (*name == '/' && *ptr != 0)
@@ -128,11 +128,11 @@ namespace
 
   bool
   use_file (files_t &files, uint64_t file_idx,
-	    where *where, char const *msg = "")
+	    where const &where, char const *msg = "")
   {
     if (file_idx == 0 || file_idx > files.size ())
       {
-	wr_error (*where)
+	wr_error (where)
 	  << msg << "invalid file index " << file_idx << '.'
 	  << std::endl;
 	return false;
@@ -316,13 +316,13 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	  /* Time of last modification.  */
 	  uint64_t timestamp;
 	  if (!checked_read_uleb128 (&sub_ctx, &timestamp,
-				     &where, "timestamp of file entry"))
+				     where, "timestamp of file entry"))
 	    goto skip;
 
 	  /* Size of the file.  */
 	  uint64_t file_size;
 	  if (!checked_read_uleb128 (&sub_ctx, &file_size,
-				     &where, "file size of file entry"))
+				     where, "file size of file entry"))
 	    goto skip;
 
 	  files.push_back ((struct file_t){name, dir_idx, false});
@@ -340,10 +340,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    if (it->stmt_list.addr == set_offset)
 	      {
 		found = true;
-		for (size_t i = 0; i < it->decl_file_refs.size; ++i)
-		  if (!use_file (files,
-				 it->decl_file_refs.refs[i].addr,
-				 &it->decl_file_refs.refs[i].who))
+		for (ref_record::const_iterator
+		       jt = it->decl_file_refs.begin ();
+		     jt != it->decl_file_refs.end (); ++jt)
+		  if (!use_file (files, jt->addr, jt->who))
 		    success = false;
 	      }
 	  if (!found)
@@ -371,10 +371,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	  struct where wh = WHERE (sec_line, NULL);
 	  uint64_t off_start, off_end;
 	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-	    wr_message_padding_0 (mc_line | mc_header, &wh,
+	    wr_message_padding_0 (mc_line | mc_header, wh,
 				  off_start, off_end);
 	  else
-	    wr_message_padding_n0 (mc_line | mc_header, &wh,
+	    wr_message_padding_n0 (mc_line | mc_header, wh,
 				   off_start, program_start - sub_ctx.begin);
 	  sub_ctx.ptr = program_start;
 	}
@@ -400,7 +400,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    case 0:
 	      {
 		uint64_t skip_len;
-		if (!checked_read_uleb128 (&sub_ctx, &skip_len, &where,
+		if (!checked_read_uleb128 (&sub_ctx, &skip_len, where,
 					   "length of extended opcode"))
 		  goto skip;
 		if (!read_ctx_need_data (&sub_ctx, skip_len))
@@ -466,7 +466,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      /* XXX Is there anything interesting we should
 			 check here?  */
 		      uint64_t disc;
-		      if (!checked_read_uleb128 (&sub_ctx, &disc, &where,
+		      if (!checked_read_uleb128 (&sub_ctx, &disc, where,
 						 "set_discriminator operand"))
 			goto skip;
 
@@ -533,10 +533,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 			struct where wh = WHERE (sec_line, NULL);
 			if (read_check_zero_padding (&sub_ctx,
 						     &off_start, &off_end))
-			  wr_message_padding_0 (mc_line, &wh,
+			  wr_message_padding_0 (mc_line, wh,
 						off_start, off_end);
 			else
-			  wr_message_padding_n0 (mc_line, &wh,
+			  wr_message_padding_n0 (mc_line, wh,
 						 off_start,
 						 next - sub_ctx.begin);
 		      }
@@ -550,7 +550,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    case DW_LNS_advance_line:
 	      {
 		int64_t line_delta;
-		if (!checked_read_sleb128 (&sub_ctx, &line_delta, &where,
+		if (!checked_read_sleb128 (&sub_ctx, &line_delta, where,
 					   "DW_LNS_advance_line operand"))
 		  goto skip;
 	      }
@@ -572,10 +572,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    case DW_LNS_set_file:
 	      {
 		uint64_t file_idx;
-		if (!checked_read_uleb128 (&sub_ctx, &file_idx, &where,
+		if (!checked_read_uleb128 (&sub_ctx, &file_idx, where,
 					   "DW_LNS_set_file operand"))
 		  goto skip;
-		if (!use_file (files, file_idx, &where, "DW_LNS_set_file: "))
+		if (!use_file (files, file_idx, where, "DW_LNS_set_file: "))
 		  success = false;
 		first_file = false;
 	      }
@@ -616,13 +616,13 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	      else
 		sprintf (buf, "operand #%d of DW_LNE_%s",
 			 i, dwarf_line_extended_opcode_string (extended));
-	      if (!checked_read_uleb128 (&sub_ctx, &operand, &where, buf))
+	      if (!checked_read_uleb128 (&sub_ctx, &operand, where, buf))
 		goto skip;
 	    }
 
 	  if (first_file)
 	    {
-	      if (!use_file (files, 1, &where,
+	      if (!use_file (files, 1, where,
 			     "initial value of `file' register: "))
 		success = false;
 	      first_file = false;
@@ -670,9 +670,9 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	{
 	  uint64_t off_start, off_end;
 	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-	    wr_message_padding_0 (mc_line, &wh, off_start, off_end);
+	    wr_message_padding_0 (mc_line, wh, off_start, off_end);
 	  else
-	    wr_message_padding_n0 (mc_line, &wh,
+	    wr_message_padding_n0 (mc_line, wh,
 				   off_start, sub_ctx.end - sub_ctx.begin);
 	}
       }

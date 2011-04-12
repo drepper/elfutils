@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -49,8 +49,6 @@ enum section_id
 #undef SEC
 
     /* Non-debuginfo sections:  */
-    sec_rel = count_debuginfo_sections,
-    sec_rela,
 
     // XXX the following should really be split out to different enum
     /* Non-sections:  */
@@ -62,6 +60,8 @@ enum section_id
     rel_address,	/* Same as above, but for addresses.  */
     rel_exec,		/* Some as above, but we expect EXEC bit.  */
   };
+
+static const unsigned num_section_ids = rel_exec + 1;
 
 // section_name[0] is for sec_invalid.  The last index is for
 // count_debuginfo_sections and is NULL.

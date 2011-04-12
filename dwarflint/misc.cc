@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2008, 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -62,7 +62,7 @@ supported_version (unsigned version,
   va_end (ap);
 
   if (!retval)
-    wr_error (where, ": unsupported version %d.\n", version);
+    wr_error (*where) << "unsupported version " << version << ".\n";
 
   return retval;
 }

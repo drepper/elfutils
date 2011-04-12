@@ -43,6 +43,11 @@
 #include "messages.hh"
 #include "misc.hh"
 
+class ll_where
+  : public locus
+{
+};
+
 checkdescriptor const *
 check_debug_abbrev::descriptor ()
 {
@@ -153,12 +158,13 @@ namespace
 
     struct abbrev_table *section = NULL;
     uint64_t first_attr_off = 0;
-    struct where where = WHERE (sec_abbrev, NULL);
+    section_id const sec_id = sec_abbrev;
+    where where = WHERE (sec_id, NULL);
 
     // Tolerate failure here.
     dwarf_version const *ver = NULL;
     static dwarf_version const *latest_ver = dwarf_version::get_latest ();
-    where.addr1 = 0;
+    where_reset_1 (&where, 0);
 
     bool failed = false;
     while (true)
@@ -184,7 +190,7 @@ namespace
 	      where_reset_2 (&where, abbr_off);
 
 	      /* Abbreviation code.  */
-	      if (!checked_read_uleb128 (&ctx, &abbr_code, &where, "abbrev code"))
+	      if (!checked_read_uleb128 (&ctx, &abbr_code, where, "abbrev code"))
 		throw check_base::failed ();
 
 	      /* Note: we generally can't tell the difference between
@@ -212,9 +218,9 @@ namespace
 
 	  if (zero_seq_off != (uint64_t)-1)
 	    {
-	      struct where wh = WHERE (where.section, NULL);
+	      struct where wh = WHERE (sec_id, NULL);
 	      wr_message_padding_0 (mc_abbrevs | mc_header,
-				    &wh, zero_seq_off, abbr_off);
+				    wh, zero_seq_off, abbr_off);
 	    }
 	}
 
@@ -308,13 +314,14 @@ namespace
 	else
 	  cur = &fake;
 	WIPE (*cur);
+	new (&cur->where) class where ();
 
 	cur->code = abbr_code;
 	cur->where = where;
 
 	/* Abbreviation tag.  */
 	uint64_t abbr_tag;
-	if (!checked_read_uleb128 (&ctx, &abbr_tag, &where, "abbrev tag"))
+	if (!checked_read_uleb128 (&ctx, &abbr_tag, where, "abbrev tag"))
 	  throw check_base::failed ();
 
 	if (abbr_tag > DW_TAG_hi_user)
@@ -362,11 +369,11 @@ namespace
 	    where_reset_3 (&where, attr_off);
 
 	    /* Load attribute name and form.  */
-	    if (!checked_read_uleb128 (&ctx, &attrib_name, &where,
+	    if (!checked_read_uleb128 (&ctx, &attrib_name, where,
 				       "attribute name"))
 	      throw check_base::failed ();
 
-	    if (!checked_read_uleb128 (&ctx, &attrib_form, &where,
+	    if (!checked_read_uleb128 (&ctx, &attrib_form, where,
 				       "attribute form"))
 	      throw check_base::failed ();
 
@@ -377,6 +384,7 @@ namespace
 
 	    struct abbrev_attrib *acur = cur->attribs + cur->size++;
 	    WIPE (*acur);
+	    new (&acur->where) class where ();
 	    acur->name = attrib_name;
 	    acur->form = attrib_form;
 	    acur->where = where;
@@ -458,7 +466,7 @@ namespace
 	  }
 	while (!null_attrib);
 
-	where_reset_2 (&where, where.addr2); // drop addr 3
+	where_reset_3 (&where, -1); // drop addr 3
 	if (high_pc && !low_pc)
 	  wr_error (where)
 	    << "the abbrev has DW_AT_high_pc without also having DW_AT_low_pc."

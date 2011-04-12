@@ -31,20 +31,64 @@
 #include "messages.hh"
 #include "misc.hh"
 #include "readctx.hh"
+#include "pri.hh"
 
 #include <sstream>
 #include <libebl.h>
 #include <cassert>
-#include <inttypes.h>
+#include <cinttypes>
 
-static struct where
-where_from_reloc (struct relocation_data *reloc, struct where const *ref)
+namespace
 {
-  struct where where
-    = WHERE (reloc->type == SHT_REL ? sec_rel : sec_rela, NULL);
-  where_reset_1 (&where, reloc->rel[reloc->index].offset);
-  where.ref = ref;
-  return where;
+  class reloc_locus
+    : public locus
+  {
+    locus const &_m_ref;
+    size_t _m_index;
+    uint64_t _m_offset;
+    int _m_type;
+
+  public:
+    reloc_locus (int type, locus const &ref, uint64_t offset)
+      : _m_ref (ref)
+      , _m_index (-1)
+      , _m_offset (offset)
+      , _m_type (type)
+    {
+    }
+
+    reloc_locus (int type, locus const &ref, unsigned index)
+      : _m_ref (ref)
+      , _m_index (index)
+      , _m_offset (-1)
+      , _m_type (type)
+    {
+    }
+
+    void
+    set_offset (uint64_t offset)
+    {
+      _m_offset = offset;
+    }
+
+    virtual std::string
+    format (bool) const
+    {
+      std::stringstream ss;
+      ss << (_m_type == SHT_REL ? ".rel" : ".rela") << " ";
+      if (_m_offset != (uint64_t)-1)
+	ss << pri::hex (_m_offset);
+      else
+	{
+	  assert (_m_index != (size_t)-1);
+	  ss << "#" << _m_index;
+	}
+
+      // Do non-brief formatting of referee
+      ss << " of " << _m_ref.format ();
+      return ss.str ();
+    }
+  };
 }
 
 relocation *
@@ -71,8 +115,7 @@ relocation_next (relocation_data *reloc, uint64_t offset,
 	{
 	  if (st != skip_ok)
 	    {
-	      struct where reloc_where = where_from_reloc (reloc, where);
-	      where_reset_2 (&reloc_where, rel->offset);
+	      reloc_locus reloc_where (reloc->type, *where, rel->offset);
 	      wr_error (reloc_where)
 		<< (st == skip_unref
 		    ? "relocation targets unreferenced portion of the section."
@@ -126,7 +169,7 @@ do_one_relocation (elf_file const *file,
 		   relocation *rel,
 		   unsigned rel_width,
 		   uint64_t *value,
-		   where const &reloc_where,
+		   reloc_locus const &reloc_where,
 		   section_id offset_into,
 		   GElf_Sym *symbol,
 		   GElf_Sym **symptr)
@@ -263,10 +306,7 @@ relocate_one (struct elf_file const *file,
   if (rel->invalid)
     return;
 
-  struct where reloc_where = where_from_reloc (reloc, where);
-  where_reset_2 (&reloc_where, rel->offset);
-  struct where reloc_ref_where = reloc_where;
-  reloc_ref_where.next = where;
+  reloc_locus reloc_where (reloc->type, *where, rel->offset);
 
   GElf_Sym symbol_mem, *symbol;
   if (symptr != NULL)
@@ -279,8 +319,8 @@ relocate_one (struct elf_file const *file,
 
   if (offset_into == sec_invalid)
     {
-      wr_message (mc_impact_3 | mc_reloc, &reloc_ref_where,
-		  ": relocates a datum that shouldn't be relocated.\n");
+      wr_message (reloc_where, mc_impact_3 | mc_reloc)
+	<< "relocates a datum that shouldn't be relocated.\n";
       return;
     }
 
@@ -314,9 +354,9 @@ relocate_one (struct elf_file const *file,
     };
 
   if (rel_width != width)
-    wr_error (&reloc_ref_where,
-	      ": %d-byte relocation relocates %d-byte datum.\n",
-	      rel_width, width);
+    wr_error (reloc_where)
+      << rel_width << "-byte relocation relocates "
+      << width << "-byte datum.\n";
 
   // Tolerate if we failed to obtain the symbol table.
   if (reloc->symdata != NULL)
@@ -372,12 +412,10 @@ read_rel (struct elf_file *file,
   size_t count = reldata->d_size / entrysize;
 
   struct where parent = WHERE (sec->id, NULL);
-  struct where where = WHERE (is_rela ? sec_rela : sec_rel, NULL);
-  where.ref = &parent;
 
   for (unsigned i = 0; i < count; ++i)
     {
-      where_reset_1 (&where, i);
+      reloc_locus where (sec->rel.type, parent, i);
 
       REALLOC (&sec->rel, rel);
       struct relocation *cur = sec->rel.rel + sec->rel.size++;
@@ -405,7 +443,7 @@ read_rel (struct elf_file *file,
       cur->symndx = GELF_R_SYM (rela->r_info);
       cur->type = cur_type;
 
-      where_reset_2 (&where, cur->offset);
+      where.set_offset (cur->offset);
 
       Elf_Type type = ebl_reloc_simple_type (file->ebl, cur->type);
       int width;

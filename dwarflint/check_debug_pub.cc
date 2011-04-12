@@ -231,10 +231,10 @@ check_debug_pub<sec_id>::check_pub_structural ()
 	  {
 	    uint64_t off_start, off_end;
 	    if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-	      wr_message_padding_0 (mc_pubtables, &wh, off_start, off_end);
+	      wr_message_padding_0 (mc_pubtables, wh, off_start, off_end);
 	    else
 	      {
-		wr_message_padding_n0 (mc_pubtables | mc_error, &wh,
+		wr_message_padding_n0 (mc_pubtables | mc_error, wh,
 				       off_start, off_start + size);
 		retval = false;
 	      }

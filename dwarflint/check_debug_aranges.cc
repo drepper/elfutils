@@ -196,7 +196,8 @@ check_aranges_structural (struct elf_file *file,
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (sec_aranges, NULL);
+      section_id const sec_id = sec_aranges;
+      struct where where = WHERE (sec_id, NULL);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
       const unsigned char *atab_begin = ctx.ptr;
 
@@ -268,13 +269,32 @@ check_aranges_structural (struct elf_file *file,
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
 
-      struct where where_cudie;
+      class cudie_locus
+	: public locus
+      {
+	uint64_t _m_offset;
+
+      public:
+	cudie_locus (uint64_t offset)
+	  : _m_offset (offset)
+	{}
+
+	std::string
+	format (bool) const
+	{
+	  std::stringstream ss;
+	  if (_m_offset != (uint64_t)-1)
+	    ss << "CU DIE " << _m_offset;
+	  else
+	    ss << "unknown CU";
+	  return ss.str ();
+	}
+      };
+
+      cudie_locus cudie_loc (cu != NULL ? cu->cudie_offset : -1);
+      where.ref = &cudie_loc;
       if (cu != NULL)
 	{
-	  where_cudie = WHERE (sec_info, NULL);
-	  where_reset_1 (&where_cudie, cu->cudie_offset);
-	  where.ref = &where_cudie;
-	  where_cudie.formatting = wf_cudie;
 	  if (cu->has_arange)
 	    wr_error (where)
 	      << "there has already been arange section for this CU."
@@ -395,12 +415,12 @@ check_aranges_structural (struct elf_file *file,
       if (sub_ctx.ptr != sub_ctx.end)
 	{
 	  uint64_t start, end;
-	  struct where wh = WHERE (where.section, NULL);
+	  struct where wh = WHERE (sec_id, NULL);
 	  if (read_check_zero_padding (&sub_ctx, &start, &end))
-	    wr_message_padding_0 (mc_aranges, &wh, start, end);
+	    wr_message_padding_0 (mc_aranges, wh, start, end);
 	  else
 	    {
-	      wr_message_padding_n0 (mc_aranges | mc_error, &wh,
+	      wr_message_padding_n0 (mc_aranges | mc_error, wh,
 				     start, start + size);
 	      retval = false;
 	    }
