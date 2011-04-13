@@ -419,7 +419,7 @@ read_rel (struct elf_file *file,
 
       REALLOC (&sec->rel, rel);
       struct relocation *cur = sec->rel.rel + sec->rel.size++;
-      WIPE (*cur);
+      new (cur) relocation ();
 
       GElf_Rela rela_mem, *rela
 	= get_rel_or_rela (reldata, i, &rela_mem, sec->rel.type);

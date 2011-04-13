@@ -850,9 +850,7 @@ check_location_expression (dwarf_version const *ver,
     }
 
   ref_record oprefs;
-
-  struct addr_record opaddrs;
-  WIPE (opaddrs);
+  addr_record opaddrs;
 
   while (!read_ctx_eof (&ctx))
     {
@@ -940,13 +938,9 @@ check_location_expression (dwarf_version const *ver,
  out:
   for (ref_record::const_iterator it = oprefs.begin ();
        it != oprefs.end (); ++it)
-    {
-      if (!addr_record_has_addr (&opaddrs, it->addr))
-	wr_error (it->who) << "unresolved reference to opcode at "
-			   << pri::hex (it->addr) << ".\n";
-    }
-
-  addr_record_free (&opaddrs);
+    if (!addr_record_has_addr (&opaddrs, it->addr))
+      wr_error (it->who) << "unresolved reference to opcode at "
+			 << pri::hex (it->addr) << ".\n";
 
   return true;
 }

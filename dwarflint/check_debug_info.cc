@@ -43,7 +43,6 @@
 #include "check_debug_info.hh"
 #include "check_debug_line.hh"
 #include "check_debug_aranges.hh"
-#include "misc.hh"
 
 checkdescriptor const *
 read_cu_headers::descriptor ()
@@ -895,7 +894,7 @@ namespace
 	    else
 	      {
 		if (symbolp != NULL)
-		  WIPE (*symbolp);
+		  memset (*symbolp, 0, sizeof (**symbolp));
 		if (type_is_rel
 		    && (relocate == rel_require
 			|| (relocate == rel_nonzero
@@ -1217,9 +1216,6 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
 
 check_debug_info::~check_debug_info ()
 {
-  for (std::vector<cu>::iterator it = cus.begin ();
-       it != cus.end (); ++it)
-    addr_record_free (&it->die_addrs);
 }
 
 cu *

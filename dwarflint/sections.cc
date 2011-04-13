@@ -246,7 +246,7 @@ namespace
 
     /* Section 0 is special, skip it.  */
     REALLOC (file, sec);
-    file->sec[file->size++].id = sec_invalid;
+    new (file->sec + file->size++) sec ();
 
     if (false)
       {
@@ -266,6 +266,7 @@ namespace
 	REALLOC (file, sec);
 	size_t curndx = file->size++;
 	struct sec *cursec = file->sec + curndx;
+	new (cursec) sec ();
 
 	GElf_Shdr *shdr = gelf_getshdr (scn, &cursec->shdr);
 	if (shdr == NULL)
@@ -285,9 +286,9 @@ namespace
 
 	secentry *entry = secinfo.get (scnname);
 	cursec->scn = scn;
-	cursec->id = entry != NULL ? entry->id : sec_invalid;
+	if (entry != NULL)
+	  cursec->id = entry->id;
 	cursec->name = scnname;
-	cursec->rel = (struct relocation_data){NULL, SHT_NULL, NULL, 0, 0, 0};
 
 	/* Dwarf section.  */
 	if (entry != NULL)

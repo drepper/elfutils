@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2008, 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -40,6 +40,14 @@ struct relocation
   bool invalid;	/* Whether this one relocation should be
 		   ignored.  Necessary so that we don't report
 		   invalid & missing relocation twice.  */
+
+  relocation ()
+    : offset (0)
+    , addend (0)
+    , symndx (0)
+    , type (0)
+    , invalid (false)
+  {}
 };
 
 struct relocation_data
@@ -54,6 +62,15 @@ struct relocation_data
   size_t size;
   size_t alloc;
   size_t index;            /* Current index. */
+
+  relocation_data ()
+    : symdata (NULL)
+    , type (SHT_NULL)
+    , rel (NULL)
+    , size (0)
+    , alloc (0)
+    , index (0)
+  {}
 };
 
 enum skip_type

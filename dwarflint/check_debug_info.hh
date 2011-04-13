@@ -78,6 +78,16 @@ struct cu
   bool has_arange;              // Whether we saw arange section pointing at this CU.
   bool has_pubnames;            // Likewise for pubnames.
   bool has_pubtypes;            // Likewise for pubtypes.
+
+  cu ()
+    : next (NULL)
+    , head (NULL)
+    , cudie_offset (0)
+    , low_pc (0)
+    , has_arange (false)
+    , has_pubnames (false)
+    , has_pubtypes (false)
+  {}
 };
 
 /** The pass for reading basic .debug_info data -- the layout of

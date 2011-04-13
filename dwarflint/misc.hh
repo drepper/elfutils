@@ -49,8 +49,6 @@ extern "C"
       }							\
   } while (0)
 
-#define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
-
 bool address_aligned (uint64_t addr, uint64_t align);
 bool necessary_alignment (uint64_t start, uint64_t length,
 			  uint64_t align);

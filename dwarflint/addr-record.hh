@@ -38,16 +38,22 @@
    interpretable as a DIE.  */
 
 struct addr_record
+  : std::vector<uint64_t>
 {
-  size_t size;
-  size_t alloc;
-  uint64_t *addrs;
+  typedef std::vector<uint64_t> _super_t;
+public:
+  using _super_t::const_iterator;
+  using _super_t::begin;
+  using _super_t::end;
+  using _super_t::push_back;
+  using _super_t::operator[];
+  using _super_t::size;
+  using _super_t::insert;
 };
 
 size_t addr_record_find_addr (struct addr_record *ar, uint64_t addr);
 bool addr_record_has_addr (struct addr_record *ar, uint64_t addr);
 void addr_record_add (struct addr_record *ar, uint64_t addr);
-void addr_record_free (struct addr_record *ar);
 
 /* Functions and data structures for reference handling.  Just like
    the above, we use this to check validity of DIE references.

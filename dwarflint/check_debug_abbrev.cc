@@ -236,7 +236,6 @@ namespace
 	if (section == NULL)
 	  {
 	    abbrev_table t;
-	    WIPE (t);
 	    section = &abbrevs.insert (std::make_pair (abbr_off, t)).first->second;
 	    section->offset = abbr_off;
 

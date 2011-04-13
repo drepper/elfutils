@@ -85,6 +85,15 @@ struct abbrev_table
   bool used;		/* There are CUs using this table.  */
 
   abbrev *find_abbrev (uint64_t abbrev_code) const;
+
+  abbrev_table ()
+    : next (NULL)
+    , abbr (NULL)
+    , offset (0)
+    , size (0)
+    , alloc (0)
+    , used (false)
+  {}
 };
 
 class check_debug_abbrev

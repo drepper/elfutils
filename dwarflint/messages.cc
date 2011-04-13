@@ -24,7 +24,6 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "messages.hh"
-#include "misc.hh"
 #include "coverage.hh"
 #include "option.hh"
 
@@ -217,9 +216,7 @@ operator<< (std::ostream &o, __attribute__ ((unused)) message_criteria const &cr
 void
 message_criteria::operator *= (message_criteria const &rhs)
 {
-  struct message_criteria ret;
-  WIPE (ret);
-
+  message_criteria ret;
   for (size_t i = 0; i < size (); ++i)
     for (size_t j = 0; j < rhs.size (); ++j)
       {
