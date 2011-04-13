@@ -203,8 +203,7 @@ check_debug_pub<sec_id>::check_pub_structural ()
 	    break;
 
 	  if (cu != NULL
-	      && !addr_record_has_addr (&cu->die_addrs,
-					offset + cu->head->offset))
+	      && !cu->die_addrs.has_addr (offset + cu->head->offset))
 	    {
 	      wr_error (where)
 		<< "unresolved reference to " << pri::DIE (offset)

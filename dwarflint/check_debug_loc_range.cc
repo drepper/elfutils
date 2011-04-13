@@ -888,7 +888,7 @@ check_location_expression (dwarf_version const *ver,
     {
       uint64_t opcode_off = read_ctx_get_offset (&ctx) + init_off;
       locexpr_locus where (opcode_off, wh);
-      addr_record_add (&opaddrs, opcode_off);
+      opaddrs.add (opcode_off);
 
       uint8_t opcode;
       if (!read_ctx_read_ubyte (&ctx, &opcode))
@@ -969,7 +969,7 @@ check_location_expression (dwarf_version const *ver,
  out:
   for (ref_record::const_iterator it = oprefs.begin ();
        it != oprefs.end (); ++it)
-    if (!addr_record_has_addr (&opaddrs, it->addr))
+    if (!opaddrs.has_addr (it->addr))
       wr_error (*it->who) << "unresolved reference to opcode at "
 			  << pri::hex (it->addr) << ".\n";
 

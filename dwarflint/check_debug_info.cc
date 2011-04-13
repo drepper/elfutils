@@ -115,7 +115,7 @@ namespace
     bool retval = true;
     for (ref_record::const_iterator it = die_refs->begin ();
 	 it != die_refs->end (); ++it)
-      if (!addr_record_has_addr (&cu->die_addrs, it->addr))
+      if (!cu->die_addrs.has_addr (it->addr))
 	{
 	  wr_error (*it->who)
 	    << "unresolved reference to " << pri::DIE (it->addr)
@@ -135,7 +135,7 @@ namespace
 	{
 	  struct cu *ref_cu = NULL;
 	  for (struct cu *jt = cu_chain; jt != NULL; jt = jt->next)
-	    if (addr_record_has_addr (&jt->die_addrs, rt->addr))
+	    if (jt->die_addrs.has_addr (rt->addr))
 	      {
 		ref_cu = jt;
 		break;
@@ -659,7 +659,7 @@ namespace
 	      }
 	  }
 
-	addr_record_add (&cu->die_addrs, cu->head->offset + die_off);
+	cu->die_addrs.add (cu->head->offset + die_off);
 
 	uint64_t low_pc = (uint64_t)-1, high_pc = (uint64_t)-1;
 	bool low_pc_relocated = false, high_pc_relocated = false;

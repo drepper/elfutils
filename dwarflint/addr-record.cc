@@ -26,15 +26,15 @@
 #include "addr-record.hh"
 
 size_t
-addr_record_find_addr (struct addr_record *ar, uint64_t addr)
+addr_record::find (uint64_t addr) const
 {
   size_t a = 0;
-  size_t b = ar->size ();
+  size_t b = size ();
 
   while (a < b)
     {
       size_t i = (a + b) / 2;
-      uint64_t v = (*ar)[i];
+      uint64_t v = (*this)[i];
 
       if (v > addr)
 	b = i;
@@ -48,23 +48,23 @@ addr_record_find_addr (struct addr_record *ar, uint64_t addr)
 }
 
 bool
-addr_record_has_addr (struct addr_record *ar, uint64_t addr)
+addr_record::has_addr (uint64_t addr) const
 {
-  if (ar->size () == 0
-      || addr < (*ar)[0]
-      || addr > (*ar)[ar->size () - 1])
+  if (begin () == end ()
+      || addr < front ()
+      || addr > back ())
     return false;
 
-  size_t a = addr_record_find_addr (ar, addr);
-  return a < ar->size () && (*ar)[a] == addr;
+  const_iterator it = begin () + find (addr);
+  return it != end () && *it == addr;
 }
 
 void
-addr_record_add (struct addr_record *ar, uint64_t addr)
+addr_record::add (uint64_t addr)
 {
-  size_t a = addr_record_find_addr (ar, addr);
-  if (a >= ar->size () || (*ar)[a] != addr)
-    ar->insert (ar->begin () + a, addr);
+  iterator it = begin () + find (addr);
+  if (it == end () || *it != addr)
+    insert (it, addr);
 }
 
 ref::ref ()
