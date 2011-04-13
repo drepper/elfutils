@@ -143,10 +143,10 @@ relocation_next (relocation_data *reloc, uint64_t offset,
    matching that offset is immediately yielded.  */
 void
 relocation_skip (struct relocation_data *reloc, uint64_t offset,
-		 struct where const *where, enum skip_type st)
+		 locus const &loc, enum skip_type st)
 {
   if (reloc != NULL && reloc->rel != NULL)
-    relocation_next (reloc, offset - 1, *where, st);
+    relocation_next (reloc, offset - 1, loc, st);
 }
 
 void
@@ -156,17 +156,18 @@ relocation_reset (struct relocation_data *reloc)
     reloc->index = 0;
 }
 
+rel_target::rel_target (rel_target const &copy)
+{
+  std::memcpy (this, &copy, sizeof (*this));
+}
+
 /* Skip all the remaining relocations.  */
 void
-relocation_skip_rest (struct relocation_data *reloc,
-		      enum section_id id)
+relocation_skip_rest (relocation_data *reloc,
+		      locus const &loc)
 {
   if (reloc->rel != NULL)
-    {
-      where wh = WHERE (id, NULL);
-      relocation_next (reloc, (uint64_t)-1, wh,
-		       skip_mismatched);
-    }
+    relocation_next (reloc, (uint64_t)-1, loc, skip_mismatched);
 }
 
 static void
@@ -176,7 +177,7 @@ do_one_relocation (elf_file const *file,
 		   unsigned rel_width,
 		   uint64_t *value,
 		   reloc_locus const &reloc_where,
-		   section_id offset_into,
+		   rel_target reltgt,
 		   GElf_Sym *symbol,
 		   GElf_Sym **symptr)
 {
@@ -238,23 +239,23 @@ do_one_relocation (elf_file const *file,
     }
 
   /* It's target value, not section offset.  */
-  if (offset_into == rel_value
-      || offset_into == rel_address
-      || offset_into == rel_exec)
+  if (reltgt == rel_target::rel_value
+      || reltgt == rel_target::rel_address
+      || reltgt == rel_target::rel_exec)
     {
       /* If a target value is what's expected, then complain if
 	 it's not either SHN_ABS, an SHF_ALLOC section, or
 	 SHN_UNDEF.  For data forms of address_size, an SHN_UNDEF
 	 reloc is acceptable, otherwise reject it.  */
       if (!(section_index == SHN_ABS
-	    || (offset_into == rel_address
+	    || (reltgt == rel_target::rel_address
 		&& (section_index == SHN_UNDEF
 		    || section_index == SHN_COMMON))))
 	{
-	  if (offset_into != rel_address && section_index == SHN_UNDEF)
+	  if (reltgt != rel_target::rel_address && section_index == SHN_UNDEF)
 	    wr_error (&reloc_where,
-			": relocation of an address is formed using SHN_UNDEF symbol"
-			" (symtab index %d).\n", rel->symndx);
+		      ": relocation of an address is formed using SHN_UNDEF symbol"
+		      " (symtab index %d).\n", rel->symndx);
 	  else
 	    {
 	      require_valid_section_index;
@@ -263,7 +264,7 @@ do_one_relocation (elf_file const *file,
 		wr_message (mc_reloc | mc_impact_3, &reloc_where,
 			    ": associated section %s isn't SHF_ALLOC.\n",
 			    file->sec[section_index].name);
-	      if (offset_into == rel_exec
+	      if (reltgt == rel_target::rel_exec
 		  && (shdr->sh_flags & SHF_EXECINSTR) != SHF_EXECINSTR)
 		/* This may still be kosher, but it's suspicious.  */
 		wr_message (mc_reloc | mc_impact_2, &reloc_where,
@@ -275,13 +276,14 @@ do_one_relocation (elf_file const *file,
   else
     {
       require_valid_section_index;
-      if (file->sec[section_index].id != offset_into)
+      section_id secid = file->sec[section_index].id;
+      if (reltgt != secid)
 	// If symtab[symndx].st_shndx does not match the expected
 	// debug section's index, complain.
 	wr_error (reloc_where)
 	  << "relocation references section "
 	  << (file->sec[section_index].name ?: "<invalid>") << ", but "
-	  << WHERE (offset_into, NULL) << " was expected." << std::endl;
+	  << WHERE (secid, NULL) << " was expected." << std::endl;
     }
 
   /* Only do the actual relocation if we have ET_REL files.  For
@@ -307,7 +309,8 @@ relocate_one (struct elf_file const *file,
 	      struct relocation *rel,
 	      unsigned width, uint64_t *value,
 	      locus const &loc,
-	      enum section_id offset_into, GElf_Sym **symptr)
+	      rel_target reltgt,
+	      GElf_Sym **symptr)
 {
   if (rel->invalid)
     return;
@@ -323,7 +326,7 @@ relocate_one (struct elf_file const *file,
   else
     symbol = &symbol_mem;
 
-  if (offset_into == sec_invalid)
+  if (reltgt == sec_invalid)
     {
       wr_message (reloc_where, mc_impact_3 | mc_reloc)
 	<< "relocates a datum that shouldn't be relocated.\n";
@@ -367,7 +370,7 @@ relocate_one (struct elf_file const *file,
   // Tolerate if we failed to obtain the symbol table.
   if (reloc->symdata != NULL)
     do_one_relocation (file, reloc, rel, rel_width, value,
-		       reloc_where, offset_into, symbol, symptr);
+		       reloc_where, reltgt, symbol, symptr);
 }
 
 static GElf_Rela *

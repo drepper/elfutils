@@ -301,7 +301,7 @@ namespace
     return ret;
   }
 
-  section_id
+  rel_target
   reloc_target (form const *form, attribute const *attribute)
   {
     switch (form->name ())
@@ -316,12 +316,12 @@ namespace
 	  case DW_AT_low_pc:
 	  case DW_AT_high_pc:
 	  case DW_AT_entry_pc:
-	    return rel_exec;
+	    return rel_target::rel_exec;
 
 	  case DW_AT_const_value:
 	    /* Appears in some kernel modules.  It's not allowed by the
 	       standard, but leave that for high-level checks.  */
-	    return rel_address;
+	    return rel_target::rel_address;
 	  };
 
 	break;
@@ -389,7 +389,7 @@ namespace
     std::cout << "XXX don't know how to handle form=" << *form
 	      << ", at=" << *attribute << std::endl;
 
-    return rel_value;
+    return rel_target::rel_value;
   }
 
   struct value_check_cb_ctx
@@ -865,7 +865,7 @@ namespace
 		  }
 		else
 		  relocation_skip (reloc, read_ctx_get_offset (ctx),
-				   &where, skip_mismatched);
+				   where, skip_mismatched);
 	      }
 
 	    /* Relocate the value if appropriate.  */
@@ -1147,16 +1147,14 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
 
   if (success)
     {
+      where wh = WHERE (sec_info, NULL);
       if (ctx.ptr != ctx.end)
 	/* Did we read up everything?  */
-	{
-	  where wh = WHERE (sec_info, NULL);
-	  wr_message (mc_die_other | mc_impact_4, &wh,
-		      ": CU lengths don't exactly match Elf_Data contents.");
-	}
+	wr_message (mc_die_other | mc_impact_4, &wh,
+		    ": CU lengths don't exactly match Elf_Data contents.");
       else
 	/* Did we consume all the relocations?  */
-	relocation_skip_rest (&sec.rel, sec.id);
+	relocation_skip_rest (&sec.rel, wh);
 
       /* If we managed to read up everything, now do abbrev usage
 	 analysis.  */

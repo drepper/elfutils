@@ -390,7 +390,7 @@ check_aranges_structural (struct elf_file *file,
 	    {
 	      address_relocated = true;
 	      relocate_one (file, &sec->rel, rel, address_size,
-			    &address, where, rel_address, NULL);
+			    &address, where, rel_target::rel_address, NULL);
 	    }
 	  else if (file->ehdr.e_type == ET_REL && address != 0)
 	    wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,

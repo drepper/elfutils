@@ -80,6 +80,58 @@ enum skip_type
     skip_ok,
   };
 
+struct rel_target
+{
+  enum target
+    {
+      rel_value,	/* For relocations, this denotes that the
+			   relocation is applied to target value, not a
+			   section offset.  */
+      rel_address,	/* Same as above, but for addresses.  */
+      rel_exec,		/* Some as above, but we expect EXEC bit.  */
+    };
+
+private:
+  bool _m_is_section;
+  union
+  {
+    section_id _m_section;
+    target _m_target;
+  };
+
+public:
+  rel_target (section_id sec)
+    : _m_is_section (true)
+    , _m_section (sec)
+  {}
+
+  rel_target (target t)
+    : _m_is_section (false)
+    , _m_target (t)
+  {}
+
+  rel_target (rel_target const &copy);
+
+  bool
+  operator== (section_id sec)
+  {
+    return _m_is_section && _m_section == sec;
+  }
+
+  bool
+  operator== (target tgt)
+  {
+    return !_m_is_section && _m_target == tgt;
+  }
+
+  template<class T>
+  bool
+  operator!= (T t)
+  {
+    return !(*this == t);
+  }
+};
+
 bool read_rel (struct elf_file *file, struct sec *sec,
 	       Elf_Data *reldata, bool elf_64);
 
@@ -91,17 +143,18 @@ relocation *relocation_next (struct relocation_data *reloc,
 void relocation_reset (struct relocation_data *reloc);
 
 void relocation_skip (struct relocation_data *reloc, uint64_t offset,
-		      struct where const *where, enum skip_type st);
+		      locus const &loc, enum skip_type st);
 
 void relocation_skip_rest (struct relocation_data *reloc,
-			   enum section_id id);
+			   locus const &loc);
 
 void relocate_one (struct elf_file const *file,
 		   struct relocation_data *reloc,
 		   struct relocation *rel,
 		   unsigned width, uint64_t *value,
 		   locus const &loc,
-		   enum section_id offset_into, GElf_Sym **symptr);
+		   rel_target reltgt,
+		   GElf_Sym **symptr);
 
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"
 

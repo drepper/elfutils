@@ -251,7 +251,7 @@ check_debug_pub<sec_id>::check_pub_structural ()
     }
 
   if (retval)
-    relocation_skip_rest (&_m_sec->sect.rel, _m_sec->sect.id);
+    relocation_skip_rest (&_m_sec->sect.rel, WHERE (_m_sec->sect.id));
 
   return retval;
 }

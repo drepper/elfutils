@@ -442,8 +442,8 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      if ((rel = relocation_next (&_m_sec->sect.rel, ctx_offset,
 						  where, skip_mismatched)))
 			relocate_one (&_m_sec->file, &_m_sec->sect.rel, rel,
-				      addr_64 ? 8 : 4,
-				      &addr, where, rel_address, NULL);
+				      addr_64 ? 8 : 4, &addr, where,
+				      rel_target::rel_address, NULL);
 		      else if (_m_sec->file.ehdr.e_type == ET_REL)
 			{
 			  wr_message (where, mc_impact_2 | mc_line | mc_reloc)
@@ -683,7 +683,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
     }
 
   if (success)
-    relocation_skip_rest (&_m_sec->sect.rel, _m_sec->sect.id);
+    relocation_skip_rest (&_m_sec->sect.rel, WHERE (_m_sec->sect.id));
   else
     throw check_base::failed ();
 }

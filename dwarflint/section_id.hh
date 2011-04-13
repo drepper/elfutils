@@ -45,21 +45,10 @@ enum section_id
     /* Debuginfo sections:  */
 #define SEC(n) sec_##n,
     DEBUGINFO_SECTIONS
-    count_debuginfo_sections,
 #undef SEC
 
-    /* Non-debuginfo sections:  */
-
-    // XXX the following should really be split out to different enum
-    /* Non-sections:  */
-    rel_value,		/* For relocations, this denotes that the
-			   relocation is applied to taget value, not a
-			   section offset.  */
-    rel_address,	/* Same as above, but for addresses.  */
-    rel_exec,		/* Some as above, but we expect EXEC bit.  */
+    count_debuginfo_sections
   };
-
-static const unsigned num_section_ids = rel_exec + 1;
 
 // section_name[0] is for sec_invalid.  The last index is for
 // count_debuginfo_sections and is NULL.

@@ -423,7 +423,8 @@ namespace
 	  {
 	    begin_relocated = true;
 	    relocate_one (file, &sec->rel, rel, cu->head->address_size,
-			  &begin_addr, where, rel_value, &begin_symbol);
+			  &begin_addr, where, rel_target::rel_value,
+			  &begin_symbol);
 	  }
 
 	/* end address */
@@ -447,7 +448,7 @@ namespace
 	  {
 	    end_relocated = true;
 	    relocate_one (file, &sec->rel, rel, cu->head->address_size,
-			  &end_addr, where, rel_value, &end_symbol);
+			  &end_addr, where, rel_target::rel_value, &end_symbol);
 	    if (begin_addr != escape)
 	      {
 		if (!begin_relocated)
@@ -621,8 +622,7 @@ namespace
 	  {
 	    if (off == last_off)
 	      continue;
-	    struct where wh = WHERE (sec->id, NULL);
-	    relocation_skip (&sec->rel, off, &wh, skip_unref);
+	    relocation_skip (&sec->rel, off, WHERE (sec->id), skip_unref);
 	  }
 
 	// xxx right now this is just so that we can ver->get_form
@@ -646,7 +646,7 @@ namespace
 
     if (retval)
       {
-	relocation_skip_rest (&sec->rel, sec->id);
+	relocation_skip_rest (&sec->rel, WHERE (sec->id));
 
 	/* We check that all CUs have the same address size when building
 	   the CU chain.  So just take the address size of the first CU in
@@ -755,7 +755,7 @@ namespace
     return true;
   }
 
-  static enum section_id
+  static rel_target
   reloc_target_loc (uint8_t opcode)
   {
     switch (opcode)
@@ -765,7 +765,7 @@ namespace
 	return sec_info;
 
       case DW_OP_addr:
-	return rel_address;
+	return rel_target::rel_address;
 
       case DW_OP_call_ref:
 	assert (!"Can't handle call_ref!");
@@ -774,7 +774,7 @@ namespace
     std::cout << "XXX don't know how to handle opcode="
 	      << elfutils::dwarf::ops::name (opcode) << std::endl;
 
-    return rel_value;
+    return rel_target::rel_value;
   }
 
   bool

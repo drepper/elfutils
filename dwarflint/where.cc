@@ -120,7 +120,7 @@ namespace
   };
 
   class section_formatters
-    : public simple_formatters<num_section_ids>
+    : public simple_formatters<count_debuginfo_sections>
   {
   public:
     section_formatters ()
