@@ -258,9 +258,9 @@ check_aranges_structural (struct elf_file *file,
 
       struct relocation *rel;
       if ((rel = relocation_next (&sec->rel, ctx_offset,
-				  &where, skip_mismatched)))
+				  where, skip_mismatched)))
 	relocate_one (file, &sec->rel, rel, offset_size,
-		      &cu_offset, &where, sec_info, NULL);
+		      &cu_offset, where, sec_info, NULL);
       else if (file->ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_aranges | mc_reloc | mc_header, &where,
 		    PRI_LACK_RELOCATION, "debug info offset");
@@ -288,6 +288,12 @@ check_aranges_structural (struct elf_file *file,
 	  else
 	    ss << "unknown CU";
 	  return ss.str ();
+	}
+
+	locus *
+	clone () const
+	{
+	  return new cudie_locus (*this);
 	}
       };
 
@@ -380,11 +386,11 @@ check_aranges_structural (struct elf_file *file,
 	    }
 
 	  if ((rel = relocation_next (&sec->rel, ctx_offset,
-				      &where, skip_mismatched)))
+				      where, skip_mismatched)))
 	    {
 	      address_relocated = true;
 	      relocate_one (file, &sec->rel, rel, address_size,
-			    &address, &where, rel_address, NULL);
+			    &address, where, rel_address, NULL);
 	    }
 	  else if (file->ehdr.e_type == ET_REL && address != 0)
 	    wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,

@@ -88,12 +88,18 @@ namespace
       ss << " of " << _m_ref.format ();
       return ss.str ();
     }
+
+    locus *
+    clone () const
+    {
+      return new reloc_locus (*this);
+    }
   };
 }
 
 relocation *
 relocation_next (relocation_data *reloc, uint64_t offset,
-		 struct where const *where, enum skip_type st)
+		 locus const &loc, enum skip_type st)
 {
   if (reloc == NULL || reloc->rel == NULL)
     return NULL;
@@ -115,7 +121,7 @@ relocation_next (relocation_data *reloc, uint64_t offset,
 	{
 	  if (st != skip_ok)
 	    {
-	      reloc_locus reloc_where (reloc->type, *where, rel->offset);
+	      reloc_locus reloc_where (reloc->type, loc, rel->offset);
 	      wr_error (reloc_where)
 		<< (st == skip_unref
 		    ? "relocation targets unreferenced portion of the section."
@@ -140,7 +146,7 @@ relocation_skip (struct relocation_data *reloc, uint64_t offset,
 		 struct where const *where, enum skip_type st)
 {
   if (reloc != NULL && reloc->rel != NULL)
-    relocation_next (reloc, offset - 1, where, st);
+    relocation_next (reloc, offset - 1, *where, st);
 }
 
 void
@@ -158,7 +164,7 @@ relocation_skip_rest (struct relocation_data *reloc,
   if (reloc->rel != NULL)
     {
       where wh = WHERE (id, NULL);
-      relocation_next (reloc, (uint64_t)-1, &wh,
+      relocation_next (reloc, (uint64_t)-1, wh,
 		       skip_mismatched);
     }
 }
@@ -300,13 +306,13 @@ relocate_one (struct elf_file const *file,
 	      struct relocation_data *reloc,
 	      struct relocation *rel,
 	      unsigned width, uint64_t *value,
-	      struct where const *where,
+	      locus const &loc,
 	      enum section_id offset_into, GElf_Sym **symptr)
 {
   if (rel->invalid)
     return;
 
-  reloc_locus reloc_where (reloc->type, *where, rel->offset);
+  reloc_locus reloc_where (reloc->type, loc, rel->offset);
 
   GElf_Sym symbol_mem, *symbol;
   if (symptr != NULL)

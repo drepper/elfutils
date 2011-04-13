@@ -62,18 +62,14 @@ void addr_record_add (struct addr_record *ar, uint64_t addr);
 
 struct ref
 {
-  uint64_t addr; // Referree address
-  ::where who;  // Referrer
+  uint64_t addr; // Referee address
+  locus *who;    // Referrer
 
-  ref ()
-    : addr (-1)
-    , who ()
-  {}
-
-  ref (uint64_t a_addr, where const &a_who)
-    : addr (a_addr)
-    , who (a_who)
-  {}
+  ref ();
+  ref (uint64_t a_addr, locus const &a_who);
+  ref (ref const &copy);
+  ~ref ();
+  ref &operator= (ref const &copy);
 };
 
 class ref_record

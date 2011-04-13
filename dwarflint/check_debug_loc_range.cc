@@ -354,7 +354,7 @@ namespace
 			  struct coverage_map *coverage_map,
 			  struct coverage *pc_coverage,
 			  uint64_t addr,
-			  struct where const *wh,
+			  locus const &loc,
 			  enum message_category cat)
   {
     char buf[128]; // messages
@@ -368,7 +368,7 @@ namespace
     read_ctx_init (&ctx, parent_ctx->data, file->other_byte_order);
     if (!read_ctx_skip (&ctx, addr))
       {
-	wr_error (wh, ": invalid reference outside the section "
+	wr_error (&loc, ": invalid reference outside the section "
 		  "%#" PRIx64 ", size only %#tx.\n",
 		  addr, ctx.end - ctx.begin);
 	return false;
@@ -379,7 +379,7 @@ namespace
 
     if (coverage->is_covered (addr, 1))
       {
-	wr_error (wh, ": reference to %#" PRIx64
+	wr_error (&loc, ": reference to %#" PRIx64
 		  " points into another location or range list.\n", addr);
 	retval = false;
       }
@@ -391,7 +391,7 @@ namespace
     uint64_t base = cu->low_pc;
     while (!read_ctx_eof (&ctx))
       {
-	struct where where = WHERE (sec->id, wh);
+	struct where where = WHERE (sec->id, &loc);
 	uint64_t offset = read_ctx_get_offset (&ctx);
 	where_reset_1 (&where, offset);
 
@@ -419,11 +419,11 @@ namespace
 
 	struct relocation *rel;
 	if ((rel = relocation_next (&sec->rel, begin_off,
-				    &where, skip_mismatched)))
+				    where, skip_mismatched)))
 	  {
 	    begin_relocated = true;
 	    relocate_one (file, &sec->rel, rel, cu->head->address_size,
-			  &begin_addr, &where, rel_value,	&begin_symbol);
+			  &begin_addr, where, rel_value, &begin_symbol);
 	  }
 
 	/* end address */
@@ -443,11 +443,11 @@ namespace
 	  }
 
 	if ((rel = relocation_next (&sec->rel, end_off,
-				    &where, skip_mismatched)))
+				    where, skip_mismatched)))
 	  {
 	    end_relocated = true;
 	    relocate_one (file, &sec->rel, rel, cu->head->address_size,
-			  &end_addr, &where, rel_value, &end_symbol);
+			  &end_addr, where, rel_value, &end_symbol);
 	    if (begin_addr != escape)
 	      {
 		if (!begin_relocated)
@@ -638,7 +638,7 @@ namespace
 	   Perhaps that's undesirable.  */
 	if (!check_loc_or_range_ref (ver, file, &ctx, it->cu, sec,
 				     &coverage, coverage_map, pc_coverage,
-				     off, &it->ref.who, cat))
+				     off, *it->ref.who, cat))
 	  retval = false;
 	last_off = off;
       }
@@ -787,7 +787,7 @@ namespace
 		form const *form,
 		uint64_t *valuep,
 		char const *str,
-		struct where const &where)
+		locus const &where)
   {
     if (form == NULL)
       return true;
@@ -812,11 +812,11 @@ namespace
 
     struct relocation *rel;
     if ((rel = relocation_next (reloc, off,
-				&where, skip_mismatched)))
+				where, skip_mismatched)))
       {
 	if (storclass != sc_block)
 	  relocate_one (&file, reloc, rel,
-			cu->head->address_size, valuep, &where,
+			cu->head->address_size, valuep, where,
 			reloc_target_loc (opcode), NULL);
 	else
 	  wr_error (where) << "relocation relocates a length field.\n";
@@ -824,12 +824,44 @@ namespace
     if (storclass == sc_block)
       {
 	uint64_t off_block_end = read_ctx_get_offset (ctx) + init_off - 1;
-	relocation_next (reloc, off_block_end, &where, skip_ok);
+	relocation_next (reloc, off_block_end, where, skip_ok);
       }
 
     return true;
   }
 }
+
+class locexpr_locus
+  : public locus
+{
+  uint64_t const _m_offset;
+  locus const *const _m_context;
+
+public:
+  explicit locexpr_locus (uint64_t offset, locus const *context)
+    : _m_offset (offset)
+    , _m_context (context)
+  {}
+
+  std::string
+  format (bool) const
+  {
+    std::stringstream ss;
+    ss << "location expression offset 0x" << std::hex << _m_offset;
+    return ss.str ();
+  }
+
+  locus *
+  clone () const
+  {
+    return new locexpr_locus (*this);
+  }
+
+  virtual locus const *next () const
+  {
+    return _m_context;
+  }
+};
 
 bool
 check_location_expression (dwarf_version const *ver,
@@ -854,9 +886,8 @@ check_location_expression (dwarf_version const *ver,
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (sec_locexpr, wh);
       uint64_t opcode_off = read_ctx_get_offset (&ctx) + init_off;
-      where_reset_1 (&where, opcode_off);
+      locexpr_locus where (opcode_off, wh);
       addr_record_add (&opaddrs, opcode_off);
 
       uint8_t opcode;
@@ -939,8 +970,8 @@ check_location_expression (dwarf_version const *ver,
   for (ref_record::const_iterator it = oprefs.begin ();
        it != oprefs.end (); ++it)
     if (!addr_record_has_addr (&opaddrs, it->addr))
-      wr_error (it->who) << "unresolved reference to opcode at "
-			 << pri::hex (it->addr) << ".\n";
+      wr_error (*it->who) << "unresolved reference to opcode at "
+			  << pri::hex (it->addr) << ".\n";
 
   return true;
 }

@@ -144,9 +144,9 @@ check_debug_pub<sec_id>::check_pub_structural ()
 
       struct relocation *rel;
       if ((rel = relocation_next (&_m_sec->sect.rel, ctx_offset,
-				  &where, skip_mismatched)))
+				  where, skip_mismatched)))
 	relocate_one (&_m_file, &_m_sec->sect.rel, rel, offset_size,
-		      &cu_offset, &where, sec_info, NULL);
+		      &cu_offset, where, sec_info, NULL);
       else if (_m_file.ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_pubtables | mc_reloc | mc_header, &where,
 		    PRI_LACK_RELOCATION, "debug info offset");

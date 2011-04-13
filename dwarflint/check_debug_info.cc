@@ -117,7 +117,7 @@ namespace
 	 it != die_refs->end (); ++it)
       if (!addr_record_has_addr (&cu->die_addrs, it->addr))
 	{
-	  wr_error (it->who)
+	  wr_error (*it->who)
 	    << "unresolved reference to " << pri::DIE (it->addr)
 	    << '.' << std::endl;
 	  retval = false;
@@ -143,7 +143,7 @@ namespace
 
 	  if (ref_cu == NULL)
 	    {
-	      wr_error (rt->who)
+	      wr_error (*rt->who)
 		<< "unresolved (non-CU-local) reference to "
 		<< pri::hex (rt->addr) << '.' << std::endl;
 	      retval = false;
@@ -153,7 +153,7 @@ namespace
 	       reference is valid, which it is.  But warn about this
 	       anyway, perhaps local reference could be formed on
 	       smaller number of bytes.  */
-	    wr_message (rt->who, mc_impact_2 | mc_acc_suboptimal | mc_die_rel)
+	    wr_message (*rt->who, mc_impact_2 | mc_acc_suboptimal | mc_die_rel)
 	      << "local reference to " << pri::DIE (rt->addr)
 	      << " formed as global." << std::endl;
 	}
@@ -262,11 +262,11 @@ namespace
 	  }
 
 	struct relocation *rel
-	  = relocation_next (reloc, ctx_offset, &head.where, skip_ok);
+	  = relocation_next (reloc, ctx_offset, head.where, skip_ok);
 	if (rel != NULL)
 	  {
 	    relocate_one (file, reloc, rel, head.offset_size,
-			  &head.abbrev_offset, &head.where, sec_abbrev, NULL);
+			  &head.abbrev_offset, head.where, sec_abbrev, NULL);
 	    rel->invalid = true; // mark as invalid so it's skipped
 				 // next time we pass by this
 	  }
@@ -487,8 +487,7 @@ namespace
     if (ctx->cu->stmt_list.addr != (uint64_t)-1)
       wr_error (*ctx->where)
 	<< "DW_AT_stmt_list mentioned twice in a CU." << std::endl;
-    ctx->cu->stmt_list.addr = value;
-    ctx->cu->stmt_list.who = *ctx->where;
+    ctx->cu->stmt_list = ref (value, *ctx->where);
   }
 
   /* Callback for locptr values.  */
@@ -872,7 +871,7 @@ namespace
 	    /* Relocate the value if appropriate.  */
 	    struct relocation *rel;
 	    if ((rel = relocation_next (reloc, ctx_offset,
-					&where, skip_mismatched)))
+					where, skip_mismatched)))
 	      {
 		if (relocate == rel_no)
 		  wr_message (where, (mc_impact_4 | mc_die_other
@@ -884,7 +883,7 @@ namespace
 		if (attribute != NULL)
 		  {
 		    form_width_t width = form->width (cu->head);
-		    relocate_one (&file, reloc, rel, width, &value, &where,
+		    relocate_one (&file, reloc, rel, width, &value, where,
 				  reloc_target (form, attribute), symbolp);
 		  }
 
@@ -1263,12 +1262,12 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
       if (it->stmt_list.addr == (uint64_t)-1)
 	for (ref_record::const_iterator jt = it->decl_file_refs.begin ();
 	     jt != it->decl_file_refs.end (); ++jt)
-	  wr_error (jt->who)
+	  wr_error (*jt->who)
 	    << "references .debug_line table, but CU DIE lacks DW_AT_stmt_list."
 	    << std::endl;
       else if (_m_line == NULL
 	       || !_m_line->has_line_table (it->stmt_list.addr))
-	wr_error (it->stmt_list.who)
+	wr_error (*it->stmt_list.who)
 	  << "unresolved reference to .debug_line table "
 	  << pri::hex (it->stmt_list.addr) << '.' << std::endl;
 

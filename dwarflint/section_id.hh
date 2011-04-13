@@ -52,8 +52,6 @@ enum section_id
 
     // XXX the following should really be split out to different enum
     /* Non-sections:  */
-    sec_locexpr,	/* Not a section, but a portion of file that
-			   contains a location expression.  */
     rel_value,		/* For relocations, this denotes that the
 			   relocation is applied to taget value, not a
 			   section offset.  */

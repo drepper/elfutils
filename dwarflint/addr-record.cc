@@ -66,3 +66,36 @@ addr_record_add (struct addr_record *ar, uint64_t addr)
   if (a >= ar->size () || (*ar)[a] != addr)
     ar->insert (ar->begin () + a, addr);
 }
+
+ref::ref ()
+  : addr (-1)
+  , who (NULL)
+{}
+
+ref::ref (uint64_t a_addr, locus const &a_who)
+  : addr (a_addr)
+  , who (a_who.clone ())
+{}
+
+ref::ref (ref const &copy)
+  : who (NULL)
+{
+  *this = copy;
+}
+
+ref &
+ref::operator= (ref const &copy)
+{
+  if (&copy != this)
+    {
+      addr = copy.addr;
+      delete who;
+      who = copy.who ? copy.who->clone () : NULL;
+    }
+  return *this;
+}
+
+ref::~ref ()
+{
+  delete who;
+}

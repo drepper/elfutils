@@ -128,11 +128,11 @@ namespace
 
   bool
   use_file (files_t &files, uint64_t file_idx,
-	    where const &where, char const *msg = "")
+	    locus const &loc, char const *msg = "")
   {
     if (file_idx == 0 || file_idx > files.size ())
       {
-	wr_error (where)
+	wr_error (loc)
 	  << msg << "invalid file index " << file_idx << '.'
 	  << std::endl;
 	return false;
@@ -343,7 +343,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		for (ref_record::const_iterator
 		       jt = it->decl_file_refs.begin ();
 		     jt != it->decl_file_refs.end (); ++jt)
-		  if (!use_file (files, jt->addr, jt->who))
+		  if (!use_file (files, jt->addr, *jt->who))
 		    success = false;
 	      }
 	  if (!found)
@@ -440,10 +440,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 		      struct relocation *rel;
 		      if ((rel = relocation_next (&_m_sec->sect.rel, ctx_offset,
-						  &where, skip_mismatched)))
+						  where, skip_mismatched)))
 			relocate_one (&_m_sec->file, &_m_sec->sect.rel, rel,
 				      addr_64 ? 8 : 4,
-				      &addr, &where, rel_address, NULL);
+				      &addr, where, rel_address, NULL);
 		      else if (_m_sec->file.ehdr.e_type == ET_REL)
 			{
 			  wr_message (where, mc_impact_2 | mc_line | mc_reloc)

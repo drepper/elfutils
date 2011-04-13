@@ -85,7 +85,7 @@ bool read_rel (struct elf_file *file, struct sec *sec,
 
 relocation *relocation_next (struct relocation_data *reloc,
 			     uint64_t offset,
-			     struct where const *where,
+			     locus const &loc,
 			     enum skip_type st);
 
 void relocation_reset (struct relocation_data *reloc);
@@ -100,7 +100,7 @@ void relocate_one (struct elf_file const *file,
 		   struct relocation_data *reloc,
 		   struct relocation *rel,
 		   unsigned width, uint64_t *value,
-		   struct where const *where,
+		   locus const &loc,
 		   enum section_id offset_into, GElf_Sym **symptr);
 
 #define PRI_LACK_RELOCATION ": %s seems to lack a relocation.\n"

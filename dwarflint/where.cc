@@ -148,8 +148,6 @@ namespace
       add (sec_mac, ".debug_mac");
 
       add (sec_ranges, ".debug_ranges", "rangelist %#"PRIx64, "offset %#"PRIx64);
-
-      add (sec_locexpr, "location expression", "offset %#"PRIx64);
     }
   } const section_names;
 }
@@ -164,7 +162,7 @@ namespace
 }
 
 where
-WHERE (section_id sec, where const *next)
+WHERE (section_id sec, locus const *next)
 {
   where::formatter const *fmt = wf_for_section (sec);
   return where (fmt, next);

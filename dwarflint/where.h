@@ -38,6 +38,7 @@ class locus
 {
 public:
   virtual std::string format (bool brief = false) const = 0;
+  virtual locus *clone () const = 0;
 
   virtual locus const *next () const
   {
@@ -84,6 +85,12 @@ public:
     return _m_next;
   }
 
+  locus *
+  clone () const
+  {
+    return new where (*this);
+  }
+
   void
   set_next (locus const *nxt)
   {
@@ -114,7 +121,7 @@ where_reset_3 (struct where *wh, uint64_t addr)
   wh->reset_3 (addr);
 }
 
-where WHERE (section_id sec, where const *next = NULL);
+where WHERE (section_id sec, locus const *next = NULL);
 
 inline std::ostream &
 operator << (std::ostream &os, where const &wh)
