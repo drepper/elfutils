@@ -203,21 +203,21 @@ where::format (bool brief) const
 }
 
 void
-where_reset_1 (struct where *wh, uint64_t addr)
+where::reset_1 (uint64_t addr)
 {
-  wh->_m_addr1 = addr;
-  wh->_m_addr2 = wh->_m_addr3 = (uint64_t)-1;
+  _m_addr1 = addr;
+  _m_addr2 = _m_addr3 = (uint64_t)-1;
 }
 
 void
-where_reset_2 (struct where *wh, uint64_t addr)
+where::reset_2 (uint64_t addr)
 {
-  wh->_m_addr2 = addr;
-  wh->_m_addr3 = (uint64_t)-1;
+  _m_addr2 = addr;
+  _m_addr3 = (uint64_t)-1;
 }
 
 void
-where_reset_3 (struct where *wh, uint64_t addr)
+where::reset_3 (uint64_t addr)
 {
-  wh->_m_addr3 = addr;
+  _m_addr3 = addr;
 }

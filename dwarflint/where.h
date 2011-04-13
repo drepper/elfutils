@@ -91,14 +91,28 @@ public:
     _m_next = nxt;
   }
 
-  friend void where_reset_1 (struct where *wh, uint64_t addr);
-  friend void where_reset_2 (struct where *wh, uint64_t addr);
-  friend void where_reset_3 (struct where *wh, uint64_t addr);
+  void reset_1 (uint64_t addr);
+  void reset_2 (uint64_t addr);
+  void reset_3 (uint64_t addr);
 };
 
-void where_reset_1 (struct where *wh, uint64_t addr);
-void where_reset_2 (struct where *wh, uint64_t addr);
-void where_reset_3 (struct where *wh, uint64_t addr);
+inline void
+where_reset_1 (struct where *wh, uint64_t addr)
+{
+  wh->reset_1 (addr);
+}
+
+inline void
+where_reset_2 (struct where *wh, uint64_t addr)
+{
+  wh->reset_2 (addr);
+}
+
+inline void
+where_reset_3 (struct where *wh, uint64_t addr)
+{
+  wh->reset_3 (addr);
+}
 
 where WHERE (section_id sec, where const *next = NULL);
 
