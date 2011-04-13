@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_abbrev.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -33,18 +33,24 @@
 
 struct abbrev_attrib
 {
-  struct where where;
+  ::where where;
   uint16_t name;
   uint8_t form;
+
+  abbrev_attrib ()
+    : where ()
+    , name (0)
+    , form (0)
+  {}
 };
 
 struct abbrev
 {
+  ::where where;
   uint64_t code;
-  struct where where;
 
   /* Attributes.  */
-  struct abbrev_attrib *attribs;
+  abbrev_attrib *attribs;
   size_t size;
   size_t alloc;
 
@@ -56,6 +62,17 @@ struct abbrev
 
   /* Whether some DIE uses this abbrev.  */
   bool used;
+
+  abbrev ()
+    : where ()
+    , code (0)
+    , attribs (0)
+    , size (0)
+    , alloc (0)
+    , tag (0)
+    , has_children (false)
+    , used (false)
+  {}
 };
 
 struct abbrev_table

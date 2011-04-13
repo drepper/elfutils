@@ -303,18 +303,17 @@ namespace
 	    << "duplicate abbrev code " << abbr_code
 	    << "; already defined at " << original->where << '.' << std::endl;
 
-	struct abbrev fake;
-	struct abbrev *cur;
+	abbrev fake;
+	abbrev *cur;
 	/* Don't actually save this abbrev if it's duplicate.  */
 	if (likely (original == NULL))
 	  {
 	    REALLOC (section, abbr);
 	    cur = section->abbr + section->size++;
+	    new (cur) abbrev ();
 	  }
 	else
 	  cur = &fake;
-	WIPE (*cur);
-	new (&cur->where) class where ();
 
 	cur->code = abbr_code;
 	cur->where = where;
@@ -383,8 +382,7 @@ namespace
 	    REALLOC (cur, attribs);
 
 	    struct abbrev_attrib *acur = cur->attribs + cur->size++;
-	    WIPE (*acur);
-	    new (&acur->where) class where ();
+	    new (acur) abbrev_attrib ();
 	    acur->name = attrib_name;
 	    acur->form = attrib_form;
 	    acur->where = where;
