@@ -258,7 +258,7 @@ wr_verror (const struct where *wh, const char *format, va_list ap)
 static void
 wr_vwarning (const struct where *wh, const char *format, va_list ap)
 {
-  printf ("warning: %s", where_fmt (wh, NULL));
+  printf ("%s", where_fmt (wh, NULL));
   vprintf (format, ap);
   where_fmt_chain (wh, "warning");
   ++error_count;
@@ -279,7 +279,11 @@ wr_message (unsigned long category, const struct where *wh,
 {
   va_list ap;
   va_start (ap, format);
-  if (message_accept (&warning_criteria, category))
+  // Clumsy duplicate filtering. Use format as key.
+  bool whether = false;
+  message_category cat = (message_category) category;
+  wr_message (cat).id (format, whether);
+  if (whether && message_accept (&warning_criteria, category))
     {
       if (message_accept (&error_criteria, category))
 	wr_verror (wh, format, ap);
