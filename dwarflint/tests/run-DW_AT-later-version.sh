@@ -32,4 +32,5 @@ testfiles DW_AT-later-version
 testrun_compare ./dwarflint --nognu DW_AT-later-version <<EOF
 warning: .debug_abbrev: abbr. attribute 0x15: attribute DW_AT_endianity from later DWARF version.
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
+warning: .debug_info: DIE 0x29: variable has decl_file, but NOT decl_line
 EOF
