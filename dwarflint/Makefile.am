@@ -87,6 +87,7 @@ dwarflint_SOURCES = \
 	check_range_out_of_scope.cc \
 	check_self_referential_die.cc \
 	check_linkage_external_die.cc \
+	check_die_decl_call.cc \
 	lowlevel_checks.cc lowlevel_checks.hh \
 	\
 	../src/dwarfstrings.c
