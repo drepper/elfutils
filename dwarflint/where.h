@@ -48,6 +48,32 @@ public:
   virtual ~locus () {}
 };
 
+struct section_locus
+  : public locus
+{
+  section_id _m_sec;
+  uint64_t _m_offset;
+
+public:
+  explicit section_locus (section_id sec, uint64_t offset = -1)
+    : _m_sec (sec)
+    , _m_offset (offset)
+  {}
+
+  section_locus (section_locus const &copy)
+    : _m_sec (copy._m_sec)
+    , _m_offset (copy._m_offset)
+  {}
+
+  std::string format (bool brief = false) const;
+
+  locus *
+  clone () const
+  {
+    return new section_locus (*this);
+  }
+};
+
 struct where
   : public locus
 {
@@ -124,9 +150,9 @@ where_reset_3 (struct where *wh, uint64_t addr)
 where WHERE (section_id sec, locus const *next = NULL);
 
 inline std::ostream &
-operator << (std::ostream &os, where const &wh)
+operator << (std::ostream &os, locus const &loc)
 {
-  os << wh.format ();
+  os << loc.format ();
   return os;
 }
 

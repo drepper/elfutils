@@ -24,6 +24,7 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "where.h"
+#include "section_id.hh"
 
 #include <cinttypes>
 #include <assert.h>
@@ -31,6 +32,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <array>
+#include <sstream>
 
 class where::simple_formatter
   : public where::formatter
@@ -149,7 +151,7 @@ namespace
 
       add (sec_ranges, ".debug_ranges", "rangelist %#"PRIx64, "offset %#"PRIx64);
     }
-  } const section_names;
+  } const section_fmts;
 }
 
 namespace
@@ -157,8 +159,18 @@ namespace
   where::formatter const *
   wf_for_section (section_id sec)
   {
-    return &section_names[sec];
+    return &section_fmts[sec];
   }
+}
+
+std::string
+section_locus::format (bool) const
+{
+  std::stringstream ss;
+  ss << section_name[_m_sec];
+  if (_m_offset != (uint64_t)-1)
+    ss << ", offset 0x" << std::hex << _m_offset;
+  return ss.str ();
 }
 
 where

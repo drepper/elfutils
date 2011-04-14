@@ -512,7 +512,7 @@ namespace
     if (addr == 0)
       {
 	wr_error (*ctx->where)
-	  << "DW_AT_sibling with a value of 0." << std::endl;
+	  << "has a value of 0." << std::endl;
 	// Don't let this up.
 	*ctx->retval_p = -2;
       }
@@ -689,7 +689,7 @@ namespace
 		  return -1;
 		form_name = value;
 		form = check_debug_abbrev::check_form
-		  (ver, attribute, form_name, &where, true);
+		  (ver, attribute, form_name, where, true);
 		// N.B. check_form emits appropriate error messages.
 		if (form == NULL)
 		  return -1;

@@ -31,9 +31,45 @@
 #include "check_debug_info_i.hh"
 #include "dwarf_version_i.hh"
 
+class abbrev_locus
+  : public locus
+{
+  uint64_t _m_abbr_offset;
+
+public:
+  explicit abbrev_locus (uint64_t abbr_offset = -1);
+
+  abbrev_locus (abbrev_locus const &copy);
+
+  std::string format (bool brief = false) const;
+  locus *clone () const;
+};
+
+class abbrev_attrib_locus
+  : public locus
+{
+  uint64_t _m_abbr_offset;
+  uint64_t _m_attr_offset;
+  int _m_name;
+
+public:
+  explicit abbrev_attrib_locus (uint64_t abbr_offset = -1,
+				uint64_t attr_offset = -1,
+				int name = -1);
+
+  abbrev_attrib_locus (abbrev_attrib_locus const &copy);
+
+  abbrev_attrib_locus non_symbolic ();
+
+  void set_name (int name);
+  std::string format (bool brief = false) const;
+  std::string name () const;
+  locus *clone () const;
+};
+
 struct abbrev_attrib
 {
-  ::where where;
+  abbrev_attrib_locus where;
   uint16_t name;
   uint8_t form;
 
@@ -46,7 +82,7 @@ struct abbrev_attrib
 
 struct abbrev
 {
-  ::where where;
+  abbrev_locus where;
   uint64_t code;
 
   /* Attributes.  */
@@ -63,8 +99,8 @@ struct abbrev
   /* Whether some DIE uses this abbrev.  */
   bool used;
 
-  abbrev ()
-    : where ()
+  explicit abbrev (abbrev_locus const &loc)
+    : where (loc)
     , code (0)
     , attribs (0)
     , size (0)
@@ -113,7 +149,7 @@ public:
   static form const *check_form (dwarf_version const *ver,
 				 attribute const *attr,
 				 int form_name,
-				 where const *where,
+				 locus const &loc,
 				 bool indirect);
 
   ~check_debug_abbrev ();
