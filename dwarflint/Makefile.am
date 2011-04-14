@@ -95,6 +95,7 @@ locstats_SOURCES = \
 	locstats.cc \
 	files.cc files.hh \
 	option.cc option.hh option_i.hh \
+	section_id.cc section_id.hh \
 	pri.cc pri.hh \
 	where.cc where.h
 
