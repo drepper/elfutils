@@ -105,6 +105,10 @@ namespace
 		  && (width == fw_4 || width == fw_8));
 	}
 
+      // upper_bound is allowed to also be a block (dwarf3 in dwarf2).
+      if (attr->name () == DW_AT_upper_bound)
+	return form->classes ()[cl_block];
+
       if (attr->name () == DW_AT_GNU_odr_signature)
 	return form->classes ()[cl_constant] && form->width (NULL) == fw_8;
       else

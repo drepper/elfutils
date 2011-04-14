@@ -978,6 +978,31 @@ namespace elfutils
 	return const_iterator (_m_raw.find (name), _m_raw.end ());
       }
 
+      /*
+	Same as find (), but if the attribute name isn't found,
+	but there is  is an abstract_origin or specification
+	attribute, then will try to find_integrate () the name
+	from that reference.
+      */
+      inline const_iterator find_integrate (int name) const
+      {
+	const_iterator result = find (name);
+	if (result != end ())
+	  return result;
+
+	result = find (DW_AT_abstract_origin);
+	if (result == end ())
+	  result = find (DW_AT_specification);
+
+	if (result != end ())
+	  {
+	    debug_info_entry integrate = (*(*result).second.reference ());
+	    return integrate.attributes ().find_integrate (name);
+	  }
+
+	return end ();
+      }
+
       inline const attr_value at (int name)
       {
 	const_iterator i = find (name);

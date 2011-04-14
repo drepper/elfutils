@@ -793,8 +793,11 @@ namespace
 		valuep = &high_pc;
 		if (cls == cl_constant)
 		  high_pc_relative = true;
-		else
-		  assert (cls == cl_address);
+		else if (cls != cl_address)
+		  {
+		    wr_error (&where, ": DW_AT_high_pc in unknown form.\n");
+		    retval = -2;
+		  }
 		break;
 
 	      case DW_AT_decl_file:

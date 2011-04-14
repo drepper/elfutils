@@ -27,10 +27,30 @@
 
 srcdir=$srcdir/tests
 
-testfiles DW_AT-later-version
+# Following program compiled with "default" gcc settings,
+# which is dwarf-2 + gnu extensions. Which will result in:
+#
+#  [    a2]      subrange_type
+#                type                 (ref4) [    ac]
+#                upper_bound          (block1)
+#                [   0] fbreg -24
+#                [   2] deref
+#
+# According to dwarf-2 DW_AT_upperbound cannot be encoded with block form.
+# It can however with later versions of dwarf, which gcc will output as
+# gnu extension (unless -gstrict-dwarf is given).
+#
+# int max_range = 42;
+#
+# int main (int argc, char **argv)
+# {
+#   char chars[max_range];
+#   chars[max_range -1] = 7;
+#   return 0;
+# }
+#
+# This would crash the low-level check_debug_info in the past.
+testfiles upper
 
-testrun_compare ./dwarflint --nognu DW_AT-later-version <<EOF
-warning: .debug_abbrev: abbr. 0x11, attr. endianity: attribute from later DWARF version.
-warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
-warning: .debug_info: DIE 0x29: variable has decl_file, but NOT decl_line
+testrun_compare ./dwarflint --quiet --check=@low upper <<EOF
 EOF

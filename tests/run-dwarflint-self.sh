@@ -49,5 +49,6 @@ runtest ../src/size
 runtest ../src/strip
 runtest ../src/unstrip
 runtest ../*/*.so
+runtest ../dwarflint/dwarflint
 
 exit $status

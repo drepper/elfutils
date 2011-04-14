@@ -87,6 +87,8 @@ dwarflint_SOURCES = \
 	check_range_out_of_scope.cc \
 	check_self_referential_die.cc \
 	check_linkage_external_die.cc \
+	check_die_decl_call.cc \
+	check_die_line_info.cc \
 	lowlevel_checks.cc lowlevel_checks.hh \
 	\
 	../src/dwarfstrings.c
@@ -118,7 +120,8 @@ EXTRA_TESTS = tests/run-debug_abbrev-duplicate-attribute.sh \
 	tests/run-check_self_referential_die.sh \
 	tests/run-DW_AT_high_pc-relative.sh \
 	tests/run-DW_AT_high_pc-below.sh \
-	tests/run-DW_AT-later-version.sh
+	tests/run-DW_AT-later-version.sh \
+	tests/run-upper.sh
 
 TESTS = $(EXTRA_TESTS) \
 	tests/test-coverage \
@@ -151,7 +154,8 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/check_self_referential_die.bz2 \
 	tests/DW_AT_high_pc-relative.bz2 \
 	tests/DW_AT_high_pc-below.bz2 \
-	tests/DW_AT-later-version.bz2
+	tests/DW_AT-later-version.bz2 \
+	tests/upper.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \

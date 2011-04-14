@@ -747,6 +747,7 @@ expected_at_map::expected_at_map ()
     .optional (DW_AT_specification)
     .optional (DW_AT_start_scope)
     .optional (DW_AT_visibility)
+    .optional (at_linkage_name) // GNU extension for anonymous typedef unions.
     ;
 
   m_map [DW_TAG_unspecified_parameters]
