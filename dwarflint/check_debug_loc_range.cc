@@ -993,21 +993,18 @@ found_hole (uint64_t start, uint64_t length, void *data)
     {
       /* Zero padding is valid, if it aligns on the bounds of
 	 info->align bytes, and is not excessive.  */
-      if (!(info->align != 0 && info->align != 1
-	    && (end % info->align == 0) && (start % 4 != 0)
-	    && (length < info->align)))
-	{
-	  struct where wh = WHERE (info->section, NULL);
-	  wr_message_padding_0 (info->category, wh, start, end);
-	}
+      if (info->align == 0 || info->align == 1
+	  || length > info->align     // excessive
+	  || end % info->align != 0   // doesn't actually align
+	  || start % info->align == 0)// was already aligned
+	wr_message_padding_0 (info->category, section_locus (info->section),
+			      start, end);
     }
   else
-    {
-      /* XXX: This actually lies when the unreferenced portion is
-	 composed of sequences of zeroes and non-zeroes.  */
-      struct where wh = WHERE (info->section, NULL);
-      wr_message_padding_n0 (info->category, wh, start, end);
-    }
+    /* XXX: This actually lies when the unreferenced portion is
+       composed of sequences of zeroes and non-zeroes.  */
+    wr_message_padding_n0 (info->category, section_locus (info->section),
+			   start, end);
 
   return true;
 }
