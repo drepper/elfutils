@@ -129,9 +129,6 @@ namespace
     {
       add (sec_info, ".debug_info", "CU %"PRId64, "DIE %#"PRIx64);
 
-      add (sec_abbrev, ".debug_abbrev",
-	   "section %"PRId64, "abbreviation %"PRId64, "abbr. attribute %#"PRIx64);
-
       add (sec_aranges, ".debug_aranges",
 	   "table %"PRId64, "arange %#"PRIx64);
 
@@ -140,8 +137,6 @@ namespace
 
       add (sec_pubtypes, ".debug_pubtypes",
 	   "pubtype table %"PRId64, "pubtype %#"PRIx64);
-
-      add (sec_str, ".debug_str", "offset %#"PRIx64);
 
       add (sec_line, ".debug_line", "table %"PRId64, "offset %#"PRIx64);
 
@@ -176,6 +171,8 @@ section_locus::format (bool) const
 where
 WHERE (section_id sec, locus const *next)
 {
+  assert (sec != sec_abbrev);
+  assert (sec != sec_str);
   where::formatter const *fmt = wf_for_section (sec);
   return where (fmt, next);
 }
