@@ -130,8 +130,6 @@ namespace
       add (sec_aranges, ".debug_aranges",
 	   "table %"PRId64, "arange %#"PRIx64);
 
-      add (sec_line, ".debug_line", "table %"PRId64, "offset %#"PRIx64);
-
       add (sec_mac, ".debug_mac");
     }
   } const section_fmts;
@@ -176,6 +174,7 @@ WHERE (section_id sec, locus const *next)
   assert (sec != sec_ranges);
   assert (sec != sec_pubtypes);
   assert (sec != sec_pubnames);
+  assert (sec != sec_line);
   where::formatter const *fmt = wf_for_section (sec);
   return where (fmt, next);
 }

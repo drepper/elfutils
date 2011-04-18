@@ -101,15 +101,15 @@ namespace
   bool read_directory_index (include_directories_t &include_directories,
 			     files_t &files, read_ctx *ctx,
 			     const char *name, uint64_t *ptr,
-			     where *where, bool &retval)
+			     locus const &loc, bool &retval)
   {
     size_t nfile = files.size () + 1;
     if (!checked_read_uleb128 (ctx, ptr,
-			       *where, "directory index"))
+			       loc, "directory index"))
       return false;
 
     if (*name == '/' && *ptr != 0)
-      wr_message (*where, mc_impact_2 | mc_line | mc_header)
+      wr_message (loc, mc_impact_2 | mc_line | mc_header)
 	<< "file #" << nfile
 	<< " has absolute pathname, but refers to directory != 0."
 	<< std::endl;
@@ -117,7 +117,7 @@ namespace
     if (*ptr > include_directories.size ())
       /* Not >=, dirs are indexed from 1.  */
       {
-	wr_message (*where, mc_impact_4 | mc_line | mc_header)
+	wr_message (loc, mc_impact_4 | mc_line | mc_header)
 	  << "file #" << nfile
 	  << " refers to directory #" << *ptr
 	  << ", which wasn't defined." << std::endl;
@@ -147,6 +147,17 @@ namespace
   }
 }
 
+namespace
+{
+  struct line_table_locus_n {
+    static char const *name () { return "table"; }
+  };
+
+  typedef fixed_locus<sec_line,
+		      line_table_locus_n::name,
+		      locus_simple_fmt::dec> line_table_locus;
+}
+
 check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
   : _m_sec (lint.check (stack, _m_sec))
   , _m_info (lint.toplev_check (stack, _m_info))
@@ -160,9 +171,8 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (_m_sec->sect.id, NULL);
       uint64_t set_offset = read_ctx_get_offset (&ctx);
-      where_reset_1 (&where, set_offset);
+      line_table_locus where (set_offset);
       _m_line_tables.insert ((Dwarf_Off)set_offset);
       const unsigned char *set_begin = ctx.ptr;
 
@@ -314,7 +324,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 	  uint64_t dir_idx;
 	  if (!read_directory_index (include_directories, files,
-				     &sub_ctx, name, &dir_idx, &where, success))
+				     &sub_ctx, name, &dir_idx, where, success))
 	    goto skip;
 
 	  /* Time of last modification.  */
@@ -372,14 +382,14 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
       else if (sub_ctx.ptr < program_start)
 	{
 	  /* Skip the rest of the header.  */
-	  struct where wh = WHERE (sec_line, NULL);
 	  uint64_t off_start, off_end;
 	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-	    wr_message_padding_0 (mc_line | mc_header, wh,
+	    wr_message_padding_0 (mc_line | mc_header, section_locus (sec_line),
 				  off_start, off_end);
 	  else
-	    wr_message_padding_n0 (mc_line | mc_header, wh,
-				   off_start, program_start - sub_ctx.begin);
+	    wr_message_padding_n0
+	      (mc_line | mc_header, section_locus (sec_line),
+	       off_start, program_start - sub_ctx.begin);
 	  sub_ctx.ptr = program_start;
 	}
 
@@ -388,11 +398,11 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
       bool seen_opcode = false;
       while (!read_ctx_eof (&sub_ctx))
 	{
-	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
+	  section_locus op_where (sec_line, read_ctx_get_offset (&sub_ctx));
 	  uint8_t opcode;
 	  if (!read_ctx_read_ubyte (&sub_ctx, &opcode))
 	    {
-	      wr_error (where) << "can't read opcode." << std::endl;
+	      wr_error (op_where) << "can't read opcode." << std::endl;
 	      goto skip;
 	    }
 
@@ -404,12 +414,12 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    case 0:
 	      {
 		uint64_t skip_len;
-		if (!checked_read_uleb128 (&sub_ctx, &skip_len, where,
+		if (!checked_read_uleb128 (&sub_ctx, &skip_len, op_where,
 					   "length of extended opcode"))
 		  goto skip;
 		if (!read_ctx_need_data (&sub_ctx, skip_len))
 		  {
-		    wr_error (where)
+		    wr_error (op_where)
 		      << "not enough data to read an opcode of length "
 		      << skip_len << '.' << std::endl;
 		    goto skip;
@@ -418,7 +428,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		const unsigned char *next = sub_ctx.ptr + skip_len;
 		if (!read_ctx_read_ubyte (&sub_ctx, &extended))
 		  {
-		    wr_error (where)
+		    wr_error (op_where)
 		      << "can't read extended opcode." << std::endl;
 		    goto skip;
 		  }
@@ -436,7 +446,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      uint64_t addr;
 		      if (!read_ctx_read_offset (&sub_ctx, addr_64, &addr))
 			{
-			  wr_error (where)
+			  wr_error (op_where)
 			    << "can't read operand of DW_LNE_set_address."
 			    << std::endl;
 			  goto skip;
@@ -444,13 +454,14 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 		      struct relocation *rel;
 		      if ((rel = relocation_next (&_m_sec->sect.rel, ctx_offset,
-						  where, skip_mismatched)))
+						  op_where, skip_mismatched)))
 			relocate_one (&_m_sec->file, &_m_sec->sect.rel, rel,
-				      addr_64 ? 8 : 4, &addr, where,
+				      addr_64 ? 8 : 4, &addr, op_where,
 				      rel_target::rel_address, NULL);
 		      else if (_m_sec->file.ehdr.e_type == ET_REL)
 			{
-			  wr_message (where, mc_impact_2 | mc_line | mc_reloc)
+			  wr_message (op_where,
+				      mc_impact_2 | mc_line | mc_reloc)
 			    << pri::lacks_relocation ("DW_LNE_set_address")
 			    << '.' << std::endl;
 
@@ -459,7 +470,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 			}
 
 		      if (addr == 0)
-			wr_message (where, mc_line | mc_impact_1)
+			wr_message (op_where, mc_line | mc_impact_1)
 			  << "DW_LNE_set_address with zero operand."
 			  << std::endl;
 		      break;
@@ -470,7 +481,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      /* XXX Is there anything interesting we should
 			 check here?  */
 		      uint64_t disc;
-		      if (!checked_read_uleb128 (&sub_ctx, &disc, where,
+		      if (!checked_read_uleb128 (&sub_ctx, &disc, op_where,
 						 "set_discriminator operand"))
 			goto skip;
 
@@ -478,7 +489,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 			 sequence change.  So setting to zero is never
 			 necessary.  */
 		      if (disc == 0)
-			wr_message (where, mc_line | mc_impact_1)
+			wr_message (op_where, mc_line | mc_impact_1)
 			  << "DW_LNE_set_discriminator with zero operand."
 			  << std::endl;
 		      break;
@@ -489,7 +500,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      const char *name;
 		      if ((name = read_ctx_read_str (&sub_ctx)) == NULL)
 			{
-			  wr_error (where)
+			  wr_error (op_where)
 			    << "can't read filename operand of DW_LNE_define_file."
 			    << std::endl;
 			  goto skip;
@@ -497,7 +508,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		      uint64_t dir_idx;
 		      if (!read_directory_index (include_directories,
 						 files, &sub_ctx, name,
-						 &dir_idx, &where, success))
+						 &dir_idx, op_where, success))
 			goto skip;
 		      files.push_back
 			((struct file_t){name, dir_idx, false});
@@ -514,7 +525,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 #undef ONE_KNOWN_DW_LNE
 		      default:
 			/* No we don't, emit a warning.  */
-			wr_message (where, mc_impact_2 | mc_line)
+			wr_message (op_where, mc_impact_2 | mc_line)
 			  << "unknown extended opcode 0x"
 			  << std::hex << +extended << std::dec
 			  << '.' << std::endl;
@@ -523,7 +534,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 		if (sub_ctx.ptr > next)
 		  {
-		    wr_error (where)
+		    wr_error (op_where)
 		      << "opcode claims that it has a size of " << skip_len
 		      << ", but in fact it has a size of "
 		      << (skip_len + (next - sub_ctx.ptr)) << '.' << std::endl;
@@ -534,15 +545,15 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		    uint64_t off_start, off_end;
 		    if (handled)
 		      {
-			struct where wh = WHERE (sec_line, NULL);
 			if (read_check_zero_padding (&sub_ctx,
 						     &off_start, &off_end))
-			  wr_message_padding_0 (mc_line, wh,
-						off_start, off_end);
+			  wr_message_padding_0
+			    (mc_line, section_locus (sec_line),
+			     off_start, off_end);
 			else
-			  wr_message_padding_n0 (mc_line, wh,
-						 off_start,
-						 next - sub_ctx.begin);
+			  wr_message_padding_n0
+			    (mc_line, section_locus (sec_line),
+			     off_start, next - sub_ctx.begin);
 		      }
 		    sub_ctx.ptr = next;
 		  }
@@ -554,7 +565,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    case DW_LNS_advance_line:
 	      {
 		int64_t line_delta;
-		if (!checked_read_sleb128 (&sub_ctx, &line_delta, where,
+		if (!checked_read_sleb128 (&sub_ctx, &line_delta, op_where,
 					   "DW_LNS_advance_line operand"))
 		  goto skip;
 	      }
@@ -565,7 +576,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		uint16_t a;
 		if (!read_ctx_read_2ubyte (&sub_ctx, &a))
 		  {
-		    wr_error (where)
+		    wr_error (op_where)
 		      << "can't read operand of DW_LNS_fixed_advance_pc."
 		      << std::endl;
 		    goto skip;
@@ -576,10 +587,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	    case DW_LNS_set_file:
 	      {
 		uint64_t file_idx;
-		if (!checked_read_uleb128 (&sub_ctx, &file_idx, where,
+		if (!checked_read_uleb128 (&sub_ctx, &file_idx, op_where,
 					   "DW_LNS_set_file operand"))
 		  goto skip;
-		if (!use_file (files, file_idx, where, "DW_LNS_set_file: "))
+		if (!use_file (files, file_idx, op_where, "DW_LNS_set_file: "))
 		  success = false;
 		first_file = false;
 	      }
@@ -603,7 +614,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 		default:
 		  if (opcode < opcode_base)
-		    wr_message (where, mc_impact_2 | mc_line)
+		    wr_message (op_where, mc_impact_2 | mc_line)
 		      << "unknown standard opcode 0x"
 		      << std::hex << +opcode << std::dec
 		      << '.' << std::endl;
@@ -620,13 +631,13 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	      else
 		sprintf (buf, "operand #%d of DW_LNE_%s",
 			 i, dwarf_line_extended_opcode_string (extended));
-	      if (!checked_read_uleb128 (&sub_ctx, &operand, where, buf))
+	      if (!checked_read_uleb128 (&sub_ctx, &operand, op_where, buf))
 		goto skip;
 	    }
 
 	  if (first_file)
 	    {
-	      if (!use_file (files, 1, where,
+	      if (!use_file (files, 1, op_where,
 			     "initial value of `file' register: "))
 		success = false;
 	      first_file = false;
@@ -665,7 +676,6 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	      << std::endl;
 	}
 
-      struct where wh = WHERE (sec_line, NULL);
       if (!terminated && seen_opcode)
 	wr_error (where)
 	  << "sequence of opcodes not terminated with DW_LNE_end_sequence."
@@ -674,9 +684,10 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	{
 	  uint64_t off_start, off_end;
 	  if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-	    wr_message_padding_0 (mc_line, wh, off_start, off_end);
+	    wr_message_padding_0
+	      (mc_line, section_locus (sec_line), off_start, off_end);
 	  else
-	    wr_message_padding_n0 (mc_line, wh,
+	    wr_message_padding_n0 (mc_line, section_locus (sec_line),
 				   off_start, sub_ctx.end - sub_ctx.begin);
 	}
       }
@@ -687,7 +698,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
     }
 
   if (success)
-    relocation_skip_rest (&_m_sec->sect.rel, WHERE (_m_sec->sect.id));
+    relocation_skip_rest (&_m_sec->sect.rel, section_locus (_m_sec->sect.id));
   else
     throw check_base::failed ();
 }
