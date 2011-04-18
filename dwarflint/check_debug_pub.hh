@@ -41,8 +41,6 @@ protected:
   elf_file const &_m_file;
   check_debug_info *_m_cus;
 
-  bool check_pub_structural ();
-
 public:
   // instantiated in .cc for each subclass
   check_debug_pub (checkstack &stack, dwarflint &lint);

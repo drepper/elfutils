@@ -35,13 +35,19 @@
 #include "messages.hh"
 #include "misc.hh"
 
+namespace
+{
+  bool check_pub_structural (elf_file const &file, sec &sect,
+			     check_debug_info *cus);
+}
+
 template<section_id sec_id>
 check_debug_pub<sec_id>::check_debug_pub (checkstack &stack, dwarflint &lint)
   : _m_sec (lint.check (stack, _m_sec))
   , _m_file (_m_sec->file)
   , _m_cus (lint.toplev_check (stack, _m_cus))
 {
-  check_pub_structural ();
+  check_pub_structural (_m_file, _m_sec->sect, _m_cus);
 }
 
 
@@ -88,17 +94,19 @@ template check_debug_pub<sec_pubtypes>::check_debug_pub (checkstack &stack,
 static reg<check_debug_pubtypes> reg_debug_pubtypes;
 
 
-template <section_id sec_id>
+namespace
+{
 bool
-check_debug_pub<sec_id>::check_pub_structural ()
+check_pub_structural (elf_file const &file, sec &sect,
+		      check_debug_info *cus)
 {
   struct read_ctx ctx;
-  read_ctx_init (&ctx, _m_sec->sect.data, _m_file.other_byte_order);
+  read_ctx_init (&ctx, sect.data, file.other_byte_order);
   bool retval = true;
 
   while (!read_ctx_eof (&ctx))
     {
-      enum section_id sid = _m_sec->sect.id;
+      enum section_id sid = sect.id;
       struct where where = WHERE (sid, NULL);
       where_reset_1 (&where, read_ctx_get_offset (&ctx));
       const unsigned char *set_begin = ctx.ptr;
@@ -147,16 +155,16 @@ check_debug_pub<sec_id>::check_pub_structural ()
 	}
 
       struct relocation *rel;
-      if ((rel = relocation_next (&_m_sec->sect.rel, ctx_offset,
+      if ((rel = relocation_next (&sect.rel, ctx_offset,
 				  where, skip_mismatched)))
-	relocate_one (&_m_file, &_m_sec->sect.rel, rel, offset_size,
+	relocate_one (&file, &sect.rel, rel, offset_size,
 		      &cu_offset, where, sec_info, NULL);
-      else if (_m_file.ehdr.e_type == ET_REL)
+      else if (file.ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_pubtables | mc_reloc | mc_header, &where,
 		    PRI_LACK_RELOCATION, "debug info offset");
 
       struct cu *cu = NULL;
-      if (_m_cus != NULL && (cu = _m_cus->find_cu (cu_offset)) == NULL)
+      if (cus != NULL && (cu = cus->find_cu (cu_offset)) == NULL)
 	wr_error (where)
 	  << "unresolved reference to " << pri::CU (cu_offset)
 	  << '.' << std::endl;
@@ -164,7 +172,7 @@ check_debug_pub<sec_id>::check_pub_structural ()
       if (cu != NULL)
 	{
 	  where.ref = &cu->head->where;
-	  bool *has = _m_sec->sect.id == sec_pubnames
+	  bool *has = sect.id == sec_pubnames
 	    ? &cu->has_pubnames : &cu->has_pubtypes;
 	  if (*has)
 	    wr_message (mc_impact_2 | mc_pubtables | mc_header, &where,
@@ -228,7 +236,7 @@ check_debug_pub<sec_id>::check_pub_structural ()
 	  while (c);
 	}
 
-	sid = _m_sec->sect.id;
+	sid = sect.id;
 	struct where wh = WHERE (sid, NULL);
 	if (sub_ctx.ptr != sub_ctx.end)
 	  {
@@ -254,7 +262,9 @@ check_debug_pub<sec_id>::check_pub_structural ()
     }
 
   if (retval)
-    relocation_skip_rest (&_m_sec->sect.rel, WHERE (_m_sec->sect.id));
+    relocation_skip_rest (&sect.rel, section_locus (sect.id));
 
   return retval;
+}
+
 }
