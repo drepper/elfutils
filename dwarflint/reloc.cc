@@ -414,7 +414,7 @@ read_rel (struct elf_file *file,
     : (is_rela ? sizeof (Elf32_Rela) : sizeof (Elf32_Rel));
   size_t count = reldata->d_size / entrysize;
 
-  struct where parent = WHERE (sec->id, NULL);
+  section_locus parent (sec->id);
 
   for (unsigned i = 0; i < count; ++i)
     {

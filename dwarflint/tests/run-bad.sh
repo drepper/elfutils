@@ -49,7 +49,7 @@ EOF
 testrun_compare ./dwarflint empty-1 <<EOF
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_line: table 0: no CU uses this line table.
-error: .debug_info: DIE 0x29 (abbr. 0x11, attr. decl_file): references .debug_line table, but CU DIE lacks DW_AT_stmt_list.
+error: .debug_info: DIE 0x29, attr. decl_file: references .debug_line table, but CU DIE lacks DW_AT_stmt_list.
 EOF
 
 testrun_compare ./dwarflint garbage-1 <<EOF
@@ -60,7 +60,7 @@ EOF
 
 testrun_compare ./dwarflint garbage-2 <<EOF
 error: .debug_info: CU 0: toplevel DIE must be either compile_unit or partial_unit.
-error: .debug_info: DIE 0xab (abbr. offset 113): DIE chain not terminated with null entry.
+error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
 testrun_compare ./dwarflint --check=@low garbage-3 <<EOF
@@ -69,13 +69,13 @@ EOF
 
 testrun_compare ./dwarflint garbage-4 <<EOF
 error: .debug_info: DIE 0x6c: this DIE claims that its sibling is 0x80000085 but it's actually 0x85.
-error: .debug_info: DIE 0xab (abbr. offset 113): DIE chain not terminated with null entry.
+error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
 testrun_compare ./dwarflint garbage-5 <<EOF
-error: .debug_info: DIE 0xab (abbr. offset 113): DIE chain not terminated with null entry.
+error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 error: .debug_line: offset 0x3e: not enough data to read an opcode of length 5.
-error: .debug_info: DIE 0xb (abbr. 0x0, attr. stmt_list): unresolved reference to .debug_line table 0x0.
+error: .debug_info: DIE 0xb, attr. stmt_list: unresolved reference to .debug_line table 0x0.
 EOF
 
 testrun_compare ./dwarflint garbage-6 <<EOF
@@ -93,20 +93,20 @@ error: .debug_abbrev: missing zero to mark end-of-table.
 EOF
 
 testrun_compare ./dwarflint garbage-8 <<EOF
-error: .debug_info: DIE 0x6c (abbr. 0x3b, attr. sibling): has a value of 0.
+error: .debug_info: DIE 0x6c, attr. sibling: has a value of 0.
 error: .debug_info: DIE 0x6c: This DIE had children, but no DW_AT_sibling attribute.
-error: .debug_info: DIE 0xab (abbr. offset 113): DIE chain not terminated with null entry.
+error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
 testrun_compare ./dwarflint garbage-9 <<EOF
-error: .debug_info: DIE 0x84 (abbr. 0x59, attr. type): invalid reference outside the CU: 0xef00ab.
+error: .debug_info: DIE 0x84, attr. type: invalid reference outside the CU: 0xef00ab.
 error: .debug_info: DIE 0x6c: is the last sibling in chain, but has a DW_AT_sibling attribute.
-error: .debug_info: DIE 0xab (abbr. offset 113): DIE chain not terminated with null entry.
+error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
 testrun_compare ./dwarflint garbage-10 <<EOF
-warning: .rela 0xc of .debug_info: DIE 0xb (abbr. 0x0, attr. producer): relocation formed using STT_SECTION symbol with non-zero value.
-error: .rela 0x11 of .debug_info: DIE 0xb (abbr. 0x0, attr. comp_dir): couldn't obtain symbol #7208969: invalid section index.
+warning: .rela 0xc of .debug_info: DIE 0xb, attr. producer: relocation formed using STT_SECTION symbol with non-zero value.
+error: .rela 0x11 of .debug_info: DIE 0xb, attr. comp_dir: couldn't obtain symbol #7208969: invalid section index.
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 EOF
 
@@ -119,12 +119,12 @@ error: .rela 0x1d00 of .debug_info: invalid relocation 256 (<INVALID RELOC>).
 error: .rela 0x2500 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
 error: .rela 0x3600 of .debug_info: invalid relocation 256 (<INVALID RELOC>).
 warning: .debug_info: CU 0: abbrev table offset seems to lack a relocation
-warning: .debug_info: DIE 0xb (abbr. 0x0, attr. producer): strp seems to lack a relocation
-warning: .debug_info: DIE 0xb (abbr. 0x0, attr. comp_dir): strp seems to lack a relocation
-warning: .debug_info: DIE 0xb (abbr. 0x0, attr. stmt_list): data4 seems to lack a relocation
+warning: .debug_info: DIE 0xb, attr. producer: strp seems to lack a relocation
+warning: .debug_info: DIE 0xb, attr. comp_dir: strp seems to lack a relocation
+warning: .debug_info: DIE 0xb, attr. stmt_list: data4 seems to lack a relocation
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 error: .debug_line: table 0: header claims that it has a size of 542, but in fact it has a size of 30.
-error: .debug_info: DIE 0xb (abbr. 0x0, attr. stmt_list): unresolved reference to .debug_line table 0x0.
+error: .debug_info: DIE 0xb, attr. stmt_list: unresolved reference to .debug_line table 0x0.
 EOF
 
 testrun_compare ./dwarflint garbage-12 <<EOF

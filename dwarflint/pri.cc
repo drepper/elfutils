@@ -64,3 +64,10 @@ pri::operator << (std::ostream &os, pri::range const &obj)
   return os << "[" << pri::addr (obj.start)
 	    << ", " << pri::addr (obj.end) << ")";
 }
+
+std::string
+pri::attr_name (int name)
+{
+  assert (name != -1);
+  return elfutils::dwarf::attributes::name (name);
+}

@@ -1,5 +1,5 @@
-/* Pedantic checking of DWARF files
-   Copyright (C) 2010, 2011 Red Hat, Inc.
+/*
+   Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -27,24 +27,31 @@
 # include <config.h>
 #endif
 
-#include "cu_coverage.hh"
-#include "check_debug_info.hh"
-#include "check_debug_loc_range.hh"
-#include <cstring>
+#include "die_locus.hh"
+#include "pri.hh"
 
-checkdescriptor const *
-cu_coverage::descriptor ()
+std::string
+cu_locus::format (bool brief) const
 {
-  static checkdescriptor cd
-    (checkdescriptor::create ("cu_coverage")
-     .hidden ());
-  return &cd;
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[sec_info] << ": ";
+  ss << "CU " << _m_offset;
+  return ss.str ();
 }
 
-cu_coverage::cu_coverage (checkstack &stack, dwarflint &lint)
-  : _m_info (lint.check (stack, _m_info))
-  , _m_ranges (lint.check_if (_m_info->need_ranges (), stack, _m_ranges))
-  , cov (_m_info->cov ()
-	 + (_m_ranges != NULL ? _m_ranges->cov () : coverage ()))
+std::string
+die_locus::format (bool brief) const
 {
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[sec_info] << ": ";
+
+  ss << "DIE 0x" << std::hex << _m_offset;
+
+  if (_m_attrib_name != -1)
+    ss << ", attr. " << pri::attr_name (_m_attrib_name);
+
+  return ss.str ();
 }
+

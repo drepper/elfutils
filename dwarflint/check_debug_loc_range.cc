@@ -455,7 +455,7 @@ namespace
 		  wr_message (cat | mc_impact_2 | mc_reloc, &where,
 			      ": end of address range is relocated, but the beginning wasn't.\n");
 		else
-		  check_range_relocations (cat, &where, file,
+		  check_range_relocations (where, cat, file,
 					   begin_symbol, end_symbol,
 					   "begin and end address");
 	      }
@@ -518,7 +518,7 @@ namespace
 		/* location expression itself */
 		uint64_t expr_start = read_ctx_get_offset (&ctx);
 		if (!check_location_expression
-		    (ver, *file, &ctx, cu, expr_start, &sec->rel, len, &where))
+		    (ver, *file, &ctx, cu, expr_start, &sec->rel, len, where))
 		  return false;
 		uint64_t expr_end = read_ctx_get_offset (&ctx);
 		if (!overlap
@@ -865,13 +865,13 @@ check_location_expression (dwarf_version const *ver,
 			   uint64_t init_off,
 			   struct relocation_data *reloc,
 			   size_t length,
-			   struct where *wh)
+			   locus const &loc)
 {
   struct read_ctx ctx;
   if (!read_ctx_init_sub (&ctx, parent_ctx, parent_ctx->ptr,
 			  parent_ctx->ptr + length))
     {
-      wr_error (wh, PRI_NOT_ENOUGH, "location expression");
+      wr_error (&loc, PRI_NOT_ENOUGH, "location expression");
       return false;
     }
 
@@ -881,7 +881,7 @@ check_location_expression (dwarf_version const *ver,
   while (!read_ctx_eof (&ctx))
     {
       uint64_t opcode_off = read_ctx_get_offset (&ctx) + init_off;
-      locexpr_locus where (opcode_off, wh);
+      locexpr_locus where (opcode_off, &loc);
       opaddrs.add (opcode_off);
 
       uint8_t opcode;
@@ -1004,8 +1004,8 @@ found_hole (uint64_t start, uint64_t length, void *data)
 }
 
 void
-check_range_relocations (enum message_category cat,
-			 struct where *where,
+check_range_relocations (locus const &loc,
+			 enum message_category cat,
 			 struct elf_file const *file,
 			 GElf_Sym *begin_symbol,
 			 GElf_Sym *end_symbol,
@@ -1014,7 +1014,7 @@ check_range_relocations (enum message_category cat,
   if (begin_symbol != NULL
       && end_symbol != NULL
       && begin_symbol->st_shndx != end_symbol->st_shndx)
-    wr_message (cat | mc_impact_2 | mc_reloc, where,
+    wr_message (cat | mc_impact_2 | mc_reloc, &loc,
 		": %s relocated against different sections (%s and %s).\n",
 		description,
 		file->sec[begin_symbol->st_shndx].name,

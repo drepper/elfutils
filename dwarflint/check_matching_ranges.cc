@@ -63,11 +63,8 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 
   try
     {
-      struct where where_ref = WHERE (sec_info, NULL);
       struct where where_ar = WHERE (sec_aranges, NULL);
-      where_ar.ref = &where_ref;
       struct where where_r = WHERE (sec_ranges, NULL);
-      where_r.ref = &where_ref;
       char buf[128];
 
       const dwarf::aranges_map &aranges = dw.aranges ();
@@ -75,8 +72,9 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 	   i != aranges.end (); ++i)
 	{
 	  const dwarf::compile_unit &cu = i->first;
-	  where_reset_1 (&where_ref, 0);
-	  where_reset_2 (&where_ref, cu.offset ());
+	  die_locus where_ref (cu);
+	  where_ar.ref = &where_ref;
+	  where_r.ref = &where_ref;
 
 	  std::set<dwarf::ranges::key_type>
 	    cu_aranges = i->second,
@@ -114,7 +112,7 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
   // XXX more specific class when <dwarf> has it
   catch (std::runtime_error &exc)
     {
-      wr_error (WHERE (sec_info, NULL))
+      wr_error (section_locus (sec_info))
 	<< "Exception while checking matching ranges: " << exc.what ()
 	<< std::endl;
       throw check_base::failed ();

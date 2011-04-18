@@ -23,6 +23,10 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "check_debug_pub.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
@@ -108,7 +112,7 @@ check_debug_pub<sec_id>::check_pub_structural ()
 	  wr_error (&where, ": can't read table length.\n");
 	  return false;
 	}
-      if (!read_size_extra (&ctx, size32, &size, &offset_size, &where))
+      if (!read_size_extra (&ctx, size32, &size, &offset_size, where))
 	return false;
 
       {

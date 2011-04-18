@@ -127,8 +127,6 @@ namespace
   public:
     section_formatters ()
     {
-      add (sec_info, ".debug_info", "CU %"PRId64, "DIE %#"PRIx64);
-
       add (sec_aranges, ".debug_aranges",
 	   "table %"PRId64, "arange %#"PRIx64);
 
@@ -173,6 +171,7 @@ WHERE (section_id sec, locus const *next)
 {
   assert (sec != sec_abbrev);
   assert (sec != sec_str);
+  assert (sec != sec_info);
   where::formatter const *fmt = wf_for_section (sec);
   return where (fmt, next);
 }

@@ -39,13 +39,13 @@
 
 bool
 read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
-		 int *offset_sizep, struct where *where)
+		 int *offset_sizep, locus const &loc)
 {
   if (size32 == DWARF3_LENGTH_64_BIT)
     {
       if (!read_ctx_read_8ubyte (ctx, sizep))
 	{
-	  wr_error (*where) << "can't read 64bit CU length.\n";
+	  wr_error (loc) << "can't read 64bit CU length.\n";
 	  return false;
 	}
 
@@ -53,7 +53,7 @@ read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
     }
   else if (size32 >= DWARF3_LENGTH_MIN_ESCAPE_CODE)
     {
-      wr_error (*where)
+      wr_error (loc)
 	<< "unrecognized CU length escape value: " << size32 << ".\n";
       return false;
     }
@@ -67,15 +67,13 @@ read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 }
 
 error_code
-read_address_size (struct read_ctx *ctx,
-		   bool addr_64,
-		   int *address_sizep,
-		   struct where const *where)
+read_address_size (struct read_ctx *ctx, bool addr_64,
+		   int *address_sizep, locus const &loc)
 {
   uint8_t address_size;
   if (!read_ctx_read_ubyte (ctx, &address_size))
     {
-      wr_error (*where) << "can't read address size.\n";
+      wr_error (loc) << "can't read address size.\n";
       return err_fatal;
     }
 
@@ -84,16 +82,16 @@ read_address_size (struct read_ctx *ctx,
     {
       /* Keep going.  Deduce the address size from ELF header, and try
 	 to parse it anyway.  */
-      wr_error (*where) << "invalid address size: " << (int)address_size
-			<< " (only 4 or 8 allowed).\n";
+      wr_error (loc) << "invalid address size: " << (int)address_size
+		     << " (only 4 or 8 allowed).\n";
       address_size = addr_64 ? 8 : 4;
       ret = err_nohl;
     }
   else if ((address_size == 8) != addr_64)
     {
       /* Keep going, we may still be able to parse it.  */
-      wr_error (*where) << "CU reports address size of " << address_size
-			<< " in " << (addr_64 ? 64 : 32) << "-bit ELF.\n";
+      wr_error (loc) << "CU reports address size of " << address_size
+		     << " in " << (addr_64 ? 64 : 32) << "-bit ELF.\n";
       ret = err_nohl;
     }
 

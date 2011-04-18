@@ -38,15 +38,13 @@ enum error_code
   };
 
 bool read_size_extra (read_ctx *ctx, uint32_t size32, uint64_t *sizep,
-		      int *offset_sizep, where *where);
+		      int *offset_sizep, locus const &loc);
 
 /// Read address size and return it via address_sizep and return 0.
 /// Address size may be 4 or 8; for other values it's set depending or
 /// addr_64, and err_nohl is returned.
-error_code read_address_size (read_ctx *ctx,
-			      bool addr_64,
-			      int *address_sizep,
-			      where const *where);
+error_code read_address_size (read_ctx *ctx, bool addr_64,
+			      int *address_sizep, locus const &loc);
 
 bool checked_read_uleb128 (read_ctx *ctx, uint64_t *ret,
 			   locus const &loc, const char *what);

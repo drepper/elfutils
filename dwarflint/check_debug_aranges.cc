@@ -210,7 +210,7 @@ check_aranges_structural (struct elf_file *file,
 	  wr_error (&where, ": can't read table length.\n");
 	  return false;
 	}
-      if (!read_size_extra (&ctx, size32, &size, &offset_size, &where))
+      if (!read_size_extra (&ctx, size32, &size, &offset_size, where))
 	return false;
 
       struct read_ctx sub_ctx;
@@ -306,7 +306,7 @@ check_aranges_structural (struct elf_file *file,
       /* Address size.  */
       int address_size;
       error_code err = read_address_size (&sub_ctx, file->addr_64,
-					  &address_size, &where);
+					  &address_size, where);
       if (err != err_ok)
 	retval = false;
       if (err == err_fatal)

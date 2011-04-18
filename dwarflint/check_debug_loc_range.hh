@@ -93,10 +93,10 @@ bool check_location_expression (dwarf_version const *ver,
 				uint64_t init_off,
 				struct relocation_data *reloc,
 				size_t length,
-				struct where *wh);
+				locus const &loc);
 
-void check_range_relocations (enum message_category cat,
-			      struct where *where,
+void check_range_relocations (locus const &loc,
+			      enum message_category cat,
 			      struct elf_file const *file,
 			      GElf_Sym *begin_symbol,
 			      GElf_Sym *end_symbol,

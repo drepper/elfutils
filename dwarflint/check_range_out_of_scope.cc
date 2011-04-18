@@ -45,7 +45,7 @@ namespace
     static void recursively_validate (dwarf::compile_unit const &cu,
 				      dwarf::debug_info_entry const &die,
 				      ranges_t const &ranges,
-				      where const &wh_parent);
+				      locus const &wh_parent);
 
   public:
     static checkdescriptor const *descriptor () {
@@ -72,7 +72,7 @@ check_range_out_of_scope::check_range_out_of_scope (checkstack &stack, dwarflint
       class dwarf::compile_units_type const &cus = dw.compile_units ();
       ranges_t r;
       r.push_back (std::make_pair (0, -1));
-      where wh = WHERE (sec_info, NULL);
+      section_locus wh (sec_info);
       for (dwarf::compile_units_type::const_iterator it = cus.begin ();
 	   it != cus.end (); ++it)
 	recursively_validate (*it, *it, r, wh);
@@ -80,7 +80,7 @@ check_range_out_of_scope::check_range_out_of_scope (checkstack &stack, dwarflint
   // XXX more specific class when <dwarf> has it
   catch (std::runtime_error &exc)
     {
-      wr_error (WHERE (sec_info, NULL))
+      wr_error (section_locus (sec_info))
 	<< "Exception while checking ranges out of scope: " << exc.what ()
 	<< std::endl;
       throw check_base::failed ();
@@ -92,11 +92,9 @@ check_range_out_of_scope::recursively_validate
   (dwarf::compile_unit const &cu,
    dwarf::debug_info_entry const &die,
    ranges_t const &ranges,
-   where const &wh_parent)
+   locus const &wh_parent)
 {
-  where wh = WHERE (sec_info, NULL);
-  where_reset_1 (&wh, cu.offset ());
-  where_reset_2 (&wh, die.offset ());
+  die_locus wh (die);
 
   ::Dwarf_Addr low_pc = 0;
   ::Dwarf_Addr high_pc = ::noaddr;

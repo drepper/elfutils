@@ -513,10 +513,7 @@ process(Dwarf *c_dw, dwarf const &dw)
 	    }
 	  catch (::error const &e)
 	    {
-	      struct where where = WHERE (sec_info, NULL);
-	      where_reset_1 (&where, it.cu ().offset ());
-	      where_reset_2 (&where, die.offset ());
-	      std::cerr << "error: " << where << ": "
+	      std::cerr << "error: " << die_locus (die) << ": "
 			<< e.what () << '.' << std::endl;
 	      continue;
 	    }

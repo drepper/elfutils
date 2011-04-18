@@ -48,6 +48,7 @@ dwarflint_SOURCES = \
 	checks.hh checks_i.hh \
 	coverage.cc coverage.hh \
 	cu_coverage.cc cu_coverage.hh cu_coverage_i.hh \
+	die_locus.cc die_locus.hh \
 	dwarf_2.cc dwarf_2.hh \
 	dwarf_3.cc dwarf_3.hh \
 	dwarf_4.cc dwarf_4.hh \
@@ -95,6 +96,7 @@ dwarflint_SOURCES = \
 
 locstats_SOURCES = \
 	locstats.cc \
+	die_locus.cc die_locus.hh \
 	files.cc files.hh \
 	option.cc option.hh option_i.hh \
 	section_id.cc section_id.hh \

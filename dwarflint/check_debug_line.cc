@@ -23,6 +23,10 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "check_debug_line.hh"
 #include "check_debug_info.hh"
 #include "sections.hh"
@@ -171,7 +175,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	  wr_error (where) << "can't read table length." << std::endl;
 	  throw check_base::failed ();
 	}
-      if (!read_size_extra (&ctx, size32, &size, &offset_size, &where))
+      if (!read_size_extra (&ctx, size32, &size, &offset_size, where))
 	throw check_base::failed ();
 
       struct read_ctx sub_ctx;

@@ -79,8 +79,7 @@ abbrev_attrib_locus::abbrev_attrib_locus (abbrev_attrib_locus const &copy)
 std::string
 abbrev_attrib_locus::name () const
 {
-  assert (_m_name != -1);
-  return elfutils::dwarf::attributes::name (_m_name);
+  return pri::attr_name (_m_name);
 }
 
 void

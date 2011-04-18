@@ -175,13 +175,8 @@ namespace
     while (!read_ctx_eof (&ctx))
       {
 	const unsigned char *cu_begin = ctx.ptr;
-	struct where where = WHERE (sec_info, NULL);
 	uint64_t offset = read_ctx_get_offset (&ctx);
-	where_reset_1 (&where, offset);
-
-	cu_head head;
-	head.offset = offset;
-	head.where = where;
+	cu_head head (offset);
 
 	/* Reading CU head is a bit tricky, because we don't know if
 	   we have run into (superfluous but allowed) zero padding
@@ -190,7 +185,7 @@ namespace
 	if (!read_ctx_need_data (&ctx, 4)
 	    && read_check_zero_padding (&ctx, &off_start, &off_end))
 	  {
-	    wr_message_padding_0 (mc_info | mc_header, where,
+	    wr_message_padding_0 (mc_info | mc_header, head.where,
 				  off_start, off_end);
 	    break;
 	  }
@@ -203,25 +198,25 @@ namespace
 	uint32_t size32;
 	if (!read_ctx_read_4ubyte (&ctx, &size32))
 	  {
-	    wr_error (where) << "can't read CU length." << std::endl;
+	    wr_error (head.where) << "can't read CU length." << std::endl;
 	    throw check_base::failed ();
 	  }
 	if (size32 == 0
 	    && read_check_zero_padding (&ctx, &off_start, &off_end))
 	  {
-	    wr_message_padding_0 (mc_info | mc_header, where,
+	    wr_message_padding_0 (mc_info | mc_header, head.where,
 				  off_start, off_end);
 	    break;
 	  }
 
 	Dwarf_Off cu_size;
 	if (!read_size_extra (&ctx, size32, &cu_size,
-			      &head.offset_size, &where))
+			      &head.offset_size, head.where))
 	  throw check_base::failed ();
 
 	if (!read_ctx_need_data (&ctx, cu_size))
 	  {
-	    wr_error (where)
+	    wr_error (head.where)
 	      << "section doesn't have enough data to read CU of size "
 	      << cu_size << '.' << std::endl;
 	    throw check_base::failed ();
@@ -241,7 +236,7 @@ namespace
 	if (dwarf_version::get (version) == NULL)
 	  {
 	    wr_error (head.where) << "unsupported CU version "
-				  << version << '.' << std::endl;
+			     << version << '.' << std::endl;
 	    throw check_base::failed ();
 	  }
 	if (version == 2 && head.offset_size == 8) // xxx?
@@ -276,7 +271,7 @@ namespace
 
 	/* Address size.  */
 	error_code err = read_address_size (&ctx, file->addr_64,
-					    &head.address_size, &head.where);
+					    &head.address_size, head.where);
 	if (err == err_fatal)
 	  throw check_base::failed ();
 	else if (err == err_nohl)
@@ -288,7 +283,7 @@ namespace
 
 	if (!read_ctx_skip (&ctx, head.size))
 	  {
-	    wr_error (where) << pri::not_enough ("next CU") << std::endl;
+	    wr_error (head.where) << pri::not_enough ("next CU") << std::endl;
 	    throw check_base::failed ();
 	  }
 
@@ -395,7 +390,7 @@ namespace
   struct value_check_cb_ctx
   {
     struct read_ctx *const ctx;
-    struct where *const where;
+    locus const *where;
     struct cu *const cu;
     struct ref_record *local_die_refs;
     Elf_Data *strings;
@@ -545,12 +540,11 @@ namespace
     uint64_t sibling_addr = 0;
     uint64_t die_off, prev_die_off = 0;
     struct abbrev *abbrev = NULL;
-    struct where where = WHERE (sec_info, NULL);
     unsigned long die_count = 0;
     int retval = 0;
 
     struct value_check_cb_ctx cb_ctx = {
-      ctx, &where, cu,
+      ctx, NULL, cu,
       local_die_refs,
       strings, strings_coverage,
       pc_coverage,
@@ -560,20 +554,18 @@ namespace
 
     while (!read_ctx_eof (ctx))
       {
-	where = cu->head->where;
 	die_off = read_ctx_get_offset (ctx);
 	/* Shift reported DIE offset by CU offset, to match the way
 	   readelf reports DIEs.  */
-	where_reset_2 (&where, die_off + cu->head->offset);
+	die_locus where (cu->head->offset + die_off);
+	cb_ctx.where = &where;
 
 	uint64_t abbr_code;
 
 	if (!checked_read_uleb128 (ctx, &abbr_code, where, "abbrev code"))
 	  return -1;
 
-#define DEF_PREV_WHERE							\
-	struct where prev_where = where;				\
-	where_reset_2 (&prev_where, prev_die_off + cu->head->offset)
+#define DEF_PREV_WHERE die_locus prev_where (cu->head->offset + prev_die_off)
 
 	/* Check sibling value advertised last time through the loop.  */
 	if (sibling_addr != 0)
@@ -671,7 +663,7 @@ namespace
 	for (struct abbrev_attrib *it = abbrev->attribs;
 	     it->name != 0 || it->form != 0; ++it)
 	  {
-	    where.ref = &it->where;
+	    where.set_attrib_name (it->name);
 	    int form_name = it->form;
 
 	    // In following, attribute may be NULL, but form never
@@ -863,7 +855,7 @@ namespace
 		    // field?  See check_debug_loc_range::op_read_form
 		    if (!check_location_expression
 			(ver, file, &block, cu,
-			 expr_start, reloc, value, &where))
+			 expr_start, reloc, value, where))
 		      return -1;
 		  }
 		else
@@ -928,7 +920,7 @@ namespace
 	    if (valuep != NULL)
 	      *valuep = value;
 	  }
-	where.ref = NULL;
+	where.set_attrib_name (-1);
 
 	if (high_pc != (uint64_t)-1 && low_pc != (uint64_t)-1
 	    && high_pc_relative)
@@ -960,7 +952,7 @@ namespace
 	    else
 	      {
 		if (!high_pc_relative)
-		  check_range_relocations (mc_die_other, &where,
+		  check_range_relocations (where, mc_die_other,
 					   &file,
 					   low_pc_symbol, high_pc_symbol,
 					   "DW_AT_low_pc and DW_AT_high_pc");
@@ -972,8 +964,6 @@ namespace
 		    << std::endl;
 	      }
 	  }
-
-	where.ref = &abbrev->where;
 
 	if (abbrev->has_children)
 	  {
@@ -1004,7 +994,7 @@ namespace
       }
 
     if (sibling_addr != 0)
-      wr_error (where)
+      wr_error (die_locus (cu->head->offset + prev_die_off))
 	<< "this DIE should have had its sibling at " << pri::hex (sibling_addr)
 	<< ", but the DIE chain ended." << std::endl;
 
@@ -1103,7 +1093,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
        it != cu_headers.end (); ++it)
     {
       cu_head const &head = *it;
-      where const &where = head.where;
+      cu_locus where = head.where;
       {
 	cu cur;
 	memset (&cur, 0, sizeof (cur));
@@ -1150,7 +1140,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
 
   if (success)
     {
-      where wh = WHERE (sec_info, NULL);
+      section_locus wh (sec_info);
       if (ctx.ptr != ctx.end)
 	/* Did we read up everything?  */
 	wr_message (mc_die_other | mc_impact_4, &wh,

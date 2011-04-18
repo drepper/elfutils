@@ -35,30 +35,32 @@
 #include "check_debug_line_i.hh"
 #include "check_debug_aranges_i.hh"
 #include "sections_i.hh"
+#include "die_locus.hh"
 
 struct cu_head
 {
-  uint64_t offset;
+  Dwarf_Off offset;
   Dwarf_Off size;               // Size of this CU.
   Dwarf_Off head_size;          // Size from begin to 1st byte of CU.
   Dwarf_Off total_size;         // size + head_size
 
-  int offset_size;	        // Offset size in this CU.
-  ::where where;                // Where this section was defined.
+  int offset_size;              // Offset size in this CU.
   Dwarf_Off abbrev_offset;      // Abbreviation section that this CU uses.
   int version;                  // CU version
   int address_size;             // Address size in bytes on the target machine.
 
-  cu_head ()
-    : offset (0)
+  cu_locus where;
+
+  explicit cu_head (Dwarf_Off a_offset)
+    : offset (a_offset)
     , size (0)
     , head_size (0)
     , total_size (0)
     , offset_size (0)
-    , where ()
     , abbrev_offset (0)
     , version (0)
     , address_size (0)
+    , where (a_offset)
   {}
 };
 

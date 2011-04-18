@@ -1,5 +1,5 @@
-/* Pedantic checking of DWARF files
-   Copyright (C) 2010, 2011 Red Hat, Inc.
+/*
+   Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,28 +23,49 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#ifndef _DWARFLINT_DIE_LOCUS_H_
+#define _DWARFLINT_DIE_LOCUS_H_
 
-#include "cu_coverage.hh"
-#include "check_debug_info.hh"
-#include "check_debug_loc_range.hh"
-#include <cstring>
+#include "where.h"
+#include "../libdw/c++/dwarf"
 
-checkdescriptor const *
-cu_coverage::descriptor ()
+class cu_locus
+  : public clonable_locus<cu_locus>
 {
-  static checkdescriptor cd
-    (checkdescriptor::create ("cu_coverage")
-     .hidden ());
-  return &cd;
-}
+  Dwarf_Off _m_offset;
+public:
+  explicit cu_locus (Dwarf_Off offset)
+    : _m_offset (offset)
+  {}
 
-cu_coverage::cu_coverage (checkstack &stack, dwarflint &lint)
-  : _m_info (lint.check (stack, _m_info))
-  , _m_ranges (lint.check_if (_m_info->need_ranges (), stack, _m_ranges))
-  , cov (_m_info->cov ()
-	 + (_m_ranges != NULL ? _m_ranges->cov () : coverage ()))
+  std::string format (bool brief = false) const;
+};
+
+class die_locus
+  : public clonable_locus<die_locus>
 {
-}
+  Dwarf_Off _m_offset;
+  int _m_attrib_name;
+
+public:
+  explicit die_locus (Dwarf_Off offset, int attrib_name = -1)
+    : _m_offset (offset)
+    , _m_attrib_name (attrib_name)
+  {}
+
+  template <class T>
+  explicit die_locus (T const &die, int attrib_name = -1)
+    : _m_offset (die.offset ())
+    , _m_attrib_name (attrib_name)
+  {}
+
+  void
+  set_attrib_name (int attrib_name)
+  {
+    _m_attrib_name = attrib_name;
+  }
+
+  std::string format (bool brief = false) const;
+};
+
+#endif /* _DWARFLINT_DIE_LOCUS_H_ */

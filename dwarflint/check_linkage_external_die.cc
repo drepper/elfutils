@@ -133,7 +133,7 @@ namespace
 		      && entry.tag () != DW_TAG_union_type)
 		      || attrs.find (DW_AT_name) != attrs.end ()))
 		{
-		  wr_message (to_where (entry),
+		  wr_message (die_locus (entry),
 			      mc_impact_3 | mc_acc_suboptimal | mc_die_other)
 		    .id (descriptor ())
 		    << elfutils::dwarf::tags::name (entry.tag ())
@@ -152,7 +152,7 @@ namespace
 	      if (attrs.find (DW_AT_declaration) == attrs.end ()
 		  && is_external (it))
 		{
-		  wr_message (to_where (entry),
+		  wr_message (die_locus (entry),
 			      mc_impact_3 | mc_acc_suboptimal | mc_die_other)
 		    .id (descriptor ())
 		    << elfutils::dwarf::tags::name (entry.tag ())
@@ -165,7 +165,7 @@ namespace
 	    {
 	      // Global symbol in symbol table, not marked external.
 	      // Always bad.
-	      wr_message (to_where (entry),
+	      wr_message (die_locus (entry),
 			  mc_impact_3 | mc_acc_suboptimal | mc_die_other)
 		.id (descriptor ())
 		<< elfutils::dwarf::tags::name (entry.tag ())
