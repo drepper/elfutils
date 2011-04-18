@@ -26,7 +26,7 @@
 #ifndef _DWARFLINT_DIE_LOCUS_H_
 #define _DWARFLINT_DIE_LOCUS_H_
 
-#include "where.h"
+#include "where.hh"
 #include "../libdw/c++/dwarf"
 
 class cu_locus

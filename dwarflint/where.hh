@@ -23,8 +23,8 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_WHERE_H
-#define DWARFLINT_WHERE_H
+#ifndef DWARFLINT_WHERE_HH
+#define DWARFLINT_WHERE_HH
 
 #include "section_id.hh"
 
@@ -155,4 +155,4 @@ operator << (std::ostream &os, locus const &loc)
   return os;
 }
 
-#endif//DWARFLINT_WHERE_H
+#endif//DWARFLINT_WHERE_HH
