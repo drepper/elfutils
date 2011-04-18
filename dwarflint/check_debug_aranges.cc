@@ -270,7 +270,7 @@ check_aranges_structural (struct elf_file *file,
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
 
       class cudie_locus
-	: public locus
+	: public clonable_locus<cudie_locus>
       {
 	uint64_t _m_offset;
 
@@ -288,12 +288,6 @@ check_aranges_structural (struct elf_file *file,
 	  else
 	    ss << "unknown CU";
 	  return ss.str ();
-	}
-
-	locus *
-	clone () const
-	{
-	  return new cudie_locus (*this);
 	}
       };
 

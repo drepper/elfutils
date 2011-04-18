@@ -32,7 +32,7 @@
 #include "dwarf_version_i.hh"
 
 class abbrev_locus
-  : public locus
+  : public clonable_locus<abbrev_locus>
 {
   uint64_t _m_abbr_offset;
 
@@ -42,11 +42,10 @@ public:
   abbrev_locus (abbrev_locus const &copy);
 
   std::string format (bool brief = false) const;
-  locus *clone () const;
 };
 
 class abbrev_attrib_locus
-  : public locus
+  : public clonable_locus<abbrev_attrib_locus>
 {
   uint64_t _m_abbr_offset;
   uint64_t _m_attr_offset;
@@ -64,7 +63,6 @@ public:
   void set_name (int name);
   std::string format (bool brief = false) const;
   std::string name () const;
-  locus *clone () const;
 };
 
 struct abbrev_attrib

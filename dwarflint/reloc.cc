@@ -41,7 +41,7 @@
 namespace
 {
   class reloc_locus
-    : public locus
+    : public clonable_locus<reloc_locus>
   {
     locus const &_m_ref;
     size_t _m_index;
@@ -87,12 +87,6 @@ namespace
       // Do non-brief formatting of referee
       ss << " of " << _m_ref.format ();
       return ss.str ();
-    }
-
-    locus *
-    clone () const
-    {
-      return new reloc_locus (*this);
     }
   };
 }

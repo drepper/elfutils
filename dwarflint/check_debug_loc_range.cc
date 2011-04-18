@@ -832,7 +832,7 @@ namespace
 }
 
 class locexpr_locus
-  : public locus
+  : public clonable_locus<locexpr_locus>
 {
   uint64_t const _m_offset;
   locus const *const _m_context;
@@ -849,12 +849,6 @@ public:
     std::stringstream ss;
     ss << "location expression offset 0x" << std::hex << _m_offset;
     return ss.str ();
-  }
-
-  locus *
-  clone () const
-  {
-    return new locexpr_locus (*this);
   }
 
   virtual locus const *next () const

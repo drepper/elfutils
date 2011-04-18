@@ -48,8 +48,19 @@ public:
   virtual ~locus () {}
 };
 
-struct section_locus
+template <class T>
+class clonable_locus
   : public locus
+{
+public:
+  virtual locus *clone () const
+  {
+    return new T (*static_cast<T const*> (this));
+  }
+};
+
+struct section_locus
+  : public clonable_locus<section_locus>
 {
   section_id _m_sec;
   uint64_t _m_offset;
@@ -66,16 +77,10 @@ public:
   {}
 
   std::string format (bool brief = false) const;
-
-  locus *
-  clone () const
-  {
-    return new section_locus (*this);
-  }
 };
 
 struct where
-  : public locus
+  : public clonable_locus<where>
 {
   class formatter
   {
@@ -109,12 +114,6 @@ public:
   next () const
   {
     return _m_next;
-  }
-
-  locus *
-  clone () const
-  {
-    return new where (*this);
   }
 
   void

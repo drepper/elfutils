@@ -62,12 +62,6 @@ abbrev_locus::format (bool brief) const
   return ss.str ();
 }
 
-locus *
-abbrev_locus::clone () const
-{
-  return new abbrev_locus (*this);
-}
-
 abbrev_attrib_locus::abbrev_attrib_locus (uint64_t abbr_offset,
 					  uint64_t attr_offset,
 					  int a_name)
@@ -112,12 +106,6 @@ abbrev_attrib_locus::format (bool brief) const
   else
     ss << "abbr. attribute 0x" << std::hex << _m_attr_offset;
   return ss.str ();
-}
-
-locus *
-abbrev_attrib_locus::clone () const
-{
-  return new abbrev_attrib_locus (*this);
 }
 
 checkdescriptor const *
