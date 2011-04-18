@@ -96,175 +96,174 @@ static reg<check_debug_pubtypes> reg_debug_pubtypes;
 
 namespace
 {
-bool
-check_pub_structural (elf_file const &file, sec &sect,
-		      check_debug_info *cus)
-{
-  struct read_ctx ctx;
-  read_ctx_init (&ctx, sect.data, file.other_byte_order);
-  bool retval = true;
+  bool
+  check_pub_structural (elf_file const &file, sec &sect,
+			check_debug_info *cus)
+  {
+    struct read_ctx ctx;
+    read_ctx_init (&ctx, sect.data, file.other_byte_order);
+    bool retval = true;
 
-  while (!read_ctx_eof (&ctx))
-    {
-      enum section_id sid = sect.id;
-      struct where where = WHERE (sid, NULL);
-      where_reset_1 (&where, read_ctx_get_offset (&ctx));
-      const unsigned char *set_begin = ctx.ptr;
-
-      /* Size.  */
-      uint32_t size32;
-      uint64_t size;
-      int offset_size;
-      if (!read_ctx_read_4ubyte (&ctx, &size32))
-	{
-	  wr_error (&where, ": can't read table length.\n");
-	  return false;
-	}
-      if (!read_size_extra (&ctx, size32, &size, &offset_size, where))
-	return false;
-
+    while (!read_ctx_eof (&ctx))
       {
-      struct read_ctx sub_ctx;
-      const unsigned char *set_end = ctx.ptr + size;
-      if (!read_ctx_init_sub (&sub_ctx, &ctx, set_begin, set_end))
-	goto not_enough;
-      sub_ctx.ptr = ctx.ptr;
+	enum section_id sid = sect.id;
+	struct where where = WHERE (sid, NULL);
+	where_reset_1 (&where, read_ctx_get_offset (&ctx));
+	const unsigned char *set_begin = ctx.ptr;
 
-      /* Version.  */
-      uint16_t version;
-      if (!read_ctx_read_2ubyte (&sub_ctx, &version))
-	{
-	  wr_error (&where, ": can't read set version.\n");
-	  retval = false;
-	  goto next;
-	}
-      if (!supported_version (version, 1, &where, 2))
-	{
-	  retval = false;
-	  goto next;
-	}
+	/* Size.  */
+	uint32_t size32;
+	uint64_t size;
+	int offset_size;
+	if (!read_ctx_read_4ubyte (&ctx, &size32))
+	  {
+	    wr_error (&where, ": can't read table length.\n");
+	    return false;
+	  }
+	if (!read_size_extra (&ctx, size32, &size, &offset_size, where))
+	  return false;
 
-      /* CU offset.  */
-      uint64_t cu_offset;  /* Offset of related CU.  */
-      uint64_t ctx_offset = sub_ctx.ptr - ctx.begin;
-      if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &cu_offset))
 	{
-	  wr_error (&where, ": can't read debug info offset.\n");
-	  retval = false;
-	  goto next;
-	}
+	  struct read_ctx sub_ctx;
+	  const unsigned char *set_end = ctx.ptr + size;
+	  if (!read_ctx_init_sub (&sub_ctx, &ctx, set_begin, set_end))
+	    goto not_enough;
+	  sub_ctx.ptr = ctx.ptr;
 
-      struct relocation *rel;
-      if ((rel = relocation_next (&sect.rel, ctx_offset,
-				  where, skip_mismatched)))
-	relocate_one (&file, &sect.rel, rel, offset_size,
-		      &cu_offset, where, sec_info, NULL);
-      else if (file.ehdr.e_type == ET_REL)
-	wr_message (mc_impact_2 | mc_pubtables | mc_reloc | mc_header, &where,
-		    PRI_LACK_RELOCATION, "debug info offset");
-
-      struct cu *cu = NULL;
-      if (cus != NULL && (cu = cus->find_cu (cu_offset)) == NULL)
-	wr_error (where)
-	  << "unresolved reference to " << pri::CU (cu_offset)
-	  << '.' << std::endl;
-      // xxx this can be checked even without CU
-      if (cu != NULL)
-	{
-	  where.ref = &cu->head->where;
-	  bool *has = sect.id == sec_pubnames
-	    ? &cu->has_pubnames : &cu->has_pubtypes;
-	  if (*has)
-	    wr_message (mc_impact_2 | mc_pubtables | mc_header, &where,
-			": there has already been section for this CU.\n");
-	  else
-	    *has = true;
-	}
-
-      /* Covered length.  */
-      uint64_t cu_len;
-      if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &cu_len))
-	{
-	  wr_error (&where, ": can't read covered length.\n");
-	  retval = false;
-	  goto next;
-	}
-      if (cu != NULL && cu_len != cu->head->total_size)
-	{
-	  wr_error (where)
-	    << "the table covers length " << cu_len << " but CU has length "
-	    << cu->head->total_size << '.' << std::endl;
-	  retval = false;
-	  goto next;
-	}
-
-      /* Records... */
-      while (!read_ctx_eof (&sub_ctx))
-	{
-	  ctx_offset = sub_ctx.ptr - ctx.begin;
-	  where_reset_2 (&where, ctx_offset);
-
-	  uint64_t offset;
-	  if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &offset))
+	  /* Version.  */
+	  uint16_t version;
+	  if (!read_ctx_read_2ubyte (&sub_ctx, &version))
 	    {
-	      wr_error (&where, ": can't read offset field.\n");
+	      wr_error (&where, ": can't read set version.\n");
 	      retval = false;
 	      goto next;
 	    }
-	  if (offset == 0)
-	    break;
+	  if (!supported_version (version, 1, &where, 2))
+	    {
+	      retval = false;
+	      goto next;
+	    }
 
-	  if (cu != NULL
-	      && !cu->die_addrs.has_addr (offset + cu->head->offset))
+	  /* CU offset.  */
+	  uint64_t cu_offset;  /* Offset of related CU.  */
+	  uint64_t ctx_offset = sub_ctx.ptr - ctx.begin;
+	  if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &cu_offset))
+	    {
+	      wr_error (&where, ": can't read debug info offset.\n");
+	      retval = false;
+	      goto next;
+	    }
+
+	  struct relocation *rel;
+	  if ((rel = relocation_next (&sect.rel, ctx_offset,
+				      where, skip_mismatched)))
+	    relocate_one (&file, &sect.rel, rel, offset_size,
+			  &cu_offset, where, sec_info, NULL);
+	  else if (file.ehdr.e_type == ET_REL)
+	    wr_message (mc_impact_2 | mc_pubtables | mc_reloc | mc_header, &where,
+			PRI_LACK_RELOCATION, "debug info offset");
+
+	  struct cu *cu = NULL;
+	  if (cus != NULL && (cu = cus->find_cu (cu_offset)) == NULL)
+	    wr_error (where)
+	      << "unresolved reference to " << pri::CU (cu_offset)
+	      << '.' << std::endl;
+	  // xxx this can be checked even without CU
+	  if (cu != NULL)
+	    {
+	      where.ref = &cu->head->where;
+	      bool *has = sect.id == sec_pubnames
+		? &cu->has_pubnames : &cu->has_pubtypes;
+	      if (*has)
+		wr_message (mc_impact_2 | mc_pubtables | mc_header, &where,
+			    ": there has already been section for this CU.\n");
+	      else
+		*has = true;
+	    }
+
+	  /* Covered length.  */
+	  uint64_t cu_len;
+	  if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &cu_len))
+	    {
+	      wr_error (&where, ": can't read covered length.\n");
+	      retval = false;
+	      goto next;
+	    }
+	  if (cu != NULL && cu_len != cu->head->total_size)
 	    {
 	      wr_error (where)
-		<< "unresolved reference to " << pri::DIE (offset)
-		<< '.' << std::endl;
+		<< "the table covers length " << cu_len << " but CU has length "
+		<< cu->head->total_size << '.' << std::endl;
 	      retval = false;
 	      goto next;
 	    }
 
-	  // xxx read_ctx_read_str???
-	  uint8_t c;
-	  do
-	    if (!read_ctx_read_ubyte (&sub_ctx, &c))
-	      {
-		wr_error (&where, ": can't read symbol name.\n");
-		retval = false;
-		goto next;
-	      }
-	  while (c);
+	  /* Records... */
+	  while (!read_ctx_eof (&sub_ctx))
+	    {
+	      ctx_offset = sub_ctx.ptr - ctx.begin;
+	      where_reset_2 (&where, ctx_offset);
+
+	      uint64_t offset;
+	      if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &offset))
+		{
+		  wr_error (&where, ": can't read offset field.\n");
+		  retval = false;
+		  goto next;
+		}
+	      if (offset == 0)
+		break;
+
+	      if (cu != NULL
+		  && !cu->die_addrs.has_addr (offset + cu->head->offset))
+		{
+		  wr_error (where)
+		    << "unresolved reference to " << pri::DIE (offset)
+		    << '.' << std::endl;
+		  retval = false;
+		  goto next;
+		}
+
+	      // xxx read_ctx_read_str???
+	      uint8_t c;
+	      do
+		if (!read_ctx_read_ubyte (&sub_ctx, &c))
+		  {
+		    wr_error (&where, ": can't read symbol name.\n");
+		    retval = false;
+		    goto next;
+		  }
+	      while (c);
+	    }
+
+	  sid = sect.id;
+	  struct where wh = WHERE (sid, NULL);
+	  if (sub_ctx.ptr != sub_ctx.end)
+	    {
+	      uint64_t off_start, off_end;
+	      if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
+		wr_message_padding_0 (mc_pubtables, wh, off_start, off_end);
+	      else
+		{
+		  wr_message_padding_n0 (mc_pubtables | mc_error, wh,
+					 off_start, off_start + size);
+		  retval = false;
+		}
+	    }
 	}
 
-	sid = sect.id;
-	struct where wh = WHERE (sid, NULL);
-	if (sub_ctx.ptr != sub_ctx.end)
-	  {
-	    uint64_t off_start, off_end;
-	    if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-	      wr_message_padding_0 (mc_pubtables, wh, off_start, off_end);
-	    else
-	      {
-		wr_message_padding_n0 (mc_pubtables | mc_error, wh,
-				       off_start, off_start + size);
-		retval = false;
-	      }
-	  }
+      next:
+	if (read_ctx_skip (&ctx, size))
+	  continue;
+
+      not_enough:
+	wr_error (&where, PRI_NOT_ENOUGH, "next set");
+	return false;
       }
 
-    next:
-      if (read_ctx_skip (&ctx, size))
-	continue;
+    if (retval)
+      relocation_skip_rest (&sect.rel, section_locus (sect.id));
 
-    not_enough:
-      wr_error (&where, PRI_NOT_ENOUGH, "next set");
-      return false;
-    }
-
-  if (retval)
-    relocation_skip_rest (&sect.rel, section_locus (sect.id));
-
-  return retval;
-}
-
+    return retval;
+  }
 }
