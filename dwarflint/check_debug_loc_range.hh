@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_loc and .debug_range.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -29,6 +29,23 @@
 #include "messages.hh"
 #include "coverage.hh"
 #include "dwarf_version_i.hh"
+
+class loc_range_locus
+  : public clonable_locus<loc_range_locus>
+{
+  locus const &_m_parent;
+  Dwarf_Off _m_offset;
+  section_id _m_sec;
+
+public:
+  loc_range_locus (section_id sec, locus const &parent, Dwarf_Off offset = -1)
+    : _m_parent (parent)
+    , _m_offset (offset)
+    , _m_sec ((assert (sec == sec_loc || sec == sec_ranges), sec))
+  {}
+
+  std::string format (bool brief) const;
+};
 
 struct section_coverage
 {

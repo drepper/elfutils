@@ -138,11 +138,7 @@ namespace
 
       add (sec_line, ".debug_line", "table %"PRId64, "offset %#"PRIx64);
 
-      add (sec_loc, ".debug_loc", "loclist %#"PRIx64, "offset %#"PRIx64);
-
       add (sec_mac, ".debug_mac");
-
-      add (sec_ranges, ".debug_ranges", "rangelist %#"PRIx64, "offset %#"PRIx64);
     }
   } const section_fmts;
 }
@@ -172,6 +168,8 @@ WHERE (section_id sec, locus const *next)
   assert (sec != sec_abbrev);
   assert (sec != sec_str);
   assert (sec != sec_info);
+  assert (sec != sec_loc);
+  assert (sec != sec_ranges);
   where::formatter const *fmt = wf_for_section (sec);
   return where (fmt, next);
 }

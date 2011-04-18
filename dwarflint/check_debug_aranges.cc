@@ -119,7 +119,6 @@ hole (uint64_t start, uint64_t length, void *user)
       || !necessary_alignment (start, length, sec->shdr.sh_addralign))
     {
       char buf[128];
-      where where = WHERE (info.id, NULL);
       char const *what = info.what;
       char const *cu = "CU DIEs";
       if (info.reverse)
@@ -128,7 +127,7 @@ hole (uint64_t start, uint64_t length, void *user)
 	  what = cu;
 	  cu = tmp;
 	}
-      wr_message (where, mc_aranges | mc_impact_3)
+      wr_message (section_locus (info.id), mc_aranges | mc_impact_3)
 	<< "addresses " << range_fmt (buf, sizeof (buf), start, start + length)
 	<< " are covered with " << cu << ", but not with " << what << "."
 	<< std::endl;
@@ -415,7 +414,7 @@ check_aranges_structural (struct elf_file *file,
       if (sub_ctx.ptr != sub_ctx.end)
 	{
 	  uint64_t start, end;
-	  struct where wh = WHERE (sec_id, NULL);
+	  section_locus wh (sec_id);
 	  if (read_check_zero_padding (&sub_ctx, &start, &end))
 	    wr_message_padding_0 (mc_aranges, wh, start, end);
 	  else

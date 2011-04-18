@@ -49,6 +49,32 @@
 
 bool do_range_coverage = false; // currently no option
 
+global_opt<void_option>
+  opt_show_refs("\
+When validating .debug_loc and .debug_ranges, display information about \
+the DIE referring to the entry in consideration", "ref");
+
+std::string
+loc_range_locus::format (bool brief) const
+{
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[_m_sec] << ": ";
+
+  if (_m_sec == sec_loc)
+    ss << "loclist";
+  else
+    ss << "rangelist";
+
+  if (_m_offset != (Dwarf_Off)-1)
+    ss << " 0x" << std::hex << _m_offset;
+
+  if (opt_show_refs)
+    ss << ", ref. by " << _m_parent.format (true);
+
+  return ss.str ();
+}
+
 checkdescriptor const *
 check_debug_ranges::descriptor ()
 {
@@ -143,7 +169,7 @@ namespace
 
   struct hole_env
   {
-    struct where *where;
+    locus const &loc;
     uint64_t address;
     uint64_t end;
   };
@@ -154,7 +180,7 @@ namespace
     hole_env *env = (hole_env *)xenv;
     char buf[128], buf2[128];
     assert (h_length != 0);
-    wr_error (env->where,
+    wr_error (&env->loc,
 	      ": portion %s of the range %s "
 	      "doesn't fall into any ALLOC section.\n",
 	      range_fmt (buf, sizeof buf,
@@ -176,7 +202,6 @@ namespace
   {
     struct coverage_map_hole_info *info = (struct coverage_map_hole_info *)user;
 
-    struct where where = WHERE (info->info.section, NULL);
     const char *scnname = sco->sec->name;
 
     struct sec *sec = sco->sec;
@@ -215,9 +240,10 @@ namespace
       return true;
 
     char buf[128];
-    wr_message (info->info.category | mc_acc_suboptimal | mc_impact_4, &where,
-		": addresses %s of section %s are not covered.\n",
-		range_fmt (buf, sizeof buf, begin + base, end + base), scnname);
+    wr_message (section_locus (info->info.section),
+		info->info.category | mc_acc_suboptimal | mc_impact_4)
+      << "addresses " << range_fmt (buf, sizeof buf, begin + base, end + base)
+      << " of section " << scnname << " are not covered.\n";
     return true;
   }
 
@@ -257,7 +283,7 @@ namespace
   coverage_map_add (struct coverage_map *coverage_map,
 		    uint64_t address,
 		    uint64_t length,
-		    struct where *where,
+		    locus const &loc,
 		    enum message_category cat)
   {
     bool found = false;
@@ -285,7 +311,7 @@ namespace
 	if (found && !crosses_boundary)
 	  {
 	    /* While probably not an error, it's very suspicious.  */
-	    wr_message (cat | mc_impact_2, where,
+	    wr_message (cat | mc_impact_2, &loc,
 			": the range %s crosses section boundaries.\n",
 			range_fmt (buf, sizeof buf, address, end));
 	    crosses_boundary = true;
@@ -313,14 +339,14 @@ namespace
 	    && cov->is_overlap (cov_begin, cov_end - cov_begin))
 	  {
 	    /* Not a show stopper, this shouldn't derail high-level.  */
-	    wr_message (*where, cat | mc_aranges | mc_impact_2 | mc_error)
+	    wr_message (loc, cat | mc_aranges | mc_impact_2 | mc_error)
 	      << "the range " << range_fmt (buf, sizeof buf, address, end)
 	      << " overlaps with another one." << std::endl;
 	    overlap = true;
 	  }
 
 	if (sco->warn)
-	  wr_message (cat | mc_impact_2, where,
+	  wr_message (cat | mc_impact_2, &loc,
 		      ": the range %s covers section %s.\n",
 		      range_fmt (buf, sizeof buf, address, end), sco->sec->name);
 
@@ -334,12 +360,12 @@ namespace
 
     if (!found)
       /* Not a show stopper.  */
-      wr_error (where,
+      wr_error (&loc,
 		": couldn't find a section that the range %s covers.\n",
 		range_fmt (buf, sizeof buf, address, end));
     else if (length > 0)
       {
-	hole_env env = {where, address, end};
+	hole_env env = {loc, address, end};
 	range_cov.find_holes (0, length, range_hole, &env);
       }
   }
@@ -391,9 +417,8 @@ namespace
     uint64_t base = cu->low_pc;
     while (!read_ctx_eof (&ctx))
       {
-	struct where where = WHERE (sec->id, &loc);
 	uint64_t offset = read_ctx_get_offset (&ctx);
-	where_reset_1 (&where, offset);
+	loc_range_locus where (sec->id, loc, offset);
 
 #define HAVE_OVERLAP						\
 	do {							\
@@ -494,7 +519,7 @@ namespace
 		uint64_t address = begin_addr + base;
 		uint64_t length = end_addr - begin_addr;
 		if (coverage_map != NULL)
-		  coverage_map_add (coverage_map, address, length, &where, cat);
+		  coverage_map_add (coverage_map, address, length, where, cat);
 		if (pc_coverage != NULL)
 		  pc_coverage->add (address, length);
 	      }
@@ -583,7 +608,7 @@ namespace
 	&& (coverage_map
 	    = coverage_map_alloc_XA (file, sec->id == sec_loc)) == NULL)
       {
-	wr_error (WHERE (sec->id, NULL))
+	wr_error (section_locus (sec->id))
 	  << "couldn't read ELF, skipping coverage analysis." << std::endl;
 	retval = false;
       }
@@ -622,7 +647,8 @@ namespace
 	  {
 	    if (off == last_off)
 	      continue;
-	    relocation_skip (&sec->rel, off, WHERE (sec->id), skip_unref);
+	    relocation_skip (&sec->rel, off, section_locus (sec->id),
+			     skip_unref);
 	  }
 
 	// xxx right now this is just so that we can ver->get_form
@@ -646,7 +672,7 @@ namespace
 
     if (retval)
       {
-	relocation_skip_rest (&sec->rel, WHERE (sec->id));
+	relocation_skip_rest (&sec->rel, section_locus (sec->id));
 
 	/* We check that all CUs have the same address size when building
 	   the CU chain.  So just take the address size of the first CU in

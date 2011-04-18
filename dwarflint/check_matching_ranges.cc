@@ -43,8 +43,7 @@ namespace
       static checkdescriptor cd
 	(checkdescriptor::create ("check_matching_ranges")
 	 .description (
-"Check that the ranges in .debug_aranges and .debug_ranges match.\n"
-));
+"Check that the ranges in .debug_aranges and .debug_ranges match.\n"));
       return &cd;
     }
 
@@ -64,7 +63,6 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
   try
     {
       struct where where_ar = WHERE (sec_aranges, NULL);
-      struct where where_r = WHERE (sec_ranges, NULL);
       char buf[128];
 
       const dwarf::aranges_map &aranges = dw.aranges ();
@@ -74,7 +72,7 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 	  const dwarf::compile_unit &cu = i->first;
 	  die_locus where_ref (cu);
 	  where_ar.ref = &where_ref;
-	  where_r.ref = &where_ref;
+	  loc_range_locus where_r (sec_ranges, where_ref);
 
 	  std::set<dwarf::ranges::key_type>
 	    cu_aranges = i->second,

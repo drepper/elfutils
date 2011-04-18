@@ -243,14 +243,10 @@ message_criteria::and_not (message_term const &term)
   *this *= tmp;
 }
 
-extern "C" bool show_refs ();
 static void
-format_chain (locus const &loc, char const *severity)
+format_chain (locus const &loc, char const *)
 {
-  if (show_refs ())
-    for (locus const *it = loc.next (); it != NULL; it = it->next ())
-      printf ("%s: %s: caused by this reference.\n",
-	      severity, it->format ().c_str ());
+  assert (loc.next () == NULL);
 }
 
 static void
