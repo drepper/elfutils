@@ -277,7 +277,7 @@ do_one_relocation (elf_file const *file,
 	wr_error (reloc_where)
 	  << "relocation references section "
 	  << (file->sec[section_index].name ?: "<invalid>") << ", but "
-	  << WHERE (secid, NULL) << " was expected." << std::endl;
+	  << section_locus (secid) << " was expected." << std::endl;
     }
 
   /* Only do the actual relocation if we have ET_REL files.  For

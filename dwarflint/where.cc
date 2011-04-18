@@ -130,12 +130,6 @@ namespace
       add (sec_aranges, ".debug_aranges",
 	   "table %"PRId64, "arange %#"PRIx64);
 
-      add (sec_pubnames, ".debug_pubnames",
-	   "pubname table %"PRId64, "pubname %#"PRIx64);
-
-      add (sec_pubtypes, ".debug_pubtypes",
-	   "pubtype table %"PRId64, "pubtype %#"PRIx64);
-
       add (sec_line, ".debug_line", "table %"PRId64, "offset %#"PRIx64);
 
       add (sec_mac, ".debug_mac");
@@ -153,12 +147,22 @@ namespace
 }
 
 std::string
-section_locus::format (bool) const
+format_simple_locus (char const *(*N) (),
+		     void (*F) (std::stringstream &, uint64_t),
+		     bool brief,
+		     section_id sec,
+		     uint64_t off)
 {
   std::stringstream ss;
-  ss << section_name[_m_sec];
-  if (_m_offset != (uint64_t)-1)
-    ss << ", offset 0x" << std::hex << _m_offset;
+  if (!brief)
+    ss << section_name[sec];
+  if (off != (uint64_t)-1)
+    {
+      if (!brief)
+	ss << ": ";
+      ss << N() << " ";
+      F (ss, off);
+    }
   return ss.str ();
 }
 
@@ -170,6 +174,8 @@ WHERE (section_id sec, locus const *next)
   assert (sec != sec_info);
   assert (sec != sec_loc);
   assert (sec != sec_ranges);
+  assert (sec != sec_pubtypes);
+  assert (sec != sec_pubnames);
   where::formatter const *fmt = wf_for_section (sec);
   return where (fmt, next);
 }

@@ -54,7 +54,7 @@ bool necessary_alignment (uint64_t start, uint64_t length,
 			  uint64_t align);
 
 bool supported_version (unsigned version,
-			size_t num_supported, struct where *where, ...);
+			size_t num_supported, locus const &loc, ...);
 
 #define UNREACHABLE assert (!"unreachable")
 

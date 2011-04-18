@@ -31,18 +31,13 @@
 #include "check_debug_info_i.hh"
 #include "dwarf_version_i.hh"
 
-class abbrev_locus
-  : public clonable_locus<abbrev_locus>
-{
-  uint64_t _m_abbr_offset;
-
-public:
-  explicit abbrev_locus (uint64_t abbr_offset = -1);
-
-  abbrev_locus (abbrev_locus const &copy);
-
-  std::string format (bool brief = false) const;
+struct abbrev_locus_n {
+  static char const *name () { return "abbr. offset"; }
 };
+
+typedef fixed_locus<sec_abbrev,
+		    abbrev_locus_n::name,
+		    locus_simple_fmt::hex> abbrev_locus;
 
 class abbrev_attrib_locus
   : public clonable_locus<abbrev_attrib_locus>

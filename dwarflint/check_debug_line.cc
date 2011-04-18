@@ -200,7 +200,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 	  success = false;
 	  goto next;
 	}
-      if (!supported_version (version, 2, &where, 2, 3))
+      if (!supported_version (version, 2, where, 2, 3))
 	goto skip;
 
       /* Header length.  */

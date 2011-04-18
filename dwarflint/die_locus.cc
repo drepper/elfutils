@@ -31,16 +31,6 @@
 #include "pri.hh"
 
 std::string
-cu_locus::format (bool brief) const
-{
-  std::stringstream ss;
-  if (!brief)
-    ss << section_name[sec_info] << ": ";
-  ss << "CU " << _m_offset;
-  return ss.str ();
-}
-
-std::string
 die_locus::format (bool brief) const
 {
   std::stringstream ss;

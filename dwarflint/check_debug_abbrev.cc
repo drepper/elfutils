@@ -43,25 +43,6 @@
 #include "messages.hh"
 #include "misc.hh"
 
-abbrev_locus::abbrev_locus (uint64_t abbr_offset)
-  : _m_abbr_offset (abbr_offset)
-{}
-
-abbrev_locus::abbrev_locus (abbrev_locus const &copy)
-  : _m_abbr_offset (copy._m_abbr_offset)
-{}
-
-std::string
-abbrev_locus::format (bool brief) const
-{
-  std::stringstream ss;
-  if (!brief)
-    ss << section_name[sec_abbrev] << ": ";
-  // readelf reports abbrev offset in dec
-  ss << "abbr. offset " << _m_abbr_offset;
-  return ss.str ();
-}
-
 abbrev_attrib_locus::abbrev_attrib_locus (uint64_t abbr_offset,
 					  uint64_t attr_offset,
 					  int a_name)

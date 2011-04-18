@@ -93,7 +93,6 @@ template check_debug_pub<sec_pubtypes>::check_debug_pub (checkstack &stack,
 
 static reg<check_debug_pubtypes> reg_debug_pubtypes;
 
-
 namespace
 {
   bool
@@ -107,8 +106,7 @@ namespace
     while (!read_ctx_eof (&ctx))
       {
 	enum section_id sid = sect.id;
-	struct where where = WHERE (sid, NULL);
-	where_reset_1 (&where, read_ctx_get_offset (&ctx));
+	section_locus where (sid, read_ctx_get_offset (&ctx));
 	const unsigned char *set_begin = ctx.ptr;
 
 	/* Size.  */
@@ -138,7 +136,7 @@ namespace
 	      retval = false;
 	      goto next;
 	    }
-	  if (!supported_version (version, 1, &where, 2))
+	  if (!supported_version (version, 1, where, 2))
 	    {
 	      retval = false;
 	      goto next;
@@ -146,6 +144,7 @@ namespace
 
 	  /* CU offset.  */
 	  uint64_t cu_offset;  /* Offset of related CU.  */
+	  {
 	  uint64_t ctx_offset = sub_ctx.ptr - ctx.begin;
 	  if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &cu_offset))
 	    {
@@ -162,6 +161,7 @@ namespace
 	  else if (file.ehdr.e_type == ET_REL)
 	    wr_message (mc_impact_2 | mc_pubtables | mc_reloc | mc_header, &where,
 			PRI_LACK_RELOCATION, "debug info offset");
+	  }
 
 	  struct cu *cu = NULL;
 	  if (cus != NULL && (cu = cus->find_cu (cu_offset)) == NULL)
@@ -171,7 +171,7 @@ namespace
 	  // xxx this can be checked even without CU
 	  if (cu != NULL)
 	    {
-	      where.ref = &cu->head->where;
+	      //where.ref = &cu->head->where;
 	      bool *has = sect.id == sec_pubnames
 		? &cu->has_pubnames : &cu->has_pubtypes;
 	      if (*has)
@@ -201,13 +201,12 @@ namespace
 	  /* Records... */
 	  while (!read_ctx_eof (&sub_ctx))
 	    {
-	      ctx_offset = sub_ctx.ptr - ctx.begin;
-	      where_reset_2 (&where, ctx_offset);
+	      section_locus rec_where (sect.id, sub_ctx.ptr - ctx.begin);
 
 	      uint64_t offset;
 	      if (!read_ctx_read_offset (&sub_ctx, offset_size == 8, &offset))
 		{
-		  wr_error (&where, ": can't read offset field.\n");
+		  wr_error (&rec_where, ": can't read offset field.\n");
 		  retval = false;
 		  goto next;
 		}
@@ -217,7 +216,7 @@ namespace
 	      if (cu != NULL
 		  && !cu->die_addrs.has_addr (offset + cu->head->offset))
 		{
-		  wr_error (where)
+		  wr_error (rec_where)
 		    << "unresolved reference to " << pri::DIE (offset)
 		    << '.' << std::endl;
 		  retval = false;
@@ -229,23 +228,23 @@ namespace
 	      do
 		if (!read_ctx_read_ubyte (&sub_ctx, &c))
 		  {
-		    wr_error (&where, ": can't read symbol name.\n");
+		    wr_error (&rec_where, ": can't read symbol name.\n");
 		    retval = false;
 		    goto next;
 		  }
 	      while (c);
 	    }
 
-	  sid = sect.id;
-	  struct where wh = WHERE (sid, NULL);
 	  if (sub_ctx.ptr != sub_ctx.end)
 	    {
 	      uint64_t off_start, off_end;
 	      if (read_check_zero_padding (&sub_ctx, &off_start, &off_end))
-		wr_message_padding_0 (mc_pubtables, wh, off_start, off_end);
+		wr_message_padding_0 (mc_pubtables, section_locus (sect.id),
+				      off_start, off_end);
 	      else
 		{
-		  wr_message_padding_n0 (mc_pubtables | mc_error, wh,
+		  wr_message_padding_n0 (mc_pubtables | mc_error,
+					 section_locus (sect.id),
 					 off_start, off_start + size);
 		  retval = false;
 		}

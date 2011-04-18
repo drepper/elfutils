@@ -29,17 +29,13 @@
 #include "where.hh"
 #include "../libdw/c++/dwarf"
 
-class cu_locus
-  : public clonable_locus<cu_locus>
-{
-  Dwarf_Off _m_offset;
-public:
-  explicit cu_locus (Dwarf_Off offset)
-    : _m_offset (offset)
-  {}
-
-  std::string format (bool brief = false) const;
+struct cu_locus_n {
+  static char const *name () { return "CU"; }
 };
+
+typedef fixed_locus<sec_info,
+		    cu_locus_n::name,
+		    locus_simple_fmt::dec> cu_locus;
 
 class die_locus
   : public clonable_locus<die_locus>

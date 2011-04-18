@@ -176,6 +176,17 @@ aranges_coverage_add (struct coverage *aranges_coverage,
   aranges_coverage->add (begin, length);
 }
 
+namespace
+{
+  struct cudie_locus_n {
+    static char const *name () { return "CU DIE"; }
+  };
+
+  typedef fixed_locus<sec_info,
+		      cudie_locus_n::name,
+		      locus_simple_fmt::dec> cudie_locus;
+}
+
 /* COVERAGE is portion of address space covered by CUs (either via
    low_pc/high_pc pairs, or via DW_AT_ranges references).  If
    non-NULL, analysis of arange coverage is done against that set. */
@@ -239,7 +250,7 @@ check_aranges_structural (struct elf_file *file,
 	  retval = false;
 	  goto next;
 	}
-      if (!supported_version (version, 1, &where, 2))
+      if (!supported_version (version, 1, where, 2))
 	{
 	  retval = false;
 	  goto next;
@@ -267,28 +278,6 @@ check_aranges_structural (struct elf_file *file,
       struct cu *cu = NULL;
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
-
-      class cudie_locus
-	: public clonable_locus<cudie_locus>
-      {
-	uint64_t _m_offset;
-
-      public:
-	cudie_locus (uint64_t offset)
-	  : _m_offset (offset)
-	{}
-
-	std::string
-	format (bool) const
-	{
-	  std::stringstream ss;
-	  if (_m_offset != (uint64_t)-1)
-	    ss << "CU DIE " << _m_offset;
-	  else
-	    ss << "unknown CU";
-	  return ss.str ();
-	}
-      };
 
       cudie_locus cudie_loc (cu != NULL ? cu->cudie_offset : -1);
       where.ref = &cudie_loc;

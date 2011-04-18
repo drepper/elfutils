@@ -873,13 +873,9 @@ public:
   format (bool) const
   {
     std::stringstream ss;
-    ss << "location expression offset 0x" << std::hex << _m_offset;
+    ss << _m_context
+       << " (location expression offset 0x" << std::hex << _m_offset << ")";
     return ss.str ();
-  }
-
-  virtual locus const *next () const
-  {
-    return _m_context;
   }
 };
 

@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <iosfwd>
 #include <iostream>
+#include <sstream>
 #include <cassert>
 
 class locus
@@ -59,25 +60,56 @@ public:
   }
 };
 
-struct section_locus
-  : public clonable_locus<section_locus>
+std::string format_simple_locus (char const *(*N) (),
+				 void (*F) (std::stringstream &, uint64_t),
+				 bool brief,
+				 section_id sec,
+				 uint64_t off);
+
+template<char const *(*N) (),
+	 void (*F) (std::stringstream &, uint64_t)>
+class simple_locus
+  : public clonable_locus<simple_locus<N, F> >
 {
   section_id _m_sec;
   uint64_t _m_offset;
 
 public:
-  explicit section_locus (section_id sec, uint64_t offset = -1)
+  explicit simple_locus (section_id sec, uint64_t offset = -1)
     : _m_sec (sec)
     , _m_offset (offset)
   {}
 
-  section_locus (section_locus const &copy)
-    : _m_sec (copy._m_sec)
-    , _m_offset (copy._m_offset)
-  {}
-
-  std::string format (bool brief = false) const;
+  std::string format (bool brief = false) const
+  {
+    return format_simple_locus (N, F, brief, _m_sec, _m_offset);
+  }
 };
+
+template<section_id S,
+	 char const *(*N) (),
+	 void (*F) (std::stringstream &, uint64_t)>
+class fixed_locus
+  : public simple_locus<N, F>
+{
+public:
+  explicit fixed_locus (uint64_t offset = -1)
+    : simple_locus<N, F> (S, offset)
+  {}
+};
+
+struct locus_simple_fmt {
+  static char const *offset () { return "offset"; }
+
+  static void hex (std::stringstream &ss, uint64_t off) {
+    ss << "0x" << std::hex << off;
+  }
+  static void dec (std::stringstream &ss, uint64_t off) {
+    ss << std::dec << off;
+  }
+};
+typedef simple_locus<locus_simple_fmt::offset,
+		     locus_simple_fmt::hex> section_locus;
 
 struct where
   : public clonable_locus<where>
