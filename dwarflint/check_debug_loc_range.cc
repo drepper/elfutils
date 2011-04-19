@@ -579,9 +579,12 @@ namespace
 
   struct ref_cu
   {
-    struct ref ref;
-    struct cu *cu;
-    bool operator < (ref_cu const& other) const {
+    ::ref ref;
+    ::cu *cu;
+
+    bool
+    operator < (ref_cu const& other) const
+    {
       return ref.addr < other.ref.addr;
     }
   };
@@ -627,7 +630,7 @@ namespace
     ref_cu_vect refs;
     for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
       {
-	struct ref_record *rec
+	ref_record *rec
 	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
 	for (ref_record::const_iterator it = rec->begin ();
 	     it != rec->end (); ++it)
@@ -664,7 +667,7 @@ namespace
 	   Perhaps that's undesirable.  */
 	if (!check_loc_or_range_ref (ver, file, &ctx, it->cu, sec,
 				     &coverage, coverage_map, pc_coverage,
-				     off, *it->ref.who, cat))
+				     off, it->ref.who, cat))
 	  retval = false;
 	last_off = off;
       }
@@ -858,10 +861,10 @@ namespace
 }
 
 class locexpr_locus
-  : public clonable_locus<locexpr_locus>
+  : public locus
 {
-  uint64_t const _m_offset;
-  locus const *const _m_context;
+  uint64_t _m_offset;
+  locus const *_m_context;
 
 public:
   explicit locexpr_locus (uint64_t offset, locus const *context)
@@ -897,7 +900,9 @@ check_location_expression (dwarf_version const *ver,
       return false;
     }
 
-  ref_record oprefs;
+  typedef ref_T<locexpr_locus> locexpr_ref;
+  typedef ref_record_T<locexpr_locus> locexpr_ref_record;
+  locexpr_ref_record oprefs;
   addr_record opaddrs;
 
   while (!read_ctx_eof (&ctx))
@@ -954,7 +959,7 @@ check_location_expression (dwarf_version const *ver,
 	    else
 	      {
 		uint64_t off_after = read_ctx_get_offset (&ctx) + init_off;
-		oprefs.push_back (ref (off_after + skip, where));
+		oprefs.push_back (locexpr_ref (off_after + skip, where));
 	      }
 
 	    break;
@@ -983,11 +988,11 @@ check_location_expression (dwarf_version const *ver,
     }
 
  out:
-  for (ref_record::const_iterator it = oprefs.begin ();
+  for (locexpr_ref_record::const_iterator it = oprefs.begin ();
        it != oprefs.end (); ++it)
     if (!opaddrs.has_addr (it->addr))
-      wr_error (*it->who) << "unresolved reference to opcode at "
-			  << pri::hex (it->addr) << ".\n";
+      wr_error (it->who) << "unresolved reference to opcode at "
+			 << pri::hex (it->addr) << ".\n";
 
   return true;
 }

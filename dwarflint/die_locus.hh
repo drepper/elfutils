@@ -39,13 +39,13 @@ typedef fixed_locus<sec_info,
 		    locus_simple_fmt::dec> cu_locus;
 
 class die_locus
-  : public clonable_locus<die_locus>
+  : public locus
 {
   Dwarf_Off _m_offset;
   int _m_attrib_name;
 
 public:
-  explicit die_locus (Dwarf_Off offset, int attrib_name = -1)
+  explicit die_locus (Dwarf_Off offset = -1, int attrib_name = -1)
     : _m_offset (offset)
     , _m_attrib_name (attrib_name)
   {}

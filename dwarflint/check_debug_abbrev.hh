@@ -41,7 +41,7 @@ typedef fixed_locus<sec_abbrev,
 		    locus_simple_fmt::hex> abbrev_locus;
 
 class abbrev_attrib_locus
-  : public clonable_locus<abbrev_attrib_locus>
+  : public locus
 {
   uint64_t _m_abbr_offset;
   uint64_t _m_attr_offset;

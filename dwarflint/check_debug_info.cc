@@ -109,15 +109,14 @@ namespace
   }
 
   bool
-  check_die_references (struct cu *cu,
-			struct ref_record *die_refs)
+  check_die_references (cu *cu, ref_record *die_refs)
   {
     bool retval = true;
     for (ref_record::const_iterator it = die_refs->begin ();
 	 it != die_refs->end (); ++it)
       if (!cu->die_addrs.has_addr (it->addr))
 	{
-	  wr_error (*it->who)
+	  wr_error (it->who)
 	    << "unresolved reference to " << pri::DIE (it->addr)
 	    << '.' << std::endl;
 	  retval = false;
@@ -143,7 +142,7 @@ namespace
 
 	  if (ref_cu == NULL)
 	    {
-	      wr_error (*rt->who)
+	      wr_error (rt->who)
 		<< "unresolved (non-CU-local) reference to "
 		<< pri::hex (rt->addr) << '.' << std::endl;
 	      retval = false;
@@ -153,7 +152,7 @@ namespace
 	       reference is valid, which it is.  But warn about this
 	       anyway, perhaps local reference could be formed on
 	       smaller number of bytes.  */
-	    wr_message (*rt->who, mc_impact_2 | mc_acc_suboptimal | mc_die_rel)
+	    wr_message (rt->who, mc_impact_2 | mc_acc_suboptimal | mc_die_rel)
 	      << "local reference to " << pri::DIE (rt->addr)
 	      << " formed as global." << std::endl;
 	}
@@ -390,9 +389,9 @@ namespace
   struct value_check_cb_ctx
   {
     struct read_ctx *const ctx;
-    locus const *where;
+    die_locus const *where;
     struct cu *const cu;
-    struct ref_record *local_die_refs;
+    ref_record *local_die_refs;
     Elf_Data *strings;
     struct coverage *strings_coverage;
     struct coverage *pc_coverage;
@@ -525,14 +524,14 @@ namespace
   int
   read_die_chain (dwarf_version const *ver,
 		  elf_file const &file,
-		  struct read_ctx *ctx,
-		  struct cu *cu,
-		  struct abbrev_table const *abbrevs,
+		  read_ctx *ctx,
+		  cu *cu,
+		  abbrev_table const *abbrevs,
 		  Elf_Data *strings,
-		  struct ref_record *local_die_refs,
-		  struct coverage *strings_coverage,
-		  struct relocation_data *reloc,
-		  struct coverage *pc_coverage,
+		  ref_record *local_die_refs,
+		  coverage *strings_coverage,
+		  relocation_data *reloc,
+		  coverage *pc_coverage,
 		  bool *need_rangesp,
 		  unsigned level)
   {
@@ -1075,7 +1074,7 @@ check_debug_info::check_debug_info (checkstack &stack, dwarflint &lint)
   sec &sec = _m_sec_info->sect;
   Elf_Data *const strings = _m_sec_str->sect.data;
 
-  struct ref_record die_refs;
+  ref_record die_refs;
 
   bool success = true;
 
@@ -1253,12 +1252,12 @@ check_debug_info_refs::check_debug_info_refs (checkstack &stack,
       if (it->stmt_list.addr == (uint64_t)-1)
 	for (ref_record::const_iterator jt = it->decl_file_refs.begin ();
 	     jt != it->decl_file_refs.end (); ++jt)
-	  wr_error (*jt->who)
+	  wr_error (jt->who)
 	    << "references .debug_line table, but CU DIE lacks DW_AT_stmt_list."
 	    << std::endl;
       else if (_m_line == NULL
 	       || !_m_line->has_line_table (it->stmt_list.addr))
-	wr_error (*it->stmt_list.who)
+	wr_error (it->stmt_list.who)
 	  << "unresolved reference to .debug_line table "
 	  << pri::hex (it->stmt_list.addr) << '.' << std::endl;
 

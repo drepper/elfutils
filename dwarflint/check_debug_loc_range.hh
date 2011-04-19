@@ -31,7 +31,7 @@
 #include "dwarf_version_i.hh"
 
 class loc_range_locus
-  : public clonable_locus<loc_range_locus>
+  : public locus
 {
   locus const &_m_parent;
   Dwarf_Off _m_offset;

@@ -37,6 +37,9 @@
 #include "sections_i.hh"
 #include "die_locus.hh"
 
+typedef ref_T<die_locus> ref;
+typedef ref_record_T<die_locus> ref_record;
+
 struct cu_head
 {
   Dwarf_Off offset;
@@ -68,15 +71,15 @@ struct cu
 {
   struct cu *next;              // For compatibility with C level.
                                 // xxx will probably go away eventually
-  struct cu_head const *head;
+  cu_head const *head;
   uint64_t cudie_offset;
   uint64_t low_pc;              // DW_AT_low_pc value of CU DIE, -1 if not present.
-  struct ref stmt_list;
-  struct addr_record die_addrs; // Addresses where DIEs begin in this CU.
-  struct ref_record die_refs;   // DIE references into other CUs from this CU.
-  struct ref_record loc_refs;   // references into .debug_loc from this CU.
-  struct ref_record range_refs; // references into .debug_ranges from this CU.
-  struct ref_record decl_file_refs;  // values of DW_AT_decl_file in this CU.
+  ::ref stmt_list;
+  addr_record die_addrs;        // Addresses where DIEs begin in this CU.
+  ref_record die_refs;          // DIE references into other CUs from this CU.
+  ref_record loc_refs;          // references into .debug_loc from this CU.
+  ref_record range_refs;        // references into .debug_ranges from this CU.
+  ref_record decl_file_refs;    // values of DW_AT_decl_file in this CU.
   bool has_arange;              // Whether we saw arange section pointing at this CU.
   bool has_pubnames;            // Likewise for pubnames.
   bool has_pubtypes;            // Likewise for pubtypes.

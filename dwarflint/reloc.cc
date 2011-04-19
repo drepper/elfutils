@@ -41,7 +41,7 @@
 namespace
 {
   class reloc_locus
-    : public clonable_locus<reloc_locus>
+    : public locus
   {
     locus const &_m_ref;
     size_t _m_index;

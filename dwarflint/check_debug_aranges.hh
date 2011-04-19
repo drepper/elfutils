@@ -56,7 +56,7 @@ public:
 };
 
 class arange_locus
-  : public clonable_locus<arange_locus>
+  : public locus
 {
   Dwarf_Off _m_table_offset;
   Dwarf_Off _m_arange_offset;

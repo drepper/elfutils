@@ -26,6 +26,14 @@
 #include "locus.hh"
 #include "section_id.hh"
 #include <sstream>
+#include <iostream>
+
+std::ostream &
+operator << (std::ostream &os, locus const &loc)
+{
+  os << loc.format ();
+  return os;
+}
 
 char const *
 locus_simple_fmt::offset_n ()

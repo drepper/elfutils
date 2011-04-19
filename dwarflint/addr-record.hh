@@ -32,11 +32,10 @@
 
 #include "locus.hh"
 
-/* Functions and data structures for address record handling.  We
-   use that to check that all DIE references actually point to an
-   existing die, not somewhere mid-DIE, where it just happens to be
-   interpretable as a DIE.  */
-
+/// Address record is used to check that all DIE references actually
+/// point to an existing die, not somewhere mid-DIE, where it just
+/// happens to be interpretable as a DIE.  This is stored as sorted
+/// array for quick lookup and duplicate removal.
 struct addr_record
   : private std::vector<uint64_t>
 {
@@ -48,27 +47,31 @@ public:
   void add (uint64_t addr);
 };
 
-/* Functions and data structures for reference handling.  Just like
-   the above, we use this to check validity of DIE references.
-   Unlike the above, this is not stored as sorted set, but simply as
-   an array of records, because duplicates are unlikely.  */
-
-struct ref
+/// One reference for use in ref_record, parametrized by locus type.
+template <class L>
+struct ref_T
 {
   uint64_t addr; // Referee address
-  locus *who;    // Referrer
+  L who;         // Referrer
 
-  ref ();
-  ref (uint64_t a_addr, locus const &a_who);
-  ref (ref const &copy);
-  ~ref ();
-  ref &operator= (ref const &copy);
+  ref_T ()
+    : addr (-1)
+  {}
+
+  ref_T (uint64_t a_addr, L const &a_who)
+    : addr (a_addr)
+    , who (a_who)
+  {}
 };
 
-class ref_record
-  : private std::vector<struct ref>
+/// Reference record is used to check validity of DIE references.
+/// Unlike the above, this is not stored as sorted set, but simply as
+/// an array of records, because duplicates are unlikely.
+template <class L>
+class ref_record_T
+  : private std::vector<ref_T<L> >
 {
-  typedef std::vector<struct ref> _super_t;
+  typedef std::vector<ref_T<L> > _super_t;
 public:
   using _super_t::const_iterator;
   using _super_t::begin;

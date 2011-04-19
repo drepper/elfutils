@@ -358,7 +358,7 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		for (ref_record::const_iterator
 		       jt = it->decl_file_refs.begin ();
 		     jt != it->decl_file_refs.end (); ++jt)
-		  if (!use_file (files, jt->addr, *jt->who))
+		  if (!use_file (files, jt->addr, jt->who))
 		    success = false;
 	      }
 	  if (!found)

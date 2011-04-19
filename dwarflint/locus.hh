@@ -29,10 +29,8 @@
 #include "section_id.hh"
 
 #include <stdint.h>
-#include <stdlib.h>
 #include <iosfwd>
-#include <iostream>
-#include <cassert>
+#include <string>
 
 /// Instances of the locus subclasses are used as pointers into
 /// debuginfo for documentation purposes (messages and errors).  They
@@ -43,23 +41,10 @@ class locus
 {
 public:
   virtual std::string format (bool brief = false) const = 0;
-  virtual locus *clone () const = 0;
   virtual ~locus () {}
 };
 
-/// This is to simplify creation of subclasses.  Most locus subclasses
-/// should in fact inherit from this using CRTP:
-///   class X: public clonable_locus<X>
-template <class T>
-class clonable_locus
-  : public locus
-{
-public:
-  virtual locus *clone () const
-  {
-    return new T (*static_cast<T const*> (this));
-  }
-};
+std::ostream &operator << (std::ostream &os, locus const &loc);
 
 /// Helper class for simple_locus to reduce the template bloat.
 class simple_locus_aux
@@ -79,7 +64,7 @@ protected:
 template<char const *(*N) (),
 	 void (*F) (std::ostream &, uint64_t)>
 class simple_locus
-  : public clonable_locus<simple_locus<N, F> >
+  : public locus
   , private simple_locus_aux
 {
   section_id _m_sec;
@@ -123,12 +108,5 @@ namespace locus_simple_fmt
 /// "offset: 0xf00".
 typedef simple_locus<locus_simple_fmt::offset_n,
 		     locus_simple_fmt::hex> section_locus;
-
-inline std::ostream &
-operator << (std::ostream &os, locus const &loc)
-{
-  os << loc.format ();
-  return os;
-}
 
 #endif//DWARFLINT_WHERE_HH
