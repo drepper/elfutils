@@ -23,12 +23,13 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#include "where.hh"
+#include "locus.hh"
 #include "section_id.hh"
+#include <sstream>
 
 std::string
 format_simple_locus (char const *(*N) (),
-		     void (*F) (std::stringstream &, uint64_t),
+		     void (*F) (std::ostream &, uint64_t),
 		     bool brief,
 		     section_id sec,
 		     uint64_t off)

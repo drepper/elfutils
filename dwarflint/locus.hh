@@ -32,7 +32,6 @@
 #include <stdlib.h>
 #include <iosfwd>
 #include <iostream>
-#include <sstream>
 #include <cassert>
 
 class locus
@@ -40,12 +39,6 @@ class locus
 public:
   virtual std::string format (bool brief = false) const = 0;
   virtual locus *clone () const = 0;
-
-  virtual locus const *next () const
-  {
-    return NULL;
-  }
-
   virtual ~locus () {}
 };
 
@@ -61,13 +54,13 @@ public:
 };
 
 std::string format_simple_locus (char const *(*N) (),
-				 void (*F) (std::stringstream &, uint64_t),
+				 void (*F) (std::ostream &, uint64_t),
 				 bool brief,
 				 section_id sec,
 				 uint64_t off);
 
 template<char const *(*N) (),
-	 void (*F) (std::stringstream &, uint64_t)>
+	 void (*F) (std::ostream &, uint64_t)>
 class simple_locus
   : public clonable_locus<simple_locus<N, F> >
 {
@@ -88,7 +81,7 @@ public:
 
 template<section_id S,
 	 char const *(*N) (),
-	 void (*F) (std::stringstream &, uint64_t)>
+	 void (*F) (std::ostream &, uint64_t)>
 class fixed_locus
   : public simple_locus<N, F>
 {
@@ -101,10 +94,10 @@ public:
 struct locus_simple_fmt {
   static char const *offset () { return "offset"; }
 
-  static void hex (std::stringstream &ss, uint64_t off) {
+  static void hex (std::ostream &ss, uint64_t off) {
     ss << "0x" << std::hex << off;
   }
-  static void dec (std::stringstream &ss, uint64_t off) {
+  static void dec (std::ostream &ss, uint64_t off) {
     ss << std::dec << off;
   }
 };

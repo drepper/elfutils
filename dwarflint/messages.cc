@@ -244,17 +244,10 @@ message_criteria::and_not (message_term const &term)
 }
 
 static void
-format_chain (locus const &loc, char const *)
-{
-  assert (loc.next () == NULL);
-}
-
-static void
 wr_verror (locus const &loc, const char *format, va_list ap)
 {
   printf ("error: %s", loc.format ().c_str ());
   vprintf (format, ap);
-  format_chain (loc, "error");
   ++error_count;
 }
 
@@ -263,7 +256,6 @@ wr_vwarning (locus const &loc, const char *format, va_list ap)
 {
   printf ("%s", loc.format ().c_str ());
   vprintf (format, ap);
-  format_chain (loc, "warning");
   ++error_count;
 }
 

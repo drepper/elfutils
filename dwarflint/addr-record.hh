@@ -30,7 +30,7 @@
 #include <stdint.h>
 #include <vector>
 
-#include "where.hh"
+#include "locus.hh"
 
 /* Functions and data structures for address record handling.  We
    use that to check that all DIE references actually point to an

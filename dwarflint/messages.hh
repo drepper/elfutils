@@ -26,7 +26,7 @@
 #ifndef DWARFLINT_MESSAGES_HH
 #define DWARFLINT_MESSAGES_HH
 
-#include "where.hh"
+#include "locus.hh"
 #include "libdw.h"
 #include <string>
 #include <iosfwd>

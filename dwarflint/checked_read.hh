@@ -27,7 +27,7 @@
 #define DWARFLINT_CHECKED_READ_HH
 
 #include "readctx.hh"
-#include "where.hh"
+#include "locus.hh"
 #include "dwarf_version.hh"
 
 enum error_code

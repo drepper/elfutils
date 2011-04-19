@@ -27,7 +27,7 @@
 #define DWARFLINT_MISC_HH
 
 #include <cstring>
-#include "where.hh"
+#include "locus.hh"
 
 extern "C"
 {

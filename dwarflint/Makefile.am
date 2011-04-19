@@ -61,6 +61,7 @@ dwarflint_SOURCES = \
 	expected-at.cc expected.hh \
 	files.cc files.hh \
 	highlevel_check.cc highlevel_check.hh highlevel_check_i.hh \
+	locus.cc locus.hh \
 	main.cc \
 	messages.cc messages.hh \
 	misc.cc misc.hh \
@@ -70,7 +71,6 @@ dwarflint_SOURCES = \
 	reloc.cc reloc.hh \
 	section_id.cc section_id.hh \
 	sections.cc sections.hh sections_i.hh \
-	where.cc where.hh \
 	wrap.cc wrap.hh \
 	\
 	check_debug_abbrev.cc check_debug_abbrev.hh check_debug_abbrev_i.hh \
@@ -98,10 +98,10 @@ locstats_SOURCES = \
 	locstats.cc \
 	die_locus.cc die_locus.hh \
 	files.cc files.hh \
+	locus.cc locus.hh \
 	option.cc option.hh option_i.hh \
 	section_id.cc section_id.hh \
-	pri.cc pri.hh \
-	where.cc where.hh
+	pri.cc pri.hh
 
 tests_test_coverage_SOURCES = tests/test-coverage.cc coverage.cc pri.cc \
 	../src/dwarfstrings.c
