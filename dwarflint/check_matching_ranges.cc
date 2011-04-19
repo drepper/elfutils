@@ -62,17 +62,15 @@ check_matching_ranges::check_matching_ranges (checkstack &stack,
 
   try
     {
-      struct where where_ar = WHERE (sec_aranges, NULL);
       char buf[128];
-
       const dwarf::aranges_map &aranges = dw.aranges ();
       for (dwarf::aranges_map::const_iterator i = aranges.begin ();
 	   i != aranges.end (); ++i)
 	{
 	  const dwarf::compile_unit &cu = i->first;
-	  die_locus where_ref (cu);
-	  where_ar.ref = &where_ref;
+	  cudie_locus where_ref (cu);
 	  loc_range_locus where_r (sec_ranges, where_ref);
+	  arange_locus where_ar (where_ref);
 
 	  std::set<dwarf::ranges::key_type>
 	    cu_aranges = i->second,

@@ -42,6 +42,26 @@
 #include "misc.hh"
 #include "pri.hh"
 
+std::string
+arange_locus::format (bool brief) const
+{
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[sec_aranges] << ": ";
+
+  if (_m_arange_offset != (Dwarf_Off)-1)
+    ss << "arange 0x" << std::hex << _m_arange_offset;
+  else if (_m_table_offset != (Dwarf_Off)-1)
+    ss << "table " << std::dec << _m_table_offset;
+  else
+    ss << "arange";
+
+  if (_m_cudie_locus != NULL)
+    ss << " (" << _m_cudie_locus->format (true) << ')';
+
+  return ss.str ();
+}
+
 checkdescriptor const *
 check_debug_aranges::descriptor ()
 {
@@ -162,29 +182,18 @@ compare_coverage (struct elf_file *file,
 inline static void
 aranges_coverage_add (struct coverage *aranges_coverage,
 		      uint64_t begin, uint64_t length,
-		      struct where *where)
+		      locus const &loc)
 {
   if (aranges_coverage->is_overlap (begin, length))
     {
       char buf[128];
       /* Not a show stopper, this shouldn't derail high-level.  */
-      wr_message (*where, mc_aranges | mc_impact_2 | mc_error)
+      wr_message (loc, mc_aranges | mc_impact_2 | mc_error)
 	<< "the range " << range_fmt (buf, sizeof buf, begin, begin + length)
 	<< " overlaps with another one." << std::endl;
     }
 
   aranges_coverage->add (begin, length);
-}
-
-namespace
-{
-  struct cudie_locus_n {
-    static char const *name () { return "CU DIE"; }
-  };
-
-  typedef fixed_locus<sec_info,
-		      cudie_locus_n::name,
-		      locus_simple_fmt::dec> cudie_locus;
 }
 
 /* COVERAGE is portion of address space covered by CUs (either via
@@ -206,9 +215,7 @@ check_aranges_structural (struct elf_file *file,
 
   while (!read_ctx_eof (&ctx))
     {
-      section_id const sec_id = sec_aranges;
-      struct where where = WHERE (sec_id, NULL);
-      where_reset_1 (&where, read_ctx_get_offset (&ctx));
+      arange_locus where (read_ctx_get_offset (&ctx));
       const unsigned char *atab_begin = ctx.ptr;
 
       /* Size.  */
@@ -280,9 +287,9 @@ check_aranges_structural (struct elf_file *file,
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
 
       cudie_locus cudie_loc (cu != NULL ? cu->cudie_offset : -1);
-      where.ref = &cudie_loc;
       if (cu != NULL)
 	{
+	  where.set_cudie (&cudie_loc);
 	  if (cu->has_arange)
 	    wr_error (where)
 	      << "there has already been arange section for this CU."
@@ -354,7 +361,7 @@ check_aranges_structural (struct elf_file *file,
 	     way, the better to catch structural errors accurately.
 	     So report arange offset instead.  If this becomes a
 	     problem, we will achieve this by two-pass analysis.  */
-	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
+	  where.set_arange (read_ctx_get_offset (&sub_ctx));
 
 	  /* Record address.  */
 	  uint64_t address;
@@ -397,13 +404,13 @@ check_aranges_structural (struct elf_file *file,
 	    wr_error (&where, ": zero-length address range.\n");
 	  /* Skip coverage analysis if we have errors.  */
 	  else if (retval && aranges_coverage != NULL)
-	    aranges_coverage_add (aranges_coverage, address, length, &where);
+	    aranges_coverage_add (aranges_coverage, address, length, where);
 	}
 
       if (sub_ctx.ptr != sub_ctx.end)
 	{
 	  uint64_t start, end;
-	  section_locus wh (sec_id);
+	  section_locus wh (sec_aranges);
 	  if (read_check_zero_padding (&sub_ctx, &start, &end))
 	    wr_message_padding_0 (mc_aranges, wh, start, end);
 	  else
