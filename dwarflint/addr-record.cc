@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -24,18 +24,17 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "addr-record.hh"
-#include "misc.hh"
 
 size_t
-addr_record_find_addr (struct addr_record *ar, uint64_t addr)
+addr_record::find (uint64_t addr) const
 {
   size_t a = 0;
-  size_t b = ar->size;
+  size_t b = size ();
 
   while (a < b)
     {
       size_t i = (a + b) / 2;
-      uint64_t v = ar->addrs[i];
+      uint64_t v = (*this)[i];
 
       if (v > addr)
 	b = i;
@@ -49,51 +48,21 @@ addr_record_find_addr (struct addr_record *ar, uint64_t addr)
 }
 
 bool
-addr_record_has_addr (struct addr_record *ar, uint64_t addr)
+addr_record::has_addr (uint64_t addr) const
 {
-  if (ar->size == 0
-      || addr < ar->addrs[0]
-      || addr > ar->addrs[ar->size - 1])
+  if (begin () == end ()
+      || addr < front ()
+      || addr > back ())
     return false;
 
-  size_t a = addr_record_find_addr (ar, addr);
-  return a < ar->size && ar->addrs[a] == addr;
+  const_iterator it = begin () + find (addr);
+  return it != end () && *it == addr;
 }
 
 void
-addr_record_add (struct addr_record *ar, uint64_t addr)
+addr_record::add (uint64_t addr)
 {
-  size_t a = addr_record_find_addr (ar, addr);
-  if (a >= ar->size || ar->addrs[a] != addr)
-    {
-      REALLOC (ar, addrs);
-      size_t len = ar->size - a;
-      memmove (ar->addrs + a + 1, ar->addrs + a, len * sizeof (*ar->addrs));
-
-      ar->addrs[a] = addr;
-      ar->size++;
-    }
-}
-
-void
-addr_record_free (struct addr_record *ar)
-{
-  if (ar != NULL)
-    free (ar->addrs);
-}
-
-void
-ref_record_add (struct ref_record *rr, uint64_t addr, struct where *referrer)
-{
-  REALLOC (rr, refs);
-  struct ref *ref = rr->refs + rr->size++;
-  ref->addr = addr;
-  ref->who = *referrer;
-}
-
-void
-ref_record_free (struct ref_record *rr)
-{
-  if (rr != NULL)
-    free (rr->refs);
+  iterator it = begin () + find (addr);
+  if (it == end () || *it != addr)
+    insert (it, addr);
 }

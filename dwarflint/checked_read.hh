@@ -27,7 +27,7 @@
 #define DWARFLINT_CHECKED_READ_HH
 
 #include "readctx.hh"
-#include "where.h"
+#include "locus.hh"
 #include "dwarf_version.hh"
 
 enum error_code
@@ -38,28 +38,26 @@ enum error_code
   };
 
 bool read_size_extra (read_ctx *ctx, uint32_t size32, uint64_t *sizep,
-		      int *offset_sizep, where *where);
+		      int *offset_sizep, locus const &loc);
 
 /// Read address size and return it via address_sizep and return 0.
 /// Address size may be 4 or 8; for other values it's set depending or
 /// addr_64, and err_nohl is returned.
-error_code read_address_size (read_ctx *ctx,
-			      bool addr_64,
-			      int *address_sizep,
-			      where const *where);
+error_code read_address_size (read_ctx *ctx, bool addr_64,
+			      int *address_sizep, locus const &loc);
 
 bool checked_read_uleb128 (read_ctx *ctx, uint64_t *ret,
-			   where const *where, const char *what);
+			   locus const &loc, const char *what);
 
 bool checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
-			   where const *where, const char *what);
+			   locus const &loc, const char *what);
 
 bool checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
-			  where const *where, const char *what);
+			  locus const &loc, const char *what);
 
 /// Read value depending on the form width and storage class.
 bool read_sc_value (uint64_t *valuep, form_width_t width,
-		    read_ctx *ctx, where const *where);
+		    read_ctx *ctx, locus const &loc);
 
 /// Read value depending on the form width and storage class.
 /// Value is returned via VALUEP, if that is non-NULL; for block
@@ -68,7 +66,7 @@ bool read_sc_value (uint64_t *valuep, form_width_t width,
 /// itself.
 bool read_generic_value (read_ctx *ctx,
 			 form_width_t width, storage_class_t storclass,
-			 where const *where, uint64_t *valuep,
+			 locus const &loc, uint64_t *valuep,
 			 read_ctx *blockp);
 
 #endif//DWARFLINT_CHECKED_READ_HH

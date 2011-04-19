@@ -26,7 +26,7 @@
 #ifndef DWARFLINT_CHECKS_HH
 #define DWARFLINT_CHECKS_HH
 
-#include "where.h"
+#include "locus.hh"
 #include "dwarflint.hh"
 #include "checkdescriptor.hh"
 #include "messages.hh"

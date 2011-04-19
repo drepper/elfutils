@@ -114,6 +114,8 @@ namespace pri
     friend std::ostream &operator << (std::ostream &os, range const &obj);
   };
   std::ostream &operator << (std::ostream &os, range const &obj);
+
+  std::string attr_name (int name);
 }
 
 #endif//DWARFLINT_PRI_H

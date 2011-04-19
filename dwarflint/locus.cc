@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_pub*.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Pedantic checking of DWARF files
+   Copyright (C) 2008,2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,47 +23,50 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_PUB_HH
-#define DWARFLINT_CHECK_DEBUG_PUB_HH
+#include "locus.hh"
+#include "section_id.hh"
+#include <sstream>
+#include <iostream>
 
-#include "sections_i.hh"
-#include "check_debug_info_i.hh"
-#include "checks.hh"
-#include "elf_file_i.hh"
-
-template<section_id sec_id>
-class check_debug_pub
-  : public check<check_debug_pub<sec_id> >
+std::ostream &
+operator << (std::ostream &os, locus const &loc)
 {
-protected:
-  typedef section<sec_id> section_t;
-  section_t *_m_sec;
-  elf_file const &_m_file;
-  check_debug_info *_m_cus;
+  os << loc.format ();
+  return os;
+}
 
-public:
-  // instantiated in .cc for each subclass
-  check_debug_pub (checkstack &stack, dwarflint &lint);
-};
-
-struct check_debug_pubnames
-  : public check_debug_pub<sec_pubnames>
+char const *
+locus_simple_fmt::offset_n ()
 {
-  static checkdescriptor const *descriptor ();
+  return "offset";
+}
 
-  check_debug_pubnames (checkstack &stack, dwarflint &lint)
-    : check_debug_pub<sec_pubnames> (stack, lint)
-  {}
-};
-
-struct check_debug_pubtypes
-  : public check_debug_pub<sec_pubtypes>
+void
+locus_simple_fmt::hex (std::ostream &ss, uint64_t off)
 {
-  static checkdescriptor const *descriptor ();
+  ss << "0x" << std::hex << off;
+}
 
-  check_debug_pubtypes (checkstack &stack, dwarflint &lint)
-    : check_debug_pub<sec_pubtypes> (stack, lint)
-  {}
-};
+void
+locus_simple_fmt::dec (std::ostream &ss, uint64_t off)
+{
+  ss << std::dec << off;
+}
 
-#endif//DWARFLINT_CHECK_DEBUG_PUB_HH
+std::string
+simple_locus_aux::format_simple_locus (char const *(*N) (),
+				       void (*F) (std::ostream &, uint64_t),
+				       bool brief, section_id sec, uint64_t off)
+{
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[sec];
+  if (off != (uint64_t)-1)
+    {
+      if (!brief)
+	ss << ": ";
+      ss << N() << " ";
+      F (ss, off);
+    }
+  return ss.str ();
+}

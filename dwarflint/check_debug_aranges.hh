@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_aranges.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -30,6 +30,66 @@
 #include "sections_i.hh"
 #include "check_debug_info_i.hh"
 #include "cu_coverage_i.hh"
+
+namespace locus_simple_fmt
+{
+  char const *cudie_n ();
+};
+
+class cudie_locus
+  : public fixed_locus<sec_info,
+		       locus_simple_fmt::cudie_n,
+		       locus_simple_fmt::dec>
+{
+  typedef fixed_locus<sec_info,
+		      locus_simple_fmt::cudie_n,
+		      locus_simple_fmt::dec> _super_t;
+public:
+  template <class T>
+  cudie_locus (T const &die)
+    : _super_t (die.offset ())
+  {}
+
+  cudie_locus (Dwarf_Off offset)
+    : _super_t (offset)
+  {}
+};
+
+class arange_locus
+  : public locus
+{
+  Dwarf_Off _m_table_offset;
+  Dwarf_Off _m_arange_offset;
+  locus const *_m_cudie_locus;
+
+public:
+  explicit arange_locus (Dwarf_Off table_offset = -1,
+			 Dwarf_Off arange_offset = -1)
+    : _m_table_offset (table_offset)
+    , _m_arange_offset (arange_offset)
+    , _m_cudie_locus (NULL)
+  {}
+
+  explicit arange_locus (locus const &cudie_locus)
+    : _m_table_offset (-1)
+    , _m_arange_offset (-1)
+    , _m_cudie_locus (&cudie_locus)
+  {}
+
+  void
+  set_cudie (locus const *cudie_locus)
+  {
+    _m_cudie_locus = cudie_locus;
+  }
+
+  void
+  set_arange (Dwarf_Off arange_offset)
+  {
+    _m_arange_offset = arange_offset;
+  }
+
+  std::string format (bool brief = false) const;
+};
 
 class check_debug_aranges
   : public check<check_debug_aranges>

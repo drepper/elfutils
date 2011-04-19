@@ -1,5 +1,5 @@
-/* Low-level checking of .debug_pub*.
-   Copyright (C) 2009 Red Hat, Inc.
+/*
+   Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,47 +23,46 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifndef DWARFLINT_CHECK_DEBUG_PUB_HH
-#define DWARFLINT_CHECK_DEBUG_PUB_HH
+#ifndef _DWARFLINT_DIE_LOCUS_H_
+#define _DWARFLINT_DIE_LOCUS_H_
 
-#include "sections_i.hh"
-#include "check_debug_info_i.hh"
-#include "checks.hh"
-#include "elf_file_i.hh"
+#include "locus.hh"
+#include "../libdw/c++/dwarf"
 
-template<section_id sec_id>
-class check_debug_pub
-  : public check<check_debug_pub<sec_id> >
+namespace locus_simple_fmt
 {
-protected:
-  typedef section<sec_id> section_t;
-  section_t *_m_sec;
-  elf_file const &_m_file;
-  check_debug_info *_m_cus;
+  char const *cu_n ();
+};
+
+typedef fixed_locus<sec_info,
+		    locus_simple_fmt::cu_n,
+		    locus_simple_fmt::dec> cu_locus;
+
+class die_locus
+  : public locus
+{
+  Dwarf_Off _m_offset;
+  int _m_attrib_name;
 
 public:
-  // instantiated in .cc for each subclass
-  check_debug_pub (checkstack &stack, dwarflint &lint);
-};
-
-struct check_debug_pubnames
-  : public check_debug_pub<sec_pubnames>
-{
-  static checkdescriptor const *descriptor ();
-
-  check_debug_pubnames (checkstack &stack, dwarflint &lint)
-    : check_debug_pub<sec_pubnames> (stack, lint)
+  explicit die_locus (Dwarf_Off offset = -1, int attrib_name = -1)
+    : _m_offset (offset)
+    , _m_attrib_name (attrib_name)
   {}
-};
 
-struct check_debug_pubtypes
-  : public check_debug_pub<sec_pubtypes>
-{
-  static checkdescriptor const *descriptor ();
-
-  check_debug_pubtypes (checkstack &stack, dwarflint &lint)
-    : check_debug_pub<sec_pubtypes> (stack, lint)
+  template <class T>
+  explicit die_locus (T const &die, int attrib_name = -1)
+    : _m_offset (die.offset ())
+    , _m_attrib_name (attrib_name)
   {}
+
+  void
+  set_attrib_name (int attrib_name)
+  {
+    _m_attrib_name = attrib_name;
+  }
+
+  std::string format (bool brief = false) const;
 };
 
-#endif//DWARFLINT_CHECK_DEBUG_PUB_HH
+#endif /* _DWARFLINT_DIE_LOCUS_H_ */

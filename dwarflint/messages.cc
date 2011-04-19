@@ -24,7 +24,6 @@
    <http://www.openinventionnetwork.com>.  */
 
 #include "messages.hh"
-#include "misc.hh"
 #include "coverage.hh"
 #include "option.hh"
 
@@ -217,9 +216,7 @@ operator<< (std::ostream &o, __attribute__ ((unused)) message_criteria const &cr
 void
 message_criteria::operator *= (message_criteria const &rhs)
 {
-  struct message_criteria ret;
-  WIPE (ret);
-
+  message_criteria ret;
   for (size_t i = 0; i < size (); ++i)
     for (size_t j = 0; j < rhs.size (); ++j)
       {
@@ -247,34 +244,32 @@ message_criteria::and_not (message_term const &term)
 }
 
 static void
-wr_verror (const struct where *wh, const char *format, va_list ap)
+wr_verror (locus const &loc, const char *format, va_list ap)
 {
-  printf ("error: %s", where_fmt (wh, NULL));
+  printf ("error: %s", loc.format ().c_str ());
   vprintf (format, ap);
-  where_fmt_chain (wh, "error");
   ++error_count;
 }
 
 static void
-wr_vwarning (const struct where *wh, const char *format, va_list ap)
+wr_vwarning (locus const &loc, const char *format, va_list ap)
 {
-  printf ("%s", where_fmt (wh, NULL));
+  printf ("%s", loc.format ().c_str ());
   vprintf (format, ap);
-  where_fmt_chain (wh, "warning");
   ++error_count;
 }
 
 void
-wr_error (const struct where *wh, const char *format, ...)
+wr_error (locus const *loc, const char *format, ...)
 {
   va_list ap;
   va_start (ap, format);
-  wr_verror (wh, format, ap);
+  wr_verror (*loc, format, ap);
   va_end (ap);
 }
 
 void
-wr_message (unsigned long category, const struct where *wh,
+wr_message (unsigned long category, locus const *loc,
 	    const char *format, ...)
 {
   va_list ap;
@@ -286,9 +281,9 @@ wr_message (unsigned long category, const struct where *wh,
   if (whether && message_accept (&warning_criteria, category))
     {
       if (message_accept (&error_criteria, category))
-	wr_verror (wh, format, ap);
+	wr_verror (*loc, format, ap);
       else
-	wr_vwarning (wh, format, ap);
+	wr_vwarning (*loc, format, ap);
     }
   va_end (ap);
 }
@@ -336,9 +331,9 @@ message_count_filter::should_emit (void const *key)
 }
 
 message_context::message_context (message_count_filter *filter,
-				  where const *where, char const *prefix)
+				  locus const *loc, char const *prefix)
   : _m_filter (filter)
-  , _m_where (where)
+  , _m_loc (loc)
   , _m_prefix (prefix)
 {}
 
@@ -353,8 +348,8 @@ message_context::when (bool whether) const
 
       std::ostream &ret = get_stream ();
       ret << _m_prefix;
-      if (_m_where)
-	ret << *_m_where << ": ";
+      if (_m_loc != NULL)
+	ret << _m_loc->format () << ": ";
       return ret;
     }
   else
@@ -412,22 +407,23 @@ wr_error ()
 }
 
 std::ostream &
-wr_error (where const &wh)
+wr_error (locus const &loc)
 {
-  return wr_error () << wh << ": ";
+  std::string fmt = loc.format ();
+  return wr_error () << fmt << ": ";
 }
 
 message_context
-message_context::filter_message (where const *wh, message_category category)
+message_context::filter_message (locus const *loc, message_category category)
 {
   if (!message_accept (&warning_criteria, category))
     return message_context (NULL, NULL, NULL);
   else if (message_accept (&error_criteria, category))
     return message_context (message_count_filter::inst (),
-			    wh, "error: ");
+			    loc, "error: ");
   else
     return message_context (message_count_filter::inst (),
-			    wh, "warning: ");
+			    loc, "warning: ");
 }
 
 message_context
@@ -437,24 +433,24 @@ wr_message (message_category category)
 }
 
 message_context
-wr_message (where const &wh, message_category category)
+wr_message (locus const &loc, message_category category)
 {
-  return message_context::filter_message (&wh, category);
+  return message_context::filter_message (&loc, category);
 }
 
 void
 wr_format_padding_message (message_category category,
-			   struct where const *wh,
+			   locus const &loc,
 			   uint64_t start, uint64_t end, char const *kind)
 {
   char msg[128];
-  wr_message (*wh, category)
+  wr_message (loc, category)
     << range_fmt (msg, sizeof msg, start, end)
     << ": " << kind << "." << std::endl;
 }
 
 void
-wr_format_leb128_message (struct where const *where,
+wr_format_leb128_message (locus const &loc,
 			  const char *what,
 			  const char *purpose,
 			  const unsigned char *begin, const unsigned char *end)
@@ -464,28 +460,28 @@ wr_format_leb128_message (struct where const *where,
   char *ptr = buf;
   for (; begin < end; ++begin)
     ptr += sprintf (ptr, " %02x", *begin);
-  wr_message (*where, category)
+  wr_message (loc, category)
     << what << ": value " << purpose << " encoded as `"
     << (buf + 1) << "'." << std::endl;
 }
 
 void
 wr_message_padding_0 (message_category category,
-		      struct where const *wh,
+		      locus const &loc,
 		      uint64_t start, uint64_t end)
 {
   wr_format_padding_message (category | mc_acc_bloat | mc_impact_1,
-			     wh, start, end,
+			     loc, start, end,
 			     "unnecessary padding with zero bytes");
 }
 
 void
 wr_message_padding_n0 (message_category category,
-		       struct where const *wh,
+		       locus const &loc,
 		       uint64_t start, uint64_t end)
 {
   wr_format_padding_message (category | mc_acc_bloat | mc_impact_1,
-			     wh, start, end,
+			     loc, start, end,
 			     "unreferenced non-zero bytes");
 }
 

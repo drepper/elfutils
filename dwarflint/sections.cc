@@ -246,7 +246,7 @@ namespace
 
     /* Section 0 is special, skip it.  */
     REALLOC (file, sec);
-    file->sec[file->size++].id = sec_invalid;
+    new (file->sec + file->size++) sec ();
 
     if (false)
       {
@@ -266,6 +266,7 @@ namespace
 	REALLOC (file, sec);
 	size_t curndx = file->size++;
 	struct sec *cursec = file->sec + curndx;
+	new (cursec) sec ();
 
 	GElf_Shdr *shdr = gelf_getshdr (scn, &cursec->shdr);
 	if (shdr == NULL)
@@ -285,9 +286,9 @@ namespace
 
 	secentry *entry = secinfo.get (scnname);
 	cursec->scn = scn;
-	cursec->id = entry != NULL ? entry->id : sec_invalid;
+	if (entry != NULL)
+	  cursec->id = entry->id;
 	cursec->name = scnname;
-	cursec->rel = (struct relocation_data){NULL, SHT_NULL, NULL, 0, 0, 0};
 
 	/* Dwarf section.  */
 	if (entry != NULL)
@@ -385,7 +386,7 @@ namespace
 		struct sec *sec = file->sec + cur->secndx;
 		sec->rel.type = cur->reltype;
 		if (sec->data == NULL)
-		  wr_error (WHERE (sec->id, NULL))
+		  wr_error (section_locus (sec->id))
 		    << "this data-less section has a relocation section."
 		    << std::endl;
 		else if (read_rel (file, sec, cur->reldata, file->addr_64))
@@ -395,7 +396,7 @@ namespace
 
 	if (secentry *str = secinfo.get (".debug_str"))
 	  if (str->reldata != NULL)
-	    wr_message (WHERE (sec_str, NULL), mc_impact_2 | mc_elf)
+	    wr_message (section_locus (sec_str), mc_impact_2 | mc_elf)
 	      << "there's a relocation section associated with this section."
 	      << std::endl;
       }

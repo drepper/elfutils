@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_loc and .debug_range.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -29,6 +29,23 @@
 #include "messages.hh"
 #include "coverage.hh"
 #include "dwarf_version_i.hh"
+
+class loc_range_locus
+  : public locus
+{
+  locus const &_m_refby;
+  Dwarf_Off _m_offset;
+  section_id _m_sec;
+
+public:
+  loc_range_locus (section_id sec, locus const &refby, Dwarf_Off offset = -1)
+    : _m_refby (refby)
+    , _m_offset (offset)
+    , _m_sec ((assert (sec == sec_loc || sec == sec_ranges), sec))
+  {}
+
+  std::string format (bool brief) const;
+};
 
 struct section_coverage
 {
@@ -93,10 +110,10 @@ bool check_location_expression (dwarf_version const *ver,
 				uint64_t init_off,
 				struct relocation_data *reloc,
 				size_t length,
-				struct where *wh);
+				locus const &loc);
 
-void check_range_relocations (enum message_category cat,
-			      struct where *where,
+void check_range_relocations (locus const &loc,
+			      enum message_category cat,
 			      struct elf_file const *file,
 			      GElf_Sym *begin_symbol,
 			      GElf_Sym *end_symbol,

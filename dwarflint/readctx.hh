@@ -29,11 +29,6 @@
 #include <stdbool.h>
 #include "../libelf/libelf.h"
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 /* Functions and data structures related to bounds-checked
    reading.  */
 
@@ -82,8 +77,5 @@ bool read_ctx_eof (struct read_ctx *ctx);
 bool read_check_zero_padding (struct read_ctx *ctx,
 			      uint64_t *ret_off_start,
 			      uint64_t *ret_off_end);
-#ifdef __cplusplus
-}
-#endif
 
 #endif

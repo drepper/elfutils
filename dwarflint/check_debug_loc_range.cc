@@ -49,6 +49,32 @@
 
 bool do_range_coverage = false; // currently no option
 
+global_opt<void_option>
+  opt_show_refs("\
+When validating .debug_loc and .debug_ranges, display information about \
+the DIE referring to the entry in consideration", "ref");
+
+std::string
+loc_range_locus::format (bool brief) const
+{
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[_m_sec] << ": ";
+
+  if (_m_sec == sec_loc)
+    ss << "loclist";
+  else
+    ss << "rangelist";
+
+  if (_m_offset != (Dwarf_Off)-1)
+    ss << " 0x" << std::hex << _m_offset;
+
+  if (opt_show_refs)
+    ss << ", ref. by " << _m_refby.format (true);
+
+  return ss.str ();
+}
+
 checkdescriptor const *
 check_debug_ranges::descriptor ()
 {
@@ -143,7 +169,7 @@ namespace
 
   struct hole_env
   {
-    struct where *where;
+    locus const &loc;
     uint64_t address;
     uint64_t end;
   };
@@ -154,7 +180,7 @@ namespace
     hole_env *env = (hole_env *)xenv;
     char buf[128], buf2[128];
     assert (h_length != 0);
-    wr_error (env->where,
+    wr_error (&env->loc,
 	      ": portion %s of the range %s "
 	      "doesn't fall into any ALLOC section.\n",
 	      range_fmt (buf, sizeof buf,
@@ -176,7 +202,6 @@ namespace
   {
     struct coverage_map_hole_info *info = (struct coverage_map_hole_info *)user;
 
-    struct where where = WHERE (info->info.section, NULL);
     const char *scnname = sco->sec->name;
 
     struct sec *sec = sco->sec;
@@ -215,9 +240,10 @@ namespace
       return true;
 
     char buf[128];
-    wr_message (info->info.category | mc_acc_suboptimal | mc_impact_4, &where,
-		": addresses %s of section %s are not covered.\n",
-		range_fmt (buf, sizeof buf, begin + base, end + base), scnname);
+    wr_message (section_locus (info->info.section),
+		info->info.category | mc_acc_suboptimal | mc_impact_4)
+      << "addresses " << range_fmt (buf, sizeof buf, begin + base, end + base)
+      << " of section " << scnname << " are not covered.\n";
     return true;
   }
 
@@ -257,7 +283,7 @@ namespace
   coverage_map_add (struct coverage_map *coverage_map,
 		    uint64_t address,
 		    uint64_t length,
-		    struct where *where,
+		    locus const &loc,
 		    enum message_category cat)
   {
     bool found = false;
@@ -285,7 +311,7 @@ namespace
 	if (found && !crosses_boundary)
 	  {
 	    /* While probably not an error, it's very suspicious.  */
-	    wr_message (cat | mc_impact_2, where,
+	    wr_message (cat | mc_impact_2, &loc,
 			": the range %s crosses section boundaries.\n",
 			range_fmt (buf, sizeof buf, address, end));
 	    crosses_boundary = true;
@@ -313,14 +339,14 @@ namespace
 	    && cov->is_overlap (cov_begin, cov_end - cov_begin))
 	  {
 	    /* Not a show stopper, this shouldn't derail high-level.  */
-	    wr_message (*where, cat | mc_aranges | mc_impact_2 | mc_error)
+	    wr_message (loc, cat | mc_aranges | mc_impact_2 | mc_error)
 	      << "the range " << range_fmt (buf, sizeof buf, address, end)
 	      << " overlaps with another one." << std::endl;
 	    overlap = true;
 	  }
 
 	if (sco->warn)
-	  wr_message (cat | mc_impact_2, where,
+	  wr_message (cat | mc_impact_2, &loc,
 		      ": the range %s covers section %s.\n",
 		      range_fmt (buf, sizeof buf, address, end), sco->sec->name);
 
@@ -334,12 +360,12 @@ namespace
 
     if (!found)
       /* Not a show stopper.  */
-      wr_error (where,
+      wr_error (&loc,
 		": couldn't find a section that the range %s covers.\n",
 		range_fmt (buf, sizeof buf, address, end));
     else if (length > 0)
       {
-	hole_env env = {where, address, end};
+	hole_env env = {loc, address, end};
 	range_cov.find_holes (0, length, range_hole, &env);
       }
   }
@@ -354,7 +380,7 @@ namespace
 			  struct coverage_map *coverage_map,
 			  struct coverage *pc_coverage,
 			  uint64_t addr,
-			  struct where const *wh,
+			  locus const &loc,
 			  enum message_category cat)
   {
     char buf[128]; // messages
@@ -368,7 +394,7 @@ namespace
     read_ctx_init (&ctx, parent_ctx->data, file->other_byte_order);
     if (!read_ctx_skip (&ctx, addr))
       {
-	wr_error (wh, ": invalid reference outside the section "
+	wr_error (&loc, ": invalid reference outside the section "
 		  "%#" PRIx64 ", size only %#tx.\n",
 		  addr, ctx.end - ctx.begin);
 	return false;
@@ -379,7 +405,7 @@ namespace
 
     if (coverage->is_covered (addr, 1))
       {
-	wr_error (wh, ": reference to %#" PRIx64
+	wr_error (&loc, ": reference to %#" PRIx64
 		  " points into another location or range list.\n", addr);
 	retval = false;
       }
@@ -391,8 +417,8 @@ namespace
     uint64_t base = cu->low_pc;
     while (!read_ctx_eof (&ctx))
       {
-	struct where where = WHERE (sec->id, wh);
-	where_reset_1 (&where, read_ctx_get_offset (&ctx));
+	uint64_t offset = read_ctx_get_offset (&ctx);
+	loc_range_locus where (sec->id, loc, offset);
 
 #define HAVE_OVERLAP						\
 	do {							\
@@ -418,11 +444,12 @@ namespace
 
 	struct relocation *rel;
 	if ((rel = relocation_next (&sec->rel, begin_off,
-				    &where, skip_mismatched)))
+				    where, skip_mismatched)))
 	  {
 	    begin_relocated = true;
 	    relocate_one (file, &sec->rel, rel, cu->head->address_size,
-			  &begin_addr, &where, rel_value,	&begin_symbol);
+			  &begin_addr, where, rel_target::rel_value,
+			  &begin_symbol);
 	  }
 
 	/* end address */
@@ -442,18 +469,18 @@ namespace
 	  }
 
 	if ((rel = relocation_next (&sec->rel, end_off,
-				    &where, skip_mismatched)))
+				    where, skip_mismatched)))
 	  {
 	    end_relocated = true;
 	    relocate_one (file, &sec->rel, rel, cu->head->address_size,
-			  &end_addr, &where, rel_value, &end_symbol);
+			  &end_addr, where, rel_target::rel_value, &end_symbol);
 	    if (begin_addr != escape)
 	      {
 		if (!begin_relocated)
 		  wr_message (cat | mc_impact_2 | mc_reloc, &where,
 			      ": end of address range is relocated, but the beginning wasn't.\n");
 		else
-		  check_range_relocations (cat, &where, file,
+		  check_range_relocations (where, cat, file,
 					   begin_symbol, end_symbol,
 					   "begin and end address");
 	      }
@@ -492,7 +519,7 @@ namespace
 		uint64_t address = begin_addr + base;
 		uint64_t length = end_addr - begin_addr;
 		if (coverage_map != NULL)
-		  coverage_map_add (coverage_map, address, length, &where, cat);
+		  coverage_map_add (coverage_map, address, length, where, cat);
 		if (pc_coverage != NULL)
 		  pc_coverage->add (address, length);
 	      }
@@ -516,7 +543,7 @@ namespace
 		/* location expression itself */
 		uint64_t expr_start = read_ctx_get_offset (&ctx);
 		if (!check_location_expression
-		    (ver, *file, &ctx, cu, expr_start, &sec->rel, len, &where))
+		    (ver, *file, &ctx, cu, expr_start, &sec->rel, len, where))
 		  return false;
 		uint64_t expr_end = read_ctx_get_offset (&ctx);
 		if (!overlap
@@ -542,7 +569,7 @@ namespace
 	  }
 #undef HAVE_OVERLAP
 
-	coverage->add (where.addr1, read_ctx_get_offset (&ctx) - where.addr1);
+	coverage->add (offset, read_ctx_get_offset (&ctx) - offset);
 	if (done)
 	  break;
       }
@@ -552,9 +579,12 @@ namespace
 
   struct ref_cu
   {
-    struct ref ref;
-    struct cu *cu;
-    bool operator < (ref_cu const& other) const {
+    ::ref ref;
+    ::cu *cu;
+
+    bool
+    operator < (ref_cu const& other) const
+    {
       return ref.addr < other.ref.addr;
     }
   };
@@ -581,7 +611,7 @@ namespace
 	&& (coverage_map
 	    = coverage_map_alloc_XA (file, sec->id == sec_loc)) == NULL)
       {
-	wr_error (WHERE (sec->id, NULL))
+	wr_error (section_locus (sec->id))
 	  << "couldn't read ELF, skipping coverage analysis." << std::endl;
 	retval = false;
       }
@@ -600,11 +630,12 @@ namespace
     ref_cu_vect refs;
     for (struct cu *cu = cu_chain; cu != NULL; cu = cu->next)
       {
-	struct ref_record *rec
+	ref_record *rec
 	  = sec->id == sec_loc ? &cu->loc_refs : &cu->range_refs;
-	for (size_t i = 0; i < rec->size; ++i)
+	for (ref_record::const_iterator it = rec->begin ();
+	     it != rec->end (); ++it)
 	  {
-	    ref_cu ref = {rec->refs[i], cu};
+	    ref_cu ref = {*it, cu};
 	    refs.push_back (ref);
 	  }
       }
@@ -619,8 +650,8 @@ namespace
 	  {
 	    if (off == last_off)
 	      continue;
-	    struct where wh = WHERE (sec->id, NULL);
-	    relocation_skip (&sec->rel, off, &wh, skip_unref);
+	    relocation_skip (&sec->rel, off, section_locus (sec->id),
+			     skip_unref);
 	  }
 
 	// xxx right now this is just so that we can ver->get_form
@@ -636,7 +667,7 @@ namespace
 	   Perhaps that's undesirable.  */
 	if (!check_loc_or_range_ref (ver, file, &ctx, it->cu, sec,
 				     &coverage, coverage_map, pc_coverage,
-				     off, &it->ref.who, cat))
+				     off, it->ref.who, cat))
 	  retval = false;
 	last_off = off;
       }
@@ -644,7 +675,7 @@ namespace
 
     if (retval)
       {
-	relocation_skip_rest (&sec->rel, sec->id);
+	relocation_skip_rest (&sec->rel, section_locus (sec->id));
 
 	/* We check that all CUs have the same address size when building
 	   the CU chain.  So just take the address size of the first CU in
@@ -753,7 +784,7 @@ namespace
     return true;
   }
 
-  static enum section_id
+  static rel_target
   reloc_target_loc (uint8_t opcode)
   {
     switch (opcode)
@@ -763,7 +794,7 @@ namespace
 	return sec_info;
 
       case DW_OP_addr:
-	return rel_address;
+	return rel_target::rel_address;
 
       case DW_OP_call_ref:
 	assert (!"Can't handle call_ref!");
@@ -772,7 +803,7 @@ namespace
     std::cout << "XXX don't know how to handle opcode="
 	      << elfutils::dwarf::ops::name (opcode) << std::endl;
 
-    return rel_value;
+    return rel_target::rel_value;
   }
 
   bool
@@ -785,7 +816,7 @@ namespace
 		form const *form,
 		uint64_t *valuep,
 		char const *str,
-		struct where *where)
+		locus const &where)
   {
     if (form == NULL)
       return true;
@@ -797,7 +828,7 @@ namespace
     if (!read_generic_value (ctx, form->width (cu->head), storclass,
 			     where, valuep, NULL))
       {
-	wr_error (*where)
+	wr_error (where)
 	  << "opcode \"" << elfutils::dwarf::ops::name (opcode)
 	  << "\": can't read " << str << " (form \""
 	  << *form << "\")." << std::endl;
@@ -817,7 +848,7 @@ namespace
 			cu->head->address_size, valuep, where,
 			reloc_target_loc (opcode), NULL);
 	else
-	  wr_error (where, ": relocation relocates a length field.\n");
+	  wr_error (where) << "relocation relocates a length field.\n";
       }
     if (storclass == sc_block)
       {
@@ -829,6 +860,28 @@ namespace
   }
 }
 
+class locexpr_locus
+  : public locus
+{
+  uint64_t _m_offset;
+  locus const *_m_context;
+
+public:
+  explicit locexpr_locus (uint64_t offset, locus const *context)
+    : _m_offset (offset)
+    , _m_context (context)
+  {}
+
+  std::string
+  format (bool) const
+  {
+    std::stringstream ss;
+    ss << _m_context
+       << " (location expression offset 0x" << std::hex << _m_offset << ")";
+    return ss.str ();
+  }
+};
+
 bool
 check_location_expression (dwarf_version const *ver,
 			   elf_file const &file,
@@ -837,28 +890,26 @@ check_location_expression (dwarf_version const *ver,
 			   uint64_t init_off,
 			   struct relocation_data *reloc,
 			   size_t length,
-			   struct where *wh)
+			   locus const &loc)
 {
   struct read_ctx ctx;
   if (!read_ctx_init_sub (&ctx, parent_ctx, parent_ctx->ptr,
 			  parent_ctx->ptr + length))
     {
-      wr_error (wh, PRI_NOT_ENOUGH, "location expression");
+      wr_error (&loc, PRI_NOT_ENOUGH, "location expression");
       return false;
     }
 
-  struct ref_record oprefs;
-  WIPE (oprefs);
-
-  struct addr_record opaddrs;
-  WIPE (opaddrs);
+  typedef ref_T<locexpr_locus> locexpr_ref;
+  typedef ref_record_T<locexpr_locus> locexpr_ref_record;
+  locexpr_ref_record oprefs;
+  addr_record opaddrs;
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (sec_locexpr, wh);
       uint64_t opcode_off = read_ctx_get_offset (&ctx) + init_off;
-      where_reset_1 (&where, opcode_off);
-      addr_record_add (&opaddrs, opcode_off);
+      locexpr_locus where (opcode_off, &loc);
+      opaddrs.add (opcode_off);
 
       uint8_t opcode;
       if (!read_ctx_read_ubyte (&ctx, &opcode))
@@ -879,9 +930,9 @@ check_location_expression (dwarf_version const *ver,
 
       uint64_t value1, value2;
       if (!op_read_form (file, &ctx, cu, init_off, reloc,
-			 opcode, form1, &value1, "1st operand", &where)
+			 opcode, form1, &value1, "1st operand", where)
 	  || !op_read_form (file, &ctx, cu, init_off, reloc,
-			    opcode, form2, &value2, "2st operand", &where))
+			    opcode, form2, &value2, "2st operand", where))
 	goto out;
 
       switch (opcode)
@@ -908,7 +959,7 @@ check_location_expression (dwarf_version const *ver,
 	    else
 	      {
 		uint64_t off_after = read_ctx_get_offset (&ctx) + init_off;
-		ref_record_add (&oprefs, off_after + skip, &where);
+		oprefs.push_back (locexpr_ref (off_after + skip, where));
 	      }
 
 	    break;
@@ -937,17 +988,11 @@ check_location_expression (dwarf_version const *ver,
     }
 
  out:
-  for (size_t i = 0; i < oprefs.size; ++i)
-    {
-      struct ref *ref = oprefs.refs + i;
-      if (!addr_record_has_addr (&opaddrs, ref->addr))
-	wr_error (&ref->who,
-		  ": unresolved reference to opcode at %#" PRIx64 ".\n",
-		  ref->addr);
-    }
-
-  addr_record_free (&opaddrs);
-  ref_record_free (&oprefs);
+  for (locexpr_ref_record::const_iterator it = oprefs.begin ();
+       it != oprefs.end (); ++it)
+    if (!opaddrs.has_addr (it->addr))
+      wr_error (it->who) << "unresolved reference to opcode at "
+			 << pri::hex (it->addr) << ".\n";
 
   return true;
 }
@@ -978,19 +1023,17 @@ found_hole (uint64_t start, uint64_t length, void *data)
 	}
     }
   else
-    {
-      /* XXX: This actually lies when the unreferenced portion is
-	 composed of sequences of zeroes and non-zeroes.  */
-      struct where wh = WHERE (info->section, NULL);
-      wr_message_padding_n0 (info->category, &wh, start, end);
-    }
+    /* XXX: This actually lies when the unreferenced portion is
+       composed of sequences of zeroes and non-zeroes.  */
+    wr_message_padding_n0 (info->category, section_locus (info->section),
+			   start, end);
 
   return true;
 }
 
 void
-check_range_relocations (enum message_category cat,
-			 struct where *where,
+check_range_relocations (locus const &loc,
+			 enum message_category cat,
 			 struct elf_file const *file,
 			 GElf_Sym *begin_symbol,
 			 GElf_Sym *end_symbol,
@@ -999,7 +1042,7 @@ check_range_relocations (enum message_category cat,
   if (begin_symbol != NULL
       && end_symbol != NULL
       && begin_symbol->st_shndx != end_symbol->st_shndx)
-    wr_message (cat | mc_impact_2 | mc_reloc, where,
+    wr_message (cat | mc_impact_2 | mc_reloc, &loc,
 		": %s relocated against different sections (%s and %s).\n",
 		description,
 		file->sec[begin_symbol->st_shndx].name,

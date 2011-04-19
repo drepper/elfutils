@@ -104,9 +104,7 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
 	void operator () (dwarf::compile_unit const &cu,
 			  dwarf::debug_info_entry const &parent)
 	{
-	  struct where where = WHERE (sec_info, NULL);
-	  where_reset_1 (&where, cu.offset ());
-	  where_reset_2 (&where, parent.offset ());
+	  die_locus where (parent);
 
 	  int parent_tag = parent.tag ();
 
@@ -204,7 +202,7 @@ check_expected_trees::check_expected_trees (checkstack &stack, dwarflint &lint)
   // XXX more specific class when <dwarf> has it
   catch (std::runtime_error &exc)
     {
-      wr_error (WHERE (sec_info, NULL))
+      wr_error (section_locus (sec_info))
 	<< "Exception while checking expected trees: " << exc.what ()
 	<< std::endl;
       throw check_base::failed ();

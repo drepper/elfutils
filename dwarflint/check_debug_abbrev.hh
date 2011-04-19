@@ -1,5 +1,5 @@
 /* Low-level checking of .debug_abbrev.
-   Copyright (C) 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -31,20 +31,56 @@
 #include "check_debug_info_i.hh"
 #include "dwarf_version_i.hh"
 
+namespace locus_simple_fmt
+{
+  char const *abbr_offset_n ();
+}
+
+typedef fixed_locus<sec_abbrev,
+		    locus_simple_fmt::abbr_offset_n,
+		    locus_simple_fmt::hex> abbrev_locus;
+
+class abbrev_attrib_locus
+  : public locus
+{
+  uint64_t _m_abbr_offset;
+  uint64_t _m_attr_offset;
+  int _m_name;
+
+public:
+  explicit abbrev_attrib_locus (uint64_t abbr_offset = -1,
+				uint64_t attr_offset = -1,
+				int name = -1);
+
+  abbrev_attrib_locus (abbrev_attrib_locus const &copy);
+
+  abbrev_attrib_locus non_symbolic ();
+
+  void set_name (int name);
+  std::string format (bool brief = false) const;
+  std::string name () const;
+};
+
 struct abbrev_attrib
 {
-  struct where where;
+  abbrev_attrib_locus where;
   uint16_t name;
   uint8_t form;
+
+  abbrev_attrib ()
+    : where ()
+    , name (0)
+    , form (0)
+  {}
 };
 
 struct abbrev
 {
+  abbrev_locus where;
   uint64_t code;
-  struct where where;
 
   /* Attributes.  */
-  struct abbrev_attrib *attribs;
+  abbrev_attrib *attribs;
   size_t size;
   size_t alloc;
 
@@ -56,6 +92,17 @@ struct abbrev
 
   /* Whether some DIE uses this abbrev.  */
   bool used;
+
+  explicit abbrev (abbrev_locus const &loc)
+    : where (loc)
+    , code (0)
+    , attribs (0)
+    , size (0)
+    , alloc (0)
+    , tag (0)
+    , has_children (false)
+    , used (false)
+  {}
 };
 
 struct abbrev_table
@@ -68,6 +115,15 @@ struct abbrev_table
   bool used;		/* There are CUs using this table.  */
 
   abbrev *find_abbrev (uint64_t abbrev_code) const;
+
+  abbrev_table ()
+    : next (NULL)
+    , abbr (NULL)
+    , offset (0)
+    , size (0)
+    , alloc (0)
+    , used (false)
+  {}
 };
 
 class check_debug_abbrev
@@ -87,7 +143,7 @@ public:
   static form const *check_form (dwarf_version const *ver,
 				 attribute const *attr,
 				 int form_name,
-				 where const *where,
+				 locus const &loc,
 				 bool indirect);
 
   ~check_debug_abbrev ();

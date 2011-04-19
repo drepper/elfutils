@@ -98,7 +98,7 @@ namespace
 	}
 
       if (! found)
-	wr_message (to_where (entry), mc_impact_3 | mc_acc_suboptimal)
+	wr_message (die_locus (entry), mc_impact_3 | mc_acc_suboptimal)
 	  .id (descriptor ())
 	  << elfutils::dwarf::tags::name (entry.tag ())
 	  << " " << dwarf::attributes::name (pc.first) << "=0x"

@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files
-   Copyright (C) 2009,2010 Red Hat, Inc.
+   Copyright (C) 2009,2010,2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -53,7 +53,7 @@ public:
 private:
   void not_available (section_id sec_id)
   {
-    wr_error (WHERE (sec_id, NULL))
+    wr_error (section_locus (sec_id))
       << "data not found." << std::endl;
   }
 

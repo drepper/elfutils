@@ -108,14 +108,14 @@ namespace
 		  varinfo &i = old->second;
 		  if ((declaration && i.decl != children.end ())
 		      || (!declaration && i.def != children.end ()))
-		    wr_message (to_where (*jt), mc_impact_3 | mc_die_other)
+		    wr_message (die_locus (*jt), mc_impact_3 | mc_die_other)
 		      .id (descriptor ())
 		      << "Re" << (declaration ? "declaration" : "definition")
 		      << " of variable '" << name << "', originally seen at "
 		      << pri::ref (declaration ? *i.decl : *i.def)
 		      << '.' << std::endl;
 		  else
-		    wr_message (to_where (*jt), mc_impact_3 | mc_die_other)
+		    wr_message (die_locus (*jt), mc_impact_3 | mc_die_other)
 		      .id (descriptor ())
 		      << "Found "
 		      << (declaration ? "declaration" : "definition")

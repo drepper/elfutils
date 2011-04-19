@@ -29,7 +29,6 @@
 #endif
 
 #include "coverage.hh"
-#include "misc.hh"
 #include "pri.hh"
 
 #include <stdbool.h>

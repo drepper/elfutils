@@ -42,6 +42,32 @@
 #include "misc.hh"
 #include "pri.hh"
 
+char const *
+locus_simple_fmt::cudie_n ()
+{
+  return "CU DIE";
+}
+
+std::string
+arange_locus::format (bool brief) const
+{
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[sec_aranges] << ": ";
+
+  if (_m_arange_offset != (Dwarf_Off)-1)
+    ss << "arange 0x" << std::hex << _m_arange_offset;
+  else if (_m_table_offset != (Dwarf_Off)-1)
+    ss << "table " << std::dec << _m_table_offset;
+  else
+    ss << "arange";
+
+  if (_m_cudie_locus != NULL)
+    ss << " (" << _m_cudie_locus->format (true) << ')';
+
+  return ss.str ();
+}
+
 checkdescriptor const *
 check_debug_aranges::descriptor ()
 {
@@ -119,7 +145,6 @@ hole (uint64_t start, uint64_t length, void *user)
       || !necessary_alignment (start, length, sec->shdr.sh_addralign))
     {
       char buf[128];
-      where where = WHERE (info.id, NULL);
       char const *what = info.what;
       char const *cu = "CU DIEs";
       if (info.reverse)
@@ -128,7 +153,7 @@ hole (uint64_t start, uint64_t length, void *user)
 	  what = cu;
 	  cu = tmp;
 	}
-      wr_message (where, mc_aranges | mc_impact_3)
+      wr_message (section_locus (info.id), mc_aranges | mc_impact_3)
 	<< "addresses " << range_fmt (buf, sizeof (buf), start, start + length)
 	<< " are covered with " << cu << ", but not with " << what << "."
 	<< std::endl;
@@ -163,13 +188,13 @@ compare_coverage (struct elf_file *file,
 inline static void
 aranges_coverage_add (struct coverage *aranges_coverage,
 		      uint64_t begin, uint64_t length,
-		      struct where *where)
+		      locus const &loc)
 {
   if (aranges_coverage->is_overlap (begin, length))
     {
       char buf[128];
       /* Not a show stopper, this shouldn't derail high-level.  */
-      wr_message (*where, mc_aranges | mc_impact_2 | mc_error)
+      wr_message (loc, mc_aranges | mc_impact_2 | mc_error)
 	<< "the range " << range_fmt (buf, sizeof buf, begin, begin + length)
 	<< " overlaps with another one." << std::endl;
     }
@@ -196,8 +221,7 @@ check_aranges_structural (struct elf_file *file,
 
   while (!read_ctx_eof (&ctx))
     {
-      struct where where = WHERE (sec_aranges, NULL);
-      where_reset_1 (&where, read_ctx_get_offset (&ctx));
+      arange_locus where (read_ctx_get_offset (&ctx));
       const unsigned char *atab_begin = ctx.ptr;
 
       /* Size.  */
@@ -209,7 +233,7 @@ check_aranges_structural (struct elf_file *file,
 	  wr_error (&where, ": can't read table length.\n");
 	  return false;
 	}
-      if (!read_size_extra (&ctx, size32, &size, &offset_size, &where))
+      if (!read_size_extra (&ctx, size32, &size, &offset_size, where))
 	return false;
 
       struct read_ctx sub_ctx;
@@ -239,7 +263,7 @@ check_aranges_structural (struct elf_file *file,
 	  retval = false;
 	  goto next;
 	}
-      if (!supported_version (version, 1, &where, 2))
+      if (!supported_version (version, 1, where, 2))
 	{
 	  retval = false;
 	  goto next;
@@ -257,9 +281,9 @@ check_aranges_structural (struct elf_file *file,
 
       struct relocation *rel;
       if ((rel = relocation_next (&sec->rel, ctx_offset,
-				  &where, skip_mismatched)))
+				  where, skip_mismatched)))
 	relocate_one (file, &sec->rel, rel, offset_size,
-		      &cu_offset, &where, sec_info, NULL);
+		      &cu_offset, where, sec_info, NULL);
       else if (file->ehdr.e_type == ET_REL)
 	wr_message (mc_impact_2 | mc_aranges | mc_reloc | mc_header, &where,
 		    PRI_LACK_RELOCATION, "debug info offset");
@@ -268,13 +292,10 @@ check_aranges_structural (struct elf_file *file,
       if (cu_chain != NULL && (cu = cu_find_cu (cu_chain, cu_offset)) == NULL)
 	wr_error (&where, ": unresolved reference to " PRI_CU ".\n", cu_offset);
 
-      struct where where_cudie;
+      cudie_locus cudie_loc (cu != NULL ? cu->cudie_offset : -1);
       if (cu != NULL)
 	{
-	  where_cudie = WHERE (sec_info, NULL);
-	  where_reset_1 (&where_cudie, cu->cudie_offset);
-	  where.ref = &where_cudie;
-	  where_cudie.formatting = wf_cudie;
+	  where.set_cudie (&cudie_loc);
 	  if (cu->has_arange)
 	    wr_error (where)
 	      << "there has already been arange section for this CU."
@@ -286,7 +307,7 @@ check_aranges_structural (struct elf_file *file,
       /* Address size.  */
       int address_size;
       error_code err = read_address_size (&sub_ctx, file->addr_64,
-					  &address_size, &where);
+					  &address_size, where);
       if (err != err_ok)
 	retval = false;
       if (err == err_fatal)
@@ -346,7 +367,7 @@ check_aranges_structural (struct elf_file *file,
 	     way, the better to catch structural errors accurately.
 	     So report arange offset instead.  If this becomes a
 	     problem, we will achieve this by two-pass analysis.  */
-	  where_reset_2 (&where, read_ctx_get_offset (&sub_ctx));
+	  where.set_arange (read_ctx_get_offset (&sub_ctx));
 
 	  /* Record address.  */
 	  uint64_t address;
@@ -360,11 +381,11 @@ check_aranges_structural (struct elf_file *file,
 	    }
 
 	  if ((rel = relocation_next (&sec->rel, ctx_offset,
-				      &where, skip_mismatched)))
+				      where, skip_mismatched)))
 	    {
 	      address_relocated = true;
 	      relocate_one (file, &sec->rel, rel, address_size,
-			    &address, &where, rel_address, NULL);
+			    &address, where, rel_target::rel_address, NULL);
 	    }
 	  else if (file->ehdr.e_type == ET_REL && address != 0)
 	    wr_message (mc_impact_2 | mc_aranges | mc_reloc, &where,
@@ -389,18 +410,18 @@ check_aranges_structural (struct elf_file *file,
 	    wr_error (&where, ": zero-length address range.\n");
 	  /* Skip coverage analysis if we have errors.  */
 	  else if (retval && aranges_coverage != NULL)
-	    aranges_coverage_add (aranges_coverage, address, length, &where);
+	    aranges_coverage_add (aranges_coverage, address, length, where);
 	}
 
       if (sub_ctx.ptr != sub_ctx.end)
 	{
 	  uint64_t start, end;
-	  struct where wh = WHERE (where.section, NULL);
+	  section_locus wh (sec_aranges);
 	  if (read_check_zero_padding (&sub_ctx, &start, &end))
-	    wr_message_padding_0 (mc_aranges, &wh, start, end);
+	    wr_message_padding_0 (mc_aranges, wh, start, end);
 	  else
 	    {
-	      wr_message_padding_n0 (mc_aranges | mc_error, &wh,
+	      wr_message_padding_n0 (mc_aranges | mc_error, wh,
 				     start, start + size);
 	      retval = false;
 	    }

@@ -1,5 +1,5 @@
 /* Pedantic checking of DWARF files.
-   Copyright (C) 2008, 2009, 2010 Red Hat, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -40,6 +40,13 @@ struct sec
   Elf_Data *data;	/* May be NULL if data in this section are
 			   missing or not substantial.  */
   enum section_id id;
+
+  sec ()
+    : scn (NULL)
+    , name (NULL)
+    , data (NULL)
+    , id (sec_invalid)
+  {}
 };
 
 struct elf_file

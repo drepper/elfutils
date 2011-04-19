@@ -135,13 +135,6 @@ global_opt<void_option>
 global_opt<void_option>
   be_tolerant ("Be somewhat more tolerant.", "tolerant");
 
-// xxx as soon as where is in c++, this can move there
-global_opt<void_option>
-  opt_show_refs("\
-When validating .debug_loc and .debug_ranges, display information about \
-the DIE referring to the entry in consideration", "ref");
-extern "C" bool show_refs () { return (bool)opt_show_refs; }
-
 int
 main (int argc, char *argv[])
 {

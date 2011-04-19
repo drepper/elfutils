@@ -23,6 +23,10 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 #include "lowlevel_checks.hh"
 #include "sections.hh"
 #include "check_debug_info.hh"

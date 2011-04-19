@@ -39,13 +39,13 @@
 
 bool
 read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
-		 int *offset_sizep, struct where *where)
+		 int *offset_sizep, locus const &loc)
 {
   if (size32 == DWARF3_LENGTH_64_BIT)
     {
       if (!read_ctx_read_8ubyte (ctx, sizep))
 	{
-	  wr_error (where, ": can't read 64bit CU length.\n");
+	  wr_error (loc) << "can't read 64bit CU length.\n";
 	  return false;
 	}
 
@@ -53,8 +53,8 @@ read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
     }
   else if (size32 >= DWARF3_LENGTH_MIN_ESCAPE_CODE)
     {
-      wr_error (where, ": unrecognized CU length escape value: "
-		"%" PRIx32 ".\n", size32);
+      wr_error (loc)
+	<< "unrecognized CU length escape value: " << size32 << ".\n";
       return false;
     }
   else
@@ -67,15 +67,13 @@ read_size_extra (struct read_ctx *ctx, uint32_t size32, uint64_t *sizep,
 }
 
 error_code
-read_address_size (struct read_ctx *ctx,
-		   bool addr_64,
-		   int *address_sizep,
-		   struct where const *where)
+read_address_size (struct read_ctx *ctx, bool addr_64,
+		   int *address_sizep, locus const &loc)
 {
   uint8_t address_size;
   if (!read_ctx_read_ubyte (ctx, &address_size))
     {
-      wr_error (where, ": can't read address size.\n");
+      wr_error (loc) << "can't read address size.\n";
       return err_fatal;
     }
 
@@ -84,18 +82,16 @@ read_address_size (struct read_ctx *ctx,
     {
       /* Keep going.  Deduce the address size from ELF header, and try
 	 to parse it anyway.  */
-      wr_error (where,
-		": invalid address size: %d (only 4 or 8 allowed).\n",
-		address_size);
+      wr_error (loc) << "invalid address size: " << (int)address_size
+		     << " (only 4 or 8 allowed).\n";
       address_size = addr_64 ? 8 : 4;
       ret = err_nohl;
     }
   else if ((address_size == 8) != addr_64)
     {
       /* Keep going, we may still be able to parse it.  */
-      wr_error (where,
-		": CU reports address size of %d in %d-bit ELF.\n",
-		address_size, addr_64 ? 64 : 32);
+      wr_error (loc) << "CU reports address size of " << address_size
+		     << " in " << (addr_64 ? 64 : 32) << "-bit ELF.\n";
       ret = err_nohl;
     }
 
@@ -105,59 +101,59 @@ read_address_size (struct read_ctx *ctx,
 
 bool
 checked_read_uleb128 (read_ctx *ctx, uint64_t *ret,
-		      where const *where, const char *what)
+		      locus const &loc, const char *what)
 {
   const unsigned char *ptr = ctx->ptr;
   int st = read_ctx_read_uleb128 (ctx, ret);
   if (st < 0)
-    wr_error (where, ": can't read %s.\n", what);
+    wr_error (loc) << "can't read " << what << ".\n";
   else if (st > 0)
     {
       char buf[19]; // 16 hexa digits, "0x", terminating zero
       sprintf (buf, "%#" PRIx64, *ret);
-      wr_format_leb128_message (where, what, buf, ptr, ctx->ptr);
+      wr_format_leb128_message (loc, what, buf, ptr, ctx->ptr);
     }
   return st >= 0;
 }
 
 bool
 checked_read_sleb128 (read_ctx *ctx, int64_t *ret,
-		      where const *where, const char *what)
+		      locus const &loc, const char *what)
 {
   const unsigned char *ptr = ctx->ptr;
   int st = read_ctx_read_sleb128 (ctx, ret);
   if (st < 0)
-    wr_error (where, ": can't read %s.\n", what);
+    wr_error (loc) << "can't read " << what << ".\n";
   else if (st > 0)
     {
       char buf[20]; // sign, "0x", 16 hexa digits, terminating zero
       int64_t val = *ret;
       sprintf (buf, "%s%#" PRIx64, val < 0 ? "-" : "", val < 0 ? -val : val);
-      wr_format_leb128_message (where, what, buf, ptr, ctx->ptr);
+      wr_format_leb128_message (loc, what, buf, ptr, ctx->ptr);
     }
   return st >= 0;
 }
 
 bool
 checked_read_leb128 (read_ctx *ctx, form_width_t width, uint64_t *ret,
-		     where const *where, const char *what)
+		     locus const &loc, const char *what)
 {
   assert (width == fw_sleb || width == fw_uleb);
   if (width == fw_sleb)
     {
       int64_t svalue;
-      if (!checked_read_sleb128 (ctx, &svalue, where, what))
+      if (!checked_read_sleb128 (ctx, &svalue, loc, what))
 	return false;
       *ret = (uint64_t) svalue;
       return true;
     }
   else
-    return checked_read_uleb128 (ctx, ret, where, what);
+    return checked_read_uleb128 (ctx, ret, loc, what);
 }
 
 bool
 read_sc_value (uint64_t *valuep, form_width_t width,
-	       read_ctx *ctx, where const *where)
+	       read_ctx *ctx, locus const &loc)
 {
   switch (width)
     {
@@ -174,7 +170,7 @@ read_sc_value (uint64_t *valuep, form_width_t width,
     case fw_uleb:
     case fw_sleb:
       return checked_read_leb128 (ctx, width, valuep,
-				  where, "attribute value");
+				  loc, "attribute value");
 
     case fw_unknown:
       ;
@@ -185,13 +181,13 @@ read_sc_value (uint64_t *valuep, form_width_t width,
 bool
 read_generic_value (read_ctx *ctx,
 		    form_width_t width, storage_class_t storclass,
-		    where const *where, uint64_t *valuep, read_ctx *blockp)
+		    locus const &loc, uint64_t *valuep, read_ctx *blockp)
 {
   uint64_t value;
   if (storclass == sc_value
       || storclass == sc_block)
     {
-      if (!read_sc_value (&value, width, ctx, where))
+      if (!read_sc_value (&value, width, ctx, loc))
 	return false;
       if (valuep != NULL)
 	*valuep = value;

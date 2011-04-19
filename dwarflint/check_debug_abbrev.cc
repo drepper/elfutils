@@ -43,6 +43,57 @@
 #include "messages.hh"
 #include "misc.hh"
 
+char const *
+locus_simple_fmt::abbr_offset_n ()
+{
+  return "abbr. offset";
+}
+
+abbrev_attrib_locus::abbrev_attrib_locus (uint64_t abbr_offset,
+					  uint64_t attr_offset,
+					  int a_name)
+  : _m_abbr_offset (abbr_offset)
+  , _m_attr_offset (attr_offset)
+  , _m_name (a_name)
+{}
+
+abbrev_attrib_locus::abbrev_attrib_locus (abbrev_attrib_locus const &copy)
+  : _m_abbr_offset (copy._m_abbr_offset)
+  , _m_attr_offset (copy._m_attr_offset)
+  , _m_name (copy._m_name)
+{}
+
+std::string
+abbrev_attrib_locus::name () const
+{
+  return pri::attr_name (_m_name);
+}
+
+void
+abbrev_attrib_locus::set_name (int a_name)
+{
+  _m_name = a_name;
+}
+
+abbrev_attrib_locus
+abbrev_attrib_locus::non_symbolic ()
+{
+  return abbrev_attrib_locus (_m_abbr_offset, _m_attr_offset);
+}
+
+std::string
+abbrev_attrib_locus::format (bool brief) const
+{
+  std::stringstream ss;
+  if (!brief)
+    ss << section_name[sec_abbrev] << ": ";
+  if (_m_name != -1)
+    ss << "abbr. 0x" << std::hex << _m_abbr_offset << ", attr. " << name ();
+  else
+    ss << "abbr. attribute 0x" << std::hex << _m_attr_offset;
+  return ss.str ();
+}
+
 checkdescriptor const *
 check_debug_abbrev::descriptor ()
 {
@@ -114,14 +165,12 @@ namespace
   };
 
   void
-  complain (where const *where,
-	    int attrib_name, int form_name,
+  complain (locus const &loc, int form_name,
 	    bool indirect, char const *qualifier)
   {
-    wr_error (*where)
-      << "attribute " << elfutils::dwarf::attributes::name (attrib_name)
-      << " with " << qualifier << (indirect ? " indirect" : "")
-      << " form " << elfutils::dwarf::forms::name (form_name)
+    wr_error (loc)
+      << "attribute with " << qualifier << (indirect ? " indirect" : "")
+      << " form " << elfutils::dwarf::forms::identifier (form_name)
       << '.' << std::endl;
   }
 
@@ -134,11 +183,9 @@ namespace
     // But since we got here, apparently there was a .debug_abbrev
     // section with size of more than 0 bytes, which is wasteful.
     if (ret)
-      {
-	where wh = WHERE (sec_abbrev, NULL);
-	wr_message (wh, mc_abbrevs | mc_impact_1 | mc_acc_bloat)
-	  << "no abbreviations." << std::endl;
-      }
+      wr_message (section_locus (sec_abbrev),
+		  mc_abbrevs | mc_impact_1 | mc_acc_bloat)
+	<< "no abbreviations." << std::endl;
     return ret;
   }
 
@@ -153,12 +200,10 @@ namespace
 
     struct abbrev_table *section = NULL;
     uint64_t first_attr_off = 0;
-    struct where where = WHERE (sec_abbrev, NULL);
 
     // Tolerate failure here.
     dwarf_version const *ver = NULL;
     static dwarf_version const *latest_ver = dwarf_version::get_latest ();
-    where.addr1 = 0;
 
     bool failed = false;
     while (true)
@@ -168,7 +213,8 @@ namespace
 	if (read_ctx_eof (&ctx))
 	  {
 	    if (!check_no_abbreviations (abbrevs))
-	      wr_error (&where, ": missing zero to mark end-of-table.\n");
+	      wr_error (section_locus (sec_abbrev))
+		<< "missing zero to mark end-of-table.\n";
 	    break;
 	  }
 
@@ -181,10 +227,11 @@ namespace
 	  do
 	    {
 	      abbr_off = read_ctx_get_offset (&ctx);
-	      where_reset_2 (&where, abbr_off);
 
 	      /* Abbreviation code.  */
-	      if (!checked_read_uleb128 (&ctx, &abbr_code, &where, "abbrev code"))
+	      if (!checked_read_uleb128 (&ctx, &abbr_code,
+					 section_locus (sec_abbrev, abbr_off),
+					 "abbrev code"))
 		throw check_base::failed ();
 
 	      /* Note: we generally can't tell the difference between
@@ -211,11 +258,9 @@ namespace
 		 || ((abbr_off += 1), false));
 
 	  if (zero_seq_off != (uint64_t)-1)
-	    {
-	      struct where wh = WHERE (where.section, NULL);
-	      wr_message_padding_0 (mc_abbrevs | mc_header,
-				    &wh, zero_seq_off, abbr_off);
-	    }
+	    wr_message_padding_0 (mc_abbrevs | mc_header,
+				  section_locus (sec_abbrev),
+				  zero_seq_off, abbr_off);
 	}
 
 	if (read_ctx_eof (&ctx))
@@ -225,17 +270,15 @@ namespace
 	    break;
 	  }
 
+	abbrev_locus where (abbr_off);
+
 	/* OK, we got some genuine abbreviation.  See if we need to
 	   allocate a new section.  */
 	if (section == NULL)
 	  {
 	    abbrev_table t;
-	    WIPE (t);
 	    section = &abbrevs.insert (std::make_pair (abbr_off, t)).first->second;
 	    section->offset = abbr_off;
-
-	    where_reset_1 (&where, abbr_off);
-	    where_reset_2 (&where, abbr_off);
 
 	    // Find CU that uses this abbrev table, so that we know what
 	    // version to validate against.
@@ -278,10 +321,9 @@ namespace
 		    ver = dwarf_version::get_latest ();
 		  }
 	      }
-	    else if (ver == NULL)
+	    else if (ver == NULL) // Only emit this once.
 	      {
-		struct where wh = WHERE (sec_info, NULL);
-		wr_error (wh)
+		wr_error (section_locus (sec_info))
 		  << "couldn't load CU headers for processing .debug_abbrev; "
 		     "assuming latest DWARF flavor."
 		  << std::endl;
@@ -291,30 +333,28 @@ namespace
 	    assert (ver != NULL);
 	  }
 
-	struct abbrev *original = section->find_abbrev (abbr_code);
+	abbrev *original = section->find_abbrev (abbr_code);
+	abbrev *cur;
+	abbrev fake (where);
 	if (unlikely (original != NULL))
-	  wr_error (where)
-	    << "duplicate abbrev code " << abbr_code
-	    << "; already defined at " << original->where << '.' << std::endl;
-
-	struct abbrev fake;
-	struct abbrev *cur;
-	/* Don't actually save this abbrev if it's duplicate.  */
-	if (likely (original == NULL))
+	  {
+	    wr_error (where) << "duplicate abbrev code (first was at "
+			     << original->where << ").\n";
+	    /* Don't actually save this abbrev if it's duplicate.  */
+	    cur = &fake;
+	  }
+	else
 	  {
 	    REALLOC (section, abbr);
 	    cur = section->abbr + section->size++;
+	    new (cur) abbrev (where);
 	  }
-	else
-	  cur = &fake;
-	WIPE (*cur);
 
 	cur->code = abbr_code;
-	cur->where = where;
 
 	/* Abbreviation tag.  */
 	uint64_t abbr_tag;
-	if (!checked_read_uleb128 (&ctx, &abbr_tag, &where, "abbrev tag"))
+	if (!checked_read_uleb128 (&ctx, &abbr_tag, where, "abbrev tag"))
 	  throw check_base::failed ();
 
 	if (abbr_tag > DW_TAG_hi_user)
@@ -359,14 +399,14 @@ namespace
 
 	    /* Shift to match elfutils reporting.  */
 	    attr_off -= first_attr_off;
-	    where_reset_3 (&where, attr_off);
+	    abbrev_attrib_locus attr_locus (abbr_off, attr_off);
 
 	    /* Load attribute name and form.  */
-	    if (!checked_read_uleb128 (&ctx, &attrib_name, &where,
+	    if (!checked_read_uleb128 (&ctx, &attrib_name, attr_locus,
 				       "attribute name"))
 	      throw check_base::failed ();
 
-	    if (!checked_read_uleb128 (&ctx, &attrib_form, &where,
+	    if (!checked_read_uleb128 (&ctx, &attrib_form, attr_locus,
 				       "attribute form"))
 	      throw check_base::failed ();
 
@@ -375,11 +415,12 @@ namespace
 
 	    REALLOC (cur, attribs);
 
+	    attr_locus.set_name (attrib_name);
 	    struct abbrev_attrib *acur = cur->attribs + cur->size++;
-	    WIPE (*acur);
+	    new (acur) abbrev_attrib ();
 	    acur->name = attrib_name;
 	    acur->form = attrib_form;
-	    acur->where = where;
+	    acur->where = attr_locus;
 
 	    if (null_attrib)
 	      break;
@@ -387,7 +428,8 @@ namespace
 	    /* Otherwise validate name and form.  */
 	    if (attrib_name == 0)
 	      {
-		wr_error (where) << "invalid attribute code 0." << std::endl;
+		wr_error (attr_locus.non_symbolic ())
+		  << "invalid attribute code 0." << std::endl;
 		// We can handle this, so keep going.  But this is not
 		// kosher for high-level checks.
 		failed = true;
@@ -407,18 +449,18 @@ namespace
 		if (attribute == NULL)
 		  // libdw should handle unknown attribute, as long as
 		  // the form is kosher, so don't fail the check.
-		  wr_message (where, mc_abbrevs | mc_impact_1)
+		  wr_message (attr_locus.non_symbolic (),
+			      mc_abbrevs | mc_impact_1)
 		    << "invalid or unknown name " << pri::hex (attrib_name)
 		    << '.' << std::endl;
 		else if (opt_nognu)
-		  wr_message (where, mc_abbrevs | mc_impact_1)
-		    << "attribute " << *attribute
-		    << " from later DWARF version."
+		  wr_message (attr_locus, mc_abbrevs | mc_impact_1)
+		    << "attribute from later DWARF version."
 		    << std::endl;
 	      }
 
 	    form const *form = check_debug_abbrev::check_form
-	      (ver, attribute, attrib_form, &where, false);
+	      (ver, attribute, attrib_form, attr_locus, false);
 	    if (form == NULL)
 	      {
 		// Error message has been emitted in check_form.
@@ -430,11 +472,11 @@ namespace
 	      = seen.insert (std::make_pair (attrib_name, attr_off));
 	    if (!inserted.second)
 	      {
-		wr_error (where)
-		  << "duplicate attribute "
-		  << elfutils::dwarf::attributes::name (attrib_name)
+		wr_error (attr_locus.non_symbolic ())
+		  << "duplicate attribute " << attr_locus.name ()
 		  << " (first was at " << pri::hex (inserted.first->second)
 		  << ")." << std::endl;
+
 		// I think we may allow such files for high-level
 		// consumption, so don't fail the check...
 		if (attrib_name == DW_AT_sibling)
@@ -442,13 +484,10 @@ namespace
 		  failed = true;
 	      }
 
-	    if (attrib_name == DW_AT_sibling)
-	      {
-		if (!cur->has_children)
-		  wr_message (where, mc_die_rel | mc_acc_bloat | mc_impact_1)
-		    << "superfluous DW_AT_sibling attribute at childless abbrev."
-		    << std::endl;
-	      }
+	    if (attrib_name == DW_AT_sibling && !cur->has_children)
+	      wr_message (attr_locus, mc_die_rel | mc_acc_bloat | mc_impact_1)
+		<< "superfluous DW_AT_sibling attribute at childless abbrev."
+		<< std::endl;
 	    if (attrib_name == DW_AT_ranges)
 	      ranges = true;
 	    else if (attrib_name == DW_AT_low_pc)
@@ -458,7 +497,6 @@ namespace
 	  }
 	while (!null_attrib);
 
-	where_reset_2 (&where, where.addr2); // drop addr 3
 	if (high_pc && !low_pc)
 	  wr_error (where)
 	    << "the abbrev has DW_AT_high_pc without also having DW_AT_low_pc."
@@ -499,13 +537,12 @@ check_debug_abbrev::check_debug_abbrev (checkstack &stack, dwarflint &lint)
 form const *
 check_debug_abbrev::check_form (dwarf_version const *ver,
 				attribute const *attribute,
-				int form_name,
-				where const *where, bool indirect)
+				int form_name, locus const &loc, bool indirect)
 {
   form const *form = ver->get_form (form_name);
   if (form == NULL)
     {
-      wr_error (*where)
+      wr_error (loc)
 	<< "invalid form " << pri::hex (form_name)
 	<< '.' << std::endl;
       return NULL;
@@ -517,12 +554,12 @@ check_debug_abbrev::check_form (dwarf_version const *ver,
       int attrib_name = attribute->name ();
       if (!ver->form_allowed (attribute, form))
 	{
-	  complain (where, attrib_name, form_name, indirect, "invalid");
+	  complain (loc, form_name, indirect, "invalid");
 	  return NULL;
 	}
       else if (attrib_name == DW_AT_sibling
 	       && sibling_form_suitable (ver, form) == sfs_long)
-	complain (where, attrib_name, form_name, indirect, "unsuitable");
+	complain (loc, form_name, indirect, "unsuitable");
     }
 
   return form;

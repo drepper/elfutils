@@ -65,7 +65,7 @@ namespace
 	    {
 	      dwarf::debug_info_entry ref = *val.reference ();
 	      if (ref.identity () == entry.identity ())
-		wr_message (to_where (entry),
+		wr_message (die_locus (entry),
 			    mc_impact_3 | mc_acc_suboptimal | mc_die_rel)
 		  .id (descriptor ())
 		  << dwarf::tags::name (entry.tag ())

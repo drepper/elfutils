@@ -64,19 +64,19 @@ namespace
 	decl_file = attrs.find (DW_AT_decl_file);
 
       if (decl_column != attrs.end () && decl_line == attrs.end ())
-	wr_message (to_where (entry), mc_impact_3 | mc_acc_suboptimal)
+	wr_message (die_locus (entry), mc_impact_3 | mc_acc_suboptimal)
 	  .id (descriptor ())
 	  << elfutils::dwarf::tags::name (entry.tag ())
 	  << " has decl_column, but NOT decl_line" << std::endl;
 
       if (decl_line != attrs.end () && decl_file == attrs.end ())
-	wr_message (to_where (entry), mc_impact_3 | mc_acc_suboptimal)
+	wr_message (die_locus (entry), mc_impact_3 | mc_acc_suboptimal)
 	  .id (descriptor ())
 	  << elfutils::dwarf::tags::name (entry.tag ())
 	  << " has decl_line, but NOT decl_file" << std::endl;
 
       if (decl_file != attrs.end () && decl_line == attrs.end ())
-	wr_message (to_where (entry), mc_impact_3 | mc_acc_suboptimal)
+	wr_message (die_locus (entry), mc_impact_3 | mc_acc_suboptimal)
 	  .id (descriptor ())
 	  << elfutils::dwarf::tags::name (entry.tag ())
 	  << " has decl_file, but NOT decl_line" << std::endl;
@@ -90,19 +90,19 @@ namespace
 	call_file = attrs.find (DW_AT_call_file);
 
       if (call_column != attrs.end () && call_line == attrs.end ())
-	wr_message (to_where (entry), mc_impact_3 | mc_acc_suboptimal)
+	wr_message (die_locus (entry), mc_impact_3 | mc_acc_suboptimal)
 	  .id (descriptor ())
 	  << elfutils::dwarf::tags::name (entry.tag ())
 	  << " has call_column, but NOT call_line" << std::endl;
 
       if (call_line != attrs.end () && call_file == attrs.end ())
-	wr_message (to_where (entry), mc_impact_3 | mc_acc_suboptimal)
+	wr_message (die_locus (entry), mc_impact_3 | mc_acc_suboptimal)
 	  .id (descriptor ())
 	  << elfutils::dwarf::tags::name (entry.tag ())
 	  << " has call_line, but NOT call_file" << std::endl;
 
       if (call_file != attrs.end () && call_line == attrs.end ())
-	wr_message (to_where (entry), mc_impact_3 | mc_acc_suboptimal)
+	wr_message (die_locus (entry), mc_impact_3 | mc_acc_suboptimal)
 	  .id (descriptor ())
 	  << elfutils::dwarf::tags::name (entry.tag ())
 	  << " has call_file, but NOT call_line" << std::endl;

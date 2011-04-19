@@ -31,25 +31,69 @@
 #include "messages.hh"
 #include "misc.hh"
 #include "readctx.hh"
+#include "pri.hh"
 
 #include <sstream>
 #include <libebl.h>
 #include <cassert>
-#include <inttypes.h>
+#include <cinttypes>
 
-static struct where
-where_from_reloc (struct relocation_data *reloc, struct where const *ref)
+namespace
 {
-  struct where where
-    = WHERE (reloc->type == SHT_REL ? sec_rel : sec_rela, NULL);
-  where_reset_1 (&where, reloc->rel[reloc->index].offset);
-  where.ref = ref;
-  return where;
+  class reloc_locus
+    : public locus
+  {
+    locus const &_m_ref;
+    size_t _m_index;
+    uint64_t _m_offset;
+    int _m_type;
+
+  public:
+    reloc_locus (int type, locus const &ref, uint64_t offset)
+      : _m_ref (ref)
+      , _m_index (-1)
+      , _m_offset (offset)
+      , _m_type (type)
+    {
+    }
+
+    reloc_locus (int type, locus const &ref, unsigned index)
+      : _m_ref (ref)
+      , _m_index (index)
+      , _m_offset (-1)
+      , _m_type (type)
+    {
+    }
+
+    void
+    set_offset (uint64_t offset)
+    {
+      _m_offset = offset;
+    }
+
+    virtual std::string
+    format (bool) const
+    {
+      std::stringstream ss;
+      ss << (_m_type == SHT_REL ? ".rel" : ".rela") << " ";
+      if (_m_offset != (uint64_t)-1)
+	ss << pri::hex (_m_offset);
+      else
+	{
+	  assert (_m_index != (size_t)-1);
+	  ss << "#" << _m_index;
+	}
+
+      // Do non-brief formatting of referee
+      ss << " of " << _m_ref.format ();
+      return ss.str ();
+    }
+  };
 }
 
 relocation *
 relocation_next (relocation_data *reloc, uint64_t offset,
-		 struct where const *where, enum skip_type st)
+		 locus const &loc, enum skip_type st)
 {
   if (reloc == NULL || reloc->rel == NULL)
     return NULL;
@@ -71,8 +115,7 @@ relocation_next (relocation_data *reloc, uint64_t offset,
 	{
 	  if (st != skip_ok)
 	    {
-	      struct where reloc_where = where_from_reloc (reloc, where);
-	      where_reset_2 (&reloc_where, rel->offset);
+	      reloc_locus reloc_where (reloc->type, loc, rel->offset);
 	      wr_error (reloc_where)
 		<< (st == skip_unref
 		    ? "relocation targets unreferenced portion of the section."
@@ -94,10 +137,10 @@ relocation_next (relocation_data *reloc, uint64_t offset,
    matching that offset is immediately yielded.  */
 void
 relocation_skip (struct relocation_data *reloc, uint64_t offset,
-		 struct where const *where, enum skip_type st)
+		 locus const &loc, enum skip_type st)
 {
   if (reloc != NULL && reloc->rel != NULL)
-    relocation_next (reloc, offset - 1, where, st);
+    relocation_next (reloc, offset - 1, loc, st);
 }
 
 void
@@ -109,15 +152,11 @@ relocation_reset (struct relocation_data *reloc)
 
 /* Skip all the remaining relocations.  */
 void
-relocation_skip_rest (struct relocation_data *reloc,
-		      enum section_id id)
+relocation_skip_rest (relocation_data *reloc,
+		      locus const &loc)
 {
   if (reloc->rel != NULL)
-    {
-      where wh = WHERE (id, NULL);
-      relocation_next (reloc, (uint64_t)-1, &wh,
-		       skip_mismatched);
-    }
+    relocation_next (reloc, (uint64_t)-1, loc, skip_mismatched);
 }
 
 static void
@@ -126,8 +165,8 @@ do_one_relocation (elf_file const *file,
 		   relocation *rel,
 		   unsigned rel_width,
 		   uint64_t *value,
-		   where const &reloc_where,
-		   section_id offset_into,
+		   reloc_locus const &reloc_where,
+		   rel_target reltgt,
 		   GElf_Sym *symbol,
 		   GElf_Sym **symptr)
 {
@@ -189,23 +228,23 @@ do_one_relocation (elf_file const *file,
     }
 
   /* It's target value, not section offset.  */
-  if (offset_into == rel_value
-      || offset_into == rel_address
-      || offset_into == rel_exec)
+  if (reltgt == rel_target::rel_value
+      || reltgt == rel_target::rel_address
+      || reltgt == rel_target::rel_exec)
     {
       /* If a target value is what's expected, then complain if
 	 it's not either SHN_ABS, an SHF_ALLOC section, or
 	 SHN_UNDEF.  For data forms of address_size, an SHN_UNDEF
 	 reloc is acceptable, otherwise reject it.  */
       if (!(section_index == SHN_ABS
-	    || (offset_into == rel_address
+	    || (reltgt == rel_target::rel_address
 		&& (section_index == SHN_UNDEF
 		    || section_index == SHN_COMMON))))
 	{
-	  if (offset_into != rel_address && section_index == SHN_UNDEF)
+	  if (reltgt != rel_target::rel_address && section_index == SHN_UNDEF)
 	    wr_error (&reloc_where,
-			": relocation of an address is formed using SHN_UNDEF symbol"
-			" (symtab index %d).\n", rel->symndx);
+		      ": relocation of an address is formed using SHN_UNDEF symbol"
+		      " (symtab index %d).\n", rel->symndx);
 	  else
 	    {
 	      require_valid_section_index;
@@ -214,7 +253,7 @@ do_one_relocation (elf_file const *file,
 		wr_message (mc_reloc | mc_impact_3, &reloc_where,
 			    ": associated section %s isn't SHF_ALLOC.\n",
 			    file->sec[section_index].name);
-	      if (offset_into == rel_exec
+	      if (reltgt == rel_target::rel_exec
 		  && (shdr->sh_flags & SHF_EXECINSTR) != SHF_EXECINSTR)
 		/* This may still be kosher, but it's suspicious.  */
 		wr_message (mc_reloc | mc_impact_2, &reloc_where,
@@ -226,13 +265,14 @@ do_one_relocation (elf_file const *file,
   else
     {
       require_valid_section_index;
-      if (file->sec[section_index].id != offset_into)
+      section_id secid = file->sec[section_index].id;
+      if (reltgt != secid)
 	// If symtab[symndx].st_shndx does not match the expected
 	// debug section's index, complain.
 	wr_error (reloc_where)
 	  << "relocation references section "
 	  << (file->sec[section_index].name ?: "<invalid>") << ", but "
-	  << WHERE (offset_into, NULL) << " was expected." << std::endl;
+	  << section_locus (secid) << " was expected." << std::endl;
     }
 
   /* Only do the actual relocation if we have ET_REL files.  For
@@ -257,16 +297,14 @@ relocate_one (struct elf_file const *file,
 	      struct relocation_data *reloc,
 	      struct relocation *rel,
 	      unsigned width, uint64_t *value,
-	      struct where const *where,
-	      enum section_id offset_into, GElf_Sym **symptr)
+	      locus const &loc,
+	      rel_target reltgt,
+	      GElf_Sym **symptr)
 {
   if (rel->invalid)
     return;
 
-  struct where reloc_where = where_from_reloc (reloc, where);
-  where_reset_2 (&reloc_where, rel->offset);
-  struct where reloc_ref_where = reloc_where;
-  reloc_ref_where.next = where;
+  reloc_locus reloc_where (reloc->type, loc, rel->offset);
 
   GElf_Sym symbol_mem, *symbol;
   if (symptr != NULL)
@@ -277,10 +315,10 @@ relocate_one (struct elf_file const *file,
   else
     symbol = &symbol_mem;
 
-  if (offset_into == sec_invalid)
+  if (reltgt == sec_invalid)
     {
-      wr_message (mc_impact_3 | mc_reloc, &reloc_ref_where,
-		  ": relocates a datum that shouldn't be relocated.\n");
+      wr_message (reloc_where, mc_impact_3 | mc_reloc)
+	<< "relocates a datum that shouldn't be relocated.\n";
       return;
     }
 
@@ -314,14 +352,14 @@ relocate_one (struct elf_file const *file,
     };
 
   if (rel_width != width)
-    wr_error (&reloc_ref_where,
-	      ": %d-byte relocation relocates %d-byte datum.\n",
-	      rel_width, width);
+    wr_error (reloc_where)
+      << rel_width << "-byte relocation relocates "
+      << width << "-byte datum.\n";
 
   // Tolerate if we failed to obtain the symbol table.
   if (reloc->symdata != NULL)
     do_one_relocation (file, reloc, rel, rel_width, value,
-		       reloc_where, offset_into, symbol, symptr);
+		       reloc_where, reltgt, symbol, symptr);
 }
 
 static GElf_Rela *
@@ -371,17 +409,15 @@ read_rel (struct elf_file *file,
     : (is_rela ? sizeof (Elf32_Rela) : sizeof (Elf32_Rel));
   size_t count = reldata->d_size / entrysize;
 
-  struct where parent = WHERE (sec->id, NULL);
-  struct where where = WHERE (is_rela ? sec_rela : sec_rel, NULL);
-  where.ref = &parent;
+  section_locus parent (sec->id);
 
   for (unsigned i = 0; i < count; ++i)
     {
-      where_reset_1 (&where, i);
+      reloc_locus where (sec->rel.type, parent, i);
 
       REALLOC (&sec->rel, rel);
       struct relocation *cur = sec->rel.rel + sec->rel.size++;
-      WIPE (*cur);
+      new (cur) relocation ();
 
       GElf_Rela rela_mem, *rela
 	= get_rel_or_rela (reldata, i, &rela_mem, sec->rel.type);
@@ -405,7 +441,7 @@ read_rel (struct elf_file *file,
       cur->symndx = GELF_R_SYM (rela->r_info);
       cur->type = cur_type;
 
-      where_reset_2 (&where, cur->offset);
+      where.set_offset (cur->offset);
 
       Elf_Type type = ebl_reloc_simple_type (file->ebl, cur->type);
       int width;

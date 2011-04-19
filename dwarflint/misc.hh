@@ -27,7 +27,7 @@
 #define DWARFLINT_MISC_HH
 
 #include <cstring>
-#include "where.h"
+#include "locus.hh"
 
 extern "C"
 {
@@ -49,14 +49,12 @@ extern "C"
       }							\
   } while (0)
 
-#define WIPE(OBJ) memset (&OBJ, 0, sizeof (OBJ))
-
 bool address_aligned (uint64_t addr, uint64_t align);
 bool necessary_alignment (uint64_t start, uint64_t length,
 			  uint64_t align);
 
 bool supported_version (unsigned version,
-			size_t num_supported, struct where *where, ...);
+			size_t num_supported, locus const &loc, ...);
 
 #define UNREACHABLE assert (!"unreachable")
 

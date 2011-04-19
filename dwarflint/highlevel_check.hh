@@ -31,6 +31,8 @@
 #endif
 
 #include "checks.hh"
+#include "check_debug_info.hh"
+
 #include "../libdw/c++/dwarf"
 #include "../libdwfl/libdwfl.h"
 
@@ -81,15 +83,5 @@ public:
     : highlevel_check_i (stack, lint)
   {}
 };
-
-template <class T>
-inline where
-to_where (T const &die)
-{
-  where ret = WHERE (sec_info, NULL);
-  where_reset_1 (&ret, 0);
-  where_reset_2 (&ret, die.offset ());
-  return ret;
-}
 
 #endif//DWARFLINT_CHECKS_HIGH_HH

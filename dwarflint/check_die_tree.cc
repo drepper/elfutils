@@ -97,7 +97,7 @@ public:
 	r += reason;
       }
 
-    wr_error (to_where (*a_d_it))
+    wr_error (die_locus (*a_d_it))
       << "A check failed: " << (_m_cd->name () ?: "(nil)")
       << r << std::endl;
   }
