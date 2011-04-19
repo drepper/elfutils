@@ -29,12 +29,13 @@
 #include "locus.hh"
 #include "../libdw/c++/dwarf"
 
-struct cu_locus_n {
-  static char const *name () { return "CU"; }
+namespace locus_simple_fmt
+{
+  char const *cu_n ();
 };
 
 typedef fixed_locus<sec_info,
-		    cu_locus_n::name,
+		    locus_simple_fmt::cu_n,
 		    locus_simple_fmt::dec> cu_locus;
 
 class die_locus

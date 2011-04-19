@@ -149,12 +149,13 @@ namespace
 
 namespace
 {
-  struct line_table_locus_n {
-    static char const *name () { return "table"; }
-  };
+  char const *
+  table_n ()
+  {
+    return "table";
+  }
 
-  typedef fixed_locus<sec_line,
-		      line_table_locus_n::name,
+  typedef fixed_locus<sec_line, table_n,
 		      locus_simple_fmt::dec> line_table_locus;
 }
 

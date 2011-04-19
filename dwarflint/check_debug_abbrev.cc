@@ -43,6 +43,12 @@
 #include "messages.hh"
 #include "misc.hh"
 
+char const *
+locus_simple_fmt::abbr_offset_n ()
+{
+  return "abbr. offset";
+}
+
 abbrev_attrib_locus::abbrev_attrib_locus (uint64_t abbr_offset,
 					  uint64_t attr_offset,
 					  int a_name)

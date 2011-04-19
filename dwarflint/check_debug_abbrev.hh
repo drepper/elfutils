@@ -31,12 +31,13 @@
 #include "check_debug_info_i.hh"
 #include "dwarf_version_i.hh"
 
-struct abbrev_locus_n {
-  static char const *name () { return "abbr. offset"; }
-};
+namespace locus_simple_fmt
+{
+  char const *abbr_offset_n ();
+}
 
 typedef fixed_locus<sec_abbrev,
-		    abbrev_locus_n::name,
+		    locus_simple_fmt::abbr_offset_n,
 		    locus_simple_fmt::hex> abbrev_locus;
 
 class abbrev_attrib_locus

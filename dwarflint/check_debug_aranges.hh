@@ -31,25 +31,27 @@
 #include "check_debug_info_i.hh"
 #include "cu_coverage_i.hh"
 
-struct cudie_locus_n {
-  static char const *name () { return "CU DIE"; }
+namespace locus_simple_fmt
+{
+  char const *cudie_n ();
 };
 
 class cudie_locus
   : public fixed_locus<sec_info,
-		       cudie_locus_n::name,
+		       locus_simple_fmt::cudie_n,
 		       locus_simple_fmt::dec>
 {
+  typedef fixed_locus<sec_info,
+		      locus_simple_fmt::cudie_n,
+		      locus_simple_fmt::dec> _super_t;
 public:
   template <class T>
   cudie_locus (T const &die)
-    : fixed_locus<sec_info, cudie_locus_n::name,
-		  locus_simple_fmt::dec> (die.offset ())
+    : _super_t (die.offset ())
   {}
 
   cudie_locus (Dwarf_Off offset)
-    : fixed_locus<sec_info, cudie_locus_n::name,
-		  locus_simple_fmt::dec> (offset)
+    : _super_t (offset)
   {}
 };
 

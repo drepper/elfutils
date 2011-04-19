@@ -42,6 +42,12 @@
 #include "misc.hh"
 #include "pri.hh"
 
+char const *
+locus_simple_fmt::cudie_n ()
+{
+  return "CU DIE";
+}
+
 std::string
 arange_locus::format (bool brief) const
 {

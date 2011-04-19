@@ -27,12 +27,28 @@
 #include "section_id.hh"
 #include <sstream>
 
+char const *
+locus_simple_fmt::offset_n ()
+{
+  return "offset";
+}
+
+void
+locus_simple_fmt::hex (std::ostream &ss, uint64_t off)
+{
+  ss << "0x" << std::hex << off;
+}
+
+void
+locus_simple_fmt::dec (std::ostream &ss, uint64_t off)
+{
+  ss << std::dec << off;
+}
+
 std::string
-format_simple_locus (char const *(*N) (),
-		     void (*F) (std::ostream &, uint64_t),
-		     bool brief,
-		     section_id sec,
-		     uint64_t off)
+simple_locus_aux::format_simple_locus (char const *(*N) (),
+				       void (*F) (std::ostream &, uint64_t),
+				       bool brief, section_id sec, uint64_t off)
 {
   std::stringstream ss;
   if (!brief)

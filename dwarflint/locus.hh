@@ -34,6 +34,11 @@
 #include <iostream>
 #include <cassert>
 
+/// Instances of the locus subclasses are used as pointers into
+/// debuginfo for documentation purposes (messages and errors).  They
+/// are usually tiny structures, and should be used as values, but we
+/// need the abstract interface to be able to format them, and copy
+/// them into ref_record.
 class locus
 {
 public:
@@ -42,6 +47,9 @@ public:
   virtual ~locus () {}
 };
 
+/// This is to simplify creation of subclasses.  Most locus subclasses
+/// should in fact inherit from this using CRTP:
+///   class X: public clonable_locus<X>
 template <class T>
 class clonable_locus
   : public locus
@@ -53,16 +61,26 @@ public:
   }
 };
 
-std::string format_simple_locus (char const *(*N) (),
-				 void (*F) (std::ostream &, uint64_t),
-				 bool brief,
-				 section_id sec,
-				 uint64_t off);
+/// Helper class for simple_locus to reduce the template bloat.
+class simple_locus_aux
+{
+protected:
+  static std::string format_simple_locus (char const *(*N) (),
+					  void (*F) (std::ostream &, uint64_t),
+					  bool brief, section_id sec,
+					  uint64_t off);
+};
 
+/// Template for quick construction of straightforward locus
+/// subclasses (one address, one way of formatting).  N should be a
+/// function that returns the name of the argument.
+/// locus_simple_fmt::hex, locus_simple_fmt::dec would be candidate
+/// parameters for argument F.
 template<char const *(*N) (),
 	 void (*F) (std::ostream &, uint64_t)>
 class simple_locus
   : public clonable_locus<simple_locus<N, F> >
+  , private simple_locus_aux
 {
   section_id _m_sec;
   uint64_t _m_offset;
@@ -73,12 +91,14 @@ public:
     , _m_offset (offset)
   {}
 
-  std::string format (bool brief = false) const
+  std::string
+  format (bool brief = false) const
   {
     return format_simple_locus (N, F, brief, _m_sec, _m_offset);
   }
 };
 
+/// Constructor of simple_locus that fixes the section_id argument.
 template<section_id S,
 	 char const *(*N) (),
 	 void (*F) (std::ostream &, uint64_t)>
@@ -91,17 +111,17 @@ public:
   {}
 };
 
-struct locus_simple_fmt {
-  static char const *offset () { return "offset"; }
+namespace locus_simple_fmt
+{
+  char const *offset_n ();
+  void hex (std::ostream &ss, uint64_t off);
+  void dec (std::ostream &ss, uint64_t off);
+}
 
-  static void hex (std::ostream &ss, uint64_t off) {
-    ss << "0x" << std::hex << off;
-  }
-  static void dec (std::ostream &ss, uint64_t off) {
-    ss << std::dec << off;
-  }
-};
-typedef simple_locus<locus_simple_fmt::offset,
+/// Straightforward locus for cases where either offset is not
+/// necessary at all, or if it is present, it's simply shown as
+/// "offset: 0xf00".
+typedef simple_locus<locus_simple_fmt::offset_n,
 		     locus_simple_fmt::hex> section_locus;
 
 inline std::ostream &

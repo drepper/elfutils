@@ -30,6 +30,12 @@
 #include "die_locus.hh"
 #include "pri.hh"
 
+char const *
+locus_simple_fmt::cu_n ()
+{
+  return "CU";
+}
+
 std::string
 die_locus::format (bool brief) const
 {
