@@ -60,7 +60,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  dwarf-print dwarf_edit dwarf_edit_output \
-		  test-flag-nobits dwarf-getstring rerequest_tag
+		  test-flag-nobits dwarf-getstring rerequest_tag \
+		  alldts
 
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -74,7 +75,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-strip-test3.sh run-strip-test4.sh run-strip-test5.sh \
 	run-strip-test6.sh run-strip-test7.sh run-strip-test8.sh \
 	run-unstrip-test.sh run-unstrip-test2.sh \
-	run-ecp-test.sh run-ecp-test2.sh \
+	run-ecp-test.sh run-ecp-test2.sh run-alldts.sh \
 	run-elflint-test.sh run-elflint-self.sh run-ranlib-test.sh \
 	run-ranlib-test2.sh run-ranlib-test3.sh run-ranlib-test4.sh \
 	run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
@@ -128,7 +129,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-dwarf-getmacros.sh run-test-flag-nobits.sh \
 	     run-dwarfcmp-self.sh run-dwarfcmp-test-self.sh \
 	     run-dwarflint-self.sh run-dwarf-attributes.sh run-dwarf_edit.sh \
-	     run-dwarf-getstring.sh \
+	     run-dwarf-getstring.sh run-alldts.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -167,7 +168,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile55-32.bz2 testfile55-32.debug.bz2 \
 	     testfile55-32.prelink.bz2 testfile55-64.bz2 \
 	     testfile55-64.debug.bz2 testfile55-64.prelink.bz2 \
-	     testfile56.bz2
+	     testfile56.bz2 testfile57.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
@@ -275,6 +276,7 @@ dwarf_getstring_LDADD = $(libdw) $(libmudflap)
 addrcfi_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 test_flag_nobits_LDADD = $(libelf) $(libmudflap)
 rerequest_tag_LDADD = $(libdw) $(libmudflap)
+alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage
