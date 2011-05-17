@@ -1,3 +1,23 @@
+2011-05-16  Jakub Jelinek  <jakub@redhat.com>
+
+	* readelf.c (print_ops): Handle DW_OP_GNU_const_type,
+	DW_OP_GNU_regval_type, DW_OP_GNU_deref_type, DW_OP_GNU_convert
+	and DW_OP_GNU_reinterpret.
+
+2011-05-17  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (dwarf_tag_string): Fixup DW_TAG_GNU_call_site and
+	DW_TAG_GNU_call_site_parameter return strings.
+
+2011-05-11  Marek Polacek  <mpolacek@redhat.com>
+
+	* nm.c (show_symbols_sysv): Remove unused if/else, remove
+	unused `prefix' and `fname' parameters.
+
+2011-05-07  Marek Polacek  <mpolacek@redhat.com>
+
+	* unstrip.c (compare_sections_nonrel): Mark this function as static.
+
 2011-04-26  Mark Wielaard  <mjw@redhat.com>
 
 	* readelf.c (handle_notes_data): Call ebl_object_note_type_name
