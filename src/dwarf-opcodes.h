@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -209,4 +209,11 @@
   DW_OP_2 (DW_OP_GNU_implicit_pointer, DW_FORM_ref_addr, DW_FORM_sdata) \
   /* GNU variant for tracking of values passed as arguments to functions.  */ \
   /* http://www.dwarfstd.org/ShowIssue.php?issue=100909.1 */	\
-  DW_OP_1 (DW_OP_GNU_entry_value, DW_FORM_block)
+  DW_OP_1 (DW_OP_GNU_entry_value, DW_FORM_block)		\
+  /* The GNU typed stack extension.  */				\
+  /* See http://www.dwarfstd.org/doc/040408.1.html */		\
+  DW_OP_2 (DW_OP_GNU_const_type, DW_FORM_udata, DW_FORM_block1)	\
+  DW_OP_2 (DW_OP_GNU_regval_type, DW_FORM_udata, DW_FORM_udata)	\
+  DW_OP_2 (DW_OP_GNU_deref_type, DW_FORM_data1, DW_FORM_udata)	\
+  DW_OP_1 (DW_OP_GNU_convert, DW_FORM_udata)			\
+  DW_OP_1 (DW_OP_GNU_reinterpret, DW_FORM_udata)
