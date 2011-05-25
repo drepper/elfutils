@@ -1,7 +1,6 @@
-/* Return note type name.
-   Copyright (C) 2002, 2007, 2009, 2011 Red Hat, Inc.
+/* Check st_other flag.
+   Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -52,50 +51,14 @@
 # include <config.h>
 #endif
 
-#include <inttypes.h>
-#include <stdio.h>
-#include <string.h>
 #include <libeblP.h>
 
 
-const char *
-ebl_object_note_type_name (ebl, name, type, buf, len)
+bool
+ebl_check_st_other_bits (ebl, st_other)
      Ebl *ebl;
-     const char *name;
-     uint32_t type;
-     char *buf;
-     size_t len;
+     unsigned char st_other;
 {
-  const char *res = ebl->object_note_type_name (name, type, buf, len);
-
-  if (res == NULL)
-    {
-      if (strcmp (name, "stapsdt") == 0)
-	{
-	  snprintf (buf, len, "Version: %" PRIu32, type);
-	  return buf;
-	}
-
-      static const char *knowntypes[] =
-	{
-#define KNOWNSTYPE(name) [NT_##name] = #name
-	  KNOWNSTYPE (VERSION),
-	  KNOWNSTYPE (GNU_HWCAP),
-	  KNOWNSTYPE (GNU_BUILD_ID),
-	  KNOWNSTYPE (GNU_GOLD_VERSION),
-	};
-
-      /* Handle standard names.  */
-      if (type < sizeof (knowntypes) / sizeof (knowntypes[0])
-	  && knowntypes[type] != NULL)
-	res = knowntypes[type];
-      else
-	{
-	  snprintf (buf, len, "%s: %" PRIu32, gettext ("<unknown>"), type);
-
-	  res = buf;
-	}
-    }
-
-  return res;
+  return ((st_other ^ GELF_ST_VISIBILITY (st_other)) == 0
+	  || ebl->check_st_other_bits (st_other ^ GELF_ST_VISIBILITY (st_other)));
 }

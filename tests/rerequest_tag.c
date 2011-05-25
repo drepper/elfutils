@@ -1,7 +1,5 @@
-/* Initialization of Alpha specific backend library.
-   Copyright (C) 2002-2011 Red Hat, Inc.
+/* Copyright (C) 2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by the
@@ -24,44 +22,33 @@
    Network licensing program, please visit www.openinventionnetwork.com
    <http://www.openinventionnetwork.com>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
+#include <config.h>
 
-#define BACKEND		alpha_
-#define RELOC_PREFIX	R_ALPHA_
-#include "libebl_CPU.h"
+#include ELFUTILS_HEADER(dw)
+#include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
 
-/* This defines the common reloc hooks based on alpha_reloc.def.  */
-#include "common-reloc.c"
-
-
-const char *
-alpha_init (elf, machine, eh, ehlen)
-     Elf *elf __attribute__ ((unused));
-     GElf_Half machine __attribute__ ((unused));
-     Ebl *eh;
-     size_t ehlen;
+int
+main (int argc, char **argv)
 {
-  /* Check whether the Elf_BH object has a sufficent size.  */
-  if (ehlen < sizeof (Ebl))
-    return NULL;
+  assert (argc > 1);
 
-  /* We handle it.  */
-  eh->name = "Alpha";
-  alpha_init_reloc (eh);
-  HOOK (eh, dynamic_tag_name);
-  HOOK (eh, dynamic_tag_check);
-  HOOK (eh, reloc_simple_type);
-  HOOK (eh, return_value_location);
-  HOOK (eh, machine_section_flag_check);
-  HOOK (eh, check_special_section);
-  HOOK (eh, check_special_symbol);
-  HOOK (eh, check_st_other_bits);
-  HOOK (eh, register_info);
-  HOOK (eh, core_note);
-  HOOK (eh, auxv_info);
-  eh->sysvhash_entrysize = sizeof (Elf64_Xword);
+  int i = open (argv[1], O_RDONLY);
+  assert (i >= 0);
 
-  return MODVERSION;
+  Dwarf *dw = dwarf_begin (i, DWARF_C_READ);
+  assert (dw != NULL);
+
+  Dwarf_Die die_mem, *die;
+  die = dwarf_offdie (dw, 11, &die_mem);
+  assert (die == &die_mem);
+  assert (dwarf_tag (die) == 0);
+
+  die = dwarf_offdie (dw, 11, &die_mem);
+  assert (die == &die_mem);
+  assert (dwarf_tag (die) == 0);
+
+  return 0;
 }

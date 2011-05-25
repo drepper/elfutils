@@ -1,3 +1,118 @@
+2011-05-23  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (relocate): Take new arguments is_rela to indicate
+	whether the relocation is from a SHT_REL or SHT_RELA section. 
+	Relocate against any debug section symbol, not just STT_SECTION
+	symbols. For SHT_REL relocations, fetch addend from offset and
+	add it to symbol value if not zero.
+
+2011-05-23  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (OPT_RELOC_DEBUG): New option.
+	(argp_option): Add new --reloc-debug-sections option.
+	(main): Check new option.
+	(parse_opt): Likewise.
+	(handle_elf): Remove any relocations between debug sections
+	in ET_REL for the debug file when requested.
+
+2011-05-18  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (handle_elf): Make sure all sections of a removed group
+	section are removed too. Don't discard SHT_GROUP sections, copy
+	section table before it gets modified. Section group signature
+	symbols don't have to be retained.
+
+2011-05-16  Jakub Jelinek  <jakub@redhat.com>
+
+	* readelf.c (print_ops): Handle DW_OP_GNU_const_type,
+	DW_OP_GNU_regval_type, DW_OP_GNU_deref_type, DW_OP_GNU_convert
+	and DW_OP_GNU_reinterpret.
+
+2011-05-17  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (dwarf_tag_string): Fixup DW_TAG_GNU_call_site and
+	DW_TAG_GNU_call_site_parameter return strings.
+
+2011-05-11  Marek Polacek  <mpolacek@redhat.com>
+
+	* nm.c (show_symbols_sysv): Remove unused if/else, remove
+	unused `prefix' and `fname' parameters.
+
+2011-05-07  Marek Polacek  <mpolacek@redhat.com>
+
+	* unstrip.c (compare_sections_nonrel): Mark this function as static.
+
+2011-04-26  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (handle_notes_data): Call ebl_object_note_type_name
+	with note name.
+
+2011-04-14  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (options): Add gdb_index.
+	(section_e): Define section_gdb_index.
+	(parse_opt): Recognize gdb_index debug-dump argument.
+	(print_gdb_index_section): New function.
+	(print_debug): Add gdb_index to debug_sections.
+
+2011-03-24  Petr Machata  <pmachata@redhat.com>
+
+	* readelf.c (print_debug_line_section): Emit initial space for all
+	opcode lines.  Print offset in front of each opcode.
+
+2011-03-22  Marek Polacek  <mpolacek@redhat.com>
+
+	* readelf.c (handle_dynamic): Don't segfault at DT_PLTREL case.
+
+2011-03-22  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (dwarf_tag_string): Support DW_TAG_GNU_call_site
+	and DW_TAG_GNU_call_site_parameter.
+	(dwarf_attr_string): Support DW_AT_GNU_call_site_value,
+	DW_AT_GNU_call_site_data_value,
+	DW_AT_GNU_call_site_target,
+	DW_AT_GNU_call_site_target_clobbered,
+	DW_AT_GNU_tail_call,
+	DW_AT_GNU_all_tail_call_sites,
+	DW_AT_GNU_all_call_sites,
+	and DW_AT_GNU_all_source_call_sites.
+	(print_ops): Handle DW_OP_GNU_entry_value.
+	(attr_callback): Handle DW_AT_GNU_call_site_value,
+	DW_AT_GNU_call_site_data_value,
+	DW_AT_GNU_call_site_target,
+	and DW_AT_GNU_call_site_target_clobbered.
+
+2011-03-10  Mark Wielaard  <mjw@redhat.com>
+
+	* elflint.c (check_symtab): Use ebl_check_st_other_bits.
+
+2011-02-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* readelf.c (reset_listptr): Clear TABLE->TABLE.
+
+2011-02-25  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (dwarf_attr_string): Add DW_AT_GNU_* handling.
+	(dwarf_form_string): Properly format and return unknown form.
+
+2011-02-23  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (section_name): New function.
+	(print_debug_abbrev_section): Use it instead of constant.
+	(print_debug_aranges_section): Likewise.
+	(print_debug_ranges_section): Likewise.
+	(print_debug_units): Likewise.
+	(print_debug_line_section): Likewise.
+	(print_debug_loc_section): Likewise.
+	(print_debug_macinfo_section): Likewise.
+	(print_debug_pubnames_section): Likewise.
+	(print_debug_str_section): Likewise.
+	(print_debug) [USE_ZLIB]: Match .zdebug_* sections too.
+	(print_debug_abbrev_section): Use decoded d_size, not sh_size.
+	(print_debug_str_section): Likewise.
+
+	* readelf.c (dwarf_attr_string): Grok DW_AT_GNU_odr_signature.
+
 2011-03-23  Petr Machata  <pmachata@redhat.com>
 
 	* readelf.c (handle_dynamic, handle_relocs_rel)

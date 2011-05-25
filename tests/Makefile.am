@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2010 Red Hat, Inc.
+## Copyright (C) 1996-2011 Red Hat, Inc.
 ## This file is part of Red Hat elfutils.
 ##
 ## Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -28,7 +28,7 @@ include $(top_srcdir)/config/eu.am
 if MUDFLAP
 BUILD_RPATH = \$$ORIGIN/../backends
 else
-BUILT_RPATH = \$$ORIGIN/../libasm:\$$ORIGIN/../libdw:\$$ORIGIN/../backends:\$$ORIGIN/../libelf
+BUILD_RPATH = \$$ORIGIN/../libasm:\$$ORIGIN/../libdw:\$$ORIGIN/../backends:\$$ORIGIN/../libelf
 endif
 
 AM_LDFLAGS =
@@ -42,7 +42,7 @@ AM_LDFLAGS += -Wl,-rpath-link,../libasm:../libdw:../libelf
 endif
 
 if TESTS_RPATH
-AM_LDFLAGS += -Wl,-rpath,$(BUILT_RPATH)
+AM_LDFLAGS += -Wl,-rpath,$(BUILD_RPATH)
 tests_rpath = yes
 else
 tests_rpath = no
@@ -57,7 +57,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
-		  test-flag-nobits
+		  test-flag-nobits dwarf-getstring rerequest_tag \
+		  alldts
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -69,21 +70,23 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	newscn run-strip-test.sh run-strip-test2.sh \
 	run-strip-test3.sh run-strip-test4.sh run-strip-test5.sh \
 	run-strip-test6.sh run-strip-test7.sh run-strip-test8.sh \
+	run-strip-groups.sh run-strip-reloc.sh \
 	run-unstrip-test.sh run-unstrip-test2.sh \
-	run-ecp-test.sh run-ecp-test2.sh \
+	run-ecp-test.sh run-ecp-test2.sh run-alldts.sh \
 	run-elflint-test.sh run-elflint-self.sh run-ranlib-test.sh \
 	run-ranlib-test2.sh run-ranlib-test3.sh run-ranlib-test4.sh \
 	run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
 	run-find-prologues.sh run-allregs.sh \
 	run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
-	run-readelf-test4.sh \
+	run-readelf-test4.sh run-readelf-twofiles.sh \
 	run-native-test.sh run-bug1-test.sh \
 	dwfl-bug-addr-overflow run-addrname-test.sh \
 	dwfl-bug-fd-leak dwfl-bug-report \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
-	run-test-flag-nobits.sh run-prelink-addr-test.sh
+	run-test-flag-nobits.sh run-prelink-addr-test.sh \
+	run-dwarf-getstring.sh run-rerequest_tag.sh
 # run-show-ciefde.sh
 
 if !STANDALONE
@@ -108,7 +111,9 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile13.bz2 run-strip-test3.sh run-allfcts.sh \
 	     run-line2addr.sh run-elflint-test.sh testfile14.bz2 \
 	     run-strip-test4.sh run-strip-test5.sh run-strip-test6.sh \
-	     run-strip-test7.sh run-strip-test8.sh \
+	     run-strip-test7.sh run-strip-test8.sh run-strip-groups.sh \
+	     run-strip-reloc.sh hello_i386.ko.bz2 hello_x86_64.ko.bz2 \
+	     hello_ppc64.ko.bz2 hello_s390.ko.bz2 \
 	     run-unstrip-test.sh run-unstrip-test2.sh \
 	     run-elflint-self.sh run-ranlib-test.sh run-ranlib-test2.sh \
 	     run-ranlib-test3.sh run-ranlib-test4.sh \
@@ -117,6 +122,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
 	     run-dwarf-getmacros.sh run-test-flag-nobits.sh \
+	     run-dwarf-getstring.sh run-alldts.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -154,7 +160,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile54-64.prelink.so.bz2 testfile54-64.noshdrs.so.bz2 \
 	     testfile55-32.bz2 testfile55-32.debug.bz2 \
 	     testfile55-32.prelink.bz2 testfile55-64.bz2 \
-	     testfile55-64.debug.bz2 testfile55-64.prelink.bz2
+	     testfile55-64.debug.bz2 testfile55-64.prelink.bz2 \
+	     testfile56.bz2 testfile57.bz2 testfile58.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
@@ -246,8 +253,11 @@ dwfl_bug_getmodules_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 dwfl_addr_sect_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 sha1_tst_LDADD = $(libeu) $(libmudflap)
 dwarf_getmacros_LDADD = $(libdw) $(libmudflap)
+dwarf_getstring_LDADD = $(libdw) $(libmudflap)
 addrcfi_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 test_flag_nobits_LDADD = $(libelf) $(libmudflap)
+rerequest_tag_LDADD = $(libdw) $(libmudflap)
+alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage
