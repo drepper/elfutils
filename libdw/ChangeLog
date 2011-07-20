@@ -1,3 +1,7 @@
+2011-07-20  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_begin_elf.c: Add fallback for be64toh if not defined.
+
 2011-03-10  Petr Machata  <pmachata@redhat.com>
 
 	* libdw/dwarf_tag.c (__libdw_findabbrev): Reject requests for
