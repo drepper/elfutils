@@ -224,6 +224,11 @@ AM_CONDITIONAL(GCOV, test "$use_gcov" = yes)
 AM_CONDITIONAL(BUILD_STATIC, [dnl
 test "$use_mudflap" = yes -o "$use_gprof" = yes -o "$use_gcov" = yes])
 
+AC_ARG_ENABLE([werror],
+AS_HELP_STRING([--disable-werror],[do not build with -Werror]),
+	       [enable_werror=$enableval], [enable_werror=yes])
+AM_CONDITIONAL(BUILD_WERROR, test "$enable_werror" = yes)
+
 AC_ARG_ENABLE([tests-rpath],
 AS_HELP_STRING([--enable-tests-rpath],[build $ORIGIN-using rpath into tests]),
 	       [tests_use_rpath=$enableval], [tests_use_rpath=no])
