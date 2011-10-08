@@ -106,7 +106,8 @@ static const struct argp_option options[] =
   { NULL, 0, NULL, 0, N_("Output control:"), 0 },
   { "numeric-addresses", 'N', NULL, 0,
     N_("Do not find symbol names for addresses in DWARF data"), 0 },
-
+  { "wide", 'W', NULL, 0,
+    N_("Ignored for compatibility (lines always wide)"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -443,6 +444,8 @@ parse_opt (int key, char *arg,
 		     program_invocation_short_name);
 	  exit (EXIT_FAILURE);
 	}
+      break;
+    case 'W':			/* Ignored.  */
       break;
     default:
       return ARGP_ERR_UNKNOWN;
@@ -4831,7 +4834,7 @@ register_info (Ebl *ebl, unsigned int regno, const Ebl_Register_Location *loc,
 				 bits ?: &ignore, type ?: &ignore);
   if (n <= 0)
     {
-      snprintf (name, sizeof name, "reg%u", loc->regno);
+      snprintf (name, REGNAMESZ, "reg%u", loc->regno);
       if (bits != NULL)
 	*bits = loc->bits;
       if (type != NULL)

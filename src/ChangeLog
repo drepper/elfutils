@@ -1,7 +1,52 @@
+2011-10-04  Marek Polacek  <mpolacek@redhat.com>
+
+	* readelf.c (register_info): Assume the right size of an array.
+
+2011-10-03  Ulrich Drepper  <drepper@gmail.com>
+
+	* nm.c: Recognize option --mark-special.  Still recognize --mark-weak
+	but don't show it in help anymore.
+	(mark_special): Renamed from mark_weak.
+	(parse_opt): Adjust.
+	(class_type_char): Take additional parameters for ELF file and ELF
+	header.  Treat TLS symbols like objects.
+	In case of D symbols, show u for unique symbols, R for symbols in
+	read-only sections, B for symbols in BSS sections.
+	(show_symbols_bsd): Take additional parameters for ELF file and ELF
+	header.  Adjust for class_type_char change.  Show TLS symbols with
+	@ after them in case --mark-special is selected.
+	(show_symbols_posix): Likewise.
+	(show_symbols): Adjust calls to show_symbols_bsd and
+	show_symbols_posix.
+	(show_symbols_sysv): Avoid printing adress and size for undefined
+	symbols.  Don't print initial special entry and section entries.
+
+2011-10-02  Ulrich Drepper  <drepper@gmail.com>
+
+	* Makefile.am (demanglelib): Define.
+	(nm_LDADD): Add demanglelib.
+	* nm.c (options): Add -C option.
+	(demangle): Define as global variable.
+	(parse_opt): Recognize -C.
+	(show_symbols_sysv): Handle demangling.
+	(show_symbols_bad): Likewise.
+	(show_symbols_posix): Likewise.
+	(show_symbols): Likewise.
+
+2011-07-09  Roland McGrath  <roland@hack.frob.com>
+
+	* readelf.c (options, parse_opt): Grok -W/--wide and ignore it.
+
+	* ar.c (parse_opt): Grok -u.
+
+2011-05-30  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (relocate): Make offset check overflow-proof.
+
 2011-05-23  Mark Wielaard  <mjw@redhat.com>
 
 	* strip.c (relocate): Take new arguments is_rela to indicate
-	whether the relocation is from a SHT_REL or SHT_RELA section. 
+	whether the relocation is from a SHT_REL or SHT_RELA section.
 	Relocate against any debug section symbol, not just STT_SECTION
 	symbols. For SHT_REL relocations, fetch addend from offset and
 	add it to symbol value if not zero.
