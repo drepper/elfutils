@@ -22,12 +22,42 @@
 # included package.  Should you wish to participate in the Open Invention
 # Network licensing program, please visit www.openinventionnetwork.com
 # <http://www.openinventionnetwork.com>.
+#
+# g++ -gdwarf-4 -c testfile58.cxx
+# class ct
+# {
+#   private:
+#   int i;
+#
+#   public:
+#   void foo ()
+#   {
+#     i = 1;
+#   }
+#
+#   int bar ()
+#   {
+#     return i;
+#   }
+# };
+#
+# int baz ()
+# {
+#   class ct c;
+#   c.foo ();
+#   return c.bar ();
+# }
 
 . $srcdir/test-subr.sh
 
-testfiles testfile56 testfile57
+infile=testfile58
+outfile=$infile.stripped
+dbgfile=$infile.debug
 
-testrun ./rerequest_tag testfile56
-testrun ./rerequest_tag testfile57
+testfiles $infile
+tempfiles $outfile $dbgfile
 
-exit 0
+testrun ../src/strip -o $outfile -f $dbgfile $infile
+testrun ../src/elflint -q $infile
+testrun ../src/elflint -q $outfile
+testrun ../src/elflint -q -d $dbgfile

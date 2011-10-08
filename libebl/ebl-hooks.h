@@ -1,5 +1,5 @@
 /* Backend hook signatures internal interface for libebl.
-   Copyright (C) 2000-2010 Red Hat, Inc.
+   Copyright (C) 2000-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -111,7 +111,8 @@ const char *EBLHOOK(osabi_name) (int, char *, size_t);
 const char *EBLHOOK(core_note_type_name) (uint32_t, char *, size_t);
 
 /* Name of a note entry type for object files.  */
-const char *EBLHOOK(object_note_type_name) (uint32_t, char *, size_t);
+const char *EBLHOOK(object_note_type_name) (const char *, uint32_t,
+					    char *, size_t);
 
 /* Describe core note format.  */
 int EBLHOOK(core_note) (const GElf_Nhdr *, const char *,
@@ -143,6 +144,10 @@ bool EBLHOOK(relative_reloc_p) (int);
 /* Check whether given symbol's value is ok despite normal checks.  */
 bool EBLHOOK(check_special_symbol) (Elf *, GElf_Ehdr *, const GElf_Sym *,
 			      const char *, const GElf_Shdr *);
+
+/* Check whether only valid bits are set on the st_other symbol flag.
+   Standard ST_VISIBILITY have already been masked off.  */
+bool EBLHOOK(check_st_other_bits) (unsigned char st_other);
 
 /* Check if backend uses a bss PLT in this file.  */
 bool EBLHOOK(bss_plt_p) (Elf *, GElf_Ehdr *);

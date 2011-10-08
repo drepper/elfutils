@@ -57,7 +57,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-addr-overflow arls dwfl-bug-fd-leak \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
-		  test-flag-nobits dwarf-getstring rerequest_tag
+		  test-flag-nobits dwarf-getstring rerequest_tag \
+		  alldts md5-sha1-test
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -69,8 +70,9 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	newscn run-strip-test.sh run-strip-test2.sh \
 	run-strip-test3.sh run-strip-test4.sh run-strip-test5.sh \
 	run-strip-test6.sh run-strip-test7.sh run-strip-test8.sh \
+	run-strip-groups.sh run-strip-reloc.sh \
 	run-unstrip-test.sh run-unstrip-test2.sh \
-	run-ecp-test.sh run-ecp-test2.sh \
+	run-ecp-test.sh run-ecp-test2.sh run-alldts.sh \
 	run-elflint-test.sh run-elflint-self.sh run-ranlib-test.sh \
 	run-ranlib-test2.sh run-ranlib-test3.sh run-ranlib-test4.sh \
 	run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
@@ -88,8 +90,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 # run-show-ciefde.sh
 
 if !STANDALONE
-noinst_PROGRAMS += msg_tst sha1-tst
-TESTS += msg_tst sha1-tst
+noinst_PROGRAMS += msg_tst md5-sha1-test
+TESTS += msg_tst md5-sha1-test
 endif
 
 if HAVE_LIBASM
@@ -109,7 +111,9 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile13.bz2 run-strip-test3.sh run-allfcts.sh \
 	     run-line2addr.sh run-elflint-test.sh testfile14.bz2 \
 	     run-strip-test4.sh run-strip-test5.sh run-strip-test6.sh \
-	     run-strip-test7.sh run-strip-test8.sh \
+	     run-strip-test7.sh run-strip-test8.sh run-strip-groups.sh \
+	     run-strip-reloc.sh hello_i386.ko.bz2 hello_x86_64.ko.bz2 \
+	     hello_ppc64.ko.bz2 hello_s390.ko.bz2 \
 	     run-unstrip-test.sh run-unstrip-test2.sh \
 	     run-elflint-self.sh run-ranlib-test.sh run-ranlib-test2.sh \
 	     run-ranlib-test3.sh run-ranlib-test4.sh \
@@ -118,7 +122,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
 	     run-dwarf-getmacros.sh run-test-flag-nobits.sh \
-	     run-dwarf-getstring.sh \
+	     run-dwarf-getstring.sh run-rerequest_tag.sh run-alldts.sh \
 	     testfile15.bz2 testfile15.debug.bz2 \
 	     testfile16.bz2 testfile16.debug.bz2 \
 	     testfile17.bz2 testfile17.debug.bz2 \
@@ -129,7 +133,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile26.bz2 testfile27.bz2 \
 	     coverage.sh test-subr.sh test-wrapper.sh \
 	     run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
-	     run-readelf-test4.sh \
+	     run-readelf-test4.sh run-readelf-twofiles.sh \
 	     run-bug1-test.sh testfile28.bz2 testfile28.rdwr.bz2 \
 	     testfile29.bz2 testfile29.rdwr.bz2 \
 	     testfile30.bz2 testfile31.bz2 testfile32.bz2 testfile33.bz2 \
@@ -157,7 +161,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile55-32.bz2 testfile55-32.debug.bz2 \
 	     testfile55-32.prelink.bz2 testfile55-64.bz2 \
 	     testfile55-64.debug.bz2 testfile55-64.prelink.bz2 \
-	     testfile56.bz2
+	     testfile56.bz2 testfile57.bz2 testfile58.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
@@ -247,12 +251,13 @@ dwfl_bug_fd_leak_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 dwfl_bug_report_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 dwfl_bug_getmodules_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 dwfl_addr_sect_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-sha1_tst_LDADD = $(libeu) $(libmudflap)
 dwarf_getmacros_LDADD = $(libdw) $(libmudflap)
 dwarf_getstring_LDADD = $(libdw) $(libmudflap)
 addrcfi_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
 test_flag_nobits_LDADD = $(libelf) $(libmudflap)
 rerequest_tag_LDADD = $(libdw) $(libmudflap)
+alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
+md5_sha1_test_LDADD = $(libeu)
 
 if GCOV
 check: check-am coverage
