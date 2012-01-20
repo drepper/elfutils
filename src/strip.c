@@ -1541,7 +1541,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	      {
 		/* Alpha and S390 64-bit use 64-bit SHT_HASH entries.  */
 		elf_assert (shdr_info[cnt].shdr.sh_entsize
-			== sizeof (Elf64_Xword));
+                            == sizeof (Elf64_Xword));
 
 		Elf64_Xword *bucket = (Elf64_Xword *) hashd->d_buf;
 
