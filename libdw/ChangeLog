@@ -1,3 +1,56 @@
+2011-11-31  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (known-dwarf.h): Run gawk on config/known-dwarf.awk.
+
+2011-07-14  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.h (dwarf_offdie): Fix documentation to mention .debug_info.
+
+2011-05-16  Jakub Jelinek  <jakub@redhat.com>
+
+	* dwarf.h (DW_OP_GNU_const_type, DW_OP_GNU_regval_type,
+	DW_OP_GNU_deref_type, DW_OP_GNU_convert, DW_OP_GNU_reinterpret):
+	New.
+
+2011-04-26  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_child (dwarf_child): Sanity check end of section against
+	cu_data () of die->cu.
+
+2011-03-22  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Add DW_TAG_GNU_call_site,
+	DW_TAG_GNU_call_site_parameter,
+	DW_AT_GNU_call_site_value,
+	DW_AT_GNU_call_site_data_value,
+	DW_AT_GNU_call_site_target,
+	DW_AT_GNU_call_site_target_clobbered,
+	DW_AT_GNU_tail_call,
+	DW_AT_GNU_all_tail_call_sites,
+	DW_AT_GNU_all_call_sites,
+	DW_AT_GNU_all_source_call_sites,
+	and DW_OP_GNU_entry_value.
+
+2011-03-10  Petr Machata  <pmachata@redhat.com>
+
+	* libdw/dwarf_tag.c (__libdw_findabbrev): Reject requests for
+	abbreviation with code 0.
+
+2011-03-09  Petr Machata  <pmachata@redhat.com>
+
+	* libdw/dwarf_child.c (dwarf_child): Check for section overrun.
+
+2011-02-23  Roland McGrath  <roland@redhat.com>
+
+	* libdwP.h (struct Dwarf) [USE_ZLIB]: New member sectiondata_gzip_mask.
+	Declare __libdw_free_zdata.
+	* dwarf_end.c [USE_ZLIB] (__libdw_free_zdata): New function.
+	(dwarf_end): Call it.
+
+	* dwarf_begin_elf.c (valid_p): Likewise.
+	(check_section, scngrp_read): Likewise.
+	(check_section) [USE_ZLIB]: Grok .z* flavors of sections.
+
 2010-10-13  Roland McGrath  <roland@redhat.com>
 
 	* dwarf.h: Add DW_LANG_Go.

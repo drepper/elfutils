@@ -1,3 +1,72 @@
+2012-01-18  Roland McGrath  <roland@hack.frob.com>
+
+	* asm-tst4.c (main): Don't set LD_LIBRARY_PATH in system invocation;
+	it will have been inherited correctly from the test harness.
+	* asm-tst5.c (main): Likewise.
+	* asm-tst6.c (main): Likewise.
+	Reported by Serge Pavlov <serge.pavlov.at.gnu@gmail.com>.
+
+2011-07-09  Roland McGrath  <roland@hack.frob.com>
+
+	* sha1-tst.c: File removed.
+	* Makefile.am (noinst_PROGRAMS, TESTS): Remove it.
+	(sha1_tst_LDADD): Variable removed.
+
+	* md5-sha1-test.c: New file.
+	* Makefile.am [!STANDALONE] (noinst_PROGRAMS, TESTS): Add it.
+	(md5_sha1_test_LDADD): New variable.
+
+2011-05-30  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add run-readelf-twofiles.sh and
+	run-rerequest_tag.sh
+
+2011-05-24  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add hello_s390.ko.bz2.
+	* run-strip-reloc.sh: Add hello_s390.ko testcase.
+	* hello_s390.ko.bz2: New test file.
+
+2011-05-23  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): Add run-strip-reloc.sh.
+	(EXTRA_DIST): Add run-strip-reloc.sh, hello_i386.ko.bz2
+	hello_x86_64.ko.bz2 and hello_ppc64.ko.bz2
+	* run-strip-reloc.sh: New test.
+	* hello_i386.ko.bz2: New test file.
+	* hello_x86_64.ko.bz2: Likewise.
+	* hello_ppc64.ko.bz2: Likewise.
+
+2011-05-18  Mark Wielaard  <mjw@redhat.com>
+
+	* run-strip-groups.sh: New test.
+	* testfile58.bz2: New test file.
+	* Makefile.am (EXTRA_DIST): Add testfile58.bz2.
+	(TESTS): Add run-strip-groups.sh.
+	(EXTRA_DIST): Likewise.
+
+2011-03-28  Marek Polacek  <mpolacek@redhat.com>
+
+	* alldts.c: New file.
+	* run-alldts.sh: Use it.
+	* Makefile.am (TESTS, EXTRA_DIST, noinst_PROGRAMS): Add them.
+	(alldts_LDADD): New variable.
+
+2011-03-02  Marek Polacek  <mpolacek@redhat.com>
+
+	* dwarf-getstring.c: New test.
+	* run-dwarf-getstring.sh: And its wrapper.
+	* Makefile.am (EXTRA_DIST): Add and update all.
+
+2011-02-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (TESTS): Add run-readelf-twofiles.sh.
+	* run-readelf-twofiles.sh: New file.
+
+2011-02-25  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (BUILD_RPATH): Be consistent in naming.
+
 2011-02-02  Josh Stone  <jistone@redhat.com>
 
 	* run-prelink-addr-test.sh: Add testfile55, 32 and 64-bit.

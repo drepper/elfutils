@@ -1,5 +1,5 @@
 /* Pedantic checking of ELF files compliance with gABI/psABI spec.
-   Copyright (C) 2001-2011 Red Hat, Inc.
+   Copyright (C) 2001-2012 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -240,7 +240,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2009");
+"), "2012");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -1011,7 +1011,7 @@ section [%2d] '%s': _DYNAMIC symbol size %" PRIu64 " does not match dynamic segm
 	ERROR (gettext ("\
 section [%2d] '%s': symbol %zu: symbol in dynamic symbol table with non-default visibility\n"),
 	       idx, section_name (ebl, idx), cnt);
-      if ((sym->st_other ^ GELF_ST_VISIBILITY (sym->st_other)) != 0)
+      if (! ebl_check_st_other_bits (ebl, sym->st_other))
 	ERROR (gettext ("\
 section [%2d] '%s': symbol %zu: unknown bit set in st_other\n"),
 	       idx, section_name (ebl, idx), cnt);

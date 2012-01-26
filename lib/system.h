@@ -1,5 +1,5 @@
 /* Declarations for common convenience functions.
-   Copyright (C) 2006, 2009 Red Hat, Inc.
+   Copyright (C) 2006-2011 Red Hat, Inc.
    This file is part of Red Hat elfutils.
 
    Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -49,8 +49,21 @@
 #ifndef LIB_SYSTEM_H
 #define LIB_SYSTEM_H	1
 
+#include <argp.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <endian.h>
+#include <byteswap.h>
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+# define LE32(n)	(n)
+# define BE32(n)	bswap_32 (n)
+#elif __BYTE_ORDER == __BIG_ENDIAN
+# define BE32(n)	(n)
+# define LE32(n)	bswap_32 (n)
+#else
+# error "Unknown byte order"
+#endif
 
 extern void *xmalloc (size_t) __attribute__ ((__malloc__));
 extern void *xcalloc (size_t, size_t) __attribute__ ((__malloc__));
@@ -89,5 +102,43 @@ extern int crc32_file (int fd, uint32_t *resp);
    __asm ("argp_program_version_hook")
 #define ARGP_PROGRAM_BUG_ADDRESS_DEF \
   const char *const apba__ __asm ("argp_program_bug_address")
+
+
+/* The demangler from libstdc++.  */
+extern char *__cxa_demangle (const char *mangled_name, char *output_buffer,
+			     size_t *length, int *status);
+
+
+
+/* Color handling.  */
+
+/* Command line parser.  */
+extern const struct argp color_argp;
+
+/* Coloring mode.  */
+enum color_enum
+  {
+    color_never = 0,
+    color_always,
+    color_auto
+  } __attribute__ ((packed));
+extern enum color_enum color_mode;
+
+/* Colors to use for the various components.  */
+extern char *color_address;
+extern char *color_bytes;
+extern char *color_mnemonic;
+extern char *color_operand1;
+extern char *color_operand2;
+extern char *color_operand3;
+extern char *color_label;
+extern char *color_undef;
+extern char *color_undef_tls;
+extern char *color_undef_weak;
+extern char *color_symbol;
+extern char *color_tls;
+extern char *color_weak;
+
+extern const char color_off[];
 
 #endif /* system.h */

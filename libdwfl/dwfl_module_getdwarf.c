@@ -61,6 +61,10 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
 {
   if (file->elf == NULL)
     {
+      /* CBFAIL uses errno if it's set, so clear it first in case we don't
+	 set it with an open failure below.  */
+      errno = 0;
+
       /* If there was a pre-primed file name left that the callback left
 	 behind, try to open that file name.  */
       if (file->fd < 0 && file->name != NULL)
@@ -567,7 +571,7 @@ find_debuginfo (Dwfl_Module *mod)
 static Dwfl_Error
 load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 	     Elf_Scn **symscn, Elf_Scn **xndxscn,
-	     size_t *syments, GElf_Word *strshndx)
+	     size_t *syments, int *first_global, GElf_Word *strshndx)
 {
   bool symtab = false;
   Elf_Scn *scn = NULL;
@@ -583,6 +587,7 @@ load_symtab (struct dwfl_file *file, struct dwfl_file **symfile,
 	    *symfile = file;
 	    *strshndx = shdr->sh_link;
 	    *syments = shdr->sh_size / shdr->sh_entsize;
+	    *first_global = shdr->sh_info;
 	    if (*xndxscn != NULL)
 	      return DWFL_E_NOERROR;
 	    break;
@@ -843,11 +848,14 @@ find_symtab (Dwfl_Module *mod)
   if (mod->symerr != DWFL_E_NOERROR)
     return;
 
+  mod->first_global = -1; /* Unknown, unless explicitly set by load_symtab.  */
+
   /* First see if the main ELF file has the debugging information.  */
   Elf_Scn *symscn = NULL, *xndxscn = NULL;
   GElf_Word strshndx;
   mod->symerr = load_symtab (&mod->main, &mod->symfile, &symscn,
-			     &xndxscn, &mod->syments, &strshndx);
+			     &xndxscn, &mod->syments, &mod->first_global,
+			     &strshndx);
   switch (mod->symerr)
     {
     default:
@@ -866,7 +874,8 @@ find_symtab (Dwfl_Module *mod)
 
 	case DWFL_E_NOERROR:
 	  mod->symerr = load_symtab (&mod->debug, &mod->symfile, &symscn,
-				     &xndxscn, &mod->syments, &strshndx);
+				     &xndxscn, &mod->syments,
+				     &mod->first_global, &strshndx);
 	  break;
 
 	case DWFL_E_CB:		/* The find_debuginfo hook failed.  */
@@ -905,7 +914,7 @@ find_symtab (Dwfl_Module *mod)
       return;
     }
 
-  /* Cache the data; MOD->syments was set above.  */
+  /* Cache the data; MOD->syments and MOD->first_global were set above.  */
 
   mod->symstrdata = elf_getdata (elf_getscn (mod->symfile->elf, strshndx),
 				 NULL);

@@ -171,6 +171,9 @@ extern bool ebl_check_special_symbol (Ebl *ebl, GElf_Ehdr *ehdr,
 				      const GElf_Sym *sym, const char *name,
 				      const GElf_Shdr *destshdr);
 
+/* Check whether only valid bits are set on the st_other symbol flag.  */
+extern bool ebl_check_st_other_bits (Ebl *ebl, unsigned char st_other);
+
 /* Return combined section header flags value.  */
 extern GElf_Word ebl_sh_flags_combine (Ebl *ebl, GElf_Word flags1,
 				       GElf_Word flags2);
@@ -184,8 +187,9 @@ extern const char *ebl_core_note_type_name (Ebl *ebl, uint32_t type, char *buf,
 					    size_t len);
 
 /* Return name of the note section type for an object file.  */
-extern const char *ebl_object_note_type_name (Ebl *ebl, uint32_t type,
-					      char *buf, size_t len);
+extern const char *ebl_object_note_type_name (Ebl *ebl, const char *name,
+					      uint32_t type, char *buf,
+					      size_t len);
 
 /* Print information about object note if available.  */
 extern void ebl_object_note (Ebl *ebl, const char *name, uint32_t type,

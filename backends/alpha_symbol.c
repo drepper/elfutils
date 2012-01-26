@@ -1,5 +1,5 @@
 /* Alpha specific symbolic name handling.
-   Copyright (C) 2002-2010 Red Hat, Inc.
+   Copyright (C) 2002-2012 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -30,6 +30,7 @@
 
 #include <elf.h>
 #include <stddef.h>
+#include <string.h>
 
 #define BACKEND		alpha_
 #include "libebl_CPU.h"
@@ -117,4 +118,33 @@ alpha_check_special_section (Ebl *ebl,
     }
 
   return false;
+}
+
+/* Check whether given symbol's st_value and st_size are OK despite failing
+   normal checks.  */
+bool
+alpha_check_special_symbol (Elf *elf __attribute__ ((unused)),
+			    GElf_Ehdr *ehdr __attribute__ ((unused)),
+			    const GElf_Sym *sym __attribute__ ((unused)),
+			    const char *name,
+			    const GElf_Shdr *destshdr __attribute__ ((unused)))
+{
+  if (name == NULL)
+    return false;
+
+  if (strcmp (name, "_GLOBAL_OFFSET_TABLE_") == 0)
+    /* On Alpha any place in the section is valid.  */
+    return true;
+
+  return false;
+}
+
+/* Check whether only valid bits are set on the st_other symbol flag.
+   Standard ST_VISIBILITY have already been masked off.  */
+bool
+alpha_check_st_other_bits (unsigned char st_other)
+{
+  return ((((st_other & STO_ALPHA_STD_GPLOAD) == STO_ALPHA_NOPV)
+	   || ((st_other & STO_ALPHA_STD_GPLOAD) == STO_ALPHA_STD_GPLOAD))
+	  && (st_other &~ STO_ALPHA_STD_GPLOAD) == 0);
 }

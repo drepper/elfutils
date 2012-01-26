@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl Configure input file for elfutils.                     -*-autoconf-*-
 dnl
-dnl Copyright (C) 1996-2011 Red Hat, Inc.
+dnl Copyright (C) 1996-2012 Red Hat, Inc.
 dnl
 dnl This program is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -47,9 +47,20 @@ AC_CONFIG_FILES([elfutils.spec:config/elfutils.spec.in])
 
 AC_CANONICAL_HOST
 
+AC_ARG_ENABLE(deterministic-archives,
+[AS_HELP_STRING([--enable-deterministic-archives],
+		[ar and ranlib default to -D behavior])], [
+if test "${enableval}" = no; then
+  default_ar_deterministic=false
+else
+  default_ar_deterministic=true
+fi], [default_ar_deterministic=false])
+AC_DEFINE_UNQUOTED(DEFAULT_AR_DETERMINISTIC, $default_ar_deterministic,
+		   [Should ar and ranlib use -D behavior by default?])
+
 AC_ARG_ENABLE([thread-safety],
 AS_HELP_STRING([--enable-thread-safety], [enable thread safety of libraries]),
-use_tls=locks, use_locks=no)
+use_locks=$enableval, use_locks=no)
 AM_CONDITIONAL(USE_LOCKS, test "$use_locks" = yes)
 AS_IF([test "$use_locks" = yes], [AC_DEFINE(USE_LOCKS)])
 
@@ -143,15 +154,18 @@ fi
 AM_CONDITIONAL(MUDFLAP, test "$use_mudflap" = yes)
 
 dnl enable debugging of branch prediction.
-use_debugpred=0
 AC_ARG_ENABLE([debugpred],
 AS_HELP_STRING([--enable-debugpred],[build binaries with support to debug branch prediction]),
-[use_debugpred=1], [use_debugpred=0])
+[use_debugpred=$enableval], [use_debugpred=no])
+case $use_debugpred in
+ yes) use_debugpred=1 ;;
+ *)   use_debugpred=0 ;;
+esac
 AC_SUBST([DEBUGPRED], $use_debugpred)
 
 dnl Enable gprof suport.
 AC_ARG_ENABLE([gprof],
-AS_HELP_STRING([--enable-gprof],[build binaries with gprof support]), [use_gprof=yes], [use_gprof=no])
+AS_HELP_STRING([--enable-gprof],[build binaries with gprof support]), [use_gprof=$enableval], [use_gprof=no])
 if test "$use_gprof" = yes; then
   CFLAGS="$CFLAGS -pg"
   LDFLAGS="$LDFLAGS -pg"
@@ -160,7 +174,7 @@ AM_CONDITIONAL(GPROF, test "$use_gprof" = yes)
 
 # Enable gcov suport.
 AC_ARG_ENABLE([gcov],
-AS_HELP_STRING([--enable-gcov],[build binaries with gcov support]), [use_gcov=yes], [use_gcov=no])
+AS_HELP_STRING([--enable-gcov],[build binaries with gcov support]), [use_gcov=$enableval], [use_gcov=no])
 if test "$use_gcov" = yes; then
   CFLAGS="$CFLAGS -fprofile-arcs -ftest-coverage"
   LDFLAGS="$LDFLAGS -fprofile-arcs"
@@ -172,7 +186,7 @@ test "$use_mudflap" = yes -o "$use_gprof" = yes -o "$use_gcov" = yes])
 
 AC_ARG_ENABLE([tests-rpath],
 AS_HELP_STRING([--enable-tests-rpath],[build $ORIGIN-using rpath into tests]),
- 	       [tests_use_rpath=yes], [tests_use_rpath=no])
+	       [tests_use_rpath=$enableval], [tests_use_rpath=no])
 AM_CONDITIONAL(TESTS_RPATH, test "$tests_use_rpath" = yes)
 
 LIBEBL_SUBDIR="$PACKAGE"
@@ -194,6 +208,10 @@ eu_ZIPLIB(lzma,LZMA,lzma,lzma_auto_decoder,[LZMA (xz)])
 zip_LIBS="$LIBS"
 LIBS="$save_LIBS"
 AC_SUBST([zip_LIBS])
+
+AC_CHECK_LIB([stdc++], [__cxa_demangle], [dnl
+AC_DEFINE([USE_DEMANGLE], [1], [Defined if demangling is enabled])])
+AM_CONDITIONAL(DEMANGLE, test "$ac_cv_lib_stdcpp___cxa_demangle" = yes)
 
 dnl The directories with content.
 
@@ -248,7 +266,7 @@ AC_SUBST([eu_version])
 
 # 1.234<whatever> -> 1234<whatever>
 case "$PACKAGE_VERSION" in
-[[0-9]].*) eu_version="${PACKAGE_VERSION/./}" ;;
+[[0-9]].*) eu_version=`echo "$PACKAGE_VERSION" | sed 's@\.@@'` ;;
 *)     	   AC_MSG_ERROR([confused by version number '$PACKAGE_VERSION']) ;;
 esac
 case "$eu_version" in
@@ -277,6 +295,6 @@ case "$eu_version" in
 esac
 
 # Round up to the next release API (x.y) version.
-[eu_version=$[($eu_version + 999) / 1000]]
+eu_version=$(( (eu_version + 999) / 1000 ))
 
 AC_OUTPUT

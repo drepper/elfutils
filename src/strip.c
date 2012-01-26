@@ -1,5 +1,5 @@
 /* Discard section not used at runtime from object files.
-   Copyright (C) 2000-2011 Red Hat, Inc.
+   Copyright (C) 2000-2012 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -53,6 +53,7 @@
 #include <libebl.h>
 #include <system.h>
 
+typedef uint8_t GElf_Byte;
 
 /* Name and version of program.  */
 static void print_version (FILE *stream, struct argp_state *state);
@@ -66,6 +67,7 @@ ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 #define OPT_REMOVE_COMMENT	0x100
 #define OPT_PERMISSIVE		0x101
 #define OPT_STRIP_SECTIONS	0x102
+#define OPT_RELOC_DEBUG 	0x103
 
 
 /* Definitions of arguments for argp functions.  */
@@ -85,6 +87,8 @@ static const struct argp_option options[] =
     N_("Remove section headers (not recommended)"), 0 },
   { "preserve-dates", 'p', NULL, 0,
     N_("Copy modified/access timestamps to the output"), 0 },
+  { "reloc-debug-sections", OPT_RELOC_DEBUG, NULL, 0,
+    N_("Resolve all trivial relocations between debug sections if the removed sections are placed in a debug file (only relevant for ET_REL files, operation is not reversable, needs -f)"), 0 },
   { "remove-comment", OPT_REMOVE_COMMENT, NULL, 0,
     N_("Remove .comment section"), 0 },
   { "remove-section", 'R', "SECTION", OPTION_HIDDEN, NULL, 0 },
@@ -149,6 +153,9 @@ static bool remove_shdrs;
 /* If true relax some ELF rules for input files.  */
 static bool permissive;
 
+/* If true perform relocations between debug sections.  */
+static bool reloc_debug;
+
 
 int
 main (int argc, char *argv[])
@@ -176,6 +183,10 @@ main (int argc, char *argv[])
   /* Parse and process arguments.  */
   if (argp_parse (&argp, argc, argv, 0, &remaining, NULL) != 0)
     return EXIT_FAILURE;
+
+  if (reloc_debug && debug_fname == NULL)
+    error (EXIT_FAILURE, 0,
+	   gettext ("--reloc-debug-sections used without -f"));
 
   /* Tell the library which version we are expecting.  */
   elf_version (EV_CURRENT);
@@ -211,7 +222,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2009");
+"), "2012");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -251,6 +262,10 @@ parse_opt (int key, char *arg, struct argp_state *state)
 
     case 'p':
       preserve_dates = true;
+      break;
+
+    case OPT_RELOC_DEBUG:
+      reloc_debug = true;
       break;
 
     case OPT_REMOVE_COMMENT:
@@ -447,10 +462,12 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
   int debug_fd = -1;
 
-  /* Get the EBL handling.  The -g option is currently the only reason
+  /* Get the EBL handling.  Removing all debugging symbols with the -g
+     option or resolving all relocations between debug sections with
+     the --reloc-debug-sections option are currently the only reasons
      we need EBL so don't open the backend unless necessary.  */
   Ebl *ebl = NULL;
-  if (remove_debug)
+  if (remove_debug || reloc_debug)
     {
       ebl = ebl_openbackend (elf);
       if (ebl == NULL)
@@ -726,6 +743,22 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		   || shdr_info[cnt].shdr.sh_type == SHT_RELA)
 		  && shdr_info[shdr_info[cnt].shdr.sh_info].idx != 0)
 		shdr_info[cnt].idx = 1;
+
+	      /* If a group section is marked as being removed make
+		 sure all the sections it contains are being removed, too.  */
+	      if (shdr_info[cnt].shdr.sh_type == SHT_GROUP)
+		{
+		  Elf32_Word *grpref;
+		  grpref = (Elf32_Word *) shdr_info[cnt].data->d_buf;
+		  for (size_t in = 1;
+		       in < shdr_info[cnt].data->d_size / sizeof (Elf32_Word);
+		       ++in)
+		    if (shdr_info[grpref[in]].idx != 0)
+		      {
+			shdr_info[cnt].idx = 1;
+			break;
+		      }
+		}
 	    }
 
 	  if (shdr_info[cnt].idx == 1)
@@ -883,6 +916,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	  bool discard_section = (shdr_info[cnt].idx > 0
 				  && shdr_info[cnt].debug_data == NULL
 				  && shdr_info[cnt].shdr.sh_type != SHT_NOTE
+				  && shdr_info[cnt].shdr.sh_type != SHT_GROUP
 				  && cnt != ehdr->e_shstrndx);
 
 	  /* Set the section header in the new file.  */
@@ -912,7 +946,8 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	  *debugdata = *shdr_info[cnt].data;
 	  if (discard_section)
 	    debugdata->d_buf = NULL;
-	  else if (shdr_info[cnt].debug_data != NULL)
+	  else if (shdr_info[cnt].debug_data != NULL
+		   || shdr_info[cnt].shdr.sh_type == SHT_GROUP)
 	    {
 	      /* Copy the original data before it gets modified.  */
 	      shdr_info[cnt].debug_data = debugdata;
@@ -1110,7 +1145,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    shdr_info[shdr_info[cnt].shdr.sh_info].idx;
 
 	/* Get the data from the old file if necessary.  We already
-           created the data for the section header string table.  */
+	   created the data for the section header string table.  */
 	if (cnt < shnum)
 	  {
 	    if (shdr_info[cnt].data == NULL)
@@ -1261,9 +1296,15 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		      }
 		    else if (debug_fname == NULL
 			     || shdr_info[cnt].debug_data == NULL)
-		      /* This is a section symbol for a section which has
-			 been removed.  */
-		      assert (GELF_ST_TYPE (sym->st_info) == STT_SECTION);
+		      /* This is a section or group signature symbol
+			 for a section which has been removed.  */
+		      {
+			size_t sidx = (sym->st_shndx != SHN_XINDEX
+					? sym->st_shndx : xshndx);
+			assert (GELF_ST_TYPE (sym->st_info) == STT_SECTION
+				|| (shdr_info[sidx].shdr.sh_type == SHT_GROUP
+				    && shdr_info[sidx].shdr.sh_info == inner));
+		      }
 		  }
 
 		if (destidx != inner)
@@ -1584,6 +1625,219 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    break;
 	  }
       }
+
+  /* Remove any relocations between debug sections in ET_REL
+     for the debug file when requested.  These relocations are always
+     zero based between the unallocated sections.  */
+  if (debug_fname != NULL && reloc_debug && ehdr->e_type == ET_REL)
+    {
+      scn = NULL;
+      cnt = 0;
+      while ((scn = elf_nextscn (debugelf, scn)) != NULL)
+	{
+	  cnt++;
+	  /* We need the actual section and header from the debugelf
+	     not just the cached original in shdr_info because we
+	     might want to change the size.  */
+	  GElf_Shdr shdr_mem;
+	  GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
+	  if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
+	    {
+	      /* Make sure that this relocation section points to a
+		 section to relocate with contents, that isn't
+		 allocated and that is a debug section.  */
+	      Elf_Scn *tscn = elf_getscn (debugelf, shdr->sh_info);
+	      GElf_Shdr tshdr_mem;
+	      GElf_Shdr *tshdr = gelf_getshdr (tscn, &tshdr_mem);
+	      if (tshdr->sh_type == SHT_NOBITS
+		  || tshdr->sh_size == 0
+		  || (tshdr->sh_flags & SHF_ALLOC) != 0)
+		continue;
+
+	      const char *tname =  elf_strptr (debugelf, shstrndx,
+					       tshdr->sh_name);
+	      if (! tname || ! ebl_debugscn_p (ebl, tname))
+		continue;
+
+	      /* OK, lets relocate all trivial cross debug section
+		 relocations. */
+	      Elf_Data *reldata = elf_getdata (scn, NULL);
+	      /* We actually wanted the rawdata, but since we already
+		 accessed it earlier as elf_getdata () that won't
+		 work. But debug sections are all ELF_T_BYTE, so it
+		 doesn't really matter.  */
+	      Elf_Data *tdata = elf_getdata (tscn, NULL);
+	      if (tdata->d_type != ELF_T_BYTE)
+		INTERNAL_ERROR (fname);
+
+	      /* Pick up the symbol table and shndx table to
+		 resolve relocation symbol indexes.  */
+	      Elf64_Word symt = shdr->sh_link;
+	      Elf_Data *symdata, *xndxdata;
+	      symdata = (shdr_info[symt].debug_data
+			 ?: shdr_info[symt].data);
+	      xndxdata = (shdr_info[shdr_info[symt].symtab_idx].debug_data
+			  ?: shdr_info[shdr_info[symt].symtab_idx].data);
+
+	      /* Apply one relocation.  Returns true when trivial
+		 relocation actually done.  */
+	      bool relocate (GElf_Addr offset, const GElf_Sxword addend,
+			     bool is_rela, int rtype, int symndx)
+	      {
+		/* R_*_NONE relocs can always just be removed.  */
+		if (rtype == 0)
+		  return true;
+
+		/* We only do simple absolute relocations.  */
+		Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
+		if (type == ELF_T_NUM)
+		  return false;
+
+		/* These are the types we can relocate.  */
+#define TYPES   DO_TYPE (BYTE, Byte); DO_TYPE (HALF, Half);		\
+		DO_TYPE (WORD, Word); DO_TYPE (SWORD, Sword);		\
+		DO_TYPE (XWORD, Xword); DO_TYPE (SXWORD, Sxword)
+
+		/* And only for relocations against other debug sections.  */
+		GElf_Sym sym_mem;
+		Elf32_Word xndx;
+		GElf_Sym *sym = gelf_getsymshndx (symdata, xndxdata,
+						  symndx, &sym_mem,
+						  &xndx);
+		Elf32_Word sec = (sym->st_shndx == SHN_XINDEX
+				  ? xndx : sym->st_shndx);
+		if (ebl_debugscn_p (ebl, shdr_info[sec].name))
+		  {
+		    size_t size;
+
+#define DO_TYPE(NAME, Name) GElf_##Name Name;
+		    union { TYPES; } tmpbuf;
+#undef DO_TYPE
+
+		    switch (type)
+		      {
+#define DO_TYPE(NAME, Name)				\
+			case ELF_T_##NAME:		\
+			  size = sizeof (GElf_##Name);	\
+			  tmpbuf.Name = 0;		\
+			  break;
+			TYPES;
+#undef DO_TYPE
+		      default:
+			return false;
+		      }
+
+		    if (offset > tdata->d_size
+			|| tdata->d_size - offset < size)
+		      error (0, 0, gettext ("bad relocation"));
+
+		    /* When the symbol value is zero then for SHT_REL
+		       sections this is all that needs to be checked.
+		       The addend is contained in the original data at
+		       the offset already.  So if the (section) symbol
+		       address is zero and the given addend is zero
+		       just remove the relocation, it isn't needed
+		       anymore.  */
+		    if (addend == 0 && sym->st_value == 0)
+		      return true;
+
+		    Elf_Data tmpdata =
+		      {
+			.d_type = type,
+			.d_buf = &tmpbuf,
+			.d_size = size,
+			.d_version = EV_CURRENT,
+		      };
+		    Elf_Data rdata =
+		      {
+			.d_type = type,
+			.d_buf = tdata->d_buf + offset,
+			.d_size = size,
+			.d_version = EV_CURRENT,
+		      };
+
+		    GElf_Addr value = sym->st_value;
+		    if (is_rela)
+		      {
+			/* For SHT_RELA sections we just take the
+			   given addend and add it to the value.  */
+			value += addend;
+		      }
+		    else
+		      {
+			/* For SHT_REL sections we have to peek at
+			   what is already in the section at the given
+			   offset to get the addend.  */
+			Elf_Data *d = gelf_xlatetom (debugelf, &tmpdata,
+						     &rdata,
+						     ehdr->e_ident[EI_DATA]);
+			if (d == NULL)
+			  INTERNAL_ERROR (fname);
+			assert (d == &tmpdata);
+		      }
+
+		    switch (type)
+		      {
+#define DO_TYPE(NAME, Name)					\
+			case ELF_T_##NAME:			\
+			  tmpbuf.Name += (GElf_##Name) value;	\
+			  break;
+			TYPES;
+#undef DO_TYPE
+		      default:
+			abort ();
+		      }
+
+		    /* Now finally put in the new value.  */
+		    Elf_Data *s = gelf_xlatetof (debugelf, &rdata,
+						 &tmpdata,
+						 ehdr->e_ident[EI_DATA]);
+		    if (s == NULL)
+		      INTERNAL_ERROR (fname);
+		    assert (s == &rdata);
+
+		    return true;
+		  }
+		return false;
+	      }
+
+	      size_t nrels = shdr->sh_size / shdr->sh_entsize;
+	      size_t next = 0;
+	      if (shdr->sh_type == SHT_REL)
+		for (size_t relidx = 0; relidx < nrels; ++relidx)
+		  {
+		    GElf_Rel rel_mem;
+		    GElf_Rel *r = gelf_getrel (reldata, relidx, &rel_mem);
+		    if (! relocate (r->r_offset, 0, false,
+				    GELF_R_TYPE (r->r_info),
+				    GELF_R_SYM (r->r_info)))
+		      {
+			if (relidx != next)
+			  gelf_update_rel (reldata, next, r);
+			++next;
+		      }
+		  }
+	      else
+		for (size_t relidx = 0; relidx < nrels; ++relidx)
+		  {
+		    GElf_Rela rela_mem;
+		    GElf_Rela *r = gelf_getrela (reldata, relidx, &rela_mem);
+		    if (! relocate (r->r_offset, r->r_addend, true,
+				    GELF_R_TYPE (r->r_info),
+				    GELF_R_SYM (r->r_info)))
+		      {
+			if (relidx != next)
+			  gelf_update_rela (reldata, next, r);
+			++next;
+		      }
+		  }
+
+	      nrels = next;
+	      shdr->sh_size = reldata->d_size = nrels * shdr->sh_entsize;
+	      gelf_update_shdr (scn, shdr);
+	    }
+	}
+    }
 
   /* Now that we have done all adjustments to the data,
      we can actually write out the debug file.  */

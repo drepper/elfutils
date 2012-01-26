@@ -1,3 +1,25 @@
+Version 0.153
+
+libdw: Support reading .zdebug_* DWARF sections compressed via zlib.
+
+libdwfl: Speed up dwfl_module_addrsym.
+
+nm: Support C++ demangling.
+
+ar: Support D modifier for "deterministic output" with no uid/gid/mtime info.
+    The U modifier is the inverse.
+    elfutils can be configured with the --enable-deterministic-archives
+    option to make the D behavior the default when U is not specified.
+
+ranlib: Support -D and -U flags with same meaning.
+
+readelf: Improve output of -wline. Add support for printing SDT elf notes.
+         Add printing of .gdb_index section.
+	 Support for typed DWARF stack, call_site and entry_value.
+
+strip: Add --reloc-debug-sections option.
+       Improved SHT_GROUP sections handling.
+
 Version 0.152
 
 Various build and warning nits fixed for newest GCC and Autoconf.
@@ -93,8 +115,8 @@ libdwfl: Support automatic decompression of files in XZ format,
 Version 0.142:
 
 libelf: Add elf_getshdrnum alias for elf_getshnum and elf_getshdrstrndx alias
-        for elf_getshstrndx and deprecate original names.  Sun screwed up
-        their implementation and asked for a solution.
+	for elf_getshstrndx and deprecate original names.  Sun screwed up
+	their implementation and asked for a solution.
 
 libebl: Add support for STB_GNU_UNIQUE.
 
@@ -131,7 +153,7 @@ Version 0.139:
 libcpu: Add Intel SSE4 disassembler support
 
 readelf: Implement call frame information and exception handling dumping.
-         Add -e option.  Enable it implicitly for -a.
+	 Add -e option.  Enable it implicitly for -a.
 
 elflint: Check PT_GNU_EH_FRAME program header entry.
 
