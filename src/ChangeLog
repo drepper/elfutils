@@ -1,3 +1,73 @@
+2012-01-31  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (attr_callback): Don't special case DW_FORM_sec_offset.
+
+2012-01-21  Ulrich Drepper  <drepper@gmail.com>
+
+	* addr2line.c: Update copyright year.
+	* ar.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* ld.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+	* size.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+
+	* nm.c (argp_children): Define.
+	(argp): Hook up argp_children.
+	(handle_ar): Optimize puts call.
+	(show_symbols_bsd): Use positional parameters to also print color
+	codes.  Don't print STT_FILE symbols.
+	* objdump.c (options): Improve help text.
+	(argp_children): Define.
+	(argp): Hook up argp_children.
+	(disasm_info): Add elements for color codes.
+	(disasm_output): Print color codes as well.
+	(show_disasm): Set up disasm_info data for callback.
+
+2012-01-20  Roland McGrath  <roland@hack.frob.com>
+
+	* arlib-argp.c (arlib_deterministic_output): Initialize from
+	configured value.
+	(help_filter): New function.
+	(argp): Use it.
+
+	* ar.c (main): Handle oper_none as usage error.
+
+	* arlib-argp.c (options, parse_opt): Grok -U as inverse of -D.
+
+	* ranlib.c (argp): Use arlib_argp_children.
+
+	* arlib.c (arlib_init): Obey arlib_deterministic_output.
+
+	* arlib-argp.c: New file.
+	* Makefile.am (libar_a_SOURCES): Add it.
+	* arlib.h (arlib_deterministic_output, arlib_argp_children):
+	Declare new variables.
+	* ar.c (deterministic_output): Variable removed.
+	(do_oper_insert): Use arlib_deterministic_output instead.
+	(options, parse_opt): Don't handle -D here.  Add group numbers.
+	(argp): Use arlib_argp_children.
+
+2011-12-20  Roland McGrath  <roland@hack.frob.com>
+
+	* readelf.c (print_debug): Initialize DUMMY_DBG.elf.
+	Reported by Karel Klic <kklic@redhat.com>.
+
+2011-11-05  Roland McGrath  <roland@hack.frob.com>
+
+	* ar.c (deterministic_output): New flag variable.
+	(options, parse_opt): Grok -D to set it.
+	(do_oper_insert): When set, use zero from mtime, uid, and gid.
+
+	* ar.c (do_oper_insert): Fix check on elf_rawfile return value.
+
 2011-10-04  Marek Polacek  <mpolacek@redhat.com>
 
 	* readelf.c (register_info): Assume the right size of an array.

@@ -1,5 +1,5 @@
 /* Print information from ELF file in human-readable form.
-   Copyright (C) 1999-2011 Red Hat, Inc.
+   Copyright (C) 1999-2012 Red Hat, Inc.
    This file is part of Red Hat elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 
@@ -463,7 +463,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2009");
+"), "2012");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -5616,9 +5616,6 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
       break;
 
     case DW_FORM_sec_offset:
-      attrp->form = cbargs->offset_size == 8 ? DW_FORM_data8 : DW_FORM_data4;
-      /* Fall through.  */
-
     case DW_FORM_udata:
     case DW_FORM_sdata:
     case DW_FORM_data8:
@@ -7292,7 +7289,11 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
   /* Before we start the real work get a debug context descriptor.  */
   Dwarf_Addr dwbias;
   Dwarf *dbg = dwfl_module_getdwarf (dwflmod, &dwbias);
-  Dwarf dummy_dbg = { .other_byte_order = MY_ELFDATA != ehdr->e_ident[EI_DATA] };
+  Dwarf dummy_dbg =
+    {
+      .elf = ebl->elf,
+      .other_byte_order = MY_ELFDATA != ehdr->e_ident[EI_DATA]
+    };
   if (dbg == NULL)
     {
       if ((print_debug_sections & ~section_exception) != 0)
