@@ -84,7 +84,7 @@ AS_IF([test "x$ac_cv_c99" != xyes],
 AC_CACHE_CHECK([for -Wextra option to $CC], ac_cv_cc_wextra, [dnl
 old_CFLAGS="$CFLAGS"
 CFLAGS="$CFLAGS -Wextra"
-AC_COMPILE_IFELSE([void foo (void) { }],
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([void foo (void) { }])],
 		  ac_cv_cc_wextra=yes, ac_cv_cc_wextra=no)
 CFLAGS="$old_CFLAGS"])
 AC_SUBST(WEXTRA)
@@ -93,14 +93,14 @@ AS_IF([test "x$ac_cv_cc_wextra" = xyes], [WEXTRA=-Wextra], [WEXTRA=-W])
 AC_CACHE_CHECK([for -fgnu89-inline option to $CC], ac_cv_cc_gnu89_inline, [dnl
 old_CFLAGS="$CFLAGS"
 CFLAGS="$CFLAGS -fgnu89-inline -Werror"
-AC_COMPILE_IFELSE([
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([
 void foo (void)
 {
   inline void bar (void) {}
   bar ();
 }
 extern inline void baz (void) {}
-], ac_cv_cc_gnu89_inline=yes, ac_cv_cc_gnu89_inline=no)
+])], ac_cv_cc_gnu89_inline=yes, ac_cv_cc_gnu89_inline=no)
 CFLAGS="$old_CFLAGS"])
 AS_IF([test "x$ac_cv_cc_gnu89_inline" = xyes],
       [WEXTRA="${WEXTRA:+$WEXTRA }-fgnu89-inline"])
