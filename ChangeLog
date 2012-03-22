@@ -2,6 +2,8 @@
 
 	* configure.ac: Wrap AC_COMPILE_IFELSE sources in AC_LANG_SOURCE.
 
+	* COPYING: Fix address. Updated version from gnulib.
+
 2012-01-23  Mark Wielaard  <mjw@redhat.com>
 
 	* configure.ac: Set version to 0.153, update copyright years.

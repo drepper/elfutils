@@ -1,7 +1,15 @@
+2012-03-21  Roland McGrath  <roland@hack.frob.com>
+
+	* elf-knowledge.h (SECTION_STRIP_P): Remove < SHT_NUM check.
+
 2011-03-10  Roland McGrath  <roland@redhat.com>
 
 	* gnuhash_xlate.h (elf_cvt_gnuhash): Avoid post-increment in bswap_32
 	argument, since some implementations are buggy macros.
+
+2011-02-26  Mark Wielaard  <mjw@redhat.com>
+
+	* elf_end.c (elf_end): Call rwlock_unlock before rwlock_fini.
 
 2011-01-05  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
