@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2005-2012 Red Hat, Inc.
+# Copyright (C) 2012 Red Hat, Inc.
 # This file is part of Red Hat elfutils.
 #
 # Red Hat elfutils is free software; you can redistribute it and/or modify
@@ -23,47 +23,36 @@
 # Network licensing program, please visit www.openinventionnetwork.com
 # <http://www.openinventionnetwork.com>.
 
+. $srcdir/test-subr.sh
 
-# We don't compile in an rpath because we want "make installcheck" to
-# use the installed libraries.  So for local test runs we need to point
-# the library path at this build.
+# struct s1
+# {
+#   char c;
+#   short s;
+#   int i;
+#   long l;
+#   float f;
+#   double d;
+# };
+# 
+# s1 S1;
+# 
+# int func (s1 *p)
+# {
+#   return p->i;
+# }
+# 
+# int main()
+# {
+#   return func (&S1);
+# }
+#
+# g++ -gdwarf-4 -g -fdebug-types-section
 
-# This wrapper script is called by the makefile, in one of two ways:
-#	$(srcdir)/test-wrapper.sh ../libelf:... run-test.sh ...
-# or:
-#	$(srcdir)/test-wrapper.sh installed s,^,eu-, run-test.sh ...
+testfiles testfile59
 
-if [ "$1" = installed ]; then
-  shift
-  elfutils_tests_rpath=$1
-  shift
-  program_transform_name="$1"
-  shift
-  elfutils_testrun=installed
-else
-  built_library_path="$1"
-  shift
-  elfutils_testrun=built
-fi
+testrun_compare ./typeiter testfile59 <<\EOF
+ok
+EOF
 
-old_path="${LD_LIBRARY_PATH:+:}$LD_LIBRARY_PATH"
-
-case "$1" in
-*.sh)
-  export built_library_path program_transform_name elfutils_testrun
-  export elfutils_tests_rpath
-  ;;
-*)
-  if [ $elfutils_testrun = built ]; then
-    LD_LIBRARY_PATH="$built_library_path$old_path"
-  elif [ $elfutils_tests_rpath = yes ]; then
-    echo >&2 installcheck not possible with --enable-tests-rpath
-    exit 77
-  elif [ "x$libdir" != x/usr/lib ] && [ "x$libdir" != x/usr/lib64 ]; then
-    LD_LIBRARY_PATH="${libdir}:${libdir}/elfutils$old_path"
-  fi
-  export LD_LIBRARY_PATH
-  ;;
-esac
-
-exec "$@"
+exit 0

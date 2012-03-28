@@ -1,3 +1,17 @@
+2012-03-28  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_debug_abbrev_section): Check there is Dwarf
+	section data.
+	(print_debug_str_section): Likewise.
+
+2012-03-21  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_gdb_index_section): Accept version 6.
+
+2012-01-31  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (attr_callback): Don't special case DW_FORM_sec_offset.
+
 2012-01-21  Ulrich Drepper  <drepper@gmail.com>
 
 	* addr2line.c: Update copyright year.
