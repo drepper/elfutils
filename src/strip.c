@@ -53,6 +53,8 @@
 #include <libebl.h>
 #include <system.h>
 
+#include "../libdw/memory-access.h"
+
 typedef uint8_t GElf_Byte;
 
 /* Name and version of program.  */
@@ -1679,6 +1681,14 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	      xndxdata = (shdr_info[shdr_info[symt].symtab_idx].debug_data
 			  ?: shdr_info[shdr_info[symt].symtab_idx].data);
 
+	      /* The simple relocation types we will be able to handle.  */
+	      const int *rel8_types;
+	      const int *rel4_types;
+	      if (ebl_reloc_simple_types (ebl, &rel8_types, &rel4_types) != 0)
+		INTERNAL_ERROR (fname);
+
+	      BYTE_ORDER_DUMMY (bo, ehdr->e_ident);
+
 	      /* Apply one relocation.  Returns true when trivial
 		 relocation actually done.  */
 	      bool relocate (GElf_Addr offset, const GElf_Sxword addend,
@@ -1689,14 +1699,21 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		  return true;
 
 		/* We only do simple absolute relocations.  */
-		Elf_Type type = ebl_reloc_simple_type (ebl, rtype);
-		if (type == ELF_T_NUM)
-		  return false;
-
-		/* These are the types we can relocate.  */
-#define TYPES   DO_TYPE (BYTE, Byte); DO_TYPE (HALF, Half);		\
-		DO_TYPE (WORD, Word); DO_TYPE (SWORD, Sword);		\
-		DO_TYPE (XWORD, Xword); DO_TYPE (SXWORD, Sxword)
+		size_t size = 4;
+		for (const int *tp = rel8_types; *tp != 0; ++tp)
+		  if (*tp == rtype)
+		    {
+		      size = 8;
+		      break;
+		    }
+		if (size == 4)
+		  {
+		    const int *tp = rel4_types;
+		    while (*tp != 0 && *tp != rtype)
+		      ++tp;
+		    if (*tp == 0)
+		      return false;
+		  }
 
 		/* And only for relocations against other debug sections.  */
 		GElf_Sym sym_mem;
@@ -1708,25 +1725,6 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 				  ? xndx : sym->st_shndx);
 		if (ebl_debugscn_p (ebl, shdr_info[sec].name))
 		  {
-		    size_t size;
-
-#define DO_TYPE(NAME, Name) GElf_##Name Name;
-		    union { TYPES; } tmpbuf;
-#undef DO_TYPE
-
-		    switch (type)
-		      {
-#define DO_TYPE(NAME, Name)				\
-			case ELF_T_##NAME:		\
-			  size = sizeof (GElf_##Name);	\
-			  tmpbuf.Name = 0;		\
-			  break;
-			TYPES;
-#undef DO_TYPE
-		      default:
-			return false;
-		      }
-
 		    if (offset > tdata->d_size
 			|| tdata->d_size - offset < size)
 		      error (0, 0, gettext ("bad relocation"));
@@ -1741,21 +1739,6 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		    if (addend == 0 && sym->st_value == 0)
 		      return true;
 
-		    Elf_Data tmpdata =
-		      {
-			.d_type = type,
-			.d_buf = &tmpbuf,
-			.d_size = size,
-			.d_version = EV_CURRENT,
-		      };
-		    Elf_Data rdata =
-		      {
-			.d_type = type,
-			.d_buf = tdata->d_buf + offset,
-			.d_size = size,
-			.d_version = EV_CURRENT,
-		      };
-
 		    GElf_Addr value = sym->st_value;
 		    if (is_rela)
 		      {
@@ -1768,33 +1751,29 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 			/* For SHT_REL sections we have to peek at
 			   what is already in the section at the given
 			   offset to get the addend.  */
-			Elf_Data *d = gelf_xlatetom (debugelf, &tmpdata,
-						     &rdata,
-						     ehdr->e_ident[EI_DATA]);
-			if (d == NULL)
-			  INTERNAL_ERROR (fname);
-			assert (d == &tmpdata);
-		      }
-
-		    switch (type)
-		      {
-#define DO_TYPE(NAME, Name)					\
-			case ELF_T_##NAME:			\
-			  tmpbuf.Name += (GElf_##Name) value;	\
-			  break;
-			TYPES;
-#undef DO_TYPE
-		      default:
-			abort ();
+			if (size == 8)
+			  value += read_8ubyte_unaligned (&bo,
+							  (tdata->d_buf
+							   + offset));
+			else
+			  value += read_4ubyte_unaligned (&bo,
+							  (tdata->d_buf
+							   + offset));
 		      }
 
 		    /* Now finally put in the new value.  */
-		    Elf_Data *s = gelf_xlatetof (debugelf, &rdata,
-						 &tmpdata,
-						 ehdr->e_ident[EI_DATA]);
-		    if (s == NULL)
-		      INTERNAL_ERROR (fname);
-		    assert (s == &rdata);
+		    if (size == 8)
+		      {
+			uint64_t v = (bo.other_byte_order
+				      ? bswap_64 (value) : value);
+			memcpy (tdata->d_buf + offset, &v, sizeof v);
+		      }
+		    else
+		      {
+			uint32_t v = (bo.other_byte_order
+				      ? bswap_32 (value) : value);
+			memcpy (tdata->d_buf + offset, &v, sizeof v);
+		      }
 
 		    return true;
 		  }
