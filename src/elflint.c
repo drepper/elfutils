@@ -1,28 +1,20 @@
 /* Pedantic checking of ELF files compliance with gABI/psABI spec.
    Copyright (C) 2001-2012 Red Hat, Inc.
-   This file is part of Red Hat elfutils.
+   This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
-   Red Hat elfutils is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by the
-   Free Software Foundation; version 2 of the License.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   Red Hat elfutils is distributed in the hope that it will be useful, but
+   elfutils is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License along
-   with Red Hat elfutils; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
-
-   Red Hat elfutils is an included package of the Open Invention Network.
-   An included package of the Open Invention Network is a package for which
-   Open Invention Network licensees cross-license their patents.  No patent
-   license is granted, either expressly or impliedly, by designation as an
-   included package.  Should you wish to participate in the Open Invention
-   Network licensing program, please visit www.openinventionnetwork.com
-   <http://www.openinventionnetwork.com>.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -3357,8 +3349,8 @@ static const struct
     { ".note", 6, SHT_NOTE, atleast, 0, SHF_ALLOC },
     { ".plt", 5, SHT_PROGBITS, unused, 0, 0 }, // XXX more tests
     { ".preinit_array", 15, SHT_PREINIT_ARRAY, exact, SHF_ALLOC | SHF_WRITE, 0 },
-    { ".rela", 5, SHT_RELA, atleast, 0, SHF_ALLOC }, // XXX more tests
-    { ".rel", 4, SHT_REL, atleast, 0, SHF_ALLOC }, // XXX more tests
+    { ".rela", 5, SHT_RELA, atleast, 0, SHF_ALLOC | SHF_INFO_LINK }, // XXX more tests
+    { ".rel", 4, SHT_REL, atleast, 0, SHF_ALLOC | SHF_INFO_LINK }, // XXX more tests
     { ".rodata", 8, SHT_PROGBITS, atleast, SHF_ALLOC, SHF_MERGE | SHF_STRINGS },
     { ".rodata1", 9, SHT_PROGBITS, atleast, SHF_ALLOC, SHF_MERGE | SHF_STRINGS },
     { ".shstrtab", 10, SHT_STRTAB, exact, 0, 0 },
@@ -3716,8 +3708,10 @@ section [%2zu] '%s' is both executable and writable\n"),
 		    || (phdr->p_type == PT_TLS
 			&& (shdr->sh_flags & SHF_TLS) != 0))
 		&& phdr->p_offset <= shdr->sh_offset
-		&& (phdr->p_offset + phdr->p_filesz > shdr->sh_offset
-		    || (phdr->p_offset + phdr->p_memsz > shdr->sh_offset
+		&& ((shdr->sh_offset - phdr->p_offset <= phdr->p_filesz
+		     && (shdr->sh_offset - phdr->p_offset < phdr->p_filesz
+			 || shdr->sh_size == 0))
+		    || (shdr->sh_offset - phdr->p_offset < phdr->p_memsz
 			&& shdr->sh_type == SHT_NOBITS)))
 	      {
 		/* Found the segment.  */
