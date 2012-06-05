@@ -1,3 +1,23 @@
+2012-05-09  Roland McGrath  <roland@hack.frob.com>
+
+	* elflint (check_sections): Allow zero sized sections at (filesz) end
+	of segment. And make check overflow-proofed.
+
+2012-04-24  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_ops): Add DW_OP_GNU_push_tls_address,
+	DW_OP_GNU_uinit and DW_OP_GNU_encoded_addr.
+
+2012-03-28  Roland McGrath  <roland@hack.frob.com>
+
+	* elflint.c (special_sections): Accept SHF_INFO_LINK for reloc sections.
+
+2012-03-28  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_debug_abbrev_section): Check there is Dwarf
+	section data.
+	(print_debug_str_section): Likewise.
+
 2012-03-21  Mark Wielaard  <mjw@redhat.com>
 
 	* readelf.c (print_gdb_index_section): Accept version 6.

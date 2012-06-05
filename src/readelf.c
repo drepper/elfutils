@@ -1,28 +1,20 @@
 /* Print information from ELF file in human-readable form.
    Copyright (C) 1999-2012 Red Hat, Inc.
-   This file is part of Red Hat elfutils.
+   This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 1999.
 
-   Red Hat elfutils is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by the
-   Free Software Foundation; version 2 of the License.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   Red Hat elfutils is distributed in the hope that it will be useful, but
+   elfutils is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License along
-   with Red Hat elfutils; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
-
-   Red Hat elfutils is an included package of the Open Invention Network.
-   An included package of the Open Invention Network is a package for which
-   Open Invention Network licensees cross-license their patents.  No patent
-   license is granted, either expressly or impliedly, by designation as an
-   included package.  Should you wish to participate in the Open Invention
-   Network licensing program, please visit www.openinventionnetwork.com
-   <http://www.openinventionnetwork.com>.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -4102,6 +4094,9 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
       [DW_OP_bit_piece] = "bit_piece",
       [DW_OP_implicit_value] = "implicit_value",
       [DW_OP_stack_value] = "stack_value",
+      [DW_OP_GNU_push_tls_address] = "GNU_push_tls_address",
+      [DW_OP_GNU_uninit] = "GNU_uninit",
+      [DW_OP_GNU_encoded_addr] = "GNU_encoded_addr",
       [DW_OP_GNU_implicit_pointer] = "GNU_implicit_pointer",
       [DW_OP_GNU_entry_value] = "GNU_entry_value",
       [DW_OP_GNU_const_type] = "GNU_const_type",
@@ -4603,13 +4598,16 @@ print_debug_abbrev_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 			    Ebl *ebl, GElf_Ehdr *ehdr,
 			    Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
+  const size_t sh_size = (dbg->sectiondata[IDX_debug_abbrev] ?
+			  dbg->sectiondata[IDX_debug_abbrev]->d_size : 0);
+
   printf (gettext ("\nDWARF section [%2zu] '%s' at offset %#" PRIx64 ":\n"
 		   " [ Code]\n"),
 	  elf_ndxscn (scn), section_name (ebl, ehdr, shdr),
 	  (uint64_t) shdr->sh_offset);
 
   Dwarf_Off offset = 0;
-  while (offset < dbg->sectiondata[IDX_debug_abbrev]->d_size)
+  while (offset < sh_size)
     {
       printf (gettext ("\nAbbreviation section at offset %" PRIu64 ":\n"),
 	      offset);
@@ -6828,7 +6826,8 @@ print_debug_str_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 			 Ebl *ebl, GElf_Ehdr *ehdr,
 			 Elf_Scn *scn, GElf_Shdr *shdr, Dwarf *dbg)
 {
-  const size_t sh_size = dbg->sectiondata[IDX_debug_str]->d_size;
+  const size_t sh_size = (dbg->sectiondata[IDX_debug_str] ?
+			  dbg->sectiondata[IDX_debug_str]->d_size : 0);
 
   /* Compute floor(log16(shdr->sh_size)).  */
   GElf_Addr tmp = sh_size;

@@ -1,28 +1,20 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2011 Red Hat, Inc.
-## This file is part of Red Hat elfutils.
+## Copyright (C) 1996-2012 Red Hat, Inc.
+## This file is part of elfutils.
 ##
-## Red Hat elfutils is free software; you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by the
-## Free Software Foundation; version 2 of the License.
+## This file is free software; you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation; either version 3 of the License, or
+## (at your option) any later version.
 ##
-## Red Hat elfutils is distributed in the hope that it will be useful, but
+## elfutils is distributed in the hope that it will be useful, but
 ## WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-## General Public License for more details.
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
 ##
-## You should have received a copy of the GNU General Public License along
-## with Red Hat elfutils; if not, write to the Free Software Foundation,
-## Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
-##
-## Red Hat elfutils is an included package of the Open Invention Network.
-## An included package of the Open Invention Network is a package for which
-## Open Invention Network licensees cross-license their patents.  No patent
-## license is granted, either expressly or impliedly, by designation as an
-## included package.  Should you wish to participate in the Open Invention
-## Network licensing program, please visit www.openinventionnetwork.com
-## <http://www.openinventionnetwork.com>.
+## You should have received a copy of the GNU General Public License
+## along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ##
 include $(top_srcdir)/config/eu.am
 if MUDFLAP
@@ -58,7 +50,7 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
-		  alldts md5-sha1-test typeiter
+		  alldts md5-sha1-test typeiter low_high_pc
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -86,8 +78,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-disasm-x86.sh run-disasm-x86-64.sh \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
 	run-test-flag-nobits.sh run-prelink-addr-test.sh \
-	run-dwarf-getstring.sh run-rerequest_tag.sh run-typeiter.sh
-# run-show-ciefde.sh
+	run-dwarf-getstring.sh run-rerequest_tag.sh run-typeiter.sh \
+	run-readelf-d.sh run-unstrip-n.sh run-low_high_pc.sh
 
 if !STANDALONE
 noinst_PROGRAMS += msg_tst md5-sha1-test
@@ -103,7 +95,7 @@ endif
 EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-show-die-info.sh run-get-files.sh run-get-lines.sh \
 	     run-get-pubnames.sh run-get-aranges.sh \
-	     run-show-ciefde.sh run-show-abbrev.sh run-strip-test.sh \
+	     run-show-abbrev.sh run-strip-test.sh \
 	     run-strip-test2.sh run-ecp-test.sh run-ecp-test2.sh \
 	     testfile.bz2 testfile2.bz2 testfile3.bz2 testfile4.bz2 \
 	     testfile5.bz2 testfile6.bz2 testfile7.bz2 testfile8.bz2 \
@@ -162,17 +154,21 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile55-32.prelink.bz2 testfile55-64.bz2 \
 	     testfile55-64.debug.bz2 testfile55-64.prelink.bz2 \
 	     testfile56.bz2 testfile57.bz2 testfile58.bz2 \
-	     run-typeiter.sh testfile59.bz2
+	     run-typeiter.sh testfile59.bz2 \
+	     run-readelf-d.sh testlib_dynseg.so.bz2 \
+	     run-unstrip-n.sh testcore-rtlib.bz2 \
+	     run-low_high_pc.sh testfile_low_high_pc.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
+			      LC_ALL=C LANG=C \
 			      $(srcdir)/test-wrapper.sh \
 			      installed $(tests_rpath) \
 			      $(program_transform_name)
 if STANDALONE
 TESTS_ENVIRONMENT = $(installed_TESTS_ENVIRONMENT)
 else !STANDALONE
-TESTS_ENVIRONMENT = $(srcdir)/test-wrapper.sh \
+TESTS_ENVIRONMENT = LC_ALL=C LANG=C $(srcdir)/test-wrapper.sh \
 		    ../libdw:../backends:../libelf:../libasm
 
 installcheck-local:
@@ -260,6 +256,7 @@ rerequest_tag_LDADD = $(libdw) $(libmudflap)
 alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
 md5_sha1_test_LDADD = $(libeu)
 typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
+low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage
