@@ -1,3 +1,42 @@
+2012-03-28  Roland McGrath  <roland@hack.frob.com>
+
+	* dwfl_segment_report_module.c
+	(dwfl_segment_report_module: read_portion): Don't use existing buffer
+	when FILESZ is zero (string mode) and available portion doesn't hold
+	a terminated string.
+
+2011-12-02  Roland McGrath  <roland@hack.frob.com>
+
+	* elf-from-memory.c (elf_from_remote_memory): Fix ELFCLASS64 case
+	to use elf64_xlatetom and PHDRS.p64.
+	Reported by Serge Pavlov <serge.pavlov.at.gnu@gmail.com>.
+
+2011-11-31  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): First search all
+	global symbols. Then only when that doesn't provide a match search
+	all local symbols too.
+	* dwfl_module_getdwarf.c (load_symtab): Take first_global int arg
+	and fill it in.
+	(find_symtab): Initialize mod->first_global and pass it to load_symtab.
+	* libdwfl/libdwflP.h (Dwfl_Module): Add first_global field.
+
+2011-11-31  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): Only update
+	sizeless_sym if needed and closer to desired addr.
+
+2011-10-20  Mark Wielaard  <mjw@redhat.com>
+
+	* derelocate.c (cache_sections): Intern mod->reloc_info check.
+	(dwfl_module_relocations): Don't check mod->reloc_info.
+	(dwfl_module_relocation_info): Likewise.
+	(find_section): Likewise.
+
+2011-07-09  Roland McGrath  <roland@hack.frob.com>
+
+	* image-header.c (LE32): Macro removed (now in lib/system.h).
+
 2011-04-11  Mark Wielaard  <mjw@redhat.com>
 
 	* linux-kernel-modules.c (vmlinux_suffixes): Guard definition

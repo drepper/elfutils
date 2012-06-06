@@ -1,48 +1,45 @@
 /* Functions to compute SHA1 message digest of files or memory blocks.
    according to the definition of SHA1 in FIPS 180-1 from April 1997.
-   Copyright (C) 2008 Red Hat, Inc.
-   This file is part of Red Hat elfutils.
+   Copyright (C) 2008-2011 Red Hat, Inc.
+   This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2008.
 
-   Red Hat elfutils is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by the
-   Free Software Foundation; version 2 of the License.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of either
 
-   Red Hat elfutils is distributed in the hope that it will be useful, but
+     * the GNU Lesser General Public License as published by the Free
+       Software Foundation; either version 3 of the License, or (at
+       your option) any later version
+
+   or
+
+     * the GNU General Public License as published by the Free
+       Software Foundation; either version 2 of the License, or (at
+       your option) any later version
+
+   or both in parallel, as here.
+
+   elfutils is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
    General Public License for more details.
 
-   You should have received a copy of the GNU General Public License along
-   with Red Hat elfutils; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
-
-   Red Hat elfutils is an included package of the Open Invention Network.
-   An included package of the Open Invention Network is a package for which
-   Open Invention Network licensees cross-license their patents.  No patent
-   license is granted, either expressly or impliedly, by designation as an
-   included package.  Should you wish to participate in the Open Invention
-   Network licensing program, please visit www.openinventionnetwork.com
-   <http://www.openinventionnetwork.com>.  */
+   You should have received copies of the GNU General Public License and
+   the GNU Lesser General Public License along with this program.  If
+   not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
 
-#include <endian.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 
 #include "sha1.h"
+#include "system.h"
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-# include <byteswap.h>
-# define SWAP(n) bswap_32 (n)
-#else
-# define SWAP(n) (n)
-#endif
-
+#define SWAP(n) BE32 (n)
 
 /* This array contains the bytes used to pad the buffer to the next
    64-byte boundary.  */
@@ -83,6 +80,13 @@ sha1_read_ctx (ctx, resbuf)
   return resbuf;
 }
 
+static void
+be64_copy (char *dest, uint64_t x)
+{
+  for (size_t i = 8; i-- > 0; x >>= 8)
+    dest[i] = (uint8_t) x;
+}
+
 /* Process the remaining bytes in the internal buffer and the usual
    prolog according to the standard and write the result to RESBUF.
 
@@ -106,9 +110,10 @@ sha1_finish_ctx (ctx, resbuf)
   memcpy (&ctx->buffer[bytes], fillbuf, pad);
 
   /* Put the 64-bit file length in *bits* at the end of the buffer.  */
-  *(sha1_uint32 *) &ctx->buffer[bytes + pad] = SWAP ((ctx->total[1] << 3) |
-						     (ctx->total[0] >> 29));
-  *(sha1_uint32 *) &ctx->buffer[bytes + pad + 4] = SWAP (ctx->total[0] << 3);
+  const uint64_t bit_length = ((ctx->total[0] << 3)
+			       + ((uint64_t) ((ctx->total[1] << 3) |
+					      (ctx->total[0] >> 29)) << 32));
+  be64_copy (&ctx->buffer[bytes + pad], bit_length);
 
   /* Process last bytes.  */
   sha1_process_block (ctx->buffer, bytes + pad + 8, ctx);

@@ -1,28 +1,20 @@
 /* Print information from ELF file in human-readable form.
-   Copyright (C) 2005, 2006, 2007, 2009 Red Hat, Inc.
-   This file is part of Red Hat elfutils.
+   Copyright (C) 2005, 2006, 2007, 2009, 2011, 2012 Red Hat, Inc.
+   This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2005.
 
-   Red Hat elfutils is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by the
-   Free Software Foundation; version 2 of the License.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   Red Hat elfutils is distributed in the hope that it will be useful, but
+   elfutils is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License along
-   with Red Hat elfutils; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
-
-   Red Hat elfutils is an included package of the Open Invention Network.
-   An included package of the Open Invention Network is a package for which
-   Open Invention Network licensees cross-license their patents.  No patent
-   license is granted, either expressly or impliedly, by designation as an
-   included package.  Should you wish to participate in the Open Invention
-   Network licensing program, please visit www.openinventionnetwork.com
-   <http://www.openinventionnetwork.com>.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -65,7 +57,7 @@ static const struct argp_option options[] =
   { "disassemble", 'd', NULL, 0,
     N_("Display assembler code of executable sections"), 0 },
 
-  { NULL, 0, NULL, 0, N_("Output option selection:"), 0 },
+  { NULL, 0, NULL, 0, N_("Output content selection:"), 0 },
   { "section", 'j', "NAME", 0,
     N_("Only display information for section NAME."), 0 },
 
@@ -82,10 +74,17 @@ static const char args_doc[] = N_("[FILE...]");
 /* Prototype for option handler.  */
 static error_t parse_opt (int key, char *arg, struct argp_state *state);
 
+/* Parser children.  */
+static struct argp_child argp_children[] =
+  {
+    { &color_argp, 0, N_("Output formatting"), 2 },
+    { NULL, 0, NULL, 0}
+  };
+
 /* Data structure to communicate with argp functions.  */
-static struct argp argp =
+static const struct argp argp =
 {
-  options, parse_opt, args_doc, doc, NULL, NULL, NULL
+  options, parse_opt, args_doc, doc, argp_children, NULL, NULL
 };
 
 
@@ -127,6 +126,7 @@ static bool print_full_content;
 
 /* If true print disassembled output..  */
 static bool print_disasm;
+
 
 int
 main (int argc, char *argv[])
@@ -182,7 +182,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "20089");
+"), "2012");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -499,7 +499,7 @@ show_relocs (Ebl *ebl, const char *fname, uint32_t shstrndx)
 
       if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
 	{
- 	  if  (! section_match (ebl->elf, elf_ndxscn (scn), shdr, shstrndx))
+	  if  (! section_match (ebl->elf, elf_ndxscn (scn), shdr, shstrndx))
 	    continue;
 
 	  GElf_Shdr destshdr_mem;
@@ -570,7 +570,7 @@ show_full_content (Ebl *ebl, const char *fname, uint32_t shstrndx)
 
       if (shdr->sh_type == SHT_PROGBITS && shdr->sh_size > 0)
 	{
- 	  if  (! section_match (ebl->elf, elf_ndxscn (scn), shdr, shstrndx))
+	  if  (! section_match (ebl->elf, elf_ndxscn (scn), shdr, shstrndx))
 	    continue;
 
 	  printf (gettext ("Contents of section %s:\n"),
@@ -632,6 +632,8 @@ struct disasm_info
   GElf_Addr addr;
   const uint8_t *cur;
   const uint8_t *last_end;
+  const char *address_color;
+  const char *bytes_color;
 };
 
 
@@ -642,10 +644,20 @@ disasm_output (char *buf, size_t buflen, void *arg)
 {
   struct disasm_info *info = (struct disasm_info *) arg;
 
-  printf ("%8" PRIx64 ":   ", (uint64_t) info->addr);
+  if (info->address_color != NULL)
+    printf ("%s%8" PRIx64 "%s:   ",
+	    info->address_color, (uint64_t) info->addr, color_off);
+  else
+    printf ("%8" PRIx64 ":   ", (uint64_t) info->addr);
+
+  if (info->bytes_color != NULL)
+    fputs_unlocked (info->bytes_color, stdout);
   size_t cnt;
   for (cnt = 0; cnt < (size_t) MIN (info->cur - info->last_end, 8); ++cnt)
     printf (" %02" PRIx8, info->last_end[cnt]);
+  if (info->bytes_color != NULL)
+    fputs_unlocked (color_off, stdout);
+
   printf ("%*s %.*s\n",
 	  (int) (8 - cnt) * 3 + 1, "", (int) buflen, buf);
 
@@ -655,9 +667,18 @@ disasm_output (char *buf, size_t buflen, void *arg)
      Print the rest on a separate, following line.  */
   if (info->cur - info->last_end > 8)
     {
-      printf ("%8" PRIx64 ":   ", (uint64_t) info->addr);
+      if (info->address_color != NULL)
+	printf ("%s%8" PRIx64 "%s:   ",
+		info->address_color, (uint64_t) info->addr, color_off);
+      else
+	printf ("%8" PRIx64 ":   ", (uint64_t) info->addr);
+
+      if (info->bytes_color != NULL)
+	fputs_unlocked (info->bytes_color, stdout);
       for (; cnt < (size_t) (info->cur - info->last_end); ++cnt)
 	printf (" %02" PRIx8, info->last_end[cnt]);
+      if (info->bytes_color != NULL)
+	fputs_unlocked (color_off, stdout);
       putchar_unlocked ('\n');
       info->addr += info->cur - info->last_end - 8;
     }
@@ -687,7 +708,7 @@ show_disasm (Ebl *ebl, const char *fname, uint32_t shstrndx)
       if (shdr->sh_type == SHT_PROGBITS && shdr->sh_size > 0
 	  && (shdr->sh_flags & SHF_EXECINSTR) != 0)
 	{
- 	  if  (! section_match (ebl->elf, elf_ndxscn (scn), shdr, shstrndx))
+	  if  (! section_match (ebl->elf, elf_ndxscn (scn), shdr, shstrndx))
 	    continue;
 
 	  Elf_Data *data = elf_getdata (scn, NULL);
@@ -700,10 +721,32 @@ show_disasm (Ebl *ebl, const char *fname, uint32_t shstrndx)
 	  struct disasm_info info;
 	  info.addr = shdr->sh_addr;
 	  info.last_end = info.cur = data->d_buf;
+	  char *fmt;
+	  if (color_mode)
+	    {
+	      info.address_color = color_address;
+	      info.bytes_color = color_bytes;
+
+	      if (asprintf (&fmt, "%s%%7m %s%%.1o,%s%%.2o,%s%%.3o%%34a %s%%l",
+			    color_mnemonic ?: "",
+			    color_operand1 ?: "",
+			    color_operand2 ?: "",
+			    color_operand3 ?: "",
+			    color_label ?: "") < 0)
+		error (EXIT_FAILURE, errno, _("cannot allocate memory"));
+	    }
+	  else
+	    {
+	      info.address_color = info.bytes_color = NULL;
+
+	      fmt = "%7m %.1o,%.2o,%.3o%34a %l";
+	    }
 
 	  disasm_cb (ctx, &info.cur, info.cur + data->d_size, info.addr,
-		     "%7m %.1o,%.2o,%.3o%34a %l", disasm_output, &info,
-		     NULL /* XXX */);
+		     fmt, disasm_output, &info, NULL /* XXX */);
+
+	  if (color_mode)
+	    free (fmt);
 	}
     }
 

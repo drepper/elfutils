@@ -1,3 +1,166 @@
+2012-05-09  Roland McGrath  <roland@hack.frob.com>
+
+	* elflint (check_sections): Allow zero sized sections at (filesz) end
+	of segment. And make check overflow-proofed.
+
+2012-04-24  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_ops): Add DW_OP_GNU_push_tls_address,
+	DW_OP_GNU_uinit and DW_OP_GNU_encoded_addr.
+
+2012-03-28  Roland McGrath  <roland@hack.frob.com>
+
+	* elflint.c (special_sections): Accept SHF_INFO_LINK for reloc sections.
+
+2012-03-28  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_debug_abbrev_section): Check there is Dwarf
+	section data.
+	(print_debug_str_section): Likewise.
+
+2012-03-21  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_gdb_index_section): Accept version 6.
+
+2012-01-31  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (attr_callback): Don't special case DW_FORM_sec_offset.
+
+2012-01-21  Ulrich Drepper  <drepper@gmail.com>
+
+	* addr2line.c: Update copyright year.
+	* ar.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* ld.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+	* size.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+
+	* nm.c (argp_children): Define.
+	(argp): Hook up argp_children.
+	(handle_ar): Optimize puts call.
+	(show_symbols_bsd): Use positional parameters to also print color
+	codes.  Don't print STT_FILE symbols.
+	* objdump.c (options): Improve help text.
+	(argp_children): Define.
+	(argp): Hook up argp_children.
+	(disasm_info): Add elements for color codes.
+	(disasm_output): Print color codes as well.
+	(show_disasm): Set up disasm_info data for callback.
+
+2012-01-20  Roland McGrath  <roland@hack.frob.com>
+
+	* arlib-argp.c (arlib_deterministic_output): Initialize from
+	configured value.
+	(help_filter): New function.
+	(argp): Use it.
+
+	* ar.c (main): Handle oper_none as usage error.
+
+	* arlib-argp.c (options, parse_opt): Grok -U as inverse of -D.
+
+	* ranlib.c (argp): Use arlib_argp_children.
+
+	* arlib.c (arlib_init): Obey arlib_deterministic_output.
+
+	* arlib-argp.c: New file.
+	* Makefile.am (libar_a_SOURCES): Add it.
+	* arlib.h (arlib_deterministic_output, arlib_argp_children):
+	Declare new variables.
+	* ar.c (deterministic_output): Variable removed.
+	(do_oper_insert): Use arlib_deterministic_output instead.
+	(options, parse_opt): Don't handle -D here.  Add group numbers.
+	(argp): Use arlib_argp_children.
+
+2011-12-20  Roland McGrath  <roland@hack.frob.com>
+
+	* readelf.c (print_debug): Initialize DUMMY_DBG.elf.
+	Reported by Karel Klic <kklic@redhat.com>.
+
+2011-11-05  Roland McGrath  <roland@hack.frob.com>
+
+	* ar.c (deterministic_output): New flag variable.
+	(options, parse_opt): Grok -D to set it.
+	(do_oper_insert): When set, use zero from mtime, uid, and gid.
+
+	* ar.c (do_oper_insert): Fix check on elf_rawfile return value.
+
+2011-10-04  Marek Polacek  <mpolacek@redhat.com>
+
+	* readelf.c (register_info): Assume the right size of an array.
+
+2011-10-03  Ulrich Drepper  <drepper@gmail.com>
+
+	* nm.c: Recognize option --mark-special.  Still recognize --mark-weak
+	but don't show it in help anymore.
+	(mark_special): Renamed from mark_weak.
+	(parse_opt): Adjust.
+	(class_type_char): Take additional parameters for ELF file and ELF
+	header.  Treat TLS symbols like objects.
+	In case of D symbols, show u for unique symbols, R for symbols in
+	read-only sections, B for symbols in BSS sections.
+	(show_symbols_bsd): Take additional parameters for ELF file and ELF
+	header.  Adjust for class_type_char change.  Show TLS symbols with
+	@ after them in case --mark-special is selected.
+	(show_symbols_posix): Likewise.
+	(show_symbols): Adjust calls to show_symbols_bsd and
+	show_symbols_posix.
+	(show_symbols_sysv): Avoid printing adress and size for undefined
+	symbols.  Don't print initial special entry and section entries.
+
+2011-10-02  Ulrich Drepper  <drepper@gmail.com>
+
+	* Makefile.am (demanglelib): Define.
+	(nm_LDADD): Add demanglelib.
+	* nm.c (options): Add -C option.
+	(demangle): Define as global variable.
+	(parse_opt): Recognize -C.
+	(show_symbols_sysv): Handle demangling.
+	(show_symbols_bad): Likewise.
+	(show_symbols_posix): Likewise.
+	(show_symbols): Likewise.
+
+2011-07-09  Roland McGrath  <roland@hack.frob.com>
+
+	* readelf.c (options, parse_opt): Grok -W/--wide and ignore it.
+
+	* ar.c (parse_opt): Grok -u.
+
+2011-05-30  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (relocate): Make offset check overflow-proof.
+
+2011-05-23  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (relocate): Take new arguments is_rela to indicate
+	whether the relocation is from a SHT_REL or SHT_RELA section.
+	Relocate against any debug section symbol, not just STT_SECTION
+	symbols. For SHT_REL relocations, fetch addend from offset and
+	add it to symbol value if not zero.
+
+2011-05-23  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (OPT_RELOC_DEBUG): New option.
+	(argp_option): Add new --reloc-debug-sections option.
+	(main): Check new option.
+	(parse_opt): Likewise.
+	(handle_elf): Remove any relocations between debug sections
+	in ET_REL for the debug file when requested.
+
+2011-05-18  Mark Wielaard  <mjw@redhat.com>
+
+	* strip.c (handle_elf): Make sure all sections of a removed group
+	section are removed too. Don't discard SHT_GROUP sections, copy
+	section table before it gets modified. Section group signature
+	symbols don't have to be retained.
+
 2011-05-16  Jakub Jelinek  <jakub@redhat.com>
 
 	* readelf.c (print_ops): Handle DW_OP_GNU_const_type,

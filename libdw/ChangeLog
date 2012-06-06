@@ -1,3 +1,26 @@
+2012-04-27  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw/dwarf_highpc.c (dwarf_highpc): Handle DW_AT_high_pc being
+	a constant offset from DW_AT_low_pc.
+
+2012-03-19  Tom Tromey  <tromey@redhat.com>
+
+	* libdw_findcu.c (findcu_cb): Move earlier.
+	(__libdw_intern_next_unit): Add new CU to search tree here...
+	(__libdw_findcu): ... not here.
+
+2012-01-31  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_formudata.c (dwarf_formudata): Handle DW_FORM_sec_offset.
+
+2011-11-31  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (known-dwarf.h): Run gawk on config/known-dwarf.awk.
+
+2011-07-14  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.h (dwarf_offdie): Fix documentation to mention .debug_info.
+
 2011-05-16  Jakub Jelinek  <jakub@redhat.com>
 
 	* dwarf.h (DW_OP_GNU_const_type, DW_OP_GNU_regval_type,

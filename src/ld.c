@@ -1,27 +1,19 @@
-/* Copyright (C) 2001-2010 Red Hat, Inc.
-   This file is part of Red Hat elfutils.
+/* Copyright (C) 2001-2010, 2012 Red Hat, Inc.
+   This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
-   Red Hat elfutils is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by the
-   Free Software Foundation; version 2 of the License.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   Red Hat elfutils is distributed in the hope that it will be useful, but
+   elfutils is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License along
-   with Red Hat elfutils; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
-
-   Red Hat elfutils is an included package of the Open Invention Network.
-   An included package of the Open Invention Network is a package for which
-   Open Invention Network licensees cross-license their patents.  No patent
-   license is granted, either expressly or impliedly, by designation as an
-   included package.  Should you wish to participate in the Open Invention
-   Network licensing program, please visit www.openinventionnetwork.com
-   <http://www.openinventionnetwork.com>.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -411,8 +403,8 @@ main (int argc, char *argv[])
       load_needed ();
 
       /* At this point all object files and DSOs are read.  If there
-         are still undefined symbols left they might have to be
-         synthesized from the linker script.  */
+	 are still undefined symbols left they might have to be
+	 synthesized from the linker script.  */
       create_lscript_symbols ();
 
       /* Now that we have loaded all the object files we can determine
@@ -958,7 +950,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2009");
+"), "2012");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -1478,7 +1470,7 @@ create_lscript_symbols (void)
       for (orule = segment->output_rules; orule != NULL; orule = orule->next)
 	if (orule->tag == output_assignment
 	    /* The assignments to "." (i.e., the PC) have to be
-               ignored here.  */
+	       ignored here.  */
 	    && strcmp (orule->val.assignment->variable, ".") != 0)
 	  {
 	    struct symbol *s = ld_state.unresolved;
@@ -1519,7 +1511,7 @@ duplicate definition of '%s' in linker script"),
 	      }
 
 	    /* If the symbol only has to be provided if it is needed,
-               ignore it here since it is not undefined.  */
+	       ignore it here since it is not undefined.  */
 	    if (orule->val.assignment->provide_flag)
 	      continue;
 

@@ -1,3 +1,29 @@
+2012-01-24  Mark Wielaard  <mjw@redhat.com>
+
+	* COPYING: Fix address. Updated version from gnulib.
+
+2012-01-23  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac: Set version to 0.153, update copyright years.
+
+2012-01-20  Roland McGrath  <roland@hack.frob.com>
+
+	* configure.ac: Handle --enable-deterministic-archives.
+
+2011-10-08  Roland McGrath  <roland@hack.frob.com>
+
+	* configure.ac (eu_version): Use sed instead of ${x/y/z} syntax.
+	Use POSIX.2 $((...)) syntax instead of $[...].
+	Reported by Mike Frysinger <vapier@gentoo.org>.
+
+2011-10-08  Mike Frysinger  <vapier@gentoo.org>
+
+	* configure.ac: Fix use of AC_ARG_ENABLE to handle $enableval correctly.
+
+2011-10-02  Ulrich Drepper  <drepper@gmail.com>
+
+	* configure.ac: Check for __cxa_demangle in libstdc++.
+
 2011-02-08  Roland McGrath  <roland@redhat.com>
 
 	* configure.ac (C99 check): Use AC_LANG_SOURCE.

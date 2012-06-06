@@ -1,27 +1,20 @@
 /* Create, modify, and extract from archives.
-   Copyright (C) 2005-2010 Red Hat, Inc.
+   Copyright (C) 2005-2012 Red Hat, Inc.
+   This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2005.
 
-   Red Hat elfutils is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by the
-   Free Software Foundation; version 2 of the License.
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
 
-   Red Hat elfutils is distributed in the hope that it will be useful, but
+   elfutils is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   General Public License for more details.
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License along
-   with Red Hat elfutils; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301 USA.
-
-   Red Hat elfutils is an included package of the Open Invention Network.
-   An included package of the Open Invention Network is a package for which
-   Open Invention Network licensees cross-license their patents.  No patent
-   license is granted, either expressly or impliedly, by designation as an
-   included package.  Should you wish to participate in the Open Invention
-   Network licensing program, please visit www.openinventionnetwork.com
-   <http://www.openinventionnetwork.com>.  */
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -73,7 +66,7 @@ ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
 {
-  { NULL, 0, NULL, 0, N_("Commands:"), 0 },
+  { NULL, 0, NULL, 0, N_("Commands:"), 1 },
   { NULL, 'd', NULL, 0, N_("Delete files from archive."), 0 },
   { NULL, 'm', NULL, 0, N_("Move files in archive."), 0 },
   { NULL, 'p', NULL, 0, N_("Print files in archive."), 0 },
@@ -83,7 +76,7 @@ static const struct argp_option options[] =
   { NULL, 't', NULL, 0, N_("Display content of archive."), 0 },
   { NULL, 'x', NULL, 0, N_("Extract files from archive."), 0 },
 
-  { NULL, 0, NULL, 0, N_("Command Modifiers:"), 0 },
+  { NULL, 0, NULL, 0, N_("Command Modifiers:"), 2 },
   { NULL, 'o', NULL, 0, N_("Preserve original dates."), 0 },
   { NULL, 'N', NULL, 0, N_("Use instance [COUNT] of name."), 0 },
   { NULL, 'C', NULL, 0,
@@ -115,7 +108,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state);
 /* Data structure to communicate with argp functions.  */
 static struct argp argp =
 {
-  options, parse_opt, args_doc, doc, NULL, NULL, NULL
+  options, parse_opt, args_doc, doc, arlib_argp_children, NULL, NULL
 };
 
 
@@ -252,6 +245,13 @@ MEMBER parameter required for 'a', 'b', and 'i' modifiers"));
   int status;
   switch (operation)
     {
+    case oper_none:
+      error (0, 0, gettext ("command option required"));
+      argp_help (&argp, stderr, ARGP_HELP_STD_ERR,
+		 program_invocation_short_name);
+      status = 1;
+      break;
+
     case oper_list:
     case oper_print:
       status = do_oper_extract (operation, arfname, argv, argc, -1);
@@ -290,7 +290,7 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
 Copyright (C) %s Red Hat, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2009");
+"), "2012");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
@@ -378,6 +378,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
     case 'T':
       allow_truncate_fname = true;
+      break;
+
+    case 'u':
+      update_newer = true;
       break;
 
     case 'v':
@@ -1291,14 +1295,15 @@ do_oper_insert (int oper, const char *arfname, char **argv, int argc,
 			found[cnt]->old_off == -1l ? 'a' : 'r', argv[cnt]);
 
 	      found[cnt]->elf = newelf;
-	      found[cnt]->sec = newst.st_mtime;
-	      found[cnt]->uid = newst.st_uid;
-	      found[cnt]->gid = newst.st_gid;
+	      found[cnt]->sec = arlib_deterministic_output ? 0 : newst.st_mtime;
+	      found[cnt]->uid = arlib_deterministic_output ? 0 : newst.st_uid;
+	      found[cnt]->gid = arlib_deterministic_output ? 0 : newst.st_gid;
 	      found[cnt]->mode = newst.st_mode;
 	      found[cnt]->name = bname;
 
 	      found[cnt]->mem = elf_rawfile (newelf, &found[cnt]->size);
-	      if (found[cnt] == NULL || elf_cntl (newelf, ELF_C_FDDONE) != 0)
+	      if (found[cnt]->mem == NULL
+		  || elf_cntl (newelf, ELF_C_FDDONE) != 0)
 		error (EXIT_FAILURE, 0, gettext ("cannot read %s: %s"),
 		       argv[cnt], elf_errmsg (-1));
 
