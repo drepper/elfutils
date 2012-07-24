@@ -72,6 +72,11 @@ AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
 
+# Check whether we can use g++ with -std=c++0x for the test.
+AC_PROG_CXX
+AX_CXX_COMPILE_STDCXX_0X
+AM_CONDITIONAL(HAVE_STDCXX_0X, test "x$ax_cv_cxx_compile_cxx0x_cxx" == "xyes")
+
 AC_CACHE_CHECK([for gcc with C99 support], ac_cv_c99, [dnl
 old_CFLAGS="$CFLAGS"
 CFLAGS="$CFLAGS -std=gnu99"

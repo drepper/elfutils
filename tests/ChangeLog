@@ -1,3 +1,13 @@
+2012-07-24  Mark Wielaard  <mjw@redhat.com>
+
+	* testfile-cxx-various.bz2: New testfile.
+	* cxx-various.cxx: New test source.
+	* Makefile.am (cxx_various_SOURCES): New.
+	(HAVE_STDCXX_0X): Add cxx-various and -std=c++0x if exists.
+	(EXTRA_DIST): Add cxx-various.cxx and testfile-cxx-various.bz2.
+	* test-subr.sh: Add testfile-cxx-various and cxx-various to
+	self_test_files if they exist.
+
 2012-07-19  Mark Wielaard  <mjw@redhat.com>
 
 	* run-readelf-unknown-self.sh: New test.

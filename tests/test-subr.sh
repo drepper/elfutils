@@ -109,11 +109,21 @@ self_test_files=`echo ../src/addr2line ../src/elfcmp ../src/elflint \
 ../src/size ../src/strip ../libelf/libelf.so ../libdw/libdw.so \
 ../libasm/libasm.so ../backends/libebl_*.so`
 
+# Prebuild binary in case we don't have a C++11 capable compiler around.
+extra_self_test_files=testfile-cxx-various
+self_test_files="$self_test_files $extra_self_test_files"
+
+# This file might not exist if we don't have a C++ compiler around.
+if test -f cxx-various; then
+  self_test_files="$self_test_files cxx-various"
+fi
+
 # Provide a command to run on all self-test files with testrun.
 testrun_on_self()
 {
   exit_status=0
 
+  testfiles $extra_self_test_files
   for file in $self_test_files; do
       testrun $* $file \
 	  || { echo "*** failure in $* $file"; exit_status=1; }
@@ -128,6 +138,7 @@ testrun_on_self_quiet()
 {
   exit_status=0
 
+  testfiles $extra_self_test_files
   for file in $self_test_files; do
       testrun $* $file > /dev/null \
 	  || { echo "*** failure in $* $file"; exit_status=1; }
@@ -148,6 +159,7 @@ testrun_on_self_nomatch()
   exit_status=0
   tempfiles self_matches.in self_matches.out
 
+  testfiles $extra_self_test_files
   for file in $self_test_files; do
     testrun "$@" $file > self_matches.in
     # egrep should fail to match anything, but we also want to show

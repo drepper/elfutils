@@ -97,6 +97,11 @@ check_PROGRAMS += $(asm_TESTS)
 TESTS += $(asm_TESTS)
 endif
 
+if HAVE_STDCXX_0X
+check_PROGRAMS += cxx-various
+AM_CXXFLAGS = -std=c++0x
+cxx_various_SOURCES = cxx-various.cc
+endif
 
 EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-show-die-info.sh run-get-files.sh run-get-lines.sh \
@@ -134,6 +139,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	     run-readelf-test4.sh run-readelf-twofiles.sh \
 	     run-readelf-unknown-self.sh \
+	     cxx-various.cc testfile-cxx-various.bz2 \
 	     run-bug1-test.sh testfile28.bz2 testfile28.rdwr.bz2 \
 	     testfile29.bz2 testfile29.rdwr.bz2 \
 	     testfile30.bz2 testfile31.bz2 testfile32.bz2 testfile33.bz2 \

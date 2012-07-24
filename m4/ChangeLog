@@ -1,3 +1,7 @@
+2012-07-24  Mark Wielaard  <mjw@redhat.com>
+
+	* ax_cxx_compile_stdcxx_0x.m4: Add from autoconf-archive.
+
 2010-04-14  Roland McGrath  <roland@redhat.com>
 
 	* gettext.m4: Upgrade to gettext-0.17.
