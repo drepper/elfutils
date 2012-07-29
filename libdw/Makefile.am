@@ -87,7 +87,17 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_frame_info.c dwarf_frame_cfa.c dwarf_frame_register.c \
 		  dwarf_cfi_addrframe.c \
 		  dwarf_getcfi.c dwarf_getcfi_elf.c dwarf_cfi_end.c \
-		  dwarf_aggregate_size.c dwarf_getlocation_implicit_pointer.c
+		  dwarf_aggregate_size.c dwarf_getlocation_implicit_pointer.c \
+		  dwarf_access_string.c dwarf_inline_string.c \
+		  dwarf_attr_string.c dwarf_lang_string.c \
+		  dwarf_calling_convention_string.c \
+		  dwarf_line_extended_opcode_string.c \
+		  dwarf_discr_list_string.c \
+		  dwarf_line_standard_opcode_string.c \
+		  dwarf_encoding_string.c dwarf_locexpr_opcode_string.c \
+		  dwarf_form_string.c dwarf_ordering_string.c \
+		  dwarf_tag_string.c dwarf_virtuality_string.c \
+		  dwarf_identifier_case_string.c dwarf_visibility_string.c
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h

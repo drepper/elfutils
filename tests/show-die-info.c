@@ -26,34 +26,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "../libdw/known-dwarf.h"
-
-static const char *
-dwarf_tag_string (unsigned int tag)
-{
-  switch (tag)
-    {
-#define ONE_KNOWN_DW_TAG(NAME, CODE) case CODE: return #NAME;
-      ALL_KNOWN_DW_TAG
-#undef ONE_KNOWN_DW_TAG
-    default:
-      return NULL;
-    }
-}
-
-static const char *
-dwarf_attr_string (unsigned int attrnum)
-{
-  switch (attrnum)
-    {
-#define ONE_KNOWN_DW_AT(NAME, CODE) case CODE: return #NAME;
-      ALL_KNOWN_DW_AT
-#undef ONE_KNOWN_DW_AT
-    default:
-      return NULL;
-    }
-}
-
 
 void
 handle (Dwarf *dbg, Dwarf_Die *die, int n)

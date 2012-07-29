@@ -1,5 +1,11 @@
 2012-07-27  Mark Wielaard  <mjw@redhat.com>
 
+	* allregs.c (dwarf_encoding_string): Removed.
+	* show-die-info.c (dwarf_tag_string): Removed.
+	(dwarf_attr_string): Removed.
+
+2012-07-27  Mark Wielaard  <mjw@redhat.com>
+
 	* allregs.c (dwarf_encoding_string): Rewritten using known-dwarf
 	macros.
 	* show-die-info.c (tagnames): Removed.

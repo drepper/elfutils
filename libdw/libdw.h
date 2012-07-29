@@ -1,5 +1,5 @@
 /* Interfaces for libdw.
-   Copyright (C) 2002-2010 Red Hat, Inc.
+   Copyright (C) 2002-2010, 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -828,6 +828,83 @@ extern const char *dwarf_errmsg (int err);
 
 /* Register new Out-Of-Memory handler.  The old handler is returned.  */
 extern Dwarf_OOM dwarf_new_oom_handler (Dwarf *dbg, Dwarf_OOM handler);
+
+
+/* Returns the tag name, without the DW_TAG_ prefix, if known.
+   Returns NULL if the given tag code is unknown.  */
+extern const char *dwarf_tag_string (unsigned int code);
+
+/* Returns the attribute name, without the DW_AT_ prefix, if known.
+   Returns NULL if the given attribute code is unknown.  */
+extern const char *dwarf_attr_string (unsigned int code);
+
+/* Returns the form name, without the DW_FORM_ prefix, if known.
+   Returns NULL if the given form code is unknown.  */
+extern const char *dwarf_form_string (unsigned int code);
+
+/* Returns the language name, without the DW_LANG_ prefix, if known.
+   Returns NULL if the given language code is unknown.  */
+extern const char *dwarf_lang_string (unsigned int code);
+
+/* Returns the inline name, without the DW_INL_ prefix, as used with
+   the DW_AT_inline attribute, if known.  Returns NULL if the given
+   DW_LANG code is unknown.  */
+extern const char *dwarf_inline_string (unsigned int code);
+
+/* Returns the encoding name, without the DW_ATE_ prefix, as used with
+   the DW_AT_encoding attribute, if known.  Returns NULL if the given
+   DW_ATE code is unknown.  */
+extern const char *dwarf_encoding_string (unsigned int code);
+
+/* Returns the access name, without the DW_ACCESS_ prefix, as used with
+   the DW_AT_accessibility attribute, if known.  Returns NULL if the given
+   DW_ACCESS code is unknown.  */
+extern const char *dwarf_access_string (unsigned int code);
+
+/* Returns the access name, without the DW_VIS_ prefix, as used with
+   the DW_AT_visibility attribute, if known.  Returns NULL if the given
+   DW_VIS code is unknown.  */
+extern const char *dwarf_visibility_string (unsigned int code);
+
+/* Returns the virtuality name, with the DW_VIRTUALITY_ prefix, as used
+   with the DW_AT_virtuality attribute, if known.  Returns NULL if the
+   given DW_VIRTUALITY code is unknown.  */
+extern const char *dwarf_virtuality_string (unsigned int code);
+
+/* Returns the identifier case name, without the DW_ID_ prefix, as used
+   with the DW_AT_identifier_case attribute, if known.  Returns NULL if
+   the given DW_ID code is unknown.  */
+extern const char *dwarf_identifier_case_string (unsigned int code);
+
+/* Returns the calling convention name, without the DW_CC_ prefix, as
+   used with the DW_AT_calling_convention attribute, if known.  Returns
+   NULL if the given DW_CC code is unknown.  */
+extern const char *dwarf_calling_convention_string (unsigned int code);
+
+/* Returns the ordering name, without the DW_ORD_ prefix, as
+   used with the DW_AT_ordering attribute, if known.  Returns
+   NULL if the given DW_CC code is unknown.  */
+extern const char *dwarf_ordering_string (unsigned int code);
+
+/* Returns the discriminant list name, without the DW_ORD_ prefix, as
+   used in the DW_AT_ordering attribute block, if known.  Returns
+   NULL if the given DW_CC code is unknown.  */
+extern const char *dwarf_discr_list_string (unsigned int code);
+
+/* Returns the operation name, without the DW_OP_ prefix, as
+   used in a DWARF location expression block, if known.  Returns
+   NULL if the given DW_OP code is unknown.  */
+extern const char *dwarf_locexpr_opcode_string (unsigned int code);
+
+/* Returns the standard line information opcode name, without the
+   DW_LNS_ prefix, as used in the line number program instructions,
+   if known.  Returns NULL if the given DW_LNS opcode is unknown.  */
+extern const char *dwarf_line_standard_opcode_string (unsigned int code);
+
+/* Returns the extended line information opcode name, without the
+   DW_LNE_ prefix, as used in the line number program instructions,
+   if known.  Returns NULL if the given DW_LNE opcode is unknown.  */
+extern const char *dwarf_line_extended_opcode_string (unsigned int code);
 
 
 /* Inline optimizations.  */

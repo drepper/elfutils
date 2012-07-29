@@ -1,5 +1,46 @@
 2012-07-27  Mark Wielaard  <mjw@redhat.com>
 
+	* Makefile.am (libdw_a_SOURCES): Add dwarf_aggregate_size.c,
+	dwarf_getlocation_implicit_pointer.c,
+	dwarf_access_string.c, dwarf_inline_string.c,
+	dwarf_attr_string.c dwarf_lang_string.c,
+	dwarf_calling_convention_string.c,
+	dwarf_line_extended_opcode_string.c,
+	dwarf_discr_list_string.c,
+	dwarf_line_standard_opcode_string.c,
+	dwarf_encoding_string.c dwarf_locexpr_opcode_string.c,
+	dwarf_form_string.c dwarf_ordering_string.c,
+	dwarf_tag_string.c dwarf_virtuality_string.c,
+	dwarf_identifier_case_string.c and dwarf_visibility_string.c
+	* dwarf_access_string.c: New file.
+	* dwarf_attr_string.c: Likewise.
+	* dwarf_calling_convention_string.c: Likewise.
+	* dwarf_discr_list_string.c: Likewise.
+	* dwarf_encoding_string.c: Likewise.
+	* dwarf_form_string.c: Likewise.
+	* dwarf_identifier_case_string.c: Likewise.
+	* dwarf_inline_string.c: Likewise.
+	* dwarf_lang_string.c: Likewise.
+	* dwarf_line_extended_opcode_string.c: Likewise.
+	* dwarf_line_standard_opcode_string.c: Likewise.
+	* dwarf_locexpr_opcode_string.c: Likewise.
+	* dwarf_ordering_string.c: Likewise.
+	* dwarf_tag_string.c: Likewise.
+	* dwarf_virtuality_string.c: Likewise.
+	* dwarf_visibility_string.c: Likewise.
+	* libdw.h: Declare dwarf_tag_string, dwarf_attr_string,
+	dwarf_lang_string, dwarf_inline_string, dwarf_encoding_string,
+	dwarf_access_string, dwarf_visibility_string,
+	dwarf_virtuality_string, dwarf_identifier_case_string,
+	dwarf_calling_convention_string, dwarf_ordering_string,
+	dwarf_discr_list_string, dwarf_locexpr_opcode_string,
+	dwarf_line_standard_opcode_string and
+	dwarf_line_extended_opcode_string.
+	* libdw.map (ELFUTILS_0.155): New symbol version directive for
+	new functions.
+
+2012-07-27  Mark Wielaard  <mjw@redhat.com>
+
 	* Makefile.am (EXTRA_DIST): Add known-dwarf.h.
 	* dwarf.h (DW_LANG_Go): Update comment.
 	(DW_LANG_Mips_Assembler): Likewise.

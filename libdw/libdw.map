@@ -254,3 +254,23 @@ ELFUTILS_0.149 {
 
     dwfl_dwarf_line;
 } ELFUTILS_0.148;
+
+ELFUTILS_0.155 {
+  global:
+    dwarf_tag_string;
+    dwarf_attr_string;
+    dwarf_form_string;
+    dwarf_lang_string;
+    dwarf_inline_string;
+    dwarf_encoding_string;
+    dwarf_access_string;
+    dwarf_visibility_string;
+    dwarf_virtuality_string;
+    dwarf_identifier_case_string;
+    dwarf_calling_convention_string;
+    dwarf_ordering_string;
+    dwarf_discr_list_string;
+    dwarf_locexpr_opcode_string;
+    dwarf_line_standard_opcode_string;
+    dwarf_line_extended_opcode_string;
+} ELFUTILS_0.149;

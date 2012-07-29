@@ -1,4 +1,4 @@
-/* Copyright (C) 2005, 2006 Red Hat, Inc.
+/* Copyright (C) 2005, 2006, 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -27,24 +27,6 @@
 #include <assert.h>
 #include ELFUTILS_HEADER(dwfl)
 #include <dwarf.h>
-
-#include "../libdw/known-dwarf.h"
-
-static const char *
-dwarf_encoding_string (unsigned int code)
-{
-  static const char *const known[] =
-    {
-#define ONE_KNOWN_DW_ATE(NAME, CODE) [CODE] = #NAME,
-      ALL_KNOWN_DW_ATE
-#undef ONE_KNOWN_DW_ATE
-    };
-
-  if (likely (code < sizeof (known) / sizeof (known[0])))
-    return known[code];
-
-  return NULL;
-}
 
 
 static int

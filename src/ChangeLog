@@ -1,5 +1,22 @@
 2012-07-27  Mark Wielaard  <mjw@redhat.com>
 
+	* readelf.c (dwarf_tag_string): Removed.
+	(dwarf_attr_string): Likewise.
+	(dwarf_form_string): Likewise.
+	(dwarf_lang_string): Likewise.
+	(dwarf_inline_string): Likewise.
+	(dwarf_encoding_string): Likewise.
+	(dwarf_access_string): Likewise.
+	(dwarf_visibility_string): Likewise.
+	(dwarf_virtuality_string): Likewise.
+	(dwarf_identifier_case_string): Likewise.
+	(dwarf_calling_convention_string): Likewise.
+	(dwarf_ordering_string): Likewise.
+	(dwarf_discr_list_string): Likewise.
+	(dwarf_locexpr_opcode_string): Likewise.
+
+2012-07-27  Mark Wielaard  <mjw@redhat.com>
+
 	* readelf.c (dwarf_tag_name): Renamed from dwarf_tag_string.
 	Uses new dwarf_tag_string or adds unknown_%#x.
 	(dwarf_attr_name): Likewise.
