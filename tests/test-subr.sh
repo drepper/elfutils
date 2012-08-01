@@ -136,3 +136,31 @@ testrun_on_self_quiet()
   # Only exit if something failed
   if test $exit_status != 0; then exit $exit_status; fi
 }
+
+# Make sure the testrun doesn't contain some regular expression output.
+# First argument is an egrep regular expression, the rest is the command
+# to run on all self test files.
+testrun_on_self_nomatch()
+{
+  pattern="$1"
+  shift
+
+  exit_status=0
+  tempfiles self_matches.in self_matches.out
+
+  for file in $self_test_files; do
+    testrun "$@" $file > self_matches.in
+    # egrep should fail to match anything, but we also want to show
+    # what it matched if it doesn't fail, so save output.
+    grep_ok=0
+    egrep -o "$pattern" < self_matches.in > self_matches.out || grep_ok=1
+    if test $grep_ok == 0; then
+      echo "*** failure in $* $file"
+      sort -u self_matches.out
+      exit_status=1;
+    fi
+  done
+
+  # Only exit if something failed
+  test $exit_status == 0 || exit $exit_status
+}

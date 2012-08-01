@@ -73,7 +73,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-nm-self.sh run-readelf-self.sh \
 	run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	run-readelf-test4.sh run-readelf-twofiles.sh \
-	run-readelf-macro.sh run-readelf-dwz-multi.sh \
+	run-readelf-unknown-self.sh run-readelf-macro.sh \
+	run-readelf-dwz-multi.sh \
 	run-native-test.sh run-bug1-test.sh \
 	dwfl-bug-addr-overflow run-addrname-test.sh \
 	dwfl-bug-fd-leak dwfl-bug-report \
@@ -132,6 +133,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     coverage.sh test-subr.sh test-wrapper.sh \
 	     run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	     run-readelf-test4.sh run-readelf-twofiles.sh \
+	     run-readelf-unknown-self.sh \
 	     run-bug1-test.sh testfile28.bz2 testfile28.rdwr.bz2 \
 	     testfile29.bz2 testfile29.rdwr.bz2 \
 	     testfile30.bz2 testfile31.bz2 testfile32.bz2 testfile33.bz2 \

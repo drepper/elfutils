@@ -1,3 +1,9 @@
+2012-07-19  Mark Wielaard  <mjw@redhat.com>
+
+	* run-readelf-unknown-self.sh: New test.
+	* Makefile.am (TESTS): Add run-readelf-unknown-self.sh.
+	(EXTRA_DIST): Likewise.
+
 2012-07-27  Mark Wielaard  <mjw@redhat.com>
 
 	* allregs.c (dwarf_encoding_string): Removed.
