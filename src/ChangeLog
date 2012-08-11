@@ -1,3 +1,10 @@
+2012-08-11  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (dwarf_endianity_name): New function.
+	(dwarf_decimal_sign_string): Likewise.
+	(attr_callback): Use dwarf_endianity_name for DW_AT_endianity
+	and use dwarf_decimal_sign_string for DW_AT_decimal_sign.
+
 2012-07-27  Mark Wielaard  <mjw@redhat.com>
 
 	* readelf.c (dwarf_tag_string): Removed.

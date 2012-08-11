@@ -273,4 +273,6 @@ ELFUTILS_0.155 {
     dwarf_locexpr_opcode_string;
     dwarf_line_standard_opcode_string;
     dwarf_line_extended_opcode_string;
+    dwarf_endianity_string;
+    dwarf_decimal_sign_string;
 } ELFUTILS_0.149;

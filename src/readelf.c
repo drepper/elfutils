@@ -3352,6 +3352,30 @@ dwarf_discr_list_name (unsigned int code)
   return result;
 }
 
+static const char *
+dwarf_endianity_name (unsigned int code)
+{
+  const char *result = dwarf_endianity_string (code);
+  if (unlikely (result == NULL))
+    {
+      if (code >= DW_END_lo_user && code <= DW_END_hi_user)
+	snprintf (unknown_buf, sizeof unknown_buf, "lo_user+%#x",
+		  code - DW_END_lo_user);
+      else
+	return "???"; /* Numeric value is always already printed. */
+      result = unknown_buf;
+    }
+  return result;
+}
+
+static const char *
+dwarf_decimal_sign_name (unsigned int code)
+{
+  const char *result = dwarf_decimal_sign_string (code);
+  if (unlikely (result == NULL))
+    result = "???"; /* Numeric value is always already printed. */
+  return result;
+}
 
 static void
 print_block (size_t n, const void *block)
@@ -5024,6 +5048,12 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	  break;
 	case DW_AT_discr_list:
 	  valuestr = dwarf_discr_list_name (num);
+	  break;
+	case DW_AT_endianity:
+	  valuestr = dwarf_endianity_name (num);
+	  break;
+	case DW_AT_decimal_sign:
+	  valuestr = dwarf_decimal_sign_name (num);
 	  break;
 	default:
 	  /* Nothing.  */

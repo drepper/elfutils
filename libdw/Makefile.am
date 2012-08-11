@@ -97,7 +97,8 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_encoding_string.c dwarf_locexpr_opcode_string.c \
 		  dwarf_form_string.c dwarf_ordering_string.c \
 		  dwarf_tag_string.c dwarf_virtuality_string.c \
-		  dwarf_identifier_case_string.c dwarf_visibility_string.c
+		  dwarf_identifier_case_string.c dwarf_visibility_string.c \
+		  dwarf_endianity_string.c dwarf_decimal_sign_string.c
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h

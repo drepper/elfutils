@@ -906,6 +906,16 @@ extern const char *dwarf_line_standard_opcode_string (unsigned int code);
    if known.  Returns NULL if the given DW_LNE opcode is unknown.  */
 extern const char *dwarf_line_extended_opcode_string (unsigned int code);
 
+/* Returns the endianity name, without the DW_END_ prefix, as used in
+   the DW_AT_endianity attribute, if known.  Returns NULL if the given
+   DW_END code is unknown.  */
+extern const char *dwarf_endianity_string (unsigned int code);
+
+/* Returns the decimal sign name, without the DW_DS_ prefix, as used in
+   the DW_AT_decimal_sign attribute, if known.  Returns NULL if the given
+   DW_DS code is unknown.  */
+extern const char *dwarf_decimal_sign_string (unsigned int code);
+
 
 /* Inline optimizations.  */
 #ifdef __OPTIMIZE__

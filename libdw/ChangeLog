@@ -1,3 +1,14 @@
+2012-08-11  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (libdw_a_SOURCES): Add dwarf_endianity_string.c and
+	dwarf_decimal_sign_string.c.
+	* dwarf_endianity_string.c: New file.
+	* dwarf_decimal_sign_string.c: New file.
+	* libdw.h: Declare dwarf_endianity_string and
+	dwarf_decimal_sign_string.
+	* libdw.map (ELFUTILS_0.155): Add dwarf_endianity_string and
+	dwarf_decimal_sign_string.
+
 2012-07-27  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am (libdw_a_SOURCES): Add dwarf_aggregate_size.c,
