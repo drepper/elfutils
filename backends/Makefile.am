@@ -39,6 +39,7 @@ libebl_pic = libebl_i386_pic.a libebl_sh_pic.a libebl_x86_64_pic.a \
 	     libebl_s390_pic.a libebl_tilegx_pic.a
 noinst_LIBRARIES = $(libebl_pic)
 noinst_DATA = $(libebl_pic:_pic.a=.so)
+lib_LIBRARIES = libebl_static_pic.a
 
 
 if MUDFLAP
@@ -48,6 +49,21 @@ else
 libelf = ../libelf/libelf.so
 libdw = ../libdw/libdw.so
 endif
+
+# The following is minimal set of backends that we link with libdw to
+# avoid dlopen.
+static_SRCS = i386_init.c i386_symbol.c i386_corenote.c i386_cfi.c \
+	     i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c \
+	     x86_64_init.c x86_64_symbol.c x86_64_corenote.c x86_64_cfi.c \
+	     x86_64_retval.c x86_64_regs.c x86_64_syscall.c \
+	     ia64_init.c ia64_symbol.c ia64_regs.c ia64_retval.c \
+	     ppc_init.c ppc_symbol.c ppc_retval.c ppc_regs.c \
+	     ppc_corenote.c ppc_auxv.c ppc_attrs.c ppc_syscall.c \
+	     ppc64_init.c ppc64_symbol.c ppc64_retval.c ppc64_corenote.c \
+	     s390_init.c s390_symbol.c s390_regs.c s390_retval.c \
+	     s390_corenote.c s390x_corenote.c s390_cfi.c ppc_cfi.c
+libebl_static_pic_a_SOURCES = $(static_SRCS)
+am_libebl_static_pic_a_OBJECTS = $(static_SRCS:.c=.os)
 
 i386_SRCS = i386_init.c i386_symbol.c i386_corenote.c i386_cfi.c \
 	    i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c

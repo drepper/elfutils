@@ -81,7 +81,8 @@ libasm = ../libasm/libasm.so
 libdw = ../libdw/libdw.so
 libelf = ../libelf/libelf.so
 endif
-libebl = ../libebl/libebl.a
+libebl = ../libebl/libebl.a ../backends/libebl_static_pic.a ../libcpu/libcpu_static_pic.a
+libdw_static = ../libdw/libdw_static_pic.a
 libeu = ../lib/libeu.a
 
 if DEMANGLE
@@ -95,22 +96,22 @@ addr2line_no_Wformat = yes
 # XXX While the file is not finished, don't warn about this
 ldgeneric_no_Wunused = yes
 
-readelf_LDADD = $(libdw) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
+readelf_LDADD = $(libdw) $(libebl) $(libelf) $(libeu) $(libmudflap)
 nm_LDADD = $(libdw) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl \
 	   $(demanglelib)
 size_LDADD = $(libelf) $(libeu) $(libmudflap)
-strip_LDADD = $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
-ld_LDADD = $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
+strip_LDADD = $(libebl) $(libdw_static) $(libelf) $(libeu) $(libmudflap) -ldl
+ld_LDADD = $(libebl) $(libdw_static) $(libelf) $(libeu) $(libmudflap) -ldl
 if NATIVE_LD
 # -ldl is always needed for libebl.
 ld_LDADD += libld_elf.a
 endif
 ld_LDFLAGS = -rdynamic
-elflint_LDADD  = $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
+elflint_LDADD  = $(libebl) $(libdw_static) $(libelf) $(libeu) $(libmudflap) -ldl
 findtextrel_LDADD = $(libdw) $(libelf) $(libmudflap)
 addr2line_LDADD = $(libdw) $(libelf) $(libmudflap)
-elfcmp_LDADD = $(libebl) $(libelf) $(libmudflap) -ldl
-objdump_LDADD  = $(libasm) $(libebl) $(libelf) $(libeu) $(libmudflap) -ldl
+elfcmp_LDADD = $(libebl) $(libdw_static) $(libelf) $(libmudflap) -ldl
+objdump_LDADD  = $(libasm) $(libebl) $(libdw_static) $(libelf) $(libeu) $(libmudflap) -ldl
 ranlib_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
 strings_LDADD = $(libelf) $(libeu) $(libmudflap)
 ar_LDADD = libar.a $(libelf) $(libeu) $(libmudflap)
