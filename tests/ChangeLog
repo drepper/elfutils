@@ -1,3 +1,109 @@
+2012-08-24  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add testfile60.bz2.
+
+2012-08-22  Jeff Kenton  <jkenton@tilera.com>
+
+	* testfile60.bz2: New testfile.
+	* run-allregs.sh: Run reg_test testfile60.
+
+2012-08-24  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): Only add run-readelf-dwz-multi.sh if
+	ENABLE_DWZ.
+
+2012-08-16  Mark Wielaard  <mjw@redhat.com>
+
+	* allregs.c (dwarf_encoding_string): Rewritten using known-dwarf
+	macros.
+	* show-die-info.c (tagnames): Removed.
+	(attrs): Removed.
+	(dwarf_tag_string): New function using known-dwarf macros.
+	(dwarf_attr_string): Likewise.
+	(handle): Call dwarf_tag_string and dwarf_attr_string instead.
+	* run-readelf-dwz-multi.sh: Expect language C89, not ISO C89.
+
+2012-06-27  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): Add run-readelf-dwz-multi.sh.
+	(EXTRA_DIST): Add run-readelf-dwz-multi.sh,
+	libtestfile_multi_shared.so.bz2, testfile_multi.dwz.bz2 and
+	testfile_multi_main.bz2.
+	* run-readelf-dwz-multi.sh: New test.
+	* libtestfile_multi_shared.so.bz2: New testfile.
+	* testfile_multi.dwz.bz2: New testifle.
+	* testfile_multi_main.bz2: New testifle.
+
+2012-08-01  Petr Machata  <pmachata@redhat.com>
+
+	* run-test-archive64.sh: New test.
+	* testarchive64.a.bz2: New testfile.
+	* Makefile.am (TESTS): Add run-test-archive64.sh.
+	(EXTRA_DIST): Likewise.
+
+2012-08-01  Mark Wielaard  <mjw@redhat.com>
+
+	* run-nm-self.sh: New test.
+	* run-readelf-self.sh: Likewise.
+	* test-subr.sh (testrun_on_self_quiet): New function.
+	* Makefile.am (TESTS): Add run-nm-self.sh and run-readelf-self.sh.
+	(EXTRA_DIST): Likewise.
+
+2012-08-01  Mark Wielaard  <mjw@redhat.com>
+
+	* test-subr.sh (self_test_files): New list of files.
+	(testrun_on_self): New function.
+	* run-elflint-self.sh: Use testrun_on_self.
+
+2012-07-19  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add test-elf_cntl_gelf_getshdr.
+	(TESTS): Add run-elf_cntl_gelf_getshdr.sh.
+	(EXTRA_DIST): Likewise.
+	(test_elf_cntl_gelf_getshdr_LDADD): New.
+	test-elf_cntl_gelf_getshdr.c: New test program.
+	run-elf_cntl_gelf_getshdr.sh: New test script.
+
+2012-07-19  Mark Wielaard  <mjw@redhat.com>
+
+	* run-elflint-self.sh: runtests on ../backends/*so files.
+
+2012-07-19  Mark Wielaard  <mjw@redhat.com>
+
+	* run-unstrip-n.sh: test_cleanup.
+	* Makefile.am (EXTRA_DIST): Add testcore-rtlib-ppc.bz2.
+
+2012-07-11  Mark Wielaard  <mjw@redhat.com>
+
+	* run-readelf-macro.sh: New test.
+	* testfilemacro.bz2: New testfile.
+	* Makefile.am (TESTS): Add run-readelf-macro.sh.
+	(EXTRA_DIST): Add run-readelf-macro.sh and testfilemacro.bz2.
+
+2012-06-27  Mark Wielaard  <mjw@redhat.com>
+
+	* run-readelf-gdb-index.sh: New test.
+	* testfilegdbindex5.bz2: New testfile.
+	* testfilegdbindex7.bz2: Likewise.
+	* Makefile.am (TESTS): Add run-readelf-gdb-index.sh.
+	(EXTRA_DIST): run-readelf-gdb_index.sh, testfilegdbindex5.bz2 and
+	testfilegdbindex7.bz2.
+
+2012-07-17  Mark Wielaard  <mjw@redhat.com>
+
+	* testcore-rtlib-ppc.bz2: New testfile.
+	* run-unstrip-n.sh: Check new ppc core testfile.
+
+2012-06-26  Mike Frysinger  <vapier@gentoo.org>
+
+	* Makefile.am (check_PROGRAMS): Rename from noinst_PROGRAMS.
+
+2012-06-26  Mark Wielaard  <mjw@redhat.com>
+
+	* run-macro-test.sh: New test.
+	* testfile-macinfo.bz2: New testfile.
+	* testfile-macros.bz2: Likewise.
+
 2012-05-07  Mark Wielaard  <mjw@redhat.com>
 
 	* low_high_pc.c: Use proper inttypes in printf formats.

@@ -17,7 +17,7 @@ dnl  GNU General Public License for more details.
 dnl
 dnl  You should have received a copy of the GNU General Public License
 dnl  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-AC_INIT([elfutils],[0.154],[http://bugzilla.redhat.com/bugzilla/],[elfutils])
+AC_INIT([elfutils],[0.155],[https://bugzilla.redhat.com/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
@@ -66,6 +66,14 @@ AM_CONDITIONAL(USE_LOCKS, test "$use_locks" = yes)
 AS_IF([test "$use_locks" = yes], [AC_DEFINE(USE_LOCKS)])
 
 AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
+
+AC_ARG_ENABLE([dwz],
+AS_HELP_STRING([--enable-dwz], [enable experimental GNU ref_alt FORM, dwz multi file support in libdw]),
+enable_dwz=$enableval, enable_dwz=no)
+AM_CONDITIONAL(ENABLE_DWZ, test "$enable_dwz" = yes)
+AS_IF([test "$enable_dwz" = yes], [AC_DEFINE(ENABLE_DWZ)])
+
+AH_TEMPLATE([ENABLE_DWZ], [Defined if libdw should support GNU ref_alt FORM, dwz multi files.])
 
 AC_PROG_CC
 AC_PROG_RANLIB

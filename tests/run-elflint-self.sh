@@ -18,37 +18,4 @@
 
 . $srcdir/test-subr.sh
 
-status=0
-runtest() {
-# Uncomment for debuging
-#  echo $1
-  if [ -f $1 ]; then
-    testrun ../src/elflint --quiet --gnu-ld $1 ||
-    { echo "*** failure in $1"; status=1; }
-  fi
-}
-
-runtest ../src/addr2line
-runtest ../src/elfcmp
-runtest ../src/elflint
-runtest ../src/findtextrel
-runtest ../src/ld
-runtest ../src/nm
-runtest ../src/objdump
-runtest ../src/readelf
-runtest ../src/size
-runtest ../src/strip
-runtest ../libelf/libelf.so
-runtest ../libdw/libdw.so
-runtest ../libasm/libasm.so
-runtest ../libebl/libebl_alpha.so
-runtest ../libebl/libebl_arm.so
-runtest ../libebl/libebl_i386.so
-runtest ../libebl/libebl_ia64.so
-runtest ../libebl/libebl_ppc.so
-runtest ../libebl/libebl_ppc64.so
-runtest ../libebl/libebl_sh.so
-runtest ../libebl/libebl_sparc.so
-runtest ../libebl/libebl_x86_64.so
-
-exit $status
+testrun_on_self ../src/elflint --quiet --gnu-ld

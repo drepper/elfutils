@@ -71,6 +71,7 @@ enum
     IDX_debug_pubnames,
     IDX_debug_str,
     IDX_debug_macinfo,
+    IDX_debug_macro,
     IDX_debug_ranges,
     IDX_last
   };
@@ -115,6 +116,7 @@ enum
   DWARF_E_INVALID_OFFSET,
   DWARF_E_NO_DEBUG_RANGES,
   DWARF_E_INVALID_CFI,
+  DWARF_E_NO_ALT_DEBUGLINK
 };
 
 
@@ -125,6 +127,9 @@ struct Dwarf
 {
   /* The underlying ELF file.  */
   Elf *elf;
+
+  /* dwz alternate DWARF file.  */
+  Dwarf *alt_dwarf;
 
   /* The section data.  */
   Elf_Data *sectiondata[IDX_last];
@@ -139,6 +144,9 @@ struct Dwarf
 
   /* If true, we allocated the ELF descriptor ourselves.  */
   bool free_elf;
+
+  /* If true, we allocated the Dwarf descriptor for alt_dwarf ourselves.  */
+  bool free_alt;
 
   /* Information for traversing the .debug_pubnames section.  This is
      an array and separately allocated with malloc.  */
@@ -579,13 +587,13 @@ __libdw_read_offset_inc (Dwarf *dbg,
 }
 
 static inline int
-__libdw_read_offset (Dwarf *dbg,
+__libdw_read_offset (Dwarf *dbg, Dwarf *dbg_ret,
 		     int sec_index, const unsigned char *addr,
 		     int width, Dwarf_Off *ret, int sec_ret,
 		     size_t size)
 {
   READ_AND_RELOCATE (__libdw_relocate_offset, (*ret));
-  return __libdw_offset_in_section (dbg, sec_ret, *ret, size);
+  return __libdw_offset_in_section (dbg_ret, sec_ret, *ret, size);
 }
 
 static inline size_t
@@ -616,12 +624,20 @@ unsigned char * __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
 				 Dwarf_Off *offsetp)
   internal_function;
 
+#ifdef ENABLE_DWZ
+/* Checks that the build_id of the underlying Elf matches the expected.
+   Returns zero on match, -1 on error or no build_id found or 1 when
+   build_id doesn't match.  */
+int __check_build_id (Dwarf *dw, const uint8_t *build_id, const size_t id_len)
+  internal_function;
+#endif /* ENABLE_DWZ */
 
 
 /* Aliases to avoid PLTs.  */
 INTDECL (dwarf_aggregate_size)
 INTDECL (dwarf_attr)
 INTDECL (dwarf_attr_integrate)
+INTDECL (dwarf_begin)
 INTDECL (dwarf_begin_elf)
 INTDECL (dwarf_child)
 INTDECL (dwarf_dieoffset)
