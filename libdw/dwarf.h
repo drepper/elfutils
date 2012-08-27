@@ -266,6 +266,7 @@ enum
     DW_AT_GNU_all_tail_call_sites = 0x2116,
     DW_AT_GNU_all_call_sites = 0x2117,
     DW_AT_GNU_all_source_call_sites = 0x2118,
+    DW_AT_GNU_macros = 0x2119,
 
     DW_AT_hi_user = 0x3fff
   };
@@ -298,7 +299,10 @@ enum
     DW_FORM_sec_offset = 0x17,
     DW_FORM_exprloc = 0x18,
     DW_FORM_flag_present = 0x19,
-    DW_FORM_ref_sig8 = 0x20
+    DW_FORM_ref_sig8 = 0x20,
+
+    DW_FORM_GNU_ref_alt = 0x1f20, /* offset in alternate .debuginfo.  */
+    DW_FORM_GNU_strp_alt = 0x1f21 /* offset in alternate .debug_str. */
   };
 
 
@@ -471,6 +475,7 @@ enum
     DW_OP_GNU_deref_type = 0xf6,
     DW_OP_GNU_convert = 0xf7,
     DW_OP_GNU_reinterpret = 0xf9,
+    DW_OP_GNU_parameter_ref = 0xfa,
 
     DW_OP_lo_user = 0xe0,	/* Implementation-defined range start.  */
     DW_OP_hi_user = 0xff	/* Implementation-defined range end.  */
@@ -496,6 +501,7 @@ enum
     DW_ATE_signed_fixed = 0xd,
     DW_ATE_unsigned_fixed = 0xe,
     DW_ATE_decimal_float = 0xf,
+    DW_ATE_UTF = 0x10,
 
     DW_ATE_lo_user = 0x80,
     DW_ATE_hi_user = 0xff
@@ -570,15 +576,15 @@ enum
     DW_LANG_Ada95 = 0x000d,	     /* ISO Ada:1995 */
     DW_LANG_Fortran95 = 0x000e,	     /* ISO Fortran 95 */
     DW_LANG_PL1 = 0x000f,	     /* ISO PL/1:1976 */
-    DW_LANG_Objc = 0x0010,	     /* Objective-C */
+    DW_LANG_ObjC = 0x0010,	     /* Objective-C */
     DW_LANG_ObjC_plus_plus = 0x0011, /* Objective-C++ */
     DW_LANG_UPC = 0x0012,	     /* Unified Parallel C */
     DW_LANG_D = 0x0013,		     /* D */
     DW_LANG_Python = 0x0014,	     /* Python */
-    DW_LANG_Go = 0x0016,	     /* Google's Go (provisionally in DWARF5) */
+    DW_LANG_Go = 0x0016,	     /* Go */
 
     DW_LANG_lo_user = 0x8000,
-    DW_LANG_Mips_Assembler = 0x8001,
+    DW_LANG_Mips_Assembler = 0x8001, /* Assembler */
     DW_LANG_hi_user = 0xffff
   };
 
@@ -669,6 +675,21 @@ enum
     DW_MACINFO_start_file = 3,
     DW_MACINFO_end_file = 4,
     DW_MACINFO_vendor_ext = 255
+  };
+
+
+/* DWARF debug_macro type encodings.  GNU/DWARF5 extension.  */
+enum
+  {
+    DW_MACRO_GNU_define = 0x01,
+    DW_MACRO_GNU_undef = 0x02,
+    DW_MACRO_GNU_start_file = 0x03,
+    DW_MACRO_GNU_end_file = 0x04,
+    DW_MACRO_GNU_define_indirect = 0x05,
+    DW_MACRO_GNU_undef_indirect = 0x06,
+    DW_MACRO_GNU_transparent_include = 0x07,
+    DW_MACRO_GNU_lo_user = 0xe0,
+    DW_MACRO_GNU_hi_user = 0xff
   };
 
 

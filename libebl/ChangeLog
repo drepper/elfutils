@@ -1,3 +1,11 @@
+2012-08-22  Jeff Kenton  <jkenton@tilera.com>
+
+	* eblopenbackend.c (machines): Add tilegx.
+
+2011-06-26  Mark Wielaard  <mjw@redhat.com>
+
+	* eblopenbackend.c (default_debugscn_p): Add .debug_macro.
+
 2011-04-26  Mark Wielaard  <mjw@redhat.com>
 
 	* libebl.h (ebl_object_note_type_name): Add const char *name arg.

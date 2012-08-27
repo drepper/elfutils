@@ -1,3 +1,68 @@
+2012-08-24  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_begin_elf.c (check_section): Only probe for dwz multi files
+	when ENABLE_DWZ is defined.
+	* libdwP.h (__check_build_id): Only declare when ENABLE_DWZ is
+	defined.
+
+2012-08-16  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add known-dwarf.h.
+	* dwarf.h (DW_LANG_Go): Update comment.
+	(DW_LANG_Mips_Assembler): Likewise.
+
+2012-06-27  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Add DW_FORM_GNU_ref_alt and DW_FORM_GNU_strp_alt.
+	* dwarf_begin.c (dwarf_begin): Add INTDEF.
+	* dwarf_begin_elf.c (__check_build_id): New internal_function.
+	(try_debugaltlink): New function.
+	(open_debugaltlink): Likewise.
+	(check_section): Try open_debugaltlink for .gnu_debugaltlink.
+	* dwarf_end.c (dwarf_end): Free the alternative Dwarf descriptor if
+	necessary.
+	* dwarf_error.c (errmsgs): Add DWARF_E_NO_ALT_DEBUGLINK.
+	* dwarf_formref.c (__libdw_formref): Using DW_FORM_GNU_ref_alt
+	is an error here.
+	* dwarf_formref_die.c (dwarf_formref_die): Handle DW_FORM_GNU_ref_alt.
+	* dwarf_formstring.c (dwarf_formstring): Handle DW_FORM_GNU_strp_alt.
+	* dwarf_formudata.c (__libdw_formptr): Adjust __libdw_read_offset
+	calls.
+	* dwarf_getpubnames.c (get_offsets): Adjust __libdw_read_offset call.
+	* libdwP.h: Add DWARF_E_NO_ALT_DEBUGLINK.
+	(struct Dwarf): Add alt_dwarf and free_alt fields.
+	(__libdw_read_offset): Add dbg_ret argument, use to check with
+	__libdw_offset_in_section.
+	(__check_build_id): New function declaration.
+	(dwarf_begin): Define as INTDECL.
+	* libdw_form.c (__libdw_form_val_len): Handle DW_FORM_GNU_ref_alt
+	and DW_FORM_GNU_strp_alt.
+
+2012-07-19  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Add DW_OP_GNU_parameter_ref.
+
+2012-07-24  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Correct spelling of DW_LANG_ObjC.
+	* dwarf_aggregate_size.c (array_size): Use correct spelling of
+	DW_LANG_ObjC.
+
+2012-07-24  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Add DW_ATE_UTF.
+
+2012-06-27  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Add DW_MACRO_GNU .debug_macro type encodings.
+
+2012-06-26  Mark Wielaard  <mjw@redhat.com>
+
+	* libdwP.h: Add IDX_debug_macro.
+	* dwarf.h: Add DW_AT_GNU_macros.
+	* dwarf_begin_elf.c (dwarf_scnnames): Add .debug_macro.
+	* dwarf_formudata.c (dwarf_formudata): Recognize DW_AT_GNU_macros.
+
 2012-04-27  Mark Wielaard  <mjw@redhat.com>
 
 	* libdw/dwarf_highpc.c (dwarf_highpc): Handle DW_AT_high_pc being

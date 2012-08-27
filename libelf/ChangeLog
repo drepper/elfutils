@@ -1,3 +1,30 @@
+2012-08-16  Roland McGrath  <roland@hack.frob.com>
+
+	* elf.h: Update from glibc.
+
+2012-08-14  Mark Wielaard  <mjw@redhat.com>
+
+	* elf32_checksum.c (ebl_debugscn_p): Removed unused define and
+	confusing outdated comment.
+
+2012-08-01  Petr Machata  <pmachata@redhat.com>
+
+	* elf_getarsym (read_number_entries): New function.
+	(elf_getarsym): Handle 64-bit symbol table, stored in special
+	entry named "/SYM64/".
+	* elf_begin.c (__libelf_next_arhdr_wrlock): Don't reject archive
+	because it contains 64-bit symbol table.
+
+2012-07-19  Mark Wielaard  <mjw@redhat.com>
+
+	* elf32_getshdr.c (load_shdr_wrlock): Add elf->flags & ELF_F_MALLOCED
+	to asserts.
+
+2012-07-17  Petr Machata  <pmachata@redhat.com>
+
+	* elf32_xlatetom.c (elfw2(LIBELFBITS, xlatetom)): Do not check for
+	integer number of records in case of ELF_T_NHDR.
+
 2012-04-02  Mark Wielaard  <mjw@redhat.com>
 
 	* elf32_offscn.c: Do not match SHT_NOBITS sections at OFFSET unless

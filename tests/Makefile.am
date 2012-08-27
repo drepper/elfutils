@@ -40,7 +40,7 @@ else
 tests_rpath = no
 endif
 
-noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
+check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  showptable update1 update2 update3 update4 test-nlist \
 		  show-die-info get-files get-lines get-pubnames \
 		  get-aranges allfcts line2addr addrscopes funcscopes \
@@ -50,7 +50,8 @@ noinst_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
-		  alldts md5-sha1-test typeiter low_high_pc
+		  alldts md5-sha1-test typeiter low_high_pc \
+		  test-elf_cntl_gelf_getshdr
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -69,8 +70,10 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-ranlib-test2.sh run-ranlib-test3.sh run-ranlib-test4.sh \
 	run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
 	run-find-prologues.sh run-allregs.sh \
+	run-nm-self.sh run-readelf-self.sh \
 	run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	run-readelf-test4.sh run-readelf-twofiles.sh \
+	run-readelf-macro.sh \
 	run-native-test.sh run-bug1-test.sh \
 	dwfl-bug-addr-overflow run-addrname-test.sh \
 	dwfl-bug-fd-leak dwfl-bug-report \
@@ -79,16 +82,22 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-early-offscn.sh run-dwarf-getmacros.sh \
 	run-test-flag-nobits.sh run-prelink-addr-test.sh \
 	run-dwarf-getstring.sh run-rerequest_tag.sh run-typeiter.sh \
-	run-readelf-d.sh run-unstrip-n.sh run-low_high_pc.sh
+	run-readelf-d.sh run-readelf-gdb_index.sh run-unstrip-n.sh \
+	run-low_high_pc.sh run-macro-test.sh run-elf_cntl_gelf_getshdr.sh \
+	run-test-archive64.sh
 
 if !STANDALONE
-noinst_PROGRAMS += msg_tst md5-sha1-test
+check_PROGRAMS += msg_tst md5-sha1-test
 TESTS += msg_tst md5-sha1-test
 endif
 
 if HAVE_LIBASM
-noinst_PROGRAMS += $(asm_TESTS)
+check_PROGRAMS += $(asm_TESTS)
 TESTS += $(asm_TESTS)
+endif
+
+if ENABLE_DWZ
+TESTS += run-readelf-dwz-multi.sh
 endif
 
 
@@ -110,6 +119,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-elflint-self.sh run-ranlib-test.sh run-ranlib-test2.sh \
 	     run-ranlib-test3.sh run-ranlib-test4.sh \
 	     run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
+	     run-nm-self.sh run-readelf-self.sh \
 	     run-find-prologues.sh run-allregs.sh run-native-test.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
@@ -138,6 +148,9 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile45.S.bz2 testfile45.expect.bz2 run-disasm-x86-64.sh \
 	     testfile46.bz2 testfile47.bz2 testfile48.bz2 testfile48.debug.bz2 \
 	     testfile49.bz2 testfile50.bz2 testfile51.bz2 \
+	     run-readelf-macro.sh testfilemacro.bz2 \
+	     run-readelf-dwz-multi.sh libtestfile_multi_shared.so.bz2 \
+	     testfile_multi.dwz.bz2 testfile_multi_main.bz2 \
 	     run-prelink-addr-test.sh \
 	     testfile52-32.so.bz2 testfile52-32.so.debug.bz2 \
 	     testfile52-32.prelink.so.bz2 testfile52-32.noshdrs.so.bz2 \
@@ -156,8 +169,14 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile56.bz2 testfile57.bz2 testfile58.bz2 \
 	     run-typeiter.sh testfile59.bz2 \
 	     run-readelf-d.sh testlib_dynseg.so.bz2 \
-	     run-unstrip-n.sh testcore-rtlib.bz2 \
-	     run-low_high_pc.sh testfile_low_high_pc.bz2
+	     run-readelf-gdb_index.sh testfilegdbindex5.bz2 \
+	     testfilegdbindex7.bz2 \
+	     run-unstrip-n.sh testcore-rtlib.bz2 testcore-rtlib-ppc.bz2 \
+	     run-low_high_pc.sh testfile_low_high_pc.bz2 \
+	     run-macro-test.sh testfile-macinfo.bz2 testfile-macros.bz2 \
+	     run-elf_cntl_gelf_getshdr.sh \
+	     run-test-archive64.sh testarchive64.a.bz2 \
+	     testfile60.bz2
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
@@ -257,6 +276,7 @@ alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
 md5_sha1_test_LDADD = $(libeu)
 typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
 low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
+test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage
