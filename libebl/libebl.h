@@ -375,8 +375,9 @@ extern int ebl_auxv_info (Ebl *ebl, GElf_Xword a_type,
 			  const char **name, const char **format)
   __nonnull_attribute__ (1, 3, 4);
 
-extern Dwarf_Frame_State *ebl_frame_state (Ebl *ebl, pid_t pid);
-extern bool ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *data);
+extern Dwarf_Frame_State *ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach);
+extern void ebl_frame_detach (Ebl *ebl, pid_t pid);
+extern bool ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul);
 
 #ifdef __cplusplus
 }

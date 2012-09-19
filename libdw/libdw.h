@@ -231,7 +231,8 @@ typedef union
 /* Opaque type representing a frame state described by CFI.  */
 typedef struct Dwarf_Frame_s Dwarf_Frame;
 
-typedef struct Dwarf_Frame_State_s Dwarf_Frame_State;
+typedef struct Dwarf_Frame_State_Base Dwarf_Frame_State_Base;
+typedef struct Dwarf_Frame_State Dwarf_Frame_State;
 
 /* Opaque type representing a CFI section found in a DWARF or ELF file.  */
 typedef struct Dwarf_CFI_s Dwarf_CFI;

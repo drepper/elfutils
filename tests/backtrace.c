@@ -31,28 +31,9 @@
 #include ELFUTILS_HEADER(dwfl)
 
 
-int
-main (void)
+static void
+dump (pid_t pid)
 {
-  /* We use no threads here which can interfere with handling a stream.  */
-  (void) __fsetlocking (stdout, FSETLOCKING_BYCALLER);
-
-  /* Set locale.  */
-  (void) setlocale (LC_ALL, "");
-
-  pid_t pid = fork ();
-  switch (pid)
-  {
-    case -1:
-      abort ();
-    case 0:
-      execlp ("sleep", "sleep", "1m", NULL);
-      abort ();
-    default:
-      usleep (1000000 / 5);
-      break;
-  }
-
   static char *debuginfo_path;
   static const Dwfl_Callbacks proc_callbacks =
     {
@@ -85,6 +66,40 @@ main (void)
     }
 
   dwfl_end (dwfl);
+}
+
+int
+main (int argc, char **argv)
+{
+  /* We use no threads here which can interfere with handling a stream.  */
+  (void) __fsetlocking (stdout, FSETLOCKING_BYCALLER);
+
+  /* Set locale.  */
+  (void) setlocale (LC_ALL, "");
+
+  if (argc <= 1)
+    {
+      pid_t pid = fork ();
+      switch (pid)
+      {
+	case -1:
+	  abort ();
+	case 0:
+	  execlp ("sleep", "sleep", "1m", NULL);
+	  abort ();
+	default:
+	  usleep (1000000 / 5);
+	  break;
+      }
+      dump (pid);
+    }
+  else while (*++argv)
+    {
+      int pid = atoi (*argv);
+      if (argc > 2)
+	printf ("PID %d\n", pid);
+      dump (pid);
+    }
 
   return 0;
 }

@@ -93,8 +93,7 @@ struct Dwfl
   Dwfl_Module *modulelist;    /* List in order used by full traversals.  */
 
   pid_t pid;
-  pid_t pid_attached;
-  Dwarf_Frame_State *statelist;
+  Dwarf_Frame_State_Base *statebaselist;
 
   GElf_Addr offline_next_address;
 

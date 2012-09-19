@@ -35,6 +35,23 @@ dwfl_end (Dwfl *dwfl)
   if (dwfl == NULL)
     return;
 
+  Dwarf_Frame_State_Base *base = dwfl->statebaselist;
+  while (base != NULL)
+    {
+      if (base->pid_attached)
+	ebl_frame_detach (base->ebl, base->pid);
+      Dwarf_Frame_State *state = base->unwound;
+      while (state != NULL)
+	{
+	  Dwarf_Frame_State *dead = state;
+	  state = state->unwound;
+	  free (dead);
+	}
+      Dwarf_Frame_State_Base *dead = base;
+      base = base->next;
+      free (dead);
+    }
+
   free (dwfl->lookup_addr);
   free (dwfl->lookup_module);
   free (dwfl->lookup_segndx);
@@ -45,14 +62,6 @@ dwfl_end (Dwfl *dwfl)
       Dwfl_Module *dead = next;
       next = dead->next;
       __libdwfl_module_free (dead);
-    }
-
-  Dwarf_Frame_State *state = dwfl->statelist;
-  while (state != NULL)
-    {
-      Dwarf_Frame_State *dead = state;
-      state = state->next;
-      free (dead);
     }
 
   free (dwfl);

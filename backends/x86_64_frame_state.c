@@ -36,19 +36,19 @@
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <assert.h>
 
 #define BACKEND x86_64_
 #include "libebl_CPU.h"
 
 Dwarf_Frame_State *
-x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid)
+x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
 {
-  Dwarf_Frame_State *state;
   /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
   const size_t nregs = 17;
   struct user_regs_struct user_regs;
 
-  if (pid != 0)
+  if (pid_attach)
     {
       if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
 	return NULL;
@@ -68,18 +68,31 @@ x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid)
 	      return NULL;
 	    }
 	}
+    }
+  if (pid)
+    {
       if (ptrace (PTRACE_GETREGS, pid, NULL, &user_regs) != 0)
 	{
-	  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+	  if (pid_attach)
+	    ptrace (PTRACE_DETACH, pid, NULL, NULL);
 	  return NULL;
 	}
     }
 
-  state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
-  if (state == NULL)
+  Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
+  if (base == NULL)
     return NULL;
-  state->nregs = nregs;
-  state->regs_bits = 64;
+  base->nregs = nregs;
+  base->regs_bits = 64;
+  Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
+  if (state == NULL)
+    {
+      free (base);
+      return NULL;
+    }
+  base->unwound = state;
+  state->base = base;
+  state->unwound = NULL;
 
   if (pid == 0)
     state->regs_set = 0;

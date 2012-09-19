@@ -39,10 +39,10 @@ dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc)
   Dwarf_CIE abi_info;
   unsigned ra;
 
-  if (ebl_abi_cfi (state->ebl, &abi_info) != 0)
+  if (ebl_abi_cfi (state->base->ebl, &abi_info) != 0)
     return false;
   ra = abi_info.return_address_register;
-  if (ra >= state->nregs || (state->regs_set & (1U << ra)) == 0)
+  if (ra >= state->base->nregs || (state->regs_set & (1U << ra)) == 0)
     return false;
   *pc = state->regs[ra];
   return true;

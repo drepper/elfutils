@@ -186,20 +186,27 @@ struct Dwarf_Frame_s
   struct dwarf_frame_register regs[];
 };
 
-struct Dwarf_Frame_State_s
+struct Dwarf_Frame_State_Base
 {
   /* Used only for memory tracking, not for unwinding inner/outer references.  */
-  Dwarf_Frame_State *next;
-
+  Dwarf_Frame_State_Base *next;
   struct Dwfl *dwfl;
   struct ebl *ebl;
   Elf *core;
-
-//  Dwarf_Frame *frame;
-
   size_t nregs;
+  pid_t pid;
+  bool pid_attached : 1;
   /* 64 or 32.  */
   unsigned regs_bits;
+  /* Bottom frame.  */
+  Dwarf_Frame_State *unwound;
+};
+
+struct Dwarf_Frame_State
+{
+  Dwarf_Frame_State_Base *base;
+  /* Previous frame.  */
+  Dwarf_Frame_State *unwound;
   /* (1 << X) bitmask where 0 <= X < NREGS.  */
   uint32_t regs_set;
   unsigned long regs[];

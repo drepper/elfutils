@@ -63,6 +63,15 @@ convert (Elf *core, Elf_Type type, uint_fast16_t count,
   return data + indata.d_size;
 }
 
+static bool
+pid_is_attached (Dwfl *dwfl, pid_t pid)
+{
+  for (Dwarf_Frame_State_Base *base = dwfl->statebaselist; base; base = base->next)
+    if (base->pid_attached && base->pid == pid)
+      return true;
+  return false;
+}
+
 Dwarf_Frame_State *
 dwfl_frame_state (Dwfl *dwfl)
 {
@@ -83,12 +92,13 @@ dwfl_frame_state (Dwfl *dwfl)
 	    __libdwfl_seterrno (error);
 	    continue;
 	  }
-	state = ebl_frame_state (mod->ebl, dwfl->pid);
+	state = ebl_frame_state (mod->ebl, dwfl->pid, ! pid_is_attached (dwfl, dwfl->pid));
 	if (state)
 	  {
-	    state->dwfl = dwfl;
-	    state->next = dwfl->statelist;
-	    dwfl->statelist = state->next;
+	    Dwarf_Frame_State_Base *base = state->base;
+	    base->dwfl = dwfl;
+	    base->next = dwfl->statebaselist;
+	    dwfl->statebaselist = base;
 	    break;
 	  }
       }
@@ -126,7 +136,8 @@ dwfl_frame_state (Dwfl *dwfl)
       return NULL;
     }
   Elf *core = coremod->main.elf;
-  state->core = core;
+  Dwarf_Frame_State_Base *base = state->base;
+  base->core = core;
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
   assert (ehdr);
   assert (ehdr->e_type == ET_CORE);
@@ -179,11 +190,11 @@ dwfl_frame_state (Dwfl *dwfl)
 	  for (size_t regloci = 0; regloci < nregloc; regloci++)
 	    {
 	      const Ebl_Register_Location *regloc = reglocs + regloci;
-	      if (regloc->regno >= state->nregs)
+	      if (regloc->regno >= base->nregs)
 		continue;
 	      assert (regloc->bits == 32 || regloc->bits == 64);
 	      const char *reg_desc = desc + regloc->offset;
-	      for (unsigned regno = regloc->regno; regno < MIN (regloc->regno + (regloc->count ?: 1U), state->nregs); regno++)
+	      for (unsigned regno = regloc->regno; regno < MIN (regloc->regno + (regloc->count ?: 1U), base->nregs); regno++)
 		{
 		  switch (regloc->bits)
 		  {

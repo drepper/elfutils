@@ -33,7 +33,7 @@
 #include <libeblP.h>
 
 bool
-ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *data)
+ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul)
 {
-  return ebl == NULL ? false : ebl->memory_read (ebl, pid, addr, data);
+  return ebl == NULL ? false : ebl->memory_read (ebl, pid, addr, ul);
 }

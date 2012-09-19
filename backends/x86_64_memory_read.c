@@ -37,10 +37,10 @@
 #include "libebl_CPU.h"
 
 bool
-x86_64_memory_read (Ebl *ebl __attribute__ ((unused)), pid_t pid, Dwarf_Addr addr, unsigned long *data)
+x86_64_memory_read (Ebl *ebl __attribute__ ((unused)), pid_t pid, Dwarf_Addr addr, unsigned long *ul)
 {
   errno = 0;
-  *data = ptrace (PTRACE_PEEKDATA, pid, (void *) (uintptr_t) addr, NULL);
+  *ul = ptrace (PTRACE_PEEKDATA, pid, (void *) (uintptr_t) addr, NULL);
   if (errno != 0)
     return false;
   return true;

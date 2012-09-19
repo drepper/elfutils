@@ -37,7 +37,7 @@
 bool
 state_get_reg (Dwarf_Frame_State *state, unsigned regno, uint64_t *val)
 {
-  if (regno >= state->nregs)
+  if (regno >= state->base->nregs)
     return false;
   if (((1U << regno) & state->regs_set) == 0)
     return false;
@@ -99,13 +99,13 @@ segment_end (Dwfl *dwfl, GElf_Addr end)
 bool
 memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, unsigned long *ul)
 {
-  if (state->dwfl->pid)
-    return ebl_memory_read (state->ebl, state->dwfl->pid, addr, ul);
+  if (state->base->pid)
+    return ebl_memory_read (state->base->ebl, state->base->pid, addr, ul);
 
-  if (state->core)
+  if (state->base->core)
     {
-      Elf *core = state->core;
-      Dwfl *dwfl = state->dwfl;
+      Elf *core = state->base->core;
+      Dwfl *dwfl = state->base->dwfl;
       static size_t phnum;
       if (elf_getphdrnum (core, &phnum) < 0)
 	{
@@ -145,18 +145,13 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
   Dwarf_Frame *frame;
   if (dwarf_cfi_addrframe (cfi, pc, &frame) != 0)
     return NULL;
-  Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * state->nregs);
-  Dwfl *dwfl = state->dwfl;
-  state->next = dwfl->statelist;
-  dwfl->statelist = state->next;
-  unwound->dwfl = dwfl;
-  unwound->ebl = state->ebl;
-  unwound->core = state->core;
-  unwound->nregs = state->nregs;
-  unwound->regs_bits = state->regs_bits;
+  Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * state->base->nregs);
+  state->unwound = unwound;
+  unwound->base = state->base;
+  unwound->unwound = NULL;
   unwound->regs_set = 0;
 
-  for (unsigned regno = 0; regno < unwound->nregs; regno++)
+  for (unsigned regno = 0; regno < unwound->base->nregs; regno++)
     {
       const struct dwarf_frame_register *reg = frame->regs + regno;
       switch (reg->rule)
@@ -233,10 +228,11 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 Dwarf_Frame_State *
 dwfl_frame_unwind (Dwarf_Frame_State *state)
 {
+  assert (state->unwound == NULL);
   Dwarf_Addr pc;
   if (! dwarf_frame_state_pc (state, &pc))
     return NULL;
-  Dwfl_Module *mod = dwfl_addrmodule (state->dwfl, pc);
+  Dwfl_Module *mod = dwfl_addrmodule (state->base->dwfl, pc);
   if (mod == NULL)
     return NULL;
   Dwarf_Addr bias;

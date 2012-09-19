@@ -1,5 +1,5 @@
-/* Return location expression to find return value given a function type DIE.
-   Copyright (C) 2005 Red Hat, Inc.
+/* Fetch live process Dwarf_Frame_State from a PID.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -30,29 +30,14 @@
 # include <config.h>
 #endif
 
-#include <libeblP.h>
-#include "../libdw/cfi.h"
-#include <assert.h>
+#include <sys/ptrace.h>
 
-Dwarf_Frame_State *
-ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach)
+#define BACKEND x86_64_
+#include "libebl_CPU.h"
+
+void
+x86_64_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
 {
-  if (ebl == NULL)
-    return NULL;
-    
-  assert (!pid_attach || pid);
-  Dwarf_Frame_State *state = ebl->frame_state (ebl, pid, pid_attach);
-  if (state == NULL)
-    return NULL;
-  Dwarf_Frame_State_Base *base = state->base;
-  base->ebl = ebl;
-  base->core = NULL;
-  base->pid = pid;
-  base->pid_attached = pid_attach;
-  base->unwound = state;
-  assert (base->nregs > 0);
-  assert (base->nregs < sizeof (state->regs_set) * 8);
-  /* REGS_SET does not have set any bit out of the NREGS range.  */
-  assert ((-(((__typeof (state->regs_set)) 1) << base->nregs) & state->regs_set) == 0);
-  return state;
+  ptrace (PTRACE_DETACH, pid, NULL, NULL);
 }
+INTDEF (x86_64_frame_detach)
