@@ -1,7 +1,6 @@
-/* Initialization of x86-64 specific backend library.
-   Copyright (C) 2002-2009 Red Hat, Inc.
+/* Get return address register for frame.
+   Copyright (C) 2009 Red Hat, Inc.
    This file is part of elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    This file is free software; you can redistribute it and/or modify
    it under the terms of either
@@ -31,37 +30,20 @@
 # include <config.h>
 #endif
 
-#define BACKEND		x86_64_
-#define RELOC_PREFIX	R_X86_64_
-#include "libebl_CPU.h"
+#include "cfi.h"
+#include "../libebl/libebl.h"
 
-/* This defines the common reloc hooks based on x86_64_reloc.def.  */
-#include "common-reloc.c"
-
-const char *
-x86_64_init (elf, machine, eh, ehlen)
-     Elf *elf __attribute__ ((unused));
-     GElf_Half machine __attribute__ ((unused));
-     Ebl *eh;
-     size_t ehlen;
+bool
+dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc)
 {
-  /* Check whether the Elf_BH object has a sufficent size.  */
-  if (ehlen < sizeof (Ebl))
-    return NULL;
+  Dwarf_CIE abi_info;
+  unsigned ra;
 
-  /* We handle it.  */
-  eh->name = "AMD x86-64";
-  x86_64_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
-  HOOK (eh, core_note);
-  HOOK (eh, return_value_location);
-  HOOK (eh, register_info);
-  HOOK (eh, syscall_abi);
-  HOOK (eh, auxv_info);
-  HOOK (eh, disasm);
-  HOOK (eh, abi_cfi);
-  HOOK (eh, frame_state);
-  HOOK (eh, memory_read);
-
-  return MODVERSION;
+  if (ebl_abi_cfi (state->ebl, &abi_info) != 0)
+    return false;
+  ra = abi_info.return_address_register;
+  if (ra >= state->nregs || (state->regs_set & (1U << ra)) == 0)
+    return false;
+  *pc = state->regs[ra];
+  return true;
 }

@@ -556,6 +556,8 @@ extern int dwfl_module_register_names (Dwfl_Module *mod,
 extern Dwarf_CFI *dwfl_module_dwarf_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 extern Dwarf_CFI *dwfl_module_eh_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 
+extern Dwarf_Frame_State *dwfl_frame_state (Dwfl *dwfl);
+extern Dwarf_Frame_State *dwfl_frame_unwind (Dwarf_Frame_State *state);
 
 #ifdef __cplusplus
 }

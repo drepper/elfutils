@@ -186,6 +186,25 @@ struct Dwarf_Frame_s
   struct dwarf_frame_register regs[];
 };
 
+struct Dwarf_Frame_State_s
+{
+  /* Used only for memory tracking, not for unwinding inner/outer references.  */
+  Dwarf_Frame_State *next;
+
+  struct Dwfl *dwfl;
+  struct ebl *ebl;
+  Elf *core;
+
+//  Dwarf_Frame *frame;
+
+  size_t nregs;
+  /* 64 or 32.  */
+  unsigned regs_bits;
+  /* (1 << X) bitmask where 0 <= X < NREGS.  */
+  uint32_t regs_set;
+  unsigned long regs[];
+};
+
 
 /* Clean up the data structure and all it points to.  */
 extern void __libdw_destroy_frame_cache (Dwarf_CFI *cache)

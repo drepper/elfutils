@@ -190,8 +190,19 @@ if test "$use_gcov" = yes; then
 fi
 AM_CONDITIONAL(GCOV, test "$use_gcov" = yes)
 
-AM_CONDITIONAL(BUILD_STATIC, [dnl
-test "$use_mudflap" = yes -o "$use_gprof" = yes -o "$use_gcov" = yes])
+AC_ARG_ENABLE([static],[dnl
+AS_HELP_STRING([--enable-static], [build static binaries @<:@default=no@:>@])],[dnl
+case $enableval in
+ yes) enable_static=yes ;;
+ no) enable_static=no ;;
+ *) AC_MSG_ERROR([invalid --enable-static option $enableval]) ;;
+esac],[dnl
+if test "$use_mudflap" = yes -o "$use_gprof" = yes -o "$use_gcov" = yes; then
+  enable_static=yes
+else
+  enable_static=no
+fi])
+AM_CONDITIONAL(BUILD_STATIC, [test "$enable_static" = yes])
 
 AC_ARG_ENABLE([tests-rpath],
 AS_HELP_STRING([--enable-tests-rpath],[build $ORIGIN-using rpath into tests]),

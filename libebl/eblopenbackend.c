@@ -200,6 +200,7 @@ static bool default_check_object_attribute (Ebl *ebl, const char *vendor,
 					    const char **tag_name,
 					    const char **value_name);
 static int default_abi_cfi (Ebl *ebl, Dwarf_CIE *abi_info);
+static Dwarf_Frame_State *default_frame_state (Ebl *ebl, pid_t pid);
 
 
 static void
@@ -244,6 +245,7 @@ fill_defaults (Ebl *result)
   result->abi_cfi = default_abi_cfi;
   result->destr = default_destr;
   result->sysvhash_entrysize = sizeof (Elf32_Word);
+  result->frame_state = default_frame_state;
 }
 
 
@@ -751,4 +753,10 @@ default_abi_cfi (Ebl *ebl __attribute__ ((unused)),
 		 Dwarf_CIE *abi_info __attribute__ ((unused)))
 {
   return 0;
+}
+
+static Dwarf_Frame_State *
+default_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid __attribute__ ((unused)))
+{
+  return NULL;
 }

@@ -231,6 +231,8 @@ typedef union
 /* Opaque type representing a frame state described by CFI.  */
 typedef struct Dwarf_Frame_s Dwarf_Frame;
 
+typedef struct Dwarf_Frame_State_s Dwarf_Frame_State;
+
 /* Opaque type representing a CFI section found in a DWARF or ELF file.  */
 typedef struct Dwarf_CFI_s Dwarf_CFI;
 
@@ -813,6 +815,9 @@ extern int dwarf_frame_register (Dwarf_Frame *frame, int regno,
 				 Dwarf_Op ops_mem[3],
 				 Dwarf_Op **ops, size_t *nops)
   __nonnull_attribute__ (3, 4, 5);
+
+
+extern bool dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc);
 
 
 /* Return error code of last failing function call.  This value is kept

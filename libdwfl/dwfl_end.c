@@ -27,6 +27,7 @@
    not, see <http://www.gnu.org/licenses/>.  */
 
 #include "libdwflP.h"
+#include "../libdw/cfi.h"
 
 void
 dwfl_end (Dwfl *dwfl)
@@ -44,6 +45,14 @@ dwfl_end (Dwfl *dwfl)
       Dwfl_Module *dead = next;
       next = dead->next;
       __libdwfl_module_free (dead);
+    }
+
+  Dwarf_Frame_State *state = dwfl->statelist;
+  while (state != NULL)
+    {
+      Dwarf_Frame_State *dead = state;
+      state = state->next;
+      free (dead);
     }
 
   free (dwfl);

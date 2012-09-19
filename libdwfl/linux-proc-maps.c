@@ -226,6 +226,7 @@ dwfl_linux_proc_report (Dwfl *dwfl, pid_t pid)
 {
   if (dwfl == NULL)
     return -1;
+  dwfl->pid = pid;
 
   /* We'll notice the AT_SYSINFO_EHDR address specially when we hit it.  */
   GElf_Addr sysinfo_ehdr = 0;

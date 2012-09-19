@@ -1,7 +1,6 @@
-/* Initialization of x86-64 specific backend library.
-   Copyright (C) 2002-2009 Red Hat, Inc.
+/* Return location expression to find return value given a function type DIE.
+   Copyright (C) 2005 Red Hat, Inc.
    This file is part of elfutils.
-   Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    This file is free software; you can redistribute it and/or modify
    it under the terms of either
@@ -31,37 +30,10 @@
 # include <config.h>
 #endif
 
-#define BACKEND		x86_64_
-#define RELOC_PREFIX	R_X86_64_
-#include "libebl_CPU.h"
+#include <libeblP.h>
 
-/* This defines the common reloc hooks based on x86_64_reloc.def.  */
-#include "common-reloc.c"
-
-const char *
-x86_64_init (elf, machine, eh, ehlen)
-     Elf *elf __attribute__ ((unused));
-     GElf_Half machine __attribute__ ((unused));
-     Ebl *eh;
-     size_t ehlen;
+bool
+ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *data)
 {
-  /* Check whether the Elf_BH object has a sufficent size.  */
-  if (ehlen < sizeof (Ebl))
-    return NULL;
-
-  /* We handle it.  */
-  eh->name = "AMD x86-64";
-  x86_64_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
-  HOOK (eh, core_note);
-  HOOK (eh, return_value_location);
-  HOOK (eh, register_info);
-  HOOK (eh, syscall_abi);
-  HOOK (eh, auxv_info);
-  HOOK (eh, disasm);
-  HOOK (eh, abi_cfi);
-  HOOK (eh, frame_state);
-  HOOK (eh, memory_read);
-
-  return MODVERSION;
+  return ebl == NULL ? false : ebl->memory_read (ebl, pid, addr, data);
 }
