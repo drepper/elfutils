@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <dwarf.h>
 #include <sys/resource.h>
+#include "../libdw/libdwP.h" /* for DWARF_E_RA_UNDEFINED ? */
 #include ELFUTILS_HEADER(dwfl)
 
 
@@ -56,13 +57,20 @@ dump (pid_t pid)
     error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
 
   Dwarf_Frame_State *state = dwfl_frame_state (dwfl);
+  if (state == NULL)
+    error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
   while (state)
     {
-      Dwarf_Addr pc;
-      if (!dwarf_frame_state_pc (state, &pc))
-	error (2, 0, "dwarf_frame_state_pc: %s", dwfl_errmsg (-1));
+      Dwarf_Addr pc = dwarf_frame_state_pc (state);
+      int dw_errno = dwarf_errno ();
+      if (dw_errno == DWARF_E_RA_UNDEFINED)
+	break;
+      if (dw_errno != DWARF_E_NOERROR)
+	error (2, 0, "dwarf_frame_state_pc: %s", dwarf_errmsg (dw_errno));
       printf ("%p\n", (void *) pc);
       state = dwfl_frame_unwind (state);
+      if (state == NULL)
+	error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
     }
 
   dwfl_end (dwfl);

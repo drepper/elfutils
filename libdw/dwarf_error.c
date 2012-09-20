@@ -92,6 +92,7 @@ static const char *errmsgs[] =
     [DWARF_E_NO_DEBUG_RANGES] = N_(".debug_ranges section missing"),
     [DWARF_E_INVALID_CFI] = N_("invalid CFI section"),
     [DWARF_E_NO_ALT_DEBUGLINK] = N_("no alternative debug link found"),
+    [DWARF_E_RA_UNDEFINED] = N_("return address is not defined"),
   };
 #define nerrmsgs (sizeof (errmsgs) / sizeof (errmsgs[0]))
 

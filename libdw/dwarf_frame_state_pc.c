@@ -33,17 +33,28 @@
 #include "cfi.h"
 #include "../libebl/libebl.h"
 
-bool
-dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc)
+Dwarf_Addr
+dwarf_frame_state_pc (Dwarf_Frame_State *state)
 {
   Dwarf_CIE abi_info;
   unsigned ra;
 
   if (ebl_abi_cfi (state->base->ebl, &abi_info) != 0)
-    return false;
+    {
+      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+      return 0;
+    }
   ra = abi_info.return_address_register;
-  if (ra >= state->base->nregs || (state->regs_set & (1U << ra)) == 0)
-    return false;
-  *pc = state->regs[ra];
-  return true;
+  if (ra >= state->base->nregs)
+    {
+      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+      return 0;
+    }
+  if ((state->regs_set & (1U << ra)) == 0)
+    {
+      __libdw_seterrno (DWARF_E_RA_UNDEFINED);
+      return 0;
+    }
+  __libdw_seterrno (DWARF_E_NOERROR);
+  return state->regs[ra];
 }

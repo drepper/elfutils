@@ -818,7 +818,8 @@ extern int dwarf_frame_register (Dwarf_Frame *frame, int regno,
   __nonnull_attribute__ (3, 4, 5);
 
 
-extern bool dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc);
+/* Always check return value validity by dwarf_errno () == DWARF_E_NOERROR.  */
+extern Dwarf_Addr dwarf_frame_state_pc (Dwarf_Frame_State *state);
 
 
 /* Return error code of last failing function call.  This value is kept

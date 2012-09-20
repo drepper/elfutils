@@ -144,22 +144,25 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 {
   Dwarf_Frame *frame;
   if (dwarf_cfi_addrframe (cfi, pc, &frame) != 0)
-    return NULL;
+    {
+      __libdwfl_seterrno (DWFL_E_LIBDW);
+      return false;
+    }
   Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * state->base->nregs);
   state->unwound = unwound;
   unwound->base = state->base;
   unwound->unwound = NULL;
   unwound->regs_set = 0;
-
+  bool fail = false;
   for (unsigned regno = 0; regno < unwound->base->nregs; regno++)
     {
       const struct dwarf_frame_register *reg = frame->regs + regno;
       switch (reg->rule)
       {
-	case reg_unspecified:		/* Uninitialized state.  */
-	  break;
 	case reg_undefined:		/* DW_CFA_undefined */
 	  break;
+	case reg_unspecified:		/* Uninitialized state.  */
+	  /* PASSTHRU - this is the common GCC violation of DWARF.  */
 	case reg_same_value:		/* DW_CFA_same_value */
 	  {
 	    uint64_t val;
@@ -167,8 +170,10 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 	      {
 		unwound->regs[regno] = val;
 		unwound->regs_set |= 1U << regno;
+		break;
 	      }
 	  }
+	  fail = true;
 	  break;
 	case reg_offset:		/* DW_CFA_offset_extended et al */
 	  {
@@ -181,9 +186,11 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 		  {
 		    unwound->regs[regno] = ul;
 		    unwound->regs_set |= 1U << regno;
+		    break;
 		  }
 	      }
 	  }
+	  fail = true;
 	  break;
 	case reg_val_offset:		/* DW_CFA_val_offset et al */
 	  {
@@ -192,8 +199,10 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 	      {
 		unwound->regs[regno] = cfa + reg->value;
 		unwound->regs_set |= 1U << regno;
+		break;
 	      }
 	  }
+	  fail = true;
 	  break;
 	case reg_register:		/* DW_CFA_register */
 	  {
@@ -202,8 +211,10 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 	      {
 		unwound->regs[regno] = val;
 		unwound->regs_set |= 1U << regno;
+		break;
 	      }
 	  }
+	  fail = true;
 	  break;
 	case reg_expression:		/* DW_CFA_expression */
 	/*
@@ -211,16 +222,23 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 					(register saved at address E computes)
 	*/
 	  /* FIXME - UNIMPLEMENTED */
+	  fail = true;
 	  break;
 	case reg_val_expression:	/* DW_CFA_val_expression */
 	/*
 	val_expression(E)	section offset of DW_FORM_block containing E
 	*/
 	  /* FIXME - UNIMPLEMENTED */
+	  fail = true;
 	  break;
 	default:
 	  abort ();
       }
+    }
+  if (fail)
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return NULL;
     }
   return unwound;
 }
@@ -230,8 +248,14 @@ dwfl_frame_unwind (Dwarf_Frame_State *state)
 {
   assert (state->unwound == NULL);
   Dwarf_Addr pc;
-  if (! dwarf_frame_state_pc (state, &pc))
-    return NULL;
+  pc = dwarf_frame_state_pc (state);
+  int dw_errno = dwarf_errno ();
+  if (dw_errno != DWARF_E_NOERROR)
+    {
+      __libdw_seterrno (dw_errno);
+      __libdwfl_seterrno (DWFL_E_LIBDW);
+      return NULL;
+    }
   Dwfl_Module *mod = dwfl_addrmodule (state->base->dwfl, pc);
   if (mod == NULL)
     return NULL;
