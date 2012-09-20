@@ -58,3 +58,4 @@ dwarf_frame_state_pc (Dwarf_Frame_State *state)
   __libdw_seterrno (DWARF_E_NOERROR);
   return state->regs[ra];
 }
+INTDEF (dwarf_frame_state_pc)

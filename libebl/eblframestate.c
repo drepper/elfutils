@@ -56,3 +56,4 @@ ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach)
   assert ((-(((__typeof (state->regs_set)) 1) << base->nregs) & state->regs_set) == 0);
   return state;
 }
+INTDEF(ebl_frame_state)
