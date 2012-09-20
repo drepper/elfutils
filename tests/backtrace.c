@@ -93,10 +93,9 @@ main (int argc, char **argv)
 	case -1:
 	  abort ();
 	case 0:
-	  execlp ("sleep", "sleep", "1m", NULL);
+	  sleep (60);
 	  abort ();
 	default:
-	  usleep (1000000 / 5);
 	  break;
       }
       dump (pid);
