@@ -140,20 +140,76 @@ memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, unsigned long *ul)
 }
 
 static Dwarf_Frame_State *
-handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribute__ ((unused)), Dwarf_CFI *cfi, Dwarf_Addr bias __attribute__ ((unused)))
+have_unwound (Dwarf_Frame_State *unwound)
+{
+  dwarf_frame_state_pc (unwound);
+  int dw_errno = dwarf_errno ();
+  if (dw_errno == DWARF_E_RA_UNDEFINED)
+    {
+      __libdwfl_seterrno (DWFL_E_RA_UNDEFINED);
+      return NULL;
+    }
+  if (dw_errno != DWARF_E_NOERROR)
+    {
+      __libdw_seterrno (dw_errno);
+      __libdwfl_seterrno (DWFL_E_LIBDW);
+      return NULL;
+    }
+  return unwound;
+}
+
+/* Check if PC is in the "_start" function which may have no FDE.
+   It corresponds to the GDB get_prev_frame logic "inside entry func".  */
+
+static void
+no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
+{
+  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (mod->main.elf, &ehdr_mem);
+  if (ehdr == NULL)
+    {
+      __libdwfl_seterrno (DWFL_E_LIBELF);
+      return;
+    }
+  if (pc < ehdr->e_entry + bias)
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return;
+    }
+  GElf_Sym entry_sym;
+  /* "_start" is size-less.  Search for PC, if the closest symbol is the one
+     for E_ENTRY it belongs into the function starting at E_ENTRY.  */
+  if (dwfl_module_addrsym (mod, pc - bias, &entry_sym, NULL) == NULL
+      || entry_sym.st_value != ehdr->e_entry
+      || (entry_sym.st_size != 0
+	  && pc >= entry_sym.st_value + entry_sym.st_size + bias))
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return;
+    }
+  __libdwfl_seterrno (DWFL_E_RA_UNDEFINED);
+}
+
+static Dwarf_Frame_State *
+handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI *cfi, Dwarf_Addr bias)
 {
   Dwarf_Frame *frame;
   if (dwarf_cfi_addrframe (cfi, pc, &frame) != 0)
     {
-      __libdwfl_seterrno (DWFL_E_LIBDW);
-      return false;
+      int dw_errno = dwarf_errno ();
+      if (dw_errno == DWARF_E_NO_MATCH)
+	no_fde (pc, mod, bias);
+      else
+	{
+	  __libdw_seterrno (dw_errno);
+	  __libdwfl_seterrno (DWFL_E_LIBDW);
+	}
+      return NULL;
     }
   Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * state->base->nregs);
   state->unwound = unwound;
   unwound->base = state->base;
   unwound->unwound = NULL;
   unwound->regs_set = 0;
-  bool fail = false;
   for (unsigned regno = 0; regno < unwound->base->nregs; regno++)
     {
       const struct dwarf_frame_register *reg = frame->regs + regno;
@@ -173,8 +229,8 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 		break;
 	      }
 	  }
-	  fail = true;
-	  break;
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return NULL;
 	case reg_offset:		/* DW_CFA_offset_extended et al */
 	  {
 	    Dwarf_Addr cfa;
@@ -190,8 +246,8 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 		  }
 	      }
 	  }
-	  fail = true;
-	  break;
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return NULL;
 	case reg_val_offset:		/* DW_CFA_val_offset et al */
 	  {
 	    Dwarf_Addr cfa;
@@ -202,8 +258,8 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 		break;
 	      }
 	  }
-	  fail = true;
-	  break;
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return NULL;
 	case reg_register:		/* DW_CFA_register */
 	  {
 	    uint64_t val;
@@ -214,41 +270,36 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod __attribut
 		break;
 	      }
 	  }
-	  fail = true;
-	  break;
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return NULL;
 	case reg_expression:		/* DW_CFA_expression */
 	/*
 	expression(E)		section offset of DW_FORM_block containing E
 					(register saved at address E computes)
 	*/
 	  /* FIXME - UNIMPLEMENTED */
-	  fail = true;
-	  break;
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return NULL;
 	case reg_val_expression:	/* DW_CFA_val_expression */
 	/*
 	val_expression(E)	section offset of DW_FORM_block containing E
 	*/
 	  /* FIXME - UNIMPLEMENTED */
-	  fail = true;
-	  break;
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return NULL;
 	default:
 	  abort ();
       }
     }
-  if (fail)
-    {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return NULL;
-    }
-  return unwound;
+  return have_unwound (unwound);
 }
 
 Dwarf_Frame_State *
 dwfl_frame_unwind (Dwarf_Frame_State *state)
 {
-  assert (state->unwound == NULL);
-  Dwarf_Addr pc;
-  pc = dwarf_frame_state_pc (state);
+  if (state->unwound != NULL)
+    return have_unwound (state->unwound);
+  Dwarf_Addr pc = dwarf_frame_state_pc (state);
   int dw_errno = dwarf_errno ();
   if (dw_errno != DWARF_E_NOERROR)
     {
