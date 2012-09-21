@@ -33,6 +33,11 @@
 #include "cfi.h"
 #include <stdlib.h>
 #include "libdwflP.h"
+#include "../libdw/dwarf.h"
+
+#ifndef MAX
+# define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
 
 static bool
 state_get_reg (Dwarf_Frame_State *state, unsigned regno, uint64_t *val)
@@ -47,38 +52,134 @@ state_get_reg (Dwarf_Frame_State *state, unsigned regno, uint64_t *val)
 }
 
 static bool
-get_cfa (Dwarf_Frame_State *state, Dwarf_Frame *frame, Dwarf_Addr *cfa)
+expr_eval (Dwarf_Frame_State *state, const Dwarf_Op *ops, size_t nops, Dwarf_Addr *result)
 {
-  /* The CFA is unknown, is R+N, or is computed by a DWARF expression.
-     A bogon in the CFI can indicate an invalid/incalculable rule.
-     We store that as cfa_invalid rather than barfing when processing it,
-     so callers can ignore the bogon unless they really need that CFA.  */
-  switch (frame->cfa_rule)
-  {
-    case cfa_undefined:
+  if (nops == 0)
+    {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
-    case cfa_offset:
+    }
+  Dwarf_Addr *stack = NULL;
+  size_t stack_used = 0, stack_allocated = 0;
+  bool
+  push (Dwarf_Addr val)
+  {
+    if (stack_used == stack_allocated)
       {
-	uint64_t val;
-	if (state_get_reg (state, frame->cfa_val_reg, &val))
+	stack_allocated = MAX (stack_allocated * 2, 32);
+	Dwarf_Addr *stack_new = realloc (stack, stack_allocated * sizeof (*stack));
+	if (stack_new == NULL)
 	  {
-	    *cfa = val + frame->cfa_val_offset;
-	    return true;
+	    __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	    return false;
 	  }
+	stack = stack_new;
+      }
+    stack[stack_used++] = val;
+    return true;
+  }
+  bool
+  pop (Dwarf_Addr *val)
+  {
+    if (stack_used == 0)
+      {
 	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	return false;
       }
-    case cfa_expr:
-      /* FIXME - UNIMPLEMENTED - frame->cfa_data.expr */
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return false;
-    case cfa_invalid:
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return false;
-    default:
-      abort ();
+    *val = stack[--stack_used];
+    return true;
   }
+  Dwarf_Addr val1, val2;
+  for (; nops--; ops++)
+    switch (ops->atom)
+    {
+      case DW_OP_breg0 ... DW_OP_breg31:
+	{
+	  uint64_t val;
+	  if (!state_get_reg (state, ops->atom - DW_OP_breg0, &val))
+	    {
+	      free (stack);
+	      return false;
+	    }
+	  val += ops->number;
+	  if (!push (val))
+	    {
+	      free (stack);
+	      return false;
+	    }
+	}
+	break;
+      case DW_OP_bregx:
+	{
+	  uint64_t val;
+	  if (!state_get_reg (state, ops->number, &val))
+	    {
+	      free (stack);
+	      return false;
+	    }
+	  val += ops->number2;
+	  if (!push (val))
+	    {
+	      free (stack);
+	      return false;
+	    }
+	}
+	break;
+      case DW_OP_lit0 ... DW_OP_lit31:
+	if (!push (ops->atom - DW_OP_lit0))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_and:
+	if (!pop (&val2) || !pop (&val1) || !push (val1 & val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_ge:
+	if (!pop (&val2) || !pop (&val1) || !push (val1 >= val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_shl:
+	if (!pop (&val2) || !pop (&val1) || !push (val1 << val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_plus:
+	if (!pop (&val2) || !pop (&val1) || !push (val1 + val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      default:
+	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	return false;
+    }
+  bool retval = pop (result);
+  free (stack);
+  return retval;
+}
+
+static bool
+get_cfa (Dwarf_Frame_State *state, Dwarf_Frame *frame, Dwarf_Addr *cfa)
+{
+  Dwarf_Op *cfa_ops;
+  size_t cfa_nops;
+  if (dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) != 0)
+    {
+      __libdwfl_seterrno (DWFL_E_LIBDW);
+      return false;
+    }
+  return expr_eval (state, cfa_ops, cfa_nops, cfa);
 }
 
 /* Exact copy from libdwfl/segment.c.  */
