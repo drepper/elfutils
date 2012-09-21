@@ -95,6 +95,7 @@ dwfl_frame_state (Dwfl *dwfl)
 	state = ebl_frame_state (mod->ebl, dwfl->pid, ! pid_is_attached (dwfl, dwfl->pid));
 	if (state)
 	  {
+	    __libdwfl_seterrno (DWFL_E_NOERROR);
 	    Dwarf_Frame_State_Base *base = state->base;
 	    base->dwfl = dwfl;
 	    base->next = dwfl->statebaselist;

@@ -39,149 +39,6 @@
 # define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-static bool
-state_get_reg (Dwarf_Frame_State *state, unsigned regno, uint64_t *val)
-{
-  if (regno >= state->base->nregs || ((1U << regno) & state->regs_set) == 0)
-    {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return false;
-    }
-  *val = state->regs[regno];
-  return true;
-}
-
-static bool
-expr_eval (Dwarf_Frame_State *state, const Dwarf_Op *ops, size_t nops, Dwarf_Addr *result)
-{
-  if (nops == 0)
-    {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return false;
-    }
-  Dwarf_Addr *stack = NULL;
-  size_t stack_used = 0, stack_allocated = 0;
-  bool
-  push (Dwarf_Addr val)
-  {
-    if (stack_used == stack_allocated)
-      {
-	stack_allocated = MAX (stack_allocated * 2, 32);
-	Dwarf_Addr *stack_new = realloc (stack, stack_allocated * sizeof (*stack));
-	if (stack_new == NULL)
-	  {
-	    __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	    return false;
-	  }
-	stack = stack_new;
-      }
-    stack[stack_used++] = val;
-    return true;
-  }
-  bool
-  pop (Dwarf_Addr *val)
-  {
-    if (stack_used == 0)
-      {
-	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	return false;
-      }
-    *val = stack[--stack_used];
-    return true;
-  }
-  Dwarf_Addr val1, val2;
-  for (; nops--; ops++)
-    switch (ops->atom)
-    {
-      case DW_OP_breg0 ... DW_OP_breg31:
-	{
-	  uint64_t val;
-	  if (!state_get_reg (state, ops->atom - DW_OP_breg0, &val))
-	    {
-	      free (stack);
-	      return false;
-	    }
-	  val += ops->number;
-	  if (!push (val))
-	    {
-	      free (stack);
-	      return false;
-	    }
-	}
-	break;
-      case DW_OP_bregx:
-	{
-	  uint64_t val;
-	  if (!state_get_reg (state, ops->number, &val))
-	    {
-	      free (stack);
-	      return false;
-	    }
-	  val += ops->number2;
-	  if (!push (val))
-	    {
-	      free (stack);
-	      return false;
-	    }
-	}
-	break;
-      case DW_OP_lit0 ... DW_OP_lit31:
-	if (!push (ops->atom - DW_OP_lit0))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      case DW_OP_and:
-	if (!pop (&val2) || !pop (&val1) || !push (val1 & val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      case DW_OP_ge:
-	if (!pop (&val2) || !pop (&val1) || !push (val1 >= val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      case DW_OP_shl:
-	if (!pop (&val2) || !pop (&val1) || !push (val1 << val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      case DW_OP_plus:
-	if (!pop (&val2) || !pop (&val1) || !push (val1 + val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      default:
-	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	return false;
-    }
-  bool retval = pop (result);
-  free (stack);
-  return retval;
-}
-
-static bool
-get_cfa (Dwarf_Frame_State *state, Dwarf_Frame *frame, Dwarf_Addr *cfa)
-{
-  Dwarf_Op *cfa_ops;
-  size_t cfa_nops;
-  if (dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) != 0)
-    {
-      __libdwfl_seterrno (DWFL_E_LIBDW);
-      return false;
-    }
-  return expr_eval (state, cfa_ops, cfa_nops, cfa);
-}
-
 /* Exact copy from libdwfl/segment.c.  */
 
 static GElf_Addr
@@ -202,7 +59,19 @@ segment_end (Dwfl *dwfl, GElf_Addr end)
   return end;
 }
 
-bool
+static bool
+state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
+{
+  if (regno >= state->base->nregs || ((1U << regno) & state->regs_set) == 0)
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return false;
+    }
+  *val = state->regs[regno];
+  return true;
+}
+
+static bool
 memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, unsigned long *ul)
 {
   if (state->base->pid)
@@ -243,6 +112,155 @@ memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, unsigned long *ul)
     }
 
   abort ();
+}
+
+static bool
+expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, size_t nops, Dwarf_Addr *result)
+{
+  if (nops == 0)
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return false;
+    }
+  Dwarf_Addr *stack = NULL;
+  size_t stack_used = 0, stack_allocated = 0;
+  bool
+  push (Dwarf_Addr val)
+  {
+    if (stack_used == stack_allocated)
+      {
+	stack_allocated = MAX (stack_allocated * 2, 32);
+	Dwarf_Addr *stack_new = realloc (stack, stack_allocated * sizeof (*stack));
+	if (stack_new == NULL)
+	  {
+	    __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	    return false;
+	  }
+	stack = stack_new;
+      }
+    stack[stack_used++] = val;
+    return true;
+  }
+  bool
+  pop (Dwarf_Addr *val)
+  {
+    if (stack_used == 0)
+      {
+	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	return false;
+      }
+    *val = stack[--stack_used];
+    return true;
+  }
+  Dwarf_Addr val1, val2;
+  bool is_location = false;
+  for (; nops--; ops++)
+    switch (ops->atom)
+    {
+      case DW_OP_breg0 ... DW_OP_breg31:
+	if (! state_get_reg (state, ops->atom - DW_OP_breg0, &val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	val1 += ops->number;
+	if (! push (val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_bregx:
+	if (! state_get_reg (state, ops->number, &val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	val1 += ops->number2;
+	if (! push (val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_lit0 ... DW_OP_lit31:
+	if (! push (ops->atom - DW_OP_lit0))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_and:
+	if (! pop (&val2) || ! pop (&val1) || ! push (val1 & val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_ge:
+	if (! pop (&val2) || ! pop (&val1) || ! push (val1 >= val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_shl:
+	if (! pop (&val2) || ! pop (&val1) || ! push (val1 << val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_plus:
+	if (! pop (&val2) || ! pop (&val1) || ! push (val1 + val2))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_plus_uconst:
+	if (! pop (&val1) || ! push (val1 + ops->number))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_call_frame_cfa:
+	{
+	  Dwarf_Op *cfa_ops;
+	  size_t cfa_nops;
+	  if (dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) != 0)
+	    {
+	      __libdwfl_seterrno (DWFL_E_LIBDW);
+	      free (stack);
+	      return false;
+	    }
+	  Dwarf_Addr cfa;
+	  if (! expr_eval (state, frame, cfa_ops, cfa_nops, &cfa) || ! push (cfa))
+	    {
+	      free (stack);
+	      return false;
+	    }
+	  is_location = true;
+	}
+	break;
+      case DW_OP_stack_value:
+	  is_location = false;
+	break;
+      default:
+	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	return false;
+    }
+  bool retval = pop (result);
+  free (stack);
+  if (is_location)
+    {
+      unsigned long ul;
+      if (! memory_read (state, *result, &ul))
+	return false;
+      *result = ul;
+    }
+  return retval;
 }
 
 static Dwarf_Frame_State *
@@ -318,84 +336,37 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI
   unwound->regs_set = 0;
   for (unsigned regno = 0; regno < unwound->base->nregs; regno++)
     {
-      const struct dwarf_frame_register *reg = frame->regs + regno;
-      switch (reg->rule)
-      {
-	case reg_undefined:		/* DW_CFA_undefined */
-	  break;
-	case reg_unspecified:		/* Uninitialized state.  */
-	  /* PASSTHRU - this is the common GCC violation of DWARF.  */
-	case reg_same_value:		/* DW_CFA_same_value */
-	  {
-	    uint64_t val;
-	    if (state_get_reg (state, regno, &val))
-	      {
-		unwound->regs[regno] = val;
-		unwound->regs_set |= 1U << regno;
-		break;
-	      }
-	  }
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      Dwarf_Op reg_ops_mem[3], *reg_ops;
+      size_t reg_nops;
+      if (dwarf_frame_register (frame, regno, reg_ops_mem, &reg_ops, &reg_nops) != 0)
+	{
+	  __libdwfl_seterrno (DWFL_E_LIBDW);
 	  return NULL;
-	case reg_offset:		/* DW_CFA_offset_extended et al */
-	  {
-	    Dwarf_Addr cfa;
-	    if (get_cfa (state, frame, &cfa))
-	      {
-		Dwarf_Addr addr = cfa + reg->value;
-		unsigned long ul;
-		if (memory_read (state, addr, &ul))
-		  {
-		    unwound->regs[regno] = ul;
-		    unwound->regs_set |= 1U << regno;
-		    break;
-		  }
-	      }
-	  }
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	  return NULL;
-	case reg_val_offset:		/* DW_CFA_val_offset et al */
-	  {
-	    Dwarf_Addr cfa;
-	    if (get_cfa (state, frame, &cfa))
-	      {
-		unwound->regs[regno] = cfa + reg->value;
-		unwound->regs_set |= 1U << regno;
-		break;
-	      }
-	  }
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	  return NULL;
-	case reg_register:		/* DW_CFA_register */
-	  {
-	    uint64_t val;
-	    if (state_get_reg (state, reg->value, &val))
-	      {
-		unwound->regs[regno] = val;
-		unwound->regs_set |= 1U << regno;
-		break;
-	      }
-	  }
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	  return NULL;
-	case reg_expression:		/* DW_CFA_expression */
-	/*
-	expression(E)		section offset of DW_FORM_block containing E
-					(register saved at address E computes)
-	*/
-	  /* FIXME - UNIMPLEMENTED */
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	  return NULL;
-	case reg_val_expression:	/* DW_CFA_val_expression */
-	/*
-	val_expression(E)	section offset of DW_FORM_block containing E
-	*/
-	  /* FIXME - UNIMPLEMENTED */
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	  return NULL;
-	default:
-	  abort ();
-      }
+	}
+      Dwarf_Addr regval;
+      if (reg_nops == 0)
+	{
+	  if (reg_ops == reg_ops_mem)
+	    {
+	      /* REGNO is undefined.  */
+	      continue;
+	    }
+	  else if (reg_ops == NULL)
+	    {
+	      /* REGNO is same-value.  */
+	      if (! state_get_reg (state, regno, &regval))
+		return NULL;
+	    }
+	  else
+	    {
+	      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	      return NULL;
+	    }
+	}
+      else if (! expr_eval (state, frame, reg_ops, reg_nops, &regval))
+	return NULL;
+      unwound->regs[regno] = regval;
+      unwound->regs_set |= 1U << regno;
     }
   return have_unwound (unwound);
 }
@@ -415,7 +386,10 @@ dwfl_frame_unwind (Dwarf_Frame_State *state)
     }
   Dwfl_Module *mod = dwfl_addrmodule (state->base->dwfl, pc);
   if (mod == NULL)
-    return NULL;
+    {
+      __libdwfl_seterrno (DWFL_E_NO_DWARF);
+      return NULL;
+    }
   Dwarf_Addr bias;
   Dwarf_CFI *cfi = dwfl_module_eh_cfi (mod, &bias);
   if (cfi)
