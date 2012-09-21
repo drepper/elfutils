@@ -34,18 +34,19 @@
 #include <stdlib.h>
 #include "libdwflP.h"
 
-bool
+static bool
 state_get_reg (Dwarf_Frame_State *state, unsigned regno, uint64_t *val)
 {
-  if (regno >= state->base->nregs)
-    return false;
-  if (((1U << regno) & state->regs_set) == 0)
-    return false;
+  if (regno >= state->base->nregs || ((1U << regno) & state->regs_set) == 0)
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return false;
+    }
   *val = state->regs[regno];
   return true;
 }
 
-bool
+static bool
 get_cfa (Dwarf_Frame_State *state, Dwarf_Frame *frame, Dwarf_Addr *cfa)
 {
   /* The CFA is unknown, is R+N, or is computed by a DWARF expression.
@@ -55,6 +56,7 @@ get_cfa (Dwarf_Frame_State *state, Dwarf_Frame *frame, Dwarf_Addr *cfa)
   switch (frame->cfa_rule)
   {
     case cfa_undefined:
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     case cfa_offset:
       {
@@ -64,12 +66,15 @@ get_cfa (Dwarf_Frame_State *state, Dwarf_Frame *frame, Dwarf_Addr *cfa)
 	    *cfa = val + frame->cfa_val_offset;
 	    return true;
 	  }
+	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	return false;
       }
     case cfa_expr:
       /* FIXME - UNIMPLEMENTED - frame->cfa_data.expr */
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     case cfa_invalid:
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     default:
       abort ();

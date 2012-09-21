@@ -28,12 +28,16 @@
 #include <unistd.h>
 #include <dwarf.h>
 #include <sys/resource.h>
+#include <sys/ptrace.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/user.h>
 #include "../libdwfl/libdwflP.h" /* for DWFL_E_RA_UNDEFINED ? */
 #include ELFUTILS_HEADER(dwfl)
 
-
-static void
-dump (pid_t pid)
+static Dwfl *
+get_dwfl (pid_t pid)
 {
   static char *debuginfo_path;
   static const Dwfl_Callbacks proc_callbacks =
@@ -56,6 +60,13 @@ dump (pid_t pid)
   if (dwfl_report_end (dwfl, NULL, NULL) != 0)
     error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
 
+  return dwfl;
+}
+
+static void
+dump (pid_t pid)
+{
+  Dwfl *dwfl = get_dwfl (pid);
   Dwarf_Frame_State *state = dwfl_frame_state (dwfl);
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
@@ -79,6 +90,27 @@ dump (pid_t pid)
   dwfl_end (dwfl);
 }
 
+static int
+see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), const char *name __attribute__ ((unused)), Dwarf_Addr start __attribute__ ((unused)), void *arg)
+{
+  GElf_Addr loadbase;
+  Elf *elf = dwfl_module_getelf (mod, &loadbase);
+  if (elf == NULL)
+    {
+      /* Dwfl_Module can be even an mmap-ed non-ELF file.  */
+      return DWARF_CB_OK;
+    }
+  assert (elf != NULL);
+  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
+  assert (ehdr != NULL);
+  if (ehdr->e_type != ET_EXEC)
+    return DWARF_CB_OK;
+  Dwfl_Module **modp = arg;
+  assert (*modp == NULL);
+  *modp = mod;
+  return DWARF_CB_OK;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -96,11 +128,74 @@ main (int argc, char **argv)
 	case -1:
 	  abort ();
 	case 0:
-	  sleep (60);
+	  errno = 0;
+	  long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
+	  assert_perror (errno);
+	  assert (l == 0);
+	  int i = raise (SIGUSR1);
+	  /* Catch the .plt jump, it will come from __errno_location.  */
+	  assert_perror (errno);
+	  assert (i == 0);
 	  abort ();
 	default:
 	  break;
       }
+      Dwfl *dwfl = get_dwfl (pid);
+      Dwfl_Module *mod = NULL;
+      ptrdiff_t ptrdiff = dwfl_getmodules (dwfl, &see_exec_module, &mod, 0);
+      assert (ptrdiff == 0);
+      assert (mod != NULL);
+      GElf_Addr loadbase;
+      Elf *elf = dwfl_module_getelf (mod, &loadbase);
+      GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
+      assert (ehdr != NULL);
+      Elf_Scn *scn = NULL, *plt = NULL;
+      while ((scn = elf_nextscn (elf, scn)) != NULL)
+	{
+	  GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (scn, &scn_shdr_mem);
+	  assert (scn_shdr != NULL);
+	  /* FIXME: sh_type */
+	  if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
+	    continue;
+	  assert (plt == NULL);
+	  plt = scn;
+	}
+      assert (plt != NULL);
+      GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (plt, &scn_shdr_mem);
+      assert (scn_shdr != NULL);
+      Dwarf_Addr plt_start = scn_shdr->sh_addr + loadbase;
+      Dwarf_Addr plt_end = plt_start + scn_shdr->sh_size;
+      dwfl_end (dwfl);
+      errno = 0;
+      int status;
+      pid_t got = waitpid (pid, &status, 0);
+      assert_perror (errno);
+      assert (got == pid);
+      assert (WIFSTOPPED (status));
+      assert (WSTOPSIG (status) == SIGUSR1);
+      for (;;)
+	{
+	  long l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
+	  assert_perror (errno);
+	  if ((unsigned long) l >= plt_start && (unsigned long) l < plt_end)
+	    break;
+	  l = ptrace (PTRACE_SINGLESTEP, pid, NULL, NULL);
+	  assert_perror (errno);
+	  assert (l == 0);
+	  got = waitpid (pid, &status, 0);
+	  assert_perror (errno);
+	  assert (got == pid);
+	  assert (WIFSTOPPED (status));
+	  assert (WSTOPSIG (status) == SIGTRAP);
+	}
+      long l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
+      assert_perror (errno);
+      assert (l == 0);
+      got = waitpid (pid, &status, WSTOPPED);
+      assert_perror (errno);
+      assert (got == pid);
+      assert (WIFSTOPPED (status));
+      assert (WSTOPSIG (status) == SIGSTOP);
       dump (pid);
     }
   else while (*++argv)
