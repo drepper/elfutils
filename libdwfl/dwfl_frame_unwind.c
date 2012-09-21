@@ -302,10 +302,10 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
   GElf_Sym entry_sym;
   /* "_start" is size-less.  Search for PC, if the closest symbol is the one
      for E_ENTRY it belongs into the function starting at E_ENTRY.  */
-  if (dwfl_module_addrsym (mod, pc - bias, &entry_sym, NULL) == NULL
-      || entry_sym.st_value != ehdr->e_entry
+  if (dwfl_module_addrsym (mod, pc, &entry_sym, NULL) == NULL
+      || entry_sym.st_value != ehdr->e_entry + bias
       || (entry_sym.st_size != 0
-	  && pc >= entry_sym.st_value + entry_sym.st_size + bias))
+	  && pc >= entry_sym.st_value + entry_sym.st_size))
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return;
@@ -317,7 +317,7 @@ static Dwarf_Frame_State *
 handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI *cfi, Dwarf_Addr bias)
 {
   Dwarf_Frame *frame;
-  if (dwarf_cfi_addrframe (cfi, pc, &frame) != 0)
+  if (dwarf_cfi_addrframe (cfi, pc - bias, &frame) != 0)
     {
       int dw_errno = dwarf_errno ();
       if (dw_errno == DWARF_E_NO_MATCH)

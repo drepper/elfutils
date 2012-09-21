@@ -90,24 +90,20 @@ dump (pid_t pid)
   dwfl_end (dwfl);
 }
 
+struct see_exec_module
+{
+  Dwfl_Module *mod;
+  char selfpath[PATH_MAX + 1];
+};
+
 static int
 see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), const char *name __attribute__ ((unused)), Dwarf_Addr start __attribute__ ((unused)), void *arg)
 {
-  GElf_Addr loadbase;
-  Elf *elf = dwfl_module_getelf (mod, &loadbase);
-  if (elf == NULL)
-    {
-      /* Dwfl_Module can be even an mmap-ed non-ELF file.  */
-      return DWARF_CB_OK;
-    }
-  assert (elf != NULL);
-  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
-  assert (ehdr != NULL);
-  if (ehdr->e_type != ET_EXEC)
+  struct see_exec_module *data = arg;
+  if (strcmp (name, data->selfpath) != 0)
     return DWARF_CB_OK;
-  Dwfl_Module **modp = arg;
-  assert (*modp == NULL);
-  *modp = mod;
+  assert (data->mod == NULL);
+  data->mod = mod;
   return DWARF_CB_OK;
 }
 
@@ -141,12 +137,16 @@ main (int argc, char **argv)
 	  break;
       }
       Dwfl *dwfl = get_dwfl (pid);
-      Dwfl_Module *mod = NULL;
-      ptrdiff_t ptrdiff = dwfl_getmodules (dwfl, &see_exec_module, &mod, 0);
+      struct see_exec_module data;
+      ssize_t ssize = readlink ("/proc/self/exe", data.selfpath, sizeof (data.selfpath));
+      assert (ssize > 0 && ssize < sizeof (data.selfpath));
+      data.selfpath[ssize] = '\0';
+      data.mod = NULL;
+      ptrdiff_t ptrdiff = dwfl_getmodules (dwfl, &see_exec_module, &data, 0);
       assert (ptrdiff == 0);
-      assert (mod != NULL);
+      assert (data.mod != NULL);
       GElf_Addr loadbase;
-      Elf *elf = dwfl_module_getelf (mod, &loadbase);
+      Elf *elf = dwfl_module_getelf (data.mod, &loadbase);
       GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
       assert (ehdr != NULL);
       Elf_Scn *scn = NULL, *plt = NULL;
