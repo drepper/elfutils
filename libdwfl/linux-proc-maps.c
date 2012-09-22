@@ -1,5 +1,4 @@
-/* Standard libdwfl callbacks for debugging a live Linux process.
-   Copyright (C) 2005-2010 Red Hat, Inc.
+/* Standard libdwfl callbacks for debugging a live Linux process.  Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -44,12 +43,39 @@
 #define PROCMAPSFMT	"/proc/%d/maps"
 #define PROCMEMFMT	"/proc/%d/mem"
 #define PROCAUXVFMT	"/proc/%d/auxv"
+#define PROCEXEFMT	"/proc/%d/exe"
 
+
+/* Return 64 for 64-bit main ELF executable, 32 accordingly otherwise.
+   Return -1 for errors.  */
+
+static int
+get_pid_width (pid_t pid)
+{
+  char *fname;
+  if (asprintf (&fname, PROCEXEFMT, pid) < 0)
+    return -1;
+
+  int fd = open64 (fname, O_RDONLY);
+  free (fname);
+  if (fd < 0)
+    return -1;
+
+  unsigned char buf[5];
+  ssize_t nread = read (fd, &buf, sizeof buf);
+  close (fd);
+  if (nread != sizeof (buf) || buf[0] != ELFMAG0 || buf[1] != ELFMAG1
+      || buf[2] != ELFMAG2 || buf[3] != ELFMAG3
+      || (buf[4] != ELFCLASS64 && buf[4] != ELFCLASS32))
+    return -1;
+
+  return buf[4] == ELFCLASS64 ? 64 : 32;
+}
 
 /* Search /proc/PID/auxv for the AT_SYSINFO_EHDR tag.  */
 
 static int
-grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
+grovel_auxv (pid_t pid, Dwfl *dwfl, int width, GElf_Addr *sysinfo_ehdr)
 {
   char *fname;
   if (asprintf (&fname, PROCAUXVFMT, pid) < 0)
@@ -72,9 +98,9 @@ grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
       nread = read (fd, &d, sizeof d);
       if (nread > 0)
 	{
-	  switch (sizeof (long int))
+	  switch (width)
 	    {
-	    case 4:
+	    case 32:
 	      for (size_t i = 0; (char *) &d.a32[i] < &d.buffer[nread]; ++i)
 		if (d.a32[i].a_type == AT_SYSINFO_EHDR)
 		  {
@@ -89,7 +115,7 @@ grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
 			 && dwfl->segment_align <= 1)
 		  dwfl->segment_align = d.a32[i].a_un.a_val;
 	      break;
-	    case 8:
+	    case 64:
 	      for (size_t i = 0; (char *) &d.a64[i] < &d.buffer[nread]; ++i)
 		if (d.a64[i].a_type == AT_SYSINFO_EHDR)
 		  {
@@ -228,9 +254,13 @@ dwfl_linux_proc_report (Dwfl *dwfl, pid_t pid)
     return -1;
   dwfl->pid = pid;
 
+  int width = get_pid_width (pid);
+  if (width == -1)
+    return -1;
+
   /* We'll notice the AT_SYSINFO_EHDR address specially when we hit it.  */
   GElf_Addr sysinfo_ehdr = 0;
-  int result = grovel_auxv (pid, dwfl, &sysinfo_ehdr);
+  int result = grovel_auxv (pid, dwfl, width, &sysinfo_ehdr);
   if (result != 0)
     return result;
 

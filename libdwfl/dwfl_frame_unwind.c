@@ -72,10 +72,25 @@ state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 }
 
 static bool
-memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, unsigned long *ul)
+memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, Dwarf_Addr *result)
 {
   if (state->base->pid)
-    return ebl_memory_read (state->base->ebl, state->base->pid, addr, ul);
+    {
+      unsigned long ul;
+      if (state->base->regs_bits == 64)
+	{
+	  bool retval = ebl_memory_read (state->base->ebl, state->base->pid, addr, &ul);
+	  *result = ul;
+	  return retval;
+	}
+      /* FIXME: Big endian machines!  */
+      /* FIXME: Boundary of a page!  */
+      /* FIXME? Unaligned access!  */
+      if (! ebl_memory_read (state->base->ebl, state->base->pid, addr, &ul))
+	return false;
+      *result = ul & 0xffffffff;
+      return true;
+    }
 
   if (state->base->core)
     {
@@ -96,16 +111,21 @@ memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, unsigned long *ul)
 	  Dwarf_Addr bias = 0;
 	  GElf_Addr start = segment_start (dwfl, bias + phdr->p_vaddr);
 	  GElf_Addr end = segment_end (dwfl, bias + phdr->p_vaddr + phdr->p_memsz);
-	  if (addr < start || addr + sizeof (*ul) > end)
+	  unsigned bytes = state->base->regs_bits / 8;
+	  if (addr < start || addr + bytes > end)
 	    continue;
-	  Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start, sizeof (*ul), ELF_T_ADDR);
+	  Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start, bytes, ELF_T_ADDR);
 	  if (data == NULL)
 	    {
 	      __libdwfl_seterrno (DWFL_E_LIBELF);
 	      return false;
 	    }
-	  assert (data->d_size == sizeof (*ul));
-	  *ul = *(const unsigned long *) data->d_buf;
+	  assert (data->d_size == bytes);
+	  /* FIXME? Unaligned access!  */
+	  if (bytes == 8)
+	    *result = *(const uint64_t *) data->d_buf;
+	  else
+	    *result = *(const uint32_t *) data->d_buf;
 	  return true;
 	}
       return false;
@@ -253,13 +273,8 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
     }
   bool retval = pop (result);
   free (stack);
-  if (is_location)
-    {
-      unsigned long ul;
-      if (! memory_read (state, *result, &ul))
-	return false;
-      *result = ul;
-    }
+  if (is_location && ! memory_read (state, *result, result))
+    return false;
   return retval;
 }
 

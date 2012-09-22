@@ -46,15 +46,15 @@ i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
 {
   /* gcc/config/ #define DWARF_FRAME_REGISTERS.  For i386 it is 17, why?  */
   const size_t nregs = 9;
-#ifdef __i386__
+#if defined __i386__ || defined __x86_64__
   struct user_regs_struct user_regs;
-#endif /* __i386__ */
+#endif /* __i386__ || __x86_64__ */
 
   if (pid_attach)
     {
-#ifndef __i386__
+#if !defined __i386__ && !defined __x86_64__
       abort ();
-#else /* __i386__ */
+#else /* __i386__ || __x86_64__ */
       if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
 	return NULL;
       for (;;)
@@ -73,20 +73,20 @@ i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
 	      return NULL;
 	    }
 	}
-#endif /* __i386__ */
+#endif /* __i386__ || __x86_64__ */
     }
   if (pid)
     {
-#ifndef __i386__
+#if !defined __i386__ && !defined __x86_64__
       abort ();
-#else /* __i386__ */
+#else /* __i386__ || __x86_64__ */
       if (ptrace (PTRACE_GETREGS, pid, NULL, &user_regs) != 0)
 	{
 	  if (pid_attach)
 	    ptrace (PTRACE_DETACH, pid, NULL, NULL);
 	  return NULL;
 	}
-#endif /* __i386__ */
+#endif /* __i386__ || __x86_64__ */
     }
 
   Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
@@ -108,9 +108,7 @@ i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
     state->regs_set = 0;
   else
     {
-#ifndef __i386__
-      abort ();
-#else /* __i386__ */
+#if defined __i386__
       state->regs[0] = user_regs.eax;
       state->regs[1] = user_regs.ecx;
       state->regs[2] = user_regs.edx;
@@ -120,8 +118,20 @@ i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
       state->regs[6] = user_regs.esi;
       state->regs[7] = user_regs.edi;
       state->regs[8] = user_regs.eip;
+#elif defined __x86_64__
+      state->regs[0] = user_regs.rax;
+      state->regs[1] = user_regs.rcx;
+      state->regs[2] = user_regs.rdx;
+      state->regs[3] = user_regs.rbx;
+      state->regs[4] = user_regs.rsp;
+      state->regs[5] = user_regs.rbp;
+      state->regs[6] = user_regs.rsi;
+      state->regs[7] = user_regs.rdi;
+      state->regs[8] = user_regs.rip;
+#else /* !__i386__ && !__x86_64__ */
+      abort ();
+#endif /* !__i386__ && !__x86_64__ */
       state->regs_set = (1U << nregs) - 1;
-#endif /* __i386__ */
     }
 
   return state;
