@@ -63,6 +63,9 @@ i386_init (elf, machine, eh, ehlen)
   HOOK (eh, auxv_info);
   HOOK (eh, disasm);
   HOOK (eh, abi_cfi);
+  HOOK (eh, frame_state);
+  HOOK (eh, frame_detach);
+  HOOK (eh, memory_read);
 
   return MODVERSION;
 }

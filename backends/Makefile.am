@@ -50,7 +50,8 @@ libdw = ../libdw/libdw.so
 endif
 
 i386_SRCS = i386_init.c i386_symbol.c i386_corenote.c i386_cfi.c \
-	    i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c
+	    i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c \
+	    i386_frame_state.c i386_frame_detach.c i386_memory_read.c
 cpu_i386 = ../libcpu/libcpu_i386.a
 libebl_i386_pic_a_SOURCES = $(i386_SRCS)
 am_libebl_i386_pic_a_OBJECTS = $(i386_SRCS:.c=.os)

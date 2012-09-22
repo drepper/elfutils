@@ -38,23 +38,23 @@
 #include <sys/wait.h>
 #include <assert.h>
 
-#define BACKEND x86_64_
+#define BACKEND i386_
 #include "libebl_CPU.h"
 
 Dwarf_Frame_State *
-x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
+i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
 {
-  /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
-  const size_t nregs = 17;
-#ifdef __x86_64__
+  /* gcc/config/ #define DWARF_FRAME_REGISTERS.  For i386 it is 17, why?  */
+  const size_t nregs = 9;
+#ifdef __i386__
   struct user_regs_struct user_regs;
-#endif /* __x86_64__ */
+#endif /* __i386__ */
 
   if (pid_attach)
     {
-#ifndef __x86_64__
+#ifndef __i386__
       abort ();
-#else /* __x86_64__ */
+#else /* __i386__ */
       if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
 	return NULL;
       for (;;)
@@ -73,27 +73,27 @@ x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attac
 	      return NULL;
 	    }
 	}
-#endif /* __x86_64__ */
+#endif /* __i386__ */
     }
   if (pid)
     {
-#ifndef __x86_64__
+#ifndef __i386__
       abort ();
-#else /* __x86_64__ */
+#else /* __i386__ */
       if (ptrace (PTRACE_GETREGS, pid, NULL, &user_regs) != 0)
 	{
 	  if (pid_attach)
 	    ptrace (PTRACE_DETACH, pid, NULL, NULL);
 	  return NULL;
 	}
-#endif /* __x86_64__ */
+#endif /* __i386__ */
     }
 
   Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
   if (base == NULL)
     return NULL;
   base->nregs = nregs;
-  base->regs_bits = 64;
+  base->regs_bits = 32;
   Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
   if (state == NULL)
     {
@@ -108,30 +108,22 @@ x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attac
     state->regs_set = 0;
   else
     {
-#ifndef __x86_64__
+#ifndef __i386__
       abort ();
-#else /* __x86_64__ */
-      state->regs[0] = user_regs.rax;
-      state->regs[1] = user_regs.rdx;
-      state->regs[2] = user_regs.rcx;
-      state->regs[3] = user_regs.rbx;
-      state->regs[4] = user_regs.rsi;
-      state->regs[5] = user_regs.rdi;
-      state->regs[6] = user_regs.rbp;
-      state->regs[7] = user_regs.rsp;
-      state->regs[8] = user_regs.r8;
-      state->regs[9] = user_regs.r9;
-      state->regs[10] = user_regs.r10;
-      state->regs[11] = user_regs.r11;
-      state->regs[12] = user_regs.r12;
-      state->regs[13] = user_regs.r13;
-      state->regs[14] = user_regs.r14;
-      state->regs[15] = user_regs.r15;
-      state->regs[16] = user_regs.rip;
+#else /* __i386__ */
+      state->regs[0] = user_regs.eax;
+      state->regs[1] = user_regs.ecx;
+      state->regs[2] = user_regs.edx;
+      state->regs[3] = user_regs.ebx;
+      state->regs[4] = user_regs.esp;
+      state->regs[5] = user_regs.ebp;
+      state->regs[6] = user_regs.esi;
+      state->regs[7] = user_regs.edi;
+      state->regs[8] = user_regs.eip;
       state->regs_set = (1U << nregs) - 1;
-#endif /* __x86_64__ */
+#endif /* __i386__ */
     }
 
   return state;
 }
-INTDEF (x86_64_frame_state)
+INTDEF (i386_frame_state)

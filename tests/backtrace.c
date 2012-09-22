@@ -76,7 +76,7 @@ dump (pid_t pid)
       int dw_errno = dwarf_errno ();
       if (dw_errno != DWARF_E_NOERROR)
 	error (2, 0, "dwarf_frame_state_pc: %s", dwarf_errmsg (dw_errno));
-      printf ("%p\n", (void *) pc);
+      printf ("%p\n", (void *) (intptr_t) pc);
       state = dwfl_frame_unwind (state);
       if (state == NULL)
 	{
@@ -175,7 +175,15 @@ main (int argc, char **argv)
       assert (WSTOPSIG (status) == SIGUSR1);
       for (;;)
 	{
-	  long l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
+	  long l;
+	  errno = 0;
+#if defined __x86_64__
+	  l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
+#elif defined __i386__
+	  l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), NULL);
+#else
+	  l = 0;
+#endif
 	  assert_perror (errno);
 	  if ((unsigned long) l >= plt_start && (unsigned long) l < plt_end)
 	    break;
