@@ -28,6 +28,8 @@
 
 #include "libdwflP.h"
 #include "../libdw/cfi.h"
+#include <fcntl.h>
+#include <unistd.h>
 
 #ifndef MIN
 # define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -73,17 +75,18 @@ pid_is_attached (Dwfl *dwfl, pid_t pid)
 }
 
 Dwarf_Frame_State *
-dwfl_frame_state (Dwfl *dwfl)
+dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile)
 {
   if (dwfl == NULL)
     return NULL;
 
+  assert (!pid != !corefile);
+
   /* Allocate STATE with proper backend-dependent size.  Possibly also fetch
-     inferior registers if DWFL->PID is not zero.  */
+     inferior registers if PID is not zero.  */
   Dwarf_Frame_State *state = NULL;
   {
     Dwfl_Module *mod;
-    __libdwfl_seterrno (DWFL_E_BADELF);
     for (mod = dwfl->modulelist; mod != NULL; mod = mod->next)
       {
 	Dwfl_Error error = __libdwfl_module_getebl (mod);
@@ -92,53 +95,39 @@ dwfl_frame_state (Dwfl *dwfl)
 	    __libdwfl_seterrno (error);
 	    continue;
 	  }
-	state = ebl_frame_state (mod->ebl, dwfl->pid, ! pid_is_attached (dwfl, dwfl->pid));
+	state = ebl_frame_state (mod->ebl, pid, !pid ? false : ! pid_is_attached (dwfl, pid));
 	if (state)
-	  {
-	    __libdwfl_seterrno (DWFL_E_NOERROR);
-	    Dwarf_Frame_State_Base *base = state->base;
-	    base->dwfl = dwfl;
-	    base->next = dwfl->statebaselist;
-	    dwfl->statebaselist = base;
-	    break;
-	  }
+	  break;
       }
   }
-  if (state == NULL || dwfl->pid)
-    return state;
-
-  /* Fetch inferior registers from a core file.  */
-  Dwfl_Module *coremod = NULL;
-  {
-    Dwfl_Module *mod;
-    for (mod = dwfl->modulelist; mod != NULL; mod = mod->next)
-      {
-	GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (mod->main.elf, &ehdr_mem);
-	if (ehdr == NULL)
-	  {
-	    __libdwfl_seterrno (DWFL_E_LIBELF);
-	    return NULL;
-	  }
-	if (ehdr->e_type != ET_CORE)
-	  continue;
-	if (coremod != NULL)
-	  {
-	    /* More than one core files found.  */
-	    __libdwfl_seterrno (DWFL_E_BADELF);
-	    return NULL;
-	  }
-	coremod = mod;
-      }
-  }
-  if (coremod == NULL)
+  if (state == NULL)
     {
-      /* No core file found.  */
       __libdwfl_seterrno (DWFL_E_BADELF);
       return NULL;
     }
-  Elf *core = coremod->main.elf;
   Dwarf_Frame_State_Base *base = state->base;
+  base->dwfl = dwfl;
+  base->next = dwfl->statebaselist;
+  dwfl->statebaselist = base;
+  if (!corefile)
+    return state;
+
+  /* Fetch inferior registers from a core file.  */
+  int core_fd = open64 (corefile, O_RDONLY);
+  if (core_fd < 0)
+    {
+      __libdwfl_seterrno (DWFL_E_BADELF);
+      return NULL;
+    }
+  Elf *core;
+  Dwfl_Error err = __libdw_open_file (&core_fd, &core, true, false);
+  if (err != DWFL_E_NOERROR)
+    {
+      __libdwfl_seterrno (err);
+      return NULL;
+    }
   base->core = core;
+  base->core_fd = core_fd;
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
   assert (ehdr);
   assert (ehdr->e_type == ET_CORE);
@@ -184,8 +173,8 @@ dwfl_frame_state (Dwfl *dwfl)
 	  if (! ebl_core_note (ebl, &nhdr, name,
 			       &regs_offset, &nregloc, &reglocs, &nitems, &items))
 	    {
-	      __libdwfl_seterrno (DWFL_E_LIBEBL);
-	      return NULL;
+	      /* This note may be just not recognized, skip it.  */
+	      continue;
 	    }
 	  desc += regs_offset;
 	  for (size_t regloci = 0; regloci < nregloc; regloci++)

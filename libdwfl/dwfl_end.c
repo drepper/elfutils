@@ -28,6 +28,7 @@
 
 #include "libdwflP.h"
 #include "../libdw/cfi.h"
+#include <unistd.h>
 
 void
 dwfl_end (Dwfl *dwfl)
@@ -47,6 +48,9 @@ dwfl_end (Dwfl *dwfl)
 	  state = state->unwound;
 	  free (dead);
 	}
+      elf_end (base->core);
+      if (base->core_fd != -1)
+	close (base->core_fd);
       Dwarf_Frame_State_Base *dead = base;
       base = base->next;
       free (dead);

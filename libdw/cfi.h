@@ -192,8 +192,11 @@ struct Dwarf_Frame_State_Base
   Dwarf_Frame_State_Base *next;
   struct Dwfl *dwfl;
   struct ebl *ebl;
+  /* If there is no core file both CORE is NULL and CORE_FD is -1.  */
   Elf *core;
+  int core_fd;
   size_t nregs;
+  /* If there is no PID it is 0.  */
   pid_t pid;
   bool pid_attached : 1;
   /* 64 or 32.  */

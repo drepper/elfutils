@@ -252,7 +252,6 @@ dwfl_linux_proc_report (Dwfl *dwfl, pid_t pid)
 {
   if (dwfl == NULL)
     return -1;
-  dwfl->pid = pid;
 
   int width = get_pid_width (pid);
   if (width == -1)

@@ -33,24 +33,17 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/user.h>
+#include <argp.h>
+#include <fcntl.h>
 #include "../libdwfl/libdwflP.h" /* for DWFL_E_RA_UNDEFINED ? */
 #include ELFUTILS_HEADER(dwfl)
 
-static Dwfl *
-get_dwfl (pid_t pid)
+/* libdwfl/argp-std.c */
+#define OPT_COREFILE    0x101
+
+static void
+report_pid (Dwfl *dwfl, pid_t pid)
 {
-  static char *debuginfo_path;
-  static const Dwfl_Callbacks proc_callbacks =
-    {
-      .find_debuginfo = dwfl_standard_find_debuginfo,
-      .debuginfo_path = &debuginfo_path,
-
-      .find_elf = dwfl_linux_proc_find_elf,
-    };
-  Dwfl *dwfl = dwfl_begin (&proc_callbacks);
-  if (dwfl == NULL)
-    error (2, 0, "dwfl_begin: %s", dwfl_errmsg (-1));
-
   int result = dwfl_linux_proc_report (dwfl, pid);
   if (result < 0)
     error (2, 0, "dwfl_linux_proc_report: %s", dwfl_errmsg (-1));
@@ -59,15 +52,14 @@ get_dwfl (pid_t pid)
 
   if (dwfl_report_end (dwfl, NULL, NULL) != 0)
     error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
-
-  return dwfl;
 }
 
 static void
-dump (pid_t pid)
+dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 {
-  Dwfl *dwfl = get_dwfl (pid);
-  Dwarf_Frame_State *state = dwfl_frame_state (dwfl);
+  if (pid)
+    report_pid (dwfl, pid);
+  Dwarf_Frame_State *state = dwfl_frame_state (dwfl, pid, corefile);
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
   while (state)
@@ -107,112 +99,156 @@ see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), con
   return DWARF_CB_OK;
 }
 
+static argp_parser_t parse_opt_orig;
+static pid_t pid;
+static const char *corefile;
+
+static error_t
+parse_opt (int key, char *arg, struct argp_state *state)
+{
+  switch (key)
+    {
+    case 'p':
+      pid = atoi (arg);
+      break;
+    case OPT_COREFILE:
+      corefile = arg;
+      break;
+    case ARGP_KEY_SUCCESS:;
+      Dwfl *dwfl = state->hook;
+      if (dwfl)
+	break;
+      static const Dwfl_Callbacks callbacks =
+	{
+	  .find_elf = dwfl_linux_proc_find_elf,
+	  .find_debuginfo = dwfl_standard_find_debuginfo,
+	};
+      dwfl = dwfl_begin (&callbacks);
+      state->hook = dwfl;
+      break;
+    }
+  return parse_opt_orig (key, arg, state);
+}
+
+static void
+selfdump (Dwfl *dwfl)
+{
+  pid_t pid = fork ();
+  switch (pid)
+  {
+    case -1:
+      abort ();
+    case 0:
+      errno = 0;
+      long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
+      assert_perror (errno);
+      assert (l == 0);
+      int i = raise (SIGUSR1);
+      /* Catch the .plt jump, it will come from __errno_location.  */
+      assert_perror (errno);
+      assert (i == 0);
+      abort ();
+    default:
+      break;
+  }
+  report_pid (dwfl, pid);
+  struct see_exec_module data;
+  ssize_t ssize = readlink ("/proc/self/exe", data.selfpath, sizeof (data.selfpath));
+  assert (ssize > 0 && ssize < sizeof (data.selfpath));
+  data.selfpath[ssize] = '\0';
+  data.mod = NULL;
+  ptrdiff_t ptrdiff = dwfl_getmodules (dwfl, see_exec_module, &data, 0);
+  assert (ptrdiff == 0);
+  assert (data.mod != NULL);
+  GElf_Addr loadbase;
+  Elf *elf = dwfl_module_getelf (data.mod, &loadbase);
+  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
+  assert (ehdr != NULL);
+  Elf_Scn *scn = NULL, *plt = NULL;
+  while ((scn = elf_nextscn (elf, scn)) != NULL)
+    {
+      GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (scn, &scn_shdr_mem);
+      assert (scn_shdr != NULL);
+      /* FIXME: sh_type */
+      if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
+	continue;
+      assert (plt == NULL);
+      plt = scn;
+    }
+  assert (plt != NULL);
+  GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (plt, &scn_shdr_mem);
+  assert (scn_shdr != NULL);
+  Dwarf_Addr plt_start = scn_shdr->sh_addr + loadbase;
+  Dwarf_Addr plt_end = plt_start + scn_shdr->sh_size;
+  errno = 0;
+  int status;
+  pid_t got = waitpid (pid, &status, 0);
+  assert_perror (errno);
+  assert (got == pid);
+  assert (WIFSTOPPED (status));
+  assert (WSTOPSIG (status) == SIGUSR1);
+  for (;;)
+    {
+      long l;
+      errno = 0;
+#if defined __x86_64__
+      l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
+#elif defined __i386__
+      l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), NULL);
+#else
+      l = 0;
+#endif
+      assert_perror (errno);
+      if ((unsigned long) l >= plt_start && (unsigned long) l < plt_end)
+	break;
+      l = ptrace (PTRACE_SINGLESTEP, pid, NULL, NULL);
+      assert_perror (errno);
+      assert (l == 0);
+      got = waitpid (pid, &status, 0);
+      assert_perror (errno);
+      assert (got == pid);
+      assert (WIFSTOPPED (status));
+      assert (WSTOPSIG (status) == SIGTRAP);
+    }
+  long l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
+  assert_perror (errno);
+  assert (l == 0);
+  got = waitpid (pid, &status, WSTOPPED);
+  assert_perror (errno);
+  assert (got == pid);
+  assert (WIFSTOPPED (status));
+  assert (WSTOPSIG (status) == SIGSTOP);
+  dump (dwfl, pid, NULL);
+}
+
 int
 main (int argc, char **argv)
 {
   /* We use no threads here which can interfere with handling a stream.  */
-  (void) __fsetlocking (stdout, FSETLOCKING_BYCALLER);
+  __fsetlocking (stdin, FSETLOCKING_BYCALLER);
+  __fsetlocking (stdout, FSETLOCKING_BYCALLER);
+  __fsetlocking (stderr, FSETLOCKING_BYCALLER);
 
   /* Set locale.  */
   (void) setlocale (LC_ALL, "");
 
-  if (argc <= 1)
-    {
-      pid_t pid = fork ();
-      switch (pid)
-      {
-	case -1:
-	  abort ();
-	case 0:
-	  errno = 0;
-	  long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
-	  assert_perror (errno);
-	  assert (l == 0);
-	  int i = raise (SIGUSR1);
-	  /* Catch the .plt jump, it will come from __errno_location.  */
-	  assert_perror (errno);
-	  assert (i == 0);
-	  abort ();
-	default:
-	  break;
-      }
-      Dwfl *dwfl = get_dwfl (pid);
-      struct see_exec_module data;
-      ssize_t ssize = readlink ("/proc/self/exe", data.selfpath, sizeof (data.selfpath));
-      assert (ssize > 0 && ssize < sizeof (data.selfpath));
-      data.selfpath[ssize] = '\0';
-      data.mod = NULL;
-      ptrdiff_t ptrdiff = dwfl_getmodules (dwfl, &see_exec_module, &data, 0);
-      assert (ptrdiff == 0);
-      assert (data.mod != NULL);
-      GElf_Addr loadbase;
-      Elf *elf = dwfl_module_getelf (data.mod, &loadbase);
-      GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
-      assert (ehdr != NULL);
-      Elf_Scn *scn = NULL, *plt = NULL;
-      while ((scn = elf_nextscn (elf, scn)) != NULL)
-	{
-	  GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (scn, &scn_shdr_mem);
-	  assert (scn_shdr != NULL);
-	  /* FIXME: sh_type */
-	  if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
-	    continue;
-	  assert (plt == NULL);
-	  plt = scn;
-	}
-      assert (plt != NULL);
-      GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (plt, &scn_shdr_mem);
-      assert (scn_shdr != NULL);
-      Dwarf_Addr plt_start = scn_shdr->sh_addr + loadbase;
-      Dwarf_Addr plt_end = plt_start + scn_shdr->sh_size;
-      dwfl_end (dwfl);
-      errno = 0;
-      int status;
-      pid_t got = waitpid (pid, &status, 0);
-      assert_perror (errno);
-      assert (got == pid);
-      assert (WIFSTOPPED (status));
-      assert (WSTOPSIG (status) == SIGUSR1);
-      for (;;)
-	{
-	  long l;
-	  errno = 0;
-#if defined __x86_64__
-	  l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
-#elif defined __i386__
-	  l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), NULL);
-#else
-	  l = 0;
-#endif
-	  assert_perror (errno);
-	  if ((unsigned long) l >= plt_start && (unsigned long) l < plt_end)
-	    break;
-	  l = ptrace (PTRACE_SINGLESTEP, pid, NULL, NULL);
-	  assert_perror (errno);
-	  assert (l == 0);
-	  got = waitpid (pid, &status, 0);
-	  assert_perror (errno);
-	  assert (got == pid);
-	  assert (WIFSTOPPED (status));
-	  assert (WSTOPSIG (status) == SIGTRAP);
-	}
-      long l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
-      assert_perror (errno);
-      assert (l == 0);
-      got = waitpid (pid, &status, WSTOPPED);
-      assert_perror (errno);
-      assert (got == pid);
-      assert (WIFSTOPPED (status));
-      assert (WSTOPSIG (status) == SIGSTOP);
-      dump (pid);
-    }
-  else while (*++argv)
-    {
-      int pid = atoi (*argv);
-      if (argc > 2)
-	printf ("PID %d\n", pid);
-      dump (pid);
-    }
+  struct argp argp = *dwfl_standard_argp ();
+  parse_opt_orig = argp.parser;
+  argp.parser = parse_opt;
+  int remaining;
+  Dwfl *dwfl = NULL;
+  argp_parse (&argp, argc, argv, 0, &remaining, &dwfl);
+  assert (dwfl != NULL);
+  assert (remaining == argc);
+
+  if (!pid && !corefile)
+    selfdump (dwfl);
+  else if (pid && !corefile)
+    dump (dwfl, pid, NULL);
+  else if (corefile && !pid)
+    dump (dwfl, 0, corefile);
+  else
+    abort ();
 
   return 0;
 }

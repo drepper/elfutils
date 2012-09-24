@@ -47,6 +47,7 @@ ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach)
   Dwarf_Frame_State_Base *base = state->base;
   base->ebl = ebl;
   base->core = NULL;
+  base->core_fd = -1;
   base->pid = pid;
   base->pid_attached = pid_attach;
   base->unwound = state;
