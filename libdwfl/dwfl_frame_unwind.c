@@ -210,34 +210,6 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	    return false;
 	  }
 	break;
-      case DW_OP_and:
-	if (! pop (&val2) || ! pop (&val1) || ! push (val1 & val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      case DW_OP_ge:
-	if (! pop (&val2) || ! pop (&val1) || ! push (val1 >= val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      case DW_OP_shl:
-	if (! pop (&val2) || ! pop (&val1) || ! push (val1 << val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
-      case DW_OP_plus:
-	if (! pop (&val2) || ! pop (&val1) || ! push (val1 + val2))
-	  {
-	    free (stack);
-	    return false;
-	  }
-	break;
       case DW_OP_plus_uconst:
 	if (! pop (&val1) || ! push (val1 + ops->number))
 	  {
@@ -265,8 +237,21 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	}
 	break;
       case DW_OP_stack_value:
-	  is_location = false;
+	is_location = false;
 	break;
+#define BINOP(atom, op)							\
+      case atom:							\
+	if (! pop (&val2) || ! pop (&val1) || ! push (val1 op val2))	\
+	  {								\
+	    free (stack);						\
+	    return false;						\
+	  }								\
+	break;
+      BINOP (DW_OP_and, &)
+      BINOP (DW_OP_ge, >=)
+      BINOP (DW_OP_shl, <<)
+      BINOP (DW_OP_plus, +)
+#undef BINOP
       default:
 	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	return false;
