@@ -1,5 +1,5 @@
-/* Get return address register for frame.
-   Copyright (C) 2009 Red Hat, Inc.
+/* Get return address register value for frame.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -52,7 +52,7 @@ dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc)
     }
   if ((state->regs_set & (1U << ra)) == 0)
     {
-      __libdw_seterrno (DWARF_E_RA_UNDEFINED);
+      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
       return false;
     }
   *pc = state->regs[ra];

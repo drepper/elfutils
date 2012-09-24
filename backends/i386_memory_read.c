@@ -1,4 +1,4 @@
-/* Fetch live process Dwarf_Frame_State from a PID.
+/* ptrace-like read from memory of PID.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 

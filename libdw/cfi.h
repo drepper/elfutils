@@ -150,8 +150,8 @@ struct dwarf_frame_register
   Dwarf_Sword value:(sizeof (Dwarf_Sword) * 8 - 3);
 };
 
-/* This holds everything we know about the state of the frame
-   at a particular PC location described by an FDE.  */
+/* This holds instructions for unwinding frame at a particular PC location
+   described by an FDE.  */
 struct Dwarf_Frame_s
 {
   /* This frame description covers PC values in [start, end).  */
@@ -186,6 +186,7 @@ struct Dwarf_Frame_s
   struct dwarf_frame_register regs[];
 };
 
+/* This holds information common for all the frames of one backtrace.  */
 struct Dwarf_Frame_State_Base
 {
   /* Used only for memory tracking, not for unwinding inner/outer references.  */
@@ -205,6 +206,8 @@ struct Dwarf_Frame_State_Base
   Dwarf_Frame_State *unwound;
 };
 
+/* This holds everything we know about the state of the frame at a particular
+   PC location described by an FDE.  */
 struct Dwarf_Frame_State
 {
   Dwarf_Frame_State_Base *base;
