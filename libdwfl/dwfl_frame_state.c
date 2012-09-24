@@ -74,7 +74,7 @@ pid_is_attached (Dwfl *dwfl, pid_t pid)
   return false;
 }
 
-Dwarf_Frame_State *
+static Dwarf_Frame_State *
 dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile)
 {
   if (dwfl == NULL)
@@ -109,8 +109,20 @@ dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile)
   base->dwfl = dwfl;
   base->next = dwfl->statebaselist;
   dwfl->statebaselist = base;
-  if (!corefile)
-    return state;
+  return state;
+}
+
+Dwarf_Frame_State *
+dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
+{
+  return dwfl_frame_state (dwfl, pid, NULL);
+}
+INTDEF (dwfl_frame_state_pid)
+
+Dwarf_Frame_State *
+dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
+{
+  Dwarf_Frame_State *state = dwfl_frame_state (dwfl, 0, corefile);
 
   /* Fetch inferior registers from a core file.  */
   int core_fd = open64 (corefile, O_RDONLY);
@@ -126,6 +138,7 @@ dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile)
       __libdwfl_seterrno (err);
       return NULL;
     }
+  Dwarf_Frame_State_Base *base = state->base;
   base->core = core;
   base->core_fd = core_fd;
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
@@ -222,4 +235,4 @@ dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile)
     }
   return state;
 }
-INTDEF (dwfl_frame_state)
+INTDEF (dwfl_frame_state_core)

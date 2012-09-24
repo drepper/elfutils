@@ -257,7 +257,8 @@ ELFUTILS_0.149 {
 
 ELFUTILS_0.155 {
   global:
-    dwfl_frame_state;
+    dwfl_frame_state_pid;
+    dwfl_frame_state_core;
     dwfl_frame_unwind;
     dwarf_frame_state_pc;
 } ELFUTILS_0.149;

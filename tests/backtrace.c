@@ -59,23 +59,26 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 {
   if (pid)
     report_pid (dwfl, pid);
-  Dwarf_Frame_State *state = dwfl_frame_state (dwfl, pid, corefile);
+  Dwarf_Frame_State *state;
+  if (pid)
+    state = dwfl_frame_state_pid (dwfl, pid);
+  else if (corefile)
+    state = dwfl_frame_state_core (dwfl, corefile);
+  else
+    abort ();
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
   while (state)
     {
-      Dwarf_Addr pc = dwarf_frame_state_pc (state);
-      int dw_errno = dwarf_errno ();
-      if (dw_errno != DWARF_E_NOERROR)
-	error (2, 0, "dwarf_frame_state_pc: %s", dwarf_errmsg (dw_errno));
+      Dwarf_Addr pc;
+      if (! dwarf_frame_state_pc (state, &pc))
+	error (2, 0, "dwarf_frame_state_pc: %s", dwarf_errmsg (-1));
       printf ("%p\n", (void *) (intptr_t) pc);
-      state = dwfl_frame_unwind (state);
-      if (state == NULL)
+      if (! dwfl_frame_unwind (&state))
 	{
-	  int dwf_errno = dwfl_errno ();
-	  if (dwf_errno == DWFL_E_RA_UNDEFINED)
+	  if (state == NULL)
 	    break;
-	  error (2, 0, "dwfl_frame_unwind: %s", dwfl_errmsg (dwf_errno));
+	  error (2, 0, "dwfl_frame_unwind: %s", dwfl_errmsg (-1));
 	}
     }
 

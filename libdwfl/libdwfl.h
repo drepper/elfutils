@@ -556,8 +556,13 @@ extern int dwfl_module_register_names (Dwfl_Module *mod,
 extern Dwarf_CFI *dwfl_module_dwarf_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 extern Dwarf_CFI *dwfl_module_eh_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 
-extern Dwarf_Frame_State *dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile);
-extern Dwarf_Frame_State *dwfl_frame_unwind (Dwarf_Frame_State *state);
+extern Dwarf_Frame_State *dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid);
+extern Dwarf_Frame_State *dwfl_frame_state_core (Dwfl *dwfl, const char *corefile);
+
+/* Return TRUE and update *STATEP for the unwound frame for successful unwind.
+   Return TRUE and set *STATEP to NULL for the outermost frame.  Return FALSE
+   (and call __libdwfl_seterrno) otherwise.  */
+extern bool dwfl_frame_unwind (Dwarf_Frame_State **statep);
 
 #ifdef __cplusplus
 }

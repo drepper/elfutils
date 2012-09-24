@@ -263,41 +263,57 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
   return retval;
 }
 
-static Dwarf_Frame_State *
-have_unwound (Dwarf_Frame_State *unwound)
+/* Return TRUE and update *STATEP for the unwound frame for successful unwind.
+   Return TRUE and set *STATEP to NULL for the outermost frame.  Return FALSE
+   (and call __libdwfl_seterrno) otherwise.  */
+
+static bool
+have_unwound (Dwarf_Frame_State **statep)
 {
-  dwarf_frame_state_pc (unwound);
-  int dw_errno = dwarf_errno ();
-  if (dw_errno == DWARF_E_RA_UNDEFINED)
+  /* Inlined dwarf_frame_state_pc.  */
+  Dwarf_CIE abi_info;
+  unsigned ra;
+
+  Dwarf_Frame_State *state = *statep, *unwound = state->unwound;
+  Dwarf_Frame_State_Base *base = state->base;
+  if (ebl_abi_cfi (base->ebl, &abi_info) != 0)
     {
-      __libdwfl_seterrno (DWFL_E_RA_UNDEFINED);
-      return NULL;
+      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+      return false;
     }
-  if (dw_errno != DWARF_E_NOERROR)
+  ra = abi_info.return_address_register;
+  if (ra >= base->nregs)
     {
-      __libdw_seterrno (dw_errno);
-      __libdwfl_seterrno (DWFL_E_LIBDW);
-      return NULL;
+      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+      return false;
     }
-  return unwound;
+  if ((unwound->regs_set & (1U << ra)) == 0)
+    {
+      *statep = NULL;
+      return true;
+    }
+  *statep = unwound;
+  return true;
 }
 
 /* Check if PC is in the "_start" function which may have no FDE.
-   It corresponds to the GDB get_prev_frame logic "inside entry func".  */
+   It corresponds to the GDB get_prev_frame logic "inside entry func".
+   Return TRUE if PC is in an outer frame.  Return FALSE (and call
+   __libdwfl_seterrno) otherwise.  */
 
-static void
+static bool
 no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
 {
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (mod->main.elf, &ehdr_mem);
   if (ehdr == NULL)
     {
       __libdwfl_seterrno (DWFL_E_LIBELF);
-      return;
+      return false;
     }
   if (pc < ehdr->e_entry + bias)
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return;
+      return false;
     }
   GElf_Sym entry_sym;
   /* "_start" is size-less.  Search for PC, if the closest symbol is the one
@@ -308,26 +324,29 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
 	  && pc >= entry_sym.st_value + entry_sym.st_size))
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return;
+      return false;
     }
-  __libdwfl_seterrno (DWFL_E_RA_UNDEFINED);
+  return true;
 }
 
-static Dwarf_Frame_State *
-handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI *cfi, Dwarf_Addr bias)
+static bool
+handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI *cfi, Dwarf_Addr bias)
 {
+  Dwarf_Frame_State *state = *statep;
   Dwarf_Frame *frame;
   if (dwarf_cfi_addrframe (cfi, pc - bias, &frame) != 0)
     {
       int dw_errno = dwarf_errno ();
       if (dw_errno == DWARF_E_NO_MATCH)
-	no_fde (pc, mod, bias);
-      else
 	{
-	  __libdw_seterrno (dw_errno);
-	  __libdwfl_seterrno (DWFL_E_LIBDW);
+	  if (! no_fde (pc, mod, bias))
+	    return false;
+	  *statep = NULL;
+	  return true;
 	}
-      return NULL;
+      __libdw_seterrno (dw_errno);
+      __libdwfl_seterrno (DWFL_E_LIBDW);
+      return false;
     }
   Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * state->base->nregs);
   state->unwound = unwound;
@@ -341,7 +360,7 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI
       if (dwarf_frame_register (frame, regno, reg_ops_mem, &reg_ops, &reg_nops) != 0)
 	{
 	  __libdwfl_seterrno (DWFL_E_LIBDW);
-	  return NULL;
+	  return false;
 	}
       Dwarf_Addr regval;
       if (reg_nops == 0)
@@ -355,52 +374,51 @@ handle_cfi (Dwarf_Frame_State *state, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI
 	    {
 	      /* REGNO is same-value.  */
 	      if (! state_get_reg (state, regno, &regval))
-		return NULL;
+		return false;
 	    }
 	  else
 	    {
 	      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	      return NULL;
+	      return false;
 	    }
 	}
       else if (! expr_eval (state, frame, reg_ops, reg_nops, &regval))
-	return NULL;
+	return false;
       unwound->regs[regno] = regval;
       unwound->regs_set |= 1U << regno;
     }
-  return have_unwound (unwound);
+  return have_unwound (statep);
 }
 
-Dwarf_Frame_State *
-dwfl_frame_unwind (Dwarf_Frame_State *state)
+bool
+dwfl_frame_unwind (Dwarf_Frame_State **statep)
 {
+  Dwarf_Frame_State *state = *statep;
   if (state->unwound != NULL)
-    return have_unwound (state->unwound);
-  Dwarf_Addr pc = dwarf_frame_state_pc (state);
-  int dw_errno = dwarf_errno ();
-  if (dw_errno != DWARF_E_NOERROR)
+    return have_unwound (statep);
+  Dwarf_Addr pc;
+  if (! dwarf_frame_state_pc (state, &pc))
     {
-      __libdw_seterrno (dw_errno);
       __libdwfl_seterrno (DWFL_E_LIBDW);
-      return NULL;
+      return false;
     }
   Dwfl_Module *mod = dwfl_addrmodule (state->base->dwfl, pc);
   if (mod == NULL)
     {
       __libdwfl_seterrno (DWFL_E_NO_DWARF);
-      return NULL;
+      return false;
     }
   Dwarf_Addr bias;
   Dwarf_CFI *cfi = dwfl_module_eh_cfi (mod, &bias);
   if (cfi)
     {
-      Dwarf_Frame_State *unwound = handle_cfi (state, pc, mod, cfi, bias);
-      if (unwound)
-	return unwound;
+      if (handle_cfi (statep, pc, mod, cfi, bias))
+	return true;
     }
   cfi = dwfl_module_dwarf_cfi (mod, &bias);
   if (cfi)
-    return handle_cfi (state, pc, mod, cfi, bias);
-  return NULL;
+    return handle_cfi (statep, pc, mod, cfi, bias);
+  __libdwfl_seterrno (DWFL_E_NO_DWARF);
+  return false;
 }
 INTDEF(dwfl_frame_unwind)
