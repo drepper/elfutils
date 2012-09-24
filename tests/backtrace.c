@@ -73,7 +73,14 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
       Dwarf_Addr pc;
       if (! dwarf_frame_state_pc (state, &pc))
 	error (2, 0, "dwarf_frame_state_pc: %s", dwarf_errmsg (-1));
-      printf ("%p\n", (void *) (intptr_t) pc);
+
+      /* Get PC->SYMNAME.  */
+      Dwfl_Module *mod = dwfl_addrmodule (dwfl, pc);
+      const char *symname = NULL;
+      if (mod)
+	symname = dwfl_module_addrname (mod, pc);
+
+      printf ("%p\t%s\n", (void *) (intptr_t) pc, symname);
       if (! dwfl_frame_unwind (&state))
 	{
 	  if (state == NULL)
