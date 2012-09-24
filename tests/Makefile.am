@@ -84,7 +84,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwarf-getstring.sh run-rerequest_tag.sh run-typeiter.sh \
 	run-readelf-d.sh run-readelf-gdb_index.sh run-unstrip-n.sh \
 	run-low_high_pc.sh run-macro-test.sh run-elf_cntl_gelf_getshdr.sh \
-	run-test-archive64.sh
+	run-test-archive64.sh run-backtrace.sh
 
 if !STANDALONE
 check_PROGRAMS += msg_tst md5-sha1-test
