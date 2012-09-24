@@ -1,4 +1,4 @@
-/* Get return address register for frame.
+/* Get previous frame state for an existing frame state.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 

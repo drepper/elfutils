@@ -1,5 +1,5 @@
-/* Return location expression to find return value given a function type DIE.
-   Copyright (C) 2005 Red Hat, Inc.
+/* ptrace-like disconnect from PID.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify

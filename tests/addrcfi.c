@@ -74,7 +74,7 @@ print_register (void *arg,
 {
   struct stuff *stuff = arg;
 
-  printf ("\t%s reg%u (%s%s, bits=%d, type=%d): ", setname, regno, prefix, regname,bits,type);
+  printf ("\t%s reg%u (%s%s): ", setname, regno, prefix, regname);
 
   Dwarf_Op ops_mem[2];
   Dwarf_Op *ops;

@@ -1,4 +1,4 @@
-/* Return location expression to find return value given a function type DIE.
+/* ptrace-like read from memory of PID.
    Copyright (C) 2005 Red Hat, Inc.
    This file is part of elfutils.
 

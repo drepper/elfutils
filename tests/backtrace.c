@@ -1,5 +1,5 @@
-/* Test program for libdwfl file decriptors leakage.
-   Copyright (C) 2007, 2008 Red Hat, Inc.
+/* Test program for unwinding of frames.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -35,7 +35,6 @@
 #include <sys/user.h>
 #include <argp.h>
 #include <fcntl.h>
-#include "../libdwfl/libdwflP.h" /* for DWFL_E_RA_UNDEFINED ? */
 #include ELFUTILS_HEADER(dwfl)
 
 /* libdwfl/argp-std.c */

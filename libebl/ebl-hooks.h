@@ -154,9 +154,13 @@ int EBLHOOK(disasm) (const uint8_t **startp, const uint8_t *end,
 /* Supply the machine-specific state of CFI before CIE initial programs.  */
 int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 
+/* Fetch live process Dwarf_Frame_State from PID.  */
 Dwarf_Frame_State *EBLHOOK(frame_state) (Ebl *ebl, pid_t pid, bool pid_attach);
+
+/* ptrace-like disconnect from PID.  */
 void EBLHOOK(frame_detach) (Ebl *ebl, pid_t pid);
 
+/* ptrace-like read from memory of PID.  */
 bool EBLHOOK(memory_read) (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul);
 
 
