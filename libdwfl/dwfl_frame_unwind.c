@@ -239,6 +239,13 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
       case DW_OP_stack_value:
 	is_location = false;
 	break;
+      case DW_OP_deref:
+	if (! pop (&val1) || ! memory_read (state, val1, &val1) || ! push (val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
 #define BINOP(atom, op)							\
       case atom:							\
 	if (! pop (&val2) || ! pop (&val1) || ! push (val1 op val2))	\
@@ -270,7 +277,7 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 static bool
 have_unwound (Dwarf_Frame_State **statep)
 {
-  /* Inlined dwarf_frame_state_pc.  */
+  /* Inlined dwfl_frame_state_pc.  */
   Dwarf_CIE abi_info;
   unsigned ra;
 
@@ -353,6 +360,7 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
   unwound->base = state->base;
   unwound->unwound = NULL;
   unwound->regs_set = 0;
+  unwound->signal_frame = frame->fde->cie->signal_frame;
   for (unsigned regno = 0; regno < unwound->base->nregs; regno++)
     {
       Dwarf_Op reg_ops_mem[3], *reg_ops;
@@ -397,11 +405,12 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
   if (state->unwound != NULL)
     return have_unwound (statep);
   Dwarf_Addr pc;
-  if (! dwarf_frame_state_pc (state, &pc))
-    {
-      __libdwfl_seterrno (DWFL_E_LIBDW);
-      return false;
-    }
+  if (! dwfl_frame_state_pc (state, &pc, NULL))
+    return false;
+  /* Do not ask for MINUSONE dwfl_frame_state_pc, it would try to unwind STATE
+     which would deadlock us.  */
+  if (! state->signal_frame)
+    pc--;
   Dwfl_Module *mod = dwfl_addrmodule (state->base->dwfl, pc);
   if (mod == NULL)
     {
@@ -409,16 +418,21 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
       return false;
     }
   Dwarf_Addr bias;
-  Dwarf_CFI *cfi = dwfl_module_eh_cfi (mod, &bias);
-  if (cfi)
+  Dwarf_CFI *cfi_eh = dwfl_module_eh_cfi (mod, &bias);
+  if (cfi_eh)
     {
-      if (handle_cfi (statep, pc, mod, cfi, bias))
+      if (handle_cfi (statep, pc, mod, cfi_eh, bias))
 	return true;
     }
-  cfi = dwfl_module_dwarf_cfi (mod, &bias);
-  if (cfi)
-    return handle_cfi (statep, pc, mod, cfi, bias);
-  __libdwfl_seterrno (DWFL_E_NO_DWARF);
+  Dwarf_CFI *cfi_dwarf = dwfl_module_dwarf_cfi (mod, &bias);
+  if (cfi_dwarf)
+    return handle_cfi (statep, pc, mod, cfi_dwarf, bias);
+  if (cfi_eh == NULL)
+    __libdwfl_seterrno (DWFL_E_NO_DWARF);
+  else
+    {
+      /* Keep the error code from former handle_cfi.  */
+    }
   return false;
 }
 INTDEF(dwfl_frame_unwind)

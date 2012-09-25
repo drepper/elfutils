@@ -44,6 +44,7 @@ ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach)
   Dwarf_Frame_State *state = ebl->frame_state (ebl, pid, pid_attach);
   if (state == NULL)
     return NULL;
+  state->signal_frame = false;
   Dwarf_Frame_State_Base *base = state->base;
   base->ebl = ebl;
   base->core = NULL;

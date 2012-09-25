@@ -817,10 +817,6 @@ extern int dwarf_frame_register (Dwarf_Frame *frame, int regno,
 				 Dwarf_Op **ops, size_t *nops)
   __nonnull_attribute__ (3, 4, 5);
 
-/* Get return address register value for frame.  Return TRUE if *PC is set.
-   Return FALSE (and call __libdw_seterrno) otherwise.  */
-extern bool dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc);
-
 
 /* Return error code of last failing function call.  This value is kept
    separately for each thread.  */

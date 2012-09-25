@@ -459,7 +459,6 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
   if (cfap)
     {
       /* Synthesize the operation to push the CFA before the expression.  */
-      --n;
       result[0].atom = DW_OP_call_frame_cfa;
       result[0].number = 0;
       result[0].number2 = 0;
@@ -480,7 +479,7 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 
       loclist = loclist->next;
     }
-  while (n > 0);
+  while (n > (cfap ? 1U : 0U));
 
   /* Insert a record in the search tree so that we can find it again later.  */
   struct loc_s *newp;

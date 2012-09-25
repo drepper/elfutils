@@ -215,6 +215,7 @@ struct Dwarf_Frame_State
   Dwarf_Frame_State *unwound;
   /* (1 << X) bitmask where 0 <= X < NREGS.  */
   uint32_t regs_set;
+  bool signal_frame;
   unsigned long regs[];
 };
 

@@ -30,32 +30,40 @@
 # include <config.h>
 #endif
 
-#include "cfi.h"
+#include "../libdw/cfi.h"
 #include "../libebl/libebl.h"
+#include "libdwflP.h"
 
 bool
-dwarf_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc)
+dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
 {
   Dwarf_CIE abi_info;
   unsigned ra;
 
   if (ebl_abi_cfi (state->base->ebl, &abi_info) != 0)
     {
-      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
   ra = abi_info.return_address_register;
   if (ra >= state->base->nregs)
     {
-      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
   if ((state->regs_set & (1U << ra)) == 0)
     {
-      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
   *pc = state->regs[ra];
+  if (minusone)
+    {
+      /* *MINUSONE is logical or of both current and previous frame state.  */
+      *minusone = ! state->signal_frame;
+      if (! state->signal_frame && dwfl_frame_unwind (&state) && state)
+	*minusone = ! state->signal_frame;
+    }
   return true;
 }
-INTDEF (dwarf_frame_state_pc)
+INTDEF (dwfl_frame_state_pc)

@@ -564,6 +564,13 @@ extern Dwarf_Frame_State *dwfl_frame_state_core (Dwfl *dwfl, const char *corefil
    (and call __libdwfl_seterrno) otherwise.  */
 extern bool dwfl_frame_unwind (Dwarf_Frame_State **statep);
 
+/* Get return address register value for frame.  Return TRUE if *PC set and
+   optionally *MINUSONE is also set, if MINUSONE is not NULL.  Return FALSE
+   (and call __libdw_seterrno) otherwise.  *MINUSONE is TRUE for normal calls
+   where *PC should be decremented by one to get the call instruction, it is
+   FALSE if this frame was interrupted by a signal handler.  */
+extern bool dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone);
+
 #ifdef __cplusplus
 }
 #endif

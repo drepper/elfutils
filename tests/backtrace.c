@@ -35,6 +35,7 @@
 #include <sys/user.h>
 #include <argp.h>
 #include <fcntl.h>
+#include <string.h>
 #include ELFUTILS_HEADER(dwfl)
 
 /* libdwfl/argp-std.c */
@@ -54,7 +55,7 @@ report_pid (Dwfl *dwfl, pid_t pid)
 }
 
 static void
-dump (Dwfl *dwfl, pid_t pid, const char *corefile)
+dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl))
 {
   if (pid)
     report_pid (dwfl, pid);
@@ -67,19 +68,24 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
     abort ();
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
-  while (state)
+  unsigned frameno;
+  for (frameno = 0; state; frameno++)
     {
       Dwarf_Addr pc;
-      if (! dwarf_frame_state_pc (state, &pc))
-	error (2, 0, "dwarf_frame_state_pc: %s", dwarf_errmsg (-1));
+      bool minusone;
+      if (! dwfl_frame_state_pc (state, &pc, &minusone))
+	error (2, 0, "dwfl_frame_state_pc: %s", dwfl_errmsg (-1));
+      Dwarf_Addr pc_adjusted = pc - (minusone ? 1 : 0);
 
       /* Get PC->SYMNAME.  */
-      Dwfl_Module *mod = dwfl_addrmodule (dwfl, pc);
+      Dwfl_Module *mod = dwfl_addrmodule (dwfl, pc_adjusted);
       const char *symname = NULL;
       if (mod)
-	symname = dwfl_module_addrname (mod, pc);
+	symname = dwfl_module_addrname (mod, pc_adjusted);
 
-      printf ("%p\t%s\n", (void *) (intptr_t) pc, symname);
+      printf ("#%u %p%4s\t%s\n", frameno, (void *) (intptr_t) pc, minusone ? "- 1" : "", symname);
+      if (callback)
+	callback (frameno, pc, symname, dwfl);
       if (! dwfl_frame_unwind (&state))
 	{
 	  if (state == NULL)
@@ -139,23 +145,132 @@ parse_opt (int key, char *arg, struct argp_state *state)
   return parse_opt_orig (key, arg, state);
 }
 
+/* Execution will arrive here from jmp by an artificial ptrace-spawn signal.  */
+
+static void
+sigusr2 (int signo)
+{
+  assert (signo == SIGUSR2);
+  raise (SIGUSR1);
+
+  /* Catch the .plt jump, it will come from this abort call.  */
+  abort ();
+}
+
+static __attribute__ ((noinline, noclone)) void
+dummy1 (void)
+{
+  asm volatile ("");
+}
+
+#if !defined __x86_64__ && !defined __i386__
+static
+#endif
+__attribute__ ((noinline, noclone)) void
+jmp (void)
+{
+  /* Not reached, signal will get ptrace-spawn to jump into sigusr2.  */
+  abort ();
+}
+
+static __attribute__ ((noinline, noclone)) void
+dummy2 (void)
+{
+  asm volatile ("");
+}
+
+static __attribute__ ((noinline, noclone, noreturn)) void
+stdarg (int f, ...)
+{
+  sighandler_t sigusr2_orig = signal (SIGUSR2, sigusr2);
+  assert (sigusr2_orig == SIG_DFL);
+  errno = 0;
+  long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
+  assert_perror (errno);
+  assert (l == 0);
+  raise (SIGUSR1);
+#if defined __x86_64__ || defined __i386__
+  /* Execution will get PC patched into function jmp.  */
+#else
+  jmp ();
+#endif
+  abort ();
+}
+
+static __attribute__ ((noinline, noclone)) void
+dummy3 (void)
+{
+  asm volatile ("");
+}
+
+static __attribute__ ((noinline, noclone)) void
+child (void)
+{
+  stdarg (1);
+  /* Here should be no instruction after the stdarg call as it is noreturn
+     function.  It must be stdarg so that it is a call and not jump (jump as
+     a tail-call).  */
+}
+
+static __attribute__ ((noinline, noclone)) void
+dummy4 (void)
+{
+  asm volatile ("");
+}
+
+static void
+selfdump_callback (unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl)
+{
+  Dwfl_Module *mod;
+  const char *symname2 = NULL;
+  switch (frameno)
+  {
+    case 0:
+      /* .plt has no symbols.  */
+      assert (symname == NULL);
+      break;
+    case 1:
+      assert (symname != NULL && strcmp (symname, "sigusr2") == 0);
+      break;
+    case 2:
+      /* __restore_rt - glibc maybe does not have to have this symbol.  */
+      break;
+    case 3:
+      /* Verify we trapped on the very first instruction of jmp.  */
+      assert (symname != NULL && strcmp (symname, "jmp") == 0);
+      mod = dwfl_addrmodule (dwfl, pc - 1);
+      if (mod)
+	symname2 = dwfl_module_addrname (mod, pc - 1);
+      assert (symname2 == NULL || strcmp (symname2, "jmp") != 0);
+      break;
+    case 4:
+      assert (symname != NULL && strcmp (symname, "stdarg") == 0);
+      break;
+    case 5:
+      /* Verify we trapped on the very last instruction of child.  */
+      assert (symname != NULL && strcmp (symname, "child") == 0);
+      mod = dwfl_addrmodule (dwfl, pc);
+      if (mod)
+	symname2 = dwfl_module_addrname (mod, pc);
+      assert (symname2 == NULL || strcmp (symname2, "child") != 0);
+      break;
+  }
+}
+
 static void
 selfdump (Dwfl *dwfl)
 {
+  dummy1 ();
+  dummy2 ();
+  dummy3 ();
+  dummy4 ();
   pid_t pid = fork ();
   switch (pid)
   {
     case -1:
       abort ();
     case 0:
-      errno = 0;
-      long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
-      assert_perror (errno);
-      assert (l == 0);
-      int i = raise (SIGUSR1);
-      /* Catch the .plt jump, it will come from __errno_location.  */
-      assert_perror (errno);
-      assert (i == 0);
+      child ();
       abort ();
     default:
       break;
@@ -178,8 +293,9 @@ selfdump (Dwfl *dwfl)
     {
       GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (scn, &scn_shdr_mem);
       assert (scn_shdr != NULL);
-      /* FIXME: sh_type */
-      if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
+      if (scn_shdr->sh_type != SHT_PROGBITS
+          || scn_shdr->sh_flags != (SHF_ALLOC | SHF_EXECINSTR)
+	  || strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
 	continue;
       assert (plt == NULL);
       plt = scn;
@@ -196,9 +312,27 @@ selfdump (Dwfl *dwfl)
   assert (got == pid);
   assert (WIFSTOPPED (status));
   assert (WSTOPSIG (status) == SIGUSR1);
+  long l;
+#if defined __x86_64__ || defined __i386__
+  errno = 0;
+#if defined __x86_64__
+  l = ptrace (PTRACE_POKEUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), (void *) jmp);
+#elif defined __i386__
+  l = ptrace (PTRACE_POKEUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), (void *) jmp);
+#else
+# error
+#endif
+  assert_perror (errno);
+  assert (l == 0);
+  l = ptrace (PTRACE_CONT, pid, NULL, (void *) (intptr_t) SIGUSR2);
+  got = waitpid (pid, &status, 0);
+  assert_perror (errno);
+  assert (got == pid);
+  assert (WIFSTOPPED (status));
+  assert (WSTOPSIG (status) == SIGUSR1);
+#endif /* __x86_64__ || __i386__ */
   for (;;)
     {
-      long l;
       errno = 0;
 #if defined __x86_64__
       l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
@@ -219,7 +353,7 @@ selfdump (Dwfl *dwfl)
       assert (WIFSTOPPED (status));
       assert (WSTOPSIG (status) == SIGTRAP);
     }
-  long l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
+  l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
   assert_perror (errno);
   assert (l == 0);
   got = waitpid (pid, &status, WSTOPPED);
@@ -227,7 +361,7 @@ selfdump (Dwfl *dwfl)
   assert (got == pid);
   assert (WIFSTOPPED (status));
   assert (WSTOPSIG (status) == SIGSTOP);
-  dump (dwfl, pid, NULL);
+  dump (dwfl, pid, NULL, selfdump_callback);
 }
 
 int
@@ -253,9 +387,9 @@ main (int argc, char **argv)
   if (!pid && !corefile)
     selfdump (dwfl);
   else if (pid && !corefile)
-    dump (dwfl, pid, NULL);
+    dump (dwfl, pid, NULL, NULL);
   else if (corefile && !pid)
-    dump (dwfl, 0, corefile);
+    dump (dwfl, 0, corefile, NULL);
   else
     abort ();
 
