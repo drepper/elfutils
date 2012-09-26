@@ -59,9 +59,16 @@ dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
   *pc = state->regs[ra];
   if (minusone)
     {
+      /* Bottom frame?  */
+      if (state == state->base->unwound)
+	*minusone = false;
       /* *MINUSONE is logical or of both current and previous frame state.  */
-      *minusone = ! state->signal_frame;
-      if (! state->signal_frame && dwfl_frame_unwind (&state) && state)
+      else if (state->signal_frame)
+	*minusone = false;
+      /* Not affected by unsuccessfully unwound frame.  */
+      else if (! dwfl_frame_unwind (&state) || state == NULL)
+	*minusone = true;
+      else
 	*minusone = ! state->signal_frame;
     }
   return true;

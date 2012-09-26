@@ -409,7 +409,7 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
     return false;
   /* Do not ask for MINUSONE dwfl_frame_state_pc, it would try to unwind STATE
      which would deadlock us.  */
-  if (! state->signal_frame)
+  if (state != state->base->unwound && ! state->signal_frame)
     pc--;
   Dwfl_Module *mod = dwfl_addrmodule (state->base->dwfl, pc);
   if (mod == NULL)
