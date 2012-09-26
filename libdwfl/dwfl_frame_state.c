@@ -123,6 +123,8 @@ Dwarf_Frame_State *
 dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 {
   Dwarf_Frame_State *state = dwfl_frame_state (dwfl, 0, corefile);
+  if (state == NULL)
+    return NULL;
 
   /* Fetch inferior registers from a core file.  */
   int core_fd = open64 (corefile, O_RDONLY);
