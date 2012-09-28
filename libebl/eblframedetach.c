@@ -38,4 +38,3 @@ ebl_frame_detach (Ebl *ebl, pid_t pid)
   if (ebl != NULL)
     ebl->frame_detach (ebl, pid);
 }
-INTDEF(ebl_frame_detach)

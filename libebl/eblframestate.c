@@ -84,4 +84,3 @@ ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
   assert (base->nregs < sizeof (state->regs_set) * 8);
   return state;
 }
-INTDEF(ebl_frame_state)

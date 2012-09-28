@@ -48,7 +48,7 @@ dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
       else if (state->signal_frame)
 	*minusone = false;
       /* Not affected by unsuccessfully unwound frame.  */
-      else if (! dwfl_frame_unwind (&state) || state == NULL)
+      else if (! INTUSE(dwfl_frame_unwind) (&state) || state == NULL)
 	*minusone = true;
       else
 	*minusone = ! state->signal_frame;

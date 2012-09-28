@@ -480,6 +480,10 @@ INTDECL (dwfl_offline_section_address)
 INTDECL (dwfl_module_relocate_address)
 INTDECL (dwfl_module_dwarf_cfi)
 INTDECL (dwfl_module_eh_cfi)
+INTDECL (dwfl_frame_state_pid)
+INTDECL (dwfl_frame_state_core)
+INTDECL (dwfl_frame_unwind)
+INTDECL (dwfl_frame_state_pc)
 
 /* Leading arguments standard to callbacks passed a Dwfl_Module.  */
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr

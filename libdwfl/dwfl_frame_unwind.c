@@ -403,7 +403,7 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
   GElf_Sym entry_sym;
   /* "_start" is size-less.  Search for PC, if the closest symbol is the one
      for E_ENTRY it belongs into the function starting at E_ENTRY.  */
-  if (dwfl_module_addrsym (mod, pc, &entry_sym, NULL) == NULL
+  if (INTUSE(dwfl_module_addrsym) (mod, pc, &entry_sym, NULL) == NULL
       || entry_sym.st_value != ehdr->e_entry + bias
       || (entry_sym.st_size != 0
 	  && pc >= entry_sym.st_value + entry_sym.st_size))
@@ -419,7 +419,7 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
 {
   Dwarf_Frame_State *state = *statep;
   Dwarf_Frame *frame;
-  if (dwarf_cfi_addrframe (cfi, pc - bias, &frame) != 0)
+  if (INTUSE(dwarf_cfi_addrframe) (cfi, pc - bias, &frame) != 0)
     {
       int dw_errno = dwarf_errno ();
       if (dw_errno == DWARF_E_NO_MATCH)
@@ -498,21 +498,21 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
   Dwarf_Frame_State *state = *statep;
   if (state->unwound)
     return have_unwound (statep);
-  Dwarf_Addr pc;
-  if (! dwfl_frame_state_pc (state, &pc, NULL))
-    return false;
+  /* Inlined dwfl_frame_state_pc.  */
+  assert (state->pc_state == DWARF_FRAME_STATE_PC_SET);
+  Dwarf_Addr pc = state->pc;
   /* Do not ask for MINUSONE dwfl_frame_state_pc, it would try to unwind STATE
      which would deadlock us.  */
   if (state != state->base->unwound && ! state->signal_frame)
     pc--;
-  Dwfl_Module *mod = dwfl_addrmodule (state->base->dwfl, pc);
+  Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (state->base->dwfl, pc);
   if (mod == NULL)
     {
       __libdwfl_seterrno (DWFL_E_NO_DWARF);
       return false;
     }
   Dwarf_Addr bias;
-  Dwarf_CFI *cfi_eh = dwfl_module_eh_cfi (mod, &bias);
+  Dwarf_CFI *cfi_eh = INTUSE(dwfl_module_eh_cfi) (mod, &bias);
   if (cfi_eh)
     {
       if (handle_cfi (statep, pc, mod, cfi_eh, bias))
@@ -523,7 +523,7 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
 	  return false;
 	}
     }
-  Dwarf_CFI *cfi_dwarf = dwfl_module_dwarf_cfi (mod, &bias);
+  Dwarf_CFI *cfi_dwarf = INTUSE(dwfl_module_dwarf_cfi) (mod, &bias);
   if (cfi_dwarf)
     {
       if (handle_cfi (statep, pc, mod, cfi_dwarf, bias) && state->unwound)
