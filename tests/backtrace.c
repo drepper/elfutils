@@ -83,15 +83,13 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (unsigned fr
       if (mod)
 	symname = dwfl_module_addrname (mod, pc_adjusted);
 
-      printf ("#%u %p%4s\t%s\n", frameno, (void *) (intptr_t) pc, minusone ? "- 1" : "", symname);
+      printf ("#%u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc, minusone ? "- 1" : "", symname);
       if (callback)
 	callback (frameno, pc, symname, dwfl);
       if (! dwfl_frame_unwind (&state))
-	{
-	  if (state == NULL)
-	    break;
-	  error (2, 0, "dwfl_frame_unwind: %s", dwfl_errmsg (-1));
-	}
+	error (2, 0, "dwfl_frame_unwind: %s", dwfl_errmsg (-1));
+      if (state == NULL)
+	break;
     }
 
   dwfl_end (dwfl);

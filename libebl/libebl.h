@@ -376,7 +376,7 @@ extern int ebl_auxv_info (Ebl *ebl, GElf_Xword a_type,
   __nonnull_attribute__ (1, 3, 4);
 
 /* Fetch live process Dwarf_Frame_State from PID.  */
-extern Dwarf_Frame_State *ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach)
+extern Dwarf_Frame_State *ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
   __nonnull_attribute__ (1);
 
 /* ptrace-like disconnect from PID.  */

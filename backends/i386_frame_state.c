@@ -42,7 +42,7 @@
 #include "libebl_CPU.h"
 
 Dwarf_Frame_State *
-i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
+i386_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ ((unused)))
 {
   /* gcc/config/ #define DWARF_FRAME_REGISTERS.  For i386 it is 17, why?  */
   const size_t nregs = 9;
@@ -92,6 +92,7 @@ i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
   Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
   if (base == NULL)
     return NULL;
+  base->ebl = ebl;
   base->nregs = nregs;
   base->regs_bits = 32;
   Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
@@ -103,35 +104,34 @@ i386_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
   base->unwound = state;
   state->base = base;
   state->unwound = NULL;
+  state->pc_state = DWARF_FRAME_STATE_ERROR;
 
-  if (pid == 0)
-    state->regs_set = 0;
-  else
+  memset (state->regs_set, 0, sizeof (state->regs_set));
+  if (pid)
     {
 #if defined __i386__
-      state->regs[0] = user_regs.eax;
-      state->regs[1] = user_regs.ecx;
-      state->regs[2] = user_regs.edx;
-      state->regs[3] = user_regs.ebx;
-      state->regs[4] = user_regs.esp;
-      state->regs[5] = user_regs.ebp;
-      state->regs[6] = user_regs.esi;
-      state->regs[7] = user_regs.edi;
-      state->regs[8] = user_regs.eip;
+      dwarf_frame_state_reg_set (state, 0, user_regs.eax);
+      dwarf_frame_state_reg_set (state, 1, user_regs.ecx);
+      dwarf_frame_state_reg_set (state, 2, user_regs.edx);
+      dwarf_frame_state_reg_set (state, 3, user_regs.ebx);
+      dwarf_frame_state_reg_set (state, 4, user_regs.esp);
+      dwarf_frame_state_reg_set (state, 5, user_regs.ebp);
+      dwarf_frame_state_reg_set (state, 6, user_regs.esi);
+      dwarf_frame_state_reg_set (state, 7, user_regs.edi);
+      dwarf_frame_state_reg_set (state, 8, user_regs.eip);
 #elif defined __x86_64__
-      state->regs[0] = user_regs.rax;
-      state->regs[1] = user_regs.rcx;
-      state->regs[2] = user_regs.rdx;
-      state->regs[3] = user_regs.rbx;
-      state->regs[4] = user_regs.rsp;
-      state->regs[5] = user_regs.rbp;
-      state->regs[6] = user_regs.rsi;
-      state->regs[7] = user_regs.rdi;
-      state->regs[8] = user_regs.rip;
+      dwarf_frame_state_reg_set (state, 0, user_regs.rax);
+      dwarf_frame_state_reg_set (state, 1, user_regs.rcx);
+      dwarf_frame_state_reg_set (state, 2, user_regs.rdx);
+      dwarf_frame_state_reg_set (state, 3, user_regs.rbx);
+      dwarf_frame_state_reg_set (state, 4, user_regs.rsp);
+      dwarf_frame_state_reg_set (state, 5, user_regs.rbp);
+      dwarf_frame_state_reg_set (state, 6, user_regs.rsi);
+      dwarf_frame_state_reg_set (state, 7, user_regs.rdi);
+      dwarf_frame_state_reg_set (state, 8, user_regs.rip);
 #else /* !__i386__ && !__x86_64__ */
       abort ();
 #endif /* !__i386__ && !__x86_64__ */
-      state->regs_set = (1U << nregs) - 1;
     }
 
   return state;

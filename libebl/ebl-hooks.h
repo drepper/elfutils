@@ -155,13 +155,18 @@ int EBLHOOK(disasm) (const uint8_t **startp, const uint8_t *end,
 int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 
 /* Fetch live process Dwarf_Frame_State from PID.  */
-Dwarf_Frame_State *EBLHOOK(frame_state) (Ebl *ebl, pid_t pid, bool pid_attach);
+Dwarf_Frame_State *EBLHOOK(frame_state) (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core);
 
 /* ptrace-like disconnect from PID.  */
 void EBLHOOK(frame_detach) (Ebl *ebl, pid_t pid);
 
 /* ptrace-like read from memory of PID.  */
 bool EBLHOOK(memory_read) (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul);
+
+/* Convert *REGNO as is in DWARF to a lower range suitable for
+   Dwarf_Frame_State->REGS indexing.  RETURN_ADDRESS_REGISTER should not change
+   on second call; other registers may map to numbers invalid on input.  */
+bool EBLHOOK(frame_dwarf_to_regno) (Ebl *ebl, unsigned *regno);
 
 
 /* Destructor for ELF backend handle.  */

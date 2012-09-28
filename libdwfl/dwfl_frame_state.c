@@ -75,12 +75,12 @@ pid_is_attached (Dwfl *dwfl, pid_t pid)
 }
 
 static Dwarf_Frame_State *
-dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile)
+dwfl_frame_state (Dwfl *dwfl, pid_t pid, Elf *core)
 {
   if (dwfl == NULL)
     return NULL;
 
-  assert (!pid != !corefile);
+  assert (!pid != !core);
 
   /* Allocate STATE with proper backend-dependent size.  Possibly also fetch
      inferior registers if PID is not zero.  */
@@ -95,7 +95,7 @@ dwfl_frame_state (Dwfl *dwfl, pid_t pid, const char *corefile)
 	    __libdwfl_seterrno (error);
 	    continue;
 	  }
-	state = ebl_frame_state (mod->ebl, pid, !pid ? false : ! pid_is_attached (dwfl, pid));
+	state = ebl_frame_state (mod->ebl, pid, !pid ? false : ! pid_is_attached (dwfl, pid), core);
 	if (state)
 	  break;
       }
@@ -122,10 +122,6 @@ INTDEF (dwfl_frame_state_pid)
 Dwarf_Frame_State *
 dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 {
-  Dwarf_Frame_State *state = dwfl_frame_state (dwfl, 0, corefile);
-  if (state == NULL)
-    return NULL;
-
   /* Fetch inferior registers from a core file.  */
   int core_fd = open64 (corefile, O_RDONLY);
   if (core_fd < 0)
@@ -140,6 +136,13 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       __libdwfl_seterrno (err);
       return NULL;
     }
+  Dwarf_Frame_State *state = dwfl_frame_state (dwfl, 0, core);
+  if (state == NULL)
+    {
+      elf_end (core);
+      close (core_fd);
+      return NULL;
+    }
   Dwarf_Frame_State_Base *base = state->base;
   base->core = core;
   base->core_fd = core_fd;
@@ -152,7 +155,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       __libdwfl_seterrno (DWFL_E_LIBEBL);
       return NULL;
     }
-  static size_t phnum;
+  size_t phnum;
   if (elf_getphdrnum (core, &phnum) < 0)
     {
       __libdwfl_seterrno (DWFL_E_LIBELF);
@@ -201,24 +204,31 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	      const char *reg_desc = desc + regloc->offset;
 	      for (unsigned regno = regloc->regno; regno < MIN (regloc->regno + (regloc->count ?: 1U), base->nregs); regno++)
 		{
+		  /* FIXME: PPC provides in DWARF register 65 irrelevant for
+		     CFI which clashes with register 108 (LR) we need.  We
+		     currently depend on their order in core notes.  */
+		  unsigned regno_nondwarf = regno;
+		  if (dwarf_frame_state_reg_is_set (state, &regno_nondwarf))
+		    continue;
+		  Dwarf_Addr val;
 		  switch (regloc->bits)
 		  {
 		    case 32:
 		      {
-			uint32_t value;
-			reg_desc = convert (core, ELF_T_WORD, 1, &value, reg_desc, 0);
+			uint32_t val32;
+			reg_desc = convert (core, ELF_T_WORD, 1, &val32, reg_desc, 0);
 			/* NULL REG_DESC is caught below.  */
-			/* Do a possible host width conversion.  */
-			state->regs[regno] = value;
+			/* Do a host width conversion.  */
+			val = val32;
 		      }
 		      break;
 		    case 64:
 		      {
-			uint64_t value;
-			reg_desc = convert (core, ELF_T_XWORD, 1, &value, reg_desc, 0);
+			uint64_t val64;
+			reg_desc = convert (core, ELF_T_XWORD, 1, &val64, reg_desc, 0);
 			/* NULL REG_DESC is caught below.  */
-			assert (sizeof (*state->regs) == sizeof (value));
-			state->regs[regno] = value;
+			assert (sizeof (*state->regs) == sizeof (val64));
+			val = val64;
 		      }
 		      break;
 		    default:
@@ -229,7 +239,8 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		      __libdwfl_seterrno (DWFL_E_BADELF);
 		      return NULL;
 		    }
-		  state->regs_set |= 1U << regno;
+		  /* Registers not valid for CFI are just ignored.  */
+		  dwarf_frame_state_reg_set (state, regno, val);
 		  reg_desc += regloc->pad;
 		}
 	    }

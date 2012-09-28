@@ -1,4 +1,4 @@
-/* Get return address register value for frame.
+/* ppc ABI-specified defaults for DWARF CFI.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -30,29 +30,30 @@
 # include <config.h>
 #endif
 
-#include "../libdw/cfi.h"
-#include "../libebl/libebl.h"
-#include "libdwflP.h"
+#include <dwarf.h>
 
-bool
-dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
+#define BACKEND ppc_
+#include "libebl_CPU.h"
+
+int
+ppc_abi_cfi (Ebl *ebl __attribute__ ((unused)), Dwarf_CIE *abi_info)
 {
-  assert (state->pc_state == DWARF_FRAME_STATE_PC_SET);
-  *pc = state->pc;
-  if (minusone)
+  static const uint8_t abi_cfi[] =
     {
-      /* Bottom frame?  */
-      if (state == state->base->unwound)
-	*minusone = false;
-      /* *MINUSONE is logical or of both current and previous frame state.  */
-      else if (state->signal_frame)
-	*minusone = false;
-      /* Not affected by unsuccessfully unwound frame.  */
-      else if (! dwfl_frame_unwind (&state) || state == NULL)
-	*minusone = true;
-      else
-	*minusone = ! state->signal_frame;
-    }
-  return true;
+      /* This only instruction is provided in every PPC32 CIE.  */
+      DW_CFA_def_cfa, ULEB128_7 (1), ULEB128_7 (0),
+      /* These rules are assumed by PPC32 FDEs, without specifying these.  */
+      /* r1 is restored from cfa adress, r1 acts as a stack frame pointer.  */
+      DW_CFA_val_expression, ULEB128_7 (1), ULEB128_7 (1), DW_OP_nop,
+      /* Some FDEs do not specify %lr but inherit it.  */
+      DW_CFA_same_value, ULEB128_7 (65), /* %lr */
+    };
+
+  abi_info->initial_instructions = abi_cfi;
+  abi_info->initial_instructions_end = &abi_cfi[sizeof abi_cfi];
+  abi_info->data_alignment_factor = 4;
+
+  abi_info->return_address_register = 65;
+
+  return 0;
 }
-INTDEF (dwfl_frame_state_pc)

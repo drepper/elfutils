@@ -133,13 +133,13 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 			}
 		    }
 		  /* When the beginning of its range is no closer,
-		     the end of its range might be.  But do not
-		     replace a global symbol with a local!  */
+		     the end of its range might be.  Prefer STB_GLOBAL over
+		     STB_WEAK and STB_WEAK over STB_LOCAL.  */
 		  else if (sym.st_size != 0
 			   && closest_sym->st_value == sym.st_value
-			   && closest_sym->st_size > sym.st_size
-			   && (GELF_ST_BIND (closest_sym->st_info)
-			       <= GELF_ST_BIND (sym.st_info)))
+			   && closest_sym->st_size >= sym.st_size
+			   && (GELF_ST_BIND (sym.st_info) == STB_GLOBAL
+			    || GELF_ST_BIND (closest_sym->st_info) == STB_LOCAL))
 		    {
 		      *closest_sym = sym;
 		      closest_shndx = shndx;

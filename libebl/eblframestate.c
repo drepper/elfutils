@@ -33,20 +33,48 @@
 #include <libeblP.h>
 #include "../libdw/cfi.h"
 #include <assert.h>
+#include <stdlib.h>
 
 Dwarf_Frame_State *
-ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach)
+ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
 {
   if (ebl == NULL)
     return NULL;
     
   assert (!pid_attach || pid);
-  Dwarf_Frame_State *state = ebl->frame_state (ebl, pid, pid_attach);
+  assert (!pid != !core);
+  Dwarf_Frame_State *state = ebl->frame_state (ebl, pid, pid_attach, core);
   if (state == NULL)
     return NULL;
+  switch (state->pc_state)
+  {
+    case DWARF_FRAME_STATE_PC_SET:
+      break;
+    case DWARF_FRAME_STATE_PC_UNDEFINED:
+      abort ();
+    case DWARF_FRAME_STATE_ERROR:;
+      Dwarf_CIE abi_info;
+      if (ebl_abi_cfi (ebl, &abi_info) != 0)
+	{
+	  free (state->base);
+	  free (state);
+	  return NULL;
+	}
+      unsigned ra = abi_info.return_address_register;
+      /* dwarf_frame_state_reg_is_set is not applied here.  */
+      if (ra >= state->base->nregs)
+	{
+	  free (state->base);
+	  free (state);
+	  return NULL;
+	}
+      state->pc = state->regs[ra];
+      state->pc_state = DWARF_FRAME_STATE_PC_SET;
+      break;
+    }
   state->signal_frame = false;
   Dwarf_Frame_State_Base *base = state->base;
-  base->ebl = ebl;
+  assert (base->ebl == ebl);
   base->core = NULL;
   base->core_fd = -1;
   base->pid = pid;
@@ -54,8 +82,6 @@ ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach)
   base->unwound = state;
   assert (base->nregs > 0);
   assert (base->nregs < sizeof (state->regs_set) * 8);
-  /* REGS_SET does not have set any bit out of the NREGS range.  */
-  assert ((-(((__typeof (state->regs_set)) 1) << base->nregs) & state->regs_set) == 0);
   return state;
 }
 INTDEF(ebl_frame_state)

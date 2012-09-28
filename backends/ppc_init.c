@@ -64,6 +64,9 @@ ppc_init (elf, machine, eh, ehlen)
   HOOK (eh, core_note);
   HOOK (eh, auxv_info);
   HOOK (eh, check_object_attribute);
+  HOOK (eh, frame_state);
+  HOOK (eh, abi_cfi);
+  HOOK (eh, frame_dwarf_to_regno);
 
   return MODVERSION;
 }

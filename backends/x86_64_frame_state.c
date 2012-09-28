@@ -42,7 +42,7 @@
 #include "libebl_CPU.h"
 
 Dwarf_Frame_State *
-x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attach)
+x86_64_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ ((unused)))
 {
   /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
   const size_t nregs = 17;
@@ -92,6 +92,7 @@ x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attac
   Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
   if (base == NULL)
     return NULL;
+  base->ebl = ebl;
   base->nregs = nregs;
   base->regs_bits = 64;
   Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
@@ -103,32 +104,31 @@ x86_64_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid, bool pid_attac
   base->unwound = state;
   state->base = base;
   state->unwound = NULL;
+  state->pc_state = DWARF_FRAME_STATE_ERROR;
 
-  if (pid == 0)
-    state->regs_set = 0;
-  else
+  memset (state->regs_set, 0, sizeof (state->regs_set));
+  if (pid)
     {
 #ifndef __x86_64__
       abort ();
 #else /* __x86_64__ */
-      state->regs[0] = user_regs.rax;
-      state->regs[1] = user_regs.rdx;
-      state->regs[2] = user_regs.rcx;
-      state->regs[3] = user_regs.rbx;
-      state->regs[4] = user_regs.rsi;
-      state->regs[5] = user_regs.rdi;
-      state->regs[6] = user_regs.rbp;
-      state->regs[7] = user_regs.rsp;
-      state->regs[8] = user_regs.r8;
-      state->regs[9] = user_regs.r9;
-      state->regs[10] = user_regs.r10;
-      state->regs[11] = user_regs.r11;
-      state->regs[12] = user_regs.r12;
-      state->regs[13] = user_regs.r13;
-      state->regs[14] = user_regs.r14;
-      state->regs[15] = user_regs.r15;
-      state->regs[16] = user_regs.rip;
-      state->regs_set = (1U << nregs) - 1;
+      dwarf_frame_state_reg_set (state, 0, user_regs.rax);
+      dwarf_frame_state_reg_set (state, 1, user_regs.rdx);
+      dwarf_frame_state_reg_set (state, 2, user_regs.rcx);
+      dwarf_frame_state_reg_set (state, 3, user_regs.rbx);
+      dwarf_frame_state_reg_set (state, 4, user_regs.rsi);
+      dwarf_frame_state_reg_set (state, 5, user_regs.rdi);
+      dwarf_frame_state_reg_set (state, 6, user_regs.rbp);
+      dwarf_frame_state_reg_set (state, 7, user_regs.rsp);
+      dwarf_frame_state_reg_set (state, 8, user_regs.r8);
+      dwarf_frame_state_reg_set (state, 9, user_regs.r9);
+      dwarf_frame_state_reg_set (state, 10, user_regs.r10);
+      dwarf_frame_state_reg_set (state, 11, user_regs.r11);
+      dwarf_frame_state_reg_set (state, 12, user_regs.r12);
+      dwarf_frame_state_reg_set (state, 13, user_regs.r13);
+      dwarf_frame_state_reg_set (state, 14, user_regs.r14);
+      dwarf_frame_state_reg_set (state, 15, user_regs.r15);
+      dwarf_frame_state_reg_set (state, 16, user_regs.rip);
 #endif /* __x86_64__ */
     }
 

@@ -31,7 +31,9 @@
 
 #include "libdwP.h"
 #include "libelfP.h"
+#include "../libebl/libeblP.h"
 struct ebl;
+#include <assert.h>
 
 /* Cached CIE representation.  */
 struct dwarf_cie
@@ -213,11 +215,38 @@ struct Dwarf_Frame_State
   Dwarf_Frame_State_Base *base;
   /* Previous frame.  */
   Dwarf_Frame_State *unwound;
+  bool signal_frame : 1;
+  enum { DWARF_FRAME_STATE_ERROR, DWARF_FRAME_STATE_PC_SET, DWARF_FRAME_STATE_PC_UNDEFINED } pc_state;
+  Dwarf_Addr pc;
   /* (1 << X) bitmask where 0 <= X < NREGS.  */
-  uint32_t regs_set;
-  bool signal_frame;
-  unsigned long regs[];
+  uint64_t regs_set[3];
+  Dwarf_Addr regs[];
 };
+static inline bool
+dwarf_frame_state_reg_is_set (Dwarf_Frame_State *state, unsigned *regnop)
+{
+  Ebl *ebl = state->base->ebl;
+  if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, regnop))
+    return false;
+  unsigned regno = *regnop;
+  if (regno >= state->base->nregs)
+    return false;
+  return ((state->regs_set[regno / sizeof (*state->regs_set) / 8]
+	   & (1U << (regno % (sizeof (*state->regs_set) * 8)))) != 0);
+}
+static inline bool
+dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr val)
+{
+  Ebl *ebl = state->base->ebl;
+  if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
+    return false;
+  if (regno >= state->base->nregs)
+    return false;
+  state->regs_set[regno / sizeof (*state->regs_set) / 8] |=
+			      (1U << (regno % (sizeof (*state->regs_set) * 8)));
+  state->regs[regno] = val;
+  return true;
+}
 
 
 /* Clean up the data structure and all it points to.  */

@@ -62,12 +62,13 @@ segment_end (Dwfl *dwfl, GElf_Addr end)
 static bool
 state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 {
-  if (regno >= state->base->nregs || ((1U << regno) & state->regs_set) == 0)
+  unsigned regno_nondwarf = regno;
+  if (! dwarf_frame_state_reg_is_set (state, &regno_nondwarf))
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
-  *val = state->regs[regno];
+  *val = state->regs[regno_nondwarf];
   return true;
 }
 
@@ -134,6 +135,14 @@ memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, Dwarf_Addr *result)
   abort ();
 }
 
+static int
+bra_compar (const void *key_voidp, const void *elem_voidp)
+{
+  Dwarf_Word offset = (uintptr_t) key_voidp;
+  const Dwarf_Op *op = elem_voidp;
+  return (offset > op->offset) - (offset < op->offset);
+}
+
 static bool
 expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, size_t nops, Dwarf_Addr *result)
 {
@@ -142,6 +151,22 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
+
+  /* Prepare CFA first.  It may depend on registers which will be already
+     unwound the time we would need to compute it later.  Scan OPS first,
+     otherwise we would dead-lock preparing CFA for the CFA computation
+     itself.  */
+  const Dwarf_Op *ops_scan;
+  for (ops_scan = ops; ops_scan < ops + nops; ops_scan++)
+    if (ops_scan->atom == DW_OP_call_frame_cfa)
+      break;
+  Dwarf_Op *cfa_ops;
+  size_t cfa_nops;
+  Dwarf_Addr cfa;
+  bool cfa_valid = (ops_scan < ops + nops
+		    && dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) == 0
+		    && expr_eval (state, frame, cfa_ops, cfa_nops, &cfa));
+
   Dwarf_Addr *stack = NULL;
   size_t stack_used = 0, stack_allocated = 0;
   bool
@@ -174,16 +199,16 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
   }
   Dwarf_Addr val1, val2;
   bool is_location = false;
-  for (; nops--; ops++)
-    switch (ops->atom)
+  for (const Dwarf_Op *op = ops; op < ops + nops; op++)
+    switch (op->atom)
     {
       case DW_OP_breg0 ... DW_OP_breg31:
-	if (! state_get_reg (state, ops->atom - DW_OP_breg0, &val1))
+	if (! state_get_reg (state, op->atom - DW_OP_breg0, &val1))
 	  {
 	    free (stack);
 	    return false;
 	  }
-	val1 += ops->number;
+	val1 += op->number;
 	if (! push (val1))
 	  {
 	    free (stack);
@@ -191,12 +216,12 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	  }
 	break;
       case DW_OP_bregx:
-	if (! state_get_reg (state, ops->number, &val1))
+	if (! state_get_reg (state, op->number, &val1))
 	  {
 	    free (stack);
 	    return false;
 	  }
-	val1 += ops->number2;
+	val1 += op->number2;
 	if (! push (val1))
 	  {
 	    free (stack);
@@ -204,43 +229,87 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	  }
 	break;
       case DW_OP_lit0 ... DW_OP_lit31:
-	if (! push (ops->atom - DW_OP_lit0))
+	if (! push (op->atom - DW_OP_lit0))
 	  {
 	    free (stack);
 	    return false;
 	  }
 	break;
       case DW_OP_plus_uconst:
-	if (! pop (&val1) || ! push (val1 + ops->number))
+	if (! pop (&val1) || ! push (val1 + op->number))
 	  {
 	    free (stack);
 	    return false;
 	  }
 	break;
       case DW_OP_call_frame_cfa:
-	{
-	  Dwarf_Op *cfa_ops;
-	  size_t cfa_nops;
-	  if (dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) != 0)
-	    {
-	      __libdwfl_seterrno (DWFL_E_LIBDW);
-	      free (stack);
-	      return false;
-	    }
-	  Dwarf_Addr cfa;
-	  if (! expr_eval (state, frame, cfa_ops, cfa_nops, &cfa) || ! push (cfa))
-	    {
-	      free (stack);
-	      return false;
-	    }
-	  is_location = true;
-	}
+	if (! cfa_valid || ! push (cfa))
+	  {
+	    __libdwfl_seterrno (DWFL_E_LIBDW);
+	    free (stack);
+	    return false;
+	  }
+	is_location = true;
 	break;
       case DW_OP_stack_value:
 	is_location = false;
 	break;
       case DW_OP_deref:
 	if (! pop (&val1) || ! memory_read (state, val1, &val1) || ! push (val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_nop:
+	break;
+      case DW_OP_dup:
+	if (! pop (&val1) || ! push (val1) || ! push (val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_const1u:
+      case DW_OP_const1s:
+      case DW_OP_const2u:
+      case DW_OP_const2s:
+      case DW_OP_const4u:
+      case DW_OP_const4s:
+      case DW_OP_const8u:
+      case DW_OP_const8s:
+      case DW_OP_constu:
+      case DW_OP_consts:
+	if (! push (op->number))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_bra:
+	if (! pop (&val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	if (val1 == 0)
+	  break;
+	/* FALLTHRU */
+      case DW_OP_skip:;
+	Dwarf_Word offset = op->offset + 1 + 2 + (int16_t) op->number;
+	ops_scan = bsearch ((void *) (uintptr_t) offset, ops, nops, sizeof (*ops), bra_compar);
+	if (ops_scan == NULL)
+	  {
+	    free (stack);
+	    /* PPC32 vDSO has such invalid operations.  */
+	    __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	    return false;
+	  }
+	/* Undo the 'for' statement increment.  */
+	op = ops_scan - 1;
+	break;
+      case DW_OP_drop:
+	if (! pop (&val1))
 	  {
 	    free (stack);
 	    return false;
@@ -255,19 +324,39 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	  }								\
 	break;
       BINOP (DW_OP_and, &)
-      BINOP (DW_OP_ge, >=)
       BINOP (DW_OP_shl, <<)
       BINOP (DW_OP_plus, +)
+      BINOP (DW_OP_mul, *)
 #undef BINOP
+#define BINOP_SIGNED(atom, op)						\
+      case atom:							\
+	if (! pop (&val2) || ! pop (&val1)				\
+	    || ! push ((int64_t) val1 op (int64_t) val2))		\
+	  {								\
+	    free (stack);						\
+	    return false;						\
+	  }								\
+	break;
+      BINOP_SIGNED (DW_OP_le, <=)
+      BINOP_SIGNED (DW_OP_ge, >=)
+      BINOP_SIGNED (DW_OP_eq, ==)
+      BINOP_SIGNED (DW_OP_lt, <)
+      BINOP_SIGNED (DW_OP_gt, >)
+      BINOP_SIGNED (DW_OP_ne, !=)
+#undef BINOP_SIGNED
       default:
 	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	return false;
     }
-  bool retval = pop (result);
+  if (! pop (result))
+    {
+      free (stack);
+      return false;
+    }
   free (stack);
   if (is_location && ! memory_read (state, *result, result))
     return false;
-  return retval;
+  return true;
 }
 
 /* Return TRUE and update *STATEP for the unwound frame for successful unwind.
@@ -277,30 +366,21 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 static bool
 have_unwound (Dwarf_Frame_State **statep)
 {
-  /* Inlined dwfl_frame_state_pc.  */
-  Dwarf_CIE abi_info;
-  unsigned ra;
-
   Dwarf_Frame_State *state = *statep, *unwound = state->unwound;
-  Dwarf_Frame_State_Base *base = state->base;
-  if (ebl_abi_cfi (base->ebl, &abi_info) != 0)
-    {
-      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
+  switch (unwound->pc_state)
+  {
+    case DWARF_FRAME_STATE_ERROR:
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      *statep = NULL;
       return false;
-    }
-  ra = abi_info.return_address_register;
-  if (ra >= base->nregs)
-    {
-      __libdw_seterrno (DWARF_E_UNKNOWN_ERROR);
-      return false;
-    }
-  if ((unwound->regs_set & (1U << ra)) == 0)
-    {
+    case DWARF_FRAME_STATE_PC_SET:
+      *statep = unwound;
+      return true;
+    case DWARF_FRAME_STATE_PC_UNDEFINED:
       *statep = NULL;
       return true;
-    }
-  *statep = unwound;
-  return true;
+  }
+  abort ();
 }
 
 /* Check if PC is in the "_start" function which may have no FDE.
@@ -359,7 +439,8 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
   state->unwound = unwound;
   unwound->base = state->base;
   unwound->unwound = NULL;
-  unwound->regs_set = 0;
+  unwound->pc_state = DWARF_FRAME_STATE_ERROR;
+  memset (unwound->regs_set, 0, sizeof (unwound->regs_set));
   unwound->signal_frame = frame->fde->cie->signal_frame;
   for (unsigned regno = 0; regno < unwound->base->nregs; regno++)
     {
@@ -391,10 +472,29 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
 	    }
 	}
       else if (! expr_eval (state, frame, reg_ops, reg_nops, &regval))
-	return false;
-      unwound->regs[regno] = regval;
-      unwound->regs_set |= 1U << regno;
+	{
+	  /* PPC32 vDSO has various invalid operations, ignore them.  The
+	     register will look as unset causing an error later, if used.
+	     But PPC32 does not use such registers.  */
+	  continue;
+	}
+      if (! dwarf_frame_state_reg_set (unwound, regno, regval))
+	{
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return false;
+	}
     }
+  unsigned ra_nondwarf = frame->fde->cie->return_address_register;
+  if (dwarf_frame_state_reg_is_set (unwound, &ra_nondwarf)
+      /* X86* has to use DW_CFA_undefined, PPC32 explicitly unwinds it to 0,
+         DEFAULT_SAME_VALUE is used to differentiate the archs.  */
+      && (frame->cache->default_same_value || unwound->regs[ra_nondwarf] != 0))
+    {
+      unwound->pc = unwound->regs[ra_nondwarf];
+      unwound->pc_state = DWARF_FRAME_STATE_PC_SET;
+    }
+  else
+    unwound->pc_state = DWARF_FRAME_STATE_PC_UNDEFINED;
   return have_unwound (statep);
 }
 
@@ -402,7 +502,7 @@ bool
 dwfl_frame_unwind (Dwarf_Frame_State **statep)
 {
   Dwarf_Frame_State *state = *statep;
-  if (state->unwound != NULL)
+  if (state->unwound)
     return have_unwound (statep);
   Dwarf_Addr pc;
   if (! dwfl_frame_state_pc (state, &pc, NULL))
@@ -423,16 +523,24 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
     {
       if (handle_cfi (statep, pc, mod, cfi_eh, bias))
 	return true;
+      if (state->unwound)
+	{
+	  assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
+	  return false;
+	}
     }
   Dwarf_CFI *cfi_dwarf = dwfl_module_dwarf_cfi (mod, &bias);
   if (cfi_dwarf)
-    return handle_cfi (statep, pc, mod, cfi_dwarf, bias);
-  if (cfi_eh == NULL)
-    __libdwfl_seterrno (DWFL_E_NO_DWARF);
-  else
     {
-      /* Keep the error code from former handle_cfi.  */
+      if (handle_cfi (statep, pc, mod, cfi_dwarf, bias) && state->unwound)
+	return true;
+      if (state->unwound)
+	{
+	  assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
+	  return false;
+	}
     }
+  __libdwfl_seterrno (DWFL_E_NO_DWARF);
   return false;
 }
 INTDEF(dwfl_frame_unwind)
