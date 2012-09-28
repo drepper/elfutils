@@ -23,7 +23,7 @@ AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
 
 AC_COPYRIGHT([Copyright (C) 1996-2012 Red Hat, Inc.])
-AC_PREREQ(2.63)			dnl Minimum Autoconf version required.
+dnl AC_PREREQ(2.63)			dnl Minimum Autoconf version required.
 
 dnl We use GNU make extensions; automake 1.10 defaults to -Wportability.
 AM_INIT_AUTOMAKE([gnits 1.8 -Wno-portability dist-bzip2 no-dist-gzip])

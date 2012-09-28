@@ -186,11 +186,11 @@ stdarg (int f, ...)
   long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
   assert_perror (errno);
   assert (l == 0);
-  raise (SIGUSR1);
 #if defined __x86_64__ || defined __i386__
+  raise (SIGUSR1);
   /* Execution will get PC patched into function jmp.  */
 #else
-  jmp ();
+  sigusr2 (SIGUSR2);
 #endif
   abort ();
 }
@@ -219,6 +219,7 @@ dummy4 (void)
 static void
 selfdump_callback (unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl)
 {
+#if defined __x86_64__ || defined __i386__
   Dwfl_Module *mod;
   const char *symname2 = NULL;
   switch (frameno)
@@ -253,6 +254,7 @@ selfdump_callback (unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *d
       assert (symname2 == NULL || strcmp (symname2, "child") != 0);
       break;
   }
+#endif /* __x86_64__ || __i386__ */
 }
 
 static void
@@ -291,9 +293,7 @@ selfdump (Dwfl *dwfl)
     {
       GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (scn, &scn_shdr_mem);
       assert (scn_shdr != NULL);
-      if (scn_shdr->sh_type != SHT_PROGBITS
-          || scn_shdr->sh_flags != (SHF_ALLOC | SHF_EXECINSTR)
-	  || strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
+      if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
 	continue;
       assert (plt == NULL);
       plt = scn;
@@ -328,7 +328,6 @@ selfdump (Dwfl *dwfl)
   assert (got == pid);
   assert (WIFSTOPPED (status));
   assert (WSTOPSIG (status) == SIGUSR1);
-#endif /* __x86_64__ || __i386__ */
   for (;;)
     {
       errno = 0;
@@ -337,7 +336,7 @@ selfdump (Dwfl *dwfl)
 #elif defined __i386__
       l = ptrace (PTRACE_PEEKUSER, pid, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), NULL);
 #else
-      l = 0;
+# error
 #endif
       assert_perror (errno);
       if ((unsigned long) l >= plt_start && (unsigned long) l < plt_end)
@@ -351,14 +350,26 @@ selfdump (Dwfl *dwfl)
       assert (WIFSTOPPED (status));
       assert (WSTOPSIG (status) == SIGTRAP);
     }
+#endif /* __x86_64__ || __i386__ */
+  /* This kill is needed for kernel-2.6.18-308.el5.ppc64.  */
+  l = kill (pid, SIGSTOP);
+  assert_perror (errno);
+  assert (l == 0);
   l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
   assert_perror (errno);
   assert (l == 0);
-  got = waitpid (pid, &status, WSTOPPED);
+  siginfo_t siginfo;
+  /* With kernel-2.6.18-308.el5.ppc64 we would get hanging waitpid after later PTRACE_ATTACH.  */
+  l = waitid (P_PID, pid, &siginfo, WSTOPPED | WNOWAIT);
   assert_perror (errno);
-  assert (got == pid);
-  assert (WIFSTOPPED (status));
-  assert (WSTOPSIG (status) == SIGSTOP);
+  assert (l == 0);
+  assert (siginfo.si_pid == pid);
+  assert (siginfo.si_signo == SIGCHLD);
+  assert (siginfo.si_code == CLD_STOPPED);
+  /* kernel-2.6.18-308.el5.ppc64 has there WIFSTOPPED + WSTOPSIG,
+     kernel-3.4.11-1.fc16.x86_64 has there the plain signal value.  */
+  assert ((WIFSTOPPED (siginfo.si_status) && WSTOPSIG (siginfo.si_status) == SIGSTOP)
+	  || siginfo.si_status == SIGSTOP);
   dump (dwfl, pid, NULL, selfdump_callback);
 }
 

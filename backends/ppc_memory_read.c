@@ -1,4 +1,4 @@
-/* ptrace-like disconnect from PID.
+/* ptrace-like read from memory of PID.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -31,12 +31,21 @@
 #endif
 
 #include <sys/ptrace.h>
+#include <errno.h>
 
-#define BACKEND i386_
+#define BACKEND ppc_
 #include "libebl_CPU.h"
 
-void
-i386_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
+bool
+ppc_memory_read (Ebl *ebl __attribute__ ((unused)), pid_t pid, Dwarf_Addr addr, unsigned long *ul)
 {
-  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+  errno = 0;
+  *ul = ptrace (PTRACE_PEEKDATA, pid, (void *) (uintptr_t) addr, NULL);
+  if (errno != 0)
+    return false;
+  return true;
 }
+
+__typeof (ppc_memory_read)
+     ppc64_memory_read
+     __attribute__ ((alias ("ppc_memory_read")));

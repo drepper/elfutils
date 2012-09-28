@@ -136,3 +136,9 @@ i386_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
 
   return state;
 }
+
+void
+i386_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
+{
+  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+}

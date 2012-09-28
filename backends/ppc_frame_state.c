@@ -32,10 +32,16 @@
 
 #include <stdlib.h>
 #include "../libdw/cfi.h"
+#include <sys/user.h>
+#include <sys/ptrace.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <assert.h>
 
 #define BACKEND ppc_
 #include "libebl_CPU.h"
+
+#define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
 
 /* Exact copy from src/readelf.c.  */
 
@@ -97,9 +103,15 @@ frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core, const unsigned reg
   /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
   const size_t nregs = (114 - 1) + 32;
 #ifdef __powerpc__
-FIXME
+  union
+    {
+      struct pt_regs r;
+      long l[sizeof (struct pt_regs) / sizeof (long) + BUILD_BUG_ON_ZERO (sizeof (struct pt_regs) % sizeof (long))];
+    }
+  user_regs;
 #endif /* __powerpc__ */
-  Dwarf_Addr core_pc;
+  /* Needless initialization for old GCCs.  */
+  Dwarf_Addr core_pc = 0;
   bool core_pc_set;
 
   if (pid_attach)
@@ -107,7 +119,24 @@ FIXME
 #ifndef __powerpc__
       abort ();
 #else /* __powerpc__ */
-FIXME
+      if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
+	return NULL;
+      for (;;)
+	{
+	  int status;
+	  if (waitpid (pid, &status, 0) != pid || !WIFSTOPPED (status))
+	    {
+	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
+	      return NULL;
+	    }
+	  if (WSTOPSIG (status) == SIGSTOP)
+	    break;
+	  if (ptrace (PTRACE_CONT, pid, NULL, (void *) (uintptr_t) WSTOPSIG (status)) != 0)
+	    {
+	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
+	      return NULL;
+	    }
+	}
 #endif /* __powerpc__ */
     }
   if (pid)
@@ -115,7 +144,18 @@ FIXME
 #ifndef __powerpc__
       abort ();
 #else /* __powerpc__ */
-FIXME
+      /* PTRACE_GETREGS is EIO on kernel-2.6.18-308.el5.ppc64.  */
+      errno = 0;
+      for (unsigned regno = 0; regno < sizeof (user_regs) / sizeof (long); regno++)
+	{
+	  user_regs.l[regno] = ptrace (PTRACE_PEEKUSER, pid, (void *) (uintptr_t) (regno * sizeof (long)), NULL);
+	  if (errno != 0)
+	    {
+	      if (pid_attach)
+		ptrace (PTRACE_DETACH, pid, NULL, NULL);
+	      return NULL;
+	    }
+	}
 #endif /* __powerpc__ */
     }
   if (core)
@@ -200,7 +240,18 @@ FIXME
 #ifndef __powerpc__
       abort ();
 #else /* __powerpc__ */
-FIXME
+      for (unsigned gpr = 0; gpr < sizeof (user_regs.r.gpr) / sizeof (*user_regs.r.gpr); gpr++)
+	dwarf_frame_state_reg_set (state, gpr, user_regs.r.gpr[gpr]);
+      state->pc = user_regs.r.nip;
+      state->pc_state = DWARF_FRAME_STATE_PC_SET;
+      dwarf_frame_state_reg_set (state, 65, user_regs.r.link); // or 108
+
+      /* These registers are probably irrelevant for CFI.  */
+      dwarf_frame_state_reg_set (state, 66, user_regs.r.msr);
+      dwarf_frame_state_reg_set (state, 109, user_regs.r.ctr);
+      dwarf_frame_state_reg_set (state, 101, user_regs.r.xer);
+      dwarf_frame_state_reg_set (state, 119, user_regs.r.dar);
+      dwarf_frame_state_reg_set (state, 118, user_regs.r.dsisr);
 #endif /* __powerpc__ */
     }
   if (core)
@@ -223,3 +274,13 @@ ppc64_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
 {
   return frame_state (ebl, pid, pid_attach, core, 64);
 }
+
+void
+ppc_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
+{
+  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+}
+
+__typeof (ppc_frame_detach)
+     ppc64_frame_detach
+     __attribute__ ((alias ("ppc_frame_detach")));

@@ -48,6 +48,14 @@
 #if USE_ZLIB
 # include <endian.h>
 # define crc32		loser_crc32
+# ifndef be64toh
+#  include <byteswap.h>
+#  if __BYTE_ORDER == __LITTLE_ENDIAN
+#   define be64toh(x) bswap_64 (x)
+#  else
+#   define be64toh(x) (x)
+#  endif
+# endif
 # include <zlib.h>
 # undef crc32
 #endif
