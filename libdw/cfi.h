@@ -222,18 +222,27 @@ struct Dwarf_Frame_State
   uint64_t regs_set[3];
   Dwarf_Addr regs[];
 };
+
+/* Fetch value from Dwarf_Frame_State->regs indexed by DWARF REGNO.
+   No error code is set if the function returns FALSE.  */
 static inline bool
-dwarf_frame_state_reg_is_set (Dwarf_Frame_State *state, unsigned *regnop)
+dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 {
   Ebl *ebl = state->base->ebl;
-  if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, regnop))
+  if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
-  unsigned regno = *regnop;
   if (regno >= state->base->nregs)
     return false;
-  return ((state->regs_set[regno / sizeof (*state->regs_set) / 8]
-	   & (1U << (regno % (sizeof (*state->regs_set) * 8)))) != 0);
+  if ((state->regs_set[regno / sizeof (*state->regs_set) / 8]
+       & (1U << (regno % (sizeof (*state->regs_set) * 8)))) == 0)
+    return false;
+  if (val)
+    *val = state->regs[regno];
+  return true;
 }
+
+/* Store value to Dwarf_Frame_State->regs indexed by DWARF REGNO.
+   No error code is set if the function returns FALSE.  */
 static inline bool
 dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr val)
 {

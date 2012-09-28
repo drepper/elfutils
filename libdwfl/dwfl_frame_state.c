@@ -204,11 +204,10 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	      const char *reg_desc = desc + regloc->offset;
 	      for (unsigned regno = regloc->regno; regno < MIN (regloc->regno + (regloc->count ?: 1U), base->nregs); regno++)
 		{
-		  /* FIXME: PPC provides in DWARF register 65 irrelevant for
-		     CFI which clashes with register 108 (LR) we need.  We
-		     currently depend on their order in core notes.  */
-		  unsigned regno_nondwarf = regno;
-		  if (dwarf_frame_state_reg_is_set (state, &regno_nondwarf))
+		  /* PPC provides in DWARF register 65 irrelevant for
+		     CFI which clashes with register 108 (LR) we need.
+		     FIXME: It depends now on their order in core notes.  */
+		  if (dwarf_frame_state_reg_get (state, regno, NULL))
 		    continue;
 		  Dwarf_Addr val;
 		  switch (regloc->bits)

@@ -62,13 +62,11 @@ segment_end (Dwfl *dwfl, GElf_Addr end)
 static bool
 state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 {
-  unsigned regno_nondwarf = regno;
-  if (! dwarf_frame_state_reg_is_set (state, &regno_nondwarf))
+  if (! dwarf_frame_state_reg_get (state, regno, val))
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
-  *val = state->regs[regno_nondwarf];
   return true;
 }
 
@@ -484,15 +482,11 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
 	  return false;
 	}
     }
-  unsigned ra_nondwarf = frame->fde->cie->return_address_register;
-  if (dwarf_frame_state_reg_is_set (unwound, &ra_nondwarf)
+  if (dwarf_frame_state_reg_get (unwound, frame->fde->cie->return_address_register, &unwound->pc)
       /* X86* has to use DW_CFA_undefined, PPC32 explicitly unwinds it to 0,
          DEFAULT_SAME_VALUE is used to differentiate the archs.  */
-      && (frame->cache->default_same_value || unwound->regs[ra_nondwarf] != 0))
-    {
-      unwound->pc = unwound->regs[ra_nondwarf];
-      unwound->pc_state = DWARF_FRAME_STATE_PC_SET;
-    }
+      && (frame->cache->default_same_value || unwound->pc != 0))
+    unwound->pc_state = DWARF_FRAME_STATE_PC_SET;
   else
     unwound->pc_state = DWARF_FRAME_STATE_PC_UNDEFINED;
   return have_unwound (statep);
