@@ -40,4 +40,3 @@ i386_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
 {
   ptrace (PTRACE_DETACH, pid, NULL, NULL);
 }
-INTDEF (i386_frame_detach)

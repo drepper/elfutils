@@ -136,4 +136,3 @@ i386_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
 
   return state;
 }
-INTDEF (i386_frame_state)

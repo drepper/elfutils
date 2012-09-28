@@ -86,10 +86,13 @@ ppc_frame_dwarf_to_regno (Ebl *ebl __attribute__ ((unused)), unsigned *regno)
   }
   abort ();
 }
-INTDEF (ppc_frame_dwarf_to_regno)
 
-Dwarf_Frame_State *
-ppc_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
+__typeof (ppc_frame_dwarf_to_regno)
+     ppc64_frame_dwarf_to_regno
+     __attribute__ ((alias ("ppc_frame_dwarf_to_regno")));
+
+static Dwarf_Frame_State *
+frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core, const unsigned regs_bits)
 {
   /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
   const size_t nregs = (114 - 1) + 32;
@@ -136,11 +139,13 @@ FIXME
 		 && (offset = gelf_getnote (data, offset,
 					    &nhdr, &name_offset, &desc_offset)) > 0)
 	    {
-	      if (nhdr.n_type != NT_PRSTATUS || nhdr.n_descsz < 0xcc)
+	      if (nhdr.n_type != NT_PRSTATUS)
 		continue;
-	      const char *reg_desc = data->d_buf + desc_offset + 0xc8;
+	      const char *reg_desc = data->d_buf + desc_offset + (regs_bits == 32 ? 0xc8 : 0x170);
+	      if (reg_desc + regs_bits / 8 > (const char *) data->d_buf + nhdr.n_descsz)
+		continue;
 	      Dwarf_Addr val;
-	      switch (32)
+	      switch (regs_bits)
 	      {
 		case 32:
 		  {
@@ -153,7 +158,6 @@ FIXME
 		  break;
 		case 64:
 		  {
-/* FIXME */ abort ();
 		    uint64_t val64;
 		    reg_desc = convert (core, ELF_T_XWORD, 1, &val64, reg_desc, 0);
 		    /* NULL REG_DESC is caught below.  */
@@ -178,7 +182,7 @@ FIXME
     return NULL;
   base->ebl = ebl;
   base->nregs = nregs;
-  base->regs_bits = 32;
+  base->regs_bits = regs_bits;
   Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
   if (state == NULL)
     {
@@ -207,4 +211,15 @@ FIXME
 
   return state;
 }
-INTDEF (ppc_frame_state)
+
+Dwarf_Frame_State *
+ppc_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
+{
+  return frame_state (ebl, pid, pid_attach, core, 32);
+}
+
+Dwarf_Frame_State *
+ppc64_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
+{
+  return frame_state (ebl, pid, pid_attach, core, 64);
+}

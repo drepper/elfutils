@@ -40,4 +40,3 @@ x86_64_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
 {
   ptrace (PTRACE_DETACH, pid, NULL, NULL);
 }
-INTDEF (x86_64_frame_detach)

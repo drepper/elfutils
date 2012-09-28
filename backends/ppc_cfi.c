@@ -57,3 +57,13 @@ ppc_abi_cfi (Ebl *ebl __attribute__ ((unused)), Dwarf_CIE *abi_info)
 
   return 0;
 }
+
+int
+ppc64_abi_cfi (Ebl *ebl, Dwarf_CIE *abi_info)
+{
+  ppc_abi_cfi (ebl, abi_info);
+
+  abi_info->data_alignment_factor = 8;
+
+  return 0;
+}

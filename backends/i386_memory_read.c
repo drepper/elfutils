@@ -45,4 +45,3 @@ i386_memory_read (Ebl *ebl __attribute__ ((unused)), pid_t pid, Dwarf_Addr addr,
     return false;
   return true;
 }
-INTDEF (i386_memory_read)

@@ -45,4 +45,3 @@ x86_64_memory_read (Ebl *ebl __attribute__ ((unused)), pid_t pid, Dwarf_Addr add
     return false;
   return true;
 }
-INTDEF (x86_64_memory_read)
