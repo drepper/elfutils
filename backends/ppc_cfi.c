@@ -47,6 +47,14 @@ ppc_abi_cfi (Ebl *ebl __attribute__ ((unused)), Dwarf_CIE *abi_info)
       DW_CFA_val_expression, ULEB128_7 (1), ULEB128_7 (1), DW_OP_nop,
       /* Some FDEs do not specify %lr but inherit it.  */
       DW_CFA_same_value, ULEB128_7 (65), /* %lr */
+
+      /* At least %r1 is inherited on PPC64, inherit all %gprs.  */
+#define SV(n) DW_CFA_same_value, ULEB128_7 (n)
+      SV (0), SV (1), SV (2), SV (3), SV (4), SV (5), SV (6), SV (7), SV (8),
+      SV (9), SV (10), SV (11), SV (12), SV (13), SV (14), SV (15), SV (16),
+      SV (17), SV (18), SV (19), SV (20), SV (21), SV (22), SV (23), SV (24),
+      SV (25), SV (26), SV (27), SV (28), SV (29), SV (30), SV (31)
+#undef SV
     };
 
   abi_info->initial_instructions = abi_cfi;
