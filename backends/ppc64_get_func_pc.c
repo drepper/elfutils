@@ -136,9 +136,10 @@ init (Ebl *ebl, Dwfl_Module *mod)
       if (shndx != opd_shndx)
 	continue;
       uint64_t val;
-      if (sym.st_value < opd_shdr->sh_addr || sym.st_value > opd_shdr->sh_addr + opd_shdr->sh_size - sizeof (val))
+      if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
+          || sym.st_value > opd_shdr->sh_addr + mod->main_bias + opd_shdr->sh_size - sizeof (val))
 	continue;
-      const void *ptr = opd_data->d_buf + sym.st_value - opd_shdr->sh_addr;
+      const void *ptr = opd_data->d_buf + sym.st_value - (opd_shdr->sh_addr + mod->main_bias);
       ptr = convert (elf, ELF_T_ADDR, 1, &val, ptr, 0);
       if (ptr == NULL)
 	continue;
@@ -162,25 +163,26 @@ init (Ebl *ebl, Dwfl_Module *mod)
       if (dwfl_module_getsym (mod, symi, &sym, &shndx) == NULL
 	  || GELF_ST_TYPE (sym.st_info) != STT_FUNC)
 	continue;
-      assert (dest < pc_table->a + funcs);
-      dest->sym_from = sym;
       if (sym.st_shndx != SHN_XINDEX)
 	shndx = sym.st_shndx;
       if (shndx != opd_shndx)
 	continue;
       uint64_t val;
-      if (sym.st_value < opd_shdr->sh_addr || sym.st_value > opd_shdr->sh_addr + opd_shdr->sh_size - sizeof (val))
+      if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
+          || sym.st_value > opd_shdr->sh_addr + mod->main_bias + opd_shdr->sh_size - sizeof (val))
 	continue;
-      const void *ptr = opd_data->d_buf + sym.st_value - opd_shdr->sh_addr;
+      const void *ptr = opd_data->d_buf + sym.st_value - (opd_shdr->sh_addr + mod->main_bias);
       ptr = convert (elf, ELF_T_ADDR, 1, &val, ptr, 0);
       assert (ptr != NULL);
-      dest->st_value_to = val;
+      assert (dest < pc_table->a + funcs);
+      dest->sym_from = sym;
+      dest->st_value_to = val + mod->main_bias;
       assert (sym.st_name < mod->symstrdata->d_size);
       const char *name = mod->symstrdata->d_buf + sym.st_name;
       dest->name_to = names_dest;
       *names_dest++ = '.';
       names_dest = stpcpy (names_dest, name) + 1;
-printf("0x%lx -> 0x%lx = %s\n",dest->sym_from.st_value, dest->st_value_to, dest->name_to);
+// printf("0x%lx -> 0x%lx = %s\n",dest->sym_from.st_value, dest->st_value_to, dest->name_to);
       dest++;
       pc_table->nelem++;
     }
