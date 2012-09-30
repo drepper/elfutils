@@ -32,7 +32,7 @@
 #ifndef PACKAGE_NAME
 # include <config.h>
 #endif
-#include <libdwfl.h>
+#include "../libdwfl/libdwfl.h"
 #include <libebl.h>
 #include <assert.h>
 #include <errno.h>

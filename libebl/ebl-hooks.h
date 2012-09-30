@@ -168,6 +168,11 @@ bool EBLHOOK(memory_read) (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *
    on second call; other registers may map to numbers invalid on input.  */
 bool EBLHOOK(frame_dwarf_to_regno) (Ebl *ebl, unsigned *regno);
 
+/* *SYM must be STT_FUNC.  Then if it describes a function descriptor (PPC64)
+   convert in-place its data and return a possibly different new name for it.
+   The name is valid as long as EBL is valid.  */
+const char *EBLHOOK(get_func_pc) (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym);
+
 
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

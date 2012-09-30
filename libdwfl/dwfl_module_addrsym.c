@@ -91,6 +91,16 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 	  GElf_Sym sym;
 	  GElf_Word shndx;
 	  const char *name = INTUSE(dwfl_module_getsym) (mod, i, &sym, &shndx);
+	  if (name != NULL && GELF_ST_TYPE (sym.st_info) == STT_FUNC)
+	    {
+	      Dwfl_Error error = __libdwfl_module_getebl (mod);
+	      if (error == DWFL_E_NOERROR)
+		{
+		  const char *new_name = ebl_get_func_pc (mod->ebl, mod, &sym);
+		  if (new_name)
+		    name = new_name;
+		}
+	    }
 	  if (name != NULL && name[0] != '\0'
 	      && sym.st_shndx != SHN_UNDEF
 	      && sym.st_value <= addr

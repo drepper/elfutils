@@ -34,6 +34,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "../libdwfl/libdwfl.h"
 
 #include "elf-knowledge.h"
 
@@ -386,6 +387,10 @@ extern void ebl_frame_detach (Ebl *ebl, pid_t pid)
 /* ptrace-like read from memory of PID.  */
 extern bool ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul)
   __nonnull_attribute__ (1, 4);
+
+/* Convert function descriptor to the function PC value.  */
+extern const char *ebl_get_func_pc (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym)
+  __nonnull_attribute__ (1, 2, 3);
 
 #ifdef __cplusplus
 }
