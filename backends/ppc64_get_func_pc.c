@@ -68,19 +68,30 @@ convert (Elf *core, Elf_Type type, uint_fast16_t count,
 
 struct pc_entry
 {
-  Elf64_Addr st_value_from;
+  /* SYM_FROM must be the very first element for the use in bsearch below.  */
+  GElf_Sym sym_from;
   Elf64_Addr st_value_to;
   const char *name_to;
 };
 
+/* FIXME: We could use fixedsizehash.h, we would hash the symbol name instead
+   of GElf_Sym.  Although maybe the name is ambiguous compared to GElf_Sym.  */
+
 struct pc_table
 {
-  /* FIXME: Could we use fixedsizehash.h?  Its HASHFCT seems to be bound to
-     strings.  */
   size_t nelem;
   struct pc_entry a[];
   /* Here follows strings memory allocated for pc_entry->name_to.  */
 };
+
+static int
+compar (const void *a_voidp, const void *b_voidp)
+{
+  const struct pc_entry *a = a_voidp;
+  const struct pc_entry *b = b_voidp;
+
+  return memcmp (&a->sym_from, &b->sym_from, sizeof (a->sym_from));
+}
 
 static void
 init (Ebl *ebl, Dwfl_Module *mod)
@@ -152,7 +163,7 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	  || GELF_ST_TYPE (sym.st_info) != STT_FUNC)
 	continue;
       assert (dest < pc_table->a + funcs);
-      dest->st_value_from = sym.st_value;
+      dest->sym_from = sym;
       if (sym.st_shndx != SHN_XINDEX)
 	shndx = sym.st_shndx;
       if (shndx != opd_shndx)
@@ -169,22 +180,14 @@ init (Ebl *ebl, Dwfl_Module *mod)
       dest->name_to = names_dest;
       *names_dest++ = '.';
       names_dest = stpcpy (names_dest, name) + 1;
-printf("0x%lx -> 0x%lx = %s\n",dest->st_value_from, dest->st_value_to, dest->name_to);
+printf("0x%lx -> 0x%lx = %s\n",dest->sym_from.st_value, dest->st_value_to, dest->name_to);
       dest++;
       pc_table->nelem++;
     }
   assert (pc_table->nelem == funcs);
-  assert (dest == pc_table->a + funcs);
+  assert (dest == pc_table->a + pc_table->nelem);
   assert (names_dest == names + names_size);
-}
-
-static int
-compar (const void *key_voidp, const void *elem_voidp)
-{
-  Elf64_Addr key = *(const Elf64_Addr *) key_voidp;
-  const struct pc_entry *elem = elem_voidp;
-
-  return (key > elem->st_value_from) - (key < elem->st_value_from);
+  qsort (pc_table->a, pc_table->nelem, sizeof (*pc_table->a), compar);
 }
 
 const char *
@@ -195,7 +198,7 @@ ppc64_get_func_pc (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym)
   if (ebl->backend == NULL)
     return NULL;
   const struct pc_table *pc_table = ebl->backend;
-  const struct pc_entry *found = bsearch (&sym->st_value, pc_table->a, pc_table->nelem, sizeof (*pc_table->a), compar);
+  const struct pc_entry *found = bsearch (sym, pc_table->a, pc_table->nelem, sizeof (*pc_table->a), compar);
   if (found == NULL)
     return NULL;
   sym->st_value = found->st_value_to;
