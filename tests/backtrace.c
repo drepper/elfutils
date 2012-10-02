@@ -83,7 +83,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (unsigned fr
       if (mod)
 	symname = dwfl_module_addrname (mod, pc_adjusted);
 
-      printf ("#%u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc, minusone ? "- 1" : "", symname);
+      printf ("#%2u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc, minusone ? "- 1" : "", symname);
       if (callback)
 	callback (frameno, pc, symname, dwfl);
       if (! dwfl_frame_unwind (&state))
