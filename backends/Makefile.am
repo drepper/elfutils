@@ -105,7 +105,8 @@ libebl_s390_pic_a_SOURCES = $(s390_SRCS)
 am_libebl_s390_pic_a_OBJECTS = $(s390_SRCS:.c=.os)
 
 s390x_SRCS = s390x_init.c s390_symbol.c s390_regs.c s390_retval.c s390_cfi.c \
-	    s390_frame_state.c s390_memory_read.c s390x_corenote.c
+	    s390_frame_state.c s390_memory_read.c s390x_corenote.c \
+	    s390_frame_unwind.c
 libebl_s390x_pic_a_SOURCES = $(s390x_SRCS)
 am_libebl_s390x_pic_a_OBJECTS = $(s390x_SRCS:.c=.os)
 

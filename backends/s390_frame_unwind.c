@@ -53,7 +53,8 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   Dwarf_Addr instr;
   if (! memory_read (state->base, pc, &instr))
     return false;
-  instr = (instr >> 16) & 0xffff;
+  /* Fetch only the very first two bytes.  */
+  instr = (instr >> (ebl->class == ELFCLASS64 ? 48 : 16)) & 0xffff;
   /* See GDB s390_sigtramp_frame_sniffer.  */
   /* Check for 'svc'.  */
   if (((instr >> 8) & 0xff) != 0x0a)
@@ -66,7 +67,7 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   Dwarf_Addr this_sp;
   if (! dwarf_frame_state_reg_get (state, S390_SP_REGNUM, &this_sp))
     return false;
-  unsigned word_size = 4;
+  unsigned word_size = ebl->class == ELFCLASS64 ? 8 : 4;
   Dwarf_Addr next_cfa = this_sp + 16 * word_size + 32;
   /* "New-style RT frame" is not supported, assuming "Old-style RT frame and all non-RT frames".  */
   Dwarf_Addr sigreg_ptr;
@@ -96,39 +97,50 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
 	return false;
       sigreg_ptr += word_size;
     }
-  /* Then the ACRs.  */
+  /* Then the ACRs.  Skip them, they are not used in CFI.  */
   for (int i = 0; i < 16; i++)
-    {
-      if (! memory_read (state->base, sigreg_ptr, &val))
-	return false;
-//      if (! dwarf_frame_state_reg_set (unwound, 48 + i, val))
-//	return false;
-      sigreg_ptr += 4;
-    }
+    sigreg_ptr += 4;
   /* The floating-point control word.  */
   sigreg_ptr += 8;
   /* And finally the FPRs.  */
   for (int i = 0; i < 16; i++)
     {
-// FIXME
+      if (! memory_read (state->base, sigreg_ptr, &val))
+	return false;
+      if (ebl->class == ELFCLASS32)
+	{
+	  Dwarf_Addr val_low;
+	  if (! memory_read (state->base, sigreg_ptr + 4, &val_low))
+	    return false;
+	  val = (val << 32) | val_low;
+	}
+      if (! dwarf_frame_state_reg_set (unwound, 16 + i, val))
+	return false;
       sigreg_ptr += 8;
     }
   /* If we have them, the GPR upper halves are appended at the end.  */
-  unsigned sigreg_high_off = 4;
-  sigreg_ptr += sigreg_high_off;
-  for (int i = 0; i < 16; i++)
+  if (ebl->class == ELFCLASS32)
     {
-      if (! memory_read (state->base, sigreg_ptr, &val))
-	return false;
-      Dwarf_Addr val_orig;
-      if (! dwarf_frame_state_reg_get (unwound, 0 + i, &val_orig))
-	return false;
-      val = (val << 32) | val_orig;
-      if (! dwarf_frame_state_reg_set (unwound, 0 + i, val))
-	return false;
-      sigreg_ptr += 4;
+      unsigned sigreg_high_off = 4;
+      sigreg_ptr += sigreg_high_off;
+      for (int i = 0; i < 16; i++)
+	{
+	  if (! memory_read (state->base, sigreg_ptr, &val))
+	    return false;
+	  Dwarf_Addr val_low;
+	  if (! dwarf_frame_state_reg_get (unwound, 0 + i, &val_low))
+	    return false;
+	  val = (val << 32) | val_low;
+	  if (! dwarf_frame_state_reg_set (unwound, 0 + i, val))
+	    return false;
+	  sigreg_ptr += 4;
+	}
     }
   unwound->pc_state = DWARF_FRAME_STATE_PC_SET;
   *statep = unwound;
   return true;
 }
+
+__typeof (s390_frame_unwind)
+     s390x_frame_unwind
+     __attribute__ ((alias ("s390_frame_unwind")));

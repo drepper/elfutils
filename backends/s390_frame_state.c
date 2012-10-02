@@ -48,8 +48,10 @@
 Dwarf_Frame_State *
 s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ ((unused)))
 {
-  /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
-  const size_t nregs = 34;
+  /* gcc/config/ #define DWARF_FRAME_REGISTERS 34.
+     But from the gcc/config/s390/s390.h "Register usage." comment it looks as
+     if #32 (Argument pointer) and #33 (Condition code) are not used for unwinding.  */
+  const size_t nregs = 32;
 #ifdef __s390__
   struct user user_regs;
 #endif /* __s390__ */
@@ -102,7 +104,7 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
   if (core)
     {
       /* Fetch PSWA.  */
-      core_pc_set = core_get_pc (core, &core_pc, ebl->class == ELFCLASS32 ? 0x4c : 0x50);
+      core_pc_set = core_get_pc (core, &core_pc, ebl->class == ELFCLASS32 ? 0x4c : 0x78);
       if (! core_pc_set)
 	return NULL;
     }

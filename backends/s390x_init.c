@@ -60,6 +60,7 @@ s390x_init (elf, machine, eh, ehlen)
   HOOK (eh, frame_detach);
   HOOK (eh, memory_read);
   HOOK (eh, core_note);
+  HOOK (eh, frame_unwind);
 
   /* Only the 64-bit format uses the incorrect hash table entry size.  */
   eh->sysvhash_entrysize = sizeof (Elf64_Xword);

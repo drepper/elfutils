@@ -240,10 +240,10 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		    }
 		  if (regloc->shift)
 		    {
-		      Dwarf_Addr val_orig;
-		      bool ok = dwarf_frame_state_reg_get (state, regno, &val_orig);
+		      Dwarf_Addr val_low;
+		      bool ok = dwarf_frame_state_reg_get (state, regno, &val_low);
 		      assert (ok);
-		      val = (val << regloc->shift) | val_orig;
+		      val = (val << regloc->shift) | val_low;
 		    }
 		  /* Registers not valid for CFI are just ignored.  */
 		  dwarf_frame_state_reg_set (state, regno, val);
