@@ -33,6 +33,9 @@
 #include <stdlib.h>
 #include "../libdw/cfi.h"
 #include <sys/user.h>
+#ifdef __s390__
+# include <asm/ptrace.h>
+#endif
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -93,7 +96,7 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
       parea.process_addr = (uintptr_t) &user_regs;
       parea.kernel_addr = 0;
       parea.len = sizeof (user_regs);
-      if (ptrace (PTRACE_PEEKUSR_AREA, child, &parea, NULL) != 0)
+      if (ptrace (PTRACE_PEEKUSR_AREA, pid, &parea, NULL) != 0)
 	{
 	  if (pid_attach)
 	    ptrace (PTRACE_DETACH, pid, NULL, NULL);
@@ -132,32 +135,16 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
 #ifndef __s390__
       abort ();
 #else /* __s390__ */
-      dwarf_frame_state_reg_set (state, 0, user_regs.rax);
-      dwarf_frame_state_reg_set (state, 1, user_regs.rdx);
-      dwarf_frame_state_reg_set (state, 2, user_regs.rcx);
-      dwarf_frame_state_reg_set (state, 3, user_regs.rbx);
-      dwarf_frame_state_reg_set (state, 4, user_regs.rsi);
-      dwarf_frame_state_reg_set (state, 5, user_regs.rdi);
-      dwarf_frame_state_reg_set (state, 6, user_regs.rbp);
-      dwarf_frame_state_reg_set (state, 7, user_regs.rsp);
-      dwarf_frame_state_reg_set (state, 8, user_regs.r8);
-      dwarf_frame_state_reg_set (state, 9, user_regs.r9);
-      dwarf_frame_state_reg_set (state, 10, user_regs.r10);
-      dwarf_frame_state_reg_set (state, 11, user_regs.r11);
-      dwarf_frame_state_reg_set (state, 12, user_regs.r12);
-      dwarf_frame_state_reg_set (state, 13, user_regs.r13);
-      dwarf_frame_state_reg_set (state, 14, user_regs.r14);
-      dwarf_frame_state_reg_set (state, 15, user_regs.r15);
-      dwarf_frame_state_reg_set (state, 16, user_regs.rip);
-
-
+      /* If we run as s390x we get the 64-bit registers of PID.
+         But -m31 executable seems to use only the 32-bit parts of its registers.  */
       for (unsigned u = 0; u < 16; u++)
 	dwarf_frame_state_reg_set (state, 0 + u, user_regs.regs.gprs[u]);
       /* Avoid a conversion double -> integer.  */
-      BUILD_BUG_ON_ZERO (sizeof (*user_regs.regs.fp_regs.fprs) - sizeof (*state->regs));
-      for (unsigned u = 0; u < 16; u++)
+      for (unsigned u = 0 + BUILD_BUG_ON_ZERO (sizeof (*user_regs.regs.fp_regs.fprs) - sizeof (*state->regs));
+	   u < 16; u++)
 	dwarf_frame_state_reg_set (state, 16 + u, *(const __typeof (*state->regs) *) &user_regs.regs.fp_regs.fprs[u]);
-      dwarf_frame_state_reg_set (state, 65, user_regs.regs.psw.addr);
+      state->pc = user_regs.regs.psw.addr;
+      state->pc_state = DWARF_FRAME_STATE_PC_SET;
 #endif /* __s390__ */
     }
   if (core)
