@@ -117,7 +117,6 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
     return NULL;
   base->ebl = ebl;
   base->nregs = nregs;
-  base->regs_bits = ebl->class == ELFCLASS64 ? 64 : 32;
   Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
   if (state == NULL)
     {

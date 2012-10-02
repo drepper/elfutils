@@ -74,14 +74,44 @@ pid_is_attached (Dwfl *dwfl, pid_t pid)
   return false;
 }
 
+static bool
+state_fetch_pc (Dwarf_Frame_State *state)
+{
+  switch (state->pc_state)
+  {
+    case DWARF_FRAME_STATE_PC_SET:
+      return true;
+    case DWARF_FRAME_STATE_PC_UNDEFINED:
+      abort ();
+    case DWARF_FRAME_STATE_ERROR:;
+      Ebl *ebl = state->base->ebl;
+      Dwarf_CIE abi_info;
+      if (ebl_abi_cfi (ebl, &abi_info) != 0)
+	{
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return false;
+	}
+      unsigned ra = abi_info.return_address_register;
+      /* dwarf_frame_state_reg_is_set is not applied here.  */
+      if (ra >= state->base->nregs)
+	{
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return false;
+	}
+      state->pc = state->regs[ra];
+      state->pc_state = DWARF_FRAME_STATE_PC_SET;
+      return true;
+    }
+  abort ();
+}
+
 static Dwarf_Frame_State *
 dwfl_frame_state (Dwfl *dwfl, pid_t pid, Elf *core)
 {
   if (dwfl == NULL)
     return NULL;
-
   assert (!pid != !core);
-
+  bool pid_attach = pid ? ! pid_is_attached (dwfl, pid) : false;
   /* Allocate STATE with proper backend-dependent size.  Possibly also fetch
      inferior registers if PID is not zero.  */
   Dwarf_Frame_State *state = NULL;
@@ -95,9 +125,12 @@ dwfl_frame_state (Dwfl *dwfl, pid_t pid, Elf *core)
 	    __libdwfl_seterrno (error);
 	    continue;
 	  }
-	state = ebl_frame_state (mod->ebl, pid, !pid ? false : ! pid_is_attached (dwfl, pid), core);
+	state = ebl_frame_state (mod->ebl, pid, pid_attach, core);
 	if (state)
-	  break;
+	  {
+	    assert (state->base->ebl == mod->ebl);
+	    break;
+	  }
       }
   }
   if (state == NULL)
@@ -105,17 +138,28 @@ dwfl_frame_state (Dwfl *dwfl, pid_t pid, Elf *core)
       __libdwfl_seterrno (DWFL_E_BADELF);
       return NULL;
     }
+  state->signal_frame = false;
   Dwarf_Frame_State_Base *base = state->base;
+  base->unwound = state;
   base->dwfl = dwfl;
+  base->core = core;
+  base->core_fd = -1;
+  base->pid = pid;
+  base->pid_attached = pid_attach;
   base->next = dwfl->statebaselist;
   dwfl->statebaselist = base;
+  assert (base->nregs > 0);
+  assert (base->nregs < sizeof (state->regs_set) * 8);
   return state;
 }
 
 Dwarf_Frame_State *
 dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 {
-  return dwfl_frame_state (dwfl, pid, NULL);
+  Dwarf_Frame_State *state = dwfl_frame_state (dwfl, pid, NULL);
+  if (! state_fetch_pc (state))
+    return NULL;
+  return state;
 }
 INTDEF (dwfl_frame_state_pid)
 
@@ -252,6 +296,8 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	    }
 	}
     }
+  if (! state_fetch_pc (state))
+    return NULL;
   return state;
 }
 INTDEF (dwfl_frame_state_core)

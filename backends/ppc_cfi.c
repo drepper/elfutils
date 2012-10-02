@@ -63,19 +63,13 @@ ppc_abi_cfi (Ebl *ebl __attribute__ ((unused)), Dwarf_CIE *abi_info)
 
   abi_info->initial_instructions = abi_cfi;
   abi_info->initial_instructions_end = &abi_cfi[sizeof abi_cfi];
-  abi_info->data_alignment_factor = 4;
+  abi_info->data_alignment_factor = ebl->class == ELFCLASS64 ? 8 : 4;
 
   abi_info->return_address_register = 65;
 
   return 0;
 }
 
-int
-ppc64_abi_cfi (Ebl *ebl, Dwarf_CIE *abi_info)
-{
-  ppc_abi_cfi (ebl, abi_info);
-
-  abi_info->data_alignment_factor = 8;
-
-  return 0;
-}
+__typeof (ppc_abi_cfi)
+     ppc64_abi_cfi
+     __attribute__ ((alias ("ppc_abi_cfi")));

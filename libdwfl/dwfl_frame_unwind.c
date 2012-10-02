@@ -76,7 +76,7 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
   if (base->pid)
     {
       unsigned long ul;
-      if (base->regs_bits == 64)
+      if (base->ebl->class == ELFCLASS64)
 	{
 	  bool retval = ebl_memory_read (base->ebl, base->pid, addr, &ul);
 	  *result = ul;
@@ -84,7 +84,6 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
 	}
       /* FIXME: Big endian machines!  */
       /* FIXME: Boundary of a page!  */
-      /* FIXME? Unaligned access!  */
       if (! ebl_memory_read (base->ebl, base->pid, addr, &ul))
 	return false;
       *result = ul & 0xffffffff;
@@ -110,7 +109,7 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
 	  Dwarf_Addr bias = 0;
 	  GElf_Addr start = segment_start (dwfl, bias + phdr->p_vaddr);
 	  GElf_Addr end = segment_end (dwfl, bias + phdr->p_vaddr + phdr->p_memsz);
-	  unsigned bytes = base->regs_bits / 8;
+	  unsigned bytes = base->ebl->class == ELFCLASS64 ? 8 : 4;
 	  if (addr < start || addr + bytes > end)
 	    continue;
 	  Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start, bytes, ELF_T_ADDR);

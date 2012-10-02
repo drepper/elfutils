@@ -69,8 +69,8 @@ __typeof (ppc_frame_dwarf_to_regno)
      ppc64_frame_dwarf_to_regno
      __attribute__ ((alias ("ppc_frame_dwarf_to_regno")));
 
-static Dwarf_Frame_State *
-frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core, const unsigned regs_bits)
+Dwarf_Frame_State *
+ppc_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
 {
   /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
   const size_t nregs = (114 - 1) + 32;
@@ -132,7 +132,7 @@ frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core, const unsigned reg
     }
   if (core)
     {
-      core_pc_set = core_get_pc (core, &core_pc, regs_bits == 32 ? 0xc8 : 0x170);
+      core_pc_set = core_get_pc (core, &core_pc, ebl->class == ELFCLASS64 ? 0x170 : 0xc8);
       if (! core_pc_set)
 	return NULL;
     }
@@ -142,7 +142,6 @@ frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core, const unsigned reg
     return NULL;
   base->ebl = ebl;
   base->nregs = nregs;
-  base->regs_bits = regs_bits;
   Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
   if (state == NULL)
     {
@@ -183,17 +182,9 @@ frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core, const unsigned reg
   return state;
 }
 
-Dwarf_Frame_State *
-ppc_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
-{
-  return frame_state (ebl, pid, pid_attach, core, 32);
-}
-
-Dwarf_Frame_State *
-ppc64_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
-{
-  return frame_state (ebl, pid, pid_attach, core, 64);
-}
+__typeof (ppc_frame_state)
+     ppc64_frame_state
+     __attribute__ ((alias ("ppc_frame_state")));
 
 void
 ppc_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)

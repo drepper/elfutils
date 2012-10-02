@@ -202,9 +202,6 @@ struct Dwarf_Frame_State_Base
   /* If there is no PID it is 0.  */
   pid_t pid;
   bool pid_attached : 1;
-  /* 64 or 32.  */
-  /* FIXME: Use (ebl->class == ELFCLASS64 ? 64 : 32) instead.  */
-  unsigned regs_bits;
   /* Bottom frame.  */
   Dwarf_Frame_State *unwound;
 };
