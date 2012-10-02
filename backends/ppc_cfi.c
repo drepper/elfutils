@@ -40,21 +40,24 @@ ppc_abi_cfi (Ebl *ebl __attribute__ ((unused)), Dwarf_CIE *abi_info)
 {
   static const uint8_t abi_cfi[] =
     {
-      /* This only instruction is provided in every PPC32 CIE.  */
-      DW_CFA_def_cfa, ULEB128_7 (1), ULEB128_7 (0),
-      /* These rules are assumed by PPC32 FDEs, without specifying these.  */
-      /* r1 is restored from cfa adress, r1 acts as a stack frame pointer.  */
+      /* This instruction is provided in every CIE.  It is not repeated here:
+	 DW_CFA_def_cfa, ULEB128_7 (1), ULEB128_7 (0)  */
+      /* r1 is assumed to be restored from cfa adress, r1 acts as a stack frame pointer.  */
       DW_CFA_val_expression, ULEB128_7 (1), ULEB128_7 (1), DW_OP_nop,
-      /* Some FDEs do not specify %lr but inherit it.  */
-      DW_CFA_same_value, ULEB128_7 (65), /* %lr */
+      /* lr is not callee-saved but it needs to be preserved as it is pre-set by the caller.  */
+      DW_CFA_same_value, ULEB128_7 (65), /* lr */
 
-      /* At least r1 is inherited on PPC64, inherit all %gprs.
-	 Do not overwrite r1 set above.  */
+      /* Callee-saved regs.  */
 #define SV(n) DW_CFA_same_value, ULEB128_7 (n)
-      SV (0), SV (2), SV (3), SV (4), SV (5), SV (6), SV (7), SV (8),
-      SV (9), SV (10), SV (11), SV (12), SV (13), SV (14), SV (15), SV (16),
-      SV (17), SV (18), SV (19), SV (20), SV (21), SV (22), SV (23), SV (24),
-      SV (25), SV (26), SV (27), SV (28), SV (29), SV (30), SV (31)
+      SV (2),			/* r2 is TOC pointer.  */
+      SV (13),			/* Reserved as system thread id (is it for CFI?).  */
+      /* r14-r31 are non-volatile registers.  */
+      SV (14), SV (15), SV (16), SV (17), SV (18), SV (19), SV (20), SV (21),
+      SV (22), SV (23), SV (24), SV (25), SV (26), SV (27), SV (28), SV (29),
+      SV (30), SV (31)
+      /* VMX registers v20-v31 and vrsave are non-volatile but they are
+	 assigned DWARF registers 1144-1156 (v20-v31) which is outside of the
+	 CFI supported range.  */
 #undef SV
     };
 
