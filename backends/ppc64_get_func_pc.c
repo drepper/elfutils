@@ -108,7 +108,8 @@ init (Ebl *ebl, Dwfl_Module *mod)
   if (ehdr == NULL)
     return;
   GElf_Word shndx, opd_shndx = 0;
-  Elf_Data *opd_data;
+  /* Needless initialization for old GCCs.  */
+  Elf_Data *opd_data = NULL;
   GElf_Shdr opd_shdr_mem, *opd_shdr;
   for (int symi = 1; symi < syments; symi++)
     {
@@ -117,6 +118,9 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	continue;
       if (sym.st_shndx != SHN_XINDEX)
 	shndx = sym.st_shndx;
+      /* Invalid value.  */
+      if (shndx == 0)
+	continue;
       if (opd_shndx == 0)
 	{
 	  Elf_Scn *scn = elf_getscn (elf, shndx);
