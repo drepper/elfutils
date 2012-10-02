@@ -71,30 +71,30 @@ state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 }
 
 static bool
-memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, Dwarf_Addr *result)
+memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
 {
-  if (state->base->pid)
+  if (base->pid)
     {
       unsigned long ul;
-      if (state->base->regs_bits == 64)
+      if (base->regs_bits == 64)
 	{
-	  bool retval = ebl_memory_read (state->base->ebl, state->base->pid, addr, &ul);
+	  bool retval = ebl_memory_read (base->ebl, base->pid, addr, &ul);
 	  *result = ul;
 	  return retval;
 	}
       /* FIXME: Big endian machines!  */
       /* FIXME: Boundary of a page!  */
       /* FIXME? Unaligned access!  */
-      if (! ebl_memory_read (state->base->ebl, state->base->pid, addr, &ul))
+      if (! ebl_memory_read (base->ebl, base->pid, addr, &ul))
 	return false;
       *result = ul & 0xffffffff;
       return true;
     }
 
-  if (state->base->core)
+  if (base->core)
     {
-      Elf *core = state->base->core;
-      Dwfl *dwfl = state->base->dwfl;
+      Elf *core = base->core;
+      Dwfl *dwfl = base->dwfl;
       static size_t phnum;
       if (elf_getphdrnum (core, &phnum) < 0)
 	{
@@ -110,7 +110,7 @@ memory_read (Dwarf_Frame_State *state, Dwarf_Addr addr, Dwarf_Addr *result)
 	  Dwarf_Addr bias = 0;
 	  GElf_Addr start = segment_start (dwfl, bias + phdr->p_vaddr);
 	  GElf_Addr end = segment_end (dwfl, bias + phdr->p_vaddr + phdr->p_memsz);
-	  unsigned bytes = state->base->regs_bits / 8;
+	  unsigned bytes = base->regs_bits / 8;
 	  if (addr < start || addr + bytes > end)
 	    continue;
 	  Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start, bytes, ELF_T_ADDR);
@@ -253,7 +253,7 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	is_location = false;
 	break;
       case DW_OP_deref:
-	if (! pop (&val1) || ! memory_read (state, val1, &val1) || ! push (val1))
+	if (! pop (&val1) || ! memory_read (state->base, val1, &val1) || ! push (val1))
 	  {
 	    free (stack);
 	    return false;
@@ -352,7 +352,7 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
       return false;
     }
   free (stack);
-  if (is_location && ! memory_read (state, *result, result))
+  if (is_location && ! memory_read (state->base, *result, result))
     return false;
   return true;
 }
@@ -498,41 +498,47 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
   Dwarf_Frame_State *state = *statep;
   if (state->unwound)
     return have_unwound (statep);
-  /* Inlined dwfl_frame_state_pc.  */
-  assert (state->pc_state == DWARF_FRAME_STATE_PC_SET);
-  Dwarf_Addr pc = state->pc;
+  Dwarf_Addr pc;
+  bool ok = INTUSE(dwfl_frame_state_pc) (state, &pc, NULL);
+  assert (ok);
   /* Do not ask for MINUSONE dwfl_frame_state_pc, it would try to unwind STATE
      which would deadlock us.  */
   if (state != state->base->unwound && ! state->signal_frame)
     pc--;
   Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (state->base->dwfl, pc);
-  if (mod == NULL)
+  if (mod != NULL)
     {
-      __libdwfl_seterrno (DWFL_E_NO_DWARF);
+      Dwarf_Addr bias;
+      Dwarf_CFI *cfi_eh = INTUSE(dwfl_module_eh_cfi) (mod, &bias);
+      if (cfi_eh)
+	{
+	  if (handle_cfi (statep, pc, mod, cfi_eh, bias))
+	    return true;
+	  if (state->unwound)
+	    {
+	      assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
+	      return false;
+	    }
+	}
+      Dwarf_CFI *cfi_dwarf = INTUSE(dwfl_module_dwarf_cfi) (mod, &bias);
+      if (cfi_dwarf)
+	{
+	  if (handle_cfi (statep, pc, mod, cfi_dwarf, bias) && state->unwound)
+	    return true;
+	  if (state->unwound)
+	    {
+	      assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
+	      return false;
+	    }
+	}
+    }
+  *statep = state;
+  if (ebl_frame_unwind (state->base->ebl, statep, pc, memory_read))
+    return true;
+  if (state->unwound)
+    {
+      assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
       return false;
-    }
-  Dwarf_Addr bias;
-  Dwarf_CFI *cfi_eh = INTUSE(dwfl_module_eh_cfi) (mod, &bias);
-  if (cfi_eh)
-    {
-      if (handle_cfi (statep, pc, mod, cfi_eh, bias))
-	return true;
-      if (state->unwound)
-	{
-	  assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
-	  return false;
-	}
-    }
-  Dwarf_CFI *cfi_dwarf = INTUSE(dwfl_module_dwarf_cfi) (mod, &bias);
-  if (cfi_dwarf)
-    {
-      if (handle_cfi (statep, pc, mod, cfi_dwarf, bias) && state->unwound)
-	return true;
-      if (state->unwound)
-	{
-	  assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
-	  return false;
-	}
     }
   __libdwfl_seterrno (DWFL_E_NO_DWARF);
   return false;

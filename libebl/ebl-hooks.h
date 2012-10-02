@@ -173,6 +173,14 @@ bool EBLHOOK(frame_dwarf_to_regno) (Ebl *ebl, unsigned *regno);
    The name is valid as long as EBL is valid.  */
 const char *EBLHOOK(get_func_pc) (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym);
 
+/* Optionally modify *PC as fetched from inferior data into valid PC
+   instruction pointer.  */
+void EBLHOOK(normalize_pc) (Ebl *ebl, Dwarf_Addr *pc);
+
+/* See dwfl_frame_unwind.  */
+bool EBLHOOK(frame_unwind) (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
+			    bool (*memory_read) (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result));
+
 
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

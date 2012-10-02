@@ -1,5 +1,5 @@
-/* Initialization of S/390 32-bit specific backend library.
-   Copyright (C) 2005, 2006, 2012 Red Hat, Inc.
+/* Initialization of S/390 64-bit specific backend library.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@
 # include <config.h>
 #endif
 
-#define BACKEND		s390_
+#define BACKEND		s390x_
 #define RELOC_PREFIX	R_390_
 #include "libebl_CPU.h"
 
@@ -39,7 +39,7 @@
 
 
 const char *
-s390_init (elf, machine, eh, ehlen)
+s390x_init (elf, machine, eh, ehlen)
      Elf *elf __attribute__ ((unused));
      GElf_Half machine __attribute__ ((unused));
      Ebl *eh;
@@ -51,7 +51,7 @@ s390_init (elf, machine, eh, ehlen)
 
   /* We handle it.  */
   eh->name = "IBM S/390";
-  s390_init_reloc (eh);
+  s390x_init_reloc (eh);
   HOOK (eh, reloc_simple_type);
   HOOK (eh, register_info);
   HOOK (eh, return_value_location);
@@ -60,8 +60,9 @@ s390_init (elf, machine, eh, ehlen)
   HOOK (eh, frame_detach);
   HOOK (eh, memory_read);
   HOOK (eh, core_note);
-  HOOK (eh, normalize_pc);
-  HOOK (eh, frame_unwind);
+
+  /* Only the 64-bit format uses the incorrect hash table entry size.  */
+  eh->sysvhash_entrysize = sizeof (Elf64_Xword);
 
   return MODVERSION;
 }

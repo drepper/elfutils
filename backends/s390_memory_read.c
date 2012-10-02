@@ -45,3 +45,7 @@ s390_memory_read (Ebl *ebl __attribute__ ((unused)), pid_t pid, Dwarf_Addr addr,
     return false;
   return true;
 }
+
+__typeof (s390_memory_read)
+     s390x_memory_read
+     __attribute__ ((alias ("s390_memory_read")));

@@ -207,7 +207,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  /* PPC provides in DWARF register 65 irrelevant for
 		     CFI which clashes with register 108 (LR) we need.
 		     FIXME: It depends now on their order in core notes.  */
-		  if (dwarf_frame_state_reg_get (state, regno, NULL))
+		  if (regloc->shift == 0 && dwarf_frame_state_reg_get (state, regno, NULL))
 		    continue;
 		  Dwarf_Addr val;
 		  switch (regloc->bits)
@@ -237,6 +237,13 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		    {
 		      __libdwfl_seterrno (DWFL_E_BADELF);
 		      return NULL;
+		    }
+		  if (regloc->shift)
+		    {
+		      Dwarf_Addr val_orig;
+		      bool ok = dwarf_frame_state_reg_get (state, regno, &val_orig);
+		      assert (ok);
+		      val = (val << regloc->shift) | val_orig;
 		    }
 		  /* Registers not valid for CFI are just ignored.  */
 		  dwarf_frame_state_reg_set (state, regno, val);

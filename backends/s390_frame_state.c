@@ -43,6 +43,8 @@
 
 #define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
 
+#include "core-get-pc.c"
+
 Dwarf_Frame_State *
 s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ ((unused)))
 {
@@ -51,6 +53,9 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
 #ifdef __s390__
   struct user user_regs;
 #endif /* __s390__ */
+  /* Needless initialization for old GCCs.  */
+  Dwarf_Addr core_pc = 0;
+  bool core_pc_set;
 
   if (pid_attach)
     {
@@ -93,6 +98,13 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
 	  return NULL;
 	}
 #endif /* __s390__ */
+    }
+  if (core)
+    {
+      /* Fetch PSWA.  */
+      core_pc_set = core_get_pc (core, &core_pc, ebl->class == ELFCLASS32 ? 0x4c : 0x50);
+      if (! core_pc_set)
+	return NULL;
     }
 
   Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
@@ -146,12 +158,32 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
       dwarf_frame_state_reg_set (state, 65, user_regs.regs.psw.addr);
 #endif /* __s390__ */
     }
+  if (core)
+    {
+      state->pc = core_pc;
+      state->pc_state = DWARF_FRAME_STATE_PC_SET;
+    }
 
   return state;
 }
+
+__typeof (s390_frame_state)
+     s390x_frame_state
+     __attribute__ ((alias ("s390_frame_state")));
 
 void
 s390_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
 {
   ptrace (PTRACE_DETACH, pid, NULL, NULL);
+}
+
+__typeof (s390_frame_detach)
+     s390x_frame_detach
+     __attribute__ ((alias ("s390_frame_detach")));
+
+void
+s390_normalize_pc (Ebl *ebl __attribute__ ((unused)), Dwarf_Addr *pc)
+{
+  /* Clear S390 bit 31.  */
+  *pc &= (1U << 31) - 1;
 }

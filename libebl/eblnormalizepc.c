@@ -1,5 +1,5 @@
-/* Initialization of S/390 32-bit specific backend library.
-   Copyright (C) 2005, 2006, 2012 Red Hat, Inc.
+/* Modify PC as fetched from inferior data into valid PC.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -30,38 +30,11 @@
 # include <config.h>
 #endif
 
-#define BACKEND		s390_
-#define RELOC_PREFIX	R_390_
-#include "libebl_CPU.h"
+#include <libeblP.h>
 
-/* This defines the common reloc hooks based on arm_reloc.def.  */
-#include "common-reloc.c"
-
-
-const char *
-s390_init (elf, machine, eh, ehlen)
-     Elf *elf __attribute__ ((unused));
-     GElf_Half machine __attribute__ ((unused));
-     Ebl *eh;
-     size_t ehlen;
+void
+ebl_normalize_pc (Ebl *ebl, Dwarf_Addr *pc)
 {
-  /* Check whether the Elf_BH object has a sufficent size.  */
-  if (ehlen < sizeof (Ebl))
-    return NULL;
-
-  /* We handle it.  */
-  eh->name = "IBM S/390";
-  s390_init_reloc (eh);
-  HOOK (eh, reloc_simple_type);
-  HOOK (eh, register_info);
-  HOOK (eh, return_value_location);
-  HOOK (eh, abi_cfi);
-  HOOK (eh, frame_state);
-  HOOK (eh, frame_detach);
-  HOOK (eh, memory_read);
-  HOOK (eh, core_note);
-  HOOK (eh, normalize_pc);
-  HOOK (eh, frame_unwind);
-
-  return MODVERSION;
+  if (ebl != NULL && ebl->normalize_pc != NULL)
+    ebl->normalize_pc (ebl, pc);
 }

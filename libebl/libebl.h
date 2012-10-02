@@ -349,6 +349,7 @@ typedef struct
   uint8_t bits;			/* Bits of data for one register.  */
   uint8_t pad;			/* Bytes of padding after register's data.  */
   Dwarf_Half count;		/* Consecutive register numbers here.  */
+  uint8_t shift;		/* Bits to shift the value left.  */
 } Ebl_Register_Location;
 
 /* Non-register data items in core notes.  */
@@ -391,6 +392,15 @@ extern bool ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long
 /* Convert function descriptor to the function PC value.  */
 extern const char *ebl_get_func_pc (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym)
   __nonnull_attribute__ (1, 2, 3);
+
+/* Modify PC as fetched from inferior data into valid PC.  */
+extern void ebl_normalize_pc (Ebl *ebl, Dwarf_Addr *pc)
+  __nonnull_attribute__ (1, 2);
+
+/* Get previous frame state for an existing frame state.  */
+extern bool ebl_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
+			      bool (*memory_read) (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result))
+  __nonnull_attribute__ (1, 2, 4);
 
 #ifdef __cplusplus
 }
