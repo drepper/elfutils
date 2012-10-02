@@ -110,7 +110,8 @@ init (Ebl *ebl, Dwfl_Module *mod)
   GElf_Word shndx, opd_shndx = 0;
   /* Needless initialization for old GCCs.  */
   Elf_Data *opd_data = NULL;
-  GElf_Shdr opd_shdr_mem, *opd_shdr;
+  /* Needless initialization for old GCCs.  */
+  GElf_Shdr opd_shdr_mem, *opd_shdr = NULL;
   for (int symi = 1; symi < syments; symi++)
     {
       if (dwfl_module_getsym (mod, symi, &sym, &shndx) == NULL
