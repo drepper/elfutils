@@ -89,22 +89,18 @@ core_get_pc (Elf *core, Dwarf_Addr *core_pc, unsigned pc_offset)
 	  Dwarf_Addr val;
 	  switch (bits)
 	  {
-	    case 32:
-	      {
-		uint32_t val32;
-		reg_desc = convert (core, ELF_T_WORD, 1, &val32, reg_desc, 0);
-		/* NULL REG_DESC is caught below.  */
-		/* Do a host width conversion.  */
-		val = val32;
-	      }
+	    case 32:;
+	      uint32_t val32;
+	      reg_desc = convert (core, ELF_T_WORD, 1, &val32, reg_desc, 0);
+	      /* NULL REG_DESC is caught below.  */
+	      /* Do a host width conversion.  */
+	      val = val32;
 	      break;
-	    case 64:
-	      {
-		uint64_t val64;
-		reg_desc = convert (core, ELF_T_XWORD, 1, &val64, reg_desc, 0);
-		/* NULL REG_DESC is caught below.  */
-		val = val64;
-	      }
+	    case 64:;
+	      uint64_t val64;
+	      reg_desc = convert (core, ELF_T_XWORD, 1, &val64, reg_desc, 0);
+	      /* NULL REG_DESC is caught below.  */
+	      val = val64;
 	      break;
 	    default:
 	      abort ();

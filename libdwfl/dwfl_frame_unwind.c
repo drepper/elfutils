@@ -160,22 +160,6 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
-
-  /* Prepare CFA first.  It may depend on registers which will be already
-     unwound the time we would need to compute it later.  Scan OPS first,
-     otherwise we would dead-lock preparing CFA for the CFA computation
-     itself.  */
-  const Dwarf_Op *ops_scan;
-  for (ops_scan = ops; ops_scan < ops + nops; ops_scan++)
-    if (ops_scan->atom == DW_OP_call_frame_cfa)
-      break;
-  Dwarf_Op *cfa_ops;
-  size_t cfa_nops;
-  Dwarf_Addr cfa;
-  bool cfa_valid = (ops_scan < ops + nops
-		    && dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) == 0
-		    && expr_eval (state, frame, cfa_ops, cfa_nops, &cfa));
-
   Dwarf_Addr *stack = NULL;
   size_t stack_used = 0, stack_allocated = 0;
   bool
@@ -251,8 +235,13 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	    return false;
 	  }
 	break;
-      case DW_OP_call_frame_cfa:
-	if (! cfa_valid || ! push (cfa))
+      case DW_OP_call_frame_cfa:;
+	Dwarf_Op *cfa_ops;
+	size_t cfa_nops;
+	Dwarf_Addr cfa;
+	if (dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) != 0
+	    || ! expr_eval (state, frame, cfa_ops, cfa_nops, &cfa)
+	    || ! push (cfa))
 	  {
 	    __libdwfl_seterrno (DWFL_E_LIBDW);
 	    free (stack);
@@ -306,8 +295,8 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	/* FALLTHRU */
       case DW_OP_skip:;
 	Dwarf_Word offset = op->offset + 1 + 2 + (int16_t) op->number;
-	ops_scan = bsearch ((void *) (uintptr_t) offset, ops, nops, sizeof (*ops), bra_compar);
-	if (ops_scan == NULL)
+	const Dwarf_Op *found = bsearch ((void *) (uintptr_t) offset, ops, nops, sizeof (*ops), bra_compar);
+	if (found == NULL)
 	  {
 	    free (stack);
 	    /* PPC32 vDSO has such invalid operations.  */
@@ -315,7 +304,7 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	    return false;
 	  }
 	/* Undo the 'for' statement increment.  */
-	op = ops_scan - 1;
+	op = found - 1;
 	break;
       case DW_OP_drop:
 	if (! pop (&val1))

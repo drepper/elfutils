@@ -337,23 +337,19 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  Dwarf_Addr val;
 		  switch (regloc->bits)
 		  {
-		    case 32:
-		      {
-			uint32_t val32;
-			reg_desc = convert (core, ELF_T_WORD, 1, &val32, reg_desc, 0);
-			/* NULL REG_DESC is caught below.  */
-			/* Do a host width conversion.  */
-			val = val32;
-		      }
+		    case 32:;
+		      uint32_t val32;
+		      reg_desc = convert (core, ELF_T_WORD, 1, &val32, reg_desc, 0);
+		      /* NULL REG_DESC is caught below.  */
+		      /* Do a host width conversion.  */
+		      val = val32;
 		      break;
-		    case 64:
-		      {
-			uint64_t val64;
-			reg_desc = convert (core, ELF_T_XWORD, 1, &val64, reg_desc, 0);
-			/* NULL REG_DESC is caught below.  */
-			assert (sizeof (*state->regs) == sizeof (val64));
-			val = val64;
-		      }
+		    case 64:;
+		      uint64_t val64;
+		      reg_desc = convert (core, ELF_T_XWORD, 1, &val64, reg_desc, 0);
+		      /* NULL REG_DESC is caught below.  */
+		      assert (sizeof (*state->regs) == sizeof (val64));
+		      val = val64;
 		      break;
 		    default:
 		      abort ();
