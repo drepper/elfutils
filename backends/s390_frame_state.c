@@ -30,110 +30,40 @@
 # include <config.h>
 #endif
 
-#include <stdlib.h>
-#include "../libdw/cfi.h"
-#include <sys/user.h>
 #ifdef __s390__
+# include <sys/user.h>
 # include <asm/ptrace.h>
+# include <sys/ptrace.h>
 #endif
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <assert.h>
 
 #define BACKEND s390_
 #include "libebl_CPU.h"
+/* Must be included after "libebl_CPU.h" for ebl_frame_state_nregs.  */
+#include "../libdw/cfi.h"
 
 #define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
 
 #include "core-get-pc.c"
 
-Dwarf_Frame_State *
-s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ ((unused)))
+bool
+s390_frame_state (Dwarf_Frame_State *state)
 {
-  /* gcc/config/ #define DWARF_FRAME_REGISTERS 34.
-     But from the gcc/config/s390/s390.h "Register usage." comment it looks as
-     if #32 (Argument pointer) and #33 (Condition code) are not used for unwinding.  */
-  const size_t nregs = 32;
-#ifdef __s390__
-  struct user user_regs;
-#endif /* __s390__ */
-  /* Needless initialization for old GCCs.  */
-  Dwarf_Addr core_pc = 0;
-  bool core_pc_set;
-
-  if (pid_attach)
-    {
-#ifndef __s390__
-      abort ();
-#else /* __s390__ */
-      if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
-	return NULL;
-      for (;;)
-	{
-	  int status;
-	  if (waitpid (pid, &status, 0) != pid || !WIFSTOPPED (status))
-	    {
-	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	      return NULL;
-	    }
-	  if (WSTOPSIG (status) == SIGSTOP)
-	    break;
-	  if (ptrace (PTRACE_CONT, pid, NULL, (void *) (uintptr_t) WSTOPSIG (status)) != 0)
-	    {
-	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	      return NULL;
-	    }
-	}
-#endif /* __s390__ */
-    }
+  Dwarf_Frame_State_Base *base = state->base;
+  Ebl *ebl = base->ebl;
+  pid_t pid = base->pid;
+  Elf *core = base->core;
   if (pid)
     {
 #ifndef __s390__
-      abort ();
+      return false;
 #else /* __s390__ */
+      struct user user_regs;
       ptrace_area parea;
       parea.process_addr = (uintptr_t) &user_regs;
       parea.kernel_addr = 0;
       parea.len = sizeof (user_regs);
       if (ptrace (PTRACE_PEEKUSR_AREA, pid, &parea, NULL) != 0)
-	{
-	  if (pid_attach)
-	    ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	  return NULL;
-	}
-#endif /* __s390__ */
-    }
-  if (core)
-    {
-      /* Fetch PSWA.  */
-      core_pc_set = core_get_pc (core, &core_pc, ebl->class == ELFCLASS32 ? 0x4c : 0x78);
-      if (! core_pc_set)
-	return NULL;
-    }
-
-  Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
-  if (base == NULL)
-    return NULL;
-  base->ebl = ebl;
-  base->nregs = nregs;
-  Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
-  if (state == NULL)
-    {
-      free (base);
-      return NULL;
-    }
-  base->unwound = state;
-  state->base = base;
-  state->unwound = NULL;
-  state->pc_state = DWARF_FRAME_STATE_ERROR;
-
-  memset (state->regs_set, 0, sizeof (state->regs_set));
-  if (pid)
-    {
-#ifndef __s390__
-      abort ();
-#else /* __s390__ */
+	return false;
       /* If we run as s390x we get the 64-bit registers of PID.
          But -m31 executable seems to use only the 32-bit parts of its registers.  */
       for (unsigned u = 0; u < 16; u++)
@@ -148,26 +78,17 @@ s390_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
     }
   if (core)
     {
-      state->pc = core_pc;
+      /* Fetch PSWA.  */
+      if (! core_get_pc (core, &state->pc, ebl->class == ELFCLASS32 ? 0x4c : 0x78))
+	return false;
       state->pc_state = DWARF_FRAME_STATE_PC_SET;
     }
-
-  return state;
+  return true;
 }
 
 __typeof (s390_frame_state)
      s390x_frame_state
      __attribute__ ((alias ("s390_frame_state")));
-
-void
-s390_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
-{
-  ptrace (PTRACE_DETACH, pid, NULL, NULL);
-}
-
-__typeof (s390_frame_detach)
-     s390x_frame_detach
-     __attribute__ ((alias ("s390_frame_detach")));
 
 void
 s390_normalize_pc (Ebl *ebl __attribute__ ((unused)), Dwarf_Addr *pc)

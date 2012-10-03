@@ -198,7 +198,6 @@ struct Dwarf_Frame_State_Base
   /* If there is no core file both CORE is NULL and CORE_FD is -1.  */
   Elf *core;
   int core_fd;
-  size_t nregs;
   /* If there is no PID it is 0.  */
   pid_t pid;
   bool pid_attached : 1;
@@ -218,6 +217,7 @@ struct Dwarf_Frame_State
   Dwarf_Addr pc;
   /* (1 << X) bitmask where 0 <= X < NREGS.  */
   uint64_t regs_set[3];
+  /* REGS array size is ebl_frame_state_nregs (base->ebl).  */
   Dwarf_Addr regs[];
 };
 
@@ -229,7 +229,7 @@ dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr 
   Ebl *ebl = state->base->ebl;
   if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
-  if (regno >= state->base->nregs)
+  if (regno >= ebl_frame_state_nregs (ebl))
     return false;
   if ((state->regs_set[regno / sizeof (*state->regs_set) / 8]
        & (1U << (regno % (sizeof (*state->regs_set) * 8)))) == 0)
@@ -247,7 +247,7 @@ dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr 
   Ebl *ebl = state->base->ebl;
   if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
-  if (regno >= state->base->nregs)
+  if (regno >= ebl_frame_state_nregs (ebl))
     return false;
   state->regs_set[regno / sizeof (*state->regs_set) / 8] |=
 			      (1U << (regno % (sizeof (*state->regs_set) * 8)));

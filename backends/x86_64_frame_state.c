@@ -31,86 +31,28 @@
 #endif
 
 #include <stdlib.h>
-#include "../libdw/cfi.h"
-#include <sys/user.h>
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <assert.h>
+#ifdef __x86_64__
+# include <sys/user.h>
+# include <sys/ptrace.h>
+#endif
 
 #define BACKEND x86_64_
 #include "libebl_CPU.h"
+/* Must be included after "libebl_CPU.h" for ebl_frame_state_nregs.  */
+#include "../libdw/cfi.h"
 
-Dwarf_Frame_State *
-x86_64_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ ((unused)))
+bool
+x86_64_frame_state (Dwarf_Frame_State *state)
 {
-  /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
-  const size_t nregs = 17;
-#ifdef __x86_64__
-  struct user_regs_struct user_regs;
-#endif /* __x86_64__ */
-
-  if (pid_attach)
-    {
-#ifndef __x86_64__
-      abort ();
-#else /* __x86_64__ */
-      if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
-	return NULL;
-      for (;;)
-	{
-	  int status;
-	  if (waitpid (pid, &status, 0) != pid || !WIFSTOPPED (status))
-	    {
-	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	      return NULL;
-	    }
-	  if (WSTOPSIG (status) == SIGSTOP)
-	    break;
-	  if (ptrace (PTRACE_CONT, pid, NULL, (void *) (uintptr_t) WSTOPSIG (status)) != 0)
-	    {
-	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	      return NULL;
-	    }
-	}
-#endif /* __x86_64__ */
-    }
+  pid_t pid = state->base->pid;
   if (pid)
     {
 #ifndef __x86_64__
-      abort ();
+      return false;
 #else /* __x86_64__ */
+      struct user_regs_struct user_regs;
       if (ptrace (PTRACE_GETREGS, pid, NULL, &user_regs) != 0)
-	{
-	  if (pid_attach)
-	    ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	  return NULL;
-	}
-#endif /* __x86_64__ */
-    }
-
-  Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
-  if (base == NULL)
-    return NULL;
-  base->ebl = ebl;
-  base->nregs = nregs;
-  Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
-  if (state == NULL)
-    {
-      free (base);
-      return NULL;
-    }
-  base->unwound = state;
-  state->base = base;
-  state->unwound = NULL;
-  state->pc_state = DWARF_FRAME_STATE_ERROR;
-
-  memset (state->regs_set, 0, sizeof (state->regs_set));
-  if (pid)
-    {
-#ifndef __x86_64__
-      abort ();
-#else /* __x86_64__ */
+	return false;
       dwarf_frame_state_reg_set (state, 0, user_regs.rax);
       dwarf_frame_state_reg_set (state, 1, user_regs.rdx);
       dwarf_frame_state_reg_set (state, 2, user_regs.rcx);
@@ -130,12 +72,5 @@ x86_64_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute_
       dwarf_frame_state_reg_set (state, 16, user_regs.rip);
 #endif /* __x86_64__ */
     }
-
-  return state;
-}
-
-void
-x86_64_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
-{
-  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+  return true;
 }

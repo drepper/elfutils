@@ -29,6 +29,7 @@
 #include "libdwflP.h"
 #include "../libdw/cfi.h"
 #include <unistd.h>
+#include <sys/ptrace.h>
 
 void
 dwfl_end (Dwfl *dwfl)
@@ -40,7 +41,7 @@ dwfl_end (Dwfl *dwfl)
   while (base != NULL)
     {
       if (base->pid_attached)
-	ebl_frame_detach (base->ebl, base->pid);
+	ptrace (PTRACE_DETACH, base->pid, NULL, NULL);
       Dwarf_Frame_State *state = base->unwound;
       while (state != NULL)
 	{

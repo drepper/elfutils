@@ -26,6 +26,11 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
+#ifndef EBLHOOKVAR
+# define EBLHOOKVAR EBLHOOK
+# define EBLHOOKVAR_STUB
+#endif
+
 /* Return symbol representaton of object file type.  */
 const char *EBLHOOK(object_type_name) (int, char *, size_t);
 
@@ -154,14 +159,11 @@ int EBLHOOK(disasm) (const uint8_t **startp, const uint8_t *end,
 /* Supply the machine-specific state of CFI before CIE initial programs.  */
 int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 
-/* Fetch live process Dwarf_Frame_State from PID.  */
-Dwarf_Frame_State *EBLHOOK(frame_state) (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core);
+/* Fetch process data from STATE->base->pid or STATE->base->core.  */
+bool EBLHOOK(frame_state) (Dwarf_Frame_State *state);
 
-/* ptrace-like disconnect from PID.  */
-void EBLHOOK(frame_detach) (Ebl *ebl, pid_t pid);
-
-/* ptrace-like read from memory of PID.  */
-bool EBLHOOK(memory_read) (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul);
+/* Number of Dwarf_Frame_State->regs entries to allocate for frame_state above.  */
+size_t EBLHOOKVAR(frame_state_nregs);
 
 /* Convert *REGNO as is in DWARF to a lower range suitable for
    Dwarf_Frame_State->REGS indexing.  RETURN_ADDRESS_REGISTER should not change
@@ -184,3 +186,8 @@ bool EBLHOOK(frame_unwind) (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
 
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);
+
+#ifdef EBLHOOKVAR_STUB
+# undef EBLHOOKVAR
+# undef EBLHOOKVAR_STUB
+#endif

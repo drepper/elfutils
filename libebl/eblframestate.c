@@ -33,14 +33,21 @@
 #include <libeblP.h>
 #include "../libdw/cfi.h"
 #include <assert.h>
-#include <stdlib.h>
 
-Dwarf_Frame_State *
-ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
+bool
+ebl_frame_state (Dwarf_Frame_State *state)
 {
-  if (ebl == NULL)
-    return NULL;
-  assert (!pid_attach || pid);
-  assert (!pid != !core);
-  return ebl->frame_state (ebl, pid, pid_attach, core);
+  Dwarf_Frame_State_Base *base = state->base;
+  Ebl *ebl = base->ebl;
+  assert (! base->pid != ! base->core);
+  /* Otherwise caller could not allocate STATE of proper size.  If FRAME_STATE
+     is unsupported then FRAME_STATE_NREGS is zero.  */
+  assert (ebl->frame_state != NULL);
+  return ebl->frame_state (state);
+}
+
+size_t
+ebl_frame_state_nregs (Ebl *ebl)
+{
+  return ebl == NULL ? 0 : ebl->frame_state_nregs;
 }

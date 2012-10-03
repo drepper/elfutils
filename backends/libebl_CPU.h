@@ -45,5 +45,9 @@ extern const char *EBLHOOK(init) (Elf *elf, GElf_Half machine,
 
 extern bool (*generic_debugscn_p) (const char *) attribute_hidden;
 
+/* libebl_ARCH libraries are built with -Wl,-z,defs.
+   But callers from other libraries do not use <libeblP.h>.  */
+#define ebl_frame_state_nregs(ebl) ((ebl)->frame_state_nregs + 0)
+
 
 #endif	/* libebl_CPU.h */

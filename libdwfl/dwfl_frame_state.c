@@ -30,6 +30,9 @@
 #include "../libdw/cfi.h"
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/ptrace.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #ifndef MIN
 # define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -93,7 +96,7 @@ state_fetch_pc (Dwarf_Frame_State *state)
 	}
       unsigned ra = abi_info.return_address_register;
       /* dwarf_frame_state_reg_is_set is not applied here.  */
-      if (ra >= state->base->nregs)
+      if (ra >= ebl_frame_state_nregs (ebl))
 	{
 	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	  return false;
@@ -105,16 +108,101 @@ state_fetch_pc (Dwarf_Frame_State *state)
   abort ();
 }
 
+static Dwarf_Frame_State_Base *
+base_alloc (Dwfl *dwfl, pid_t pid, Elf *core)
+{
+  Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
+  if (base == NULL)
+    return NULL;
+  base->dwfl = dwfl;
+  base->ebl = NULL;
+  base->core = core;
+  base->core_fd = -1;
+  base->pid = pid;
+  base->pid_attached = false;
+  base->unwound = NULL;
+  return base;
+}
+
+static void
+base_free (Dwarf_Frame_State_Base *base)
+{
+  assert (base->unwound == NULL);
+  assert (base->ebl == NULL);
+  if (base->pid_attached)
+    ptrace (PTRACE_DETACH, base->pid, NULL, NULL);
+  free (base);
+}
+
+static bool
+ptrace_attach (Dwarf_Frame_State_Base *base)
+{
+  assert (! base->pid_attached);
+  pid_t pid = base->pid;
+  if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
+    return false;
+  /* FIXME: Handle missing SIGSTOP on old Linux kernels.  */
+  for (;;)
+    {
+      int status;
+      if (waitpid (pid, &status, 0) != pid || !WIFSTOPPED (status))
+	{
+	  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+	  return false;
+	}
+      if (WSTOPSIG (status) == SIGSTOP)
+	break;
+      if (ptrace (PTRACE_CONT, pid, NULL, (void *) (uintptr_t) WSTOPSIG (status)) != 0)
+	{
+	  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+	  return false;
+	}
+    }
+  base->pid_attached = true;
+  return true;
+}
+
+static Dwarf_Frame_State *
+state_alloc (Dwarf_Frame_State_Base *base, Ebl *ebl)
+{
+  assert (base->ebl == NULL);
+  size_t nregs = ebl_frame_state_nregs (ebl);
+  if (nregs == 0)
+    return NULL;
+  assert (nregs < sizeof (((Dwarf_Frame_State *) NULL)->regs_set) * 8);
+  Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
+  if (state == NULL)
+    return NULL;
+  state->base = base;
+  base->unwound = state;
+  base->ebl = ebl;
+  state->unwound = NULL;
+  state->signal_frame = false;
+  state->pc_state = DWARF_FRAME_STATE_ERROR;
+  memset (state->regs_set, 0, sizeof (state->regs_set));
+  return state;
+}
+
+static void
+state_free (Dwarf_Frame_State *state)
+{
+  Dwarf_Frame_State_Base *base = state->base;
+  base->unwound = NULL;
+  base->ebl = NULL;
+  free (state);
+}
+
+/* Allocate STATE with proper backend-dependent size.  Possibly also fetch
+   inferior registers if PID is not zero.  */
+
 static Dwarf_Frame_State *
 dwfl_frame_state (Dwfl *dwfl, pid_t pid, Elf *core)
 {
   if (dwfl == NULL)
     return NULL;
   assert (!pid != !core);
+  Dwarf_Frame_State_Base *base = base_alloc (dwfl, pid, core);
   bool pid_attach = pid ? ! pid_is_attached (dwfl, pid) : false;
-  /* Allocate STATE with proper backend-dependent size.  Possibly also fetch
-     inferior registers if PID is not zero.  */
-  Dwarf_Frame_State *state = NULL;
   {
     Dwfl_Module *mod;
     for (mod = dwfl->modulelist; mod != NULL; mod = mod->next)
@@ -125,38 +213,30 @@ dwfl_frame_state (Dwfl *dwfl, pid_t pid, Elf *core)
 	    __libdwfl_seterrno (error);
 	    continue;
 	  }
-	state = ebl_frame_state (mod->ebl, pid, pid_attach, core);
-	if (state)
+	Dwarf_Frame_State *state = state_alloc (base, mod->ebl);
+	if (state == NULL)
+	  continue;
+	if (pid_attach && ! base->pid_attached && ! ptrace_attach (base))
+	  continue;
+	if (ebl_frame_state (state))
 	  {
-	    assert (state->base->ebl == mod->ebl);
-	    break;
+	    base->next = dwfl->statebaselist;
+	    dwfl->statebaselist = base;
+	    return state;
 	  }
+	state_free (state);
       }
   }
-  if (state == NULL)
-    {
-      __libdwfl_seterrno (DWFL_E_BADELF);
-      return NULL;
-    }
-  state->signal_frame = false;
-  Dwarf_Frame_State_Base *base = state->base;
-  base->unwound = state;
-  base->dwfl = dwfl;
-  base->core = core;
-  base->core_fd = -1;
-  base->pid = pid;
-  base->pid_attached = pid_attach;
-  base->next = dwfl->statebaselist;
-  dwfl->statebaselist = base;
-  assert (base->nregs > 0);
-  assert (base->nregs < sizeof (state->regs_set) * 8);
-  return state;
+  base_free (base);
+  __libdwfl_seterrno (DWFL_E_BADELF);
+  return NULL;
 }
 
 Dwarf_Frame_State *
 dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 {
   Dwarf_Frame_State *state = dwfl_frame_state (dwfl, pid, NULL);
+  assert (state->base->pid == pid);
   if (! state_fetch_pc (state))
     return NULL;
   return state;
@@ -188,7 +268,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       return NULL;
     }
   Dwarf_Frame_State_Base *base = state->base;
-  base->core = core;
+  assert (base->core == core);
   base->core_fd = core_fd;
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
   assert (ehdr);
@@ -205,6 +285,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       __libdwfl_seterrno (DWFL_E_LIBELF);
       return NULL;
     }
+  size_t nregs = ebl_frame_state_nregs (ebl);
   for (size_t cnt = 0; cnt < phnum; ++cnt)
     {
       GElf_Phdr phdr_mem, *phdr = gelf_getphdr (core, cnt, &phdr_mem);
@@ -242,11 +323,11 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	  for (size_t regloci = 0; regloci < nregloc; regloci++)
 	    {
 	      const Ebl_Register_Location *regloc = reglocs + regloci;
-	      if (regloc->regno >= base->nregs)
+	      if (regloc->regno >= nregs)
 		continue;
 	      assert (regloc->bits == 32 || regloc->bits == 64);
 	      const char *reg_desc = desc + regloc->offset;
-	      for (unsigned regno = regloc->regno; regno < MIN (regloc->regno + (regloc->count ?: 1U), base->nregs); regno++)
+	      for (unsigned regno = regloc->regno; regno < MIN (regloc->regno + (regloc->count ?: 1U), nregs); regno++)
 		{
 		  /* PPC provides in DWARF register 65 irrelevant for
 		     CFI which clashes with register 108 (LR) we need.

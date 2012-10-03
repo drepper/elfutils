@@ -60,9 +60,9 @@ x86_64_init (elf, machine, eh, ehlen)
   HOOK (eh, auxv_info);
   HOOK (eh, disasm);
   HOOK (eh, abi_cfi);
+  /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
+  eh->frame_state_nregs = 17;
   HOOK (eh, frame_state);
-  HOOK (eh, frame_detach);
-  HOOK (eh, memory_read);
 
   return MODVERSION;
 }

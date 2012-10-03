@@ -56,9 +56,11 @@ s390x_init (elf, machine, eh, ehlen)
   HOOK (eh, register_info);
   HOOK (eh, return_value_location);
   HOOK (eh, abi_cfi);
+  /* gcc/config/ #define DWARF_FRAME_REGISTERS 34.
+     But from the gcc/config/s390/s390.h "Register usage." comment it looks as
+     if #32 (Argument pointer) and #33 (Condition code) are not used for unwinding.  */
+  eh->frame_state_nregs = 32;
   HOOK (eh, frame_state);
-  HOOK (eh, frame_detach);
-  HOOK (eh, memory_read);
   HOOK (eh, core_note);
   HOOK (eh, frame_unwind);
 

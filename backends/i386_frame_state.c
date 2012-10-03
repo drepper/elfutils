@@ -1,4 +1,4 @@
-/* Fetch live process Dwarf_Frame_State from PID.
+/* Fetch process data from STATE->base->pid or STATE->base->core.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -30,85 +30,29 @@
 # include <config.h>
 #endif
 
-#include <stdlib.h>
-#include "../libdw/cfi.h"
-#include <sys/user.h>
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <assert.h>
+#if defined __i386__ || defined __x86_64__
+# include <sys/user.h>
+# include <sys/ptrace.h>
+#endif
 
 #define BACKEND i386_
 #include "libebl_CPU.h"
+/* Must be included after "libebl_CPU.h" for ebl_frame_state_nregs.  */
+#include "../libdw/cfi.h"
 
-Dwarf_Frame_State *
-i386_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ ((unused)))
+bool
+i386_frame_state (Dwarf_Frame_State *state)
 {
-  /* gcc/config/ #define DWARF_FRAME_REGISTERS.  For i386 it is 17, why?  */
-  const size_t nregs = 9;
-#if defined __i386__ || defined __x86_64__
-  struct user_regs_struct user_regs;
-#endif /* __i386__ || __x86_64__ */
-
-  if (pid_attach)
-    {
-#if !defined __i386__ && !defined __x86_64__
-      abort ();
-#else /* __i386__ || __x86_64__ */
-      if (ptrace (PTRACE_ATTACH, pid, NULL, NULL) != 0)
-	return NULL;
-      for (;;)
-	{
-	  int status;
-	  if (waitpid (pid, &status, 0) != pid || !WIFSTOPPED (status))
-	    {
-	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	      return NULL;
-	    }
-	  if (WSTOPSIG (status) == SIGSTOP)
-	    break;
-	  if (ptrace (PTRACE_CONT, pid, NULL, (void *) (uintptr_t) WSTOPSIG (status)) != 0)
-	    {
-	      ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	      return NULL;
-	    }
-	}
-#endif /* __i386__ || __x86_64__ */
-    }
+  pid_t pid = state->base->pid;
   if (pid)
     {
 #if !defined __i386__ && !defined __x86_64__
-      abort ();
+      return false;
 #else /* __i386__ || __x86_64__ */
+      struct user_regs_struct user_regs;
       if (ptrace (PTRACE_GETREGS, pid, NULL, &user_regs) != 0)
-	{
-	  if (pid_attach)
-	    ptrace (PTRACE_DETACH, pid, NULL, NULL);
-	  return NULL;
-	}
-#endif /* __i386__ || __x86_64__ */
-    }
-
-  Dwarf_Frame_State_Base *base = malloc (sizeof (*base));
-  if (base == NULL)
-    return NULL;
-  base->ebl = ebl;
-  base->nregs = nregs;
-  Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
-  if (state == NULL)
-    {
-      free (base);
-      return NULL;
-    }
-  base->unwound = state;
-  state->base = base;
-  state->unwound = NULL;
-  state->pc_state = DWARF_FRAME_STATE_ERROR;
-
-  memset (state->regs_set, 0, sizeof (state->regs_set));
-  if (pid)
-    {
-#if defined __i386__
+	return false;
+# if defined __i386__
       dwarf_frame_state_reg_set (state, 0, user_regs.eax);
       dwarf_frame_state_reg_set (state, 1, user_regs.ecx);
       dwarf_frame_state_reg_set (state, 2, user_regs.edx);
@@ -118,7 +62,7 @@ i386_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
       dwarf_frame_state_reg_set (state, 6, user_regs.esi);
       dwarf_frame_state_reg_set (state, 7, user_regs.edi);
       dwarf_frame_state_reg_set (state, 8, user_regs.eip);
-#elif defined __x86_64__
+# elif defined __x86_64__
       dwarf_frame_state_reg_set (state, 0, user_regs.rax);
       dwarf_frame_state_reg_set (state, 1, user_regs.rcx);
       dwarf_frame_state_reg_set (state, 2, user_regs.rdx);
@@ -128,16 +72,10 @@ i386_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core __attribute__ 
       dwarf_frame_state_reg_set (state, 6, user_regs.rsi);
       dwarf_frame_state_reg_set (state, 7, user_regs.rdi);
       dwarf_frame_state_reg_set (state, 8, user_regs.rip);
-#else /* !__i386__ && !__x86_64__ */
-      abort ();
-#endif /* !__i386__ && !__x86_64__ */
+# else /* (__i386__ || __x86_64__) && (!__i386__ && !__x86_64__) */
+#  error
+# endif /* (__i386__ || __x86_64__) && (!__i386__ && !__x86_64__) */
+#endif /* __i386__ || __x86_64__ */
     }
-
-  return state;
-}
-
-void
-i386_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid)
-{
-  ptrace (PTRACE_DETACH, pid, NULL, NULL);
+  return true;
 }

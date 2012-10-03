@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include "libdwflP.h"
 #include "../libdw/dwarf.h"
+#include <sys/ptrace.h>
 
 #ifndef MAX
 # define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -75,18 +76,29 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
 {
   if (base->pid)
     {
-      unsigned long ul;
       if (base->ebl->class == ELFCLASS64)
 	{
-	  bool retval = ebl_memory_read (base->ebl, base->pid, addr, &ul);
-	  *result = ul;
-	  return retval;
+	  errno = 0;
+	  *result = ptrace (PTRACE_PEEKDATA, base->pid, (void *) (uintptr_t) addr, NULL);
+	  return errno == 0;
 	}
-      /* FIXME: Big endian machines!  */
-      /* FIXME: Boundary of a page!  */
-      if (! ebl_memory_read (base->ebl, base->pid, addr, &ul))
+      /* We do not care about reads unaliged to 4 bytes boundary.
+         But 0x...ffc read of 8 bytes could overrun a page.  */
+      bool lowered = (addr & 4) != 0;
+      if (lowered)
+	addr -= 4;
+      errno = 0;
+      *result = ptrace (PTRACE_PEEKDATA, base->pid, (void *) (uintptr_t) addr, NULL);
+      if (errno != 0)
 	return false;
-      *result = ul & 0xffffffff;
+#if BYTE_ORDER == BIG_ENDIAN
+      if (! lowered)
+	*result >>= 32;
+#else
+      if (lowered)
+	*result >>= 32;
+#endif
+      *result &= 0xffffffff;
       return true;
     }
 
@@ -432,14 +444,17 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
       __libdwfl_seterrno (DWFL_E_LIBDW);
       return false;
     }
-  Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * state->base->nregs);
+  Dwarf_Frame_State_Base *base = state->base;
+  Ebl *ebl = base->ebl;
+  size_t nregs = ebl_frame_state_nregs (ebl);
+  Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
-  unwound->base = state->base;
+  unwound->base = base;
   unwound->unwound = NULL;
+  unwound->signal_frame = frame->fde->cie->signal_frame;
   unwound->pc_state = DWARF_FRAME_STATE_ERROR;
   memset (unwound->regs_set, 0, sizeof (unwound->regs_set));
-  unwound->signal_frame = frame->fde->cie->signal_frame;
-  for (unsigned regno = 0; regno < unwound->base->nregs; regno++)
+  for (unsigned regno = 0; regno < nregs; regno++)
     {
       Dwarf_Op reg_ops_mem[3], *reg_ops;
       size_t reg_nops;

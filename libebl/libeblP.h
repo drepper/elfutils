@@ -54,7 +54,9 @@ struct ebl
 
   /* See ebl-hooks.h for the declarations of the hook functions.  */
 # define EBLHOOK(name) (*name)
+# define EBLHOOKVAR(name) (name)
 # include "ebl-hooks.h"
+# undef EBLHOOKVAR
 # undef EBLHOOK
 
   /* Size of entry in Sysv-style hash table.  */

@@ -201,9 +201,6 @@ static bool default_check_object_attribute (Ebl *ebl, const char *vendor,
 					    const char **tag_name,
 					    const char **value_name);
 static int default_abi_cfi (Ebl *ebl, Dwarf_CIE *abi_info);
-static Dwarf_Frame_State *default_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core);
-static void default_frame_detach (Ebl *ebl, pid_t pid);
-static bool default_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul);
 
 
 static void
@@ -248,10 +245,6 @@ fill_defaults (Ebl *result)
   result->abi_cfi = default_abi_cfi;
   result->destr = default_destr;
   result->sysvhash_entrysize = sizeof (Elf32_Word);
-  result->frame_state = default_frame_state;
-  result->frame_detach = default_frame_detach;
-  result->memory_read = default_memory_read;
-  result->frame_dwarf_to_regno = NULL;
 }
 
 
@@ -760,21 +753,4 @@ default_abi_cfi (Ebl *ebl __attribute__ ((unused)),
 		 Dwarf_CIE *abi_info __attribute__ ((unused)))
 {
   return -1;
-}
-
-static Dwarf_Frame_State *
-default_frame_state (Ebl *ebl __attribute__ ((unused)), pid_t pid __attribute__ ((unused)), bool pid_attach __attribute__ ((unused)), Elf *core __attribute__ ((unused)))
-{
-  return NULL;
-}
-
-static void
-default_frame_detach (Ebl *ebl __attribute__ ((unused)), pid_t pid __attribute__ ((unused)))
-{
-}
-
-static bool
-default_memory_read (Ebl *ebl __attribute__ ((unused)), pid_t pid __attribute__ ((unused)), Dwarf_Addr addr __attribute__ ((unused)), unsigned long *ul __attribute__ ((unused)))
-{
-  return false;
 }

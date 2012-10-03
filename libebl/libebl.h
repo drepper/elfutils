@@ -377,17 +377,13 @@ extern int ebl_auxv_info (Ebl *ebl, GElf_Xword a_type,
 			  const char **name, const char **format)
   __nonnull_attribute__ (1, 3, 4);
 
-/* Fetch live process Dwarf_Frame_State from PID.  */
-extern Dwarf_Frame_State *ebl_frame_state (Ebl *ebl, pid_t pid, bool pid_attach, Elf *core)
+/* Fetch process data from STATE->base->pid or STATE->base->core.  */
+extern bool ebl_frame_state (Dwarf_Frame_State *state)
   __nonnull_attribute__ (1);
 
-/* ptrace-like disconnect from PID.  */
-extern void ebl_frame_detach (Ebl *ebl, pid_t pid)
+/* Number of registers to allocate for STATE of ebl_frame_state.  */
+extern size_t ebl_frame_state_nregs (Ebl *ebl)
   __nonnull_attribute__ (1);
-
-/* ptrace-like read from memory of PID.  */
-extern bool ebl_memory_read (Ebl *ebl, pid_t pid, Dwarf_Addr addr, unsigned long *ul)
-  __nonnull_attribute__ (1, 4);
 
 /* Convert function descriptor to the function PC value.  */
 extern const char *ebl_get_func_pc (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym)
