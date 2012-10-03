@@ -398,6 +398,10 @@ extern bool ebl_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr p
 			      bool (*memory_read) (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result))
   __nonnull_attribute__ (1, 2, 4);
 
+/* Convert *REGNO as is in DWARF to a lower range.  */
+extern bool ebl_frame_dwarf_to_regno (Ebl *ebl, unsigned *regno)
+  __nonnull_attribute__ (1, 2);
+
 #ifdef __cplusplus
 }
 #endif

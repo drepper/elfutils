@@ -35,11 +35,10 @@
 # include <asm/ptrace.h>
 # include <sys/ptrace.h>
 #endif
+#include "../libdw/cfi.h"
 
 #define BACKEND s390_
 #include "libebl_CPU.h"
-/* Must be included after "libebl_CPU.h" for ebl_frame_state_nregs.  */
-#include "../libdw/cfi.h"
 
 #define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
 

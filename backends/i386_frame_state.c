@@ -34,11 +34,10 @@
 # include <sys/user.h>
 # include <sys/ptrace.h>
 #endif
+#include "../libdw/cfi.h"
 
 #define BACKEND i386_
 #include "libebl_CPU.h"
-/* Must be included after "libebl_CPU.h" for ebl_frame_state_nregs.  */
-#include "../libdw/cfi.h"
 
 bool
 i386_frame_state (Dwarf_Frame_State *state)

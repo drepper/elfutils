@@ -33,11 +33,10 @@
 #include <stdlib.h>
 #include "../libdwfl/libdwfl.h"
 #include <assert.h>
+#include "../libdw/cfi.h"
 
 #define BACKEND s390_
 #include "libebl_CPU.h"
-/* Must be included after "libebl_CPU.h" for ebl_frame_state_nregs.  */
-#include "../libdw/cfi.h"
 
 bool
 s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep, Dwarf_Addr pc,
@@ -81,7 +80,7 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   if (! memory_read (state->base, sigreg_ptr, &val))
     return false;
   sigreg_ptr += word_size;
-  size_t nregs = ebl_frame_state_nregs (ebl);
+  size_t nregs = ebl->frame_state_nregs;
   Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
   unwound->base = state->base;

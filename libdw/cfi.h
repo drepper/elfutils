@@ -229,7 +229,7 @@ dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr 
   Ebl *ebl = state->base->ebl;
   if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
-  if (regno >= ebl_frame_state_nregs (ebl))
+  if (regno >= ebl->frame_state_nregs)
     return false;
   if ((state->regs_set[regno / sizeof (*state->regs_set) / 8]
        & (1U << (regno % (sizeof (*state->regs_set) * 8)))) == 0)
@@ -247,7 +247,7 @@ dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr 
   Ebl *ebl = state->base->ebl;
   if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
-  if (regno >= ebl_frame_state_nregs (ebl))
+  if (regno >= ebl->frame_state_nregs)
     return false;
   state->regs_set[regno / sizeof (*state->regs_set) / 8] |=
 			      (1U << (regno % (sizeof (*state->regs_set) * 8)));

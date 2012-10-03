@@ -1,5 +1,5 @@
-/* Common interface for libebl modules.
-   Copyright (C) 2000, 2001, 2002, 2003, 2005 Red Hat, Inc.
+/* Convert *REGNO as is in DWARF to a lower range.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -26,24 +26,16 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef _LIBEBL_CPU_H
-#define _LIBEBL_CPU_H 1
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
 #include <libeblP.h>
 
-#define EBLHOOK(name)	EBLHOOK_1(BACKEND, name)
-#define EBLHOOK_1(a, b)	EBLHOOK_2(a, b)
-#define EBLHOOK_2(a, b)	a##b
-
-/* Constructor.  */
-extern const char *EBLHOOK(init) (Elf *elf, GElf_Half machine,
-				  Ebl *eh, size_t ehlen);
-
-#include "ebl-hooks.h"
-
-#define HOOK(eh, name)	eh->name = EBLHOOK(name)
-
-extern bool (*generic_debugscn_p) (const char *) attribute_hidden;
-
-
-#endif	/* libebl_CPU.h */
+bool
+ebl_frame_dwarf_to_regno (Ebl *ebl, unsigned *regno)
+{
+  if (ebl == NULL)
+    return false;
+  return ebl->frame_dwarf_to_regno == NULL ? true : ebl->frame_dwarf_to_regno (ebl, regno);
+}
