@@ -117,10 +117,9 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
 	  GElf_Phdr phdr_mem, *phdr = gelf_getphdr (core, cnt, &phdr_mem);
 	  if (phdr == NULL || phdr->p_type != PT_LOAD)
 	    continue;
-	  /* FIXME */
-	  Dwarf_Addr bias = 0;
-	  GElf_Addr start = segment_start (dwfl, bias + phdr->p_vaddr);
-	  GElf_Addr end = segment_end (dwfl, bias + phdr->p_vaddr + phdr->p_memsz);
+	  /* Bias is zero here, a core file itself has no bias.  */
+	  GElf_Addr start = segment_start (dwfl, phdr->p_vaddr);
+	  GElf_Addr end = segment_end (dwfl, phdr->p_vaddr + phdr->p_memsz);
 	  unsigned bytes = base->ebl->class == ELFCLASS64 ? 8 : 4;
 	  if (addr < start || addr + bytes > end)
 	    continue;
@@ -131,7 +130,8 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
 	      return false;
 	    }
 	  assert (data->d_size == bytes);
-	  /* FIXME? Unaligned access!  */
+	  /* FIXME: Currently any arch supported for unwinding supports
+	     unaligned access.  */
 	  if (bytes == 8)
 	    *result = *(const uint64_t *) data->d_buf;
 	  else
