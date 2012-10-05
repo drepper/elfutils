@@ -57,7 +57,8 @@ dwfl_end (Dwfl *dwfl)
 	  thread = thread->next;
 	  free (dead);
 	}
-      ebl_closebackend (process->ebl);
+      if (process->ebl_close)
+	ebl_closebackend (process->ebl);
       elf_end (process->core);
       if (process->core_fd != -1)
 	close (process->core_fd);

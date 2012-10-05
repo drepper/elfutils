@@ -50,13 +50,13 @@ s390_frame_state (Dwarf_Frame_State *state)
   Dwarf_Frame_State_Thread *thread = state->thread;
   Dwarf_Frame_State_Process *process = thread->process;
   Ebl *ebl = process->ebl;
-  pid_t tid = thread->tid;
   Elf *core = process->core;
-  if (tid)
+  if (core == NULL)
     {
 #ifndef __s390__
       return false;
 #else /* __s390__ */
+      pid_t tid = thread->tid;
       struct user user_regs;
       ptrace_area parea;
       parea.process_addr = (uintptr_t) &user_regs;
@@ -76,7 +76,7 @@ s390_frame_state (Dwarf_Frame_State *state)
       state->pc_state = DWARF_FRAME_STATE_PC_SET;
 #endif /* __s390__ */
     }
-  if (core)
+  else /* core */
     {
       /* Fetch PSWA.  */
       if (! core_get_pc (core, &state->pc, ebl->class == ELFCLASS32 ? 0x4c : 0x78))

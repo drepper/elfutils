@@ -55,7 +55,7 @@ report_pid (Dwfl *dwfl, pid_t pid)
 }
 
 static void
-dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl))
+dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data), void *data)
 {
   if (pid)
     report_pid (dwfl, pid);
@@ -68,29 +68,37 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (unsigned fr
     abort ();
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
-  unsigned frameno;
-  for (frameno = 0; state; frameno++)
+  do
     {
-      Dwarf_Addr pc;
-      bool minusone;
-      if (! dwfl_frame_state_pc (state, &pc, &minusone))
-	error (2, 0, "dwfl_frame_state_pc: %s", dwfl_errmsg (-1));
-      Dwarf_Addr pc_adjusted = pc - (minusone ? 1 : 0);
+      Dwarf_Frame_State *thread = state;
+      pid_t tid = dwfl_frame_tid_get (thread);
+      printf ("TID %ld:\n", (long) tid);
+      unsigned frameno;
+      for (frameno = 0; state; frameno++)
+	{
+	  Dwarf_Addr pc;
+	  bool minusone;
+	  if (! dwfl_frame_state_pc (state, &pc, &minusone))
+	    error (2, 0, "dwfl_frame_state_pc: %s", dwfl_errmsg (-1));
+	  Dwarf_Addr pc_adjusted = pc - (minusone ? 1 : 0);
 
-      /* Get PC->SYMNAME.  */
-      Dwfl_Module *mod = dwfl_addrmodule (dwfl, pc_adjusted);
-      const char *symname = NULL;
-      if (mod)
-	symname = dwfl_module_addrname (mod, pc_adjusted);
+	  /* Get PC->SYMNAME.  */
+	  Dwfl_Module *mod = dwfl_addrmodule (dwfl, pc_adjusted);
+	  const char *symname = NULL;
+	  if (mod)
+	    symname = dwfl_module_addrname (mod, pc_adjusted);
 
-      printf ("#%2u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc, minusone ? "- 1" : "", symname);
-      if (callback)
-	callback (frameno, pc, symname, dwfl);
-      if (! dwfl_frame_unwind (&state))
-	error (2, 0, "dwfl_frame_unwind: %s", dwfl_errmsg (-1));
-      if (state == NULL)
-	break;
+	  printf ("#%2u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc, minusone ? "- 1" : "", symname);
+	  if (callback)
+	    callback (tid, frameno, pc, symname, dwfl, data);
+	  if (! dwfl_frame_unwind (&state))
+	    error (2, 0, "dwfl_frame_unwind: %s", dwfl_errmsg (-1));
+	  if (state == NULL)
+	    break;
+	}
+      state = dwfl_frame_thread_next (thread);
     }
+  while (state);
 
   dwfl_end (dwfl);
 }
@@ -217,9 +225,12 @@ dummy4 (void)
 }
 
 static void
-selfdump_callback (unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl)
+selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data)
 {
 #if defined __x86_64__ || defined __i386__
+  pid_t check_tid = (intptr_t) data;
+  if (tid != check_tid)
+    return;
   Dwfl_Module *mod;
   const char *symname2 = NULL;
   switch (frameno)
@@ -427,7 +438,7 @@ selfdump (Dwfl *dwfl)
   ptrace_detach_stopped (pid, pid);
   ptrace_detach_stopped (pid2, pid);
 
-  dump (dwfl, pid, NULL, selfdump_callback);
+  dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) pid2);
 }
 
 int
@@ -453,9 +464,9 @@ main (int argc, char **argv)
   if (!pid && !corefile)
     selfdump (dwfl);
   else if (pid && !corefile)
-    dump (dwfl, pid, NULL, NULL);
+    dump (dwfl, pid, NULL, NULL, NULL);
   else if (corefile && !pid)
-    dump (dwfl, 0, corefile, NULL);
+    dump (dwfl, 0, corefile, NULL, NULL);
   else
     abort ();
 

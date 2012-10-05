@@ -117,15 +117,19 @@ state_fetch_pc (Dwarf_Frame_State *state)
 static void
 state_free (Dwarf_Frame_State *state)
 {
+  Dwarf_Frame_State_Thread *thread = state->thread;
+  assert (thread->unwound == state);
+  thread->unwound = state->unwound;
   free (state);
 }
 
 /* Do not call it on your own, to be used by thread_* functions only.  */
 
 static Dwarf_Frame_State *
-state_alloc (Dwarf_Frame_State_Thread *thread, Ebl *ebl)
+state_alloc (Dwarf_Frame_State_Thread *thread)
 {
   assert (thread->unwound == NULL);
+  Ebl *ebl = thread->process->ebl;
   size_t nregs = ebl_frame_state_nregs (ebl);
   if (nregs == 0)
     return NULL;
@@ -134,45 +138,42 @@ state_alloc (Dwarf_Frame_State_Thread *thread, Ebl *ebl)
   if (state == NULL)
     return NULL;
   state->thread = thread;
-  thread->unwound = state;
-  state->unwound = NULL;
   state->signal_frame = false;
   state->pc_state = DWARF_FRAME_STATE_ERROR;
   memset (state->regs_set, 0, sizeof (state->regs_set));
+  thread->unwound = state;
+  state->unwound = NULL;
   return state;
 }
 
 static void
 thread_free (Dwarf_Frame_State_Thread *thread)
 {
-  if (thread == NULL)
-    return;
   while (thread->unwound)
-    {
-      Dwarf_Frame_State *dead = thread->unwound;
-      thread->unwound = dead->unwound;
-      state_free (dead);
-    }
+    state_free (thread->unwound);
   if (thread->tid_attached)
     ptrace (PTRACE_DETACH, thread->tid, NULL, NULL);
+  Dwarf_Frame_State_Process *process = thread->process;
+  assert (process->thread == thread);
+  process->thread = thread->next;
   free (thread);
 }
 
-/* You own the returned object and you need to call thread_free until you call
-   thread_link.
-   
-   One state_alloc is called automatically.  */
+/* One state_alloc is called automatically.  */
 
 static Dwarf_Frame_State_Thread *
-thread_alloc (pid_t tid, Ebl *ebl)
+thread_alloc (Dwarf_Frame_State_Process *process, pid_t tid)
 {
   Dwarf_Frame_State_Thread *thread = malloc (sizeof (*thread));
   if (thread == NULL)
     return NULL;
+  thread->process = process;
   thread->tid = tid;
   thread->tid_attached = false;
   thread->unwound = NULL;
-  if (state_alloc (thread, ebl) == NULL)
+  thread->next = process->thread;
+  process->thread = thread;
+  if (state_alloc (thread) == NULL)
     {
       thread_free (thread);
       return NULL;
@@ -180,62 +181,37 @@ thread_alloc (pid_t tid, Ebl *ebl)
   return thread;
 }
 
-/* You then no longer own THREAD but you also can no longer destroy it (without
-   destroying whole PROCESS).  */
-
-static void
-thread_link (Dwarf_Frame_State_Thread *thread)
-{
-  Dwarf_Frame_State_Process *process = thread->process;
-  thread->next = process->thread;
-  process->thread = thread;
-}
-
 static void
 process_free (Dwarf_Frame_State_Process *process)
 {
   while (process->thread)
-    {
-      Dwarf_Frame_State_Thread *dead = process->thread;
-      process->thread = dead->next;
-      thread_free (dead);
-    }
+    thread_free (process->thread);
   if (process->ebl_close)
     ebl_closebackend (process->ebl);
   elf_end (process->core);
   if (process->core_fd != -1)
     close (process->core_fd);
+  Dwfl *dwfl = process->dwfl;
+  assert (dwfl->framestatelist == process);
+  dwfl->framestatelist = process->next;
   free (process);
 }
 
-/* You own the returned object and you need to call process_free until you call
-   process_link.  */
-
 static Dwarf_Frame_State_Process *
-process_alloc (void)
+process_alloc (Dwfl *dwfl)
 {
   Dwarf_Frame_State_Process *process = malloc (sizeof (*process));
   if (process == NULL)
     return NULL;
-  /* To be filled in by the caller.  We do not link to DWFL so we do not take
-     it as a parameter.  */
-  process->dwfl = NULL;
+  process->dwfl = dwfl;
   process->ebl = NULL;
   process->ebl_close = NULL;
   process->core = NULL;
   process->core_fd = -1;
   process->thread = NULL;
-  return process;
-}
-
-/* You then no longer own PROCESS but you also can no longer destroy it.  */
-
-static void
-process_link (Dwarf_Frame_State_Process *process)
-{
-  Dwfl *dwfl = process->dwfl;
   process->next = dwfl->framestatelist;
   dwfl->framestatelist = process;
+  return process;
 }
 
 static bool
@@ -247,7 +223,7 @@ ptrace_attach (pid_t tid)
   for (;;)
     {
       int status;
-      if (waitpid (tid, &status, 0) != tid || !WIFSTOPPED (status))
+      if (waitpid (tid, &status, __WALL) != tid || !WIFSTOPPED (status))
 	{
 	  ptrace (PTRACE_DETACH, tid, NULL, NULL);
 	  return false;
@@ -269,10 +245,9 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
   char dirname[64];
   int i = snprintf (dirname, sizeof (dirname), "/proc/%ld/task", (long) pid);
   assert (i > 0 && i < (ssize_t) sizeof (dirname) - 1);
-  Dwarf_Frame_State_Process *process = process_alloc ();
+  Dwarf_Frame_State_Process *process = process_alloc (dwfl);
   if (process == NULL)
     return NULL;
-  process->dwfl = dwfl;
   for (Dwfl_Module *mod = dwfl->modulelist; mod != NULL; mod = mod->next)
     {
       Dwfl_Error error = __libdwfl_module_getebl (mod);
@@ -324,7 +299,7 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	  return NULL;
 	}
-      Dwarf_Frame_State_Thread *thread = thread_alloc (tid, process->ebl);
+      Dwarf_Frame_State_Thread *thread = thread_alloc (process, tid);
       if (thread == NULL)
 	{
 	  process_free (process);
@@ -346,7 +321,6 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 	  thread_free (thread);
 	  continue;
 	}
-      thread_link (thread);
     }
   if (closedir (dir) != 0)
     {
@@ -361,7 +335,6 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return NULL;
     }
-  process_link (process);
   return process->thread->unwound;
 }
 INTDEF (dwfl_frame_state_pid)
@@ -369,10 +342,9 @@ INTDEF (dwfl_frame_state_pid)
 Dwarf_Frame_State *
 dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 {
-  Dwarf_Frame_State_Process *process = process_alloc ();
+  Dwarf_Frame_State_Process *process = process_alloc (dwfl);
   if (process == NULL)
     return NULL;
-  process->dwfl = dwfl;
   /* Fetch inferior registers from a core file.  */
   int core_fd = open64 (corefile, O_RDONLY);
   if (core_fd < 0)
@@ -432,7 +404,6 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset, phdr->p_filesz, ELF_T_NHDR);
       if (data == NULL)
 	{
-	  thread_free (thread);
 	  process_free (process);
 	  __libdwfl_seterrno (DWFL_E_LIBELF);
 	  return NULL;
@@ -469,7 +440,6 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	      if (item == items + nitems
 		  || convert (core, ELF_T_SWORD, item->type, 1, &val32s, desc + item->offset, 0) == NULL)
 		{
-		  thread_free (thread);
 		  process_free (process);
 		  __libdwfl_seterrno (DWFL_E_BADELF);
 		  return NULL;
@@ -482,14 +452,13 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  if (! ebl_frame_state (state) || ! state_fetch_pc (state))
 		    {
 		      thread_free (thread);
+		      thread = NULL;
 		      continue;
 		    }
-		  thread_link (thread);
 		}
-	      thread = thread_alloc (tid, ebl);
+	      thread = thread_alloc (process, tid);
 	      if (thread == NULL)
 		{
-		  thread_free (thread);
 		  process_free (process);
 		  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 		  return NULL;
@@ -539,7 +508,6 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  }
 		  if (reg_desc == NULL)
 		    {
-		      thread_free (thread);
 		      process_free (process);
 		      __libdwfl_seterrno (DWFL_E_BADELF);
 		      return NULL;
@@ -564,8 +532,6 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       Dwarf_Frame_State *state = thread->unwound;
       if (! ebl_frame_state (state) || ! state_fetch_pc (state))
 	thread_free (thread);
-      else
-	thread_link (thread);
     }
   if (process->thread == NULL)
     {
@@ -574,7 +540,21 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       __libdwfl_seterrno (DWFL_E_BADELF);
       return NULL;
     }
-  process_link (process);
   return process->thread->unwound;
 }
 INTDEF (dwfl_frame_state_core)
+
+Dwarf_Frame_State *
+dwfl_frame_thread_next (Dwarf_Frame_State *state)
+{
+  Dwarf_Frame_State_Thread *thread_next = state->thread->next;
+  return thread_next ? thread_next->unwound : NULL;
+}
+INTDEF (dwfl_frame_thread_next)
+
+pid_t
+dwfl_frame_tid_get (Dwarf_Frame_State *state)
+{
+  return state->thread->tid;
+}
+INTDEF (dwfl_frame_tid_get)

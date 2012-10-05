@@ -261,4 +261,6 @@ ELFUTILS_0.155 {
     dwfl_frame_state_core;
     dwfl_frame_unwind;
     dwfl_frame_state_pc;
+    dwfl_frame_tid_get;
+    dwfl_frame_thread_next;
 } ELFUTILS_0.149;

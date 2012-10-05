@@ -39,7 +39,6 @@ ebl_frame_state (Dwarf_Frame_State *state)
 {
   Dwarf_Frame_State_Process *process = state->thread->process;
   Ebl *ebl = process->ebl;
-  assert (! process->thread->tid != ! process->core);
   /* Otherwise caller could not allocate STATE of proper size.  If FRAME_STATE
      is unsupported then FRAME_STATE_NREGS is zero.  */
   assert (ebl->frame_state != NULL);

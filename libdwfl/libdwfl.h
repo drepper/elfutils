@@ -571,6 +571,9 @@ extern bool dwfl_frame_unwind (Dwarf_Frame_State **statep);
    FALSE if this frame was interrupted by a signal handler.  */
 extern bool dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone);
 
+extern Dwarf_Frame_State *dwfl_frame_thread_next (Dwarf_Frame_State *state);
+extern pid_t dwfl_frame_tid_get (Dwarf_Frame_State *state);
+
 #ifdef __cplusplus
 }
 #endif
