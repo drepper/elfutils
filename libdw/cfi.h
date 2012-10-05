@@ -191,10 +191,11 @@ struct Dwarf_Frame_s
 /* This holds information common for all the frames of one backtrace.  */
 struct Dwarf_Frame_State_Process
 {
-  /* Used only for memory tracking, not for unwinding inner/outer references.  */
-  Dwarf_Frame_State_Base *next;
+  Dwarf_Frame_State_Process *next;
   struct Dwfl *dwfl;
   struct ebl *ebl;
+  /* If it is false we share EBL with one of DWFL's Dwfl_Module->ebl.  */
+  bool ebl_close : 1;
   /* If there is no core file both CORE is NULL and CORE_FD is -1.  */
   Elf *core;
   int core_fd;
@@ -203,6 +204,8 @@ struct Dwarf_Frame_State_Process
 
 struct Dwarf_Frame_State_Thread
 {
+  Dwarf_Frame_State_Process *process;
+  Dwarf_Frame_State_Thread *next;
   /* If there is no TID it is 0.  */
   pid_t tid;
   bool tid_attached : 1;
@@ -214,7 +217,7 @@ struct Dwarf_Frame_State_Thread
    PC location described by an FDE.  */
 struct Dwarf_Frame_State
 {
-  Dwarf_Frame_State_Base *base;
+  Dwarf_Frame_State_Thread *thread;
   /* Previous frame.  */
   Dwarf_Frame_State *unwound;
   bool signal_frame : 1;
@@ -231,7 +234,7 @@ struct Dwarf_Frame_State
 static inline bool
 dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 {
-  Ebl *ebl = state->base->ebl;
+  Ebl *ebl = state->thread->process->ebl;
   if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
   if (regno >= ebl->frame_state_nregs)
@@ -249,7 +252,7 @@ dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr 
 static inline bool
 dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr val)
 {
-  Ebl *ebl = state->base->ebl;
+  Ebl *ebl = state->thread->process->ebl;
   if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
   if (regno >= ebl->frame_state_nregs)

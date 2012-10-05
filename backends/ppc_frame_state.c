@@ -70,11 +70,12 @@ __typeof (ppc_frame_dwarf_to_regno)
 bool
 ppc_frame_state (Dwarf_Frame_State *state)
 {
-  Dwarf_Frame_State_Base *base = state->base;
-  Ebl *ebl = base->ebl;
-  pid_t pid = base->pid;
-  Elf *core = base->core;
-  if (pid)
+  Dwarf_Frame_State_Thread *thread = state->thread;
+  Dwarf_Frame_State_Process *process = thread->process;
+  Ebl *ebl = process->ebl;
+  pid_t tid = thread->tid;
+  Elf *core = process->core;
+  if (tid)
     {
 #ifndef __powerpc__
       return false;
@@ -89,7 +90,7 @@ ppc_frame_state (Dwarf_Frame_State *state)
       errno = 0;
       for (unsigned regno = 0; regno < sizeof (user_regs) / sizeof (long); regno++)
 	{
-	  user_regs.l[regno] = ptrace (PTRACE_PEEKUSER, pid, (void *) (uintptr_t) (regno * sizeof (long)), NULL);
+	  user_regs.l[regno] = ptrace (PTRACE_PEEKUSER, tid, (void *) (uintptr_t) (regno * sizeof (long)), NULL);
 	  if (errno != 0)
 	    return false;
 	}

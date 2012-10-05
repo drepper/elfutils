@@ -72,14 +72,14 @@ state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 }
 
 static bool
-memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
+memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *result)
 {
-  if (base->pid)
+  if (process->core == NULL)
     {
-      if (base->ebl->class == ELFCLASS64)
+      if (process->ebl->class == ELFCLASS64)
 	{
 	  errno = 0;
-	  *result = ptrace (PTRACE_PEEKDATA, base->pid, (void *) (uintptr_t) addr, NULL);
+	  *result = ptrace (PTRACE_PEEKDATA, process->thread->tid, (void *) (uintptr_t) addr, NULL);
 	  if (errno != 0)
 	    {
 	      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
@@ -93,7 +93,7 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
       if (lowered)
 	addr -= 4;
       errno = 0;
-      *result = ptrace (PTRACE_PEEKDATA, base->pid, (void *) (uintptr_t) addr, NULL);
+      *result = ptrace (PTRACE_PEEKDATA, process->thread->tid, (void *) (uintptr_t) addr, NULL);
       if (errno != 0)
 	{
 	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
@@ -109,10 +109,10 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
       *result &= 0xffffffff;
       return true;
     }
-  if (base->core)
+  if (process->core)
     {
-      Elf *core = base->core;
-      Dwfl *dwfl = base->dwfl;
+      Elf *core = process->core;
+      Dwfl *dwfl = process->dwfl;
       static size_t phnum;
       if (elf_getphdrnum (core, &phnum) < 0)
 	{
@@ -127,7 +127,7 @@ memory_read (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result)
 	  /* Bias is zero here, a core file itself has no bias.  */
 	  GElf_Addr start = segment_start (dwfl, phdr->p_vaddr);
 	  GElf_Addr end = segment_end (dwfl, phdr->p_vaddr + phdr->p_memsz);
-	  unsigned bytes = base->ebl->class == ELFCLASS64 ? 8 : 4;
+	  unsigned bytes = process->ebl->class == ELFCLASS64 ? 8 : 4;
 	  if (addr < start || addr + bytes > end)
 	    continue;
 	  Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start, bytes, ELF_T_ADDR);
@@ -262,7 +262,7 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	is_location = false;
 	break;
       case DW_OP_deref:
-	if (! pop (&val1) || ! memory_read (state->base, val1, &val1) || ! push (val1))
+	if (! pop (&val1) || ! memory_read (state->thread->process, val1, &val1) || ! push (val1))
 	  {
 	    free (stack);
 	    return false;
@@ -361,7 +361,7 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
       return false;
     }
   free (stack);
-  if (is_location && ! memory_read (state->base, *result, result))
+  if (is_location && ! memory_read (state->thread->process, *result, result))
     return false;
   return true;
 }
@@ -451,12 +451,13 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
       __libdwfl_seterrno (DWFL_E_LIBDW);
       return false;
     }
-  Dwarf_Frame_State_Base *base = state->base;
-  Ebl *ebl = base->ebl;
+  Dwarf_Frame_State_Thread *thread = state->thread;
+  Dwarf_Frame_State_Process *process = thread->process;
+  Ebl *ebl = process->ebl;
   size_t nregs = ebl_frame_state_nregs (ebl);
   Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
-  unwound->base = base;
+  unwound->thread = thread;
   unwound->unwound = NULL;
   unwound->signal_frame = frame->fde->cie->signal_frame;
   unwound->pc_state = DWARF_FRAME_STATE_ERROR;
@@ -530,9 +531,9 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
   assert (ok);
   /* Do not ask for MINUSONE dwfl_frame_state_pc, it would try to unwind STATE
      which would deadlock us.  */
-  if (state != state->base->unwound && ! state->signal_frame)
+  if (state != state->thread->unwound && ! state->signal_frame)
     pc--;
-  Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (state->base->dwfl, pc);
+  Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (state->thread->process->dwfl, pc);
   if (mod != NULL)
     {
       Dwarf_Addr bias;
@@ -560,7 +561,7 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
 	}
     }
   *statep = state;
-  if (ebl_frame_unwind (state->base->ebl, statep, pc, memory_read))
+  if (ebl_frame_unwind (state->thread->process->ebl, statep, pc, memory_read))
     return true;
   if (state->unwound)
     {

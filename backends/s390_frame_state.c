@@ -47,11 +47,12 @@
 bool
 s390_frame_state (Dwarf_Frame_State *state)
 {
-  Dwarf_Frame_State_Base *base = state->base;
-  Ebl *ebl = base->ebl;
-  pid_t pid = base->pid;
-  Elf *core = base->core;
-  if (pid)
+  Dwarf_Frame_State_Thread *thread = state->thread;
+  Dwarf_Frame_State_Process *process = thread->process;
+  Ebl *ebl = process->ebl;
+  pid_t tid = thread->tid;
+  Elf *core = process->core;
+  if (tid)
     {
 #ifndef __s390__
       return false;
@@ -61,9 +62,9 @@ s390_frame_state (Dwarf_Frame_State *state)
       parea.process_addr = (uintptr_t) &user_regs;
       parea.kernel_addr = 0;
       parea.len = sizeof (user_regs);
-      if (ptrace (PTRACE_PEEKUSR_AREA, pid, &parea, NULL) != 0)
+      if (ptrace (PTRACE_PEEKUSR_AREA, tid, &parea, NULL) != 0)
 	return false;
-      /* If we run as s390x we get the 64-bit registers of PID.
+      /* If we run as s390x we get the 64-bit registers of tid.
          But -m31 executable seems to use only the 32-bit parts of its registers.  */
       for (unsigned u = 0; u < 16; u++)
 	dwarf_frame_state_reg_set (state, 0 + u, user_regs.regs.gprs[u]);

@@ -39,11 +39,11 @@ dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
 {
   assert (state->pc_state == DWARF_FRAME_STATE_PC_SET);
   *pc = state->pc;
-  ebl_normalize_pc (state->base->ebl, pc);
+  ebl_normalize_pc (state->thread->process->ebl, pc);
   if (minusone)
     {
       /* Bottom frame?  */
-      if (state == state->base->unwound)
+      if (state == state->thread->unwound)
 	*minusone = false;
       /* *MINUSONE is logical or of both current and previous frame state.  */
       else if (state->signal_frame)

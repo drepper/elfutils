@@ -40,9 +40,10 @@
 
 bool
 s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep, Dwarf_Addr pc,
-		   bool (*memory_read) (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result))
+		   bool (*memory_read) (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *result))
 {
   Dwarf_Frame_State *state = *statep;
+  Dwarf_Frame_State_Process *process = state->thread->process;
   assert (state->unwound == NULL);
   /* Caller already assumed caller adjustment but S390 instructions are 4 bytes
      long.  Undo it.  */
@@ -51,7 +52,7 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   pc++;
   /* We can assume big-endian read here.  */
   Dwarf_Addr instr;
-  if (! memory_read (state->base, pc, &instr))
+  if (! memory_read (process, pc, &instr))
     return false;
   /* Fetch only the very first two bytes.  */
   instr = (instr >> (ebl->class == ELFCLASS64 ? 48 : 16)) & 0xffff;
@@ -71,19 +72,19 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   Dwarf_Addr next_cfa = this_sp + 16 * word_size + 32;
   /* "New-style RT frame" is not supported, assuming "Old-style RT frame and all non-RT frames".  */
   Dwarf_Addr sigreg_ptr;
-  if (! memory_read (state->base, next_cfa + 8, &sigreg_ptr))
+  if (! memory_read (process, next_cfa + 8, &sigreg_ptr))
     return false;
   /* Skip PSW mask.  */
   sigreg_ptr += word_size;
   /* Read PSW address.  */
   Dwarf_Addr val;
-  if (! memory_read (state->base, sigreg_ptr, &val))
+  if (! memory_read (process, sigreg_ptr, &val))
     return false;
   sigreg_ptr += word_size;
   size_t nregs = ebl->frame_state_nregs;
   Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
-  unwound->base = state->base;
+  unwound->thread = state->thread;
   unwound->unwound = NULL;
   unwound->pc = val;
   unwound->pc_state = DWARF_FRAME_STATE_ERROR;
@@ -92,7 +93,7 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   /* Then the GPRs.  */
   for (int i = 0; i < 16; i++)
     {
-      if (! memory_read (state->base, sigreg_ptr, &val))
+      if (! memory_read (process, sigreg_ptr, &val))
 	return false;
       if (! dwarf_frame_state_reg_set (unwound, 0 + i, val))
 	return false;
@@ -106,12 +107,12 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   /* And finally the FPRs.  */
   for (int i = 0; i < 16; i++)
     {
-      if (! memory_read (state->base, sigreg_ptr, &val))
+      if (! memory_read (process, sigreg_ptr, &val))
 	return false;
       if (ebl->class == ELFCLASS32)
 	{
 	  Dwarf_Addr val_low;
-	  if (! memory_read (state->base, sigreg_ptr + 4, &val_low))
+	  if (! memory_read (process, sigreg_ptr + 4, &val_low))
 	    return false;
 	  val = (val << 32) | val_low;
 	}
@@ -126,7 +127,7 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
       sigreg_ptr += sigreg_high_off;
       for (int i = 0; i < 16; i++)
 	{
-	  if (! memory_read (state->base, sigreg_ptr, &val))
+	  if (! memory_read (process, sigreg_ptr, &val))
 	    return false;
 	  Dwarf_Addr val_low;
 	  if (! dwarf_frame_state_reg_get (unwound, 0 + i, &val_low))

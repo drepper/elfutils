@@ -43,14 +43,14 @@
 bool
 x86_64_frame_state (Dwarf_Frame_State *state)
 {
-  pid_t pid = state->base->pid;
-  if (pid)
+  pid_t tid = state->thread->tid;
+  if (tid)
     {
 #ifndef __x86_64__
       return false;
 #else /* __x86_64__ */
       struct user_regs_struct user_regs;
-      if (ptrace (PTRACE_GETREGS, pid, NULL, &user_regs) != 0)
+      if (ptrace (PTRACE_GETREGS, tid, NULL, &user_regs) != 0)
 	return false;
       dwarf_frame_state_reg_set (state, 0, user_regs.rax);
       dwarf_frame_state_reg_set (state, 1, user_regs.rdx);

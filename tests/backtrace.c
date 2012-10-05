@@ -68,7 +68,8 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (unsigned fr
     abort ();
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
-  for (unsigned frameno = 0; state; frameno++)
+  unsigned frameno;
+  for (frameno = 0; state; frameno++)
     {
       Dwarf_Addr pc;
       bool minusone;
@@ -269,7 +270,7 @@ child (void)
   pthread_t thread;
 
   errno = 0;
-  i = pthread_create (&thread, NULL, start, NULL);
+  int i = pthread_create (&thread, NULL, start, NULL);
   assert_perror (errno);
   assert (i == 0);
   long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
@@ -280,7 +281,7 @@ child (void)
 }
 
 static void
-prepare_thread (pid_t pid2)
+prepare_thread (pid_t pid2, Dwarf_Addr plt_start, Dwarf_Addr plt_end)
 {
   long l;
 #if defined __x86_64__ || defined __i386__
@@ -296,7 +297,7 @@ prepare_thread (pid_t pid2)
   assert (l == 0);
   l = ptrace (PTRACE_CONT, pid2, NULL, (void *) (intptr_t) SIGUSR2);
   int status;
-  pid_t got = waitpid (pid2, &status, 0);
+  pid_t got = waitpid (pid2, &status, __WALL);
   assert_perror (errno);
   assert (got == pid2);
   assert (WIFSTOPPED (status));
@@ -317,7 +318,7 @@ prepare_thread (pid_t pid2)
       l = ptrace (PTRACE_SINGLESTEP, pid2, NULL, NULL);
       assert_perror (errno);
       assert (l == 0);
-      got = waitpid (pid2, &status, 0);
+      got = waitpid (pid2, &status, __WALL);
       assert_perror (errno);
       assert (got == pid2);
       assert (WIFSTOPPED (status));
@@ -326,20 +327,26 @@ prepare_thread (pid_t pid2)
 #endif /* __x86_64__ || __i386__ */
 }
 
+#include <asm/unistd.h>
+#include <unistd.h>
+#define tgkill(pid, tid, sig) syscall (__NR_tgkill, (pid), (tid), (sig))
+
 static void
-ptrace_detach_stopped (pid_t pid)
+ptrace_detach_stopped (pid_t pid, pid_t group_pid)
 {
   errno = 0;
   /* This kill is needed for kernel-2.6.18-308.el5.ppc64.  */
-  long l = kill (pid, SIGSTOP);
+  long l = tgkill (group_pid, pid, SIGSTOP);
   assert_perror (errno);
   assert (l == 0);
   l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
   assert_perror (errno);
   assert (l == 0);
+  /* Currently broken on kernel-3.5.4-2.fc17.x86_64.  */
+#if 0
   siginfo_t siginfo;
   /* With kernel-2.6.18-308.el5.ppc64 we would get hanging waitpid after later PTRACE_ATTACH.  */
-  l = waitid (P_PID, pid, &siginfo, WSTOPPED | WNOWAIT);
+  l = waitid (P_PID, pid, &siginfo, WSTOPPED | WNOWAIT | WNOHANG);
   assert_perror (errno);
   assert (l == 0);
   assert (siginfo.si_pid == pid);
@@ -349,6 +356,7 @@ ptrace_detach_stopped (pid_t pid)
      kernel-3.4.11-1.fc16.x86_64 has there the plain signal value.  */
   assert ((WIFSTOPPED (siginfo.si_status) && WSTOPSIG (siginfo.si_status) == SIGSTOP)
 	  || siginfo.si_status == SIGSTOP);
+#endif
 }
 
 static void
@@ -405,20 +413,19 @@ selfdump (Dwfl *dwfl)
   assert_perror (errno);
   assert (got == pid);
   assert (WIFSTOPPED (status));
-  assert (WSTOPSIG (status) == SIGUSR1);
+  assert (WSTOPSIG (status) == SIGUSR2);
 
   /* Catch the spawned thread.  */
-  pid_t pid2 = waitpid (-1, &status, 0);
+  pid_t pid2 = waitpid (-1, &status, __WCLONE);
   assert_perror (errno);
   assert (pid2 > 0);
   assert (pid2 != pid);
   assert (WIFSTOPPED (status));
-  assert (WSTOPSIG (status) == SIGUSR2);
+  assert (WSTOPSIG (status) == SIGUSR1);
 
-  prepare_thread (pid2);
-  /* T (Stopped) is per-PID (not per-TID) so maybe this is excessive.  */
-  ptrace_detach_stopped (pid);
-  ptrace_detach_stopped (pid2);
+  prepare_thread (pid2, plt_start, plt_end);
+  ptrace_detach_stopped (pid, pid);
+  ptrace_detach_stopped (pid2, pid);
 
   dump (dwfl, pid, NULL, selfdump_callback);
 }

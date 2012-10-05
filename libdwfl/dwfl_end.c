@@ -37,23 +37,32 @@ dwfl_end (Dwfl *dwfl)
   if (dwfl == NULL)
     return;
 
-  Dwarf_Frame_State_Base *base = dwfl->statebaselist;
-  while (base != NULL)
+  /* FIXME: Unify with dwfl_frame_state.c.  */
+  Dwarf_Frame_State_Process *process = dwfl->framestatelist;
+  while (process != NULL)
     {
-      if (base->pid_attached)
-	ptrace (PTRACE_DETACH, base->pid, NULL, NULL);
-      Dwarf_Frame_State *state = base->unwound;
-      while (state != NULL)
+      Dwarf_Frame_State_Thread *thread = process->thread;
+      while (thread != NULL)
 	{
-	  Dwarf_Frame_State *dead = state;
-	  state = state->unwound;
+	  if (thread->tid_attached)
+	    ptrace (PTRACE_DETACH, thread->tid, NULL, NULL);
+	  Dwarf_Frame_State *state = thread->unwound;
+	  while (state != NULL)
+	    {
+	      Dwarf_Frame_State *dead = state;
+	      state = state->unwound;
+	      free (dead);
+	    }
+	  Dwarf_Frame_State_Thread *dead = thread;
+	  thread = thread->next;
 	  free (dead);
 	}
-      elf_end (base->core);
-      if (base->core_fd != -1)
-	close (base->core_fd);
-      Dwarf_Frame_State_Base *dead = base;
-      base = base->next;
+      ebl_closebackend (process->ebl);
+      elf_end (process->core);
+      if (process->core_fd != -1)
+	close (process->core_fd);
+      Dwarf_Frame_State_Process *dead = process;
+      process = process->next;
       free (dead);
     }
 

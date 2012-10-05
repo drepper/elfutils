@@ -42,14 +42,14 @@
 bool
 i386_frame_state (Dwarf_Frame_State *state)
 {
-  pid_t pid = state->base->pid;
-  if (pid)
+  pid_t tid = state->thread->tid;
+  if (tid)
     {
 #if !defined __i386__ && !defined __x86_64__
       return false;
 #else /* __i386__ || __x86_64__ */
       struct user_regs_struct user_regs;
-      if (ptrace (PTRACE_GETREGS, pid, NULL, &user_regs) != 0)
+      if (ptrace (PTRACE_GETREGS, tid, NULL, &user_regs) != 0)
 	return false;
 # if defined __i386__
       dwarf_frame_state_reg_set (state, 0, user_regs.eax);

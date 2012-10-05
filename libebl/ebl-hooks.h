@@ -181,7 +181,7 @@ void EBLHOOK(normalize_pc) (Ebl *ebl, Dwarf_Addr *pc);
 
 /* See dwfl_frame_unwind.  */
 bool EBLHOOK(frame_unwind) (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
-			    bool (*memory_read) (Dwarf_Frame_State_Base *base, Dwarf_Addr addr, Dwarf_Addr *result));
+			    bool (*memory_read) (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *result));
 
 
 /* Destructor for ELF backend handle.  */

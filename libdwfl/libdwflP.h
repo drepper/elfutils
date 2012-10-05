@@ -92,7 +92,7 @@ struct Dwfl
 
   Dwfl_Module *modulelist;    /* List in order used by full traversals.  */
 
-  Dwarf_Frame_State_Base *statebaselist;
+  Dwarf_Frame_State_Process *framestatelist;
 
   GElf_Addr offline_next_address;
 
