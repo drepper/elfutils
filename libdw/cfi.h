@@ -189,7 +189,7 @@ struct Dwarf_Frame_s
 };
 
 /* This holds information common for all the frames of one backtrace.  */
-struct Dwarf_Frame_State_Base
+struct Dwarf_Frame_State_Process
 {
   /* Used only for memory tracking, not for unwinding inner/outer references.  */
   Dwarf_Frame_State_Base *next;
@@ -198,9 +198,14 @@ struct Dwarf_Frame_State_Base
   /* If there is no core file both CORE is NULL and CORE_FD is -1.  */
   Elf *core;
   int core_fd;
-  /* If there is no PID it is 0.  */
-  pid_t pid;
-  bool pid_attached : 1;
+  Dwarf_Frame_State_Thread *thread;
+};
+
+struct Dwarf_Frame_State_Thread
+{
+  /* If there is no TID it is 0.  */
+  pid_t tid;
+  bool tid_attached : 1;
   /* Bottom frame.  */
   Dwarf_Frame_State *unwound;
 };
