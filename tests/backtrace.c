@@ -276,6 +276,27 @@ selfdump (Dwfl *dwfl, const char *exec)
     default:
       break;
   }
+
+  /* Catch the main thread.  Catch it first otherwise the /proc evaluation of
+     PID may have caught still ourselves before executing execl above.  */
+  errno = 0;
+  int status;
+  pid_t got = waitpid (pid, &status, 0);
+  assert_perror (errno);
+  assert (got == pid);
+  assert (WIFSTOPPED (status));
+  assert (WSTOPSIG (status) == SIGUSR2);
+
+  /* Catch the spawned thread.  Do not use __WCLONE as we could get racy
+     __WCLONE, probably despite pthread_create already had to be called the new
+     task is not yet alive enough for waitpid.  */
+  pid_t pid2 = waitpid (-1, &status, __WALL);
+  assert_perror (errno);
+  assert (pid2 > 0);
+  assert (pid2 != pid);
+  assert (WIFSTOPPED (status));
+  assert (WSTOPSIG (status) == SIGUSR1);
+
   report_pid (dwfl, pid);
   char *selfpathname;
   int i = asprintf (&selfpathname, "/proc/%ld/exe", (long) pid);
@@ -333,25 +354,6 @@ selfdump (Dwfl *dwfl, const char *exec)
       break;
     }
   assert (symi < nsym);
-
-  /* Catch the main thread.  */
-  errno = 0;
-  int status;
-  pid_t got = waitpid (pid, &status, 0);
-  assert_perror (errno);
-  assert (got == pid);
-  assert (WIFSTOPPED (status));
-  assert (WSTOPSIG (status) == SIGUSR2);
-
-  /* Catch the spawned thread.  Do not use __WCLONE as we could get racy
-     __WCLONE, probably despite pthread_create already had to be called the new
-     task is not yet alive enough for waitpid.  */
-  pid_t pid2 = waitpid (-1, &status, __WALL);
-  assert_perror (errno);
-  assert (pid2 > 0);
-  assert (pid2 != pid);
-  assert (WIFSTOPPED (status));
-  assert (WSTOPSIG (status) == SIGUSR1);
 
   prepare_thread (pid2, plt_start, plt_end, jmp);
   ptrace_detach_stopped (pid, pid);
