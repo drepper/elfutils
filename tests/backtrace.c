@@ -263,7 +263,7 @@ ptrace_detach_stopped (pid_t pid, pid_t group_pid)
 }
 
 static void
-selfdump (Dwfl *dwfl)
+selfdump (Dwfl *dwfl, const char *exec)
 {
   pid_t pid = fork ();
   switch (pid)
@@ -271,7 +271,7 @@ selfdump (Dwfl *dwfl)
     case -1:
       abort ();
     case 0:
-      execl ("./backtrace-child", "./backtrace-child", "run-me-via-./backtrace", NULL);
+      execl (exec, exec, "run-me-via-./backtrace", NULL);
       abort ();
     default:
       break;
@@ -360,6 +360,23 @@ selfdump (Dwfl *dwfl)
   dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) pid2);
 }
 
+static bool
+is_core (const char *corefile)
+{
+  Dwfl *dwfl = dwfl_get ();
+  Dwfl_Module *mod = dwfl_report_elf (dwfl, "core", corefile, -1, 0 /* base */);
+  assert (mod != NULL);
+  GElf_Addr loadbase;
+  Elf *core = dwfl_module_getelf (mod, &loadbase);
+  assert (core != NULL);
+  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
+  assert (ehdr != NULL);
+  assert (ehdr->e_type == ET_CORE || ehdr->e_type == ET_EXEC || ehdr->e_type == ET_DYN);
+  bool retval = ehdr->e_type == ET_CORE;
+  dwfl_end (dwfl);
+  return retval;
+}
+
 int
 main (int argc __attribute__ ((unused)), char **argv)
 {
@@ -372,7 +389,7 @@ main (int argc __attribute__ ((unused)), char **argv)
   (void) setlocale (LC_ALL, "");
 
   if (!argv[1])
-    selfdump (dwfl_get ());
+    selfdump (dwfl_get (), "./backtrace-child");
   else
     while (*++argv)
       {
@@ -380,8 +397,10 @@ main (int argc __attribute__ ((unused)), char **argv)
 	long l = strtol (*argv, &end, 10);
 	if (**argv && !*end)
 	  dump (dwfl_get (), l, NULL, NULL, NULL);
-	else
+	else if (is_core (*argv))
 	  dump (dwfl_get (), 0, *argv, NULL, NULL);
+	else
+	  selfdump (dwfl_get (), *argv);
       }
 
   return 0;

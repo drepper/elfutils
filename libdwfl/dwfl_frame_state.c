@@ -339,13 +339,14 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 }
 INTDEF (dwfl_frame_state_pid)
 
+/* Fetch inferior registers from a core file.  */
+
 Dwarf_Frame_State *
 dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 {
   Dwarf_Frame_State_Process *process = process_alloc (dwfl);
   if (process == NULL)
     return NULL;
-  /* Fetch inferior registers from a core file.  */
   int core_fd = open64 (corefile, O_RDONLY);
   if (core_fd < 0)
     {

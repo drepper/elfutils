@@ -55,6 +55,19 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
+BUILT_SOURCES = backtrace-child-biarch
+
+clean-local:
+	$(RM) backtrace-child-biarch
+
+# Substitute $(COMPILE).
+backtrace-child-biarch: backtrace-child.c
+	$(CC_BIARCH) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+		     $(AM_CPPFLAGS) $(CPPFLAGS) \
+		     $(AM_CFLAGS) $(CFLAGS) $(backtrace_child_CFLAGS) \
+		     $(AM_LDFLAGS) $(LDFLAGS) $(backtrace_child_LDFLAGS) \
+		     -o $@ $<
+
 TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	update1 update2 update3 update4 \
 	run-show-die-info.sh run-get-files.sh run-get-lines.sh \

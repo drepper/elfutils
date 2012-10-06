@@ -21,6 +21,8 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/ptrace.h>
+#include <string.h>
+#include <pthread.h>
 
 /* Execution will arrive here from jmp by an artificial ptrace-spawn signal.  */
 
@@ -57,7 +59,7 @@ dummy2 (void)
 }
 
 static __attribute__ ((noinline, noclone, noreturn)) void
-stdarg (int f, ...)
+stdarg (int f __attribute__ ((unused)), ...)
 {
   sighandler_t sigusr2_orig = signal (SIGUSR2, sigusr2);
   assert (sigusr2_orig == SIG_DFL);
@@ -96,7 +98,7 @@ dummy4 (void)
 }
 
 static void *
-start (void *arg)
+start (void *arg __attribute__ ((unused)))
 {
   backtracegen ();
   abort ();
