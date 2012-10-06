@@ -64,6 +64,7 @@ dwfl_get (void)
   Dwfl *dwfl = dwfl_begin (&proc_callbacks);
   if (dwfl == NULL)
     error (2, 0, "dwfl_begin: %s", dwfl_errmsg (-1));
+  return dwfl;
 }
 
 static void
@@ -138,79 +139,6 @@ see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), con
   return DWARF_CB_OK;
 }
 
-/* Execution will arrive here from jmp by an artificial ptrace-spawn signal.  */
-
-static void
-sigusr2 (int signo)
-{
-  assert (signo == SIGUSR2);
-  raise (SIGUSR1);
-
-  /* Catch the .plt jump, it will come from this abort call.  */
-  abort ();
-}
-
-static __attribute__ ((noinline, noclone)) void
-dummy1 (void)
-{
-  asm volatile ("");
-}
-
-#if !defined __x86_64__ && !defined __i386__
-static
-#endif
-__attribute__ ((noinline, noclone)) void
-jmp (void)
-{
-  /* Not reached, signal will get ptrace-spawn to jump into sigusr2.  */
-  abort ();
-}
-
-static __attribute__ ((noinline, noclone)) void
-dummy2 (void)
-{
-  asm volatile ("");
-}
-
-static __attribute__ ((noinline, noclone, noreturn)) void
-stdarg (int f, ...)
-{
-  sighandler_t sigusr2_orig = signal (SIGUSR2, sigusr2);
-  assert (sigusr2_orig == SIG_DFL);
-  errno = 0;
-  long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
-  assert_perror (errno);
-  assert (l == 0);
-#if defined __x86_64__ || defined __i386__
-  raise (SIGUSR1);
-  /* Execution will get PC patched into function jmp.  */
-#else
-  sigusr2 (SIGUSR2);
-#endif
-  abort ();
-}
-
-static __attribute__ ((noinline, noclone)) void
-dummy3 (void)
-{
-  asm volatile ("");
-}
-
-static __attribute__ ((noinline, noclone)) void
-backtracegen (void)
-{
-  stdarg (1);
-  /* Here should be no instruction after the stdarg call as it is noreturn
-     function.  It must be stdarg so that it is a call and not jump (jump as
-     a tail-call).  */
-}
-
-static __attribute__ ((noinline, noclone)) void
-dummy4 (void)
-{
-  asm volatile ("");
-}
-
 static void
 selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data)
 {
@@ -255,39 +183,16 @@ selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symna
 #endif /* __x86_64__ || __i386__ */
 }
 
-static void *
-start (void *arg)
-{
-  backtracegen ();
-  abort ();
-}
-
 static void
-child (void)
-{
-  pthread_t thread;
-
-  errno = 0;
-  int i = pthread_create (&thread, NULL, start, NULL);
-  assert_perror (errno);
-  assert (i == 0);
-  long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
-  assert_perror (errno);
-  assert (l == 0);
-  raise (SIGUSR2);
-  abort ();
-}
-
-static void
-prepare_thread (pid_t pid2, Dwarf_Addr plt_start, Dwarf_Addr plt_end)
+prepare_thread (pid_t pid2, Dwarf_Addr plt_start, Dwarf_Addr plt_end, void (*jmp) (void))
 {
   long l;
 #if defined __x86_64__ || defined __i386__
   errno = 0;
 #if defined __x86_64__
-  l = ptrace (PTRACE_POKEUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), (void *) jmp);
+  l = ptrace (PTRACE_POKEUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), jmp);
 #elif defined __i386__
-  l = ptrace (PTRACE_POKEUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), (void *) jmp);
+  l = ptrace (PTRACE_POKEUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), jmp);
 #else
 # error
 #endif
@@ -360,25 +265,25 @@ ptrace_detach_stopped (pid_t pid, pid_t group_pid)
 static void
 selfdump (Dwfl *dwfl)
 {
-  dummy1 ();
-  dummy2 ();
-  dummy3 ();
-  dummy4 ();
   pid_t pid = fork ();
   switch (pid)
   {
     case -1:
       abort ();
     case 0:
-      child ();
+      execl ("./backtrace-child", "./backtrace-child", "run-me-via-./backtrace", NULL);
       abort ();
     default:
       break;
   }
   report_pid (dwfl, pid);
+  char *selfpathname;
+  int i = asprintf (&selfpathname, "/proc/%ld/exe", (long) pid);
+  assert (i > 0);
   struct see_exec_module data;
-  ssize_t ssize = readlink ("/proc/self/exe", data.selfpath, sizeof (data.selfpath));
-  assert (ssize > 0 && ssize < sizeof (data.selfpath));
+  ssize_t ssize = readlink (selfpathname, data.selfpath, sizeof (data.selfpath));
+  free (selfpathname);
+  assert (ssize > 0 && ssize < (ssize_t) sizeof (data.selfpath));
   data.selfpath[ssize] = '\0';
   data.mod = NULL;
   ptrdiff_t ptrdiff = dwfl_getmodules (dwfl, see_exec_module, &data, 0);
@@ -403,6 +308,31 @@ selfdump (Dwfl *dwfl)
   assert (scn_shdr != NULL);
   Dwarf_Addr plt_start = scn_shdr->sh_addr + loadbase;
   Dwarf_Addr plt_end = plt_start + scn_shdr->sh_size;
+  void (*jmp) (void);
+  int nsym = dwfl_module_getsymtab (data.mod);
+  int symi;
+  for (symi = 1; symi < nsym; ++symi)
+    {
+      GElf_Sym symbol;
+      const char *symbol_name = dwfl_module_getsym (data.mod, symi, &symbol, NULL);
+      if (symbol_name == NULL)
+        continue;
+      switch (GELF_ST_TYPE (symbol.st_info))
+        {
+        case STT_SECTION:
+        case STT_FILE:
+        case STT_TLS:
+	  continue;
+        default:
+	  if (strcmp (symbol_name, "jmp") != 0)
+	    continue;
+	  break;
+        }
+      /* LOADBASE is already applied here.  */
+      jmp = (void (*) (void)) symbol.st_value;
+      break;
+    }
+  assert (symi < nsym);
 
   /* Catch the main thread.  */
   errno = 0;
@@ -413,15 +343,17 @@ selfdump (Dwfl *dwfl)
   assert (WIFSTOPPED (status));
   assert (WSTOPSIG (status) == SIGUSR2);
 
-  /* Catch the spawned thread.  */
-  pid_t pid2 = waitpid (-1, &status, __WCLONE);
+  /* Catch the spawned thread.  Do not use __WCLONE as we could get racy
+     __WCLONE, probably despite pthread_create already had to be called the new
+     task is not yet alive enough for waitpid.  */
+  pid_t pid2 = waitpid (-1, &status, __WALL);
   assert_perror (errno);
   assert (pid2 > 0);
   assert (pid2 != pid);
   assert (WIFSTOPPED (status));
   assert (WSTOPSIG (status) == SIGUSR1);
 
-  prepare_thread (pid2, plt_start, plt_end);
+  prepare_thread (pid2, plt_start, plt_end, jmp);
   ptrace_detach_stopped (pid, pid);
   ptrace_detach_stopped (pid2, pid);
 
@@ -429,7 +361,7 @@ selfdump (Dwfl *dwfl)
 }
 
 int
-main (int argc, char **argv)
+main (int argc __attribute__ ((unused)), char **argv)
 {
   /* We use no threads here which can interfere with handling a stream.  */
   __fsetlocking (stdin, FSETLOCKING_BYCALLER);
