@@ -87,13 +87,13 @@ memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *re
 	    }
 	  return true;
 	}
-#if SIZEOF_LONG == 4
+#if SIZEOF_LONG == 8
       /* We do not care about reads unaliged to 4 bytes boundary.
          But 0x...ffc read of 8 bytes could overrun a page.  */
       bool lowered = (addr & 4) != 0;
       if (lowered)
 	addr -= 4;
-#endif /* SIZEOF_LONG == 4 */
+#endif /* SIZEOF_LONG == 8 */
       errno = 0;
       *result = ptrace (PTRACE_PEEKDATA, process->thread->tid, (void *) (uintptr_t) addr, NULL);
       if (errno != 0)
@@ -101,7 +101,7 @@ memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *re
 	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	  return false;
 	}
-#if SIZEOF_LONG == 4
+#if SIZEOF_LONG == 8
 # if BYTE_ORDER == BIG_ENDIAN
       if (! lowered)
 	*result >>= 32;
@@ -109,7 +109,7 @@ memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *re
       if (lowered)
 	*result >>= 32;
 # endif
-#endif /* SIZEOF_LONG == 4 */
+#endif /* SIZEOF_LONG == 8 */
       *result &= 0xffffffff;
       return true;
     }
