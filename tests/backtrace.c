@@ -33,13 +33,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/user.h>
-#include <argp.h>
 #include <fcntl.h>
 #include <string.h>
 #include ELFUTILS_HEADER(dwfl)
-
-/* libdwfl/argp-std.c */
-#define OPT_COREFILE    0x101
 
 static void
 report_pid (Dwfl *dwfl, pid_t pid)
@@ -52,6 +48,22 @@ report_pid (Dwfl *dwfl, pid_t pid)
 
   if (dwfl_report_end (dwfl, NULL, NULL) != 0)
     error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
+}
+
+static Dwfl *
+dwfl_get (void)
+{
+  static char *debuginfo_path;
+  static const Dwfl_Callbacks proc_callbacks =
+    {
+      .find_debuginfo = dwfl_standard_find_debuginfo,
+      .debuginfo_path = &debuginfo_path,
+
+      .find_elf = dwfl_linux_proc_find_elf,
+    };
+  Dwfl *dwfl = dwfl_begin (&proc_callbacks);
+  if (dwfl == NULL)
+    error (2, 0, "dwfl_begin: %s", dwfl_errmsg (-1));
 }
 
 static void
@@ -79,7 +91,10 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
 	  Dwarf_Addr pc;
 	  bool minusone;
 	  if (! dwfl_frame_state_pc (state, &pc, &minusone))
-	    error (2, 0, "dwfl_frame_state_pc: %s", dwfl_errmsg (-1));
+	    {
+	      perror (dwfl_errmsg (-1));
+	      break;
+	    }
 	  Dwarf_Addr pc_adjusted = pc - (minusone ? 1 : 0);
 
 	  /* Get PC->SYMNAME.  */
@@ -92,7 +107,10 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
 	  if (callback)
 	    callback (tid, frameno, pc, symname, dwfl, data);
 	  if (! dwfl_frame_unwind (&state))
-	    error (2, 0, "dwfl_frame_unwind: %s", dwfl_errmsg (-1));
+	    {
+	      perror (dwfl_errmsg (-1));
+	      break;
+	    }
 	  if (state == NULL)
 	    break;
 	}
@@ -118,37 +136,6 @@ see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), con
   assert (data->mod == NULL);
   data->mod = mod;
   return DWARF_CB_OK;
-}
-
-static argp_parser_t parse_opt_orig;
-static pid_t pid;
-static const char *corefile;
-
-static error_t
-parse_opt (int key, char *arg, struct argp_state *state)
-{
-  switch (key)
-    {
-    case 'p':
-      pid = atoi (arg);
-      break;
-    case OPT_COREFILE:
-      corefile = arg;
-      break;
-    case ARGP_KEY_SUCCESS:;
-      Dwfl *dwfl = state->hook;
-      if (dwfl)
-	break;
-      static const Dwfl_Callbacks callbacks =
-	{
-	  .find_elf = dwfl_linux_proc_find_elf,
-	  .find_debuginfo = dwfl_standard_find_debuginfo,
-	};
-      dwfl = dwfl_begin (&callbacks);
-      state->hook = dwfl;
-      break;
-    }
-  return parse_opt_orig (key, arg, state);
 }
 
 /* Execution will arrive here from jmp by an artificial ptrace-spawn signal.  */
@@ -452,23 +439,18 @@ main (int argc, char **argv)
   /* Set locale.  */
   (void) setlocale (LC_ALL, "");
 
-  struct argp argp = *dwfl_standard_argp ();
-  parse_opt_orig = argp.parser;
-  argp.parser = parse_opt;
-  int remaining;
-  Dwfl *dwfl = NULL;
-  argp_parse (&argp, argc, argv, 0, &remaining, &dwfl);
-  assert (dwfl != NULL);
-  assert (remaining == argc);
-
-  if (!pid && !corefile)
-    selfdump (dwfl);
-  else if (pid && !corefile)
-    dump (dwfl, pid, NULL, NULL, NULL);
-  else if (corefile && !pid)
-    dump (dwfl, 0, corefile, NULL, NULL);
+  if (!argv[1])
+    selfdump (dwfl_get ());
   else
-    abort ();
+    while (*++argv)
+      {
+	char *end;
+	long l = strtol (*argv, &end, 10);
+	if (**argv && !*end)
+	  dump (dwfl_get (), l, NULL, NULL, NULL);
+	else
+	  dump (dwfl_get (), 0, *argv, NULL, NULL);
+      }
 
   return 0;
 }
