@@ -257,6 +257,9 @@ dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr 
     return false;
   if (regno >= ebl->frame_state_nregs)
     return false;
+  /* For example i386 user_regs_struct has signed fields.  */
+  if (ebl->class == ELFCLASS32)
+    val &= 0xffffffff;
   state->regs_set[regno / sizeof (*state->regs_set) / 8] |=
 			      (1U << (regno % (sizeof (*state->regs_set) * 8)));
   state->regs[regno] = val;
