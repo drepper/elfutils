@@ -24,6 +24,8 @@
 #include <string.h>
 #include <pthread.h>
 
+static int ptraceme;
+
 /* Execution will arrive here from jmp by an artificial ptrace-spawn signal.  */
 
 static void
@@ -42,15 +44,14 @@ dummy1 (void)
   asm volatile ("");
 }
 
-#if !defined __x86_64__ && !defined __i386__
-static
-#endif
-__attribute__ ((noinline, noclone)) void
+#ifdef __x86_64__
+static __attribute__ ((noinline, noclone)) void
 jmp (void)
 {
   /* Not reached, signal will get ptrace-spawn to jump into sigusr2.  */
   abort ();
 }
+#endif
 
 static __attribute__ ((noinline, noclone)) void
 dummy2 (void)
@@ -64,10 +65,13 @@ stdarg (int f __attribute__ ((unused)), ...)
   sighandler_t sigusr2_orig = signal (SIGUSR2, sigusr2);
   assert (sigusr2_orig == SIG_DFL);
   errno = 0;
-  long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
-  assert_perror (errno);
-  assert (l == 0);
-#if defined __x86_64__ || defined __i386__
+  if (ptraceme)
+    {
+      long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
+      assert_perror (errno);
+      assert (l == 0);
+    }
+#ifdef __x86_64__
   raise (SIGUSR1);
   /* Execution will get PC patched into function jmp.  */
 #else
@@ -105,9 +109,12 @@ start (void *arg __attribute__ ((unused)))
 }
 
 int
-main (int argc, char **argv)
+main (int argc __attribute__ ((unused)), char **argv)
 {
-  assert (argc == 2 && strcmp (argv[1], "run-me-via-./backtrace") == 0);
+  assert (*argv++);
+  ptraceme = (*argv && strcmp (*argv, "--ptraceme") == 0);
+  argv += ptraceme;
+  assert (*argv && strcmp (*argv, "--run") == 0);
   dummy1 ();
   dummy2 ();
   dummy3 ();
@@ -117,9 +124,12 @@ main (int argc, char **argv)
   int i = pthread_create (&thread, NULL, start, NULL);
   assert_perror (errno);
   assert (i == 0);
-  long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
-  assert_perror (errno);
-  assert (l == 0);
+  if (ptraceme)
+    {
+      long l = ptrace (PTRACE_TRACEME, 0, NULL, NULL);
+      assert_perror (errno);
+      assert (l == 0);
+    }
   raise (SIGUSR2);
   abort ();
 }

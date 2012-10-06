@@ -81,6 +81,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
     abort ();
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
+  int err = 0;
   do
     {
       Dwarf_Frame_State *thread = state;
@@ -94,6 +95,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
 	  if (! dwfl_frame_state_pc (state, &pc, &minusone))
 	    {
 	      perror (dwfl_errmsg (-1));
+	      err = 1;
 	      break;
 	    }
 	  Dwarf_Addr pc_adjusted = pc - (minusone ? 1 : 0);
@@ -110,6 +112,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
 	  if (! dwfl_frame_unwind (&state))
 	    {
 	      perror (dwfl_errmsg (-1));
+	      err = 1;
 	      break;
 	    }
 	  if (state == NULL)
@@ -118,8 +121,9 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
       state = dwfl_frame_thread_next (thread);
     }
   while (state);
-
   dwfl_end (dwfl);
+  if (err)
+    exit (EXIT_FAILURE);
 }
 
 struct see_exec_module
@@ -140,9 +144,8 @@ see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), con
 }
 
 static void
-selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data)
+selfdump_callback (pid_t tid __attribute__ ((unused)), unsigned frameno __attribute__ ((unused)), Dwarf_Addr pc __attribute__ ((unused)), const char *symname __attribute__ ((unused)), Dwfl *dwfl __attribute__ ((unused)), void *data __attribute__ ((unused)))
 {
-#if defined __x86_64__ || defined __i386__
   pid_t check_tid = (intptr_t) data;
   if (tid != check_tid)
     return;
@@ -180,22 +183,15 @@ selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symna
       assert (symname2 == NULL || strcmp (symname2, "backtracegen") != 0);
       break;
   }
-#endif /* __x86_64__ || __i386__ */
 }
 
 static void
-prepare_thread (pid_t pid2, Dwarf_Addr plt_start, Dwarf_Addr plt_end, void (*jmp) (void))
+prepare_thread (pid_t pid2 __attribute__ ((unused)), Dwarf_Addr plt_start __attribute__ ((unused)), Dwarf_Addr plt_end __attribute__ ((unused)), void (*jmp) (void) __attribute__ ((unused)))
 {
+#ifdef __x86_64__
   long l;
-#if defined __x86_64__ || defined __i386__
   errno = 0;
-#if defined __x86_64__
   l = ptrace (PTRACE_POKEUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), jmp);
-#elif defined __i386__
-  l = ptrace (PTRACE_POKEUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), jmp);
-#else
-# error
-#endif
   assert_perror (errno);
   assert (l == 0);
   l = ptrace (PTRACE_CONT, pid2, NULL, (void *) (intptr_t) SIGUSR2);
@@ -208,13 +204,7 @@ prepare_thread (pid_t pid2, Dwarf_Addr plt_start, Dwarf_Addr plt_end, void (*jmp
   for (;;)
     {
       errno = 0;
-#if defined __x86_64__
       l = ptrace (PTRACE_PEEKUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
-#elif defined __i386__
-      l = ptrace (PTRACE_PEEKUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, eip), NULL);
-#else
-# error
-#endif
       assert_perror (errno);
       if ((unsigned long) l >= plt_start && (unsigned long) l < plt_end)
 	break;
@@ -227,7 +217,7 @@ prepare_thread (pid_t pid2, Dwarf_Addr plt_start, Dwarf_Addr plt_end, void (*jmp
       assert (WIFSTOPPED (status));
       assert (WSTOPSIG (status) == SIGTRAP);
     }
-#endif /* __x86_64__ || __i386__ */
+#endif /* __x86_64__ */
 }
 
 #include <asm/unistd.h>
@@ -271,7 +261,7 @@ selfdump (Dwfl *dwfl, const char *exec)
     case -1:
       abort ();
     case 0:
-      execl (exec, exec, "run-me-via-./backtrace", NULL);
+      execl (exec, exec, "--ptraceme", "--run", NULL);
       abort ();
     default:
       break;
@@ -329,37 +319,40 @@ selfdump (Dwfl *dwfl, const char *exec)
   assert (scn_shdr != NULL);
   Dwarf_Addr plt_start = scn_shdr->sh_addr + loadbase;
   Dwarf_Addr plt_end = plt_start + scn_shdr->sh_size;
+  /* Make it true on x86_64 with i386 inferior.  */
+  int disable = ehdr->e_ident[EI_CLASS] == ELFCLASS32;
   void (*jmp) (void);
-  int nsym = dwfl_module_getsymtab (data.mod);
-  int symi;
-  for (symi = 1; symi < nsym; ++symi)
+  if (! disable)
     {
-      GElf_Sym symbol;
-      const char *symbol_name = dwfl_module_getsym (data.mod, symi, &symbol, NULL);
-      if (symbol_name == NULL)
-        continue;
-      switch (GELF_ST_TYPE (symbol.st_info))
-        {
-        case STT_SECTION:
-        case STT_FILE:
-        case STT_TLS:
-	  continue;
-        default:
-	  if (strcmp (symbol_name, "jmp") != 0)
+      int nsym = dwfl_module_getsymtab (data.mod);
+      int symi;
+      for (symi = 1; symi < nsym; ++symi)
+	{
+	  GElf_Sym symbol;
+	  const char *symbol_name = dwfl_module_getsym (data.mod, symi, &symbol, NULL);
+	  if (symbol_name == NULL)
 	    continue;
+	  switch (GELF_ST_TYPE (symbol.st_info))
+	    {
+	    case STT_SECTION:
+	    case STT_FILE:
+	    case STT_TLS:
+	      continue;
+	    default:
+	      if (strcmp (symbol_name, "jmp") != 0)
+		continue;
+	      break;
+	    }
+	  /* LOADBASE is already applied here.  */
+	  jmp = (void (*) (void)) (uintptr_t) symbol.st_value;
 	  break;
-        }
-      /* LOADBASE is already applied here.  */
-      jmp = (void (*) (void)) (uintptr_t) symbol.st_value;
-      break;
+	}
+      assert (symi < nsym);
+    prepare_thread (pid2, plt_start, plt_end, jmp);
     }
-  assert (symi < nsym);
-
-  prepare_thread (pid2, plt_start, plt_end, jmp);
   ptrace_detach_stopped (pid, pid);
   ptrace_detach_stopped (pid2, pid);
-
-  dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) pid2);
+  dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) (disable ? 0 : pid2));
 }
 
 static bool
