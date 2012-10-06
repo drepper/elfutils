@@ -329,7 +329,7 @@ selfdump (Dwfl *dwfl, const char *exec)
 	  break;
         }
       /* LOADBASE is already applied here.  */
-      jmp = (void (*) (void)) symbol.st_value;
+      jmp = (void (*) (void)) (uintptr_t) symbol.st_value;
       break;
     }
   assert (symi < nsym);
