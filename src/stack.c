@@ -97,6 +97,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 
 static argp_parser_t parse_opt_orig;
 static pid_t pid;
+static bool executable;
 static const char *corefile;
 
 static error_t
@@ -107,7 +108,12 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'p':
       pid = atoi (arg);
       break;
+    case 'e':
+      executable = true;
+      break;
     case OPT_COREFILE:
+      if (executable)
+	error (2, 0, "Argument --core must be specified before --executable");
       corefile = arg;
       break;
     case ARGP_KEY_SUCCESS:;
