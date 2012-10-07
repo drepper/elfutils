@@ -118,7 +118,8 @@ report_core (Dwfl *dwfl, const char *corefile)
   /* FIXME: Here we use different DWFL, reported data would be used after free
      if we called dwfl_end (core_dwfl).  Therefore we leak CORE_DWFL.  */
   Dwfl *core_dwfl = dwfl_get_offline ();
-  Dwfl_Module *mod = dwfl_report_elf (core_dwfl, "core", corefile, -1, 0 /* base */);
+  Dwfl_Module *mod = dwfl_report_elf (core_dwfl, "core", corefile, -1,
+				      0 /* base */);
   assert (mod != NULL);
   GElf_Addr loadbase;
   Elf *core = dwfl_module_getelf (mod, &loadbase);
@@ -133,16 +134,22 @@ report_core (Dwfl *dwfl, const char *corefile)
 }
 
 static int
-dump_modules (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), const char *name, Dwarf_Addr start, void *arg __attribute__ ((unused)))
+dump_modules (Dwfl_Module *mod, void **userdata __attribute__ ((unused)),
+	      const char *name, Dwarf_Addr start,
+	      void *arg __attribute__ ((unused)))
 {
   Dwarf_Addr end;
   dwfl_module_info (mod, NULL, NULL, &end, NULL, NULL, NULL, NULL);
-  printf ("%#" PRIx64 "\t%#" PRIx64 "\t%s\n", (uint64_t) start, (uint64_t) end, name);
+  printf ("%#" PRIx64 "\t%#" PRIx64 "\t%s\n", (uint64_t) start, (uint64_t) end,
+	  name);
   return DWARF_CB_OK;
 }
 
 static void
-dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data), void *data)
+dump (Dwfl *dwfl, pid_t pid, const char *corefile,
+      void (*callback) (pid_t tid, unsigned frameno, Dwarf_Addr pc,
+			const char *symname, Dwfl *dwfl, void *data),
+      void *data)
 {
   Dwarf_Frame_State *state;
   if (pid && !corefile)
@@ -180,7 +187,8 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
 	  if (mod)
 	    symname = dwfl_module_addrname (mod, pc_adjusted);
 
-	  printf ("#%2u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc, minusone ? "- 1" : "", symname);
+	  printf ("#%2u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc,
+		  minusone ? "- 1" : "", symname);
 	  if (callback)
 	    callback (tid, frameno, pc, symname, dwfl, data);
 	  if (! dwfl_frame_unwind (&state))
@@ -209,7 +217,9 @@ struct see_exec_module
 };
 
 static int
-see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), const char *name __attribute__ ((unused)), Dwarf_Addr start __attribute__ ((unused)), void *arg)
+see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)),
+		 const char *name __attribute__ ((unused)),
+		 Dwarf_Addr start __attribute__ ((unused)), void *arg)
 {
   struct see_exec_module *data = arg;
   if (strcmp (name, data->selfpath) != 0)
@@ -220,7 +230,8 @@ see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), con
 }
 
 static void
-selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data)
+selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc,
+		   const char *symname, Dwfl *dwfl, void *data)
 {
   pid_t check_tid = (intptr_t) data;
   bool disable = check_tid < 0;
@@ -272,13 +283,15 @@ selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symna
   }
 }
 
-static void
-prepare_thread (pid_t pid2 __attribute__ ((unused)), Dwarf_Addr plt_start __attribute__ ((unused)), Dwarf_Addr plt_end __attribute__ ((unused)), void (*jmp) (void) __attribute__ ((unused)))
-{
 #ifdef __x86_64__
+static void
+prepare_thread (pid_t pid2, Dwarf_Addr plt_start, Dwarf_Addr plt_end,
+		void (*jmp) (void))
+{
   long l;
   errno = 0;
-  l = ptrace (PTRACE_POKEUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), jmp);
+  l = ptrace (PTRACE_POKEUSER, pid2,
+	      (void *) (intptr_t) offsetof (struct user_regs_struct, rip), jmp);
   assert_perror (errno);
   assert (l == 0);
   l = ptrace (PTRACE_CONT, pid2, NULL, (void *) (intptr_t) SIGUSR2);
@@ -291,7 +304,9 @@ prepare_thread (pid_t pid2 __attribute__ ((unused)), Dwarf_Addr plt_start __attr
   for (;;)
     {
       errno = 0;
-      l = ptrace (PTRACE_PEEKUSER, pid2, (void *) (intptr_t) offsetof (struct user_regs_struct, rip), NULL);
+      l = ptrace (PTRACE_PEEKUSER, pid2,
+		  (void *) (intptr_t) offsetof (struct user_regs_struct, rip),
+		  NULL);
       assert_perror (errno);
       if ((unsigned long) l >= plt_start && (unsigned long) l < plt_end)
 	break;
@@ -304,8 +319,8 @@ prepare_thread (pid_t pid2 __attribute__ ((unused)), Dwarf_Addr plt_start __attr
       assert (WIFSTOPPED (status));
       assert (WSTOPSIG (status) == SIGTRAP);
     }
-#endif /* __x86_64__ */
 }
+#endif /* __x86_64__ */
 
 #include <asm/unistd.h>
 #include <unistd.h>
@@ -325,7 +340,8 @@ ptrace_detach_stopped (pid_t pid, pid_t group_pid)
   /* Currently broken on kernel-3.5.4-2.fc17.x86_64.  */
 #if 0
   siginfo_t siginfo;
-  /* With kernel-2.6.18-308.el5.ppc64 we would get hanging waitpid after later PTRACE_ATTACH.  */
+  /* With kernel-2.6.18-308.el5.ppc64 we would get hanging waitpid after later
+     PTRACE_ATTACH.  */
   l = waitid (P_PID, pid, &siginfo, WSTOPPED | WNOWAIT | WNOHANG);
   assert_perror (errno);
   assert (l == 0);
@@ -334,7 +350,8 @@ ptrace_detach_stopped (pid_t pid, pid_t group_pid)
   assert (siginfo.si_code == CLD_STOPPED);
   /* kernel-2.6.18-308.el5.ppc64 has there WIFSTOPPED + WSTOPSIG,
      kernel-3.4.11-1.fc16.x86_64 has there the plain signal value.  */
-  assert ((WIFSTOPPED (siginfo.si_status) && WSTOPSIG (siginfo.si_status) == SIGSTOP)
+  assert ((WIFSTOPPED (siginfo.si_status)
+	   && WSTOPSIG (siginfo.si_status) == SIGSTOP)
 	  || siginfo.si_status == SIGSTOP);
 #endif
 }
@@ -379,7 +396,8 @@ selfdump (Dwfl *dwfl, const char *exec)
   int i = asprintf (&selfpathname, "/proc/%ld/exe", (long) pid);
   assert (i > 0);
   struct see_exec_module data;
-  ssize_t ssize = readlink (selfpathname, data.selfpath, sizeof (data.selfpath));
+  ssize_t ssize = readlink (selfpathname, data.selfpath,
+			    sizeof (data.selfpath));
   free (selfpathname);
   assert (ssize > 0 && ssize < (ssize_t) sizeof (data.selfpath));
   data.selfpath[ssize] = '\0';
@@ -396,7 +414,8 @@ selfdump (Dwfl *dwfl, const char *exec)
     {
       GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (scn, &scn_shdr_mem);
       assert (scn_shdr != NULL);
-      if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name), ".plt") != 0)
+      if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, scn_shdr->sh_name),
+		  ".plt") != 0)
 	continue;
       assert (plt == NULL);
       plt = scn;
@@ -404,10 +423,11 @@ selfdump (Dwfl *dwfl, const char *exec)
   assert (plt != NULL);
   GElf_Shdr scn_shdr_mem, *scn_shdr = gelf_getshdr (plt, &scn_shdr_mem);
   assert (scn_shdr != NULL);
-  Dwarf_Addr plt_start = scn_shdr->sh_addr + loadbase;
-  Dwarf_Addr plt_end = plt_start + scn_shdr->sh_size;
   /* Make it true on x86_64 with i386 inferior.  */
   int disable = ehdr->e_ident[EI_CLASS] == ELFCLASS32;
+#ifdef __x86_64__
+  Dwarf_Addr plt_start = scn_shdr->sh_addr + loadbase;
+  Dwarf_Addr plt_end = plt_start + scn_shdr->sh_size;
   void (*jmp) (void);
   if (! disable)
     {
@@ -437,10 +457,12 @@ selfdump (Dwfl *dwfl, const char *exec)
       assert (symi < nsym);
     prepare_thread (pid2, plt_start, plt_end, jmp);
     }
+#endif
   ptrace_detach_stopped (pid, pid);
   ptrace_detach_stopped (pid2, pid);
   report_pid (dwfl, pid);
-  dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) (disable ? -pid2 : pid2));
+  dump (dwfl, pid, NULL, selfdump_callback,
+	(void *) (intptr_t) (disable ? -pid2 : pid2));
 }
 
 static bool
@@ -454,7 +476,8 @@ is_core (const char *corefile)
   assert (core != NULL);
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
   assert (ehdr != NULL);
-  assert (ehdr->e_type == ET_CORE || ehdr->e_type == ET_EXEC || ehdr->e_type == ET_DYN);
+  assert (ehdr->e_type == ET_CORE || ehdr->e_type == ET_EXEC
+	  || ehdr->e_type == ET_DYN);
   bool retval = ehdr->e_type == ET_CORE;
   dwfl_end (dwfl);
   return retval;
@@ -480,7 +503,8 @@ main (int argc __attribute__ ((unused)), char **argv)
   if (argc == 2)
     {
       if (strcmp (*argv, "--help") == 0)
-	error (2, 0, "backtrace {{no args for ./backtrace-child}|<pid>|<core>|<executable>|<executable core>}");
+	error (2, 0, "backtrace {{no args for ./backtrace-child}|<pid>|<core>|"
+		     "<executable>|<executable core>}");
       char *end;
       long l = strtol (*argv, &end, 10);
       if (**argv && !*end)
@@ -508,7 +532,8 @@ main (int argc __attribute__ ((unused)), char **argv)
 	 will find the one from a core file which dwfl_module_addrname will not
 	 work for.  */
       report_core (dwfl, argv[1]);
-      Dwfl_Module *mod = dwfl_report_offline (dwfl, "<executable>", argv[0], -1);
+      Dwfl_Module *mod;
+      mod = dwfl_report_offline (dwfl, "<executable>", argv[0], -1);
       assert (mod);
       dump (dwfl, 0, argv[1], NULL, NULL);
       return 0;

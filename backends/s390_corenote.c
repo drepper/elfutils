@@ -53,7 +53,8 @@ static const Ebl_Register_Location prstatus_regs[] =
     GR ( 0,  1, 64),		/* pswm */
     GR ( 1,  1, 65),		/* pswa */
     GR ( 2, 16, 0),		/* r0-r15 */
-    { .offset = 18 * BITS/8, .regno = 48, .count = 16, .bits = 32 } /* ar0-r15 */
+    /* ar0-r15 */
+    { .offset = 18 * BITS/8, .regno = 48, .count = 16, .bits = 32 }
     /* ar15 end is at (BITS == 32 ? 18 + 16 == 34 : 18 + 16 / 2 == 26).  */
     /* orig_r2 is at (BITS == 32 ? 34 : 26). */
 

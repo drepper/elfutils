@@ -44,8 +44,10 @@
 static bool
 tid_is_attached (Dwfl *dwfl, pid_t tid)
 {
-  for (Dwarf_Frame_State_Process *process = dwfl->framestatelist; process; process = process->next)
-    for (Dwarf_Frame_State_Thread *thread = process->thread; thread; thread = thread->next)
+  for (Dwarf_Frame_State_Process *process = dwfl->framestatelist; process;
+       process = process->next)
+    for (Dwarf_Frame_State_Thread *thread = process->thread; thread;
+         thread = thread->next)
       if (thread->tid_attached && thread->tid == tid)
 	return true;
   return false;
@@ -104,7 +106,8 @@ state_alloc (Dwarf_Frame_State_Thread *thread)
   if (nregs == 0)
     return NULL;
   assert (nregs < sizeof (((Dwarf_Frame_State *) NULL)->regs_set) * 8);
-  Dwarf_Frame_State *state = malloc (sizeof (*state) + sizeof (*state->regs) * nregs);
+  Dwarf_Frame_State *state = malloc (sizeof (*state)
+				     + sizeof (*state->regs) * nregs);
   if (state == NULL)
     return NULL;
   state->thread = thread;
@@ -200,7 +203,8 @@ ptrace_attach (pid_t tid)
 	}
       if (WSTOPSIG (status) == SIGSTOP)
 	break;
-      if (ptrace (PTRACE_CONT, tid, NULL, (void *) (uintptr_t) WSTOPSIG (status)) != 0)
+      if (ptrace (PTRACE_CONT, tid, NULL,
+		  (void *) (uintptr_t) WSTOPSIG (status)) != 0)
 	{
 	  ptrace (PTRACE_DETACH, tid, NULL, NULL);
 	  return false;
@@ -251,7 +255,8 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 	  __libdwfl_seterrno (DWFL_E_ERRNO);
 	  return NULL;
 	}
-      if (strcmp (dirent->d_name, ".") == 0 || strcmp (dirent->d_name, "..") == 0)
+      if (strcmp (dirent->d_name, ".") == 0
+	  || strcmp (dirent->d_name, "..") == 0)
 	continue;
       char *end;
       errno = 0;
@@ -372,7 +377,8 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
       GElf_Phdr phdr_mem, *phdr = gelf_getphdr (core, cnt, &phdr_mem);
       if (phdr == NULL || phdr->p_type != PT_NOTE)
 	continue;
-      Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset, phdr->p_filesz, ELF_T_NHDR);
+      Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset,
+					     phdr->p_filesz, ELF_T_NHDR);
       if (data == NULL)
 	{
 	  process_free (process);
@@ -417,10 +423,13 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  __libdwfl_seterrno (DWFL_E_BADELF);
 		  return NULL;
 		}
-	      pid_t tid = val32s + BUILD_BUG_ON_ZERO (sizeof (val32s) <= sizeof (pid_t) ? 0 : -1);
+	      pid_t tid = val32s;
+	      tid += BUILD_BUG_ON_ZERO (sizeof (val32s) <= sizeof (pid_t)
+					? 0 : -1);
 	      if (thread)
 		{
-		  /* Delay initialization of THREAD till all notes for it have been read in.  */
+		  /* Delay initialization of THREAD till all notes for it have
+		     been read in.  */
 		  Dwarf_Frame_State *state = thread->unwound;
 		  if (! ebl_frame_state (state) || ! state_fetch_pc (state))
 		    {
@@ -451,7 +460,9 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		continue;
 	      assert (regloc->bits == 32 || regloc->bits == 64);
 	      const char *reg_desc = desc + regloc->offset;
-	      for (unsigned regno = regloc->regno; regno < MIN (regloc->regno + (regloc->count ?: 1U), nregs); regno++)
+	      for (unsigned regno = regloc->regno;
+		   regno < MIN (regloc->regno + (regloc->count ?: 1U), nregs);
+		   regno++)
 		{
 		  /* PPC provides DWARF register 65 irrelevant for
 		     CFI which clashes with register 108 (LR) we need.
@@ -496,7 +507,8 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
     }
   if (thread)
     {
-      /* Delay initialization of THREAD till all notes for it have been read in.  */
+      /* Delay initialization of THREAD till all notes for it have been read
+	 in.  */
       Dwarf_Frame_State *state = thread->unwound;
       if (! ebl_frame_state (state) || ! state_fetch_pc (state))
 	thread_free (thread);

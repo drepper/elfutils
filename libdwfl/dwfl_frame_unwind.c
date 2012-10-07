@@ -72,14 +72,16 @@ state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 }
 
 static bool
-memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *result)
+memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr,
+	     Dwarf_Addr *result)
 {
   if (process->core == NULL)
     {
       if (process->ebl->class == ELFCLASS64)
 	{
 	  errno = 0;
-	  *result = ptrace (PTRACE_PEEKDATA, process->thread->tid, (void *) (uintptr_t) addr, NULL);
+	  *result = ptrace (PTRACE_PEEKDATA, process->thread->tid,
+			    (void *) (uintptr_t) addr, NULL);
 	  if (errno != 0)
 	    {
 	      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
@@ -95,7 +97,8 @@ memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *re
 	addr -= 4;
 #endif /* SIZEOF_LONG == 8 */
       errno = 0;
-      *result = ptrace (PTRACE_PEEKDATA, process->thread->tid, (void *) (uintptr_t) addr, NULL);
+      *result = ptrace (PTRACE_PEEKDATA, process->thread->tid,
+			(void *) (uintptr_t) addr, NULL);
       if (errno != 0)
 	{
 	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
@@ -134,7 +137,9 @@ memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *re
 	  unsigned bytes = process->ebl->class == ELFCLASS64 ? 8 : 4;
 	  if (addr < start || addr + bytes > end)
 	    continue;
-	  Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start, bytes, ELF_T_ADDR);
+	  Elf_Data *data;
+	  data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start,
+				       bytes, ELF_T_ADDR);
 	  if (data == NULL)
 	    {
 	      __libdwfl_seterrno (DWFL_E_LIBELF);
@@ -166,7 +171,8 @@ bra_compar (const void *key_voidp, const void *elem_voidp)
 /* FIXME: Handle bytecode deadlocks and overflows.  */
 
 static bool
-expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, size_t nops, Dwarf_Addr *result)
+expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
+	   size_t nops, Dwarf_Addr *result)
 {
   if (nops == 0)
     {
@@ -266,7 +272,8 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	is_location = false;
 	break;
       case DW_OP_deref:
-	if (! pop (&val1) || ! memory_read (state->thread->process, val1, &val1) || ! push (val1))
+	if (! pop (&val1) || ! memory_read (state->thread->process, val1, &val1)
+	    || ! push (val1))
 	  {
 	    free (stack);
 	    return false;
@@ -308,7 +315,8 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops, si
 	/* FALLTHRU */
       case DW_OP_skip:;
 	Dwarf_Word offset = op->offset + 1 + 2 + (int16_t) op->number;
-	const Dwarf_Op *found = bsearch ((void *) (uintptr_t) offset, ops, nops, sizeof (*ops), bra_compar);
+	const Dwarf_Op *found = bsearch ((void *) (uintptr_t) offset, ops, nops,
+					 sizeof (*ops), bra_compar);
 	if (found == NULL)
 	  {
 	    free (stack);
@@ -444,7 +452,8 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
    an undefined PC register (due to an error unwinding it).  */
 
 static bool
-handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_CFI *cfi, Dwarf_Addr bias)
+handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
+	    Dwarf_CFI *cfi, Dwarf_Addr bias)
 {
   Dwarf_Frame_State *state = *statep;
   Dwarf_Frame *frame;
@@ -466,7 +475,8 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
   Dwarf_Frame_State_Process *process = thread->process;
   Ebl *ebl = process->ebl;
   size_t nregs = ebl_frame_state_nregs (ebl);
-  Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
+  Dwarf_Frame_State *unwound;
+  unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
   unwound->thread = thread;
   unwound->unwound = NULL;
@@ -477,7 +487,8 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
     {
       Dwarf_Op reg_ops_mem[3], *reg_ops;
       size_t reg_nops;
-      if (dwarf_frame_register (frame, regno, reg_ops_mem, &reg_ops, &reg_nops) != 0)
+      if (dwarf_frame_register (frame, regno, reg_ops_mem, &reg_ops,
+				&reg_nops) != 0)
 	{
 	  __libdwfl_seterrno (DWFL_E_LIBDW);
 	  continue;
@@ -519,7 +530,9 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_C
 	}
     }
   if (unwound->pc_state == DWARF_FRAME_STATE_ERROR
-      && dwarf_frame_state_reg_get (unwound, frame->fde->cie->return_address_register, &unwound->pc))
+      && dwarf_frame_state_reg_get (unwound,
+				    frame->fde->cie->return_address_register,
+				    &unwound->pc))
     {
       /* PPC32 __libc_start_main properly CFI-unwinds PC as zero.  Currently
 	 none of the archs supported for unwinding have zero as a valid PC.  */

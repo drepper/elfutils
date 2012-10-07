@@ -65,13 +65,18 @@ s390_frame_state (Dwarf_Frame_State *state)
       if (ptrace (PTRACE_PEEKUSR_AREA, tid, &parea, NULL) != 0)
 	return false;
       /* If we run as s390x we get the 64-bit registers of tid.
-         But -m31 executable seems to use only the 32-bit parts of its registers.  */
+	 But -m31 executable seems to use only the 32-bit parts of its
+	 registers so we ignore the upper half.  */
       for (unsigned u = 0; u < 16; u++)
 	dwarf_frame_state_reg_set (state, 0 + u, user_regs.regs.gprs[u]);
       /* Avoid a conversion double -> integer.  */
-      for (unsigned u = 0 + BUILD_BUG_ON_ZERO (sizeof (*user_regs.regs.fp_regs.fprs) - sizeof (*state->regs));
+      for (unsigned u = 0
+		      + BUILD_BUG_ON_ZERO (sizeof (*user_regs.regs.fp_regs.fprs)
+					   - sizeof (*state->regs));
 	   u < 16; u++)
-	dwarf_frame_state_reg_set (state, 16 + u, *(const __typeof (*state->regs) *) &user_regs.regs.fp_regs.fprs[u]);
+	dwarf_frame_state_reg_set (state, 16 + u,
+				   *((const __typeof (*state->regs) *)
+				     &user_regs.regs.fp_regs.fprs[u]));
       state->pc = user_regs.regs.psw.addr;
       state->pc_state = DWARF_FRAME_STATE_PC_SET;
 #endif /* __s390__ */
@@ -79,7 +84,8 @@ s390_frame_state (Dwarf_Frame_State *state)
   else /* core */
     {
       /* Fetch PSWA.  */
-      if (! core_get_pc (core, &state->pc, ebl->class == ELFCLASS32 ? 0x4c : 0x78))
+      if (! core_get_pc (core, &state->pc,
+			 ebl->class == ELFCLASS32 ? 0x4c : 0x78))
 	return false;
       state->pc_state = DWARF_FRAME_STATE_PC_SET;
     }

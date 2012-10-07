@@ -39,8 +39,9 @@
 #include "libebl_CPU.h"
 
 bool
-s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep, Dwarf_Addr pc,
-		   bool (*memory_read) (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *result))
+s390_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
+		   bool (*memory_read) (Dwarf_Frame_State_Process *process,
+					Dwarf_Addr addr, Dwarf_Addr *result))
 {
   Dwarf_Frame_State *state = *statep;
   Dwarf_Frame_State_Process *process = state->thread->process;
@@ -70,7 +71,8 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
     return false;
   unsigned word_size = ebl->class == ELFCLASS64 ? 8 : 4;
   Dwarf_Addr next_cfa = this_sp + 16 * word_size + 32;
-  /* "New-style RT frame" is not supported, assuming "Old-style RT frame and all non-RT frames".  */
+  /* "New-style RT frame" is not supported,
+     assuming "Old-style RT frame and all non-RT frames".  */
   Dwarf_Addr sigreg_ptr;
   if (! memory_read (process, next_cfa + 8, &sigreg_ptr))
     return false;
@@ -82,7 +84,8 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
     return false;
   sigreg_ptr += word_size;
   size_t nregs = ebl->frame_state_nregs;
-  Dwarf_Frame_State *unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
+  Dwarf_Frame_State *unwound;
+  unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
   unwound->thread = state->thread;
   unwound->unwound = NULL;

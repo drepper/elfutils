@@ -42,7 +42,8 @@ s390_abi_cfi (Ebl *ebl, Dwarf_CIE *abi_info)
     {
       /* This instruction is provided in every CIE.  It is not repeated here:
 	 DW_CFA_def_cfa, ULEB128_7 (15), ULEB128_7 (96)  */
-      /* r14 is not callee-saved but it needs to be preserved as it is pre-set by the caller.  */
+      /* r14 is not callee-saved but it needs to be preserved as it is pre-set
+	 by the caller.  */
       DW_CFA_same_value, ULEB128_7 (14), /* r14 */
 
       /* Callee-saved regs.  */

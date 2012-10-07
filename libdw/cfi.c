@@ -91,7 +91,8 @@ execute_cfi (Dwarf_CFI *cache,
 	    {
 	      fs = bigger;
 	      /* Assume reg_unspecified == 0.  */
-	      memset (fs->regs + fs->nregs, 0, sizeof (*fs->regs) * (reg + 1 - fs->nregs));
+	      memset (fs->regs + fs->nregs, 0,
+		      sizeof (*fs->regs) * (reg + 1 - fs->nregs));
 	      fs->nregs = reg + 1;
 	    }
 	}

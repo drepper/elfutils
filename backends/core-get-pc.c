@@ -40,7 +40,8 @@ core_get_pc (Elf *core, Dwarf_Addr *core_pc, unsigned pc_offset)
       GElf_Phdr phdr_mem, *phdr = gelf_getphdr (core, cnt, &phdr_mem);
       if (phdr == NULL || phdr->p_type != PT_NOTE)
 	continue;
-      Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset, phdr->p_filesz, ELF_T_NHDR);
+      Elf_Data *data = elf_getdata_rawchunk (core, phdr->p_offset,
+					     phdr->p_filesz, ELF_T_NHDR);
       if (data == NULL)
 	return NULL;
       size_t offset = 0;

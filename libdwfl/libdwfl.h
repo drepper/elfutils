@@ -557,7 +557,8 @@ extern Dwarf_CFI *dwfl_module_dwarf_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 extern Dwarf_CFI *dwfl_module_eh_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 
 extern Dwarf_Frame_State *dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid);
-extern Dwarf_Frame_State *dwfl_frame_state_core (Dwfl *dwfl, const char *corefile);
+extern Dwarf_Frame_State *dwfl_frame_state_core (Dwfl *dwfl,
+						 const char *corefile);
 
 /* Return TRUE and update *STATEP for the unwound frame for successful unwind.
    Return TRUE and set *STATEP to NULL for the outermost frame.  Return FALSE
@@ -569,7 +570,8 @@ extern bool dwfl_frame_unwind (Dwarf_Frame_State **statep);
    (and call __libdw_seterrno) otherwise.  *MINUSONE is TRUE for normal calls
    where *PC should be decremented by one to get the call instruction, it is
    FALSE if this frame was interrupted by a signal handler.  */
-extern bool dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone);
+extern bool dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc,
+				 bool *minusone);
 
 extern Dwarf_Frame_State *dwfl_frame_thread_next (Dwarf_Frame_State *state);
 extern pid_t dwfl_frame_tid_get (Dwarf_Frame_State *state);

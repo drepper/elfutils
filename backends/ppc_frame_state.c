@@ -83,18 +83,24 @@ ppc_frame_state (Dwarf_Frame_State *state)
       union
 	{
 	  struct pt_regs r;
-	  long l[sizeof (struct pt_regs) / sizeof (long) + BUILD_BUG_ON_ZERO (sizeof (struct pt_regs) % sizeof (long))];
+	  long l[sizeof (struct pt_regs) / sizeof (long)
+		 + BUILD_BUG_ON_ZERO (sizeof (struct pt_regs) % sizeof (long))];
 	}
       user_regs;
       /* PTRACE_GETREGS is EIO on kernel-2.6.18-308.el5.ppc64.  */
       errno = 0;
-      for (unsigned regno = 0; regno < sizeof (user_regs) / sizeof (long); regno++)
+      for (unsigned regno = 0; regno < sizeof (user_regs) / sizeof (long);
+	   regno++)
 	{
-	  user_regs.l[regno] = ptrace (PTRACE_PEEKUSER, tid, (void *) (uintptr_t) (regno * sizeof (long)), NULL);
+	  user_regs.l[regno] = ptrace (PTRACE_PEEKUSER, tid,
+				       (void *) (uintptr_t) (regno
+							     * sizeof (long)),
+				       NULL);
 	  if (errno != 0)
 	    return false;
 	}
-      for (unsigned gpr = 0; gpr < sizeof (user_regs.r.gpr) / sizeof (*user_regs.r.gpr); gpr++)
+      for (unsigned gpr = 0;
+	   gpr < sizeof (user_regs.r.gpr) / sizeof (*user_regs.r.gpr); gpr++)
 	dwarf_frame_state_reg_set (state, gpr, user_regs.r.gpr[gpr]);
       state->pc = user_regs.r.nip;
       state->pc_state = DWARF_FRAME_STATE_PC_SET;
@@ -105,7 +111,8 @@ ppc_frame_state (Dwarf_Frame_State *state)
     }
   else /* core */
     {
-      if (! core_get_pc (core, &state->pc, ebl->class == ELFCLASS64 ? 0x170 : 0xc8))
+      if (! core_get_pc (core, &state->pc,
+			 ebl->class == ELFCLASS64 ? 0x170 : 0xc8))
 	return false;
       state->pc_state = DWARF_FRAME_STATE_PC_SET;
     }

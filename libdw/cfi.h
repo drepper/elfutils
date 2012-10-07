@@ -218,10 +218,22 @@ struct Dwarf_Frame_State_Thread
 struct Dwarf_Frame_State
 {
   Dwarf_Frame_State_Thread *thread;
-  /* Previous frame.  */
+  /* Previous (outer) frame.  */
   Dwarf_Frame_State *unwound;
   bool signal_frame : 1;
-  enum { DWARF_FRAME_STATE_ERROR, DWARF_FRAME_STATE_PC_SET, DWARF_FRAME_STATE_PC_UNDEFINED } pc_state;
+  enum
+  {
+    /* This structure is still being initialized or there was an error
+       initializing it.  */
+    DWARF_FRAME_STATE_ERROR,
+    /* PC field is valid.  */
+    DWARF_FRAME_STATE_PC_SET,
+    /* PC field is undefined, this means the next (inner) frame was the
+       outermost frame.  */
+    DWARF_FRAME_STATE_PC_UNDEFINED
+  } pc_state;
+  /* Either initialized from appropriate REGS element or on some archs
+     initialized separately as the return address has no DWARF register.  */
   Dwarf_Addr pc;
   /* (1 << X) bitmask where 0 <= X < NREGS.  */
   uint64_t regs_set[3];
@@ -232,10 +244,12 @@ struct Dwarf_Frame_State
 /* Fetch value from Dwarf_Frame_State->regs indexed by DWARF REGNO.
    No error code is set if the function returns FALSE.  */
 static inline bool
-dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
+dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno,
+                           Dwarf_Addr *val)
 {
   Ebl *ebl = state->thread->process->ebl;
-  if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
+  if (ebl->frame_dwarf_to_regno != NULL
+      && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
   if (regno >= ebl->frame_state_nregs)
     return false;
@@ -250,10 +264,12 @@ dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr 
 /* Store value to Dwarf_Frame_State->regs indexed by DWARF REGNO.
    No error code is set if the function returns FALSE.  */
 static inline bool
-dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr val)
+dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno,
+			   Dwarf_Addr val)
 {
   Ebl *ebl = state->thread->process->ebl;
-  if (ebl->frame_dwarf_to_regno != NULL && ! ebl->frame_dwarf_to_regno (ebl, &regno))
+  if (ebl->frame_dwarf_to_regno != NULL
+      && ! ebl->frame_dwarf_to_regno (ebl, &regno))
     return false;
   if (regno >= ebl->frame_state_nregs)
     return false;

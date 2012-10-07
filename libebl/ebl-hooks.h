@@ -162,7 +162,8 @@ int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 /* Fetch process data from STATE->base->pid or STATE->base->core.  */
 bool EBLHOOK(frame_state) (Dwarf_Frame_State *state);
 
-/* Number of Dwarf_Frame_State->regs entries to allocate for frame_state above.  */
+/* Number of Dwarf_Frame_State->regs entries to allocate for frame_state
+   above.  */
 size_t EBLHOOKVAR(frame_state_nregs);
 
 /* Convert *REGNO as is in DWARF to a lower range suitable for
@@ -180,8 +181,12 @@ const char *EBLHOOK(get_func_pc) (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym);
 void EBLHOOK(normalize_pc) (Ebl *ebl, Dwarf_Addr *pc);
 
 /* See dwfl_frame_unwind.  */
-bool EBLHOOK(frame_unwind) (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
-			    bool (*memory_read) (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *result));
+bool
+  EBLHOOK(frame_unwind) (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
+			 bool
+			   (*memory_read) (Dwarf_Frame_State_Process *process,
+					   Dwarf_Addr addr,
+					   Dwarf_Addr *result));
 
 
 /* Destructor for ELF backend handle.  */

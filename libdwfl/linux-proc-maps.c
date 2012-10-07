@@ -1,4 +1,5 @@
-/* Standard libdwfl callbacks for debugging a live Linux process.  Copyright (C) 2005-2010 Red Hat, Inc.
+/* Standard libdwfl callbacks for debugging a live Linux process.
+   Copyright (C) 2005-2010 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify

@@ -100,7 +100,8 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	  opd_shdr = gelf_getshdr (scn, &opd_shdr_mem);
 	  if (opd_shdr == NULL)
 	    continue;
-	  if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, opd_shdr->sh_name), ".opd") != 0)
+	  if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, opd_shdr->sh_name),
+		      ".opd") != 0)
 	    continue;
 	  opd_data = elf_getdata (scn, NULL);
 	  /* SHT_NOBITS will produce NULL D_BUF.  */
@@ -113,9 +114,11 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	continue;
       Elf64_Addr val;
       if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
-          || sym.st_value > opd_shdr->sh_addr + mod->main_bias + opd_shdr->sh_size - sizeof (val))
+          || sym.st_value > (opd_shdr->sh_addr + mod->main_bias
+			     + opd_shdr->sh_size - sizeof (val)))
 	continue;
-      const void *ptr = opd_data->d_buf + sym.st_value - (opd_shdr->sh_addr + mod->main_bias);
+      const void *ptr = (opd_data->d_buf + sym.st_value
+			 - (opd_shdr->sh_addr + mod->main_bias));
       ptr = gelf_convert (elf, ELF_T_ADDR, ELF_T_ADDR, &val, ptr);
       if (ptr == NULL)
 	continue;
@@ -125,7 +128,9 @@ init (Ebl *ebl, Dwfl_Module *mod)
       const char *name = mod->symstrdata->d_buf + sym.st_name;
       names_size += 1 + strlen (name) + 1;
     }
-  struct pc_table *pc_table = malloc (sizeof (*pc_table) + funcs * sizeof (*pc_table->a) + names_size);
+  struct pc_table *pc_table;
+  pc_table = malloc (sizeof (*pc_table) + funcs * sizeof (*pc_table->a)
+		     + names_size);
   if (pc_table == NULL)
     return;
   ebl->backend = pc_table;
@@ -145,9 +150,11 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	continue;
       Elf64_Addr val;
       if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
-          || sym.st_value > opd_shdr->sh_addr + mod->main_bias + opd_shdr->sh_size - sizeof (val))
+          || sym.st_value > (opd_shdr->sh_addr + mod->main_bias
+			     + opd_shdr->sh_size - sizeof (val)))
 	continue;
-      const void *ptr = opd_data->d_buf + sym.st_value - (opd_shdr->sh_addr + mod->main_bias);
+      const void *ptr = (opd_data->d_buf + sym.st_value
+			 - (opd_shdr->sh_addr + mod->main_bias));
       ptr = gelf_convert (elf, ELF_T_ADDR, ELF_T_ADDR, &val, ptr);
       assert (ptr != NULL);
       assert (dest < pc_table->a + funcs);
@@ -175,7 +182,9 @@ ppc64_get_func_pc (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym)
   if (ebl->backend == NULL)
     return NULL;
   const struct pc_table *pc_table = ebl->backend;
-  const struct pc_entry *found = bsearch (sym, pc_table->a, pc_table->nelem, sizeof (*pc_table->a), compar);
+  const struct pc_entry *found;
+  found = bsearch (sym, pc_table->a, pc_table->nelem, sizeof (*pc_table->a),
+		   compar);
   if (found == NULL)
     return NULL;
   sym->st_value = found->st_value_to;

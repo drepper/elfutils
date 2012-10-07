@@ -79,7 +79,8 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 	  if (mod)
 	    symname = dwfl_module_addrname (mod, pc_adjusted);
 
-	  printf ("#%2u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc, minusone ? "- 1" : "", symname);
+	  printf ("#%2u %#" PRIx64 "%4s\t%s\n", frameno, (uint64_t) pc,
+		  minusone ? "- 1" : "", symname);
 	  if (! dwfl_frame_unwind (&state))
 	    {
 	      perror (dwfl_errmsg (-1));
@@ -157,7 +158,8 @@ main (int argc, char **argv)
   else if (corefile && !pid)
     dump (dwfl, 0, corefile);
   else
-    error (2, 0, "gstack [--debuginfo-path=<path>] {-p <process id>|--core=<core file>|--help}");
+    error (2, 0, "eu-stack [--debuginfo-path=<path>] "
+		 "{-p <process id>|--core=<core file>|--help}");
 
   return 0;
 }

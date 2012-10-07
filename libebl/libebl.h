@@ -393,8 +393,10 @@ extern void ebl_normalize_pc (Ebl *ebl, Dwarf_Addr *pc)
   __nonnull_attribute__ (1, 2);
 
 /* Get previous frame state for an existing frame state.  */
-extern bool ebl_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
-			      bool (*memory_read) (Dwarf_Frame_State_Process *process, Dwarf_Addr addr, Dwarf_Addr *result))
+extern bool
+  ebl_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
+		    bool (*memory_read) (Dwarf_Frame_State_Process *process,
+					 Dwarf_Addr addr, Dwarf_Addr *result))
   __nonnull_attribute__ (1, 2, 4);
 
 /* Convert *REGNO as is in DWARF to a lower range.  */

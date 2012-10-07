@@ -37,5 +37,6 @@ ebl_frame_dwarf_to_regno (Ebl *ebl, unsigned *regno)
 {
   if (ebl == NULL)
     return false;
-  return ebl->frame_dwarf_to_regno == NULL ? true : ebl->frame_dwarf_to_regno (ebl, regno);
+  return (ebl->frame_dwarf_to_regno == NULL
+	  ? true : ebl->frame_dwarf_to_regno (ebl, regno));
 }
