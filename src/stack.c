@@ -86,8 +86,6 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 	      fprintf (stderr, "%s\n", dwfl_errmsg (-1));
 	      break;
 	    }
-	  if (state == NULL)
-	    break;
 	}
       state = dwfl_frame_thread_next (thread);
     }

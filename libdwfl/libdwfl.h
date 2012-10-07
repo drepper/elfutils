@@ -556,7 +556,12 @@ extern int dwfl_module_register_names (Dwfl_Module *mod,
 extern Dwarf_CFI *dwfl_module_dwarf_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 extern Dwarf_CFI *dwfl_module_eh_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 
+/* Get innermost frame of first thread of live process PID.  Returns NULL on
+   failure.  */
 extern Dwarf_Frame_State *dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid);
+
+/* Get innermost frame of first thread of core file COREFILE.  Returns NULL on
+   failure.  */
 extern Dwarf_Frame_State *dwfl_frame_state_core (Dwfl *dwfl,
 						 const char *corefile);
 
@@ -573,7 +578,12 @@ extern bool dwfl_frame_unwind (Dwarf_Frame_State **statep);
 extern bool dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc,
 				 bool *minusone);
 
+/* Get innermost frame of the next thread from STATE.  STATE can be any frame
+   of (the previous) thread.  */
 extern Dwarf_Frame_State *dwfl_frame_thread_next (Dwarf_Frame_State *state);
+
+/* Get Task ID of the thread of STATE.  This is PID for the thread started by
+   function main and gettid () for the other threads.  */
 extern pid_t dwfl_frame_tid_get (Dwarf_Frame_State *state);
 
 #ifdef __cplusplus

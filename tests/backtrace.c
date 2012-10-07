@@ -197,8 +197,6 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile,
 	      err = 1;
 	      break;
 	    }
-	  if (state == NULL)
-	    break;
 	}
       state = dwfl_frame_thread_next (thread);
     }
