@@ -146,15 +146,9 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
 {
   Dwarf_Frame_State *state;
   if (pid && !corefile)
-    {
-      report_pid (dwfl, pid);
-      state = dwfl_frame_state_pid (dwfl, pid);
-    }
+    state = dwfl_frame_state_pid (dwfl, pid);
   else if (corefile && !pid)
-    {
-      report_core (dwfl, corefile);
-      state = dwfl_frame_state_core (dwfl, corefile);
-    }
+    state = dwfl_frame_state_core (dwfl, corefile);
   else
     abort ();
   if (state == NULL)
@@ -432,6 +426,7 @@ selfdump (Dwfl *dwfl, const char *exec)
     }
   ptrace_detach_stopped (pid, pid);
   ptrace_detach_stopped (pid2, pid);
+  report_pid (dwfl, pid);
   dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) (disable ? 0 : pid2));
 }
 
@@ -476,9 +471,17 @@ main (int argc __attribute__ ((unused)), char **argv)
       char *end;
       long l = strtol (*argv, &end, 10);
       if (**argv && !*end)
-	dump (dwfl_get_proc (), l, NULL, NULL, NULL);
+	{
+	  Dwfl *dwfl = dwfl_get_proc ();
+	  report_pid (dwfl, l);
+	  dump (dwfl, l, NULL, NULL, NULL);
+	}
       else if (is_core (*argv))
-	dump (dwfl_get_offline (), 0, *argv, NULL, NULL);
+	{
+	  Dwfl *dwfl = dwfl_get_offline ();
+	  report_core (dwfl, *argv);
+	  dump (dwfl, 0, *argv, NULL, NULL);
+	}
       else
 	selfdump (dwfl_get_proc (), *argv);
       return 0;
@@ -488,6 +491,10 @@ main (int argc __attribute__ ((unused)), char **argv)
       assert (! is_core (argv[0]));
       assert (is_core (argv[1]));
       Dwfl *dwfl = dwfl_get_offline ();
+      /* We must report core before the executable otherwise dwfl_addrmodule
+	 will find the one from a core file which dwfl_module_addrname will not
+	 work for.  */
+      report_core (dwfl, argv[1]);
       Dwfl_Module *mod = dwfl_report_offline (dwfl, "<executable>", argv[0], -1);
       assert (mod);
       dump (dwfl, 0, argv[1], NULL, NULL);
