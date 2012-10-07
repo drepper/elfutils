@@ -36,36 +36,6 @@
 #define BACKEND ppc64_
 #include "libebl_CPU.h"
 
-/* Exact copy from src/readelf.c.  */
-
-static const void *
-convert (Elf *core, Elf_Type type, uint_fast16_t count,
-	 void *value, const void *data, size_t size)
-{
-  Elf_Data valuedata =
-    {
-      .d_type = type,
-      .d_buf = value,
-      .d_size = size ?: gelf_fsize (core, type, count, EV_CURRENT),
-      .d_version = EV_CURRENT,
-    };
-  Elf_Data indata =
-    {
-      .d_type = type,
-      .d_buf = (void *) data,
-      .d_size = valuedata.d_size,
-      .d_version = EV_CURRENT,
-    };
-
-  Elf_Data *d = (gelf_getclass (core) == ELFCLASS32
-		 ? elf32_xlatetom : elf64_xlatetom)
-    (&valuedata, &indata, elf_getident (core, NULL)[EI_DATA]);
-  if (d == NULL)
-    return NULL;
-
-  return data + indata.d_size;
-}
-
 struct pc_entry
 {
   /* SYM_FROM must be the very first element for the use in bsearch below.  */
@@ -141,12 +111,12 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	}
       if (shndx != opd_shndx)
 	continue;
-      uint64_t val;
+      Elf64_Addr val;
       if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
           || sym.st_value > opd_shdr->sh_addr + mod->main_bias + opd_shdr->sh_size - sizeof (val))
 	continue;
       const void *ptr = opd_data->d_buf + sym.st_value - (opd_shdr->sh_addr + mod->main_bias);
-      ptr = convert (elf, ELF_T_ADDR, 1, &val, ptr, 0);
+      ptr = gelf_convert (elf, ELF_T_ADDR, ELF_T_ADDR, &val, ptr);
       if (ptr == NULL)
 	continue;
       if (unlikely (sym.st_name >= mod->symstrdata->d_size))
@@ -173,12 +143,12 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	shndx = sym.st_shndx;
       if (shndx != opd_shndx)
 	continue;
-      uint64_t val;
+      Elf64_Addr val;
       if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
           || sym.st_value > opd_shdr->sh_addr + mod->main_bias + opd_shdr->sh_size - sizeof (val))
 	continue;
       const void *ptr = opd_data->d_buf + sym.st_value - (opd_shdr->sh_addr + mod->main_bias);
-      ptr = convert (elf, ELF_T_ADDR, 1, &val, ptr, 0);
+      ptr = gelf_convert (elf, ELF_T_ADDR, ELF_T_ADDR, &val, ptr);
       assert (ptr != NULL);
       assert (dest < pc_table->a + funcs);
       dest->sym_from = sym;
@@ -188,7 +158,6 @@ init (Ebl *ebl, Dwfl_Module *mod)
       dest->name_to = names_dest;
       *names_dest++ = '.';
       names_dest = stpcpy (names_dest, name) + 1;
-// printf("0x%lx -> 0x%lx = %s\n",dest->sym_from.st_value, dest->st_value_to, dest->name_to);
       dest++;
       pc_table->nelem++;
     }

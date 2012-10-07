@@ -28,36 +28,6 @@
 
 #include <stdlib.h>
 
-/* Exact copy from src/readelf.c.  */
-
-static const void *
-convert (Elf *core, Elf_Type type, uint_fast16_t count,
-	 void *value, const void *data, size_t size)
-{
-  Elf_Data valuedata =
-    {
-      .d_type = type,
-      .d_buf = value,
-      .d_size = size ?: gelf_fsize (core, type, count, EV_CURRENT),
-      .d_version = EV_CURRENT,
-    };
-  Elf_Data indata =
-    {
-      .d_type = type,
-      .d_buf = (void *) data,
-      .d_size = valuedata.d_size,
-      .d_version = EV_CURRENT,
-    };
-
-  Elf_Data *d = (gelf_getclass (core) == ELFCLASS32
-		 ? elf32_xlatetom : elf64_xlatetom)
-    (&valuedata, &indata, elf_getident (core, NULL)[EI_DATA]);
-  if (d == NULL)
-    return NULL;
-
-  return data + indata.d_size;
-}
-
 static bool
 core_get_pc (Elf *core, Dwarf_Addr *core_pc, unsigned pc_offset)
 {
@@ -90,15 +60,17 @@ core_get_pc (Elf *core, Dwarf_Addr *core_pc, unsigned pc_offset)
 	  switch (bits)
 	  {
 	    case 32:;
-	      uint32_t val32;
-	      reg_desc = convert (core, ELF_T_WORD, 1, &val32, reg_desc, 0);
+	      Elf32_Word val32;
+	      reg_desc = gelf_convert (core, ELF_T_WORD, ELF_T_WORD, &val32,
+				       reg_desc);
 	      /* NULL REG_DESC is caught below.  */
 	      /* Do a host width conversion.  */
 	      val = val32;
 	      break;
 	    case 64:;
-	      uint64_t val64;
-	      reg_desc = convert (core, ELF_T_XWORD, 1, &val64, reg_desc, 0);
+	      Elf64_Xword val64;
+	      reg_desc = gelf_convert (core, ELF_T_XWORD, ELF_T_XWORD, &val64,
+				       reg_desc);
 	      /* NULL REG_DESC is caught below.  */
 	      val = val64;
 	      break;

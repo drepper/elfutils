@@ -41,36 +41,6 @@
 
 #define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
 
-/* Modified copy from src/readelf.c.  */
-
-static const void *
-convert (Elf *core, Elf_Type valuetype, Elf_Type datatype, uint_fast16_t count,
-	 void *value, const void *data, size_t size)
-{
-  Elf_Data valuedata =
-    {
-      .d_type = valuetype,
-      .d_buf = value,
-      .d_size = size ?: gelf_fsize (core, valuetype, count, EV_CURRENT),
-      .d_version = EV_CURRENT,
-    };
-  Elf_Data indata =
-    {
-      .d_type = datatype,
-      .d_buf = (void *) data,
-      .d_size = valuedata.d_size,
-      .d_version = EV_CURRENT,
-    };
-
-  Elf_Data *d = (gelf_getclass (core) == ELFCLASS32
-		 ? elf32_xlatetom : elf64_xlatetom)
-    (&valuedata, &indata, elf_getident (core, NULL)[EI_DATA]);
-  if (d == NULL)
-    return NULL;
-
-  return data + indata.d_size;
-}
-
 static bool
 tid_is_attached (Dwfl *dwfl, pid_t tid)
 {
@@ -437,9 +407,11 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	      for (item = items; item < items + nitems; item++)
 		if (strcmp (item->name, "pid") == 0)
 		  break;
-	      int32_t val32s;
+	      Elf32_Sword val32s;
 	      if (item == items + nitems
-		  || convert (core, ELF_T_SWORD, item->type, 1, &val32s, desc + item->offset, 0) == NULL)
+		  || gelf_convert (core, ELF_T_SWORD, item->type, &val32s,
+				   desc + item->offset)
+		     == NULL)
 		{
 		  process_free (process);
 		  __libdwfl_seterrno (DWFL_E_BADELF);
@@ -492,14 +464,16 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  {
 		    case 32:;
 		      Elf32_Word val32;
-		      reg_desc = convert (core, ELF_T_WORD, ELF_T_WORD, 1, &val32, reg_desc, 0);
+		      reg_desc = gelf_convert (core, ELF_T_WORD, ELF_T_WORD,
+					       &val32, reg_desc);
 		      /* NULL REG_DESC is caught below.  */
 		      /* Do a host width conversion.  */
 		      val = val32;
 		      break;
 		    case 64:;
-		      Elf32_Xword val64;
-		      reg_desc = convert (core, ELF_T_XWORD, ELF_T_XWORD, 1, &val64, reg_desc, 0);
+		      Elf64_Xword val64;
+		      reg_desc = gelf_convert (core, ELF_T_XWORD, ELF_T_XWORD,
+					       &val64, reg_desc);
 		      /* NULL REG_DESC is caught below.  */
 		      assert (sizeof (*state->regs) == sizeof (val64));
 		      val = val64;
