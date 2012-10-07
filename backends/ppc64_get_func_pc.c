@@ -133,7 +133,8 @@ init (Ebl *ebl, Dwfl_Module *mod)
 	  if (strcmp (elf_strptr (elf, ehdr->e_shstrndx, opd_shdr->sh_name), ".opd") != 0)
 	    continue;
 	  opd_data = elf_getdata (scn, NULL);
-	  if (opd_data == NULL)
+	  /* SHT_NOBITS will produce NULL D_BUF.  */
+	  if (opd_data == NULL || opd_data->d_buf == NULL)
 	    return;
 	  assert (opd_data->d_size == opd_shdr->sh_size);
 	  opd_shndx = shndx;
