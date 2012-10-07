@@ -17,6 +17,17 @@
 
 . $srcdir/test-subr.sh
 
-testrun ./backtrace >/dev/null
+if [ -z "$VERBOSE" ]; then
+  exec >/dev/null
+fi
+
+testrun ./backtrace ./backtrace-child
+testrun ./backtrace ./backtrace-child-biarch
+
+for arch in ppc ppc64 s390 s390x; do
+  testfiles backtrace.$arch.{exec,core}
+  echo ./backtrace ./backtrace.$arch.{exec,core}
+  testrun ./backtrace ./backtrace.$arch.{exec,core}
+done
 
 exit 0
