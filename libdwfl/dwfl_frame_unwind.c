@@ -402,6 +402,16 @@ have_unwound (Dwarf_Frame_State **statep)
 static bool
 no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
 {
+  GElf_Sym sym;
+  const char *symname = INTUSE(dwfl_module_addrsym) (mod, pc, &sym, NULL);
+  if (symname == NULL)
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return false;
+    }
+  /* It has no FDE on PPC64; it can be still unwound via the stack frame.  */
+  if (strcmp (symname, ".generic_start_main") == 0)
+    return true;
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (mod->main.elf, &ehdr_mem);
   if (ehdr == NULL)
     {
@@ -413,13 +423,10 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
     }
-  GElf_Sym entry_sym;
   /* "_start" is size-less.  Search for PC, if the closest symbol is the one
      for E_ENTRY it belongs into the function starting at E_ENTRY.  */
-  if (INTUSE(dwfl_module_addrsym) (mod, pc, &entry_sym, NULL) == NULL
-      || entry_sym.st_value != ehdr->e_entry + bias
-      || (entry_sym.st_size != 0
-	  && pc >= entry_sym.st_value + entry_sym.st_size))
+  if (sym.st_value != ehdr->e_entry + bias
+      || (sym.st_size != 0 && pc >= sym.st_value + sym.st_size))
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
