@@ -144,7 +144,3 @@ s390_register_info (Ebl *ebl __attribute__ ((unused)),
   name[namelen++] = '\0';
   return namelen;
 }
-
-__typeof (s390_register_info)
-     s390x_register_info
-     __attribute__ ((alias ("s390_register_info")));

@@ -70,8 +70,7 @@ static const struct
   { "sparc", "elf_sparcv9", "sparc", 5, EM_SPARCV9, 0, 0 },
   { "sparc", "elf_sparc", "sparc", 5, EM_SPARC, 0, 0 },
   { "sparc", "elf_sparcv8plus", "sparc", 5, EM_SPARC32PLUS, 0, 0 },
-  { "s390", "ebl_s390", "s390", 4, EM_S390, ELFCLASS32, 0 },
-  { "s390x", "ebl_s390x", "s390x", 5, EM_S390, ELFCLASS64, 0 },
+  { "s390", "ebl_s390", "s390", 4, EM_S390, 0, 0 },
 
   { "m32", "elf_m32", "m32", 3, EM_M32, 0, 0 },
   { "m68k", "elf_m68k", "m68k", 4, EM_68K, 0, 0 },
@@ -283,9 +282,8 @@ openbackend (elf, emulation, machine)
      when a module which can handle the machine type is found or all
      available matching modules are tried.  */
   for (cnt = 0; cnt < nmachines; ++cnt)
-    if (((emulation != NULL && strcmp (emulation, machines[cnt].emulation) == 0)
-	 || (emulation == NULL && machines[cnt].em == machine))
-	&& (machines[cnt].class == 0 || (elf && elf->state.elf32.ehdr->e_ident[EI_CLASS] == machines[cnt].class)))
+    if ((emulation != NULL && strcmp (emulation, machines[cnt].emulation) == 0)
+	|| (emulation == NULL && machines[cnt].em == machine))
       {
 	/* Well, we know the emulation name now.  */
 	result->emulation = machines[cnt].emulation;

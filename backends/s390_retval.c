@@ -157,7 +157,3 @@ s390_return_value_location (Dwarf_Die *functypedie, const Dwarf_Op **locp)
      DWARF and might be valid.  */
   return -2;
 }
-
-__typeof (s390_return_value_location)
-     s390x_return_value_location
-     __attribute__ ((alias ("s390_return_value_location")));

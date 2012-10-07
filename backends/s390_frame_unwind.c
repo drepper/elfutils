@@ -142,7 +142,3 @@ s390_frame_unwind (Ebl *ebl __attribute__ ((unused)), Dwarf_Frame_State **statep
   *statep = unwound;
   return true;
 }
-
-__typeof (s390_frame_unwind)
-     s390x_frame_unwind
-     __attribute__ ((alias ("s390_frame_unwind")));

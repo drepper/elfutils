@@ -86,13 +86,11 @@ s390_frame_state (Dwarf_Frame_State *state)
   return true;
 }
 
-__typeof (s390_frame_state)
-     s390x_frame_state
-     __attribute__ ((alias ("s390_frame_state")));
-
 void
 s390_normalize_pc (Ebl *ebl __attribute__ ((unused)), Dwarf_Addr *pc)
 {
+  if (ebl->class != ELFCLASS32)
+    return;
   /* Clear S390 bit 31.  */
   *pc &= (1U << 31) - 1;
 }

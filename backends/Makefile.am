@@ -32,11 +32,11 @@ INCLUDES += -I$(top_srcdir)/libebl -I$(top_srcdir)/libasm \
 	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw
 
 
-modules = i386 sh x86_64 ia64 alpha arm sparc ppc ppc64 s390 s390x tilegx
+modules = i386 sh x86_64 ia64 alpha arm sparc ppc ppc64 s390 tilegx
 libebl_pic = libebl_i386_pic.a libebl_sh_pic.a libebl_x86_64_pic.a \
 	     libebl_ia64_pic.a libebl_alpha_pic.a libebl_arm_pic.a \
 	     libebl_sparc_pic.a libebl_ppc_pic.a libebl_ppc64_pic.a \
-	     libebl_s390_pic.a libebl_s390x_pic.a libebl_tilegx_pic.a
+	     libebl_s390_pic.a libebl_tilegx_pic.a
 noinst_LIBRARIES = $(libebl_pic)
 noinst_DATA = $(libebl_pic:_pic.a=.so)
 
@@ -99,14 +99,10 @@ libebl_ppc64_pic_a_SOURCES = $(ppc64_SRCS)
 am_libebl_ppc64_pic_a_OBJECTS = $(ppc64_SRCS:.c=.os)
 
 s390_SRCS = s390_init.c s390_symbol.c s390_regs.c s390_retval.c s390_cfi.c \
-	    s390_frame_state.c s390_corenote.c s390_frame_unwind.c
+	    s390_frame_state.c s390_corenote.c s390x_corenote.c \
+	    s390_frame_unwind.c
 libebl_s390_pic_a_SOURCES = $(s390_SRCS)
 am_libebl_s390_pic_a_OBJECTS = $(s390_SRCS:.c=.os)
-
-s390x_SRCS = s390x_init.c s390_symbol.c s390_regs.c s390_retval.c s390_cfi.c \
-	    s390_frame_state.c s390x_corenote.c s390_frame_unwind.c
-libebl_s390x_pic_a_SOURCES = $(s390x_SRCS)
-am_libebl_s390x_pic_a_OBJECTS = $(s390x_SRCS:.c=.os)
 
 tilegx_SRCS = tilegx_init.c tilegx_symbol.c tilegx_regs.c \
               tilegx_retval.c tilegx_corenote.c

@@ -62,7 +62,3 @@ s390_abi_cfi (Ebl *ebl, Dwarf_CIE *abi_info)
 
   return 0;
 }
-
-__typeof (s390_abi_cfi)
-     s390x_abi_cfi
-     __attribute__ ((alias ("s390_abi_cfi")));

@@ -54,7 +54,3 @@ s390_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
       return ELF_T_NUM;
     }
 }
-
-__typeof (s390_reloc_simple_type)
-     s390x_reloc_simple_type
-     __attribute__ ((alias ("s390_reloc_simple_type")));

@@ -61,9 +61,19 @@ s390_init (elf, machine, eh, ehlen)
      if #32 (Argument pointer) and #33 (Condition code) are not used for unwinding.  */
   eh->frame_state_nregs = 32;
   HOOK (eh, frame_state);
-  HOOK (eh, core_note);
+  if (eh->class == ELFCLASS64)
+    {
+      __typeof (s390_core_note) s390x_core_note;
+      eh->core_note = s390x_core_note;
+    }
+  else
+    HOOK (eh, core_note);
   HOOK (eh, normalize_pc);
   HOOK (eh, frame_unwind);
+
+  /* Only the 64-bit format uses the incorrect hash table entry size.  */
+  if (eh->class == ELFCLASS64)
+    eh->sysvhash_entrysize = sizeof (Elf64_Xword);
 
   return MODVERSION;
 }
