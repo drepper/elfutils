@@ -24,7 +24,7 @@
 #include <string.h>
 #include <pthread.h>
 
-static int ptraceme;
+static int ptraceme, gencore;
 
 /* Execution will arrive here from jmp by an artificial ptrace-spawn signal.  */
 
@@ -32,7 +32,8 @@ static void
 sigusr2 (int signo)
 {
   assert (signo == SIGUSR2);
-  raise (SIGUSR1);
+  if (! gencore)
+    raise (SIGUSR1);
 
   /* Catch the .plt jump, it will come from this abort call.  */
   abort ();
@@ -72,11 +73,13 @@ stdarg (int f __attribute__ ((unused)), ...)
       assert (l == 0);
     }
 #ifdef __x86_64__
-  raise (SIGUSR1);
-  /* Execution will get PC patched into function jmp.  */
-#else
-  sigusr2 (SIGUSR2);
+  if (! gencore)
+    {
+      /* Execution will get PC patched into function jmp.  */
+      raise (SIGUSR1);
+    }
 #endif
+  sigusr2 (SIGUSR2);
   abort ();
 }
 
@@ -114,6 +117,8 @@ main (int argc __attribute__ ((unused)), char **argv)
   assert (*argv++);
   ptraceme = (*argv && strcmp (*argv, "--ptraceme") == 0);
   argv += ptraceme;
+  gencore = (*argv && strcmp (*argv, "--gencore") == 0);
+  argv += gencore;
   assert (*argv && strcmp (*argv, "--run") == 0);
   dummy1 ();
   dummy2 ();
@@ -130,6 +135,9 @@ main (int argc __attribute__ ((unused)), char **argv)
       assert_perror (errno);
       assert (l == 0);
     }
-  raise (SIGUSR2);
+  if (gencore)
+    pthread_join (thread, NULL);
+  else
+    raise (SIGUSR2);
   abort ();
 }

@@ -37,21 +37,8 @@
 #include <string.h>
 #include ELFUTILS_HEADER(dwfl)
 
-static void
-report_pid (Dwfl *dwfl, pid_t pid)
-{
-  int result = dwfl_linux_proc_report (dwfl, pid);
-  if (result < 0)
-    error (2, 0, "dwfl_linux_proc_report: %s", dwfl_errmsg (-1));
-  else if (result > 0)
-    error (2, result, "dwfl_linux_proc_report");
-
-  if (dwfl_report_end (dwfl, NULL, NULL) != 0)
-    error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
-}
-
 static Dwfl *
-dwfl_get (void)
+dwfl_get_proc (void)
 {
   static char *debuginfo_path;
   static const Dwfl_Callbacks proc_callbacks =
@@ -67,20 +54,113 @@ dwfl_get (void)
   return dwfl;
 }
 
+static Dwfl *
+dwfl_get_offline (void)
+{
+  static char *debuginfo_path;
+  static const Dwfl_Callbacks offline_callbacks =
+    {
+      .find_debuginfo = dwfl_standard_find_debuginfo,
+      .debuginfo_path = &debuginfo_path,
+
+      .section_address = dwfl_offline_section_address,
+
+      /* We use this table for core files too.  */
+      .find_elf = dwfl_build_id_find_elf,
+    };
+  Dwfl *dwfl = dwfl_begin (&offline_callbacks);
+  if (dwfl == NULL)
+    error (2, 0, "dwfl_begin: %s", dwfl_errmsg (-1));
+  return dwfl;
+}
+
+static void
+report_pid (Dwfl *dwfl, pid_t pid)
+{
+  int result = dwfl_linux_proc_report (dwfl, pid);
+  if (result < 0)
+    error (2, 0, "dwfl_linux_proc_report: %s", dwfl_errmsg (-1));
+  else if (result > 0)
+    error (2, result, "dwfl_linux_proc_report");
+
+  if (dwfl_report_end (dwfl, NULL, NULL) != 0)
+    error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
+}
+
+static void
+report_core (Dwfl *dwfl, const char *corefile)
+{
+#if 0
+  /* FIXME: Here COREFILE gets errorneously reported into VMA of DWFL.  */
+  Dwfl_Module *mod = dwfl_report_elf (dwfl, "core", corefile, -1, 0 /* base */);
+  assert (mod != NULL);
+  GElf_Addr loadbase;
+  Elf *core = dwfl_module_getelf (mod, &loadbase);
+  assert (core != NULL);
+  int result = dwfl_core_file_report (dwfl, core);
+  assert (result >= 0);
+#endif
+#if 0
+  /* FIXME: Here it does not build as __libdw_open_file is private.  */
+  int core_fd = open64 (corefile, O_RDONLY);
+  assert (core_fd >= 0);
+  Elf *core;
+  Dwfl_Error err = __libdw_open_file (&core_fd, &core, true, false);
+  assert (err == DWFL_E_NOERROR);
+  int result = dwfl_core_file_report (dwfl, core);
+  assert (result >= 0);
+  result = elf_end (core);
+  assert (result == 0);
+  result = close (core_fd);
+  assert (result == 0);
+#endif
+#if 1
+  /* FIXME: Here we use different DWFL, reported data would be used after free
+     if we called dwfl_end (core_dwfl).  Therefore we leak CORE_DWFL.  */
+  Dwfl *core_dwfl = dwfl_get_offline ();
+  Dwfl_Module *mod = dwfl_report_elf (core_dwfl, "core", corefile, -1, 0 /* base */);
+  assert (mod != NULL);
+  GElf_Addr loadbase;
+  Elf *core = dwfl_module_getelf (mod, &loadbase);
+  assert (core != NULL);
+  int result = dwfl_core_file_report (dwfl, core);
+  assert (result >= 0);
+  // dwfl_end (core_dwfl);
+#endif
+
+  if (dwfl_report_end (dwfl, NULL, NULL) != 0)
+    error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
+}
+
+static int
+dump_modules (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), const char *name, Dwarf_Addr start, void *arg __attribute__ ((unused)))
+{
+  Dwarf_Addr end;
+  dwfl_module_info (mod, NULL, NULL, &end, NULL, NULL, NULL, NULL);
+  printf ("%#" PRIx64 "\t%#" PRIx64 "\t%s\n", (uint64_t) start, (uint64_t) end, name);
+  return DWARF_CB_OK;
+}
+
 static void
 dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data), void *data)
 {
-  if (pid)
-    report_pid (dwfl, pid);
   Dwarf_Frame_State *state;
-  if (pid)
-    state = dwfl_frame_state_pid (dwfl, pid);
-  else if (corefile)
-    state = dwfl_frame_state_core (dwfl, corefile);
+  if (pid && !corefile)
+    {
+      report_pid (dwfl, pid);
+      state = dwfl_frame_state_pid (dwfl, pid);
+    }
+  else if (corefile && !pid)
+    {
+      report_core (dwfl, corefile);
+      state = dwfl_frame_state_core (dwfl, corefile);
+    }
   else
     abort ();
   if (state == NULL)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
+  ptrdiff_t ptrdiff = dwfl_getmodules (dwfl, dump_modules, NULL, 0);
+  assert (ptrdiff == 0);
   int err = 0;
   do
     {
@@ -358,7 +438,7 @@ selfdump (Dwfl *dwfl, const char *exec)
 static bool
 is_core (const char *corefile)
 {
-  Dwfl *dwfl = dwfl_get ();
+  Dwfl *dwfl = dwfl_get_offline ();
   Dwfl_Module *mod = dwfl_report_elf (dwfl, "core", corefile, -1, 0 /* base */);
   assert (mod != NULL);
   GElf_Addr loadbase;
@@ -383,20 +463,37 @@ main (int argc __attribute__ ((unused)), char **argv)
   /* Set locale.  */
   (void) setlocale (LC_ALL, "");
 
-  if (!argv[1])
-    selfdump (dwfl_get (), "./backtrace-child");
-  else
-    while (*++argv)
-      {
-	char *end;
-	long l = strtol (*argv, &end, 10);
-	if (**argv && !*end)
-	  dump (dwfl_get (), l, NULL, NULL, NULL);
-	else if (is_core (*argv))
-	  dump (dwfl_get (), 0, *argv, NULL, NULL);
-	else
-	  selfdump (dwfl_get (), *argv);
-      }
+  if (argc == 1)
+    {
+      selfdump (dwfl_get_proc (), "./backtrace-child");
+      return 0;
+    }
+  argv++;
+  if (argc == 2)
+    {
+      if (strcmp (*argv, "--help") == 0)
+	error (2, 0, "backtrace {{no args for ./backtrace-child}|<pid>|<core>|<executable>|<executable core>}");
+      char *end;
+      long l = strtol (*argv, &end, 10);
+      if (**argv && !*end)
+	dump (dwfl_get_proc (), l, NULL, NULL, NULL);
+      else if (is_core (*argv))
+	dump (dwfl_get_offline (), 0, *argv, NULL, NULL);
+      else
+	selfdump (dwfl_get_proc (), *argv);
+      return 0;
+    }
+  if (argc == 3)
+    {
+      assert (! is_core (argv[0]));
+      assert (is_core (argv[1]));
+      Dwfl *dwfl = dwfl_get_offline ();
+      Dwfl_Module *mod = dwfl_report_offline (dwfl, "<executable>", argv[0], -1);
+      assert (mod);
+      dump (dwfl, 0, argv[1], NULL, NULL);
+      return 0;
+    }
+  assert (0);
 
   return 0;
 }
