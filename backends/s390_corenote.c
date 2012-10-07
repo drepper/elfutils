@@ -121,8 +121,8 @@ static const Ebl_Register_Location fpregset_regs[] =
 static const Ebl_Register_Location high_regs[] =
   {
     /* Upper halves of r-r15 are stored here.  */
-    /* FIXME: readelf -n does not display the values merged.  */
-    { .offset = 0, .regno = 0, .count = 16, .bits = 32, .shift = 32 },
+    /* FIXME: It is currently unsupported by elfutils.  */
+    { .offset = 0, .regno = 0, .count = 16, .bits = 32 },
   };
 
 static const Ebl_Core_Item no_items[0];

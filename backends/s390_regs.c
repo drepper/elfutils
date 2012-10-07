@@ -73,8 +73,6 @@ s390_register_info (Ebl *ebl __attribute__ ((unused)),
     {
       *setname = "integer";
       *type = DW_ATE_signed;
-      /* Even 32-bit s390 has 64-bit registers r0-r15.  */
-      *bits = 64;
     }
   else if (regno < 32)
     {

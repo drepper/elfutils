@@ -485,7 +485,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		     CFI which clashes with register 108 (LR) we need.
 		     LR (108) is provided earlier (in NT_PRSTATUS) than the # 65.
 		     FIXME: It depends now on their order in core notes.  */
-		  if (regloc->shift == 0 && dwarf_frame_state_reg_get (state, regno, NULL))
+		  if (dwarf_frame_state_reg_get (state, regno, NULL))
 		    continue;
 		  Dwarf_Addr val;
 		  switch (regloc->bits)
@@ -512,13 +512,6 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		      process_free (process);
 		      __libdwfl_seterrno (DWFL_E_BADELF);
 		      return NULL;
-		    }
-		  if (regloc->shift)
-		    {
-		      Dwarf_Addr val_low;
-		      bool ok = dwarf_frame_state_reg_get (state, regno, &val_low);
-		      assert (ok);
-		      val = (val << regloc->shift) | val_low;
 		    }
 		  /* Registers not valid for CFI are just ignored.  */
 		  dwarf_frame_state_reg_set (state, regno, val);

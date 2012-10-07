@@ -349,7 +349,6 @@ typedef struct
   uint8_t bits;			/* Bits of data for one register.  */
   uint8_t pad;			/* Bytes of padding after register's data.  */
   Dwarf_Half count;		/* Consecutive register numbers here.  */
-  uint8_t shift;		/* Bits to shift the value left.  */
 } Ebl_Register_Location;
 
 /* Non-register data items in core notes.  */
