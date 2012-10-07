@@ -46,7 +46,7 @@ dummy1 (void)
 }
 
 #ifdef __x86_64__
-static __attribute__ ((noinline, noclone)) void
+static __attribute__ ((noinline, noclone, used)) void
 jmp (void)
 {
   /* Not reached, signal will get ptrace-spawn to jump into sigusr2.  */
