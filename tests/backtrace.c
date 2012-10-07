@@ -195,6 +195,8 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile, void (*callback) (pid_t tid, 
       state = dwfl_frame_thread_next (thread);
     }
   while (state);
+  if (callback)
+    callback (0, 0, 0, NULL, dwfl, data);
   dwfl_end (dwfl);
   if (err)
     exit (EXIT_FAILURE);
@@ -218,10 +220,21 @@ see_exec_module (Dwfl_Module *mod, void **userdata __attribute__ ((unused)), con
 }
 
 static void
-selfdump_callback (pid_t tid __attribute__ ((unused)), unsigned frameno __attribute__ ((unused)), Dwarf_Addr pc __attribute__ ((unused)), const char *symname __attribute__ ((unused)), Dwfl *dwfl __attribute__ ((unused)), void *data __attribute__ ((unused)))
+selfdump_callback (pid_t tid, unsigned frameno, Dwarf_Addr pc, const char *symname, Dwfl *dwfl, void *data)
 {
   pid_t check_tid = (intptr_t) data;
-  if (tid != check_tid)
+  bool disable = check_tid < 0;
+  if (disable)
+    check_tid = -check_tid;
+  static bool seen_main = false;
+  if (symname && strcmp (symname, "main") == 0)
+    seen_main = true;
+  if (pc == 0)
+    {
+      assert (seen_main);
+      return;
+    }
+  if (disable || tid != check_tid)
     return;
   Dwfl_Module *mod;
   const char *symname2 = NULL;
@@ -427,7 +440,7 @@ selfdump (Dwfl *dwfl, const char *exec)
   ptrace_detach_stopped (pid, pid);
   ptrace_detach_stopped (pid2, pid);
   report_pid (dwfl, pid);
-  dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) (disable ? 0 : pid2));
+  dump (dwfl, pid, NULL, selfdump_callback, (void *) (intptr_t) (disable ? -pid2 : pid2));
 }
 
 static bool
