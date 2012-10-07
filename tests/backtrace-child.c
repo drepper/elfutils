@@ -23,6 +23,8 @@
 #include <sys/ptrace.h>
 #include <string.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <unistd.h>
 
 static int ptraceme, gencore;
 
@@ -124,6 +126,8 @@ main (int argc __attribute__ ((unused)), char **argv)
   dummy2 ();
   dummy3 ();
   dummy4 ();
+  if (gencore)
+    printf ("%ld\n", (long) getpid ());
   errno = 0;
   pthread_t thread;
   int i = pthread_create (&thread, NULL, start, NULL);

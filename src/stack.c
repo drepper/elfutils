@@ -68,7 +68,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 	  bool minusone;
 	  if (! dwfl_frame_state_pc (state, &pc, &minusone))
 	    {
-	      perror (dwfl_errmsg (-1));
+	      fprintf (stderr, "%s\n", dwfl_errmsg (-1));
 	      break;
 	    }
 	  Dwarf_Addr pc_adjusted = pc - (minusone ? 1 : 0);
@@ -83,7 +83,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 		  minusone ? "- 1" : "", symname);
 	  if (! dwfl_frame_unwind (&state))
 	    {
-	      perror (dwfl_errmsg (-1));
+	      fprintf (stderr, "%s\n", dwfl_errmsg (-1));
 	      break;
 	    }
 	  if (state == NULL)

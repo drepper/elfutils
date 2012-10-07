@@ -175,7 +175,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile,
 	  bool minusone;
 	  if (! dwfl_frame_state_pc (state, &pc, &minusone))
 	    {
-	      perror (dwfl_errmsg (-1));
+	      fprintf (stderr, "%s\n", dwfl_errmsg (-1));
 	      err = 1;
 	      break;
 	    }
@@ -193,7 +193,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile,
 	    callback (tid, frameno, pc, symname, dwfl, data);
 	  if (! dwfl_frame_unwind (&state))
 	    {
-	      perror (dwfl_errmsg (-1));
+	      fprintf (stderr, "%s\n", dwfl_errmsg (-1));
 	      err = 1;
 	      break;
 	    }
