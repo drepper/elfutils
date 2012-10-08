@@ -60,6 +60,26 @@ static const struct argp_option options[] =
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
+static int
+offline_find_elf (Dwfl_Module *mod, void **userdata, const char *modname,
+		  Dwarf_Addr base, char **file_name, Elf **elfp)
+{
+  if (modname != NULL && (strcmp (modname, "[exe]") == 0
+			  || strcmp (modname, "[pie]") == 0)
+      && *userdata)
+    {
+      char *e_dup = strdup (*userdata);
+      if (e_dup)
+	{
+	  free (*file_name);
+	  *file_name = e_dup;
+	  return -1;
+	}
+    }
+  return INTUSE(dwfl_build_id_find_elf) (mod, userdata, modname, base,
+                                         file_name, elfp);
+}
+
 static char *debuginfo_path;
 
 static const Dwfl_Callbacks offline_callbacks =
@@ -70,7 +90,7 @@ static const Dwfl_Callbacks offline_callbacks =
     .section_address = INTUSE(dwfl_offline_section_address),
 
     /* We use this table for core files too.  */
-    .find_elf = INTUSE(dwfl_build_id_find_elf),
+    .find_elf = offline_find_elf,
   };
 
 static const Dwfl_Callbacks proc_callbacks =
@@ -89,6 +109,10 @@ static const Dwfl_Callbacks kernel_callbacks =
     .find_elf = INTUSE(dwfl_linux_kernel_find_elf),
     .section_address = INTUSE(dwfl_linux_kernel_module_section_address),
   };
+
+/* I have tried to change state->hook to be struct * containing these fields
+   but all the elfutils programs already expect state->hook is Dwfl *.  */
+const char *data_e, *data_core;
 
 static error_t
 parse_opt (int key, char *arg, struct argp_state *state)
@@ -129,19 +153,16 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	       the DSO is shown without address bias.  */
 	    dwfl->offline_next_address = 0;
 	  }
-	if (dwfl->callbacks == &offline_callbacks)
-	  {
-	    if (INTUSE(dwfl_report_offline) (dwfl, "", arg, -1) == NULL)
-	      return fail (dwfl, -1, arg);
-	    state->hook = dwfl;
-	  }
-	else
+	if (dwfl->callbacks != &offline_callbacks)
 	  {
 	  toomany:
 	    argp_error (state, "%s",
 			_("only one of -e, -p, -k, -K, or --core allowed"));
 	    return EINVAL;
 	  }
+	if (data_core)
+	  argp_error (state, _("-e must be specified before --core"));
+	data_e = arg;
       }
       break;
 
@@ -189,37 +210,8 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	/* Permit -e and --core together.  */
 	else if (dwfl->callbacks != &offline_callbacks)
 	  goto toomany;
-
-	int fd = open64 (arg, O_RDONLY);
-	if (fd < 0)
-	  goto nofile;
-
-	Elf *core;
-	Dwfl_Error error = __libdw_open_file (&fd, &core, true, false);
-	if (error != DWFL_E_NOERROR)
-	  {
-	    argp_failure (state, EXIT_FAILURE, 0,
-			  _("cannot read ELF core file: %s"),
-			  INTUSE(dwfl_errmsg) (error));
-	    return error == DWFL_E_ERRNO ? errno : EIO;
-	  }
-
-	int result = INTUSE(dwfl_core_file_report) (dwfl, core);
-	if (result < 0)
-	  {
-	    elf_end (core);
-	    close (fd);
-	    return fail (dwfl, result, arg);
-	  }
-
-	/* From now we leak FD and CORE.  */
-
-	if (result == 0)
-	  {
-	    argp_failure (state, EXIT_FAILURE, 0,
-			  _("No modules recognized in core file"));
-	    return ENOENT;
-	  }
+	
+	data_core = arg;
       }
       break;
 
@@ -266,6 +258,54 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	    if (INTUSE(dwfl_report_offline) (dwfl, "", arg, -1) == NULL)
 	      return fail (dwfl, -1, arg);
 	    state->hook = dwfl;
+	  }
+
+	if (data_core)
+	  {
+	    int fd = open64 (data_core, O_RDONLY);
+	    if (fd < 0)
+	      goto nofile;
+
+	    Elf *core;
+	    Dwfl_Error error = __libdw_open_file (&fd, &core, true, false);
+	    if (error != DWFL_E_NOERROR)
+	      {
+		argp_failure (state, EXIT_FAILURE, 0,
+			      _("cannot read ELF core file: %s"),
+			      INTUSE(dwfl_errmsg) (error));
+		return error == DWFL_E_ERRNO ? errno : EIO;
+	      }
+
+	    int result = INTUSE(dwfl_core_file_report) (dwfl, core);
+	    if (result < 0)
+	      {
+		elf_end (core);
+		close (fd);
+		return fail (dwfl, result, data_core);
+	      }
+
+	    /* From now we leak FD and CORE.  */
+
+	    if (result == 0)
+	      {
+		argp_failure (state, EXIT_FAILURE, 0,
+			      _("No modules recognized in core file"));
+		return ENOENT;
+	      }
+
+	    if (data_e)
+	      for (Dwfl_Module *mod = dwfl->modulelist; mod; mod = mod->next)
+		{
+		  if (mod->name == NULL || (strcmp (mod->name, "[exe]") != 0
+					    && strcmp (mod->name, "[pie]") != 0))
+		    continue;
+		  mod->userdata = (void *) data_e;
+		}
+	  }
+	else if (data_e)
+	  {
+	    if (INTUSE(dwfl_report_offline) (dwfl, "", data_e, -1) == NULL)
+	      return fail (dwfl, -1, arg);
 	  }
 
 	/* One of the three flavors has done dwfl_begin and some reporting

@@ -96,7 +96,6 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 
 static argp_parser_t parse_opt_orig;
 static pid_t pid;
-static bool executable;
 static const char *corefile;
 
 static error_t
@@ -107,25 +106,8 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'p':
       pid = atoi (arg);
       break;
-    case 'e':
-      executable = true;
-      break;
     case OPT_COREFILE:
-      if (executable)
-	error (2, 0, "Argument --core must be specified before --executable");
       corefile = arg;
-      break;
-    case ARGP_KEY_SUCCESS:;
-      Dwfl *dwfl = state->hook;
-      if (dwfl)
-	break;
-      static const Dwfl_Callbacks callbacks =
-	{
-	  .find_elf = dwfl_linux_proc_find_elf,
-	  .find_debuginfo = dwfl_standard_find_debuginfo,
-	};
-      dwfl = dwfl_begin (&callbacks);
-      state->hook = dwfl;
       break;
     }
   return parse_opt_orig (key, arg, state);
@@ -156,8 +138,8 @@ main (int argc, char **argv)
   else if (corefile && !pid)
     dump (dwfl, 0, corefile);
   else
-    error (2, 0, "eu-stack [--debuginfo-path=<path>] "
-		 "{-p <process id>|--core=<core file>|--help}");
+    error (2, 0, "eu-stack [--debuginfo-path=<path>] {-p <process id>|"
+                 "--core=<file> [--executable=<file>]|--help}");
 
   return 0;
 }

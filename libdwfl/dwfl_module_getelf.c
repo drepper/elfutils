@@ -57,7 +57,8 @@ dwfl_module_getelf (Dwfl_Module *mod, GElf_Addr *loadbase)
 	    }
 	}
 
-      *loadbase = dwfl_adjusted_address (mod, 0);
+      if (loadbase)
+	*loadbase = dwfl_adjusted_address (mod, 0);
       return mod->main.elf;
     }
 

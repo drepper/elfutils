@@ -31,11 +31,7 @@ for child in backtrace-child{,-biarch}; do
   mytestrun ./backtrace ./$child
   core="core.`ulimit -c unlimited; set +e; ./$child --gencore --run; true`"
   tempfiles $core
-  # FIXME: This does not work now:
-  # 0x7fce62f89000	0x7fce6318b000	[pie]
-  # [...]
-  # 0x200000	0x401558	<executable>
-  # mytestrun ./backtrace ./$child ./$core
+  mytestrun ./backtrace ./$child ./$core
 done
 
 for arch in ppc ppc64 s390 s390x; do
