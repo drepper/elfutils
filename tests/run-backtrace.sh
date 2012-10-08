@@ -27,22 +27,29 @@ mytestrun()
   testrun "$@"
 }
 
-for child in backtrace-child{,-biarch}; do
-  mytestrun ./backtrace ./$child
-  core="core.`ulimit -c unlimited; set +e; ./$child --gencore --run; true`"
-  tempfiles $core $core.bt
-  mytestrun ./backtrace ./$child ./$core | tee $core.bt
+check_gsignal()
+{
   # Without proper ELF symbols resolution we could get inappropriate weak
   # symbol "gsignal" with the same address as the correct symbol "raise".
   if grep -w gsignal $core.bt; then
     false
   fi
+}
+
+for child in backtrace-child{,-biarch}; do
+  mytestrun ./backtrace ./$child
+  core="core.`ulimit -c unlimited; set +e; ./$child --gencore --run; true`"
+  tempfiles $core{,.bt}
+  mytestrun ./backtrace ./$child ./$core | tee $core.bt
+  check_gsignal $core.bt
 done
 
 for arch in ppc ppc64 s390 s390x; do
   testfiles backtrace.$arch.{exec,core}
+  tempfiles backtrace.$arch.bt
   echo ./backtrace ./backtrace.$arch.{exec,core}
-  mytestrun ./backtrace ./backtrace.$arch.{exec,core}
+  mytestrun ./backtrace ./backtrace.$arch.{exec,core} | tee backtrace.$arch.bt
+  check_gsignal backtrace.$arch.bt
 done
 
 exit 0
