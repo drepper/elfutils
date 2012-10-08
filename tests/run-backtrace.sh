@@ -48,6 +48,7 @@ for child in backtrace-child{,-biarch}; do
   core="core.`ulimit -c unlimited; set +e; ./$child --gencore --run; true`"
   tempfiles $core{,.bt,.err}
   mytestrun ./backtrace ./$child ./$core 1>$core.bt 2>$core.err
+  cat $core.{bt,err}
   check_gsignal $core.bt
   check_empty $core.err
 done
@@ -58,6 +59,7 @@ for arch in ppc ppc64 s390 s390x; do
   echo ./backtrace ./backtrace.$arch.{exec,core}
   mytestrun ./backtrace ./backtrace.$arch.{exec,core} 1>backtrace.$arch.bt \
 						      2>backtrace.$arch.err
+  cat backtrace.$arch.{bt,err}
   check_gsignal backtrace.$arch.bt
   check_empty backtrace.$arch.err
 done
