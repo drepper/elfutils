@@ -39,8 +39,6 @@
 #define BACKEND ppc_
 #include "libebl_CPU.h"
 
-#define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
-
 #include "core-get-pc.c"
 
 bool
@@ -83,10 +81,10 @@ ppc_frame_state (Dwarf_Frame_State *state)
       union
 	{
 	  struct pt_regs r;
-	  long l[sizeof (struct pt_regs) / sizeof (long)
-		 + BUILD_BUG_ON_ZERO (sizeof (struct pt_regs) % sizeof (long))];
+	  long l[sizeof (struct pt_regs) / sizeof (long)];
 	}
       user_regs;
+      eu_static_assert (sizeof (struct pt_regs) % sizeof (long) == 0);
       /* PTRACE_GETREGS is EIO on kernel-2.6.18-308.el5.ppc64.  */
       errno = 0;
       for (unsigned regno = 0; regno < sizeof (user_regs) / sizeof (long);
