@@ -1,3 +1,26 @@
+2012-10-08  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* cfi.c: New include system.h.
+	(execute_cfi) (enough_registers): Clear new memory after realloc.
+
+2012-10-08  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* fde.c (__libdw_find_fde): Change <fde != NULL> to likely.  Return
+	DWARF_E_NO_MATCH if .eh_frame_hdr points to FDE which is too short for
+	searched PC.
+
+2012-10-08  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwarf_getlocation.c (__libdw_intern_expression) <cfap>: Make new
+	loclist element DW_OP_call_frame_cfa before decoding the opcodes.
+	Remove the later DW_OP_call_frame_cfa push to RESULT.
+
+2012-10-08  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Code cleanup.
+	* fde.c (binary_search_fde): Remove always true <address >= start>
+	conditional.  Move L initialization upwards.
+
 2012-08-24  Mark Wielaard  <mjw@redhat.com>
 
 	* dwarf_begin_elf.c (check_section): Only probe for dwz multi files
