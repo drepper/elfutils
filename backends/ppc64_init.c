@@ -64,6 +64,8 @@ ppc64_init (elf, machine, eh, ehlen)
   HOOK (eh, syscall_abi);
   HOOK (eh, core_note);
   HOOK (eh, auxv_info);
+  HOOK (eh, get_func_pc);
+  HOOK (eh, destr);
 
   return MODVERSION;
 }

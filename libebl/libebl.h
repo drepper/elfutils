@@ -375,6 +375,12 @@ extern int ebl_auxv_info (Ebl *ebl, GElf_Xword a_type,
 			  const char **name, const char **format)
   __nonnull_attribute__ (1, 3, 4);
 
+/* Convert function descriptor SYM to the function PC value in-place.  */
+struct Dwfl_Module;
+extern const char *ebl_get_func_pc (Ebl *ebl, struct Dwfl_Module *mod,
+				    GElf_Sym *sym)
+  __nonnull_attribute__ (1, 2, 3);
+
 
 #ifdef __cplusplus
 }
