@@ -1,3 +1,12 @@
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_module_addrsym.c (dwfl_module_addrsym) (get_section): New
+	function from ...
+	(dwfl_module_addrsym) (same_section): ... here.  Call it.
+	(dwfl_module_addrsym) (found_sym): New function from ...
+	(dwfl_module_addrsym) (search_table): ... here.  Call it.  Try second
+	time with ebl_get_func_pc.
+
 2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* dwfl_module_getdwarf.c (mod_verify_build_id): New function with code

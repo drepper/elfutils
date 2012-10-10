@@ -1,3 +1,10 @@
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (INCLUDES): Add libdwfl.
+	(ppc64_SRCS): Add ppc64_get_func_pc.c.
+	* ppc64_get_func_pc.c: New file.
+	* ppc64_init.c (ppc64_init): Install get_func_pc and destr.
+
 2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* linux-core-note.c (prstatus_items): Rename groups of sigpend and

@@ -62,6 +62,9 @@ struct ebl
 
   /* Internal data.  */
   void *dlhandle;
+
+  /* Data specific to the backend.  */
+  void *backend;
 };
 
 
