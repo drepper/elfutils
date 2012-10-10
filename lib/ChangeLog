@@ -1,3 +1,12 @@
+2012-10-09  Adam Markey  <adam@etinternational.com>
+
+	* system.h: Changed pwrite_retry, write_retry, and pread_retry to
+	handle case where not all data was read/written.
+
+2012-10-08  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* system.h (eu_static_assert): New macro.
+
 2012-01-21  Ulrich Drepper  <drepper@gmail.com>
 
 	* Makefile.am (libeu_a_SOURCES): Add color.c.

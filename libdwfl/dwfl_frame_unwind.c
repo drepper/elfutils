@@ -214,6 +214,21 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
   for (const Dwarf_Op *op = ops; op < ops + nops; op++)
     switch (op->atom)
     {
+      case DW_OP_reg0 ... DW_OP_reg31:
+	if (! state_get_reg (state, op->atom - DW_OP_reg0, &val1)
+	    || ! push (val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
+      case DW_OP_regx:
+	if (! state_get_reg (state, op->number, &val1) || ! push (val1))
+	  {
+	    free (stack);
+	    return false;
+	  }
+	break;
       case DW_OP_breg0 ... DW_OP_breg31:
 	if (! state_get_reg (state, op->atom - DW_OP_breg0, &val1))
 	  {

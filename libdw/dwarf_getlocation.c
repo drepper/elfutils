@@ -224,6 +224,21 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 
   struct loclist *loclist = NULL;
   unsigned int n = 0;
+
+  if (cfap)
+    {
+      /* Synthesize the operation to push the CFA before the expression.  */
+      struct loclist *newloc;
+      newloc = (struct loclist *) alloca (sizeof (struct loclist));
+      newloc->atom = DW_OP_call_frame_cfa;
+      newloc->number = 0;
+      newloc->number2 = 0;
+      newloc->offset = -1;
+      newloc->next = loclist;
+      loclist = newloc;
+      ++n;
+    }
+
   /* Decode the opcodes.  It is possible in some situations to have a
      block of size zero.  */
   while (data < end_data)
@@ -339,6 +354,7 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 
 	case DW_OP_const4s:
 	case DW_OP_call4:
+	case DW_OP_GNU_parameter_ref:
 	  if (unlikely (data + 4 > end_data))
 	    goto invalid;
 
@@ -363,6 +379,8 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 	case DW_OP_plus_uconst:
 	case DW_OP_regx:
 	case DW_OP_piece:
+	case DW_OP_GNU_convert:
+	case DW_OP_GNU_reinterpret:
 	  /* XXX Check size.  */
 	  get_uleb128 (newloc->number, data);
 	  break;
@@ -381,12 +399,14 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 	  break;
 
 	case DW_OP_bit_piece:
+	case DW_OP_GNU_regval_type:
 	  /* XXX Check size.  */
 	  get_uleb128 (newloc->number, data);
 	  get_uleb128 (newloc->number2, data);
 	  break;
 
 	case DW_OP_implicit_value:
+	case DW_OP_GNU_entry_value:
 	  /* This cannot be used in a CFI expression.  */
 	  if (unlikely (dbg == NULL))
 	    goto invalid;
@@ -406,6 +426,27 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 	    return -1;
 	  /* XXX Check size.  */
 	  get_uleb128 (newloc->number2, data); /* Byte offset.  */
+	  break;
+
+	case DW_OP_GNU_deref_type:
+	  if (unlikely (data >= end_data))
+	    goto invalid;
+	  newloc->number = *data++;
+	  get_uleb128 (newloc->number2, data);
+	  break;
+
+	case DW_OP_GNU_const_type:
+	  /* XXX Check size.  */
+	  get_uleb128 (newloc->number, data);
+	  if (unlikely (data >= end_data))
+	    goto invalid;
+	  newloc->number2 = *data++; /* Block length.  */
+	  if (unlikely ((Dwarf_Word) (end_data - data) < newloc->number2))
+	    goto invalid;
+	  /* The third operand is relative block offset:
+		newloc->number3 = data - block->data;
+	     We don't support this at this point.  */
+	  data += newloc->number2;		/* Skip the block.  */
 	  break;
 
 	default:
@@ -434,9 +475,6 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
       ++n;
     }
 
-  if (cfap)
-    ++n;
-
   /* Allocate the array.  */
   Dwarf_Op *result;
   if (dbg != NULL)
@@ -455,15 +493,6 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
   /* Store the result.  */
   *llbuf = result;
   *listlen = n;
-
-  if (cfap)
-    {
-      /* Synthesize the operation to push the CFA before the expression.  */
-      result[0].atom = DW_OP_call_frame_cfa;
-      result[0].number = 0;
-      result[0].number2 = 0;
-      result[0].offset = -1;
-    }
 
   do
     {

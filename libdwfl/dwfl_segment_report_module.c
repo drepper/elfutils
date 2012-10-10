@@ -650,8 +650,6 @@ dwfl_segment_report_module (Dwfl *dwfl, int ndx, const char *name,
       mod->main.elf = elf;
       mod->main.vaddr = module_start - bias;
       mod->main.address_sync = module_address_sync;
-      /* FIXME: elfutils bug?
-	 Otherwise it is left zero for i386 vdso from a core file.  */
       mod->main_bias = bias;
     }
 

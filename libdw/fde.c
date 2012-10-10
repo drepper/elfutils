@@ -229,17 +229,18 @@ __libdw_find_fde (Dwarf_CFI *cache, Dwarf_Addr address)
       if (offset == (Dwarf_Off) -1l)
 	goto no_match;
       struct dwarf_fde *fde = __libdw_fde_by_offset (cache, offset);
-      if (unlikely (fde != NULL)
-	  /* Sanity check the address range.  */
-	  && unlikely (address < fde->start))
+      if (likely (fde != NULL))
 	{
-	  __libdw_seterrno (DWARF_E_INVALID_DWARF);
-	  return NULL;
-	}
-      if (unlikely (fde != NULL)
+	  /* Sanity check the address range.  */
+	  if (unlikely (address < fde->start))
+	    {
+	      __libdw_seterrno (DWARF_E_INVALID_DWARF);
+	      return NULL;
+	    }
 	  /* .eh_frame_hdr does not indicate length covered by FDE.  */
-	  && unlikely (address >= fde->end))
-	goto no_match;
+	  if (unlikely (address >= fde->end))
+	    goto no_match;
+	}
       return fde;
     }
 

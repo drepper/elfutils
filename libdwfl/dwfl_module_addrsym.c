@@ -116,12 +116,26 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 
 	      if (sym.st_size == 0 || addr - sym.st_value < sym.st_size)
 		{
+		  /* Return GELF_ST_BIND as higher-is-better integer.  */
+		  inline int binding_value (const GElf_Sym *symp)
+		    {
+		      switch (GELF_ST_BIND (symp->st_info))
+		      {
+			case STB_GLOBAL:
+			  return 3;
+			case STB_WEAK:
+			  return 2;
+			case STB_LOCAL:
+			  return 1;
+			default:
+			  return 0;
+		      }
+		    }
 		  /* This symbol is a better candidate than the current one
 		     if it's closer to ADDR or is global when it was local.  */
 		  if (closest_name == NULL
 		      || closest_sym->st_value < sym.st_value
-		      || (GELF_ST_BIND (closest_sym->st_info)
-			  < GELF_ST_BIND (sym.st_info)))
+		      || binding_value (closest_sym) < binding_value (&sym))
 		    {
 		      if (sym.st_size != 0)
 			{
@@ -143,13 +157,17 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 			}
 		    }
 		  /* When the beginning of its range is no closer,
-		     the end of its range might be.  Prefer STB_GLOBAL over
-		     STB_WEAK and STB_WEAK over STB_LOCAL.  */
+		     the end of its range might be.  Otherwise follow
+		     GELF_ST_BIND preference.  If all are equal prefer
+		     the first symbol found.  */
 		  else if (sym.st_size != 0
 			   && closest_sym->st_value == sym.st_value
-			   && closest_sym->st_size >= sym.st_size
-			   && (GELF_ST_BIND (sym.st_info) == STB_GLOBAL
-			    || GELF_ST_BIND (closest_sym->st_info) == STB_LOCAL))
+			   && ((closest_sym->st_size > sym.st_size
+			        && (binding_value (closest_sym)
+				    <= binding_value (&sym)))
+			       || (closest_sym->st_size >= sym.st_size
+				   && (binding_value (closest_sym)
+				       < binding_value (&sym)))))
 		    {
 		      *closest_sym = sym;
 		      closest_shndx = shndx;
