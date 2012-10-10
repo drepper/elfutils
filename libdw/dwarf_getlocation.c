@@ -508,7 +508,7 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 
       loclist = loclist->next;
     }
-  while (n > (cfap ? 1U : 0U));
+  while (n > 0);
 
   /* Insert a record in the search tree so that we can find it again later.  */
   struct loc_s *newp;
