@@ -1,5 +1,13 @@
 2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
+	* run-readelf-mixed-corenote.sh: New testcase for readelf -n of s390
+	and s390x core notes.
+	* testfile67.bz2: New file.
+	* testfile68.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile67.bz2 and testfile68.bz2 .
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
 	* Makefile.am (EXTRA_DIST): Add testfile64.bz2, testfile65.bz2,
 	testfile69.core.bz2 and testfile69.so.bz2 .
 
