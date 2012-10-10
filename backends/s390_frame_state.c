@@ -40,8 +40,6 @@
 #define BACKEND s390_
 #include "libebl_CPU.h"
 
-#define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
-
 #include "core-get-pc.c"
 
 bool
@@ -69,11 +67,10 @@ s390_frame_state (Dwarf_Frame_State *state)
 	 registers so we ignore the upper half.  */
       for (unsigned u = 0; u < 16; u++)
 	dwarf_frame_state_reg_set (state, 0 + u, user_regs.regs.gprs[u]);
-      /* Avoid a conversion double -> integer.  */
-      for (unsigned u = 0
-		      + BUILD_BUG_ON_ZERO (sizeof (*user_regs.regs.fp_regs.fprs)
-					   - sizeof (*state->regs));
-	   u < 16; u++)
+      /* Avoid conversion double -> integer.  */
+      eu_static_assert (sizeof user_regs.regs.fp_regs.fprs[0]
+                        == sizeof state->regs[0]);
+      for (unsigned u = 0; u < 16; u++)
 	dwarf_frame_state_reg_set (state, 16 + u,
 				   *((const __typeof (*state->regs) *)
 				     &user_regs.regs.fp_regs.fprs[u]));

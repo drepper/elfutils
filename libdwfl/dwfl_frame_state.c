@@ -34,12 +34,11 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <dirent.h>
+#include "system.h"
 
 #ifndef MIN
 # define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
-
-#define BUILD_BUG_ON_ZERO(x) (sizeof (char [(x) ? -1 : 1]) - 1)
 
 static bool
 tid_is_attached (Dwfl *dwfl, pid_t tid)
@@ -424,8 +423,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  return NULL;
 		}
 	      pid_t tid = val32s;
-	      tid += BUILD_BUG_ON_ZERO (sizeof (val32s) <= sizeof (pid_t)
-					? 0 : -1);
+	      eu_static_assert (sizeof val32s <= sizeof tid);
 	      if (thread)
 		{
 		  /* Delay initialization of THREAD till all notes for it have
