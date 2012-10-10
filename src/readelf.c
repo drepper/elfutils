@@ -7789,12 +7789,9 @@ handle_core_register (Ebl *ebl, Elf *core, int maxregname,
   for (int reg = regloc->regno; reg < regloc->regno + regloc->count; ++reg)
     {
       char name[REGNAMESZ];
-      /* Core file description may have different BITS count such as for S390
-	 where r0-r15 are 64-bit but NT_S390_HIGH_GPRS is only 32-bit upper
-	 half of it.  */
-      int bits = regloc->bits;
+      int bits;
       int type;
-      register_info (ebl, reg, regloc, name, NULL, &type);
+      register_info (ebl, reg, regloc, name, &bits, &type);
 
 #define TYPES								      \
       BITS (8, BYTE, "%4" PRId8, "0x%.2" PRIx8, 4);			      \
@@ -7962,12 +7959,8 @@ handle_core_registers (Ebl *ebl, Elf *core, const void *desc,
 	struct register_info *info = &regs[reg];
 	info->regloc = &reglocs[i];
 	info->regno = reg;
-	/* Core file description may have different BITS count such as for S390
-	   where r0-r15 are 64-bit but NT_S390_HIGH_GPRS is only 32-bit upper
-	   half of it.  */
-	info->bits = reglocs[i].bits;
 	info->set = register_info (ebl, reg, &reglocs[i],
-				   info->name, NULL, &info->type);
+				   info->name, &info->bits, &info->type);
       }
   qsort (regs, maxreg + 1, sizeof regs[0], &compare_registers);
 
