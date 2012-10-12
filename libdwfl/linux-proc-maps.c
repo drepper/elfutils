@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <endian.h>
+#include "system.h"
 
 
 #define PROCMAPSFMT	"/proc/%d/maps"
@@ -47,36 +48,37 @@
 #define PROCEXEFMT	"/proc/%d/exe"
 
 
-/* Return 64 for 64-bit main ELF executable, 32 accordingly otherwise.
-   Return -1 for errors.  */
+/* Return ELFCLASS64 or ELFCLASS32 for the main ELF executable.  Return
+   ELFCLASSNONE for an error.  */
 
-static int
-get_pid_width (pid_t pid)
+static unsigned char
+get_pid_class (pid_t pid)
 {
   char *fname;
   if (asprintf (&fname, PROCEXEFMT, pid) < 0)
-    return -1;
+    return ELFCLASSNONE;
 
   int fd = open64 (fname, O_RDONLY);
   free (fname);
   if (fd < 0)
-    return -1;
+    return ELFCLASSNONE;
 
-  unsigned char buf[5];
-  ssize_t nread = read (fd, &buf, sizeof buf);
+  unsigned char buf[EI_CLASS + 1];
+  ssize_t nread = pread_retry (fd, &buf, sizeof buf, 0);
   close (fd);
-  if (nread != sizeof (buf) || buf[0] != ELFMAG0 || buf[1] != ELFMAG1
-      || buf[2] != ELFMAG2 || buf[3] != ELFMAG3
-      || (buf[4] != ELFCLASS64 && buf[4] != ELFCLASS32))
-    return -1;
+  if (nread != sizeof (buf) || buf[EI_MAG0] != ELFMAG0
+      || buf[EI_MAG1] != ELFMAG1 || buf[EI_MAG2] != ELFMAG2
+      || buf[EI_MAG3] != ELFMAG3
+      || (buf[EI_CLASS] != ELFCLASS64 && buf[EI_CLASS] != ELFCLASS32))
+    return ELFCLASSNONE;
 
-  return buf[4] == ELFCLASS64 ? 64 : 32;
+  return buf[EI_CLASS];
 }
 
 /* Search /proc/PID/auxv for the AT_SYSINFO_EHDR tag.  */
 
 static int
-grovel_auxv (pid_t pid, Dwfl *dwfl, int width, GElf_Addr *sysinfo_ehdr)
+grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
 {
   char *fname;
   if (asprintf (&fname, PROCAUXVFMT, pid) < 0)
@@ -87,61 +89,74 @@ grovel_auxv (pid_t pid, Dwfl *dwfl, int width, GElf_Addr *sysinfo_ehdr)
   if (fd < 0)
     return errno == ENOENT ? 0 : errno;
 
-  ssize_t nread;
-  do
+  GElf_Addr sysinfo_ehdr64 = 0, sysinfo_ehdr32 = 0;
+  GElf_Addr segment_align64 = dwfl->segment_align;
+  GElf_Addr segment_align32 = dwfl->segment_align;
+  off_t offset = 0;
+  for (;;)
     {
       union
       {
-	char buffer[sizeof (long int) * 2 * 64];
-	Elf64_auxv_t a64[sizeof (long int) * 2 * 64 / sizeof (Elf64_auxv_t)];
-	Elf32_auxv_t a32[sizeof (long int) * 2 * 32 / sizeof (Elf32_auxv_t)];
+	Elf64_auxv_t a64;
+	Elf32_auxv_t a32[2];
       } d;
-      nread = read (fd, &d, sizeof d);
-      if (nread > 0)
+      eu_static_assert (sizeof d.a64 == sizeof d.a32);
+      ssize_t nread = pread_retry (fd, &d.a64, sizeof d.a64, offset);
+      if (nread < 0)
+	return errno;
+      if (nread == 0)
+	break;
+      for (unsigned a32i = 0; a32i < nread / sizeof d.a32[0]; a32i++)
 	{
-	  switch (width)
-	    {
-	    case 32:
-	      for (size_t i = 0; (char *) &d.a32[i] < &d.buffer[nread]; ++i)
-		if (d.a32[i].a_type == AT_SYSINFO_EHDR)
-		  {
-		    *sysinfo_ehdr = d.a32[i].a_un.a_val;
-		    if (dwfl->segment_align > 1)
-		      {
-			nread = 0;
-			break;
-		      }
-		  }
-		else if (d.a32[i].a_type == AT_PAGESZ
-			 && dwfl->segment_align <= 1)
-		  dwfl->segment_align = d.a32[i].a_un.a_val;
+	  const Elf32_auxv_t *a32 = d.a32 + a32i;
+	  switch (a32->a_type)
+	  {
+	    case AT_SYSINFO_EHDR:
+	      sysinfo_ehdr32 = a32->a_un.a_val;
 	      break;
-	    case 64:
-	      for (size_t i = 0; (char *) &d.a64[i] < &d.buffer[nread]; ++i)
-		if (d.a64[i].a_type == AT_SYSINFO_EHDR)
-		  {
-		    *sysinfo_ehdr = d.a64[i].a_un.a_val;
-		    if (dwfl->segment_align > 1)
-		      {
-			nread = 0;
-			break;
-		      }
-		  }
-		else if (d.a64[i].a_type == AT_PAGESZ
-			 && dwfl->segment_align <= 1)
-		  dwfl->segment_align = d.a64[i].a_un.a_val;
+	    case AT_PAGESZ:
+	      segment_align32 = a32->a_un.a_val;
 	      break;
-	    default:
-	      abort ();
-	      break;
-	    }
+	  }
 	}
+      if ((size_t) nread < sizeof d.a64)
+	break;
+      const Elf64_auxv_t *a64 = &d.a64;
+      switch (a64->a_type)
+      {
+	case AT_SYSINFO_EHDR:
+	  sysinfo_ehdr64 = a64->a_un.a_val;
+	  break;
+	case AT_PAGESZ:
+	  segment_align64 = a64->a_un.a_val;
+	  break;
+      }
+      offset += nread;
     }
-  while (nread > 0);
 
   close (fd);
 
-  return nread < 0 ? errno : 0;
+  bool valid64 = sysinfo_ehdr64 || segment_align64 != dwfl->segment_align;
+  bool valid32 = sysinfo_ehdr32 || segment_align32 != dwfl->segment_align;
+
+  if (! valid64 && ! valid32)
+    return 0;
+
+  unsigned char pid_class = ELFCLASSNONE;
+  if (valid64 && valid32)
+    pid_class = get_pid_class (pid);
+
+  if (pid_class == ELFCLASS64 || (valid64 && ! valid32))
+    {
+      *sysinfo_ehdr = sysinfo_ehdr64;
+      dwfl->segment_align = segment_align64;
+    }
+  if (pid_class == ELFCLASS32 || (! valid64 && valid32))
+    {
+      *sysinfo_ehdr = sysinfo_ehdr32;
+      dwfl->segment_align = segment_align32;
+    }
+  return 0;
 }
 
 static int
@@ -254,13 +269,9 @@ dwfl_linux_proc_report (Dwfl *dwfl, pid_t pid)
   if (dwfl == NULL)
     return -1;
 
-  int width = get_pid_width (pid);
-  if (width == -1)
-    return -1;
-
   /* We'll notice the AT_SYSINFO_EHDR address specially when we hit it.  */
   GElf_Addr sysinfo_ehdr = 0;
-  int result = grovel_auxv (pid, dwfl, width, &sysinfo_ehdr);
+  int result = grovel_auxv (pid, dwfl, &sysinfo_ehdr);
   if (result != 0)
     return result;
 
