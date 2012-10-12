@@ -154,5 +154,11 @@ int EBLHOOK(disasm) (const uint8_t **startp, const uint8_t *end,
 /* Supply the machine-specific state of CFI before CIE initial programs.  */
 int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 
+/* *SYM must be STT_FUNC.  Then if it describes a function descriptor (PPC64)
+   convert in-place its data and return a possibly different new name for it.
+   The name is valid as long as EBL is valid.  */
+const char *EBLHOOK(get_func_pc) (Ebl *ebl, struct Dwfl_Module *mod,
+				  GElf_Sym *sym);
+
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

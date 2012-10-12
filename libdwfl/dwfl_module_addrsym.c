@@ -39,6 +39,23 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
   if (syments < 0)
     return NULL;
 
+  /* Return section where FIND_ADDR lies.  Return SHN_ABS otherwise.  */
+  inline GElf_Word get_section (GElf_Addr find_addr)
+    {
+      GElf_Addr mod_addr = dwfl_deadjust_st_value (mod, find_addr);
+      Elf_Scn *scn = NULL;
+      while ((scn = elf_nextscn (mod->symfile->elf, scn)) != NULL)
+	{
+	  GElf_Shdr shdr_mem;
+	  GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
+	  if (likely (shdr != NULL)
+	      && mod_addr >= shdr->sh_addr
+	      && mod_addr < shdr->sh_addr + shdr->sh_size)
+	    return elf_ndxscn (scn);
+	}
+      return SHN_ABS;
+    }
+
   /* Return true iff we consider ADDR to lie in the same section as SYM.  */
   GElf_Word addr_shndx = SHN_UNDEF;
   inline bool same_section (const GElf_Sym *sym, GElf_Word shndx)
@@ -49,23 +66,7 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 
       /* Figure out what section ADDR lies in.  */
       if (addr_shndx == SHN_UNDEF)
-	{
-	  GElf_Addr mod_addr = dwfl_deadjust_st_value (mod, addr);
-	  Elf_Scn *scn = NULL;
-	  addr_shndx = SHN_ABS;
-	  while ((scn = elf_nextscn (mod->symfile->elf, scn)) != NULL)
-	    {
-	      GElf_Shdr shdr_mem;
-	      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
-	      if (likely (shdr != NULL)
-		  && mod_addr >= shdr->sh_addr
-		  && mod_addr < shdr->sh_addr + shdr->sh_size)
-		{
-		  addr_shndx = elf_ndxscn (scn);
-		  break;
-		}
-	    }
-	}
+	addr_shndx = get_section (addr);
 
       return shndx == addr_shndx;
     }
@@ -83,6 +84,85 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
   /* Keep track of the lowest address a relevant sizeless symbol could have.  */
   GElf_Addr min_label = 0;
 
+  /* Consider one symbol SYM.  */
+  inline void found_sym (const GElf_Sym *sym, GElf_Word shndx, const char *name)
+    {
+      if (name != NULL && name[0] != '\0'
+	  && sym->st_shndx != SHN_UNDEF
+	  && sym->st_value <= addr
+	  && GELF_ST_TYPE (sym->st_info) != STT_SECTION
+	  && GELF_ST_TYPE (sym->st_info) != STT_FILE
+	  && GELF_ST_TYPE (sym->st_info) != STT_TLS)
+	{
+	  /* Even if we don't choose this symbol, its existence excludes
+	     any sizeless symbol (assembly label) that is below its upper
+	     bound.  */
+	  if (sym->st_value + sym->st_size > min_label)
+	    min_label = sym->st_value + sym->st_size;
+
+	  if (sym->st_size == 0 || addr - sym->st_value < sym->st_size)
+	    {
+	      /* Return GELF_ST_BIND as higher-is-better integer.  */
+	      inline int binding_value (const GElf_Sym *symp)
+		{
+		  switch (GELF_ST_BIND (symp->st_info))
+		  {
+		    case STB_GLOBAL:
+		      return 3;
+		    case STB_WEAK:
+		      return 2;
+		    case STB_LOCAL:
+		      return 1;
+		    default:
+		      return 0;
+		  }
+		}
+	      /* This symbol is a better candidate than the current one
+		 if it's closer to ADDR or is global when it was local.  */
+	      if (closest_name == NULL
+		  || closest_sym->st_value < sym->st_value
+		  || binding_value (closest_sym) < binding_value (sym))
+		{
+		  if (sym->st_size != 0)
+		    {
+		      *closest_sym = *sym;
+		      closest_shndx = shndx;
+		      closest_name = name;
+		    }
+		  else if (closest_name == NULL
+			   && sym->st_value >= min_label
+			   && same_section (sym, shndx))
+		    {
+		      /* Handwritten assembly symbols sometimes have no
+			 st_size.  If no symbol with proper size includes
+			 the address, we'll use the closest one that is in
+			 the same section as ADDR.  */
+		      sizeless_sym = *sym;
+		      sizeless_shndx = shndx;
+		      sizeless_name = name;
+		    }
+		}
+	      /* When the beginning of its range is no closer,
+		 the end of its range might be.  Otherwise follow
+		 GELF_ST_BIND preference.  If all are equal prefer
+		 the first symbol found.  */
+	      else if (sym->st_size != 0
+		       && closest_sym->st_value == sym->st_value
+		       && ((closest_sym->st_size > sym->st_size
+			    && (binding_value (closest_sym)
+				<= binding_value (sym)))
+			   || (closest_sym->st_size >= sym->st_size
+			       && (binding_value (closest_sym)
+				   < binding_value (sym)))))
+		{
+		  *closest_sym = *sym;
+		  closest_shndx = shndx;
+		  closest_name = name;
+		}
+	    }
+	}
+    }
+
   /* Look through the symbol table for a matching symbol.  */
   inline void search_table (int start, int end)
     {
@@ -91,80 +171,17 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 	  GElf_Sym sym;
 	  GElf_Word shndx;
 	  const char *name = INTUSE(dwfl_module_getsym) (mod, i, &sym, &shndx);
-	  if (name != NULL && name[0] != '\0'
-	      && sym.st_shndx != SHN_UNDEF
-	      && sym.st_value <= addr
-	      && GELF_ST_TYPE (sym.st_info) != STT_SECTION
-	      && GELF_ST_TYPE (sym.st_info) != STT_FILE
-	      && GELF_ST_TYPE (sym.st_info) != STT_TLS)
-	    {
-	      /* Even if we don't choose this symbol, its existence excludes
-		 any sizeless symbol (assembly label) that is below its upper
-		 bound.  */
-	      if (sym.st_value + sym.st_size > min_label)
-		min_label = sym.st_value + sym.st_size;
-
-	      if (sym.st_size == 0 || addr - sym.st_value < sym.st_size)
-		{
-		  /* Return GELF_ST_BIND as higher-is-better integer.  */
-		  inline int binding_value (const GElf_Sym *symp)
-		    {
-		      switch (GELF_ST_BIND (symp->st_info))
-		      {
-			case STB_GLOBAL:
-			  return 3;
-			case STB_WEAK:
-			  return 2;
-			case STB_LOCAL:
-			  return 1;
-			default:
-			  return 0;
-		      }
-		    }
-		  /* This symbol is a better candidate than the current one
-		     if it's closer to ADDR or is global when it was local.  */
-		  if (closest_name == NULL
-		      || closest_sym->st_value < sym.st_value
-		      || binding_value (closest_sym) < binding_value (&sym))
-		    {
-		      if (sym.st_size != 0)
-			{
-			  *closest_sym = sym;
-			  closest_shndx = shndx;
-			  closest_name = name;
-			}
-		      else if (closest_name == NULL
-			       && sym.st_value >= min_label
-			       && same_section (&sym, shndx))
-			{
-			  /* Handwritten assembly symbols sometimes have no
-			     st_size.  If no symbol with proper size includes
-			     the address, we'll use the closest one that is in
-			     the same section as ADDR.  */
-			  sizeless_sym = sym;
-			  sizeless_shndx = shndx;
-			  sizeless_name = name;
-			}
-		    }
-		  /* When the beginning of its range is no closer,
-		     the end of its range might be.  Otherwise follow
-		     GELF_ST_BIND preference.  If all are equal prefer
-		     the first symbol found.  */
-		  else if (sym.st_size != 0
-			   && closest_sym->st_value == sym.st_value
-			   && ((closest_sym->st_size > sym.st_size
-			        && (binding_value (closest_sym)
-				    <= binding_value (&sym)))
-			       || (closest_sym->st_size >= sym.st_size
-				   && (binding_value (closest_sym)
-				       < binding_value (&sym)))))
-		    {
-		      *closest_sym = sym;
-		      closest_shndx = shndx;
-		      closest_name = name;
-		    }
-		}
-	    }
+	  found_sym (&sym, shndx, name);
+	  if (name == NULL || GELF_ST_TYPE (sym.st_info) != STT_FUNC)
+	    continue;
+	  Dwfl_Error error = __libdwfl_module_getebl (mod);
+	  if (error != DWFL_E_NOERROR)
+	    continue;
+	  name = ebl_get_func_pc (mod->ebl, mod, &sym);
+	  if (name == NULL)
+	    continue;
+	  shndx = get_section (sym.st_value);
+	  found_sym (&sym, shndx, name);
 	}
     }
 

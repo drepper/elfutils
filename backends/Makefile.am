@@ -29,7 +29,7 @@
 ## not, see <http://www.gnu.org/licenses/>.
 include $(top_srcdir)/config/eu.am
 INCLUDES += -I$(top_srcdir)/libebl -I$(top_srcdir)/libasm \
-	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw
+	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw -I$(top_srcdir)/libdwfl
 
 
 modules = i386 sh x86_64 ia64 alpha arm sparc ppc ppc64 s390 tilegx
@@ -90,7 +90,8 @@ libebl_ppc_pic_a_SOURCES = $(ppc_SRCS)
 am_libebl_ppc_pic_a_OBJECTS = $(ppc_SRCS:.c=.os)
 
 ppc64_SRCS = ppc64_init.c ppc64_symbol.c ppc64_retval.c \
-	     ppc64_corenote.c ppc_regs.c ppc_auxv.c ppc_attrs.c ppc_syscall.c
+	     ppc64_corenote.c ppc_regs.c ppc_auxv.c ppc_attrs.c ppc_syscall.c \
+	     ppc64_get_func_pc.c
 libebl_ppc64_pic_a_SOURCES = $(ppc64_SRCS)
 am_libebl_ppc64_pic_a_OBJECTS = $(ppc64_SRCS:.c=.os)
 
