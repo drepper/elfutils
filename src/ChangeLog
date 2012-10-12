@@ -1,5 +1,13 @@
 2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
+	* readelf.c (handle_core_items): New variable wrap, choose
+	REGISTER_WRAP_COLUMN for "register" group.  Use it instead of
+	ITEM_WRAP_COLUMN.  Limit special repeated items handling to
+	OFFSET 0 and formats '\n', 'b' and 'B'.  Initialize COLNO to MAX of
+	also REGISTER_WRAP_COLUMN.
+
+2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
 	* readelf.c (ITEM_WRAP_COLUMN, REGISTER_WRAP_COLUMN): Merge to ...
 	(WRAP_COLUMN): ... here.
 	(print_core_item): Remove parameter format_max.  Update function
