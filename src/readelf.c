@@ -7339,8 +7339,14 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 #define ITEM_INDENT		4
 #define WRAP_COLUMN		75
 
-/* Print "NAME: FORMAT", wrapping when output text would make the line exceed
-   WRAP_COLUMN.  */
+/* Print "NAME: FORMAT", wrapping when output text would make the line
+   exceed WRAP_COLUMN.  Unpadded numbers look better for the core items
+   but this function is also used for registers which should be printed
+   aligned.  Fortunately registers output uses fixed fields width (such
+   as %11d) for the alignment.
+
+   Line breaks should not depend on the particular values although that
+   may happen in some cases of the core items.  */
 
 static unsigned int
 __attribute__ ((format (printf, 6, 7)))
