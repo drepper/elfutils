@@ -1,5 +1,5 @@
-/* Convert function descriptor to the function PC value for Linux/PPC64 ABI.
-   Copyright (C) 2005-2010 Red Hat, Inc.
+/* Convert function descriptor SYM to the function PC value in-place.
+   Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -31,27 +31,27 @@
 #endif
 
 #include <assert.h>
-#include "../libdwfl/libdwflP.h"
+#include "libdwfl.h"
+#include <endian.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define BACKEND ppc64_
 #include "libebl_CPU.h"
 
 struct pc_entry
 {
-  /* SYM_FROM must be the very first element for the use in bsearch below.  */
+  /* sym_from must be the very first element for the use in bsearch below.  */
   GElf_Sym sym_from;
   Elf64_Addr st_value_to;
   const char *name_to;
 };
 
-/* FIXME: We could use fixedsizehash.h, we would hash the symbol name instead
-   of GElf_Sym.  Although maybe the name is ambiguous compared to GElf_Sym.  */
-
 struct pc_table
 {
   size_t nelem;
   struct pc_entry a[];
-  /* Here follows strings memory allocated for pc_entry->name_to.  */
+  /* Here follow strings allocated for pc_entry->name_to.  */
 };
 
 static int
@@ -68,7 +68,6 @@ init (Ebl *ebl, Dwfl_Module *mod)
 {
   int syments = dwfl_module_getsymtab (mod);
   assert (syments >= 0);
-  GElf_Sym sym;
   size_t funcs = 0;
   size_t names_size = 0;
   Elf *elf = ebl->elf;
@@ -82,14 +81,17 @@ init (Ebl *ebl, Dwfl_Module *mod)
   Elf_Data *opd_data = NULL;
   /* Needless initialization for old GCCs.  */
   GElf_Shdr opd_shdr_mem, *opd_shdr = NULL;
+  Dwarf_Addr symbias;
+  dwfl_module_info (mod, NULL, NULL, NULL, NULL, &symbias, NULL, NULL);
   for (int symi = 1; symi < syments; symi++)
     {
-      if (dwfl_module_getsym (mod, symi, &sym, &shndx) == NULL
-	  || GELF_ST_TYPE (sym.st_info) != STT_FUNC)
+      GElf_Sym sym;
+      const char *symname = dwfl_module_getsym (mod, symi, &sym, &shndx);
+      if (symname == NULL || GELF_ST_TYPE (sym.st_info) != STT_FUNC)
 	continue;
       if (sym.st_shndx != SHN_XINDEX)
 	shndx = sym.st_shndx;
-      /* Invalid value.  */
+      /* Zero is invalid value but it could crash this code.  */
       if (shndx == 0)
 	continue;
       if (opd_shndx == 0)
@@ -113,20 +115,12 @@ init (Ebl *ebl, Dwfl_Module *mod)
       if (shndx != opd_shndx)
 	continue;
       Elf64_Addr val;
-      if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
-          || sym.st_value > (opd_shdr->sh_addr + mod->main_bias
+      if (sym.st_value < opd_shdr->sh_addr + symbias
+          || sym.st_value > (opd_shdr->sh_addr + symbias
 			     + opd_shdr->sh_size - sizeof (val)))
 	continue;
-      const void *ptr = (opd_data->d_buf + sym.st_value
-			 - (opd_shdr->sh_addr + mod->main_bias));
-      ptr = gelf_convert (elf, ELF_T_ADDR, ELF_T_ADDR, &val, ptr);
-      if (ptr == NULL)
-	continue;
-      if (unlikely (sym.st_name >= mod->symstrdata->d_size))
-	continue;
       funcs++;
-      const char *name = mod->symstrdata->d_buf + sym.st_name;
-      names_size += 1 + strlen (name) + 1;
+      names_size += 1 + strlen (symname) + 1;
     }
   struct pc_table *pc_table;
   pc_table = malloc (sizeof (*pc_table) + funcs * sizeof (*pc_table->a)
@@ -141,30 +135,29 @@ init (Ebl *ebl, Dwfl_Module *mod)
   char *names = (void *) (pc_table->a + funcs), *names_dest = names;
   for (int symi = 1; symi < syments; symi++)
     {
-      if (dwfl_module_getsym (mod, symi, &sym, &shndx) == NULL
-	  || GELF_ST_TYPE (sym.st_info) != STT_FUNC)
+      GElf_Sym sym;
+      const char *symname = dwfl_module_getsym (mod, symi, &sym, &shndx);
+      if (symname == NULL || GELF_ST_TYPE (sym.st_info) != STT_FUNC)
 	continue;
       if (sym.st_shndx != SHN_XINDEX)
 	shndx = sym.st_shndx;
       if (shndx != opd_shndx)
 	continue;
-      Elf64_Addr val;
-      if (sym.st_value < opd_shdr->sh_addr + mod->main_bias
-          || sym.st_value > (opd_shdr->sh_addr + mod->main_bias
-			     + opd_shdr->sh_size - sizeof (val)))
+      uint64_t val64;
+      if (sym.st_value < opd_shdr->sh_addr + symbias
+          || sym.st_value > (opd_shdr->sh_addr + symbias
+			     + opd_shdr->sh_size - sizeof (val64)))
 	continue;
-      const void *ptr = (opd_data->d_buf + sym.st_value
-			 - (opd_shdr->sh_addr + mod->main_bias));
-      ptr = gelf_convert (elf, ELF_T_ADDR, ELF_T_ADDR, &val, ptr);
-      assert (ptr != NULL);
+      val64 = *(const uint64_t *) (opd_data->d_buf + sym.st_value
+				   - (opd_shdr->sh_addr + symbias));
+      val64 = (elf_getident (elf, NULL)[EI_DATA] == ELFDATA2MSB
+               ? be64toh (val64) : le64toh (val64));
       assert (dest < pc_table->a + funcs);
       dest->sym_from = sym;
-      dest->st_value_to = val + mod->main_bias;
-      assert (sym.st_name < mod->symstrdata->d_size);
-      const char *name = mod->symstrdata->d_buf + sym.st_name;
+      dest->st_value_to = val64 + symbias;
       dest->name_to = names_dest;
       *names_dest++ = '.';
-      names_dest = stpcpy (names_dest, name) + 1;
+      names_dest = stpcpy (names_dest, symname) + 1;
       dest++;
       pc_table->nelem++;
     }

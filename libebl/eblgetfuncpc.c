@@ -1,4 +1,4 @@
-/* Convert function descriptor to the function PC value.
+/* Convert function descriptor SYM to the function PC value in-place.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -34,7 +34,7 @@
 #include <assert.h>
 
 const char *
-ebl_get_func_pc (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym)
+ebl_get_func_pc (Ebl *ebl, struct Dwfl_Module *mod, GElf_Sym *sym)
 {
   if (ebl == NULL)
     return NULL;

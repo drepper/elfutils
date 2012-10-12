@@ -37,6 +37,8 @@
 /* This defines the common reloc hooks based on arm_reloc.def.  */
 #include "common-reloc.c"
 
+extern __typeof (s390_core_note) s390x_core_note;
+
 
 const char *
 s390_init (elf, machine, eh, ehlen)
@@ -55,6 +57,10 @@ s390_init (elf, machine, eh, ehlen)
   HOOK (eh, reloc_simple_type);
   HOOK (eh, register_info);
   HOOK (eh, return_value_location);
+  if (eh->class == ELFCLASS64)
+    eh->core_note = s390x_core_note;
+  else
+    HOOK (eh, core_note);
   HOOK (eh, abi_cfi);
   /* gcc/config/ #define DWARF_FRAME_REGISTERS 34.
      But from the gcc/config/s390/s390.h "Register usage." comment it looks as
@@ -62,13 +68,6 @@ s390_init (elf, machine, eh, ehlen)
      unwinding.  */
   eh->frame_state_nregs = 32;
   HOOK (eh, frame_state);
-  if (eh->class == ELFCLASS64)
-    {
-      __typeof (s390_core_note) s390x_core_note;
-      eh->core_note = s390x_core_note;
-    }
-  else
-    HOOK (eh, core_note);
   HOOK (eh, normalize_pc);
   HOOK (eh, frame_unwind);
 

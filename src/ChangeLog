@@ -1,3 +1,28 @@
+2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* readelf.c (handle_core_items): New variable wrap, choose
+	REGISTER_WRAP_COLUMN for "register" group.  Use it instead of
+	ITEM_WRAP_COLUMN.  Limit special repeated items handling to
+	OFFSET 0 and formats '\n', 'b' and 'B'.  Initialize COLNO to MAX of
+	also REGISTER_WRAP_COLUMN.
+
+2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* readelf.c (ITEM_WRAP_COLUMN, REGISTER_WRAP_COLUMN): Merge to ...
+	(WRAP_COLUMN): ... here.
+	(print_core_item): Remove parameter format_max.  Update function
+	comment.  Replace FORMAT_MAX by the real output width.
+	(handle_core_item): Remove the FORMAT_MAX values in TYPES, DO_TYPE,
+	calls of print_core_item, remove variable maxfmt, change
+	ITEM_WRAP_COLUMN to WRAP_COLUMN.
+	(handle_core_register): Remove the FORMAT_MAX values in TYPES, BITS,
+	calls of print_core_item, change REGISTER_WRAP_COLUMN to WRAP_COLUMN.
+
+2012-10-11  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* readelf.c (handle_core_item) <b>: Make run an outer block variable.
+	Increase run only if LASTBIT != 0.  Print last element only if RUN > 0.
+
 2012-08-27  Mark Wielaard  <mjw@redhat.com>
 
 	* readelf.c (print_debug_macro_section): Print offset as PRIx64.

@@ -159,6 +159,12 @@ int EBLHOOK(disasm) (const uint8_t **startp, const uint8_t *end,
 /* Supply the machine-specific state of CFI before CIE initial programs.  */
 int EBLHOOK(abi_cfi) (Ebl *ebl, Dwarf_CIE *abi_info);
 
+/* *SYM must be STT_FUNC.  Then if it describes a function descriptor (PPC64)
+   convert in-place its data and return a possibly different new name for it.
+   The name is valid as long as EBL is valid.  */
+const char *EBLHOOK(get_func_pc) (Ebl *ebl, struct Dwfl_Module *mod,
+				  GElf_Sym *sym);
+
 /* Fetch process data from STATE->base->pid or STATE->base->core.  */
 bool EBLHOOK(frame_state) (Dwarf_Frame_State *state);
 
@@ -171,11 +177,6 @@ size_t EBLHOOKVAR(frame_state_nregs);
    on second call; other registers may map to numbers invalid on input.  */
 bool EBLHOOK(frame_dwarf_to_regno) (Ebl *ebl, unsigned *regno);
 
-/* *SYM must be STT_FUNC.  Then if it describes a function descriptor (PPC64)
-   convert in-place its data and return a possibly different new name for it.
-   The name is valid as long as EBL is valid.  */
-const char *EBLHOOK(get_func_pc) (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym);
-
 /* Optionally modify *PC as fetched from inferior data into valid PC
    instruction pointer.  */
 void EBLHOOK(normalize_pc) (Ebl *ebl, Dwarf_Addr *pc);
@@ -187,7 +188,6 @@ bool
 			   (*memory_read) (Dwarf_Frame_State_Process *process,
 					   Dwarf_Addr addr,
 					   Dwarf_Addr *result));
-
 
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

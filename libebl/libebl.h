@@ -376,6 +376,12 @@ extern int ebl_auxv_info (Ebl *ebl, GElf_Xword a_type,
 			  const char **name, const char **format)
   __nonnull_attribute__ (1, 3, 4);
 
+/* Convert function descriptor SYM to the function PC value in-place.  */
+struct Dwfl_Module;
+extern const char *ebl_get_func_pc (Ebl *ebl, struct Dwfl_Module *mod,
+				    GElf_Sym *sym)
+  __nonnull_attribute__ (1, 2, 3);
+
 /* Fetch process data from STATE->base->pid or STATE->base->core.  */
 extern bool ebl_frame_state (Dwarf_Frame_State *state)
   __nonnull_attribute__ (1);
@@ -383,10 +389,6 @@ extern bool ebl_frame_state (Dwarf_Frame_State *state)
 /* Number of registers to allocate for STATE of ebl_frame_state.  */
 extern size_t ebl_frame_state_nregs (Ebl *ebl)
   __nonnull_attribute__ (1);
-
-/* Convert function descriptor to the function PC value.  */
-extern const char *ebl_get_func_pc (Ebl *ebl, Dwfl_Module *mod, GElf_Sym *sym)
-  __nonnull_attribute__ (1, 2, 3);
 
 /* Modify PC as fetched from inferior data into valid PC.  */
 extern void ebl_normalize_pc (Ebl *ebl, Dwarf_Addr *pc)

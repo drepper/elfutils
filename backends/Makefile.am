@@ -29,7 +29,7 @@
 ## not, see <http://www.gnu.org/licenses/>.
 include $(top_srcdir)/config/eu.am
 INCLUDES += -I$(top_srcdir)/libebl -I$(top_srcdir)/libasm \
-	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw
+	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw -I$(top_srcdir)/libdwfl
 
 
 modules = i386 sh x86_64 ia64 alpha arm sparc ppc ppc64 s390 tilegx
@@ -94,12 +94,12 @@ am_libebl_ppc_pic_a_OBJECTS = $(ppc_SRCS:.c=.os)
 
 ppc64_SRCS = ppc64_init.c ppc64_symbol.c ppc64_retval.c \
 	     ppc64_corenote.c ppc_regs.c ppc_auxv.c ppc_attrs.c ppc_syscall.c \
-	     ppc_frame_state.c ppc_cfi.c ppc64_get_func_pc.c
+	     ppc64_get_func_pc.c ppc_frame_state.c ppc_cfi.c
 libebl_ppc64_pic_a_SOURCES = $(ppc64_SRCS)
 am_libebl_ppc64_pic_a_OBJECTS = $(ppc64_SRCS:.c=.os)
 
-s390_SRCS = s390_init.c s390_symbol.c s390_regs.c s390_retval.c s390_cfi.c \
-	    s390_frame_state.c s390_corenote.c s390x_corenote.c \
+s390_SRCS = s390_init.c s390_symbol.c s390_regs.c s390_retval.c \
+	    s390_corenote.c s390x_corenote.c s390_cfi.c s390_frame_state.c \
 	    s390_frame_unwind.c
 libebl_s390_pic_a_SOURCES = $(s390_SRCS)
 am_libebl_s390_pic_a_OBJECTS = $(s390_SRCS:.c=.os)
