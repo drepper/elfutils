@@ -93,19 +93,18 @@ grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
   GElf_Addr segment_align64 = dwfl->segment_align;
   GElf_Addr segment_align32 = dwfl->segment_align;
   off_t offset = 0;
-  for (;;)
+  ssize_t nread;
+  union
+  {
+    Elf64_auxv_t a64[64];
+    Elf32_auxv_t a32[128];
+  } d;
+  do
     {
-      union
-      {
-	Elf64_auxv_t a64;
-	Elf32_auxv_t a32[2];
-      } d;
       eu_static_assert (sizeof d.a64 == sizeof d.a32);
-      ssize_t nread = pread_retry (fd, &d.a64, sizeof d.a64, offset);
+      nread = pread_retry (fd, d.a64, sizeof d.a64, offset);
       if (nread < 0)
 	return errno;
-      if (nread == 0)
-	break;
       for (unsigned a32i = 0; a32i < nread / sizeof d.a32[0]; a32i++)
 	{
 	  const Elf32_auxv_t *a32 = d.a32 + a32i;
@@ -119,20 +118,22 @@ grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
 	      break;
 	  }
 	}
-      if ((size_t) nread < sizeof d.a64)
-	break;
-      const Elf64_auxv_t *a64 = &d.a64;
-      switch (a64->a_type)
-      {
-	case AT_SYSINFO_EHDR:
-	  sysinfo_ehdr64 = a64->a_un.a_val;
-	  break;
-	case AT_PAGESZ:
-	  segment_align64 = a64->a_un.a_val;
-	  break;
-      }
+      for (unsigned a64i = 0; a64i < nread / sizeof d.a64[0]; a64i++)
+	{
+	  const Elf64_auxv_t *a64 = d.a64 + a64i;
+	  switch (a64->a_type)
+	  {
+	    case AT_SYSINFO_EHDR:
+	      sysinfo_ehdr64 = a64->a_un.a_val;
+	      break;
+	    case AT_PAGESZ:
+	      segment_align64 = a64->a_un.a_val;
+	      break;
+	  }
+	}
       offset += nread;
     }
+  while (nread == sizeof d.a64);
 
   close (fd);
 
