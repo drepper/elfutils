@@ -34,7 +34,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "../libdwfl/libdwfl.h"
 
 #include "elf-knowledge.h"
 

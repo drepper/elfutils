@@ -33,7 +33,7 @@
 #include <libeblP.h>
 
 bool
-ebl_frame_unwind (Ebl *ebl, Dwfl_Frame_State **statep, Dwarf_Addr pc,
+ebl_frame_unwind (Ebl *ebl, struct Dwfl_Frame_State **statep, Dwarf_Addr pc,
 		  bool (*memory_read) (struct Dwfl_Frame_State_Process *process,
 				       Dwarf_Addr addr, Dwarf_Addr *result))
 {

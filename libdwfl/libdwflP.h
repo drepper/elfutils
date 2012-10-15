@@ -41,7 +41,7 @@
 #include <string.h>
 
 #include "../libdw/libdwP.h"	/* We need its INTDECLs.  */
-#include "../libebl/libeblP.h"
+#include "libeblP.h"
 
 typedef struct Dwfl_Frame_State_Process Dwfl_Frame_State_Process;
 typedef struct Dwfl_Frame_State_Thread Dwfl_Frame_State_Thread;
