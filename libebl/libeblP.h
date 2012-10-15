@@ -30,8 +30,8 @@
 #define _LIBEBLP_H 1
 
 #include <gelf.h>
-#include "../libasm/libasm.h"
-#include "../libebl/libebl.h"
+#include <libasm.h>
+#include <libebl.h>
 #include <libintl.h>
 
 
