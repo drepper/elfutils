@@ -7681,19 +7681,6 @@ handle_core_items (Elf *core, const void *desc, size_t descsz,
   if (nitems == 0)
     return 0;
 
-  unsigned int colno = 0;
-  if (items[0].format == '\n' || items[0].format == 'b'
-      || items[0].format == 'B')
-    {
-      assert (nitems == 1);
-      assert (items[0].offset == 0);
-      size_t size = descsz;
-      colno = handle_core_item (core, items, desc, colno, &size);
-      /* If SIZE is not zero here there is some remaining data.  But we do not
-	 know how to process it anyway.  */
-      return colno;
-    }
-
   /* Sort to collect the groups together.  */
   const Ebl_Core_Item *sorted_items[nitems];
   for (size_t i = 0; i < nitems; ++i)
@@ -7711,7 +7698,23 @@ handle_core_items (Elf *core, const void *desc, size_t descsz,
   qsort (groups, ngroups, sizeof groups[0], &compare_core_item_groups);
 
   /* Write out all the groups.  */
+  unsigned int colno = 0;
+
   const void *last = desc;
+  if (nitems == 1)
+    {
+      size_t size = descsz;
+      /* If this note contains registers as well as items, don't pass
+	 &size to express that we don't wish to repeat.  */
+      colno = handle_core_item (core, sorted_items[0], desc, colno,
+				size != 0 ? &size : NULL);
+
+      if (size == 0)
+	return colno;
+      desc += descsz - size;
+      descsz = size;
+    }
+
   do
     {
       for (size_t i = 0; i < ngroups; ++i)
