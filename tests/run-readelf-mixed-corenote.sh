@@ -146,7 +146,7 @@ Note segment of 1044 bytes at offset 0xe8:
   LINUX                  8  S390_LAST_BREAK
     last_break: 0x000003fffd75ccbe
   LINUX                  4  S390_SYSTEM_CALL
-    system_call: 0x00000000
+    system_call: 0
 EOF
 
 testfiles testfile68
@@ -207,7 +207,7 @@ Note segment of 852 bytes at offset 0x94:
   LINUX                  8  S390_LAST_BREAK
     last_break: 0xfd75ccbe
   LINUX                  4  S390_SYSTEM_CALL
-    system_call: 0x00000000
+    system_call: 0
   LINUX                 64  S390_HIGH_GPRS
     high_r0: 0x000003ff, high_r1: 0x000003ff, high_r2: 0x00000000
     high_r3: 0x00000000, high_r4: 0x00000000, high_r5: 0x000003ff

@@ -42,17 +42,8 @@
 #define	INT			int32_t
 #define ALIGN_INT		4
 #define TYPE_INT		ELF_T_SWORD
-#ifndef PR_REG_TYPE
-# define PR_REG_TYPE		ULONG
-#endif
-#ifndef ALIGN_PR_REG_TYPE
-# define ALIGN_PR_REG_TYPE	ALIGN_ULONG
-#endif
-#ifndef PR_FPVALID_TYPE
-# define PR_FPVALID_TYPE	INT
-#endif
-#ifndef ALIGN_PR_FPVALID_TYPE
-# define ALIGN_PR_FPVALID_TYPE	ALIGN_INT
+#ifndef ALIGN_PR_REG
+# define ALIGN_PR_REG		ALIGN_ULONG
 #endif
 
 #define FIELD(type, name) type name __attribute__ ((aligned (ALIGN_##type)))
@@ -93,8 +84,15 @@ struct EBLHOOK(prstatus)
   struct EBLHOOK(timeval) pr_stime;
   struct EBLHOOK(timeval) pr_cutime;
   struct EBLHOOK(timeval) pr_cstime;
-  FIELD (PR_REG_TYPE, pr_reg[PRSTATUS_REGS_SIZE / sizeof (PR_REG_TYPE)]);
-  FIELD (PR_FPVALID_TYPE, pr_fpvalid);
+  union
+  {
+    FIELD (ULONG, pr_reg[PRSTATUS_REGS_SIZE / sizeof (ULONG)]);
+  } 
+#ifdef ALIGN_PR_REG
+    __attribute__ ((aligned (ALIGN_PR_REG)))
+#endif
+    ; 
+  FIELD (INT, pr_fpvalid);
 };
 
 #define	FNAMESZ	16

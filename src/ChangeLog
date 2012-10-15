@@ -1,10 +1,7 @@
-2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
+2012-10-14  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
-	* readelf.c (handle_core_items): New variable wrap, choose
-	REGISTER_WRAP_COLUMN for "register" group.  Use it instead of
-	ITEM_WRAP_COLUMN.  Limit special repeated items handling to
-	OFFSET 0 and formats '\n', 'b' and 'B'.  Initialize COLNO to MAX of
-	also REGISTER_WRAP_COLUMN.
+	* readelf.c (handle_core_items): Limit special repeated items handling
+	to single-item formats '\n', 'b' and 'B', assert OFFSET 0 there.
 
 2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
 

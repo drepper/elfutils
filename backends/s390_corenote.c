@@ -126,8 +126,8 @@ static const Ebl_Core_Item fpregset_items[] =
 #define PID_T			int32_t
 #define ALIGN_PID_T		4
 #define TYPE_PID_T		ELF_T_SWORD
-#define ALIGN_PR_REG_TYPE	8
-#define ALIGN_PR_FPVALID_TYPE	8
+/* s390 psw_compat_t has alignment 8 bytes where it is inherited from.  */
+#define ALIGN_PR_REG		8
 
 #define PRSTATUS_REGSET_ITEMS					\
   {								\
@@ -176,7 +176,7 @@ static const Ebl_Core_Item system_call_items[] =
   {
     {
       .name = "system_call", .group = "system", .offset = 0, .type = ELF_T_WORD,
-      .format = 'x',
+      .format = 'd',
     },
   };
 
