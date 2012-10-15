@@ -141,7 +141,8 @@ report_core (Dwfl *dwfl, const char *corefile)
   Dwfl_Module *mod = dwfl_report_elf (core_dwfl, "core", corefile, -1,
 				      0 /* base */);
   assert (mod != NULL);
-  Elf *core = dwfl_module_getelf (mod, NULL);
+  GElf_Addr loadbase_ignore;
+  Elf *core = dwfl_module_getelf (mod, &loadbase_ignore);
   assert (core != NULL);
   int result = dwfl_core_file_report (dwfl, core);
   assert (result >= 0);
@@ -503,7 +504,8 @@ is_core (const char *corefile)
   Dwfl *dwfl = dwfl_offline ();
   Dwfl_Module *mod = dwfl_report_elf (dwfl, "core", corefile, -1, 0 /* base */);
   assert (mod != NULL);
-  Elf *core = dwfl_module_getelf (mod, NULL);
+  GElf_Addr loadbase_ignore;
+  Elf *core = dwfl_module_getelf (mod, &loadbase_ignore);
   assert (core != NULL);
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
   assert (ehdr != NULL);
