@@ -29,7 +29,8 @@
 ##
 include $(top_srcdir)/config/eu.am
 AM_CFLAGS += -fpic
-INCLUDES += -I$(srcdir)/../libelf -I$(srcdir)/../libdw -I$(srcdir)/../libasm
+INCLUDES += -I$(srcdir)/../libelf -I$(srcdir)/../libdw -I$(srcdir)/../libasm \
+	    -I$(srcdir)/../libdwfl
 VERSION = 1
 LIBEBL_SUBDIR = @LIBEBL_SUBDIR@
 

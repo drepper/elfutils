@@ -27,7 +27,6 @@
    not, see <http://www.gnu.org/licenses/>.  */
 
 #include "libdwflP.h"
-#include "../libdw/cfi.h"
 #include <unistd.h>
 #include <sys/ptrace.h>
 
@@ -38,22 +37,22 @@ dwfl_end (Dwfl *dwfl)
     return;
 
   /* FIXME: Unify with dwfl_frame_state.c.  */
-  Dwarf_Frame_State_Process *process = dwfl->framestatelist;
+  Dwfl_Frame_State_Process *process = dwfl->framestatelist;
   while (process != NULL)
     {
-      Dwarf_Frame_State_Thread *thread = process->thread;
+      Dwfl_Frame_State_Thread *thread = process->thread;
       while (thread != NULL)
 	{
 	  if (thread->tid_attached)
 	    ptrace (PTRACE_DETACH, thread->tid, NULL, NULL);
-	  Dwarf_Frame_State *state = thread->unwound;
+	  Dwfl_Frame_State *state = thread->unwound;
 	  while (state != NULL)
 	    {
-	      Dwarf_Frame_State *dead = state;
+	      Dwfl_Frame_State *dead = state;
 	      state = state->unwound;
 	      free (dead);
 	    }
-	  Dwarf_Frame_State_Thread *dead = thread;
+	  Dwfl_Frame_State_Thread *dead = thread;
 	  thread = thread->next;
 	  free (dead);
 	}
@@ -62,7 +61,7 @@ dwfl_end (Dwfl *dwfl)
       elf_end (process->core);
       if (process->core_fd != -1)
 	close (process->core_fd);
-      Dwarf_Frame_State_Process *dead = process;
+      Dwfl_Frame_State_Process *dead = process;
       process = process->next;
       free (dead);
     }

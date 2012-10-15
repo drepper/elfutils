@@ -61,9 +61,9 @@ segment_end (Dwfl *dwfl, GElf_Addr end)
 }
 
 static bool
-state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
+state_get_reg (Dwfl_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 {
-  if (! dwarf_frame_state_reg_get (state, regno, val))
+  if (! dwfl_frame_state_reg_get (state, regno, val))
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return false;
@@ -72,7 +72,7 @@ state_get_reg (Dwarf_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 }
 
 static bool
-memory_read (Dwarf_Frame_State_Process *process, Dwarf_Addr addr,
+memory_read (Dwfl_Frame_State_Process *process, Dwarf_Addr addr,
 	     Dwarf_Addr *result)
 {
   if (process->core == NULL)
@@ -171,7 +171,7 @@ bra_compar (const void *key_voidp, const void *elem_voidp)
 /* FIXME: Handle bytecode deadlocks and overflows.  */
 
 static bool
-expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
+expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
 	   size_t nops, Dwarf_Addr *result)
 {
   if (nops == 0)
@@ -398,19 +398,19 @@ expr_eval (Dwarf_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
    (and call __libdwfl_seterrno) otherwise.  */
 
 static bool
-have_unwound (Dwarf_Frame_State **statep)
+have_unwound (Dwfl_Frame_State **statep)
 {
-  Dwarf_Frame_State *state = *statep, *unwound = state->unwound;
+  Dwfl_Frame_State *state = *statep, *unwound = state->unwound;
   switch (unwound->pc_state)
   {
-    case DWARF_FRAME_STATE_ERROR:
+    case DWFL_FRAME_STATE_ERROR:
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       *statep = NULL;
       return false;
-    case DWARF_FRAME_STATE_PC_SET:
+    case DWFL_FRAME_STATE_PC_SET:
       *statep = unwound;
       return true;
-    case DWARF_FRAME_STATE_PC_UNDEFINED:
+    case DWFL_FRAME_STATE_PC_UNDEFINED:
       *statep = NULL;
       return true;
   }
@@ -467,15 +467,15 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
    an undefined PC register (due to an error unwinding it).  */
 
 static bool
-handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
+handle_cfi (Dwfl_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
 	    Dwarf_CFI *cfi, Dwarf_Addr bias)
 {
-  Dwarf_Frame_State *state = *statep;
+  Dwfl_Frame_State *state = *statep;
   Dwarf_Frame *frame;
   if (INTUSE(dwarf_cfi_addrframe) (cfi, pc - bias, &frame) != 0)
     {
       int dw_errno = dwarf_errno ();
-      if (dw_errno == DWARF_E_NO_MATCH)
+      if (dw_errno == DWFL_E_NO_MATCH)
 	{
 	  if (! no_fde (pc, mod, bias))
 	    return false;
@@ -486,17 +486,17 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
       __libdwfl_seterrno (DWFL_E_LIBDW);
       return false;
     }
-  Dwarf_Frame_State_Thread *thread = state->thread;
-  Dwarf_Frame_State_Process *process = thread->process;
+  Dwfl_Frame_State_Thread *thread = state->thread;
+  Dwfl_Frame_State_Process *process = thread->process;
   Ebl *ebl = process->ebl;
   size_t nregs = ebl_frame_state_nregs (ebl);
-  Dwarf_Frame_State *unwound;
+  Dwfl_Frame_State *unwound;
   unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
   unwound->thread = thread;
   unwound->unwound = NULL;
   unwound->signal_frame = frame->fde->cie->signal_frame;
-  unwound->pc_state = DWARF_FRAME_STATE_ERROR;
+  unwound->pc_state = DWFL_FRAME_STATE_ERROR;
   memset (unwound->regs_set, 0, sizeof (unwound->regs_set));
   for (unsigned regno = 0; regno < nregs; regno++)
     {
@@ -516,7 +516,7 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
 	      /* REGNO is undefined.  */
 	      unsigned ra = frame->fde->cie->return_address_register;
 	      if (ebl_frame_dwarf_to_regno (ebl, &ra) && regno == ra)
-		unwound->pc_state = DWARF_FRAME_STATE_PC_UNDEFINED;
+		unwound->pc_state = DWFL_FRAME_STATE_PC_UNDEFINED;
 	      continue;
 	    }
 	  else if (reg_ops == NULL)
@@ -538,31 +538,31 @@ handle_cfi (Dwarf_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
 	     But PPC32 does not use such registers.  */
 	  continue;
 	}
-      if (! dwarf_frame_state_reg_set (unwound, regno, regval))
+      if (! dwfl_frame_state_reg_set (unwound, regno, regval))
 	{
 	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
 	  continue;
 	}
     }
-  if (unwound->pc_state == DWARF_FRAME_STATE_ERROR
-      && dwarf_frame_state_reg_get (unwound,
-				    frame->fde->cie->return_address_register,
-				    &unwound->pc))
+  if (unwound->pc_state == DWFL_FRAME_STATE_ERROR
+      && dwfl_frame_state_reg_get (unwound,
+				   frame->fde->cie->return_address_register,
+				   &unwound->pc))
     {
       /* PPC32 __libc_start_main properly CFI-unwinds PC as zero.  Currently
 	 none of the archs supported for unwinding have zero as a valid PC.  */
       if (unwound->pc == 0)
-	unwound->pc_state = DWARF_FRAME_STATE_PC_UNDEFINED;
+	unwound->pc_state = DWFL_FRAME_STATE_PC_UNDEFINED;
       else
-	unwound->pc_state = DWARF_FRAME_STATE_PC_SET;
+	unwound->pc_state = DWFL_FRAME_STATE_PC_SET;
     }
   return have_unwound (statep);
 }
 
 bool
-dwfl_frame_unwind (Dwarf_Frame_State **statep)
+dwfl_frame_unwind (Dwfl_Frame_State **statep)
 {
-  Dwarf_Frame_State *state = *statep;
+  Dwfl_Frame_State *state = *statep;
   if (state->unwound)
     return have_unwound (statep);
   Dwarf_Addr pc;
@@ -583,7 +583,7 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
 	    return true;
 	  if (state->unwound)
 	    {
-	      assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
+	      assert (state->unwound->pc_state == DWFL_FRAME_STATE_ERROR);
 	      return false;
 	    }
 	}
@@ -594,7 +594,7 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
 	    return true;
 	  if (state->unwound)
 	    {
-	      assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
+	      assert (state->unwound->pc_state == DWFL_FRAME_STATE_ERROR);
 	      return false;
 	    }
 	}
@@ -604,7 +604,7 @@ dwfl_frame_unwind (Dwarf_Frame_State **statep)
     return true;
   if (state->unwound)
     {
-      assert (state->unwound->pc_state == DWARF_FRAME_STATE_ERROR);
+      assert (state->unwound->pc_state == DWFL_FRAME_STATE_ERROR);
       return false;
     }
   __libdwfl_seterrno (DWFL_E_NO_DWARF);

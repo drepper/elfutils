@@ -47,7 +47,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
 {
   if (pid)
     report_pid (dwfl, pid);
-  Dwarf_Frame_State *state;
+  Dwfl_Frame_State *state;
   if (pid)
     state = dwfl_frame_state_pid (dwfl, pid);
   else if (corefile)
@@ -58,7 +58,7 @@ dump (Dwfl *dwfl, pid_t pid, const char *corefile)
     error (2, 0, "dwfl_frame_state: %s", dwfl_errmsg (-1));
   do
     {
-      Dwarf_Frame_State *thread = state;
+      Dwfl_Frame_State *thread = state;
       pid_t tid = dwfl_frame_tid_get (thread);
       printf ("TID %ld:\n", (long) tid);
       unsigned frameno;

@@ -34,13 +34,13 @@
 # include <sys/user.h>
 # include <sys/ptrace.h>
 #endif
-#include "../libdw/cfi.h"
+#include "libdwflP.h"
 
 #define BACKEND i386_
 #include "libebl_CPU.h"
 
 bool
-i386_frame_state (Dwarf_Frame_State *state)
+i386_frame_state (Dwfl_Frame_State *state)
 {
   if (state->thread->process->core == NULL)
     {
@@ -52,25 +52,25 @@ i386_frame_state (Dwarf_Frame_State *state)
       if (ptrace (PTRACE_GETREGS, tid, NULL, &user_regs) != 0)
 	return false;
 # if defined __i386__
-      dwarf_frame_state_reg_set (state, 0, user_regs.eax);
-      dwarf_frame_state_reg_set (state, 1, user_regs.ecx);
-      dwarf_frame_state_reg_set (state, 2, user_regs.edx);
-      dwarf_frame_state_reg_set (state, 3, user_regs.ebx);
-      dwarf_frame_state_reg_set (state, 4, user_regs.esp);
-      dwarf_frame_state_reg_set (state, 5, user_regs.ebp);
-      dwarf_frame_state_reg_set (state, 6, user_regs.esi);
-      dwarf_frame_state_reg_set (state, 7, user_regs.edi);
-      dwarf_frame_state_reg_set (state, 8, user_regs.eip);
+      dwfl_frame_state_reg_set (state, 0, user_regs.eax);
+      dwfl_frame_state_reg_set (state, 1, user_regs.ecx);
+      dwfl_frame_state_reg_set (state, 2, user_regs.edx);
+      dwfl_frame_state_reg_set (state, 3, user_regs.ebx);
+      dwfl_frame_state_reg_set (state, 4, user_regs.esp);
+      dwfl_frame_state_reg_set (state, 5, user_regs.ebp);
+      dwfl_frame_state_reg_set (state, 6, user_regs.esi);
+      dwfl_frame_state_reg_set (state, 7, user_regs.edi);
+      dwfl_frame_state_reg_set (state, 8, user_regs.eip);
 # elif defined __x86_64__
-      dwarf_frame_state_reg_set (state, 0, user_regs.rax);
-      dwarf_frame_state_reg_set (state, 1, user_regs.rcx);
-      dwarf_frame_state_reg_set (state, 2, user_regs.rdx);
-      dwarf_frame_state_reg_set (state, 3, user_regs.rbx);
-      dwarf_frame_state_reg_set (state, 4, user_regs.rsp);
-      dwarf_frame_state_reg_set (state, 5, user_regs.rbp);
-      dwarf_frame_state_reg_set (state, 6, user_regs.rsi);
-      dwarf_frame_state_reg_set (state, 7, user_regs.rdi);
-      dwarf_frame_state_reg_set (state, 8, user_regs.rip);
+      dwfl_frame_state_reg_set (state, 0, user_regs.rax);
+      dwfl_frame_state_reg_set (state, 1, user_regs.rcx);
+      dwfl_frame_state_reg_set (state, 2, user_regs.rdx);
+      dwfl_frame_state_reg_set (state, 3, user_regs.rbx);
+      dwfl_frame_state_reg_set (state, 4, user_regs.rsp);
+      dwfl_frame_state_reg_set (state, 5, user_regs.rbp);
+      dwfl_frame_state_reg_set (state, 6, user_regs.rsi);
+      dwfl_frame_state_reg_set (state, 7, user_regs.rdi);
+      dwfl_frame_state_reg_set (state, 8, user_regs.rip);
 # else /* (__i386__ || __x86_64__) && (!__i386__ && !__x86_64__) */
 #  error
 # endif /* (__i386__ || __x86_64__) && (!__i386__ && !__x86_64__) */

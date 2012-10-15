@@ -68,7 +68,8 @@ s390_init (elf, machine, eh, ehlen)
      unwinding.  */
   eh->frame_state_nregs = 32;
   HOOK (eh, frame_state);
-  HOOK (eh, normalize_pc);
+  if (eh->class == ELFCLASS32)
+    HOOK (eh, normalize_pc);
   HOOK (eh, frame_unwind);
 
   /* Only the 64-bit format uses the incorrect hash table entry size.  */

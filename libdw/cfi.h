@@ -31,9 +31,7 @@
 
 #include "libdwP.h"
 #include "libelfP.h"
-#include "../libebl/libeblP.h"
 struct ebl;
-#include <assert.h>
 
 /* Cached CIE representation.  */
 struct dwarf_cie
@@ -187,100 +185,6 @@ struct Dwarf_Frame_s
   size_t nregs;
   struct dwarf_frame_register regs[];
 };
-
-/* This holds information common for all the frames of one backtrace.  */
-struct Dwarf_Frame_State_Process
-{
-  Dwarf_Frame_State_Process *next;
-  struct Dwfl *dwfl;
-  struct ebl *ebl;
-  /* If it is false we share EBL with one of DWFL's Dwfl_Module->ebl.  */
-  bool ebl_close : 1;
-  /* If there is no core file both CORE is NULL and CORE_FD is -1.  */
-  Elf *core;
-  int core_fd;
-  Dwarf_Frame_State_Thread *thread;
-};
-
-struct Dwarf_Frame_State_Thread
-{
-  Dwarf_Frame_State_Process *process;
-  Dwarf_Frame_State_Thread *next;
-  /* If there is no TID it is 0.  */
-  pid_t tid;
-  bool tid_attached : 1;
-  /* Bottom frame.  */
-  Dwarf_Frame_State *unwound;
-};
-
-/* This holds everything we know about the state of the frame at a particular
-   PC location described by an FDE.  */
-struct Dwarf_Frame_State
-{
-  Dwarf_Frame_State_Thread *thread;
-  /* Previous (outer) frame.  */
-  Dwarf_Frame_State *unwound;
-  bool signal_frame : 1;
-  enum
-  {
-    /* This structure is still being initialized or there was an error
-       initializing it.  */
-    DWARF_FRAME_STATE_ERROR,
-    /* PC field is valid.  */
-    DWARF_FRAME_STATE_PC_SET,
-    /* PC field is undefined, this means the next (inner) frame was the
-       outermost frame.  */
-    DWARF_FRAME_STATE_PC_UNDEFINED
-  } pc_state;
-  /* Either initialized from appropriate REGS element or on some archs
-     initialized separately as the return address has no DWARF register.  */
-  Dwarf_Addr pc;
-  /* (1 << X) bitmask where 0 <= X < NREGS.  */
-  uint64_t regs_set[3];
-  /* REGS array size is ebl_frame_state_nregs (base->ebl).  */
-  Dwarf_Addr regs[];
-};
-
-/* Fetch value from Dwarf_Frame_State->regs indexed by DWARF REGNO.
-   No error code is set if the function returns FALSE.  */
-static inline bool
-dwarf_frame_state_reg_get (Dwarf_Frame_State *state, unsigned regno,
-                           Dwarf_Addr *val)
-{
-  Ebl *ebl = state->thread->process->ebl;
-  if (ebl->frame_dwarf_to_regno != NULL
-      && ! ebl->frame_dwarf_to_regno (ebl, &regno))
-    return false;
-  if (regno >= ebl->frame_state_nregs)
-    return false;
-  if ((state->regs_set[regno / sizeof (*state->regs_set) / 8]
-       & (1U << (regno % (sizeof (*state->regs_set) * 8)))) == 0)
-    return false;
-  if (val)
-    *val = state->regs[regno];
-  return true;
-}
-
-/* Store value to Dwarf_Frame_State->regs indexed by DWARF REGNO.
-   No error code is set if the function returns FALSE.  */
-static inline bool
-dwarf_frame_state_reg_set (Dwarf_Frame_State *state, unsigned regno,
-			   Dwarf_Addr val)
-{
-  Ebl *ebl = state->thread->process->ebl;
-  if (ebl->frame_dwarf_to_regno != NULL
-      && ! ebl->frame_dwarf_to_regno (ebl, &regno))
-    return false;
-  if (regno >= ebl->frame_state_nregs)
-    return false;
-  /* For example i386 user_regs_struct has signed fields.  */
-  if (ebl->class == ELFCLASS32)
-    val &= 0xffffffff;
-  state->regs_set[regno / sizeof (*state->regs_set) / 8] |=
-			      (1U << (regno % (sizeof (*state->regs_set) * 8)));
-  state->regs[regno] = val;
-  return true;
-}
 
 
 /* Clean up the data structure and all it points to.  */

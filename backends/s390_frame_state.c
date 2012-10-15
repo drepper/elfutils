@@ -1,4 +1,4 @@
-/* Fetch live process Dwarf_Frame_State from PID.
+/* Fetch live process Dwfl_Frame_State from PID.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -35,7 +35,7 @@
 # include <asm/ptrace.h>
 # include <sys/ptrace.h>
 #endif
-#include "../libdw/cfi.h"
+#include "libdwflP.h"
 
 #define BACKEND s390_
 #include "libebl_CPU.h"
@@ -43,10 +43,10 @@
 #include "core-get-pc.c"
 
 bool
-s390_frame_state (Dwarf_Frame_State *state)
+s390_frame_state (Dwfl_Frame_State *state)
 {
-  Dwarf_Frame_State_Thread *thread = state->thread;
-  Dwarf_Frame_State_Process *process = thread->process;
+  Dwfl_Frame_State_Thread *thread = state->thread;
+  Dwfl_Frame_State_Process *process = thread->process;
   Ebl *ebl = process->ebl;
   Elf *core = process->core;
   if (core == NULL)
@@ -75,7 +75,7 @@ s390_frame_state (Dwarf_Frame_State *state)
 				   *((const __typeof (*state->regs) *)
 				     &user_regs.regs.fp_regs.fprs[u]));
       state->pc = user_regs.regs.psw.addr;
-      state->pc_state = DWARF_FRAME_STATE_PC_SET;
+      state->pc_state = DWFL_FRAME_STATE_PC_SET;
 #endif /* __s390__ */
     }
   else /* core */
@@ -84,7 +84,7 @@ s390_frame_state (Dwarf_Frame_State *state)
       if (! core_get_pc (core, &state->pc,
 			 ebl->class == ELFCLASS32 ? 0x4c : 0x78))
 	return false;
-      state->pc_state = DWARF_FRAME_STATE_PC_SET;
+      state->pc_state = DWFL_FRAME_STATE_PC_SET;
     }
   return true;
 }
@@ -92,8 +92,8 @@ s390_frame_state (Dwarf_Frame_State *state)
 void
 s390_normalize_pc (Ebl *ebl __attribute__ ((unused)), Dwarf_Addr *pc)
 {
-  if (ebl->class != ELFCLASS32)
-    return;
+  assert (ebl->class == ELFCLASS32);
+
   /* Clear S390 bit 31.  */
   *pc &= (1U << 31) - 1;
 }

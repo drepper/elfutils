@@ -1,4 +1,4 @@
-/* Fetch live process Dwarf_Frame_State from PID.
+/* Fetch live process Dwfl_Frame_State from PID.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -35,13 +35,13 @@
 # include <sys/user.h>
 # include <sys/ptrace.h>
 #endif
-#include "../libdw/cfi.h"
+#include "libdwflP.h"
 
 #define BACKEND x86_64_
 #include "libebl_CPU.h"
 
 bool
-x86_64_frame_state (Dwarf_Frame_State *state)
+x86_64_frame_state (Dwfl_Frame_State *state)
 {
   if (state->thread->process->core == NULL)
     {
@@ -52,23 +52,23 @@ x86_64_frame_state (Dwarf_Frame_State *state)
       struct user_regs_struct user_regs;
       if (ptrace (PTRACE_GETREGS, tid, NULL, &user_regs) != 0)
 	return false;
-      dwarf_frame_state_reg_set (state, 0, user_regs.rax);
-      dwarf_frame_state_reg_set (state, 1, user_regs.rdx);
-      dwarf_frame_state_reg_set (state, 2, user_regs.rcx);
-      dwarf_frame_state_reg_set (state, 3, user_regs.rbx);
-      dwarf_frame_state_reg_set (state, 4, user_regs.rsi);
-      dwarf_frame_state_reg_set (state, 5, user_regs.rdi);
-      dwarf_frame_state_reg_set (state, 6, user_regs.rbp);
-      dwarf_frame_state_reg_set (state, 7, user_regs.rsp);
-      dwarf_frame_state_reg_set (state, 8, user_regs.r8);
-      dwarf_frame_state_reg_set (state, 9, user_regs.r9);
-      dwarf_frame_state_reg_set (state, 10, user_regs.r10);
-      dwarf_frame_state_reg_set (state, 11, user_regs.r11);
-      dwarf_frame_state_reg_set (state, 12, user_regs.r12);
-      dwarf_frame_state_reg_set (state, 13, user_regs.r13);
-      dwarf_frame_state_reg_set (state, 14, user_regs.r14);
-      dwarf_frame_state_reg_set (state, 15, user_regs.r15);
-      dwarf_frame_state_reg_set (state, 16, user_regs.rip);
+      dwfl_frame_state_reg_set (state, 0, user_regs.rax);
+      dwfl_frame_state_reg_set (state, 1, user_regs.rdx);
+      dwfl_frame_state_reg_set (state, 2, user_regs.rcx);
+      dwfl_frame_state_reg_set (state, 3, user_regs.rbx);
+      dwfl_frame_state_reg_set (state, 4, user_regs.rsi);
+      dwfl_frame_state_reg_set (state, 5, user_regs.rdi);
+      dwfl_frame_state_reg_set (state, 6, user_regs.rbp);
+      dwfl_frame_state_reg_set (state, 7, user_regs.rsp);
+      dwfl_frame_state_reg_set (state, 8, user_regs.r8);
+      dwfl_frame_state_reg_set (state, 9, user_regs.r9);
+      dwfl_frame_state_reg_set (state, 10, user_regs.r10);
+      dwfl_frame_state_reg_set (state, 11, user_regs.r11);
+      dwfl_frame_state_reg_set (state, 12, user_regs.r12);
+      dwfl_frame_state_reg_set (state, 13, user_regs.r13);
+      dwfl_frame_state_reg_set (state, 14, user_regs.r14);
+      dwfl_frame_state_reg_set (state, 15, user_regs.r15);
+      dwfl_frame_state_reg_set (state, 16, user_regs.rip);
 #endif /* __x86_64__ */
     }
   return true;

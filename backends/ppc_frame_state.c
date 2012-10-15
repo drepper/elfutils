@@ -1,4 +1,4 @@
-/* Fetch live process Dwarf_Frame_State from PID.
+/* Fetch live process Dwfl_Frame_State from PID.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -34,7 +34,7 @@
 # include <sys/user.h>
 # include <sys/ptrace.h>
 #endif
-#include "../libdw/cfi.h"
+#include "libdwflP.h"
 
 #define BACKEND ppc_
 #include "libebl_CPU.h"
@@ -66,10 +66,10 @@ __typeof (ppc_frame_dwarf_to_regno)
      __attribute__ ((alias ("ppc_frame_dwarf_to_regno")));
 
 bool
-ppc_frame_state (Dwarf_Frame_State *state)
+ppc_frame_state (Dwfl_Frame_State *state)
 {
-  Dwarf_Frame_State_Thread *thread = state->thread;
-  Dwarf_Frame_State_Process *process = thread->process;
+  Dwfl_Frame_State_Thread *thread = state->thread;
+  Dwfl_Frame_State_Process *process = thread->process;
   Ebl *ebl = process->ebl;
   Elf *core = process->core;
   if (core == NULL)
@@ -99,10 +99,10 @@ ppc_frame_state (Dwarf_Frame_State *state)
 	}
       for (unsigned gpr = 0;
 	   gpr < sizeof (user_regs.r.gpr) / sizeof (*user_regs.r.gpr); gpr++)
-	dwarf_frame_state_reg_set (state, gpr, user_regs.r.gpr[gpr]);
+	dwfl_frame_state_reg_set (state, gpr, user_regs.r.gpr[gpr]);
       state->pc = user_regs.r.nip;
-      state->pc_state = DWARF_FRAME_STATE_PC_SET;
-      dwarf_frame_state_reg_set (state, 65, user_regs.r.link); // or 108
+      state->pc_state = DWFL_FRAME_STATE_PC_SET;
+      dwfl_frame_state_reg_set (state, 65, user_regs.r.link); // or 108
       /* Registers like msr, ctr, xer, dar, dsisr etc. are probably irrelevant
 	 for CFI.  */
 #endif /* __powerpc__ */
@@ -112,7 +112,7 @@ ppc_frame_state (Dwarf_Frame_State *state)
       if (! core_get_pc (core, &state->pc,
 			 ebl->class == ELFCLASS64 ? 0x170 : 0xc8))
 	return false;
-      state->pc_state = DWARF_FRAME_STATE_PC_SET;
+      state->pc_state = DWFL_FRAME_STATE_PC_SET;
     }
   return true;
 }

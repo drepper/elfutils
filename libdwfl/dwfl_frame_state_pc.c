@@ -30,14 +30,12 @@
 # include <config.h>
 #endif
 
-#include "../libdw/cfi.h"
-#include "../libebl/libebl.h"
 #include "libdwflP.h"
 
 bool
-dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
+dwfl_frame_state_pc (Dwfl_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
 {
-  assert (state->pc_state == DWARF_FRAME_STATE_PC_SET);
+  assert (state->pc_state == DWFL_FRAME_STATE_PC_SET);
   *pc = state->pc;
   ebl_normalize_pc (state->thread->process->ebl, pc);
   if (minusone)

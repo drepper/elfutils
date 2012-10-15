@@ -386,7 +386,8 @@ extern const char *ebl_get_func_pc (Ebl *ebl, struct Dwfl_Module *mod,
   __nonnull_attribute__ (1, 2, 3);
 
 /* Fetch process data from STATE->base->pid or STATE->base->core.  */
-extern bool ebl_frame_state (Dwarf_Frame_State *state)
+struct Dwfl_Frame_State;
+extern bool ebl_frame_state (struct Dwfl_Frame_State *state)
   __nonnull_attribute__ (1);
 
 /* Number of registers to allocate for STATE of ebl_frame_state.  */
@@ -398,10 +399,12 @@ extern void ebl_normalize_pc (Ebl *ebl, Dwarf_Addr *pc)
   __nonnull_attribute__ (1, 2);
 
 /* Get previous frame state for an existing frame state.  */
+struct Dwfl_Frame_State_Process;
 extern bool
-  ebl_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
-		    bool (*memory_read) (Dwarf_Frame_State_Process *process,
-					 Dwarf_Addr addr, Dwarf_Addr *result))
+  ebl_frame_unwind (Ebl *ebl, struct Dwfl_Frame_State **statep, Dwarf_Addr pc,
+		    bool
+		      (*memory_read) (struct Dwfl_Frame_State_Process *process,
+				      Dwarf_Addr addr, Dwarf_Addr *result))
   __nonnull_attribute__ (1, 2, 4);
 
 /* Convert *REGNO as is in DWARF to a lower range.  */

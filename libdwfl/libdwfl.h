@@ -41,6 +41,10 @@ typedef struct Dwfl_Module Dwfl_Module;
 /* Handle describing a line record.  */
 typedef struct Dwfl_Line Dwfl_Line;
 
+/* This holds everything we know about the state of the frame at a particular
+   PC location described by an FDE.  */
+typedef struct Dwfl_Frame_State Dwfl_Frame_State;
+
 /* Callbacks.  */
 typedef struct
 {
@@ -558,33 +562,33 @@ extern Dwarf_CFI *dwfl_module_eh_cfi (Dwfl_Module *mod, Dwarf_Addr *bias);
 
 /* Get innermost frame of first thread of live process PID.  Returns NULL on
    failure.  */
-extern Dwarf_Frame_State *dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid);
+extern Dwfl_Frame_State *dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid);
 
 /* Get innermost frame of first thread of core file COREFILE.  Returns NULL on
    failure.  */
-extern Dwarf_Frame_State *dwfl_frame_state_core (Dwfl *dwfl,
-						 const char *corefile);
+extern Dwfl_Frame_State *dwfl_frame_state_core (Dwfl *dwfl,
+						const char *corefile);
 
 /* Return TRUE and update *STATEP for the unwound frame for successful unwind.
    Return TRUE and set *STATEP to NULL for the outermost frame.  Return FALSE
    (and call __libdwfl_seterrno) otherwise.  */
-extern bool dwfl_frame_unwind (Dwarf_Frame_State **statep);
+extern bool dwfl_frame_unwind (Dwfl_Frame_State **statep);
 
 /* Get return address register value for frame.  Return TRUE if *PC set and
    optionally *MINUSONE is also set, if MINUSONE is not NULL.  Return FALSE
    (and call __libdw_seterrno) otherwise.  *MINUSONE is TRUE for normal calls
    where *PC should be decremented by one to get the call instruction, it is
    FALSE if this frame was interrupted by a signal handler.  */
-extern bool dwfl_frame_state_pc (Dwarf_Frame_State *state, Dwarf_Addr *pc,
+extern bool dwfl_frame_state_pc (Dwfl_Frame_State *state, Dwarf_Addr *pc,
 				 bool *minusone);
 
 /* Get innermost frame of the next thread from STATE.  STATE can be any frame
    of (the previous) thread.  */
-extern Dwarf_Frame_State *dwfl_frame_thread_next (Dwarf_Frame_State *state);
+extern Dwfl_Frame_State *dwfl_frame_thread_next (Dwfl_Frame_State *state);
 
 /* Get Task ID of the thread of STATE.  This is PID for the thread started by
    function main and gettid () for the other threads.  */
-extern pid_t dwfl_frame_tid_get (Dwarf_Frame_State *state);
+extern pid_t dwfl_frame_tid_get (Dwfl_Frame_State *state);
 
 #ifdef __cplusplus
 }

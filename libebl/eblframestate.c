@@ -1,4 +1,4 @@
-/* Fetch live process Dwarf_Frame_State from PID.
+/* Fetch live process Dwfl_Frame_State from PID.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -31,13 +31,13 @@
 #endif
 
 #include <libeblP.h>
-#include "../libdw/cfi.h"
 #include <assert.h>
+#include "libdwflP.h"
 
 bool
-ebl_frame_state (Dwarf_Frame_State *state)
+ebl_frame_state (Dwfl_Frame_State *state)
 {
-  Dwarf_Frame_State_Process *process = state->thread->process;
+  Dwfl_Frame_State_Process *process = state->thread->process;
   Ebl *ebl = process->ebl;
   /* Otherwise caller could not allocate STATE of proper size.  If FRAME_STATE
      is unsupported then FRAME_STATE_NREGS is zero.  */

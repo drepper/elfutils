@@ -31,20 +31,19 @@
 #endif
 
 #include <stdlib.h>
-#include "../libdwfl/libdwfl.h"
 #include <assert.h>
-#include "../libdw/cfi.h"
+#include "libdwflP.h"
 
 #define BACKEND s390_
 #include "libebl_CPU.h"
 
 bool
-s390_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
-		   bool (*memory_read) (Dwarf_Frame_State_Process *process,
+s390_frame_unwind (Ebl *ebl, Dwfl_Frame_State **statep, Dwarf_Addr pc,
+		   bool (*memory_read) (Dwfl_Frame_State_Process *process,
 					Dwarf_Addr addr, Dwarf_Addr *result))
 {
-  Dwarf_Frame_State *state = *statep;
-  Dwarf_Frame_State_Process *process = state->thread->process;
+  Dwfl_Frame_State *state = *statep;
+  Dwfl_Frame_State_Process *process = state->thread->process;
   assert (state->unwound == NULL);
   /* Caller already assumed caller adjustment but S390 instructions are 4 bytes
      long.  Undo it.  */
@@ -67,7 +66,7 @@ s390_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
   /* See GDB s390_sigtramp_frame_unwind_cache.  */
 # define S390_SP_REGNUM (0 + 15) /* S390_R15_REGNUM */
   Dwarf_Addr this_sp;
-  if (! dwarf_frame_state_reg_get (state, S390_SP_REGNUM, &this_sp))
+  if (! dwfl_frame_state_reg_get (state, S390_SP_REGNUM, &this_sp))
     return false;
   unsigned word_size = ebl->class == ELFCLASS64 ? 8 : 4;
   Dwarf_Addr next_cfa = this_sp + 16 * word_size + 32;
@@ -84,13 +83,13 @@ s390_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
     return false;
   sigreg_ptr += word_size;
   size_t nregs = ebl->frame_state_nregs;
-  Dwarf_Frame_State *unwound;
+  Dwfl_Frame_State *unwound;
   unwound = malloc (sizeof (*unwound) + sizeof (*unwound->regs) * nregs);
   state->unwound = unwound;
   unwound->thread = state->thread;
   unwound->unwound = NULL;
   unwound->pc = val;
-  unwound->pc_state = DWARF_FRAME_STATE_ERROR;
+  unwound->pc_state = DWFL_FRAME_STATE_ERROR;
   memset (unwound->regs_set, 0, sizeof (unwound->regs_set));
   unwound->signal_frame = true;
   /* Then the GPRs.  */
@@ -98,7 +97,7 @@ s390_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
     {
       if (! memory_read (process, sigreg_ptr, &val))
 	return false;
-      if (! dwarf_frame_state_reg_set (unwound, 0 + i, val))
+      if (! dwfl_frame_state_reg_set (unwound, 0 + i, val))
 	return false;
       sigreg_ptr += word_size;
     }
@@ -119,7 +118,7 @@ s390_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
 	    return false;
 	  val = (val << 32) | val_low;
 	}
-      if (! dwarf_frame_state_reg_set (unwound, 16 + i, val))
+      if (! dwfl_frame_state_reg_set (unwound, 16 + i, val))
 	return false;
       sigreg_ptr += 8;
     }
@@ -133,15 +132,15 @@ s390_frame_unwind (Ebl *ebl, Dwarf_Frame_State **statep, Dwarf_Addr pc,
 	  if (! memory_read (process, sigreg_ptr, &val))
 	    return false;
 	  Dwarf_Addr val_low;
-	  if (! dwarf_frame_state_reg_get (unwound, 0 + i, &val_low))
+	  if (! dwfl_frame_state_reg_get (unwound, 0 + i, &val_low))
 	    return false;
 	  val = (val << 32) | val_low;
-	  if (! dwarf_frame_state_reg_set (unwound, 0 + i, val))
+	  if (! dwfl_frame_state_reg_set (unwound, 0 + i, val))
 	    return false;
 	  sigreg_ptr += 4;
 	}
     }
-  unwound->pc_state = DWARF_FRAME_STATE_PC_SET;
+  unwound->pc_state = DWFL_FRAME_STATE_PC_SET;
   *statep = unwound;
   return true;
 }

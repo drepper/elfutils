@@ -32,7 +32,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "../libebl/libebl.h"
+#include <libebl.h>
 
 
 /* Opaque type for the assembler context descriptor.  */
