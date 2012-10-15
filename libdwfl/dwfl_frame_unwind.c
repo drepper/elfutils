@@ -475,7 +475,7 @@ handle_cfi (Dwfl_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
   if (INTUSE(dwarf_cfi_addrframe) (cfi, pc - bias, &frame) != 0)
     {
       int dw_errno = dwarf_errno ();
-      if (dw_errno == DWFL_E_NO_MATCH)
+      if (dw_errno == DWARF_E_NO_MATCH)
 	{
 	  if (! no_fde (pc, mod, bias))
 	    return false;
