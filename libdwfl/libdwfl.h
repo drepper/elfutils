@@ -368,7 +368,8 @@ extern int dwfl_linux_proc_find_elf (Dwfl_Module *mod, void **userdata,
 				     const char *module_name, Dwarf_Addr base,
 				     char **file_name, Elf **);
 
-/* Standard argument parsing for using a standard callback set.  */
+/* Standard argument parsing for using a standard callback set.
+   Field Dwfl_Module->USERDATA is reserved for "[exe]" or "[pie]" modules.  */
 struct argp;
 extern const struct argp *dwfl_standard_argp (void) __attribute__ ((const));
 
