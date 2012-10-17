@@ -1,5 +1,16 @@
 2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
+	* argp-std.c (offline_find_elf): New function.
+	(offline_callbacks): Use it for FIND_ELF.
+	(struct parse_opt): New.
+	(parse_opt): New KEY ARGP_KEY_INIT.  In other make HOOK struct
+	parse_opt pointer from former Dwfl pointer.  Delay 'e and OPT_COREFILE
+	processing till ARGP_KEY_SUCCESS.  Initialize state->INPUT already from
+	ARGP_KEY_SUCCESS.  Modify the cleanup in ARGP_KEY_ERROR.  Make the final state->INPUT initialization optional.
+	* libdwfl.h (dwfl_standard_argp): Extend the comment for USERDATA.
+
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
 	* dwfl_module_getdwarf.c (mod_verify_build_id): New function with code
 	from ...
 	(__libdwfl_getelf): ... here.  Call it.
