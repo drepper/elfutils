@@ -176,8 +176,8 @@ __libdwfl_getelf (Dwfl_Module *mod)
 							 mod->main.elf), 2))
 	{
 	case 2:
-	  /* Build ID matches as it should. */
-	  return;
+	  /* Build ID matches as it should.  But initialize MAIN_BIAS below.  */
+	  break;
 
 	case -1:			/* ELF error.  */
 	  mod->elferr = INTUSE(dwfl_errno) ();
@@ -192,13 +192,16 @@ __libdwfl_getelf (Dwfl_Module *mod)
 	  abort ();
 	}
 
-      /* We get here when it was the right ELF file.  Clear it out.  */
-      elf_end (mod->main.elf);
-      mod->main.elf = NULL;
-      if (mod->main.fd >= 0)
+      if (mod->elferr != DWFL_E_NOERROR)
 	{
-	  close (mod->main.fd);
-	  mod->main.fd = -1;
+	  /* We get here when it was the right ELF file.  Clear it out.  */
+	  elf_end (mod->main.elf);
+	  mod->main.elf = NULL;
+	  if (mod->main.fd >= 0)
+	    {
+	      close (mod->main.fd);
+	      mod->main.fd = -1;
+	    }
 	}
     }
 

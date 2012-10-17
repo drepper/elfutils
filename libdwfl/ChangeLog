@@ -1,3 +1,8 @@
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_module_getdwarf.c (__libdwfl_getelf): Do not return yet on
+	matching build-id.  Check ELFERR before closing this MOD file.
+
 2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* linux-proc-maps.c: Include system.h.
