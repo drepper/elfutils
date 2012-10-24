@@ -198,6 +198,8 @@ struct Dwfl_Frame_State_Process
   struct ebl *ebl;
   /* If it is false we share EBL with one of DWFL's Dwfl_Module->ebl.  */
   bool ebl_close : 1;
+  dwfl_frame_memory_read_t *memory_read;
+  void *memory_read_user_data;
   /* If there is no core file both CORE is NULL and CORE_FD is -1.  */
   Elf *core;
   int core_fd;

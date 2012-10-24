@@ -40,26 +40,6 @@
 # define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-/* Exact copy from libdwfl/segment.c.  */
-
-static GElf_Addr
-segment_start (Dwfl *dwfl, GElf_Addr start)
-{
-  if (dwfl->segment_align > 1)
-    start &= -dwfl->segment_align;
-  return start;
-}
-
-/* Exact copy from libdwfl/segment.c.  */
-
-static GElf_Addr
-segment_end (Dwfl *dwfl, GElf_Addr end)
-{
-  if (dwfl->segment_align > 1)
-    end = (end + dwfl->segment_align - 1) & -dwfl->segment_align;
-  return end;
-}
-
 static bool
 state_get_reg (Dwfl_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 {
@@ -69,95 +49,6 @@ state_get_reg (Dwfl_Frame_State *state, unsigned regno, Dwarf_Addr *val)
       return false;
     }
   return true;
-}
-
-static bool
-memory_read (Dwfl_Frame_State_Process *process, Dwarf_Addr addr,
-	     Dwarf_Addr *result)
-{
-  if (process->core == NULL)
-    {
-      if (process->ebl->class == ELFCLASS64)
-	{
-	  errno = 0;
-	  *result = ptrace (PTRACE_PEEKDATA, process->thread->tid,
-			    (void *) (uintptr_t) addr, NULL);
-	  if (errno != 0)
-	    {
-	      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	      return false;
-	    }
-	  return true;
-	}
-#if SIZEOF_LONG == 8
-      /* We do not care about reads unaliged to 4 bytes boundary.
-         But 0x...ffc read of 8 bytes could overrun a page.  */
-      bool lowered = (addr & 4) != 0;
-      if (lowered)
-	addr -= 4;
-#endif /* SIZEOF_LONG == 8 */
-      errno = 0;
-      *result = ptrace (PTRACE_PEEKDATA, process->thread->tid,
-			(void *) (uintptr_t) addr, NULL);
-      if (errno != 0)
-	{
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-	  return false;
-	}
-#if SIZEOF_LONG == 8
-# if BYTE_ORDER == BIG_ENDIAN
-      if (! lowered)
-	*result >>= 32;
-# else
-      if (lowered)
-	*result >>= 32;
-# endif
-#endif /* SIZEOF_LONG == 8 */
-      *result &= 0xffffffff;
-      return true;
-    }
-  if (process->core)
-    {
-      Elf *core = process->core;
-      Dwfl *dwfl = process->dwfl;
-      static size_t phnum;
-      if (elf_getphdrnum (core, &phnum) < 0)
-	{
-	  __libdwfl_seterrno (DWFL_E_LIBELF);
-	  return false;
-	}
-      for (size_t cnt = 0; cnt < phnum; ++cnt)
-	{
-	  GElf_Phdr phdr_mem, *phdr = gelf_getphdr (core, cnt, &phdr_mem);
-	  if (phdr == NULL || phdr->p_type != PT_LOAD)
-	    continue;
-	  /* Bias is zero here, a core file itself has no bias.  */
-	  GElf_Addr start = segment_start (dwfl, phdr->p_vaddr);
-	  GElf_Addr end = segment_end (dwfl, phdr->p_vaddr + phdr->p_memsz);
-	  unsigned bytes = process->ebl->class == ELFCLASS64 ? 8 : 4;
-	  if (addr < start || addr + bytes > end)
-	    continue;
-	  Elf_Data *data;
-	  data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start,
-				       bytes, ELF_T_ADDR);
-	  if (data == NULL)
-	    {
-	      __libdwfl_seterrno (DWFL_E_LIBELF);
-	      return false;
-	    }
-	  assert (data->d_size == bytes);
-	  /* FIXME: Currently any arch supported for unwinding supports
-	     unaligned access.  */
-	  if (bytes == 8)
-	    *result = *(const uint64_t *) data->d_buf;
-	  else
-	    *result = *(const uint32_t *) data->d_buf;
-	  return true;
-	}
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
-      return false;
-    }
-  abort ();
 }
 
 static int
@@ -174,6 +65,7 @@ static bool
 expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
 	   size_t nops, Dwarf_Addr *result)
 {
+  Dwfl_Frame_State_Process *process = state->thread->process;
   if (nops == 0)
     {
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
@@ -287,7 +179,9 @@ expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
 	is_location = false;
 	break;
       case DW_OP_deref:
-	if (! pop (&val1) || ! memory_read (state->thread->process, val1, &val1)
+	if (! pop (&val1)
+	    || ! process->memory_read (val1, &val1,
+				       process->memory_read_user_data)
 	    || ! push (val1))
 	  {
 	    free (stack);
@@ -388,7 +282,8 @@ expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
       return false;
     }
   free (stack);
-  if (is_location && ! memory_read (state->thread->process, *result, result))
+  if (is_location && ! process->memory_read (*result, result,
+					     process->memory_read_user_data))
     return false;
   return true;
 }
@@ -600,7 +495,7 @@ dwfl_frame_unwind (Dwfl_Frame_State **statep)
 	}
     }
   *statep = state;
-  if (ebl_frame_unwind (state->thread->process->ebl, statep, pc, memory_read))
+  if (ebl_frame_unwind (state->thread->process->ebl, statep, pc))
     return true;
   if (state->unwound)
     {

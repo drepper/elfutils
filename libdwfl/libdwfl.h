@@ -572,10 +572,15 @@ extern Dwfl_Frame_State *dwfl_frame_state_core (Dwfl *dwfl,
 						const char *corefile);
 
 /* Fetch inferior registers from a caller supplied storage.  */
+typedef bool dwfl_frame_memory_read_t (Dwarf_Addr addr, Dwarf_Addr *result,
+				       void *user_data);
 extern Dwfl_Frame_State *dwfl_frame_state_data (Dwfl *dwfl, int pc_set,
 						Dwarf_Addr pc, unsigned nregs,
 					        const uint64_t *regs_set,
-						const Dwarf_Addr *regs);
+						const Dwarf_Addr *regs,
+						dwfl_frame_memory_read_t
+								   *memory_read,
+						void *memory_read_user_data);
 
 /* Return TRUE and update *STATEP for the unwound frame for successful unwind.
    Return TRUE and set *STATEP to NULL for the outermost frame.  Return FALSE

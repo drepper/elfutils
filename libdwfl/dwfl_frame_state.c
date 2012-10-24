@@ -39,6 +39,26 @@
 # define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
+/* Exact copy from libdwfl/segment.c.  */
+
+static GElf_Addr
+segment_start (Dwfl *dwfl, GElf_Addr start)
+{
+  if (dwfl->segment_align > 1)
+    start &= -dwfl->segment_align;
+  return start;
+}
+
+/* Exact copy from libdwfl/segment.c.  */
+
+static GElf_Addr
+segment_end (Dwfl *dwfl, GElf_Addr end)
+{
+  if (dwfl->segment_align > 1)
+    end = (end + dwfl->segment_align - 1) & -dwfl->segment_align;
+  return end;
+}
+
 static bool
 tid_is_attached (Dwfl *dwfl, pid_t tid)
 {
@@ -169,7 +189,8 @@ process_free (Dwfl_Frame_State_Process *process)
 }
 
 static Dwfl_Frame_State_Process *
-process_alloc (Dwfl *dwfl)
+process_alloc (Dwfl *dwfl, dwfl_frame_memory_read_t *memory_read,
+	       void *memory_read_user_data)
 {
   Dwfl_Frame_State_Process *process = malloc (sizeof (*process));
   if (process == NULL)
@@ -177,6 +198,8 @@ process_alloc (Dwfl *dwfl)
   process->dwfl = dwfl;
   process->ebl = NULL;
   process->ebl_close = NULL;
+  process->memory_read = memory_read;
+  process->memory_read_user_data = memory_read_user_data;
   process->core = NULL;
   process->core_fd = -1;
   process->thread = NULL;
@@ -211,15 +234,63 @@ ptrace_attach (pid_t tid)
   return true;
 }
 
+static bool
+dwfl_frame_state_pid_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
+				  void *user_data)
+{
+  Dwfl_Frame_State_Process *process = user_data;
+  assert (process->core == NULL && process->thread->tid);
+  if (process->ebl->class == ELFCLASS64)
+    {
+      errno = 0;
+      *result = ptrace (PTRACE_PEEKDATA, process->thread->tid,
+			(void *) (uintptr_t) addr, NULL);
+      if (errno != 0)
+	{
+	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  return false;
+	}
+      return true;
+    }
+#if SIZEOF_LONG == 8
+  /* We do not care about reads unaliged to 4 bytes boundary.
+     But 0x...ffc read of 8 bytes could overrun a page.  */
+  bool lowered = (addr & 4) != 0;
+  if (lowered)
+    addr -= 4;
+#endif /* SIZEOF_LONG == 8 */
+  errno = 0;
+  *result = ptrace (PTRACE_PEEKDATA, process->thread->tid,
+		    (void *) (uintptr_t) addr, NULL);
+  if (errno != 0)
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return false;
+    }
+#if SIZEOF_LONG == 8
+# if BYTE_ORDER == BIG_ENDIAN
+  if (! lowered)
+    *result >>= 32;
+# else
+  if (lowered)
+    *result >>= 32;
+# endif
+#endif /* SIZEOF_LONG == 8 */
+  *result &= 0xffffffff;
+  return true;
+}
+
 Dwfl_Frame_State *
 dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 {
   char dirname[64];
   int i = snprintf (dirname, sizeof (dirname), "/proc/%ld/task", (long) pid);
   assert (i > 0 && i < (ssize_t) sizeof (dirname) - 1);
-  Dwfl_Frame_State_Process *process = process_alloc (dwfl);
+  Dwfl_Frame_State_Process *process;
+  process = process_alloc (dwfl, dwfl_frame_state_pid_memory_read, NULL);
   if (process == NULL)
     return NULL;
+  process->memory_read_user_data = process;
   for (Dwfl_Module *mod = dwfl->modulelist; mod != NULL; mod = mod->next)
     {
       Dwfl_Error error = __libdwfl_module_getebl (mod);
@@ -312,12 +383,60 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 }
 INTDEF (dwfl_frame_state_pid)
 
+static bool
+dwfl_frame_state_core_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
+				   void *user_data)
+{
+  Dwfl_Frame_State_Process *process = user_data;
+  Elf *core = process->core;
+  assert (core != NULL);
+  Dwfl *dwfl = process->dwfl;
+  static size_t phnum;
+  if (elf_getphdrnum (core, &phnum) < 0)
+    {
+      __libdwfl_seterrno (DWFL_E_LIBELF);
+      return false;
+    }
+  for (size_t cnt = 0; cnt < phnum; ++cnt)
+    {
+      GElf_Phdr phdr_mem, *phdr = gelf_getphdr (core, cnt, &phdr_mem);
+      if (phdr == NULL || phdr->p_type != PT_LOAD)
+	continue;
+      /* Bias is zero here, a core file itself has no bias.  */
+      GElf_Addr start = segment_start (dwfl, phdr->p_vaddr);
+      GElf_Addr end = segment_end (dwfl, phdr->p_vaddr + phdr->p_memsz);
+      unsigned bytes = process->ebl->class == ELFCLASS64 ? 8 : 4;
+      if (addr < start || addr + bytes > end)
+	continue;
+      Elf_Data *data;
+      data = elf_getdata_rawchunk (core, phdr->p_offset + addr - start,
+				   bytes, ELF_T_ADDR);
+      if (data == NULL)
+	{
+	  __libdwfl_seterrno (DWFL_E_LIBELF);
+	  return false;
+	}
+      assert (data->d_size == bytes);
+      /* FIXME: Currently any arch supported for unwinding supports
+	 unaligned access.  */
+      if (bytes == 8)
+	*result = *(const uint64_t *) data->d_buf;
+      else
+	*result = *(const uint32_t *) data->d_buf;
+      return true;
+    }
+  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+  return false;
+}
+
 Dwfl_Frame_State *
 dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 {
-  Dwfl_Frame_State_Process *process = process_alloc (dwfl);
+  Dwfl_Frame_State_Process *process;
+  process = process_alloc (dwfl, dwfl_frame_state_core_memory_read, NULL);
   if (process == NULL)
     return NULL;
+  process->memory_read_user_data = process;
   int core_fd = open64 (corefile, O_RDONLY);
   if (core_fd < 0)
     {
@@ -521,7 +640,9 @@ INTDEF (dwfl_frame_state_core)
 
 Dwfl_Frame_State *
 dwfl_frame_state_data (Dwfl *dwfl, int pc_set, Dwarf_Addr pc, unsigned nregs,
-		       const uint64_t *regs_set, const Dwarf_Addr *regs)
+		       const uint64_t *regs_set, const Dwarf_Addr *regs,
+		       dwfl_frame_memory_read_t *memory_read,
+		       void *memory_read_user_data)
 {
   Ebl *ebl = NULL;
   for (Dwfl_Module *mod = dwfl->modulelist; mod != NULL; mod = mod->next)
@@ -536,7 +657,8 @@ dwfl_frame_state_data (Dwfl *dwfl, int pc_set, Dwarf_Addr pc, unsigned nregs,
       __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
       return NULL;
     }
-  Dwfl_Frame_State_Process *process = process_alloc (dwfl);
+  Dwfl_Frame_State_Process *process;
+  process = process_alloc (dwfl, memory_read, memory_read_user_data);
   if (process == NULL)
     return NULL;
   process->ebl = ebl;
