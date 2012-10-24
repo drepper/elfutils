@@ -639,7 +639,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 INTDEF (dwfl_frame_state_core)
 
 Dwfl_Frame_State *
-dwfl_frame_state_data (Dwfl *dwfl, int pc_set, Dwarf_Addr pc, unsigned nregs,
+dwfl_frame_state_data (Dwfl *dwfl, bool pc_set, Dwarf_Addr pc, unsigned nregs,
 		       const uint64_t *regs_set, const Dwarf_Addr *regs,
 		       dwfl_frame_memory_read_t *memory_read,
 		       void *memory_read_user_data)

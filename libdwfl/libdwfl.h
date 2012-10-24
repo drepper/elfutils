@@ -574,7 +574,7 @@ extern Dwfl_Frame_State *dwfl_frame_state_core (Dwfl *dwfl,
 /* Fetch inferior registers from a caller supplied storage.  */
 typedef bool dwfl_frame_memory_read_t (Dwarf_Addr addr, Dwarf_Addr *result,
 				       void *user_data);
-extern Dwfl_Frame_State *dwfl_frame_state_data (Dwfl *dwfl, int pc_set,
+extern Dwfl_Frame_State *dwfl_frame_state_data (Dwfl *dwfl, bool pc_set,
 						Dwarf_Addr pc, unsigned nregs,
 					        const uint64_t *regs_set,
 						const Dwarf_Addr *regs,
