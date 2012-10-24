@@ -312,8 +312,6 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 }
 INTDEF (dwfl_frame_state_pid)
 
-/* Fetch inferior registers from a core file.  */
-
 Dwfl_Frame_State *
 dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 {
@@ -520,6 +518,60 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
   return process->thread->unwound;
 }
 INTDEF (dwfl_frame_state_core)
+
+Dwfl_Frame_State *
+dwfl_frame_state_data (Dwfl *dwfl, int pc_set, Dwarf_Addr pc, unsigned nregs,
+		       const uint64_t *regs_set, const Dwarf_Addr *regs)
+{
+  Ebl *ebl = NULL;
+  for (Dwfl_Module *mod = dwfl->modulelist; mod != NULL; mod = mod->next)
+    {
+      Dwfl_Error error = __libdwfl_module_getebl (mod);
+      if (error != DWFL_E_NOERROR)
+	continue;
+      ebl = mod->ebl;
+    }
+  if (ebl == NULL || nregs > ebl_frame_state_nregs (ebl))
+    {
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return NULL;
+    }
+  Dwfl_Frame_State_Process *process = process_alloc (dwfl);
+  if (process == NULL)
+    return NULL;
+  process->ebl = ebl;
+  Dwfl_Frame_State_Thread *thread = thread_alloc (process, 0);
+  if (thread == NULL)
+    {
+      process_free (process);
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return NULL;
+    }
+  Dwfl_Frame_State *state = thread->unwound;
+  state->pc_state = DWFL_FRAME_STATE_ERROR;
+  if (pc_set)
+    {
+      state->pc = pc;
+      state->pc_state = DWFL_FRAME_STATE_PC_SET;
+    }
+  for (unsigned regno = 0; regno < nregs; regno++)
+    if ((regs_set[regno / sizeof (*regs_set) / 8]
+	 & (1U << (regno % (sizeof (*regs_set) * 8)))) != 0
+        && ! dwfl_frame_state_reg_set (state, regno, regs[regno]))
+      {
+	process_free (process);
+	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	return NULL;
+      }
+  if (! ebl_frame_state (state) || ! state_fetch_pc (state))
+    {
+      process_free (process);
+      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      return NULL;
+    }
+  return process->thread->unwound;
+}
+INTDEF (dwfl_frame_state_data)
 
 Dwfl_Frame_State *
 dwfl_frame_thread_next (Dwfl_Frame_State *state)

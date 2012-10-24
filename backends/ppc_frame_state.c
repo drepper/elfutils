@@ -72,12 +72,12 @@ ppc_frame_state (Dwfl_Frame_State *state)
   Dwfl_Frame_State_Process *process = thread->process;
   Ebl *ebl = process->ebl;
   Elf *core = process->core;
-  if (core == NULL)
+  pid_t tid = thread->tid;
+  if (core == NULL && tid)
     {
 #ifndef __powerpc__
       return false;
 #else /* __powerpc__ */
-      pid_t tid = thread->tid;
       union
 	{
 	  struct pt_regs r;
@@ -107,7 +107,7 @@ ppc_frame_state (Dwfl_Frame_State *state)
 	 for CFI.  */
 #endif /* __powerpc__ */
     }
-  else /* core */
+  else if (core)
     {
       if (! core_get_pc (core, &state->pc,
 			 ebl->class == ELFCLASS64 ? 0x170 : 0xc8))

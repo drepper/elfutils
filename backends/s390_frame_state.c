@@ -49,12 +49,12 @@ s390_frame_state (Dwfl_Frame_State *state)
   Dwfl_Frame_State_Process *process = thread->process;
   Ebl *ebl = process->ebl;
   Elf *core = process->core;
-  if (core == NULL)
+  pid_t tid = thread->tid;
+  if (core == NULL && tid)
     {
 #ifndef __s390__
       return false;
 #else /* __s390__ */
-      pid_t tid = thread->tid;
       struct user user_regs;
       ptrace_area parea;
       parea.process_addr = (uintptr_t) &user_regs;
@@ -78,7 +78,7 @@ s390_frame_state (Dwfl_Frame_State *state)
       state->pc_state = DWFL_FRAME_STATE_PC_SET;
 #endif /* __s390__ */
     }
-  else /* core */
+  else if (core)
     {
       /* Fetch PSWA.  */
       if (! core_get_pc (core, &state->pc,

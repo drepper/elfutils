@@ -240,9 +240,9 @@ struct Dwfl_Frame_State
   /* Either initialized from appropriate REGS element or on some archs
      initialized separately as the return address has no DWARF register.  */
   Dwarf_Addr pc;
-  /* (1 << X) bitmask where 0 <= X < NREGS.  */
+  /* (1 << X) bitmask where 0 <= X < ebl_frame_state_nregs.  */
   uint64_t regs_set[3];
-  /* REGS array size is ebl_frame_state_nregs (base->ebl).  */
+  /* REGS array size is ebl_frame_state_nregs.  */
   Dwarf_Addr regs[];
 };
 

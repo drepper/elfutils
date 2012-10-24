@@ -43,12 +43,12 @@
 bool
 x86_64_frame_state (Dwfl_Frame_State *state)
 {
-  if (state->thread->process->core == NULL)
+  pid_t tid = state->thread->tid;
+  if (state->thread->process->core == NULL && tid)
     {
 #ifndef __x86_64__
       return false;
 #else /* __x86_64__ */
-      pid_t tid = state->thread->tid;
       struct user_regs_struct user_regs;
       if (ptrace (PTRACE_GETREGS, tid, NULL, &user_regs) != 0)
 	return false;

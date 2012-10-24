@@ -571,6 +571,12 @@ extern Dwfl_Frame_State *dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid);
 extern Dwfl_Frame_State *dwfl_frame_state_core (Dwfl *dwfl,
 						const char *corefile);
 
+/* Fetch inferior registers from a caller supplied storage.  */
+extern Dwfl_Frame_State *dwfl_frame_state_data (Dwfl *dwfl, int pc_set,
+						Dwarf_Addr pc, unsigned nregs,
+					        const uint64_t *regs_set,
+						const Dwarf_Addr *regs);
+
 /* Return TRUE and update *STATEP for the unwound frame for successful unwind.
    Return TRUE and set *STATEP to NULL for the outermost frame.  Return FALSE
    (and call __libdwfl_seterrno) otherwise.  */
