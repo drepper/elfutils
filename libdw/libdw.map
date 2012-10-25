@@ -259,6 +259,7 @@ ELFUTILS_0.155 {
   global:
     dwfl_frame_state_pid;
     dwfl_frame_state_core;
+    dwfl_frame_state_data;
     dwfl_frame_unwind;
     dwfl_frame_state_pc;
     dwfl_frame_tid_get;
