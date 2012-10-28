@@ -33,13 +33,6 @@ Dwarf_CFI *
 internal_function
 __libdwfl_set_cfi (Dwfl_Module *mod, Dwarf_CFI **slot, Dwarf_CFI *cfi)
 {
-  /* SHT_NOBITS gets read in this way.  */
-  if (cfi != NULL && cfi->data->d.d_buf == NULL)
-    {
-      free (cfi);
-      cfi = NULL;
-    }
-
   if (cfi != NULL && cfi->ebl == NULL)
     {
       Dwfl_Error error = __libdwfl_module_getebl (mod);

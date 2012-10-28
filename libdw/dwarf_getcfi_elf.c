@@ -223,7 +223,7 @@ getcfi_scn_eh_frame (Elf *elf, const GElf_Ehdr *ehdr,
       if (hdr_scn != NULL)
 	{
 	  Elf_Data *hdr_data = elf_rawdata (hdr_scn, NULL);
-	  if (hdr_data != NULL && hdr_data->d_buf != NULL)
+	  if (hdr_data != NULL)
 	    {
 	      GElf_Addr eh_frame_vaddr;
 	      cfi->search_table_vaddr = hdr_vaddr;
