@@ -258,6 +258,7 @@ ELFUTILS_0.149 {
 ELFUTILS_0.155 {
   global:
     dwfl_report_elf_baseaddr;
+    dwfl_fd_find_debuginfo;
     dwfl_frame_state_pid;
     dwfl_frame_state_core;
     dwfl_frame_state_data;
