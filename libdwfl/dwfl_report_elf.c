@@ -204,7 +204,7 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 	  if (ph->p_type == PT_LOAD
 	      && ph->p_vaddr + ph->p_memsz > 0)
 	    {
-	      end = base + (ph->p_vaddr + ph->p_memsz);
+	      end = bias + (ph->p_vaddr + ph->p_memsz);
 	      break;
 	    }
 	}
