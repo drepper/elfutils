@@ -51,7 +51,8 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
 		  alldts md5-sha1-test typeiter low_high_pc \
-		  test-elf_cntl_gelf_getshdr backtrace backtrace-child
+		  test-elf_cntl_gelf_getshdr dwfl-report-elf-align backtrace \
+		  backtrace-child
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -98,7 +99,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-readelf-d.sh run-readelf-gdb_index.sh run-unstrip-n.sh \
 	run-low_high_pc.sh run-macro-test.sh run-elf_cntl_gelf_getshdr.sh \
 	run-test-archive64.sh run-readelf-vmcoreinfo.sh \
-	run-readelf-mixed-corenote.sh run-backtrace.sh
+	run-readelf-mixed-corenote.sh run-dwfl-report-elf-align.sh \
+	run-backtrace.sh
 
 if !STANDALONE
 check_PROGRAMS += msg_tst md5-sha1-test
@@ -192,7 +194,10 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-test-archive64.sh testarchive64.a.bz2 \
 	     testfile60.bz2 testfile61.bz2 \
 	     run-readelf-vmcoreinfo.sh testfile62.bz2 \
-	     run-readelf-mixed-corenote.sh testfile63.bz2
+	     run-readelf-mixed-corenote.sh testfile63.bz2 testfile64.bz2 \
+	     testfile65.bz2 testfile69.core.bz2 testfile69.so.bz2 \
+	     run-dwfl-report-elf-align.sh \
+	     testfile-dwfl-report-elf-align-shlib.so.bz2
 
 if USE_VALGRIND
 valgrind_cmd="valgrind -q --trace-children=yes --error-exitcode=1"
@@ -299,6 +304,7 @@ md5_sha1_test_LDADD = $(libeu)
 typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
 low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
 test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
+dwfl_report_elf_align_LDADD = $(libdw) $(libmudflap)
 backtrace_LDADD = $(libdw) $(libelf) $(libmudflap)
 backtrace_child_CFLAGS = -fPIE
 backtrace_child_LDFLAGS = -pie -pthread

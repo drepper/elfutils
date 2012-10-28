@@ -41,7 +41,8 @@
 Dwfl_Module *
 internal_function
 __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
-		      int fd, Elf *elf, GElf_Addr base, bool sanity)
+		      int fd, Elf *elf, GElf_Addr base, bool base_is_bias,
+		      bool sanity)
 {
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
   if (ehdr == NULL)
@@ -181,13 +182,19 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 	    {
 	      vaddr = ph->p_vaddr & -ph->p_align;
 	      address_sync = ph->p_vaddr + ph->p_memsz;
-	      if ((base & (ph->p_align - 1)) != 0)
-		base = (base + ph->p_align - 1) & -ph->p_align;
-	      start = base + (ph->p_vaddr & -ph->p_align);
 	      break;
 	    }
 	}
-      bias = start - vaddr;
+      if (base_is_bias)
+	{
+	  start = base + vaddr;
+	  bias = base;
+	}
+      else
+	{
+	  start = base;
+	  bias = base - vaddr;
+	}
 
       for (size_t i = phnum; i-- > 0;)
 	{
@@ -197,7 +204,7 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 	  if (ph->p_type == PT_LOAD
 	      && ph->p_vaddr + ph->p_memsz > 0)
 	    {
-	      end = base + (ph->p_vaddr + ph->p_memsz);
+	      end = bias + (ph->p_vaddr + ph->p_memsz);
 	      break;
 	    }
 	}
@@ -248,8 +255,9 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 }
 
 Dwfl_Module *
-dwfl_report_elf (Dwfl *dwfl, const char *name,
-		 const char *file_name, int fd, GElf_Addr base)
+internal_function
+__libdwfl_report_elf_open (Dwfl *dwfl, const char *name, const char *file_name,
+			   int fd, GElf_Addr base, bool base_is_bias)
 {
   bool closefd = false;
   if (fd < 0)
@@ -272,7 +280,7 @@ dwfl_report_elf (Dwfl *dwfl, const char *name,
     }
 
   Dwfl_Module *mod = __libdwfl_report_elf (dwfl, name, file_name,
-					   fd, elf, base, true);
+					   fd, elf, base, base_is_bias, true);
   if (mod == NULL)
     {
       elf_end (elf);
@@ -282,4 +290,19 @@ dwfl_report_elf (Dwfl *dwfl, const char *name,
 
   return mod;
 }
+
+Dwfl_Module *
+dwfl_report_elf (Dwfl *dwfl, const char *name,
+		 const char *file_name, int fd, GElf_Addr base)
+{
+  return __libdwfl_report_elf_open (dwfl, name, file_name, fd, base, true);
+}
 INTDEF (dwfl_report_elf)
+
+Dwfl_Module *
+dwfl_report_elf_baseaddr (Dwfl *dwfl, const char *name,
+			  const char *file_name, int fd, GElf_Addr base)
+{
+  return __libdwfl_report_elf_open (dwfl, name, file_name, fd, base, false);
+}
+INTDEF (dwfl_report_elf_baseaddr)

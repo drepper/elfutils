@@ -1,3 +1,19 @@
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add dwfl-report-elf-align.
+	(TESTS): Add run-dwfl-report-elf-align.sh.
+	(EXTRA_DIST): Add run-dwfl-report-elf-align.sh and
+	testfile-dwfl-report-elf-align-shlib.so.bz2 .
+	(dwfl_report_elf_align_LDADD): New.
+	* dwfl-report-elf-align.c: New file.
+	* run-dwfl-report-elf-align.sh: New file.
+	* testfile-dwfl-report-elf-align-shlib.so.bz2: New file.
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add testfile64.bz2, testfile65.bz2,
+	testfile69.core.bz2 and testfile69.so.bz2 .
+
 2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* run-addrname-test.sh: New test for PIE relocation.

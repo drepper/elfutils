@@ -150,6 +150,13 @@ extern Dwfl_Module *dwfl_report_elf (Dwfl *dwfl, const char *name,
 				     const char *file_name, int fd,
 				     GElf_Addr base);
 
+/* See dwfl_report_elf except that BASE is the page-aligned absolute VMA
+   address where the ELF file should start.  Any possible file prelinking of
+   the disk file is compensated.  */
+extern Dwfl_Module *dwfl_report_elf_baseaddr (Dwfl *dwfl, const char *name,
+					      const char *file_name, int fd,
+					      GElf_Addr base);
+
 /* Similar, but report the module for offline use.  All ET_EXEC files
    being reported must be reported before any relocatable objects.
    If this is used, dwfl_report_module and dwfl_report_elf may not be
