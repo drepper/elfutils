@@ -28,7 +28,7 @@ testfiles testfile-dwfl-report-elf-align-shlib.so
 #   LOAD           0x000660 0x0000000000200660 0x0000000000200660 0x0001f0 0x000200 RW  0x200000
 # #1  0x00007f3560c92585 in shlib () from ./testfile-dwfl-report-elf-align-shlib.so
 
-./dwfl-report-elf-align ./testfile-dwfl-report-elf-align-shlib.so \
-			0x7f3560c92000 0x7f3560c92585 shlib
+testrun ./dwfl-report-elf-align ./testfile-dwfl-report-elf-align-shlib.so \
+				0x7f3560c92000 0x7f3560c92585 shlib
 
 exit 0
