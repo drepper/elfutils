@@ -182,11 +182,19 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
 	    {
 	      vaddr = ph->p_vaddr & -ph->p_align;
 	      address_sync = ph->p_vaddr + ph->p_memsz;
-	      start = base + vaddr;
 	      break;
 	    }
 	}
-      bias = base;
+      if (base_is_bias)
+	{
+	  start = base + vaddr;
+	  bias = base;
+	}
+      else
+	{
+	  start = base;
+	  bias = base - vaddr;
+	}
 
       for (size_t i = phnum; i-- > 0;)
 	{

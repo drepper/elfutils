@@ -353,7 +353,8 @@ extern int __libdwfl_crc32_file (int fd, uint32_t *resp) attribute_hidden;
    Consumes ELF on success, not on failure.  */
 extern Dwfl_Module *__libdwfl_report_elf (Dwfl *dwfl, const char *name,
 					  const char *file_name, int fd,
-					  Elf *elf, GElf_Addr base, bool sanity)
+					  Elf *elf, GElf_Addr base,
+					  bool base_is_bias, bool sanity)
   internal_function;
 
 /* Meat of dwfl_report_offline.  */
