@@ -52,7 +52,7 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
 		  alldts md5-sha1-test typeiter low_high_pc \
 		  test-elf_cntl_gelf_getshdr dwfl-report-elf-align backtrace \
-		  backtrace-child
+		  backtrace-child backtrace-data
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -308,6 +308,7 @@ dwfl_report_elf_align_LDADD = $(libdw) $(libmudflap)
 backtrace_LDADD = $(libdw) $(libelf) $(libmudflap)
 backtrace_child_CFLAGS = -fPIE
 backtrace_child_LDFLAGS = -pie -pthread
+backtrace_data_LDADD = $(libdw) $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage
