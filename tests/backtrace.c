@@ -363,9 +363,30 @@ static void
 ptrace_detach_stopped (pid_t pid, pid_t group_pid)
 {
   errno = 0;
+  /* This kill is needed for kernel-2.6.18-308.el5.ppc64.  */
+  long l = tgkill (group_pid, pid, SIGSTOP);
+  assert_perror (errno);
+  assert (l == 0);
   l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
   assert_perror (errno);
   assert (l == 0);
+  /* Currently broken on kernel-3.5.4-2.fc17.x86_64.  */
+#if 0
+  siginfo_t siginfo;
+  /* With kernel-2.6.18-308.el5.ppc64 we would get hanging waitpid after later
+     PTRACE_ATTACH.  */
+  l = waitid (P_PID, pid, &siginfo, WSTOPPED | WNOWAIT | WNOHANG);
+  assert_perror (errno);
+  assert (l == 0);
+  assert (siginfo.si_pid == pid);
+  assert (siginfo.si_signo == SIGCHLD);
+  assert (siginfo.si_code == CLD_STOPPED);
+  /* kernel-2.6.18-308.el5.ppc64 has there WIFSTOPPED + WSTOPSIG,
+     kernel-3.4.11-1.fc16.x86_64 has there the plain signal value.  */
+  assert ((WIFSTOPPED (siginfo.si_status)
+	   && WSTOPSIG (siginfo.si_status) == SIGSTOP)
+	  || siginfo.si_status == SIGSTOP);
+#endif
 }
 
 static void
