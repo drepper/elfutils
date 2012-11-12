@@ -205,7 +205,6 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	  {
 	    FILE *f = fopen (arg, "r");
 	    if (f == NULL)
-	    nofile:
 	      {
 		int code = errno;
 		argp_failure (state, EXIT_FAILURE, code,
@@ -291,31 +290,18 @@ parse_opt (int key, char *arg, struct argp_state *state)
 
 	if (opt->core)
 	  {
-	    int fd = open64 (opt->core, O_RDONLY);
-	    if (fd < 0)
-	      goto nofile;
-
-	    Elf *core;
-	    Dwfl_Error error = __libdw_open_file (&fd, &core, true, false);
-	    if (error != DWFL_E_NOERROR)
+	    if (dwfl_core_filename_report (dwfl, NULL, opt->core) == NULL)
 	      {
+		Dwfl_Error error = dwfl_errno ();
 		argp_failure (state, EXIT_FAILURE, 0,
 			      _("cannot read ELF core file: %s"),
 			      INTUSE(dwfl_errmsg) (error));
 		return error == DWFL_E_ERRNO ? errno : EIO;
 	      }
 
-	    int result = INTUSE(dwfl_core_file_report) (dwfl, core);
-	    if (result < 0)
-	      {
-		elf_end (core);
-		close (fd);
-		return fail (dwfl, result, opt->core);
-	      }
-
 	    /* From now we leak FD and CORE.  */
 
-	    if (result == 0)
+	    if (dwfl->modulelist == NULL)
 	      {
 		argp_failure (state, EXIT_FAILURE, 0,
 			      _("No modules recognized in core file"));

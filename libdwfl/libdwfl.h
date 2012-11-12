@@ -355,6 +355,14 @@ extern int dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
    Returns the number of modules reported, or -1 for errors.  */
 extern int dwfl_core_file_report (Dwfl *dwfl, Elf *elf);
 
+/* Call dwfl_core_file_report but providing FILENAME instead.  Function returns
+   opened core file Elf * and its *FDP file descriptor which must be held valid
+   until dwfl_end is called for DWFL.  FDP can be passed as NULL (but the
+   caller cannot close the file descriptor then).  Function returns NULL for
+   errors, check dwfl_errmsg in such case.  */
+extern Elf *dwfl_core_filename_report (Dwfl *dwfl, int *fdp,
+				       const char *filename);
+
 /* Call dwfl_report_module for each file mapped into the address space of PID.
    Returns zero on success, -1 if dwfl_report_module failed,
    or an errno code if opening the kernel binary failed.  */
