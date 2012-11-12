@@ -61,25 +61,23 @@ core_get_pc (Elf *core, Dwarf_Addr *core_pc, unsigned pc_offset)
 	  switch (bits)
 	  {
 	    case 32:;
-	      Elf32_Word val32;
-	      reg_desc = gelf_convert (core, ELF_T_WORD, ELF_T_WORD, &val32,
-				       reg_desc);
-	      /* NULL REG_DESC is caught below.  */
+	      uint32_t val32 = *(const uint32_t *) reg_desc;
+	      reg_desc += sizeof (val32);
+	      val32 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
+		       ? be32toh (val32) : le32toh (val32));
 	      /* Do a host width conversion.  */
 	      val = val32;
 	      break;
 	    case 64:;
-	      Elf64_Xword val64;
-	      reg_desc = gelf_convert (core, ELF_T_XWORD, ELF_T_XWORD, &val64,
-				       reg_desc);
-	      /* NULL REG_DESC is caught below.  */
+	      uint64_t val64 = *(const uint64_t *) reg_desc;
+	      reg_desc += sizeof (val64);
+	      val64 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
+		       ? be64toh (val64) : le64toh (val64));
 	      val = val64;
 	      break;
 	    default:
 	      abort ();
 	  }
-	  if (reg_desc == NULL)
-	    continue;
 	  *core_pc = val;
 	  return true;
 	}

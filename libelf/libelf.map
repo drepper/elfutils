@@ -138,8 +138,3 @@ ELFUTILS_1.6 {
   global:
     elf_getphdrnum;
 } ELFUTILS_1.5;
-
-ELFUTILS_0.155 {
-  global:
-    gelf_convert;
-} ELFUTILS_1.6;

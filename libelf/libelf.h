@@ -383,12 +383,6 @@ extern unsigned long int elf_hash (const char *__string)
 extern unsigned long int elf_gnu_hash (const char *__string)
        __attribute__ ((__pure__));
 
-/* Convert DATA from ELF to VALUE in host memory.  Return NULL on error,
-   otherwise th updated DATA pointer.  */
-extern const void *gelf_convert (Elf *elf, Elf_Type valuetype,
-				 Elf_Type datatype, void *value,
-				 const void *data);
-
 
 /* Compute simple checksum from permanent parts of the ELF file.  */
 extern long int elf32_checksum (Elf *__elf);

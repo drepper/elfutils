@@ -528,18 +528,17 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	      for (item = items; item < items + nitems; item++)
 		if (strcmp (item->name, "pid") == 0)
 		  break;
-	      Elf32_Sword val32s;
-	      if (item == items + nitems
-		  || gelf_convert (core, ELF_T_SWORD, item->type, &val32s,
-				   desc + item->offset)
-		     == NULL)
+	      if (item == items + nitems)
 		{
 		  process_free (process);
 		  __libdwfl_seterrno (DWFL_E_BADELF);
 		  return NULL;
 		}
-	      pid_t tid = val32s;
-	      eu_static_assert (sizeof val32s <= sizeof tid);
+	      uint32_t val32 = *(const uint32_t *) (desc + item->offset);
+	      val32 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
+			? be32toh (val32) : le32toh (val32));
+	      pid_t tid = (int32_t) val32;
+	      eu_static_assert (sizeof val32 <= sizeof tid);
 	      if (thread)
 		{
 		  /* Delay initialization of THREAD till all notes for it have
@@ -588,30 +587,22 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  switch (regloc->bits)
 		  {
 		    case 32:;
-		      Elf32_Word val32;
-		      reg_desc = gelf_convert (core, ELF_T_WORD, ELF_T_WORD,
-					       &val32, reg_desc);
-		      /* NULL REG_DESC is caught below.  */
+		      uint32_t val32 = *(const uint32_t *) reg_desc;
+		      val32 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
+			       ? be32toh (val32) : le32toh (val32));
 		      /* Do a host width conversion.  */
 		      val = val32;
 		      break;
 		    case 64:;
-		      Elf64_Xword val64;
-		      reg_desc = gelf_convert (core, ELF_T_XWORD, ELF_T_XWORD,
-					       &val64, reg_desc);
-		      /* NULL REG_DESC is caught below.  */
+		      uint64_t val64 = *(const uint64_t *) reg_desc;
+		      val64 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
+			       ? be64toh (val64) : le64toh (val64));
 		      assert (sizeof (*state->regs) == sizeof (val64));
 		      val = val64;
 		      break;
 		    default:
 		      abort ();
 		  }
-		  if (reg_desc == NULL)
-		    {
-		      process_free (process);
-		      __libdwfl_seterrno (DWFL_E_BADELF);
-		      return NULL;
-		    }
 		  /* Registers not valid for CFI are just ignored.  */
 		  dwfl_frame_state_reg_set (state, regno, val);
 		  reg_desc += regloc->pad;
