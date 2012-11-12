@@ -588,6 +588,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		  {
 		    case 32:;
 		      uint32_t val32 = *(const uint32_t *) reg_desc;
+		      reg_desc += sizeof val32;
 		      val32 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
 			       ? be32toh (val32) : le32toh (val32));
 		      /* Do a host width conversion.  */
@@ -595,9 +596,10 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 		      break;
 		    case 64:;
 		      uint64_t val64 = *(const uint64_t *) reg_desc;
+		      reg_desc += sizeof val64;
 		      val64 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
 			       ? be64toh (val64) : le64toh (val64));
-		      assert (sizeof (*state->regs) == sizeof (val64));
+		      assert (sizeof (*state->regs) == sizeof val64);
 		      val = val64;
 		      break;
 		    default:
