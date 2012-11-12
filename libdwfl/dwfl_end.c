@@ -36,35 +36,8 @@ dwfl_end (Dwfl *dwfl)
   if (dwfl == NULL)
     return;
 
-  /* FIXME: Unify with dwfl_frame_state.c.  */
-  Dwfl_Frame_State_Process *process = dwfl->framestatelist;
-  while (process != NULL)
-    {
-      Dwfl_Frame_State_Thread *thread = process->thread;
-      while (thread != NULL)
-	{
-	  if (thread->tid_attached)
-	    ptrace (PTRACE_DETACH, thread->tid, NULL, NULL);
-	  Dwfl_Frame_State *state = thread->unwound;
-	  while (state != NULL)
-	    {
-	      Dwfl_Frame_State *dead = state;
-	      state = state->unwound;
-	      free (dead);
-	    }
-	  Dwfl_Frame_State_Thread *dead = thread;
-	  thread = thread->next;
-	  free (dead);
-	}
-      if (process->ebl_close)
-	ebl_closebackend (process->ebl);
-      elf_end (process->core);
-      if (process->core_fd != -1)
-	close (process->core_fd);
-      Dwfl_Frame_State_Process *dead = process;
-      process = process->next;
-      free (dead);
-    }
+  while (dwfl->framestatelist)
+    __libdwfl_process_free (dwfl->framestatelist);
 
   free (dwfl->lookup_addr);
   free (dwfl->lookup_module);
