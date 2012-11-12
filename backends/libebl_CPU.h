@@ -32,6 +32,7 @@
 #include <libeblP.h>
 
 #define EBLHOOK(name)	EBLHOOK_1(BACKEND, name)
+#define EBLHOOKVAR	EBLHOOK
 #define EBLHOOK_1(a, b)	EBLHOOK_2(a, b)
 #define EBLHOOK_2(a, b)	a##b
 
