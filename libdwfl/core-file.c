@@ -37,6 +37,7 @@
 #include <endian.h>
 #include <byteswap.h>
 #include "system.h"
+#include <fcntl.h>
 
 
 /* This is a prototype of what a new libelf interface might be.
@@ -461,3 +462,39 @@ dwfl_core_file_report (Dwfl *dwfl, Elf *elf)
   return sniffed == 0 || listed > sniffed ? listed : sniffed;
 }
 INTDEF (dwfl_core_file_report)
+
+Elf *
+dwfl_core_filename_report (Dwfl *dwfl, int *fdp, const char *filename)
+{
+  int fd_storage = -1;
+  if (fdp == NULL)
+    fdp = &fd_storage;
+
+  if (*fdp < 0)
+    {
+      *fdp = open64 (filename, O_RDONLY);
+      if (*fdp < 0)
+	{
+	  __libdwfl_seterrno (DWFL_E_ERRNO);
+	  return NULL;
+	}
+    }
+
+  Elf *core;
+  Dwfl_Error error = __libdw_open_file (fdp, &core, true, false);
+  if (error != DWFL_E_NOERROR)
+    {
+      __libdwfl_seterrno (error);
+      return NULL;
+    }
+
+  int result = INTUSE(dwfl_core_file_report) (dwfl, core);
+  if (result < 0)
+    {
+      elf_end (core);
+      close (*fdp);
+      return NULL;
+    }
+  return core;
+}
+INTDEF (dwfl_core_filename_report)
