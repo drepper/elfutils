@@ -26,11 +26,6 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef EBLHOOKVAR
-# define EBLHOOKVAR EBLHOOK
-# define EBLHOOKVAR_STUB
-#endif
-
 /* Return symbol representaton of object file type.  */
 const char *EBLHOOK(object_type_name) (int, char *, size_t);
 
@@ -188,8 +183,3 @@ bool EBLHOOK(frame_unwind) (Ebl *ebl, struct Dwfl_Frame_State **statep,
 
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);
-
-#ifdef EBLHOOKVAR_STUB
-# undef EBLHOOKVAR
-# undef EBLHOOKVAR_STUB
-#endif
