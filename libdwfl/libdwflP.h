@@ -472,6 +472,32 @@ extern Dwfl_Module *__libdwfl_report_offline (Dwfl *dwfl, const char *name,
 								const char *))
   internal_function;
 
+/* Set STATE->pc_set from STATE->regs according to the backend.  Return true on
+   success, false on error.  */
+extern bool __libdwfl_state_fetch_pc (Dwfl_Frame_State *state)
+  internal_function;
+
+/* Free and unlink THREAD from the internal lists.  */
+extern void __libdwfl_thread_free (Dwfl_Frame_State_Thread *thread)
+  internal_function;
+
+/* Allocate new Dwfl_Frame_State_Thread for PID and link it to PROCESS.
+   Automatically create and link in also the first Dwfl_Frame_State.  */
+extern Dwfl_Frame_State_Thread *
+  __libdwfl_thread_alloc (Dwfl_Frame_State_Process *process, pid_t tid)
+  internal_function;
+
+/* Free PROCESS.  Unlink and free also any structures it references.  */
+extern void __libdwfl_process_free (Dwfl_Frame_State_Process *process)
+  internal_function;
+
+/* Allocate new Dwfl_Frame_State_Process for DWFL with callback MEMORY_READ
+   (which is passed MEMORY_READ_USER_DATA).  */
+extern Dwfl_Frame_State_Process *
+  __libdwfl_process_alloc (Dwfl *dwfl, dwfl_frame_memory_read_t *memory_read,
+			   void *memory_read_user_data)
+  internal_function;
+
 /* Decompression wrappers: decompress whole file into memory.  */
 extern Dwfl_Error __libdw_gunzip  (int fd, off64_t start_offset,
 				   void *mapped, size_t mapped_size,
