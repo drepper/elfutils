@@ -167,6 +167,7 @@ __libdwfl_report_elf (Dwfl *dwfl, const char *name, const char *file_name,
     case ET_CORE:
       /* An assigned base address is meaningless for these.  */
       base = 0;
+      base_is_bias = true;
 
     case ET_DYN:
     default:;
