@@ -498,6 +498,10 @@ extern Dwfl_Frame_State_Process *
 			   void *memory_read_user_data)
   internal_function;
 
+/* Align segment START downwards or END upwards addresses according to DWFL.  */
+extern GElf_Addr __libdwfl_segment_start (Dwfl *dwfl, GElf_Addr start);
+extern GElf_Addr __libdwfl_segment_end (Dwfl *dwfl, GElf_Addr end);
+
 /* Decompression wrappers: decompress whole file into memory.  */
 extern Dwfl_Error __libdw_gunzip  (int fd, off64_t start_offset,
 				   void *mapped, size_t mapped_size,
