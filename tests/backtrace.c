@@ -108,56 +108,14 @@ dwfl_offline (void)
   return dwfl;
 }
 
-static void
-report_core (Dwfl *dwfl, const char *corefile)
-{
-#if 0
-  /* FIXME: Here COREFILE gets errorneously reported into VMA of DWFL.  */
-  Dwfl_Module *mod = dwfl_report_elf (dwfl, "core", corefile, -1, 0 /* base */);
-  assert (mod != NULL);
-  Elf *core = dwfl_module_getelf (mod, NULL);
-  assert (core != NULL);
-  int result = dwfl_core_file_report (dwfl, core);
-  assert (result >= 0);
-#endif
-#if 0
-  /* FIXME: Here it does not build as __libdw_open_file is private.  */
-  int core_fd = open64 (corefile, O_RDONLY);
-  assert (core_fd >= 0);
-  Elf *core;
-  Dwfl_Error err = __libdw_open_file (&core_fd, &core, true, false);
-  assert (err == DWFL_E_NOERROR);
-  int result = dwfl_core_file_report (dwfl, core);
-  assert (result >= 0);
-  result = elf_end (core);
-  assert (result == 0);
-  result = close (core_fd);
-  assert (result == 0);
-#endif
-#if 1
-  /* FIXME: Here we use different DWFL, reported data would be used after free
-     if we called dwfl_end (core_dwfl).  Therefore we leak CORE_DWFL.  */
-  Dwfl *core_dwfl = dwfl_offline ();
-  Dwfl_Module *mod = dwfl_report_elf (core_dwfl, "core", corefile, -1,
-				      0 /* base */);
-  assert (mod != NULL);
-  GElf_Addr loadbase_ignore;
-  Elf *core = dwfl_module_getelf (mod, &loadbase_ignore);
-  assert (core != NULL);
-  int result = dwfl_core_file_report (dwfl, core);
-  assert (result >= 0);
-  // dwfl_end (core_dwfl);
-#endif
-
-  if (dwfl_report_end (dwfl, NULL, NULL) != 0)
-    error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
-}
-
 static Dwfl *
 dwfl_core (const char *corefile)
 {
   Dwfl *dwfl = dwfl_offline ();
-  report_core (dwfl, corefile);
+  if (dwfl_core_filename_report (dwfl, NULL, corefile) == NULL)
+    error (2, 0, "dwfl_core_filename_report: %s", dwfl_errmsg (-1));
+  if (dwfl_report_end (dwfl, NULL, NULL) != 0)
+    error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
   return dwfl;
 }
 
