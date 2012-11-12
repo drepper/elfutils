@@ -1,3 +1,12 @@
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Remove BASE aligning.
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Simplify START and BIAS
+	calculation.
+
 2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* argp-std.c (offline_find_elf): New function.
