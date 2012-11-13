@@ -1,4 +1,4 @@
-/* Get return address register value for frame.
+/* Convert *REGNO as is in DWARF to a lower range.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -30,28 +30,13 @@
 # include <config.h>
 #endif
 
-#include "libdwflP.h"
+#include <libeblP.h>
 
 bool
-dwfl_frame_state_pc (Dwfl_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
+ebl_frame_dwarf_to_regno (Ebl *ebl, unsigned *regno)
 {
-  assert (state->pc_state == DWFL_FRAME_STATE_PC_SET);
-  *pc = state->pc;
-  ebl_normalize_pc (state->thread->process->ebl, pc);
-  if (minusone)
-    {
-      /* Bottom frame?  */
-      if (state == state->thread->unwound)
-	*minusone = false;
-      /* *MINUSONE is logical or of both current and previous frame state.  */
-      else if (state->signal_frame)
-	*minusone = false;
-      /* Not affected by unsuccessfully unwound frame.  */
-      else if (! INTUSE(dwfl_frame_unwind) (&state) || state == NULL)
-	*minusone = true;
-      else
-	*minusone = ! state->signal_frame;
-    }
-  return true;
+  if (ebl == NULL)
+    return false;
+  return (ebl->frame_dwarf_to_regno == NULL
+	  ? true : ebl->frame_dwarf_to_regno (ebl, regno));
 }
-INTDEF (dwfl_frame_state_pc)

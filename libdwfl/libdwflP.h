@@ -265,6 +265,9 @@ dwfl_frame_state_reg_get (Dwfl_Frame_State *state, unsigned regno,
 			  Dwarf_Addr *val)
 {
   Ebl *ebl = state->thread->process->ebl;
+  if (ebl->frame_dwarf_to_regno != NULL
+      && ! ebl->frame_dwarf_to_regno (ebl, &regno))
+    return false;
   if (regno >= ebl->frame_state_nregs)
     return false;
   if ((state->regs_set[regno / sizeof (*state->regs_set) / 8]
@@ -283,6 +286,9 @@ dwfl_frame_state_reg_set (Dwfl_Frame_State *state, unsigned regno,
 			  Dwarf_Addr val)
 {
   Ebl *ebl = state->thread->process->ebl;
+  if (ebl->frame_dwarf_to_regno != NULL
+      && ! ebl->frame_dwarf_to_regno (ebl, &regno))
+    return false;
   if (regno >= ebl->frame_state_nregs)
     return false;
   /* For example i386 user_regs_struct has signed fields.  */

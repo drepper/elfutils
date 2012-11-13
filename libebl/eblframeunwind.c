@@ -1,4 +1,4 @@
-/* Get return address register value for frame.
+/* Get previous frame state for an existing frame state.
    Copyright (C) 2012 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -30,28 +30,12 @@
 # include <config.h>
 #endif
 
-#include "libdwflP.h"
+#include <libeblP.h>
 
 bool
-dwfl_frame_state_pc (Dwfl_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
+ebl_frame_unwind (Ebl *ebl, struct Dwfl_Frame_State **statep, Dwarf_Addr pc)
 {
-  assert (state->pc_state == DWFL_FRAME_STATE_PC_SET);
-  *pc = state->pc;
-  ebl_normalize_pc (state->thread->process->ebl, pc);
-  if (minusone)
-    {
-      /* Bottom frame?  */
-      if (state == state->thread->unwound)
-	*minusone = false;
-      /* *MINUSONE is logical or of both current and previous frame state.  */
-      else if (state->signal_frame)
-	*minusone = false;
-      /* Not affected by unsuccessfully unwound frame.  */
-      else if (! INTUSE(dwfl_frame_unwind) (&state) || state == NULL)
-	*minusone = true;
-      else
-	*minusone = ! state->signal_frame;
-    }
-  return true;
+  if (ebl == NULL || ebl->frame_unwind == NULL)
+    return false;
+  return ebl->frame_unwind (ebl, statep, pc);
 }
-INTDEF (dwfl_frame_state_pc)

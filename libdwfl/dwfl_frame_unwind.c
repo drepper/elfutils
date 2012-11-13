@@ -410,7 +410,7 @@ handle_cfi (Dwfl_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
 	    {
 	      /* REGNO is undefined.  */
 	      unsigned ra = frame->fde->cie->return_address_register;
-	      if (regno == ra)
+	      if (ebl_frame_dwarf_to_regno (ebl, &ra) && regno == ra)
 		unwound->pc_state = DWFL_FRAME_STATE_PC_UNDEFINED;
 	      continue;
 	    }
@@ -493,6 +493,14 @@ dwfl_frame_unwind (Dwfl_Frame_State **statep)
 	      return false;
 	    }
 	}
+    }
+  *statep = state;
+  if (ebl_frame_unwind (state->thread->process->ebl, statep, pc))
+    return true;
+  if (state->unwound)
+    {
+      assert (state->unwound->pc_state == DWFL_FRAME_STATE_ERROR);
+      return false;
     }
   __libdwfl_seterrno (DWFL_E_NO_DWARF);
   return false;
