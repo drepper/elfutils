@@ -27,8 +27,6 @@
    not, see <http://www.gnu.org/licenses/>.  */
 
 #include "libdwflP.h"
-#include <unistd.h>
-#include <sys/ptrace.h>
 
 void
 dwfl_end (Dwfl *dwfl)
