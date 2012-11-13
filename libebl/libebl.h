@@ -393,20 +393,6 @@ extern bool ebl_frame_state (struct Dwfl_Frame_State *state)
 extern size_t ebl_frame_state_nregs (Ebl *ebl)
   __nonnull_attribute__ (1);
 
-/* Modify PC as fetched from inferior data into valid PC.  */
-extern void ebl_normalize_pc (Ebl *ebl, Dwarf_Addr *pc)
-  __nonnull_attribute__ (1, 2);
-
-/* Get previous frame state for an existing frame state.  */
-struct Dwfl_Frame_State_Process;
-extern bool
-  ebl_frame_unwind (Ebl *ebl, struct Dwfl_Frame_State **statep, Dwarf_Addr pc)
-  __nonnull_attribute__ (1, 2);
-
-/* Convert *REGNO as is in DWARF to a lower range.  */
-extern bool ebl_frame_dwarf_to_regno (Ebl *ebl, unsigned *regno)
-  __nonnull_attribute__ (1, 2);
-
 #ifdef __cplusplus
 }
 #endif
