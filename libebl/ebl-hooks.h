@@ -168,18 +168,5 @@ bool EBLHOOK(frame_state) (struct Dwfl_Frame_State *state);
    above.  */
 size_t EBLHOOKVAR(frame_state_nregs);
 
-/* Convert *REGNO as is in DWARF to a lower range suitable for
-   Dwarf_Frame_State->REGS indexing.  RETURN_ADDRESS_REGISTER should not change
-   on second call; other registers may map to numbers invalid on input.  */
-bool EBLHOOK(frame_dwarf_to_regno) (Ebl *ebl, unsigned *regno);
-
-/* Optionally modify *PC as fetched from inferior data into valid PC
-   instruction pointer.  */
-void EBLHOOK(normalize_pc) (Ebl *ebl, Dwarf_Addr *pc);
-
-/* See dwfl_frame_unwind.  */
-bool EBLHOOK(frame_unwind) (Ebl *ebl, struct Dwfl_Frame_State **statep,
-			    Dwarf_Addr pc);
-
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

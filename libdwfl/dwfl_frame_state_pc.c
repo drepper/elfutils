@@ -37,7 +37,6 @@ dwfl_frame_state_pc (Dwfl_Frame_State *state, Dwarf_Addr *pc, bool *minusone)
 {
   assert (state->pc_state == DWFL_FRAME_STATE_PC_SET);
   *pc = state->pc;
-  ebl_normalize_pc (state->thread->process->ebl, pc);
   if (minusone)
     {
       /* Bottom frame?  */
