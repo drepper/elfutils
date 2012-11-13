@@ -269,11 +269,3 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
   return fd;
 }
 INTDEF (dwfl_standard_find_debuginfo)
-
-bool
-dwfl_fd_find_debuginfo (Dwfl_Module *mod, GElf_Word debuglink_crc, int fd)
-{
-  bool cancheck = debuglink_crc != (GElf_Word) 0;
-  return validate (mod, fd, cancheck, debuglink_crc);
-}
-INTDEF (dwfl_fd_find_debuginfo)
