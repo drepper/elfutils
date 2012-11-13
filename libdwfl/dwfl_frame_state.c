@@ -49,14 +49,14 @@ __libdwfl_state_fetch_pc (Dwfl_Frame_State *state)
       Dwarf_CIE abi_info;
       if (ebl_abi_cfi (ebl, &abi_info) != 0)
 	{
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  __libdwfl_seterrno (DWFL_E_LIBEBL);
 	  return false;
 	}
       unsigned ra = abi_info.return_address_register;
       /* dwarf_frame_state_reg_is_set is not applied here.  */
       if (ra >= ebl_frame_state_nregs (ebl))
 	{
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  __libdwfl_seterrno (DWFL_E_LIBEBL_BAD);
 	  return false;
 	}
       state->pc = state->regs[ra];

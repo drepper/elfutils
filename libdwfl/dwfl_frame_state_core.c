@@ -77,7 +77,7 @@ dwfl_frame_state_core_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
 	*result = *(const uint32_t *) data->d_buf;
       return true;
     }
-  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+  __libdwfl_seterrno (DWFL_E_CORE_MISSING);
   return false;
 }
 
@@ -209,7 +209,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	      if (thread == NULL)
 		{
 		  __libdwfl_process_free (process);
-		  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+		  __libdwfl_seterrno (DWFL_E_NOMEM);
 		  return NULL;
 		}
 	    }

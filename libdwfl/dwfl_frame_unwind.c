@@ -45,7 +45,7 @@ state_get_reg (Dwfl_Frame_State *state, unsigned regno, Dwarf_Addr *val)
 {
   if (! dwfl_frame_state_reg_get (state, regno, val))
     {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_INVALID_REGISTER);
       return false;
     }
   return true;
@@ -68,7 +68,7 @@ expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
   Dwfl_Frame_State_Process *process = state->thread->process;
   if (nops == 0)
     {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_INVALID_DWARF);
       return false;
     }
   Dwarf_Addr *stack = NULL;
@@ -82,7 +82,7 @@ expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
 	Dwarf_Addr *stack_new = realloc (stack, stack_allocated * sizeof (*stack));
 	if (stack_new == NULL)
 	  {
-	    __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	    __libdwfl_seterrno (DWFL_E_NOMEM);
 	    return false;
 	  }
 	stack = stack_new;
@@ -95,7 +95,7 @@ expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
   {
     if (stack_used == 0)
       {
-	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	__libdwfl_seterrno (DWFL_E_INVALID_DWARF);
 	return false;
       }
     *val = stack[--stack_used];
@@ -230,7 +230,7 @@ expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
 	  {
 	    free (stack);
 	    /* PPC32 vDSO has such invalid operations.  */
-	    __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	    __libdwfl_seterrno (DWFL_E_INVALID_DWARF);
 	    return false;
 	  }
 	/* Undo the 'for' statement increment.  */
@@ -273,7 +273,7 @@ expr_eval (Dwfl_Frame_State *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
       BINOP_SIGNED (DW_OP_ne, !=)
 #undef BINOP_SIGNED
       default:
-	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	__libdwfl_seterrno (DWFL_E_UNSUPPORTED_DWARF);
 	return false;
     }
   if (! pop (result))
@@ -299,7 +299,7 @@ have_unwound (Dwfl_Frame_State **statep)
   switch (unwound->pc_state)
   {
     case DWFL_FRAME_STATE_ERROR:
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_INVALID_DWARF);
       *statep = NULL;
       return false;
     case DWFL_FRAME_STATE_PC_SET:
@@ -324,7 +324,7 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
   const char *symname = INTUSE(dwfl_module_addrsym) (mod, pc, &sym, NULL);
   if (symname == NULL)
     {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_NO_DWARF);
       return false;
     }
   /* It has no FDE on PPC64; it can be still unwound via the stack frame.  */
@@ -338,7 +338,7 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
     }
   if (pc < ehdr->e_entry + bias)
     {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_NO_DWARF);
       return false;
     }
   /* "_start" is size-less.  Search for PC, if the closest symbol is the one
@@ -346,7 +346,7 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
   if (sym.st_value != ehdr->e_entry + bias
       || (sym.st_size != 0 && pc >= sym.st_value + sym.st_size))
     {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_NO_DWARF);
       return false;
     }
   return true;
@@ -422,7 +422,7 @@ handle_cfi (Dwfl_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
 	    }
 	  else
 	    {
-	      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	      __libdwfl_seterrno (DWFL_E_INVALID_DWARF);
 	      continue;
 	    }
 	}
@@ -435,7 +435,7 @@ handle_cfi (Dwfl_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
 	}
       if (! dwfl_frame_state_reg_set (unwound, regno, regval))
 	{
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  __libdwfl_seterrno (DWFL_E_INVALID_REGISTER);
 	  continue;
 	}
     }

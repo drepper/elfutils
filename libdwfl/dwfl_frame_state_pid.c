@@ -82,7 +82,7 @@ dwfl_frame_state_pid_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
 			(void *) (uintptr_t) addr, NULL);
       if (errno != 0)
 	{
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  __libdwfl_seterrno (DWFL_E_PROCESS_MEMORY_READ);
 	  return false;
 	}
       return true;
@@ -99,7 +99,7 @@ dwfl_frame_state_pid_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
 		    (void *) (uintptr_t) addr, NULL);
   if (errno != 0)
     {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_PROCESS_MEMORY_READ);
       return false;
     }
 #if SIZEOF_LONG == 8
@@ -136,16 +136,16 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
     }
   if (process->ebl == NULL)
     {
-      /* Not idenified EBL from any of the modules.  */
+      /* Not identified EBL from any of the modules.  */
       __libdwfl_process_free (process);
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_PROCESS_NO_ARCH);
       return NULL;
     }
   DIR *dir = opendir (dirname);
   if (dir == NULL)
     {
       __libdwfl_process_free (process);
-      __libdwfl_seterrno (DWFL_E_ERRNO);
+      __libdwfl_seterrno (DWFL_E_PARSE_PROC);
       return NULL;
     }
   for (;;)
@@ -157,7 +157,7 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
 	  if (errno == 0)
 	    break;
 	  __libdwfl_process_free (process);
-	  __libdwfl_seterrno (DWFL_E_ERRNO);
+	  __libdwfl_seterrno (DWFL_E_PARSE_PROC);
 	  return NULL;
 	}
       if (strcmp (dirent->d_name, ".") == 0
@@ -169,21 +169,21 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
       if (errno != 0)
 	{
 	  __libdwfl_process_free (process);
-	  __libdwfl_seterrno (DWFL_E_ERRNO);
+	  __libdwfl_seterrno (DWFL_E_PARSE_PROC);
 	  return NULL;
 	}
       pid_t tid = tidl;
       if (tidl <= 0 || (end && *end) || tid != tidl)
 	{
 	  __libdwfl_process_free (process);
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  __libdwfl_seterrno (DWFL_E_PARSE_PROC);
 	  return NULL;
 	}
       Dwfl_Frame_State_Thread *thread = __libdwfl_thread_alloc (process, tid);
       if (thread == NULL)
 	{
 	  __libdwfl_process_free (process);
-	  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	  __libdwfl_seterrno (DWFL_E_NOMEM);
 	  return NULL;
 	}
       if (! tid_is_attached (dwfl, thread->tid))
@@ -205,14 +205,14 @@ dwfl_frame_state_pid (Dwfl *dwfl, pid_t pid)
   if (closedir (dir) != 0)
     {
       __libdwfl_process_free (process);
-      __libdwfl_seterrno (DWFL_E_ERRNO);
+      __libdwfl_seterrno (DWFL_E_PARSE_PROC);
       return NULL;
     }
   if (process->thread == NULL)
     {
       /* No valid threads recognized.  */
       __libdwfl_process_free (process);
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_NO_THREAD);
       return NULL;
     }
   return process->thread->unwound;
