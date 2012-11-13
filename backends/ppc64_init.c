@@ -66,6 +66,13 @@ ppc64_init (elf, machine, eh, ehlen)
   HOOK (eh, auxv_info);
   HOOK (eh, get_func_pc);
   HOOK (eh, destr);
+  /* gcc/config/ #define DWARF_FRAME_REGISTERS.  */
+  eh->frame_state_nregs = (114 - 1) + 32;
+  HOOK (eh, frame_state);
+  HOOK (eh, abi_cfi);
+  HOOK (eh, frame_dwarf_to_regno);
+  HOOK (eh, get_func_pc);
+  HOOK (eh, destr);
 
   return MODVERSION;
 }

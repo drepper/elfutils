@@ -1,5 +1,5 @@
-/* Initialization of S/390 specific backend library.
-   Copyright (C) 2005, 2006 Red Hat, Inc.
+/* Initialization of S/390 32-bit specific backend library.
+   Copyright (C) 2005, 2006, 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -61,6 +61,16 @@ s390_init (elf, machine, eh, ehlen)
     eh->core_note = s390x_core_note;
   else
     HOOK (eh, core_note);
+  HOOK (eh, abi_cfi);
+  /* gcc/config/ #define DWARF_FRAME_REGISTERS 34.
+     But from the gcc/config/s390/s390.h "Register usage." comment it looks as
+     if #32 (Argument pointer) and #33 (Condition code) are not used for
+     unwinding.  */
+  eh->frame_state_nregs = 32;
+  HOOK (eh, frame_state);
+  if (eh->class == ELFCLASS32)
+    HOOK (eh, normalize_pc);
+  HOOK (eh, frame_unwind);
 
   /* Only the 64-bit format uses the incorrect hash table entry size.  */
   if (eh->class == ELFCLASS64)
