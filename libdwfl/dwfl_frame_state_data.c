@@ -44,7 +44,7 @@ dwfl_frame_state_data (Dwfl *dwfl, bool pc_set, Dwarf_Addr pc, unsigned nregs,
     }
   if (ebl == NULL || nregs > ebl_frame_state_nregs (ebl))
     {
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_LIBEBL_BAD);
       return NULL;
     }
   Dwfl_Frame_State_Process *process;
@@ -56,7 +56,7 @@ dwfl_frame_state_data (Dwfl *dwfl, bool pc_set, Dwarf_Addr pc, unsigned nregs,
   if (thread == NULL)
     {
       __libdwfl_process_free (process);
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_NOMEM);
       return NULL;
     }
   Dwfl_Frame_State *state = thread->unwound;
@@ -72,13 +72,18 @@ dwfl_frame_state_data (Dwfl *dwfl, bool pc_set, Dwarf_Addr pc, unsigned nregs,
         && ! dwfl_frame_state_reg_set (state, regno, regs[regno]))
       {
 	__libdwfl_process_free (process);
-	__libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+	__libdwfl_seterrno (DWFL_E_INVALID_REGISTER);
 	return NULL;
       }
-  if (! ebl_frame_state (state) || ! __libdwfl_state_fetch_pc (state))
+  if (! ebl_frame_state (state))
     {
       __libdwfl_process_free (process);
-      __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+      __libdwfl_seterrno (DWFL_E_LIBEBL);
+      return NULL;
+    }
+  if (! __libdwfl_state_fetch_pc (state))
+    {
+      __libdwfl_process_free (process);
       return NULL;
     }
   return process->thread->unwound;

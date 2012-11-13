@@ -78,7 +78,16 @@ typedef struct Dwfl_Frame_State_Thread Dwfl_Frame_State_Thread;
   DWFL_ERROR (BADELF, N_("not a valid ELF file"))			      \
   DWFL_ERROR (WEIRD_TYPE, N_("cannot handle DWARF type description"))	      \
   DWFL_ERROR (WRONG_ID_ELF, N_("ELF file does not match build ID"))	      \
-  DWFL_ERROR (BAD_PRELINK, N_("corrupt .gnu.prelink_undo section data"))
+  DWFL_ERROR (BAD_PRELINK, N_("corrupt .gnu.prelink_undo section data"))      \
+  DWFL_ERROR (LIBEBL_BAD, N_("Internal error due to ebl"))		      \
+  DWFL_ERROR (CORE_MISSING, N_("Missing data in core file"))		      \
+  DWFL_ERROR (INVALID_REGISTER, N_("Invalid register"))			      \
+  DWFL_ERROR (PROCESS_MEMORY_READ, N_("Error reading process memory"))	      \
+  DWFL_ERROR (PROCESS_NO_ARCH, N_("Have not found ELF module in a process"))  \
+  DWFL_ERROR (PARSE_PROC, N_("Error parsing /proc filesystem"))		      \
+  DWFL_ERROR (NO_THREAD, N_("No thread found"))				      \
+  DWFL_ERROR (INVALID_DWARF, N_("Invalid DWARF"))			      \
+  DWFL_ERROR (UNSUPPORTED_DWARF, N_("Unsupported DWARF"))
 
 #define DWFL_ERROR(name, text) DWFL_E_##name,
 typedef enum { DWFL_ERRORS DWFL_E_NUM } Dwfl_Error;
@@ -497,6 +506,10 @@ extern Dwfl_Frame_State_Process *
   __libdwfl_process_alloc (Dwfl *dwfl, dwfl_frame_memory_read_t *memory_read,
 			   void *memory_read_user_data)
   internal_function;
+
+/* Align segment START downwards or END upwards addresses according to DWFL.  */
+extern GElf_Addr __libdwfl_segment_start (Dwfl *dwfl, GElf_Addr start);
+extern GElf_Addr __libdwfl_segment_end (Dwfl *dwfl, GElf_Addr end);
 
 /* Decompression wrappers: decompress whole file into memory.  */
 extern Dwfl_Error __libdw_gunzip  (int fd, off64_t start_offset,

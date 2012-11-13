@@ -34,26 +34,6 @@
 # define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
-/* Exact copy from libdwfl/segment.c.  */
-
-static GElf_Addr
-segment_start (Dwfl *dwfl, GElf_Addr start)
-{
-  if (dwfl->segment_align > 1)
-    start &= -dwfl->segment_align;
-  return start;
-}
-
-/* Exact copy from libdwfl/segment.c.  */
-
-static GElf_Addr
-segment_end (Dwfl *dwfl, GElf_Addr end)
-{
-  if (dwfl->segment_align > 1)
-    end = (end + dwfl->segment_align - 1) & -dwfl->segment_align;
-  return end;
-}
-
 static bool
 dwfl_frame_state_core_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
 				   void *user_data)
@@ -74,8 +54,9 @@ dwfl_frame_state_core_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
       if (phdr == NULL || phdr->p_type != PT_LOAD)
 	continue;
       /* Bias is zero here, a core file itself has no bias.  */
-      GElf_Addr start = segment_start (dwfl, phdr->p_vaddr);
-      GElf_Addr end = segment_end (dwfl, phdr->p_vaddr + phdr->p_memsz);
+      GElf_Addr start = __libdwfl_segment_start (dwfl, phdr->p_vaddr);
+      GElf_Addr end = __libdwfl_segment_end (dwfl,
+					     phdr->p_vaddr + phdr->p_memsz);
       unsigned bytes = process->ebl->class == ELFCLASS64 ? 8 : 4;
       if (addr < start || addr + bytes > end)
 	continue;
@@ -96,7 +77,7 @@ dwfl_frame_state_core_memory_read (Dwarf_Addr addr, Dwarf_Addr *result,
 	*result = *(const uint32_t *) data->d_buf;
       return true;
     }
-  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+  __libdwfl_seterrno (DWFL_E_CORE_MISSING);
   return false;
 }
 
@@ -228,7 +209,7 @@ dwfl_frame_state_core (Dwfl *dwfl, const char *corefile)
 	      if (thread == NULL)
 		{
 		  __libdwfl_process_free (process);
-		  __libdwfl_seterrno (DWFL_E_UNKNOWN_ERROR);
+		  __libdwfl_seterrno (DWFL_E_NOMEM);
 		  return NULL;
 		}
 	    }
