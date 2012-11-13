@@ -1,5 +1,5 @@
-/* Initialization of S/390 32-bit specific backend library.
-   Copyright (C) 2005, 2006, 2012 Red Hat, Inc.
+/* Initialization of S/390 specific backend library.
+   Copyright (C) 2005, 2006 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
