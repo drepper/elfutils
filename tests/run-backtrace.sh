@@ -53,15 +53,4 @@ for child in backtrace-child{,-biarch}; do
   check_empty $core.err
 done
 
-for arch in ppc ppc64 s390 s390x; do
-  testfiles backtrace.$arch.{exec,core}
-  tempfiles backtrace.$arch.{bt,err}
-  echo ./backtrace ./backtrace.$arch.{exec,core}
-  mytestrun ./backtrace ./backtrace.$arch.{exec,core} 1>backtrace.$arch.bt \
-						      2>backtrace.$arch.err
-  cat backtrace.$arch.{bt,err}
-  check_gsignal backtrace.$arch.bt
-  check_empty backtrace.$arch.err
-done
-
 exit 0
