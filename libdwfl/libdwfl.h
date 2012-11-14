@@ -304,6 +304,10 @@ extern int dwfl_standard_find_debuginfo (Dwfl_Module *, void **,
 					 const char *, const char *,
 					 GElf_Word, char **);
 
+/* Provide supplied separate debug info file FD for MOD.  */
+extern bool dwfl_fd_find_debuginfo (Dwfl_Module *mod, GElf_Word debuglink_crc,
+                                    int fd);
+
 
 /* This callback must be used when using dwfl_offline_* to report modules,
    if ET_REL is to be supported.  */
