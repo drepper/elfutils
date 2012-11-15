@@ -197,7 +197,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-mixed-corenote.sh testfile63.bz2 testfile64.bz2 \
 	     testfile65.bz2 testfile69.core.bz2 testfile69.so.bz2 \
 	     run-dwfl-report-elf-align.sh \
-	     testfile-dwfl-report-elf-align-shlib.so.bz2
+	     testfile-dwfl-report-elf-align-shlib.so.bz2 run-backtrace.sh
 
 if USE_VALGRIND
 valgrind_cmd="valgrind -q --trace-children=yes --error-exitcode=1"
