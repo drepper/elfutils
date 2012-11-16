@@ -1,4 +1,10 @@
 2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+    
+	* run-addrname-test.sh: New testcase for ppc64 function descriptors.
+	* testfile66.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile66.bz2.
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* Makefile.am (check_PROGRAMS): Add dwfl-report-elf-align.
 	(TESTS): Add run-dwfl-report-elf-align.sh.
@@ -8,6 +14,22 @@
 	* dwfl-report-elf-align.c: New file.
 	* run-dwfl-report-elf-align.sh: New file.
 	* testfile-dwfl-report-elf-align-shlib.so.bz2: New file.
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for PIE relocation.
+	* testfile70.core.bz2: New file.
+	* testfile70.exec.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile70.core.bz2 and
+	testfile70.exec.bz2 .
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-readelf-mixed-corenote.sh: New testcase for readelf -n of s390
+	and s390x core notes.
+	* testfile67.bz2: New file.
+	* testfile68.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile67.bz2 and testfile68.bz2 .
 
 2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
 

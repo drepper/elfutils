@@ -11,6 +11,26 @@
 	(s390_init): Install s390x_core_note and s390_core_note.
 	* s390x_corenote.c: New file.
 
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (INCLUDES): Add libdwfl.
+	(ppc64_SRCS): Add ppc64_get_func_pc.c.
+	* ppc64_get_func_pc.c: New file.
+	* ppc64_init.c (ppc64_init): Install get_func_pc and destr.
+
+2012-10-14  Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Roland McGrath <roland@hack.frob.com>
+
+	* Makefile.am (s390_SRCS): Add s390_corenote.c and s390x_corenote.c.
+	* linux-core-note.c (ALIGN_PR_REG): New definitions.
+	(struct EBLHOOK(prstatus)): Change field pr_reg to anonymous union with
+	ALIGN_PR_REG.
+	(EXTRA_ITEMS): New macro.
+	* s390_corenote.c: New file.
+	* s390_init.c (s390x_core_note): New declaration.
+	(s390_init): Install s390x_core_note and s390_core_note.
+	* s390x_corenote.c: New file.
+
 2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* linux-core-note.c (prstatus_items): Rename groups of sigpend and
