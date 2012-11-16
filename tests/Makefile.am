@@ -198,7 +198,11 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile65.bz2 testfile66.bz2 testfile67.bz2 testfile68.bz2 \
 	     testfile69.core.bz2 testfile69.so.bz2 testfile70.core.bz2 \
 	     testfile70.exec.bz2 run-dwfl-report-elf-align.sh \
-	     testfile-dwfl-report-elf-align-shlib.so.bz2 run-backtrace.sh
+	     testfile-dwfl-report-elf-align-shlib.so.bz2 run-backtrace.sh \
+	     backtrace.ppc.core.bz2 backtrace.ppc.exec.bz2 \
+	     backtrace.ppc64.core.bz2 backtrace.ppc64.exec.bz2 \
+	     backtrace.s390.core.bz2 backtrace.s390.exec.bz2 \
+	     backtrace.s390x.core.bz2 backtrace.s390x.exec.bz2
 
 if USE_VALGRIND
 valgrind_cmd="valgrind -q --trace-children=yes --error-exitcode=1"
