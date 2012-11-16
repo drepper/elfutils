@@ -50,13 +50,13 @@ main (int argc, char **argv)
   assert (dwfl != NULL);
 
   char *endptr;
-  uintptr_t base = strtol (argv[2], &endptr, 0);
+  uintptr_t base = strtoull (argv[2], &endptr, 0);
   assert (endptr && !*endptr);
 
   Dwfl_Module *mod = dwfl_report_elf (dwfl, argv[1], argv[1], -1, base);
   assert (mod != NULL);
 
-  uintptr_t funcaddr = strtol (argv[3], &endptr, 0);
+  uintptr_t funcaddr = strtoull (argv[3], &endptr, 0);
   assert (endptr && !*endptr);
 
   Dwfl_Module *mod_found = dwfl_addrmodule (dwfl, funcaddr);
