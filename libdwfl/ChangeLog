@@ -18,6 +18,13 @@
 	ARGP_KEY_SUCCESS.  Modify the cleanup in ARGP_KEY_ERROR.  Make the final state->INPUT initialization optional.
 	* libdwfl.h (dwfl_standard_argp): Extend the comment for USERDATA.
 
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* linux-proc-maps.c: Include system.h.
+	(PROCEXEFMT, get_pid_class): New.
+	(grovel_auxv): Detect 32-bit vs. 64-bit auxv, possibly call
+	get_pid_class.
+
 2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* dwfl_module_getdwarf.c (mod_verify_build_id): New function with code
