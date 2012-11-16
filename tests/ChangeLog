@@ -1,4 +1,10 @@
 2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+    
+	* run-addrname-test.sh: New testcase for ppc64 function descriptors.
+	* testfile66.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile66.bz2.
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* Makefile.am (check_PROGRAMS): Add dwfl-report-elf-align.
 	(TESTS): Add run-dwfl-report-elf-align.sh.

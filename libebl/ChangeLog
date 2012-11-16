@@ -1,3 +1,12 @@
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (gen_SOURCES): Add eblgetfuncpc.c.
+	* ebl-hooks.h (get_func_pc): New entry.
+	* eblgetfuncpc.c: New file.
+	* libebl.h (struct Dwfl_Module): New declaration.
+	(ebl_get_func_pc): New declaration.
+	* libeblP.h (struct ebl): New field backend.
+
 2012-10-12  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* ebl-hooks.h (abi_cfi): Extend its comment for return value.
