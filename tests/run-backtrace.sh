@@ -60,6 +60,7 @@ for arch in ppc ppc64 s390 s390x; do
   mytestrun ./backtrace ./backtrace.$arch.{exec,core} 1>backtrace.$arch.bt \
 						      2>backtrace.$arch.err
   cat backtrace.$arch.{bt,err}
+  mytestrun grep -w main backtrace.$arch.bt
   check_gsignal backtrace.$arch.bt
   check_empty backtrace.$arch.err
 done
