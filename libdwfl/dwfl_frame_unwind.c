@@ -312,46 +312,6 @@ have_unwound (Dwfl_Frame_State **statep)
   abort ();
 }
 
-/* Check if PC is in the "_start" function which may have no FDE.
-   It corresponds to the GDB get_prev_frame logic "inside entry func".
-   Return TRUE if PC is in an outer frame.  Return FALSE (and call
-   __libdwfl_seterrno) otherwise.  */
-
-static bool
-no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
-{
-  GElf_Sym sym;
-  const char *symname = INTUSE(dwfl_module_addrsym) (mod, pc, &sym, NULL);
-  if (symname == NULL)
-    {
-      __libdwfl_seterrno (DWFL_E_NO_DWARF);
-      return false;
-    }
-  /* It has no FDE on PPC64; it can be still unwound via the stack frame.  */
-  if (strcmp (symname, ".generic_start_main") == 0)
-    return true;
-  GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (mod->main.elf, &ehdr_mem);
-  if (ehdr == NULL)
-    {
-      __libdwfl_seterrno (DWFL_E_LIBELF);
-      return false;
-    }
-  if (pc < ehdr->e_entry + bias)
-    {
-      __libdwfl_seterrno (DWFL_E_NO_DWARF);
-      return false;
-    }
-  /* "_start" is size-less.  Search for PC, if the closest symbol is the one
-     for E_ENTRY it belongs into the function starting at E_ENTRY.  */
-  if (sym.st_value != ehdr->e_entry + bias
-      || (sym.st_size != 0 && pc >= sym.st_value + sym.st_size))
-    {
-      __libdwfl_seterrno (DWFL_E_NO_DWARF);
-      return false;
-    }
-  return true;
-}
-
 /* The logic is to call __libdwfl_seterrno for any CFI bytecode interpretation
    error so one can easily catch the problem with a debugger.  Still there are
    archs with invalid CFI for some registers where the registers are never used
@@ -362,22 +322,12 @@ no_fde (Dwarf_Addr pc, Dwfl_Module *mod, Dwarf_Addr bias)
    an undefined PC register (due to an error unwinding it).  */
 
 static bool
-handle_cfi (Dwfl_Frame_State **statep, Dwarf_Addr pc, Dwfl_Module *mod,
-	    Dwarf_CFI *cfi, Dwarf_Addr bias)
+handle_cfi (Dwfl_Frame_State **statep, Dwarf_Addr pc, Dwarf_CFI *cfi)
 {
   Dwfl_Frame_State *state = *statep;
   Dwarf_Frame *frame;
-  if (INTUSE(dwarf_cfi_addrframe) (cfi, pc - bias, &frame) != 0)
+  if (INTUSE(dwarf_cfi_addrframe) (cfi, pc, &frame) != 0)
     {
-      int dw_errno = dwarf_errno ();
-      if (dw_errno == DWARF_E_NO_MATCH)
-	{
-	  if (! no_fde (pc, mod, bias))
-	    return false;
-	  *statep = NULL;
-	  return true;
-	}
-      __libdw_seterrno (dw_errno);
       __libdwfl_seterrno (DWFL_E_LIBDW);
       return false;
     }
@@ -474,7 +424,7 @@ dwfl_frame_unwind (Dwfl_Frame_State **statep)
       Dwarf_CFI *cfi_eh = INTUSE(dwfl_module_eh_cfi) (mod, &bias);
       if (cfi_eh)
 	{
-	  if (handle_cfi (statep, pc, mod, cfi_eh, bias))
+	  if (handle_cfi (statep, pc - bias, cfi_eh))
 	    return true;
 	  if (state->unwound)
 	    {
@@ -485,7 +435,7 @@ dwfl_frame_unwind (Dwfl_Frame_State **statep)
       Dwarf_CFI *cfi_dwarf = INTUSE(dwfl_module_dwarf_cfi) (mod, &bias);
       if (cfi_dwarf)
 	{
-	  if (handle_cfi (statep, pc, mod, cfi_dwarf, bias) && state->unwound)
+	  if (handle_cfi (statep, pc - bias, cfi_dwarf) && state->unwound)
 	    return true;
 	  if (state->unwound)
 	    {
