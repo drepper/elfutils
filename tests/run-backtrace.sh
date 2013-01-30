@@ -60,6 +60,7 @@ check_err()
   fi
   cat >&2 $1
   echo >&2 $2: neither empty nor just out of DWARF
+  false
 }
 
 for child in backtrace-child{,-biarch}; do

@@ -140,9 +140,6 @@ grovel_auxv (pid_t pid, Dwfl *dwfl, GElf_Addr *sysinfo_ehdr)
   bool valid64 = sysinfo_ehdr64 || segment_align64 != dwfl->segment_align;
   bool valid32 = sysinfo_ehdr32 || segment_align32 != dwfl->segment_align;
 
-  if (! valid64 && ! valid32)
-    return 0;
-
   unsigned char pid_class = ELFCLASSNONE;
   if (valid64 && valid32)
     pid_class = get_pid_class (pid);
