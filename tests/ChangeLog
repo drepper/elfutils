@@ -1,3 +1,91 @@
+2013-01-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-readelf-mixed-corenote.sh: New testcase for readelf -n of s390
+	and s390x core notes.
+	* testfile67.bz2: New file.
+	* testfile68.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile67.bz2 and testfile68.bz2 .
+
+2013-01-23  Mark Wielaard  <mjw@redhat.com>
+
+	* testfilebasmin.bz2: New testfile.
+	* Makefile.am (EXTRA_DIST): Add testfilebasmin.bz2.
+	* run-readelf-s.sh: Test testfilebasmin.
+	* run-dwflsyms.sh: Likewise.
+
+2013-01-16  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add dwflsyms.
+	(TESTS): Add run-readelf-s.sh and run-dwflsyms.sh.
+	(EXTRA_DIST): Add run-readelf-s.sh, testfilebazdbg.bz2,
+	testfilebazdyn.bz2, testfilebazmin.bz2, testfilebazdbg.debug.bz2,
+	testfilebazmdb.bz2, testfilebaztab.bz2 and run-dwflsyms.sh.
+	(dwflsyms_LDADD): New variable.
+
+2013-01-07  Roland McGrath  <roland@hack.frob.com>
+
+	* run-prelink-addr-test.sh: Use ln -snf.
+
+2012-12-03  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (valgrind_cmd): Add --run-libc-freeres=no.
+
+2012-11-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for PIE relocation.
+	* testfile70.core.bz2: New file.
+	* testfile70.exec.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile70.core.bz2 and
+	testfile70.exec.bz2 .
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add testfile64.bz2, testfile65.bz2,
+	testfile69.core.bz2 and testfile69.so.bz2 .
+
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for DSO with build-id bias.
+	* testfile69.core.bz2: New file.
+	* testfile69.so.bz2: New file.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for core vDSO bias.
+	* testfile65.bz2: New file.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for symbol preferences.
+	* testfile64.bz2: New file.
+
+2012-10-01  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS_ENVIRONMENT): Define valgrind_cmd if USE_VALGRIND.
+	* test-wrapper.sh: Export VALGRIND_CMD if available.
+	* test-subr.sh (built_testrun): Use VALGRIND_CMD to invoke test prog.
+	(installed_testrun): Likewise.
+
+2012-09-24  Petr Machata  <pmachata@redhat.com>
+
+	* testfile63.bz2: New testfile.
+	* run-readelf-mixed-corenote.sh: New test.
+	* Makefile.am (TEST): Add run-readelf-mixed-corenote.sh.
+	(EXTRA_DIST): Add testfile63.bz2 and run-readelf-mixed-corenote.sh.
+
+2012-09-24  Petr Machata  <pmachata@redhat.com>
+
+	* testfile62.bz2: New testfile.
+	* run-readelf-vmcoreinfo.sh: New test.
+	* Makefile.am (TEST): Add run-readelf-vmcoreinfo.sh.
+	(EXTRA_DIST): Add testfile62.bz2 and run-readelf-vmcoreinfo.sh.
+
+2012-09-18  Petr Machata  <pmachata@redhat.com>
+
+	* testfile61.bz2: New testfile.
+	* run-allregs.sh: Run reg_test testfile61.
+	* Makefile.am (EXTRA_DIST): Add testfile61.bz2.
+
 2012-08-24  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am (EXTRA_DIST): Add testfile60.bz2.

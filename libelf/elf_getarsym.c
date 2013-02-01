@@ -57,7 +57,9 @@ read_number_entries (uint64_t *nump, Elf *elf, size_t *offp, bool index64_p)
 
   size_t w = index64_p ? 8 : 4;
   if (elf->map_address != NULL)
-    u = *(union u *) (elf->map_address + *offp);
+    /* Use memcpy instead of pointer dereference so as not to assume the
+       field is naturally aligned within the file.  */
+    memcpy (&u, elf->map_address + *offp, sizeof u);
   else if ((size_t) pread_retry (elf->fildes, &u, w, *offp) != w)
     return -1;
 
@@ -238,6 +240,9 @@ elf_getarsym (elf, ptr)
 	  else
 	    {
 	      file_data = (void *) (elf->map_address + off);
+	      if (!ALLOW_UNALIGNED
+		  && ((uintptr_t) file_data & -(uintptr_t) n) != 0)
+		file_data = memcpy (alloca (sz), elf->map_address + off, sz);
 	      str_data = (char *) (elf->map_address + off + sz);
 	    }
 

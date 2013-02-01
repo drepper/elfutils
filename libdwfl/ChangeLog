@@ -1,3 +1,107 @@
+2013-01-23  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_module_getdwarf.c (find_aux_sym): Don't substract one
+	from aux_syments by default.
+	(find_symtab): Also succeed when only aux_symdata is found.
+	When no symtab is found always try to load auxiliary table.
+	(dwfl_module_getsymtab): Substract one from result when both
+	tables have symbols.
+	* dwfl_module_getsym.c (dwfl_module_getsym): Only skip auxiliary
+	zero entry when both tables have symbols.
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): Only substract
+	one from first_global when both tables have symbols.
+
+2013-01-16  Mark Wielaard  <mjw@redhat.com>
+
+	* libdwflP.h (struct Dwfl_Module): Add aux_sym, aux_symdata,
+	aux_syments, aux_symstrdata, aux_symxndxdata and aux_first_global.
+	(dwfl_adjusted_aux_sym_addr): New function.
+	(dwfl_deadjust_aux_sym_addr): Likewise.
+	(dwfl_adjusted_st_value): Take and check symfile argument.
+	(dwfl_deadjust_st_value): Likewise.
+	* dwfl_module_getdwarf.c (find_prelink_address_sync): Take and
+	use dwfl_file as argument to set address_sync.
+	(find_debuginfo): Call find_prelink_address_sync with debug file.
+	(find_aux_sym): New function.
+	(find_symtab): Use find_aux_sym if all we have is the dynsym table
+	and fill in aux DwflModule fields.
+	(dwfl_module_getsymtab): Return syments plus aux_syments.
+	(load_symtab): Always set first_global.
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): Check symfile
+	when using same_section. Calculate first_global based on both
+	mod->first_global and mod->aux_first_global.
+	* dwfl_module.c (__libdwfl_module_free): Free aux_sym.
+	* dwfl_module_getsym.c (dwfl_module_getsym): Use auxsym table
+	to retrieve symbol and name if necessary, making sure all locals
+	from any table come before any globals.
+	* dwfl_module_info.c (dwfl_module_info): Call dwfl_adjusted_st_value
+	with symfile.
+	* relocate.c (resolve_symbol): Likewise.
+
+2013-01-07  Roland McGrath  <roland@hack.frob.com>
+
+	* link_map.c (auxv_format_probe): Handle unaligned 64-bit data, but
+	still assume the data is at least 32-bit aligned anyway.
+	(dwfl_link_map_report): Handle unaligned auxv data.
+
+2012-12-11  Mark Wielaard  <mjw@redhat.com>
+
+	* linux-kernel-modules.c (report_kernel): Only free fname if
+	find_kernel_elf succeeds and allocates it.
+	(report_kernel_archive): Fix brackets around unlikely expression.
+
+2012-11-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* argp-std.c: Update Copyright year.
+	(offline_find_elf): New function.
+	(offline_callbacks): Use it for find_elf.
+	(struct parse_opt): New.
+	(parse_opt): New key ARGP_KEY_INIT.  In other make hook struct
+	parse_opt pointer from former Dwfl pointer.  Delay 'e and OPT_COREFILE
+	processing till ARGP_KEY_SUCCESS.  Initialize state->input already from
+	ARGP_KEY_SUCCESS.  Modify the cleanup in ARGP_KEY_ERROR.  Make the
+	final state->input initialization optional.
+	* dwfl_end.c: Update Copyright year.
+	(dwfl_end): Free executable_for_core.
+	* libdwflP.h: Update Copyright year.
+	(struct Dwfl): New field executable_for_core.
+
+2012-11-20  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Simplify START and BIAS
+	calculation.
+
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_module_getdwarf.c (mod_verify_build_id): New function with code
+	from ...
+	(__libdwfl_getelf): ... here.  Call it.
+
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* libdwfl.h (dwfl_module_getelf): Add __nonnull_attribute__.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_segment_report_module.c (dwfl_segment_report_module):
+	Initialize mod->MAIN_BIAS.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): New function
+	binding_value.  Use it for both zero and non-zero size symbols
+	comparisons.
+
+2012-10-01  Mark Wielaard  <mjw@redhat.com>
+
+	* cu.c (cudie_offset): Don't use type_sig8, it might not be
+	initialized and these are always real CUs, never TUs.
+
+2012-10-01  Mark Wielaard  <mjw@redhat.com>
+
+	* derelocate.c (find_section): Check next section exists before
+	accessing it.
+
 2012-08-01  Petr Machata  <pmachata@redhat.com>
 
 	* offline.c (process_archive_member): Ignore entry "/SYM64/".

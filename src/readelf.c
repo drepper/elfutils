@@ -61,9 +61,16 @@ ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 /* Bug report address.  */
 ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
+/* argp key value for --elf-section, non-ascii.  */
+#define ELF_INPUT_SECTION 256
+
 /* Definitions of arguments for argp functions.  */
 static const struct argp_option options[] =
 {
+  { NULL, 0, NULL, 0, N_("ELF input selection:"), 0 },
+  { "elf-section", ELF_INPUT_SECTION, "SECTION", OPTION_ARG_OPTIONAL,
+    N_("Use the named SECTION (default .gnu_debugdata) as (compressed) ELF "
+       "input data"), 0 },
   { NULL, 0, NULL, 0, N_("ELF output selection:"), 0 },
   { "all", 'a', NULL, 0,
     N_("All these plus -p .strtab -p .dynstr -p .comment"), 0 },
@@ -121,6 +128,8 @@ static struct argp argp =
   options, parse_opt, args_doc, doc, NULL, NULL, NULL
 };
 
+/* If non-null, the section from which we should read to (compressed) ELF.  */
+static const char *elf_input_section = NULL;
 
 /* Flags set by the option controlling the output.  */
 
@@ -445,6 +454,12 @@ parse_opt (int key, char *arg,
       break;
     case 'W':			/* Ignored.  */
       break;
+    case ELF_INPUT_SECTION:
+      if (arg == NULL)
+	elf_input_section = ".gnu_debugdata";
+      else
+	elf_input_section = arg;
+      break;
     default:
       return ARGP_ERR_UNKNOWN;
     }
@@ -465,6 +480,121 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 
+
+/* Create a file descriptor to read the data from the
+   elf_input_section given a file descriptor to an ELF file.  */
+static int
+open_input_section (int fd)
+{
+  size_t shnums;
+  size_t cnt;
+  size_t shstrndx;
+  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP, NULL);
+  if (elf == NULL)
+    {
+      error (0, 0, gettext ("cannot generate Elf descriptor: %s"),
+	     elf_errmsg (-1));
+      return -1;
+    }
+
+  if (elf_getshdrnum (elf, &shnums) < 0)
+    {
+      error (0, 0, gettext ("cannot determine number of sections: %s"),
+	     elf_errmsg (-1));
+    open_error:
+      elf_end (elf);
+      return -1;
+    }
+
+  if (elf_getshdrstrndx (elf, &shstrndx) < 0)
+    {
+      error (0, 0, gettext ("cannot get section header string table index"));
+      goto open_error;
+    }
+
+  for (cnt = 0; cnt < shnums; ++cnt)
+    {
+      Elf_Scn *scn = elf_getscn (elf, cnt);
+      if (scn == NULL)
+	{
+	  error (0, 0, gettext ("cannot get section: %s"),
+		 elf_errmsg (-1));
+	  goto open_error;
+	}
+
+      GElf_Shdr shdr_mem;
+      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
+      if (unlikely (shdr == NULL))
+	{
+	  error (0, 0, gettext ("cannot get section header: %s"),
+		 elf_errmsg (-1));
+	  goto open_error;
+	}
+
+      const char *sname = elf_strptr (elf, shstrndx, shdr->sh_name);
+      if (sname == NULL)
+	{
+	  error (0, 0, gettext ("cannot get section name"));
+	  goto open_error;
+	}
+
+      if (strcmp (sname, elf_input_section) == 0)
+	{
+	  Elf_Data *data = elf_rawdata (scn, NULL);
+	  if (data == NULL)
+	    {
+	      error (0, 0, gettext ("cannot get %s content: %s"),
+		     sname, elf_errmsg (-1));
+	      goto open_error;
+	    }
+
+	  /* Create (and immediately unlink) a temporary file to store
+	     section data in to create a file descriptor for it.  */
+	  const char *tmpdir = getenv ("TMPDIR") ?: P_tmpdir;
+	  static const char suffix[] = "/readelfXXXXXX";
+	  int tmplen = strlen (tmpdir) + sizeof (suffix);
+	  char *tempname = alloca (tmplen);
+	  sprintf (tempname, "%s%s", tmpdir, suffix);
+
+	  int sfd = mkstemp (tempname);
+	  if (sfd == -1)
+	    {
+	      error (0, 0, gettext ("cannot create temp file '%s'"),
+		     tempname);
+	      goto open_error;
+	    }
+	  unlink (tempname);
+
+	  ssize_t size = data->d_size;
+	  if (write_retry (sfd, data->d_buf, size) != size)
+	    {
+	      error (0, 0, gettext ("cannot write section data"));
+	      goto open_error;
+	    }
+
+	  if (elf_end (elf) != 0)
+	    {
+	      error (0, 0, gettext ("error while closing Elf descriptor: %s"),
+		     elf_errmsg (-1));
+	      return -1;
+	    }
+
+	  if (lseek (sfd, 0, SEEK_SET) == -1)
+	    {
+	      error (0, 0, gettext ("error while rewinding file descriptor"));
+	      return -1;
+	    }
+
+	  return sfd;
+	}
+    }
+
+  /* Named section not found.  */
+  if (elf_end (elf) != 0)
+    error (0, 0, gettext ("error while closing Elf descriptor: %s"),
+	   elf_errmsg (-1));
+  return -1;
+}
 
 /* Check if the file is an archive, and if so dump its index.  */
 static void
@@ -562,6 +692,21 @@ process_file (int fd, const char *fname, bool only_one)
   if (!any_control_option)
     return;
 
+  if (elf_input_section != NULL)
+    {
+      /* Replace fname and fd with section content. */
+      char *fnname = alloca (strlen (fname) + strlen (elf_input_section) + 2);
+      sprintf (fnname, "%s:%s", fname, elf_input_section);
+      fd = open_input_section (fd);
+      if (fd == -1)
+        {
+          error (0, 0, gettext ("No such section '%s' in '%s'"),
+		 elf_input_section, fname);
+          return;
+        }
+      fname = fnname;
+    }
+
   /* Duplicate an fd for dwfl_report_offline to swallow.  */
   int dwfl_fd = dup (fd);
   if (unlikely (dwfl_fd < 0))
@@ -606,6 +751,11 @@ process_file (int fd, const char *fname, bool only_one)
       dwfl_getmodules (dwfl, &process_dwflmod, &a, 0);
     }
   dwfl_end (dwfl);
+
+  /* Need to close the replaced fd if we created it.  Caller takes
+     care of original.  */
+  if (elf_input_section != NULL)
+    close (fd);
 }
 
 
@@ -3802,7 +3952,7 @@ print_ops (Dwfl_Module *dwflmod, Dwarf *dbg, int indent, int indentrest,
 	  NEED (2);
 	  printf ("%*s[%4" PRIuMAX "] %s %" PRIuMAX "\n",
 		  indent, "", (uintmax_t) offset, op_name,
-		  (uintmax_t) (offset + read_2sbyte_unaligned (dbg, data)));
+		  (uintmax_t) (offset + read_2sbyte_unaligned (dbg, data) + 3));
 	  CONSUME (2);
 	  data += 2;
 	  offset += 3;
@@ -4714,6 +4864,14 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
   (void) elf_getshdrstrndx (ebl->elf, &shstrndx);
   const char *scnname = elf_strptr (ebl->elf, shstrndx, shdr->sh_name);
 
+  /* Needed if we find PC-relative addresses.  */
+  GElf_Addr bias;
+  if (dwfl_module_getelf (dwflmod, &bias) == NULL)
+    {
+      error (0, 0, gettext ("cannot get ELF: %s"), dwfl_errmsg (-1));
+      return;
+    }
+
   Elf_Data *data = elf_rawdata (scn, NULL);
 
   if (unlikely (data == NULL))
@@ -4960,8 +5118,21 @@ print_debug_frame_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	  Dwarf_Word address_range
 	    = read_ubyte_unaligned_inc (ptr_size, dbg, readp);
 
+	  /* pcrel for an FDE address is relative to the runtime
+	     address of the start_address field itself.  Sign extend
+	     if necessary to make sure the calculation is done on the
+	     full 64 bit address even when initial_location only holds
+	     the lower 32 bits.  */
+	  Dwarf_Addr pc_start = initial_location;
+	  if (ptr_size == 4)
+	    pc_start = (uint64_t) (int32_t) pc_start;
+	  if ((fde_encoding & 0x70) == DW_EH_PE_pcrel)
+	    pc_start += ((uint64_t) shdr->sh_addr
+			 + (base - (const unsigned char *) data->d_buf)
+			 - bias);
+
 	  char *a = format_dwarf_addr (dwflmod, cie->address_size,
-				       initial_location);
+				       pc_start);
 	  printf ("\n [%6tx] FDE length=%" PRIu64 " cie=[%6tx]\n"
 		  "   CIE_pointer:              %" PRIu64 "\n"
 		  "   initial_location:         %s",
@@ -7341,24 +7512,35 @@ print_debug (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr)
 
 
 #define ITEM_INDENT		4
-#define ITEM_WRAP_COLUMN	150
-#define REGISTER_WRAP_COLUMN	75
+#define WRAP_COLUMN		75
 
-/* Print "NAME: FORMAT", wrapping when FORMAT_MAX chars of FORMAT would
-   make the line exceed ITEM_WRAP_COLUMN.  Unpadded numbers look better
-   for the core items.  But we do not want the line breaks to depend on
-   the particular values.  */
+/* Print "NAME: FORMAT", wrapping when output text would make the line
+   exceed WRAP_COLUMN.  Unpadded numbers look better for the core items
+   but this function is also used for registers which should be printed
+   aligned.  Fortunately registers output uses fixed fields width (such
+   as %11d) for the alignment.
+
+   Line breaks should not depend on the particular values although that
+   may happen in some cases of the core items.  */
+
 static unsigned int
-__attribute__ ((format (printf, 7, 8)))
+__attribute__ ((format (printf, 6, 7)))
 print_core_item (unsigned int colno, char sep, unsigned int wrap,
-		 size_t name_width, const char *name,
-		 size_t format_max, const char *format, ...)
+		 size_t name_width, const char *name, const char *format, ...)
 {
   size_t len = strlen (name);
   if (name_width < len)
     name_width = len;
 
-  size_t n = name_width + sizeof ": " - 1 + format_max;
+  char *out;
+  va_list ap;
+  va_start (ap, format);
+  int out_len = vasprintf (&out, format, ap);
+  va_end (ap);
+  if (out_len == -1)
+    error (EXIT_FAILURE, 0, _("memory exhausted"));
+
+  size_t n = name_width + sizeof ": " - 1 + out_len;
 
   if (colno == 0)
     {
@@ -7376,12 +7558,9 @@ print_core_item (unsigned int colno, char sep, unsigned int wrap,
       colno = ITEM_INDENT + n;
     }
 
-  printf ("%s: %*s", name, (int) (name_width - len), "");
+  printf ("%s: %*s%s", name, (int) (name_width - len), "", out);
 
-  va_list ap;
-  va_start (ap, format);
-  vprintf (format, ap);
-  va_end (ap);
+  free (out);
 
   return colno;
 }
@@ -7424,14 +7603,14 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
   uint_fast16_t count = item->count ?: 1;
 
 #define TYPES								      \
-  DO_TYPE (BYTE, Byte, "0x%.2" PRIx8, "%" PRId8, 4);			      \
-  DO_TYPE (HALF, Half, "0x%.4" PRIx16, "%" PRId16, 6);			      \
-  DO_TYPE (WORD, Word, "0x%.8" PRIx32, "%" PRId32, 11);			      \
-  DO_TYPE (SWORD, Sword, "%" PRId32, "%" PRId32, 11);			      \
-  DO_TYPE (XWORD, Xword, "0x%.16" PRIx64, "%" PRId64, 20);		      \
-  DO_TYPE (SXWORD, Sxword, "%" PRId64, "%" PRId64, 20)
+  DO_TYPE (BYTE, Byte, "0x%.2" PRIx8, "%" PRId8);			      \
+  DO_TYPE (HALF, Half, "0x%.4" PRIx16, "%" PRId16);			      \
+  DO_TYPE (WORD, Word, "0x%.8" PRIx32, "%" PRId32);			      \
+  DO_TYPE (SWORD, Sword, "%" PRId32, "%" PRId32);			      \
+  DO_TYPE (XWORD, Xword, "0x%.16" PRIx64, "%" PRId64);			      \
+  DO_TYPE (SXWORD, Sxword, "%" PRId64, "%" PRId64)
 
-#define DO_TYPE(NAME, Name, hex, dec, max) GElf_##Name Name[count]
+#define DO_TYPE(NAME, Name, hex, dec) GElf_##Name Name[count]
   union { TYPES; } value;
 #undef DO_TYPE
 
@@ -7463,10 +7642,10 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
       assert (count == 1);
       switch (type)
 	{
-#define DO_TYPE(NAME, Name, hex, dec, max)				      \
+#define DO_TYPE(NAME, Name, hex, dec)					      \
 	  case ELF_T_##NAME:						      \
-	    colno = print_core_item (colno, ',', ITEM_WRAP_COLUMN,	      \
-				     0, item->name, max, dec, value.Name[0]); \
+	    colno = print_core_item (colno, ',', WRAP_COLUMN,		      \
+				     0, item->name, dec, value.Name[0]); \
 	    break
 	  TYPES;
 #undef DO_TYPE
@@ -7479,10 +7658,10 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
       assert (count == 1);
       switch (type)
 	{
-#define DO_TYPE(NAME, Name, hex, dec, max)				      \
+#define DO_TYPE(NAME, Name, hex, dec)					      \
 	  case ELF_T_##NAME:						      \
-	    colno = print_core_item (colno, ',', ITEM_WRAP_COLUMN,	      \
-				     0, item->name, max, hex, value.Name[0]); \
+	    colno = print_core_item (colno, ',', WRAP_COLUMN,		      \
+				     0, item->name, hex, value.Name[0]);      \
 	    break
 	  TYPES;
 #undef DO_TYPE
@@ -7519,19 +7698,19 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
 	  }
 
 	unsigned int lastbit = 0;
+	unsigned int run = 0;
 	for (const unsigned int *i = data;
 	     (void *) i < data + count * size; ++i)
 	  {
 	    unsigned int bit = ((void *) i - data) * 8;
 	    unsigned int w = negate ? ~*i : *i;
-	    unsigned int run = 0;
 	    while (w != 0)
 	      {
 		int n = ffs (w);
 		w >>= n;
 		bit += n;
 
-		if (lastbit + 1 == bit)
+		if (lastbit != 0 && lastbit + 1 == bit)
 		  ++run;
 		else
 		  {
@@ -7547,11 +7726,10 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
 		lastbit = bit;
 	      }
 	  }
-	if (lastbit > 0 && lastbit + 1 != nbits)
-	  p += sprintf (p, "-%u", nbits - bias);
+	if (lastbit > 0 && run > 0 && lastbit + 1 != nbits)
+	  p += sprintf (p, "-%u", lastbit - bias);
 
-	colno = print_core_item (colno, ',', ITEM_WRAP_COLUMN, 0, item->name,
-				 4 + nbits * 4,
+	colno = print_core_item (colno, ',', WRAP_COLUMN, 0, item->name,
 				 negate ? "~<%s>" : "<%s>", printed);
       }
       break;
@@ -7561,14 +7739,12 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
       assert (count == 2);
       Dwarf_Word sec;
       Dwarf_Word usec;
-      size_t maxfmt = 7;
       switch (type)
 	{
-#define DO_TYPE(NAME, Name, hex, dec, max)				      \
+#define DO_TYPE(NAME, Name, hex, dec)					      \
 	  case ELF_T_##NAME:						      \
 	    sec = value.Name[0];					      \
 	    usec = value.Name[1];					      \
-	    maxfmt += max;						      \
 	    break
 	  TYPES;
 #undef DO_TYPE
@@ -7591,19 +7767,19 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
 	  else
 	    usec &= UINT32_MAX;
 	}
-      colno = print_core_item (colno, ',', ITEM_WRAP_COLUMN, 0, item->name,
-			       maxfmt, "%" PRIu64 ".%.6" PRIu64, sec, usec);
+      colno = print_core_item (colno, ',', WRAP_COLUMN, 0, item->name,
+			       "%" PRIu64 ".%.6" PRIu64, sec, usec);
       break;
 
     case 'c':
       assert (count == 1);
-      colno = print_core_item (colno, ',', ITEM_WRAP_COLUMN, 0, item->name,
-			       1, "%c", value.Byte[0]);
+      colno = print_core_item (colno, ',', WRAP_COLUMN, 0, item->name,
+			       "%c", value.Byte[0]);
       break;
 
     case 's':
-      colno = print_core_item (colno, ',', ITEM_WRAP_COLUMN, 0, item->name,
-			       count, "%.*s", (int) count, value.Byte);
+      colno = print_core_item (colno, ',', WRAP_COLUMN, 0, item->name,
+			       "%.*s", (int) count, value.Byte);
       break;
 
     case '\n':
@@ -7630,7 +7806,7 @@ handle_core_item (Elf *core, const Ebl_Core_Item *item, const void *desc,
 	  s = eol + 1;
 	}
 
-      colno = ITEM_WRAP_COLUMN;
+      colno = WRAP_COLUMN;
       break;
 
     default:
@@ -7679,6 +7855,24 @@ handle_core_items (Elf *core, const void *desc, size_t descsz,
 {
   if (nitems == 0)
     return 0;
+  unsigned int colno = 0;
+
+  /* FORMAT '\n' makes sense to be present only as a single item as it
+     processes all the data of a note.  FORMATs 'b' and 'B' have a special case
+     if present as a single item but they can be also processed with other
+     items below.  */
+  if (nitems == 1 && (items[0].format == '\n' || items[0].format == 'b'
+		      || items[0].format == 'B'))
+    {
+      assert (items[0].offset == 0);
+      size_t size = descsz;
+      colno = handle_core_item (core, items, desc, colno, &size);
+      /* If SIZE is not zero here there is some remaining data.  But we do not
+	 know how to process it anyway.  */
+      return colno;
+    }
+  for (size_t i = 0; i < nitems; ++i)
+    assert (items[i].format != '\n');
 
   /* Sort to collect the groups together.  */
   const Ebl_Core_Item *sorted_items[nitems];
@@ -7697,19 +7891,7 @@ handle_core_items (Elf *core, const void *desc, size_t descsz,
   qsort (groups, ngroups, sizeof groups[0], &compare_core_item_groups);
 
   /* Write out all the groups.  */
-  unsigned int colno = 0;
-
   const void *last = desc;
-  if (nitems == 1)
-    {
-      size_t size = descsz;
-      colno = handle_core_item (core, sorted_items[0], desc, colno, &size);
-      if (size == 0)
-	return colno;
-      desc += descsz - size;
-      descsz = size;
-    }
-
   do
     {
       for (size_t i = 0; i < ngroups; ++i)
@@ -7722,7 +7904,7 @@ handle_core_items (Elf *core, const void *desc, size_t descsz,
 	    colno = handle_core_item (core, *item, desc, colno, NULL);
 
 	  /* Force a line break at the end of the group.  */
-	  colno = ITEM_WRAP_COLUMN;
+	  colno = WRAP_COLUMN;
 	}
 
       if (descsz == 0)
@@ -7790,12 +7972,12 @@ handle_core_register (Ebl *ebl, Elf *core, int maxregname,
       register_info (ebl, reg, regloc, name, &bits, &type);
 
 #define TYPES								      \
-      BITS (8, BYTE, "%4" PRId8, "0x%.2" PRIx8, 4);			      \
-      BITS (16, HALF, "%6" PRId16, "0x%.4" PRIx16, 6);			      \
-      BITS (32, WORD, "%11" PRId32, " 0x%.8" PRIx32, 11);		      \
-      BITS (64, XWORD, "%20" PRId64, "  0x%.16" PRIx64, 20)
+      BITS (8, BYTE, "%4" PRId8, "0x%.2" PRIx8);			      \
+      BITS (16, HALF, "%6" PRId16, "0x%.4" PRIx16);			      \
+      BITS (32, WORD, "%11" PRId32, " 0x%.8" PRIx32);			      \
+      BITS (64, XWORD, "%20" PRId64, "  0x%.16" PRIx64)
 
-#define BITS(bits, xtype, sfmt, ufmt, max)				\
+#define BITS(bits, xtype, sfmt, ufmt)				\
       uint##bits##_t b##bits; int##bits##_t b##bits##s
       union { TYPES; uint64_t b128[2]; } value;
 #undef	BITS
@@ -7807,17 +7989,17 @@ handle_core_register (Ebl *ebl, Elf *core, int maxregname,
 	case DW_ATE_address:
 	  switch (bits)
 	    {
-#define BITS(bits, xtype, sfmt, ufmt, max)				      \
+#define BITS(bits, xtype, sfmt, ufmt)					      \
 	    case bits:							      \
 	      desc = convert (core, ELF_T_##xtype, 1, &value, desc, 0);	      \
 	      if (type == DW_ATE_signed)				      \
-		colno = print_core_item (colno, ' ', REGISTER_WRAP_COLUMN,    \
+		colno = print_core_item (colno, ' ', WRAP_COLUMN,	      \
 					 maxregname, name,		      \
-					 max, sfmt, value.b##bits##s);	      \
+					 sfmt, value.b##bits##s);	      \
 	      else							      \
-		colno = print_core_item (colno, ' ', REGISTER_WRAP_COLUMN,    \
+		colno = print_core_item (colno, ' ', WRAP_COLUMN,	      \
 					 maxregname, name,		      \
-					 max, ufmt, value.b##bits);	      \
+					 ufmt, value.b##bits);		      \
 	      break
 
 	    TYPES;
@@ -7826,9 +8008,9 @@ handle_core_register (Ebl *ebl, Elf *core, int maxregname,
 	      assert (type == DW_ATE_unsigned);
 	      desc = convert (core, ELF_T_XWORD, 2, &value, desc, 0);
 	      int be = elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB;
-	      colno = print_core_item (colno, ' ', REGISTER_WRAP_COLUMN,
+	      colno = print_core_item (colno, ' ', WRAP_COLUMN,
 				       maxregname, name,
-				       34, "0x%.16" PRIx64 "%.16" PRIx64,
+				       "0x%.16" PRIx64 "%.16" PRIx64,
 				       value.b128[!be], value.b128[be]);
 	      break;
 
@@ -7857,9 +8039,8 @@ handle_core_register (Ebl *ebl, Elf *core, int maxregname,
 	      *h++ = "0123456789abcdef"[bytes[idx] >> 4];
 	      *h++ = "0123456789abcdef"[bytes[idx] & 0xf];
 	    }
-	  colno = print_core_item (colno, ' ', REGISTER_WRAP_COLUMN,
-				   maxregname, name,
-				   2 + sizeof hex - 1, "0x%s", hex);
+	  colno = print_core_item (colno, ' ', WRAP_COLUMN,
+				   maxregname, name, "0x%s", hex);
 	  break;
 	}
       desc += regloc->pad;
@@ -7998,7 +8179,7 @@ handle_core_registers (Ebl *ebl, Elf *core, const void *desc,
 				      reg->regloc, desc, colno);
 
       /* Force a line break at the end of the group.  */
-      colno = REGISTER_WRAP_COLUMN;
+      colno = WRAP_COLUMN;
     }
 
   return colno;

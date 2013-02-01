@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2012 Red Hat, Inc.
+## Copyright (C) 1996-2013 Red Hat, Inc.
 ## This file is part of elfutils.
 ##
 ## This file is free software; you can redistribute it and/or modify
@@ -51,7 +51,7 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
 		  alldts md5-sha1-test typeiter low_high_pc \
-		  test-elf_cntl_gelf_getshdr
+		  test-elf_cntl_gelf_getshdr dwflsyms
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -83,8 +83,10 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-test-flag-nobits.sh run-prelink-addr-test.sh \
 	run-dwarf-getstring.sh run-rerequest_tag.sh run-typeiter.sh \
 	run-readelf-d.sh run-readelf-gdb_index.sh run-unstrip-n.sh \
+	run-readelf-s.sh run-dwflsyms.sh \
 	run-low_high_pc.sh run-macro-test.sh run-elf_cntl_gelf_getshdr.sh \
-	run-test-archive64.sh
+	run-test-archive64.sh run-readelf-vmcoreinfo.sh \
+	run-readelf-mixed-corenote.sh
 
 if !STANDALONE
 check_PROGRAMS += msg_tst md5-sha1-test
@@ -171,23 +173,38 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-d.sh testlib_dynseg.so.bz2 \
 	     run-readelf-gdb_index.sh testfilegdbindex5.bz2 \
 	     testfilegdbindex7.bz2 \
+	     run-readelf-s.sh testfilebazdbg.bz2 testfilebazdyn.bz2 \
+	     testfilebazmin.bz2 testfilebazdbg.debug.bz2 testfilebazmdb.bz2 \
+	     testfilebaztab.bz2 testfilebasmin.bz2 \
+	     run-dwflsyms.sh \
 	     run-unstrip-n.sh testcore-rtlib.bz2 testcore-rtlib-ppc.bz2 \
 	     run-low_high_pc.sh testfile_low_high_pc.bz2 \
 	     run-macro-test.sh testfile-macinfo.bz2 testfile-macros.bz2 \
 	     run-elf_cntl_gelf_getshdr.sh \
 	     run-test-archive64.sh testarchive64.a.bz2 \
-	     testfile60.bz2
+	     testfile60.bz2 testfile61.bz2 \
+	     run-readelf-vmcoreinfo.sh testfile62.bz2 \
+	     run-readelf-mixed-corenote.sh testfile63.bz2 testfile64.bz2 \
+	     testfile65.bz2 testfile67.bz2 testfile68.bz2 \
+	     testfile69.core.bz2 testfile69.so.bz2 \
+	     testfile70.core.bz2 testfile70.exec.bz2
+
+if USE_VALGRIND
+valgrind_cmd="valgrind -q --trace-children=yes --error-exitcode=1 --run-libc-freeres=no"
+endif
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
 			      LC_ALL=C LANG=C \
+			      VALGRIND_CMD=$(valgrind_cmd) \
 			      $(srcdir)/test-wrapper.sh \
 			      installed $(tests_rpath) \
 			      $(program_transform_name)
 if STANDALONE
 TESTS_ENVIRONMENT = $(installed_TESTS_ENVIRONMENT)
 else !STANDALONE
-TESTS_ENVIRONMENT = LC_ALL=C LANG=C $(srcdir)/test-wrapper.sh \
+TESTS_ENVIRONMENT = LC_ALL=C LANG=C VALGRIND_CMD=$(valgrind_cmd) \
+		    $(srcdir)/test-wrapper.sh \
 		    ../libdw:../backends:../libelf:../libasm
 
 installcheck-local:
@@ -277,6 +294,7 @@ md5_sha1_test_LDADD = $(libeu)
 typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
 low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
 test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
+dwflsyms_LDADD = $(libdw) $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage
