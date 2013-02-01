@@ -6,7 +6,6 @@
 *.orig
 *.os
 *.patch
-*.pot
 *.rej
 *.so
 *~
