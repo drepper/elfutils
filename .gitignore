@@ -15,13 +15,8 @@
 .glimpse_*
 =*
 autom4te.*
-backends/*.map
 config.h
 config.log
 config.status
 elfutils.spec
-libcpu/*_dis.h
-libdw/known-dwarf.h
-po/en@boldquot.po
-po/en@quot.po
 stamp-h1
