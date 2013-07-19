@@ -1,3 +1,211 @@
+2013-07-02  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Fix typo, forgot extension in
+	testfilenolines.bz2.
+
+2013-05-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add test-core-lib.so.bz2,
+	test-core.core.bz2 and test-core.exec.bz2.
+	* run-addrname-test.sh: New test for these files.
+	* run-unstrip-n.sh: Update expected output.  New test for these files.
+	* test-core-lib.so.bz2: New file.
+	* test-core.core.bz2: New file.
+	* test-core.exec.bz2: New file.
+
+2013-05-03  Mark Wielaard  <mjw@redhat.com>
+
+	* testfilenolines.bz2: New test file.
+	* Makefile.am (EXTRA_DIST): Add testfilenolines.bz2.
+	* run-get-lines.sh: Run testrun_compare on testfilenolines.
+
+2013-04-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl-report-elf-align.c: Use false add_p_vaddr for dwfl_report_elf.
+
+2013-04-29  Mark Wielaard  <mjw@redhat.com>
+
+	* test-subr.sh: Don't use pushd, just cd into test-dir.
+	(exit_cleanup): Don't use popd, just cd .. to get out.
+
+2013-04-27  Mark Wielaard  <mjw@redhat.com>
+
+	* test-subr.sh (exit_cleanup): New function.
+	(trap): Use exit_cleanup as argument.
+	* run-native-test.sh (native_exit): New function.
+	(trap): For EXIT (0) use native_exit as argument.
+
+2013-04-27  Mark Wielaard  <mjw@redhat.com>
+
+	* update1.c (main): Use unique tempfile name and unlink file.
+	* update2.c (main): Likewise.
+	* update3.c (main): Likewise.
+	* update4.c (main): Use unique tempfile name.
+
+2013-04-27  Mark Wielaard  <mjw@redhat.com>
+
+	* run-alldts.sh: Add testfile-alldts to tempfiles.
+	* run-elf_cntl_gelf_getshdr.sh: Add test_shdr.out to tempfiles.
+	* run-macro-test.sh: Add readelf.macros.out to tempfiles.
+	* run-strip-reloc.sh: Add readelf.out, readelf.out1, readelf.out2
+	and out.stripped1, out.debug1, out.stripped2, out.debug2 to tempfiles.
+
+2013-04-26  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (installed_TESTS_ENVIRONMENT): Export environment,
+	remove wrapper.
+	(TESTS_ENVIRONMENT): Likewise.
+	(installed_LOG_COMPILER): New variable defining wrapper.
+	(LOG_COMPILER): Likewise.
+	* run-*.sh: Fixup location of input and output files.
+	* test-subr.sh: Create test_dir, pushd to execute test in.
+	(trap): Remove test_dir.
+	(testfiles): Use abs_srcdir.
+	(installed_testrun): Match on abs_builddir or abs_top_builddir.
+	(self_test_files): Adjust path.
+
+2013-04-24  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Use AM_CPPFLAGS instead of INCLUDES.
+
+2013-03-25  Mark Wielaard  <mjw@redhat.com>
+
+	* run-readelf-aranges.sh: New test.
+	* testfilefoobarbaz.bz2: New test file.
+	* Makefile.am (TESTS): Add run-readelf-aranges.sh.
+	(EXTRA_DIST): Add run-readelf-aranges.sh and testfilefoobarbaz.bz2.
+
+2013-03-25  Mark Wielaard  <mjw@redhat.com>
+
+	* run-readelf-dwz-multi.sh: Expect high_pc also as address.
+
+2013-03-20  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add dwfl-report-elf-align.
+	(TESTS): Add run-dwfl-report-elf-align.sh.
+	(EXTRA_DIST): Add run-dwfl-report-elf-align.sh and
+	testfile-dwfl-report-elf-align-shlib.so.bz2 .
+	(dwfl_report_elf_align_LDADD): New.
+	* dwfl-report-elf-align.c: New file.
+	* run-dwfl-report-elf-align.sh: New file.
+	* testfile-dwfl-report-elf-align-shlib.so.bz2: New file.
+
+2013-03-12  Mark Wielaard  <mjw@redhat.com>
+
+	* run-dwfllines.sh: New test.
+	* dwfllines.c: New test program.
+	* Makefile.am (TESTS): Add run-dwfllines.sh.
+	(EXTRA_DIST): Likewise.
+	(dwfllines_LDADD): New variable.
+
+2013-02-22  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): Remove run-readelf-s.sh and run-dwflsyms.sh.
+	(LZMA): Add run-readelf-s.sh and run-dwflsyms.sh to TESTS.
+
+2013-02-15  Mark Wielaard  <mjw@redhat.com>
+
+	* testfile-dwzstr.bz2: New testfile.
+	* testfile-dwzstr.multi.bz2: Likewise.
+	* run-readelf-dwz-multi.sh: Add readelf testfile-dwzstr test.
+	* Makefile.am (EXTRA_DIST): Add testfile-dwzstr.bz2 and
+	testfile-dwzstr.multi.bz2.
+
+2013-01-30  Mark Wielaard  <mjw@redhat.com>
+
+	* testfileloc.bz2: New testfile.
+	* run-readelf-loc.sh: New test.
+	* Makefile.am (TESTS): Add run-readelf-loc.sh.
+	(EXTRA_DIST): Add run-readelf-loc.sh and testfileloc.bz2.
+
+2013-01-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-readelf-mixed-corenote.sh: New testcase for readelf -n of s390
+	and s390x core notes.
+	* testfile67.bz2: New file.
+	* testfile68.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile67.bz2 and testfile68.bz2 .
+
+2013-01-23  Mark Wielaard  <mjw@redhat.com>
+
+	* testfilebasmin.bz2: New testfile.
+	* Makefile.am (EXTRA_DIST): Add testfilebasmin.bz2.
+	* run-readelf-s.sh: Test testfilebasmin.
+	* run-dwflsyms.sh: Likewise.
+
+2013-01-16  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add dwflsyms.
+	(TESTS): Add run-readelf-s.sh and run-dwflsyms.sh.
+	(EXTRA_DIST): Add run-readelf-s.sh, testfilebazdbg.bz2,
+	testfilebazdyn.bz2, testfilebazmin.bz2, testfilebazdbg.debug.bz2,
+	testfilebazmdb.bz2, testfilebaztab.bz2 and run-dwflsyms.sh.
+	(dwflsyms_LDADD): New variable.
+
+2013-01-07  Roland McGrath  <roland@hack.frob.com>
+
+	* run-prelink-addr-test.sh: Use ln -snf.
+
+2012-12-03  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (valgrind_cmd): Add --run-libc-freeres=no.
+
+2012-11-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for PIE relocation.
+	* testfile70.core.bz2: New file.
+	* testfile70.exec.bz2: New file.
+	* Makefile.am (EXTRA_DIST): Add testfile70.core.bz2 and
+	testfile70.exec.bz2 .
+
+2012-10-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add testfile64.bz2, testfile65.bz2,
+	testfile69.core.bz2 and testfile69.so.bz2 .
+
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for DSO with build-id bias.
+	* testfile69.core.bz2: New file.
+	* testfile69.so.bz2: New file.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for core vDSO bias.
+	* testfile65.bz2: New file.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* run-addrname-test.sh: New test for symbol preferences.
+	* testfile64.bz2: New file.
+
+2012-10-01  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS_ENVIRONMENT): Define valgrind_cmd if USE_VALGRIND.
+	* test-wrapper.sh: Export VALGRIND_CMD if available.
+	* test-subr.sh (built_testrun): Use VALGRIND_CMD to invoke test prog.
+	(installed_testrun): Likewise.
+
+2012-09-24  Petr Machata  <pmachata@redhat.com>
+
+	* testfile63.bz2: New testfile.
+	* run-readelf-mixed-corenote.sh: New test.
+	* Makefile.am (TEST): Add run-readelf-mixed-corenote.sh.
+	(EXTRA_DIST): Add testfile63.bz2 and run-readelf-mixed-corenote.sh.
+
+2012-09-24  Petr Machata  <pmachata@redhat.com>
+
+	* testfile62.bz2: New testfile.
+	* run-readelf-vmcoreinfo.sh: New test.
+	* Makefile.am (TEST): Add run-readelf-vmcoreinfo.sh.
+	(EXTRA_DIST): Add testfile62.bz2 and run-readelf-vmcoreinfo.sh.
+
+2012-09-18  Petr Machata  <pmachata@redhat.com>
+
+	* testfile61.bz2: New testfile.
+	* run-allregs.sh: Run reg_test testfile61.
+	* Makefile.am (EXTRA_DIST): Add testfile61.bz2.
+
 2012-08-24  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am (EXTRA_DIST): Add testfile60.bz2.

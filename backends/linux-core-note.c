@@ -42,6 +42,9 @@
 #define	INT			int32_t
 #define ALIGN_INT		4
 #define TYPE_INT		ELF_T_SWORD
+#ifndef ALIGN_PR_REG
+# define ALIGN_PR_REG		ALIGN_ULONG
+#endif
 
 #define FIELD(type, name) type name __attribute__ ((aligned (ALIGN_##type)))
 
@@ -81,7 +84,14 @@ struct EBLHOOK(prstatus)
   struct EBLHOOK(timeval) pr_stime;
   struct EBLHOOK(timeval) pr_cutime;
   struct EBLHOOK(timeval) pr_cstime;
-  FIELD (ULONG, pr_reg[PRSTATUS_REGS_SIZE / sizeof (ULONG)]);
+  struct
+  {
+    FIELD (ULONG, pr_reg[PRSTATUS_REGS_SIZE / sizeof (ULONG)]);
+  }
+#ifdef ALIGN_PR_REG
+    __attribute__ ((aligned (ALIGN_PR_REG)))
+#endif
+    ;
   FIELD (INT, pr_fpvalid);
 };
 
@@ -123,8 +133,10 @@ static const Ebl_Core_Item prstatus_items[] =
     FIELD (signal, INT, info.si_code, 'd'),
     FIELD (signal, INT, info.si_errno, 'd'),
     FIELD (signal, SHORT, cursig, 'd'),
-    FIELD (signal, ULONG, sigpend, 'B'),
-    FIELD (signal, ULONG, sighold, 'B'),
+
+    /* Use different group name for a newline delimiter.  */
+    FIELD (signal2, ULONG, sigpend, 'B'),
+    FIELD (signal3, ULONG, sighold, 'B'),
     FIELD (identity, PID_T, pid, 'd', .thread_identifier = true),
     FIELD (identity, PID_T, ppid, 'd'),
     FIELD (identity, PID_T, pgrp, 'd'),
@@ -250,6 +262,28 @@ EBLHOOK(core_note) (nhdr, name, regs_offset, nregloc, reglocs, nitems, items)
       *reglocs = table;							      \
       *nitems = 0;							      \
       *items = NULL;							      \
+      return 1;
+
+#define EXTRA_REGSET_ITEMS(type, size, table, extra_items)		      \
+    case type:								      \
+      if (nhdr->n_descsz != size)					      \
+	return 0;							      \
+      *regs_offset = 0;							      \
+      *nregloc = sizeof table / sizeof table[0];			      \
+      *reglocs = table;							      \
+      *nitems = sizeof extra_items / sizeof extra_items[0];		      \
+      *items = extra_items;						      \
+      return 1;
+
+#define EXTRA_ITEMS(type, size, extra_items)				      \
+    case type:								      \
+      if (nhdr->n_descsz != size)					      \
+	return 0;							      \
+      *regs_offset = 0;							      \
+      *nregloc = 0;							      \
+      *reglocs = NULL;							      \
+      *nitems = sizeof extra_items / sizeof extra_items[0];		      \
+      *items = extra_items;						      \
       return 1;
 
 #ifdef FPREGSET_SIZE

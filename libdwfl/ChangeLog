@@ -1,3 +1,211 @@
+2013-07-19  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* libdwflP.h (__libdwfl_find_elf_build_id): Add internal_function.
+
+2013-07-02  Mark Wielaard  <mjw@redhat.com>
+
+	* relocate.c (__libdwfl_relocate_value): Remove mod->e_type assert.
+
+2013-06-05  Mark Wielaard  <mjw@redhat.com>
+
+	* link_map.c (report_r_debug): Always call release_buffer after
+	memory_callback succeeded reading build_id.
+
+2013-05-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* argp-std.c (parse_opt) <ARGP_KEY_SUCCESS> <opt->core> <opt->e>: Set
+	executable_for_core before calling dwfl_core_file_report.
+	* core-file.c (clear_r_debug_info): New function.
+	(dwfl_core_file_report): Move raw segments reporting lower.  New
+	variable r_debug_info, pass it to dwfl_segment_report_module.  Call
+	clear_r_debug_info in the end.  Return sum of LISTED and SNIFFED.
+	* dwfl_module_build_id.c (check_notes): Move into
+	__libdwfl_find_elf_build_id.
+	(__libdwfl_find_build_id): Rename to ...
+	(__libdwfl_find_elf_build_id): ... here.  Add parameters build_id_bits,
+	build_id_elfaddr and build_id_len.  Verify MOD vs. ELF.
+	(__libdwfl_find_elf_build_id) (check_notes): Remove parameters mod and
+	set, rename data_vaddr to data_elfaddr.  Do not call found_build_id.
+	(__libdwfl_find_elf_build_id): Update the check_notes caller, do not
+	adjust its data_elfaddr parameter.
+	(__libdwfl_find_build_id): New wrapper of __libdwfl_find_elf_build_id.
+	* dwfl_segment_report_module.c (dwfl_segment_report_module): New
+	parameter r_debug_info.  New variable name_is_final.  Adjust addresses
+	according to R_DEBUG_INFO->MODULE.  Check conflicts against DWFL.
+	Do not overwrite NAME by SONAME if NAME_IS_FINAL.
+	* libdwflP.h (__libdwfl_find_elf_build_id): New declaration.
+	(struct r_debug_info_module, struct r_debug_info): New definitions.
+	(dwfl_segment_report_module, dwfl_link_map_report): Add parameter
+	r_debug_info.
+	* link_map.c: Include fcntl.h.
+	(report_r_debug): Add parameter r_debug_info, describe it in the
+	function comment.  Delete dwfl_addrmodule call and its dependent code.
+	Verify build-id before calling dwfl_report_elf, also supply
+	executable_for_core to it.  Store r_debug_info->module info when
+	appropriate.
+	(dwfl_link_map_report): Add parameter r_debug_info.  New variable
+	in_ok.  Try to read IN from EXECUTABLE_FOR_CORE.  Update report_r_debug
+	caller parameters.
+
+2013-04-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Add parameter add_p_vaddr.
+	Set it to true for ET_EXEC and ET_CORE.  Provide alternative
+	setup of START and BIAS if !ADD_P_VADDR.  Set END from BIAS, not BASE.
+	(dwfl_report_elf): Add parameter add_p_vaddr.  Pass it down.  Add
+	NEW_VERSION.
+	(_compat_without_add_p_vaddr_dwfl_report_elf) <SHARED>: New, with
+	COMPAT_VERSION.
+	* libdwfl.h (dwfl_report_elf): Add parameter add_p_vaddr.  Describe it.
+	* libdwflP.h (__libdwfl_report_elf): Add parameter add_p_vaddr.
+	* link_map.c (report_r_debug): Use true add_p_vaddr for dwfl_report_elf.
+	* linux-kernel-modules.c (report_kernel): Use false add_p_vaddr for
+	dwfl_report_elf.
+	* offline.c (process_elf): Use true add_p_vaddr for dwfl_report_elf.
+
+2013-04-27  Mark Wielaard  <mjw@redhat.com>
+
+	* link_map.c: #include system.h.
+
+2013-04-26  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* link_map.c (BE32, BE64, LE32, LE64): Delete the definitions, move
+	them to lib/system.h.
+
+2013-04-24  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Use AM_CPPFLAGS instead of INCLUDES.
+
+2013-03-20  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Remove BASE aligning.
+
+2013-03-12  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_getsrclines.c (dwfl_getsrclines): Return 0 on success.
+
+2013-02-22  Mark Wielaard  <mjw@redhat.com>
+
+	* open.c (__libdw_gunzip,__libdw_bunzip2,__libdw_unlzma): Define
+	as DWFL_E_BADELF when not used.
+
+2013-02-10  Mark Wielaard  <mjw@redhat.com>
+
+	* argp-std.c (parse_opt): Use opt->core and opt->e explicitly in
+	failure messages When handling ARGP_KEY_SUCCESS because arg will
+	not have been set.
+
+2013-01-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* linux-proc-maps.c: Include system.h.
+	(PROCEXEFMT, get_pid_class): New.
+	(grovel_auxv): Detect 32-bit vs. 64-bit auxv, possibly call
+	get_pid_class.
+
+2013-01-23  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_module_getdwarf.c (find_aux_sym): Don't substract one
+	from aux_syments by default.
+	(find_symtab): Also succeed when only aux_symdata is found.
+	When no symtab is found always try to load auxiliary table.
+	(dwfl_module_getsymtab): Substract one from result when both
+	tables have symbols.
+	* dwfl_module_getsym.c (dwfl_module_getsym): Only skip auxiliary
+	zero entry when both tables have symbols.
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): Only substract
+	one from first_global when both tables have symbols.
+
+2013-01-16  Mark Wielaard  <mjw@redhat.com>
+
+	* libdwflP.h (struct Dwfl_Module): Add aux_sym, aux_symdata,
+	aux_syments, aux_symstrdata, aux_symxndxdata and aux_first_global.
+	(dwfl_adjusted_aux_sym_addr): New function.
+	(dwfl_deadjust_aux_sym_addr): Likewise.
+	(dwfl_adjusted_st_value): Take and check symfile argument.
+	(dwfl_deadjust_st_value): Likewise.
+	* dwfl_module_getdwarf.c (find_prelink_address_sync): Take and
+	use dwfl_file as argument to set address_sync.
+	(find_debuginfo): Call find_prelink_address_sync with debug file.
+	(find_aux_sym): New function.
+	(find_symtab): Use find_aux_sym if all we have is the dynsym table
+	and fill in aux DwflModule fields.
+	(dwfl_module_getsymtab): Return syments plus aux_syments.
+	(load_symtab): Always set first_global.
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): Check symfile
+	when using same_section. Calculate first_global based on both
+	mod->first_global and mod->aux_first_global.
+	* dwfl_module.c (__libdwfl_module_free): Free aux_sym.
+	* dwfl_module_getsym.c (dwfl_module_getsym): Use auxsym table
+	to retrieve symbol and name if necessary, making sure all locals
+	from any table come before any globals.
+	* dwfl_module_info.c (dwfl_module_info): Call dwfl_adjusted_st_value
+	with symfile.
+	* relocate.c (resolve_symbol): Likewise.
+
+2013-01-07  Roland McGrath  <roland@hack.frob.com>
+
+	* link_map.c (auxv_format_probe): Handle unaligned 64-bit data, but
+	still assume the data is at least 32-bit aligned anyway.
+	(dwfl_link_map_report): Handle unaligned auxv data.
+
+2012-12-11  Mark Wielaard  <mjw@redhat.com>
+
+	* linux-kernel-modules.c (report_kernel): Only free fname if
+	find_kernel_elf succeeds and allocates it.
+	(report_kernel_archive): Fix brackets around unlikely expression.
+
+2012-11-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* argp-std.c: Update Copyright year.
+	(offline_find_elf): New function.
+	(offline_callbacks): Use it for find_elf.
+	(struct parse_opt): New.
+	(parse_opt): New key ARGP_KEY_INIT.  In other make hook struct
+	parse_opt pointer from former Dwfl pointer.  Delay 'e and OPT_COREFILE
+	processing till ARGP_KEY_SUCCESS.  Initialize state->input already from
+	ARGP_KEY_SUCCESS.  Modify the cleanup in ARGP_KEY_ERROR.  Make the
+	final state->input initialization optional.
+	* dwfl_end.c: Update Copyright year.
+	(dwfl_end): Free executable_for_core.
+	* libdwflP.h: Update Copyright year.
+	(struct Dwfl): New field executable_for_core.
+
+2012-11-20  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_report_elf.c (__libdwfl_report_elf): Simplify START and BIAS
+	calculation.
+
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_module_getdwarf.c (mod_verify_build_id): New function with code
+	from ...
+	(__libdwfl_getelf): ... here.  Call it.
+
+2012-10-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* libdwfl.h (dwfl_module_getelf): Add __nonnull_attribute__.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_segment_report_module.c (dwfl_segment_report_module):
+	Initialize mod->MAIN_BIAS.
+
+2012-10-10  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): New function
+	binding_value.  Use it for both zero and non-zero size symbols
+	comparisons.
+
+2012-10-01  Mark Wielaard  <mjw@redhat.com>
+
+	* cu.c (cudie_offset): Don't use type_sig8, it might not be
+	initialized and these are always real CUs, never TUs.
+
+2012-10-01  Mark Wielaard  <mjw@redhat.com>
+
+	* derelocate.c (find_section): Check next section exists before
+	accessing it.
+
 2012-08-01  Petr Machata  <pmachata@redhat.com>
 
 	* offline.c (process_archive_member): Ignore entry "/SYM64/".

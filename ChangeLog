@@ -1,3 +1,29 @@
+2013-07-19  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* NEWS: Remove bugfix only entries from Version 0.156.
+
+2013-07-18  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* NEWS: Add entries for Version 0.156.
+
+2013-04-28  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* NEWS (Version 0.156): New.
+
+2013-04-26  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac (AM_INIT_AUTOMAKE): Request parallel-tests.
+
+2013-04-25  Mark Wielaard  <mjw@redhat.com>
+
+	* .gitignore: Add config/test-driver as installed by automake 1.13.
+	* configure.ac (AM_INIT_AUTOMAKE): Require at least automake 1.11.
+
+2012-10-01  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac: Add --enable-valgrind check.
+	* Makefile.am (DISTCHECK_CONFIGURE_FLAGS): Add --enable-valgrind.
+
 2012-08-27  Mark Wielaard  <mjw@redhat.com>
 
 	* configure.ac: Set version to 0.155.
