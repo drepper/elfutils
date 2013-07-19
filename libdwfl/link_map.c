@@ -1,5 +1,5 @@
 /* Report modules by examining dynamic linker data structures.
-   Copyright (C) 2008-2010 Red Hat, Inc.
+   Copyright (C) 2008-2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -28,27 +28,18 @@
 
 #include <config.h>
 #include "libdwflP.h"
+#include "../libdw/memory-access.h"
+#include "system.h"
 
 #include <byteswap.h>
 #include <endian.h>
+#include <fcntl.h>
 
 /* This element is always provided and always has a constant value.
    This makes it an easy thing to scan for to discern the format.  */
 #define PROBE_TYPE	AT_PHENT
 #define PROBE_VAL32	sizeof (Elf32_Phdr)
 #define PROBE_VAL64	sizeof (Elf64_Phdr)
-
-#if BYTE_ORDER == BIG_ENDIAN
-# define BE32(x)	(x)
-# define BE64(x)	(x)
-# define LE32(x)	bswap_32 (x)
-# define LE64(x)	bswap_64 (x)
-#else
-# define LE32(x)	(x)
-# define LE64(x)	(x)
-# define BE32(x)	bswap_32 (x)
-# define BE64(x)	bswap_64 (x)
-#endif
 
 
 /* Examine an auxv data block and determine its format.
@@ -66,15 +57,22 @@ auxv_format_probe (const void *auxv, size_t size,
 
   inline bool check64 (size_t i)
   {
-    if (u->a64[i].a_type == BE64 (PROBE_TYPE)
-	&& u->a64[i].a_un.a_val == BE64 (PROBE_VAL64))
+    /* The AUXV pointer might not even be naturally aligned for 64-bit
+       data, because note payloads in a core file are not aligned.
+       But we assume the data is 32-bit aligned.  */
+
+    uint64_t type = read_8ubyte_unaligned_noncvt (&u->a64[i].a_type);
+    uint64_t val = read_8ubyte_unaligned_noncvt (&u->a64[i].a_un.a_val);
+
+    if (type == BE64 (PROBE_TYPE)
+	&& val == BE64 (PROBE_VAL64))
       {
 	*elfdata = ELFDATA2MSB;
 	return true;
       }
 
-    if (u->a64[i].a_type == LE64 (PROBE_TYPE)
-	&& u->a64[i].a_un.a_val == LE64 (PROBE_VAL64))
+    if (type == LE64 (PROBE_TYPE)
+	&& val == LE64 (PROBE_VAL64))
       {
 	*elfdata = ELFDATA2LSB;
 	return true;
@@ -225,7 +223,8 @@ addrsize (uint_fast8_t elfclass)
 }
 
 /* Report a module for each struct link_map in the linked list at r_map
-   in the struct r_debug at R_DEBUG_VADDR.
+   in the struct r_debug at R_DEBUG_VADDR.  For r_debug_info description
+   see dwfl_link_map_report in libdwflP.h.
 
    For each link_map entry, if an existing module resides at its address,
    this just modifies that module's name and suggested file name.  If
@@ -237,7 +236,8 @@ static int
 report_r_debug (uint_fast8_t elfclass, uint_fast8_t elfdata,
 		Dwfl *dwfl, GElf_Addr r_debug_vaddr,
 		Dwfl_Memory_Callback *memory_callback,
-		void *memory_callback_arg)
+		void *memory_callback_arg,
+		struct r_debug_info *r_debug_info)
 {
   /* Skip r_version, to aligned r_map field.  */
   GElf_Addr read_vaddr = r_debug_vaddr + addrsize (elfclass);
@@ -352,42 +352,88 @@ report_r_debug (uint_fast8_t elfclass, uint_fast8_t elfdata,
       if (name != NULL && name[0] == '\0')
 	name = NULL;
 
-      /* If content-sniffing already reported a module covering
-	 the same area, find that existing module to adjust.
-	 The l_ld address is the only one we know for sure
-	 to be within the module's own segments (its .dynamic).  */
-      Dwfl_Module *mod = INTUSE(dwfl_addrmodule) (dwfl, l_ld);
-      if (mod != NULL)
+      if (iterations == 1 && dwfl->executable_for_core != NULL)
+	name = dwfl->executable_for_core;
+
+      Dwfl_Module *mod = NULL;
+      if (name != NULL)
 	{
-	  /* We have a module.  We can give it a better name from l_name.  */
-	  if (name != NULL && mod->name[0] == '[')
+	  /* This code is mostly inlined dwfl_report_elf.  */
+	  // XXX hook for sysroot
+	  int fd = open64 (name, O_RDONLY);
+	  if (fd >= 0)
 	    {
-	      char *newname = strdup (basename (name));
-	      if (newname != NULL)
+	      Elf *elf;
+	      Dwfl_Error error = __libdw_open_file (&fd, &elf, true, false);
+	      if (error == DWFL_E_NOERROR)
 		{
-		  free (mod->name);
-		  mod->name = newname;
+		  const void *build_id_bits;
+		  GElf_Addr build_id_elfaddr;
+		  int build_id_len;
+		  bool valid = true;
+
+		  /* FIXME: Bias L_ADDR should be computed from the prelink
+		     state in memory (when the file got loaded), not against
+		     the current on-disk file state as is computed below.
+
+		     This verification gives false positive if in-core ELF had
+		     build-id but on-disk ELF does not have any.  But we cannot
+		     reliably find ELF header and/or the ELF build id just from
+		     the link map (and checking core segments is also not
+		     reliable).  */
+
+		  if (__libdwfl_find_elf_build_id (NULL, elf, &build_id_bits,
+						   &build_id_elfaddr,
+						   &build_id_len) > 0
+		      && build_id_elfaddr != 0)
+		    {
+		      GElf_Addr build_id_vaddr = build_id_elfaddr + l_addr;
+		      release_buffer (0);
+		      int segndx = INTUSE(dwfl_addrsegment) (dwfl,
+							     build_id_vaddr,
+							     NULL);
+		      if (! (*memory_callback) (dwfl, segndx,
+						&buffer, &buffer_available,
+						build_id_vaddr, build_id_len,
+						memory_callback_arg))
+			/* File has valid build-id which cannot be verified
+			   in memory.  */
+			valid = false;
+		      else
+			{
+			  if (memcmp (build_id_bits, buffer, build_id_len) != 0)
+			    /* File has valid build-id which does not match
+			       the one in memory.  */
+			    valid = false;
+			  release_buffer (0);
+			}
+		    }
+
+		  if (valid)
+		    // XXX hook for sysroot
+		    mod = __libdwfl_report_elf (dwfl, basename (name), name,
+						fd, elf, l_addr, true, true);
+		  if (mod == NULL)
+		    {
+		      elf_end (elf);
+		      close (fd);
+		    }
 		}
 	    }
-
-	  if (name == NULL && mod->name[0] == '/')
-	    name = mod->name;
-
-	  /* If we don't have a file for it already, we can pre-install
-	     the full file name from l_name.  Opening the file by this
-	     name will be the fallback when no build ID match is found.
-	     XXX hook for sysroot */
-	  if (name != NULL && mod->main.name == NULL)
-	    mod->main.name = strdup (name);
 	}
-      else if (name != NULL)
+      if (r_debug_info != NULL && mod == NULL)
 	{
-	  /* We have to find the file's phdrs to compute along with l_addr
-	     what its runtime address boundaries are.  */
-
-	  // XXX hook for sysroot
-	  mod = INTUSE(dwfl_report_elf) (dwfl, basename (name),
-					 name, -1, l_addr);
+	  /* Save link map information about valid shared library (or
+	     executable) which has not been found on disk.  */
+	  const char *base = name == NULL ? "" : basename (name);
+	  struct r_debug_info_module *module;
+	  module = malloc (sizeof (*module) + strlen (base) + 1);
+	  if (module == NULL)
+	    return release_buffer (result);
+	  module->l_ld = l_ld;
+	  strcpy (module->name, base);
+	  module->next = r_debug_info->module;
+	  r_debug_info->module = module;
 	}
 
       if (mod != NULL)
@@ -604,7 +650,8 @@ find_executable (Dwfl *dwfl, GElf_Addr at_phdr, GElf_Addr at_entry,
 int
 dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
 		      Dwfl_Memory_Callback *memory_callback,
-		      void *memory_callback_arg)
+		      void *memory_callback_arg,
+		      struct r_debug_info *r_debug_info)
 {
   GElf_Addr r_debug_vaddr = 0;
 
@@ -618,29 +665,32 @@ dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
       GElf_Xword phent = 0;
       GElf_Xword phnum = 0;
 
-#define AUXV_SCAN(NN, BL) do					\
-	{							\
-	  const Elf##NN##_auxv_t *av = auxv;			\
-	  for (size_t i = 0; i < auxv_size / sizeof av[0]; ++i)	\
-	    {							\
-	      Elf##NN##_Addr val = BL##NN (av[i].a_un.a_val);	\
-	      if (av[i].a_type == BL##NN (AT_ENTRY))		\
-		entry = val;					\
-	      else if (av[i].a_type == BL##NN (AT_PHDR))	\
-		phdr = val;					\
-	      else if (av[i].a_type == BL##NN (AT_PHNUM))	\
-		phnum = val;					\
-	      else if (av[i].a_type == BL##NN (AT_PHENT))	\
-		phent = val;					\
-	      else if (av[i].a_type == BL##NN (AT_PAGESZ))	\
-		{						\
-		  if (val > 1					\
-		      && (dwfl->segment_align == 0		\
-			  || val < dwfl->segment_align))	\
-		    dwfl->segment_align = val;			\
-		}						\
-	    }							\
-	}							\
+#define READ_AUXV32(ptr)	read_4ubyte_unaligned_noncvt (ptr)
+#define READ_AUXV64(ptr)	read_8ubyte_unaligned_noncvt (ptr)
+#define AUXV_SCAN(NN, BL) do                                            \
+	{                                                               \
+	  const Elf##NN##_auxv_t *av = auxv;                            \
+	  for (size_t i = 0; i < auxv_size / sizeof av[0]; ++i)         \
+	    {                                                           \
+              uint##NN##_t type = READ_AUXV##NN (&av[i].a_type);        \
+              uint##NN##_t val = BL##NN (READ_AUXV##NN (&av[i].a_un.a_val)); \
+	      if (type == BL##NN (AT_ENTRY))                            \
+		entry = val;                                            \
+	      else if (type == BL##NN (AT_PHDR))                        \
+		phdr = val;                                             \
+	      else if (type == BL##NN (AT_PHNUM))                       \
+		phnum = val;                                            \
+	      else if (type == BL##NN (AT_PHENT))                       \
+		phent = val;                                            \
+	      else if (type == BL##NN (AT_PAGESZ))                      \
+		{                                                       \
+		  if (val > 1                                           \
+		      && (dwfl->segment_align == 0                      \
+			  || val < dwfl->segment_align))                \
+		    dwfl->segment_align = val;                          \
+		}                                                       \
+	    }                                                           \
+	}                                                               \
       while (0)
 
       if (elfclass == ELFCLASS32)
@@ -699,8 +749,65 @@ dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
 	      .d_size = phnum * phent,
 	      .d_buf = NULL
 	    };
-	  if ((*memory_callback) (dwfl, phdr_segndx, &in.d_buf, &in.d_size,
-				  phdr, phnum * phent, memory_callback_arg))
+	  bool in_ok = (*memory_callback) (dwfl, phdr_segndx, &in.d_buf,
+					   &in.d_size, phdr, phnum * phent,
+					   memory_callback_arg);
+	  if (! in_ok && dwfl->executable_for_core != NULL)
+	    {
+	      /* AUXV -> PHDR -> DYNAMIC
+		 Both AUXV and DYNAMIC should be always present in a core file.
+		 PHDR may be missing in core file, try to read it from
+		 EXECUTABLE_FOR_CORE to find where DYNAMIC is located in the
+		 core file.  */
+
+	      int fd = open (dwfl->executable_for_core, O_RDONLY);
+	      Elf *elf;
+	      Dwfl_Error error = DWFL_E_ERRNO;
+	      if (fd != -1)
+		error = __libdw_open_file (&fd, &elf, true, false);
+	      if (error != DWFL_E_NOERROR)
+		{
+		  __libdwfl_seterrno (error);
+		  return false;
+		}
+	      GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (elf, &ehdr_mem);
+	      if (ehdr == NULL)
+		{
+		  elf_end (elf);
+		  close (fd);
+		  __libdwfl_seterrno (DWFL_E_LIBELF);
+		  return false;
+		}
+	      if (ehdr->e_phnum != phnum || ehdr->e_phentsize != phent)
+		{
+		  elf_end (elf);
+		  close (fd);
+		  __libdwfl_seterrno (DWFL_E_BADELF);
+		  return false;
+		}
+	      off_t off = ehdr->e_phoff;
+	      assert (in.d_buf == NULL);
+	      assert (in.d_size == phnum * phent);
+	      in.d_buf = malloc (in.d_size);
+	      if (unlikely (in.d_buf == NULL))
+		{
+		  elf_end (elf);
+		  close (fd);
+		  __libdwfl_seterrno (DWFL_E_NOMEM);
+		  return false;
+		}
+	      ssize_t nread = pread_retry (fd, in.d_buf, in.d_size, off);
+	      elf_end (elf);
+	      close (fd);
+	      if (nread != (ssize_t) in.d_size)
+		{
+		  free (in.d_buf);
+		  __libdwfl_seterrno (DWFL_E_ERRNO);
+		  return false;
+		}
+	      in_ok = true;
+	    }
+	  if (in_ok)
 	    {
 	      union
 	      {
@@ -862,6 +969,6 @@ dwfl_link_map_report (Dwfl *dwfl, const void *auxv, size_t auxv_size,
 
   /* Now we can follow the dynamic linker's library list.  */
   return report_r_debug (elfclass, elfdata, dwfl, r_debug_vaddr,
-			 &integrated_memory_callback, &mcb);
+			 &integrated_memory_callback, &mcb, r_debug_info);
 }
 INTDEF (dwfl_link_map_report)

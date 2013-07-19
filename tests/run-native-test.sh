@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2005, 2006 Red Hat, Inc.
+# Copyright (C) 2005, 2006, 2013 Red Hat, Inc.
 # This file is part of elfutils.
 #
 # This file is free software; you can redistribute it and/or modify
@@ -45,7 +45,14 @@ native_cleanup()
   test_cleanup
 }
 
-trap native_cleanup 0 1 2 15
+native_exit()
+{
+  native_cleanup
+  exit_cleanup
+}
+
+trap native_cleanup 1 2 15
+trap native_exit 0
 
 for cc in "$HOSTCC" "$HOST_CC" cc gcc "$CC"; do
   test "x$cc" != x || continue
@@ -70,8 +77,8 @@ native_test()
   test $native -eq 0 || testrun "$@" -p $native > /dev/null
 }
 
-native_test ./allregs
-native_test ./funcretval
+native_test ${abs_builddir}/allregs
+native_test ${abs_builddir}/funcretval
 
 # We do this explicitly rather than letting the trap 0 cover it,
 # because as of version 3.1 bash prints the "Killed" report for

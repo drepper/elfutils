@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2012 Red Hat, Inc.
+## Copyright (C) 1996-2013 Red Hat, Inc.
 ## This file is part of elfutils.
 ##
 ## This file is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@ endif
 AM_LDFLAGS =
 
 if !STANDALONE
-INCLUDES += -I$(top_srcdir)/libasm -I$(top_srcdir)/libdw \
+AM_CPPFLAGS += -I$(top_srcdir)/libasm -I$(top_srcdir)/libdw \
 	    -I$(top_srcdir)/libdwfl \
 	    -I$(top_srcdir)/libebl -I$(top_srcdir)/libelf \
 	    -I$(top_srcdir)/lib -I..
@@ -51,7 +51,8 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
 		  alldts md5-sha1-test typeiter low_high_pc \
-		  test-elf_cntl_gelf_getshdr
+		  test-elf_cntl_gelf_getshdr dwflsyms dwfllines \
+		  dwfl-report-elf-align
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -73,7 +74,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-nm-self.sh run-readelf-self.sh \
 	run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	run-readelf-test4.sh run-readelf-twofiles.sh \
-	run-readelf-macro.sh \
+	run-readelf-macro.sh run-readelf-loc.sh \
+	run-readelf-aranges.sh run-readelf-line.sh \
 	run-native-test.sh run-bug1-test.sh \
 	dwfl-bug-addr-overflow run-addrname-test.sh \
 	dwfl-bug-fd-leak dwfl-bug-report \
@@ -84,11 +86,17 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-dwarf-getstring.sh run-rerequest_tag.sh run-typeiter.sh \
 	run-readelf-d.sh run-readelf-gdb_index.sh run-unstrip-n.sh \
 	run-low_high_pc.sh run-macro-test.sh run-elf_cntl_gelf_getshdr.sh \
-	run-test-archive64.sh
+	run-test-archive64.sh run-readelf-vmcoreinfo.sh \
+	run-readelf-mixed-corenote.sh run-dwfllines.sh \
+	run-dwfl-report-elf-align.sh
 
 if !STANDALONE
 check_PROGRAMS += msg_tst md5-sha1-test
 TESTS += msg_tst md5-sha1-test
+endif
+
+if LZMA
+TESTS += run-readelf-s.sh run-dwflsyms.sh
 endif
 
 if HAVE_LIBASM
@@ -149,8 +157,11 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile46.bz2 testfile47.bz2 testfile48.bz2 testfile48.debug.bz2 \
 	     testfile49.bz2 testfile50.bz2 testfile51.bz2 \
 	     run-readelf-macro.sh testfilemacro.bz2 \
+	     run-readelf-loc.sh testfileloc.bz2 \
+	     run-readelf-aranges.sh run-readelf-line.sh testfilefoobarbaz.bz2 \
 	     run-readelf-dwz-multi.sh libtestfile_multi_shared.so.bz2 \
 	     testfile_multi.dwz.bz2 testfile_multi_main.bz2 \
+	     testfile-dwzstr.bz2 testfile-dwzstr.multi.bz2 \
 	     run-prelink-addr-test.sh \
 	     testfile52-32.so.bz2 testfile52-32.so.debug.bz2 \
 	     testfile52-32.prelink.so.bz2 testfile52-32.noshdrs.so.bz2 \
@@ -171,28 +182,62 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-d.sh testlib_dynseg.so.bz2 \
 	     run-readelf-gdb_index.sh testfilegdbindex5.bz2 \
 	     testfilegdbindex7.bz2 \
+	     run-readelf-s.sh testfilebazdbg.bz2 testfilebazdyn.bz2 \
+	     testfilebazmin.bz2 testfilebazdbg.debug.bz2 testfilebazmdb.bz2 \
+	     testfilebaztab.bz2 testfilebasmin.bz2 \
+	     run-dwflsyms.sh \
 	     run-unstrip-n.sh testcore-rtlib.bz2 testcore-rtlib-ppc.bz2 \
 	     run-low_high_pc.sh testfile_low_high_pc.bz2 \
 	     run-macro-test.sh testfile-macinfo.bz2 testfile-macros.bz2 \
 	     run-elf_cntl_gelf_getshdr.sh \
 	     run-test-archive64.sh testarchive64.a.bz2 \
-	     testfile60.bz2
+	     testfile60.bz2 testfile61.bz2 \
+	     run-readelf-vmcoreinfo.sh testfile62.bz2 \
+	     run-readelf-mixed-corenote.sh testfile63.bz2 testfile64.bz2 \
+	     testfile65.bz2 testfile67.bz2 testfile68.bz2 \
+	     testfile69.core.bz2 testfile69.so.bz2 \
+	     testfile70.core.bz2 testfile70.exec.bz2 \
+	     run-dwfllines.sh run-dwfl-report-elf-align.sh \
+	     testfile-dwfl-report-elf-align-shlib.so.bz2 \
+	     testfilenolines.bz2 test-core-lib.so.bz2 test-core.core.bz2 \
+	     test-core.exec.bz2
 
-installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
-			      bindir=$(DESTDIR)$(bindir) \
-			      LC_ALL=C LANG=C \
-			      $(srcdir)/test-wrapper.sh \
-			      installed $(tests_rpath) \
-			      $(program_transform_name)
+if USE_VALGRIND
+valgrind_cmd='valgrind -q --trace-children=yes --error-exitcode=1 --run-libc-freeres=no'
+endif
+
+
+installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir); \
+			      bindir=$(DESTDIR)$(bindir); \
+			      LC_ALL=C; LANG=C; \
+			      VALGRIND_CMD=$(valgrind_cmd); \
+			      abs_srcdir=$(abs_srcdir); \
+			      abs_builddir=$(abs_builddir); \
+			      abs_top_builddir=$(abs_top_builddir); \
+			      export abs_srcdir; export abs_builddir; \
+			      export abs_top_builddir; \
+			      export libdir; export bindir; \
+			      export LC_ALL; export LANG; export VALGRIND_CMD;
+installed_LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
+			 installed $(tests_rpath) \
+			 '$(program_transform_name)'
 if STANDALONE
 TESTS_ENVIRONMENT = $(installed_TESTS_ENVIRONMENT)
+LOG_COMPILER = $(installed_LOG_COMPILER)
 else !STANDALONE
-TESTS_ENVIRONMENT = LC_ALL=C LANG=C $(srcdir)/test-wrapper.sh \
-		    ../libdw:../backends:../libelf:../libasm
+TESTS_ENVIRONMENT = LC_ALL=C; LANG=C; VALGRIND_CMD=$(valgrind_cmd); \
+		    abs_srcdir=$(abs_srcdir);  abs_builddir=$(abs_builddir); \
+		    abs_top_builddir=$(abs_top_builddir); \
+		    export abs_srcdir; export abs_builddir; \
+		    export abs_top_builddir; \
+		    export LC_ALL; export LANG; export VALGRIND_CMD;
+LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
+	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm
 
 installcheck-local:
 	$(MAKE) $(AM_MAKEFLAGS) \
-		TESTS_ENVIRONMENT='$(installed_TESTS_ENVIRONMENT)' check-TESTS
+		TESTS_ENVIRONMENT="$(installed_TESTS_ENVIRONMENT)" \
+		LOG_COMPILER="$(installed_LOG_COMPILER)" check-TESTS
 endif !STANDALONE
 
 if MUDFLAP
@@ -277,6 +322,9 @@ md5_sha1_test_LDADD = $(libeu)
 typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
 low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
 test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
+dwflsyms_LDADD = $(libdw) $(libelf) $(libmudflap)
+dwfllines_LDADD = $(libdw) $(libelf) $(libmudflap)
+dwfl_report_elf_align_LDADD = $(libdw) $(libmudflap)
 
 if GCOV
 check: check-am coverage

@@ -28,7 +28,7 @@
 ## the GNU Lesser General Public License along with this program.  If
 ## not, see <http://www.gnu.org/licenses/>.
 include $(top_srcdir)/config/eu.am
-INCLUDES += -I$(top_srcdir)/libebl -I$(top_srcdir)/libasm \
+AM_CPPFLAGS += -I$(top_srcdir)/libebl -I$(top_srcdir)/libasm \
 	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw
 
 
@@ -94,7 +94,8 @@ ppc64_SRCS = ppc64_init.c ppc64_symbol.c ppc64_retval.c \
 libebl_ppc64_pic_a_SOURCES = $(ppc64_SRCS)
 am_libebl_ppc64_pic_a_OBJECTS = $(ppc64_SRCS:.c=.os)
 
-s390_SRCS = s390_init.c s390_symbol.c s390_regs.c s390_retval.c
+s390_SRCS = s390_init.c s390_symbol.c s390_regs.c s390_retval.c \
+	    s390_corenote.c s390x_corenote.c
 libebl_s390_pic_a_SOURCES = $(s390_SRCS)
 am_libebl_s390_pic_a_OBJECTS = $(s390_SRCS:.c=.os)
 

@@ -38,8 +38,6 @@ internal_function
 __libdwfl_relocate_value (Dwfl_Module *mod, Elf *elf, size_t *shstrndx,
 			  Elf32_Word shndx, GElf_Addr *value)
 {
-  assert (mod->e_type == ET_REL);
-
   Elf_Scn *refscn = elf_getscn (elf, shndx);
   GElf_Shdr refshdr_mem, *refshdr = gelf_getshdr (refscn, &refshdr_mem);
   if (refshdr == NULL)
@@ -254,7 +252,8 @@ resolve_symbol (Dwfl_Module *referer, struct reloc_symtab_cache *symtab,
 
 		if (m->e_type != ET_REL)
 		  {
-		    sym->st_value = dwfl_adjusted_st_value (m, sym->st_value);
+		    sym->st_value = dwfl_adjusted_st_value (m, m->symfile,
+							    sym->st_value);
 		    return DWFL_E_NOERROR;
 		  }
 

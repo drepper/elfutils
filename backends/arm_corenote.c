@@ -1,5 +1,5 @@
 /* ARM specific core note handling.
-   Copyright (C) 2009 Red Hat, Inc.
+   Copyright (C) 2009, 2012 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -58,7 +58,7 @@ static const Ebl_Register_Location fpregset_regs[] =
   {
     { .offset = 0, .regno = 96, .count = 8, .bits = 96 }, /* f0..f7 */
   };
-#define FPREGSET_SIZE	140
+#define FPREGSET_SIZE	116
 
 #define	ULONG			uint32_t
 #define PID_T			int32_t
@@ -72,5 +72,23 @@ static const Ebl_Register_Location fpregset_regs[] =
 #define TYPE_PID_T		ELF_T_SWORD
 #define TYPE_UID_T		ELF_T_HALF
 #define TYPE_GID_T		ELF_T_HALF
+
+#define ARM_VFPREGS_SIZE ( 32 * 8 /*fpregs*/ + 4 /*fpscr*/ )
+static const Ebl_Register_Location vfp_regs[] =
+  {
+    { .offset = 0, .regno = 256, .count = 32, .bits = 64 }, /* fpregs */
+  };
+
+static const Ebl_Core_Item vfp_items[] =
+  {
+    {
+      .name = "fpscr", .group = "register",
+      .offset = 0,
+      .type = ELF_T_WORD, .format = 'x',
+    },
+  };
+
+#define	EXTRA_NOTES \
+  EXTRA_REGSET_ITEMS (NT_ARM_VFP, ARM_VFPREGS_SIZE, vfp_regs, vfp_items)
 
 #include "linux-core-note.c"
