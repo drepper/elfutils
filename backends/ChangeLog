@@ -1,3 +1,25 @@
+2013-08-29  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (arm_SRCS): Add arm_cfi.c.
+	* arm_cfi.c: New file.
+	* arm_init.c (arm_init): Initialize abi_cfi.
+
+2013-08-27  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (ppc_SRCS, ppc64_SRCS): Add ppc_cfi.c.
+	(s390_SRCS): Add s390_cfi.c.
+	* ppc64_init.c (ppc64_init): Initialize abi_cfi.
+	* ppc_cfi.c: New file.
+	* ppc_init.c (ppc_init): Initialize abi_cfi.
+	* s390_cfi.c: New file.
+	* s390_init.c (s390_init): Initialize abi_cfi.
+
+2013-08-28  Mark Wielaard  <mjw@redhat.com>
+
+	* arm_regs.c (arm_register_info): Set *prefix to "".
+	* ppc_regs.c (ppc_register_info): Likewise.
+	* sh_regs.c (sh_register_info): Likewise.
+
 2013-04-24  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am: Use AM_CPPFLAGS instead of INCLUDES.

@@ -1,3 +1,17 @@
+2013-08-13  Mark Wielaard  <mjw@redhat.com>
+
+	* addr2line.c (options): Add "inlines", 'i'.
+	(show_inlines): New bool.
+	(parse_opt): Handle 'i'.
+	(print_diesym): New static function.
+	(print_src): New function taking code from...
+	(handle_address): here. Call print_src. Print inlines.
+
+2013-08-12  Mark Wielaard  <mjw@redhat.com>
+
+	* addr2line.c (main): If there is a newline char at end of buf,
+	then remove it.
+
 2013-07-05  Mark Wielaard  <mjw@redhat.com>
 
 	* readelf.c (print_ops): Take CU as argument, use it to print

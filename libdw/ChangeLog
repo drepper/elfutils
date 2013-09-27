@@ -1,3 +1,54 @@
+2013-09-24  Josh Stone  <jistone@redhat.com>
+
+	* libdw_visit_scopes.c (classify_die): Removed.
+	(may_have_scopes): New function to replace classify_die.  There's no
+	need for full classification; just find tags that may contain scopes.
+	(__libdw_visit_scopes): Use a direct tag comparison for imported
+	units, and use may_have_scopes to test if recursion is needed.
+
+2013-09-20  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_getfuncs.c (visitor_info): New struct.
+	(tree_visitor): New function.
+	(dwarf_getfuncs): Use __libdw_visit_scopes with tree_visitor.
+	* libdw.h (dwarf_getfuncs): Expand function documentation.
+
+2013-09-12  Mark Wielaard  <mjw@redhat.com>
+
+	* fde.c (intern_fde): Free fde and set libdw errno when start
+	or end could not be read.
+
+2013-08-24  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_getlocation.c (store_implicit_value): Don't take data
+	as argument, get block data from op number2. Return false when
+	block data length and op number don't match up.
+	(__libdw_intern_expression): Store start of block for
+	DW_OP_implicit_value and DW_OP_GNU_entry_value instead of
+	relative data offset. Also store block start (including length)
+	for DW_OP_GNU_const_type. Don't pass data to store_implicit_value.
+	* dwarf_getlocation_attr.c: New file.
+	* dwarf_getlocation_die.c: Likewise.
+	* libdw.h (dwarf_getlocation_die): New function definition.
+	(dwarf_getlocation_attr): Likewise.
+	* libdwP.h: Declare internal dwarf_getlocation_die.
+	* libdw.map (ELFUTILS_0.157): Add dwarf_getlocation_die and
+	dwarf_getlocation_attr.
+	* Makefile.am (libdw_a_SOURCES): Add dwarf_getlocation_die.c and
+	dwarf_getlocation_attr.c.
+
+2013-08-23  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_getlocation.c (attr_ok): Also accept DW_AT_segment.
+	(attr_base_address): New function.
+	(initial_offset_base): New function.
+	(getlocations_addr): New function. Taken from...
+	(dwarf_getlocation_addr): here. Use new initial_offset_base and
+	getlocations_addr.
+	(dwarf_getlocations): New function.
+	* libdw.h (dwarf_getlocations): New function definition.
+	* libdw.map (ELFUTILS_0.157): New.
+
 2013-07-02  Mark Wielaard  <mjw@redhat.com>
 
 	* dwarf_getsrclines.c (dwarf_getsrclines): Add new stack allocation

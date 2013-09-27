@@ -52,7 +52,7 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
 		  alldts md5-sha1-test typeiter low_high_pc \
 		  test-elf_cntl_gelf_getshdr dwflsyms dwfllines \
-		  dwfl-report-elf-align
+		  dwfl-report-elf-align varlocs
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -70,7 +70,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-elflint-test.sh run-elflint-self.sh run-ranlib-test.sh \
 	run-ranlib-test2.sh run-ranlib-test3.sh run-ranlib-test4.sh \
 	run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
-	run-find-prologues.sh run-allregs.sh \
+	run-find-prologues.sh run-allregs.sh run-addrcfi.sh \
 	run-nm-self.sh run-readelf-self.sh \
 	run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	run-readelf-test4.sh run-readelf-twofiles.sh \
@@ -88,7 +88,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-low_high_pc.sh run-macro-test.sh run-elf_cntl_gelf_getshdr.sh \
 	run-test-archive64.sh run-readelf-vmcoreinfo.sh \
 	run-readelf-mixed-corenote.sh run-dwfllines.sh \
-	run-dwfl-report-elf-align.sh
+	run-dwfl-report-elf-align.sh run-addr2line-test.sh \
+	run-addr2line-i-test.sh run-varlocs.sh
 
 if !STANDALONE
 check_PROGRAMS += msg_tst md5-sha1-test
@@ -118,6 +119,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile5.bz2 testfile6.bz2 testfile7.bz2 testfile8.bz2 \
 	     testfile9.bz2 testfile10.bz2 testfile11.bz2 testfile12.bz2 \
 	     testfile13.bz2 run-strip-test3.sh run-allfcts.sh \
+	     testfile_class_func.bz2 testfile_nested_funcs.bz2 \
 	     run-line2addr.sh run-elflint-test.sh testfile14.bz2 \
 	     run-strip-test4.sh run-strip-test5.sh run-strip-test6.sh \
 	     run-strip-test7.sh run-strip-test8.sh run-strip-groups.sh \
@@ -127,7 +129,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-elflint-self.sh run-ranlib-test.sh run-ranlib-test2.sh \
 	     run-ranlib-test3.sh run-ranlib-test4.sh \
 	     run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
-	     run-nm-self.sh run-readelf-self.sh \
+	     run-nm-self.sh run-readelf-self.sh run-addrcfi.sh \
 	     run-find-prologues.sh run-allregs.sh run-native-test.sh \
 	     run-addrname-test.sh run-dwfl-bug-offline-rel.sh \
 	     run-dwfl-addr-sect.sh run-early-offscn.sh \
@@ -200,7 +202,17 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-dwfllines.sh run-dwfl-report-elf-align.sh \
 	     testfile-dwfl-report-elf-align-shlib.so.bz2 \
 	     testfilenolines.bz2 test-core-lib.so.bz2 test-core.core.bz2 \
-	     test-core.exec.bz2
+	     test-core.exec.bz2 run-addr2line-test.sh \
+	     run-addr2line-i-test.sh testfile-inlines.bz2 \
+	     testfileppc32.bz2 testfileppc64.bz2 \
+	     testfiles390.bz2 testfiles390x.bz2 \
+	     testfilearm.bz2 \
+	     run-varlocs.sh \
+	     testfile_const_type.c testfile_const_type.bz2 \
+	     testfile_implicit_pointer.c testfile_implicit_pointer.bz2 \
+	     testfile_parameter_ref.c testfile_parameter_ref.bz2 \
+	     testfile_entry_value.c testfile_entry_value.bz2 \
+	     testfile_implicit_value.c testfile_implicit_value.bz2
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --trace-children=yes --error-exitcode=1 --run-libc-freeres=no'
@@ -325,6 +337,7 @@ test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
 dwflsyms_LDADD = $(libdw) $(libelf) $(libmudflap)
 dwfllines_LDADD = $(libdw) $(libelf) $(libmudflap)
 dwfl_report_elf_align_LDADD = $(libdw) $(libmudflap)
+varlocs_LDADD = $(libdw) $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage

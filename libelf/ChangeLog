@@ -1,3 +1,24 @@
+2013-06-17  Petr Machata  <pmachata@redhat.com>
+
+	* elf.h: Update from glibc.
+
+2013-08-28  Namhyung Kim  <namhyung@gmail.com>
+
+	* gelf.h (gelf_fsize): Fix typo in comment.
+
+2013-08-28  Mark Wielaard  <mjw@redhat.com>
+
+	* gelf_getauxv.c (gelf_getauxv): Add missing whitespace.
+
+2013-08-27  Mark Wielaard  <mjw@redhat.com>
+
+	* gelf_getauxv.c (gelf_getauxv): Remove unnecessary casts to char *.
+
+2013-08-25  Kurt Roeckx  <kurt@roeckx.be>
+
+	* gelf_getauxv.c (gelf_getauxv): Use memcpy instead of pointer
+	dereference to avoid alignment problems.
+
 2013-01-07  Roland McGrath  <roland@hack.frob.com>
 
 	* elf_getarsym.c (elf_getarsym): Copy FILE_DATA into stack space if it
