@@ -260,3 +260,10 @@ ELFUTILS_0.156 {
     # Replaced ELFUTILS_0.122 version, which has a wrapper without add_p_vaddr.
     dwfl_report_elf;
 } ELFUTILS_0.149;
+
+ELFUTILS_0.157 {
+  global:
+    dwarf_getlocations;
+    dwarf_getlocation_die;
+    dwarf_getlocation_attr;
+} ELFUTILS_0.156;

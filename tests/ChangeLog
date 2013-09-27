@@ -1,3 +1,85 @@
+2013-09-20  Mark Wielaard  <mjw@redhat.com>
+
+	* allfcts.c (cb): Return DWARF_CB_ABORT.
+	(main): Iterate over all offsets returned by dwarf_getfuncs.
+	* run-allfcts.sh: Add nested_funcs and class_func testcases.
+	* testfile_nested_funcs.bz2: New test file.
+	* testfile_class_func.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add testfile_class_func.bz2 and
+	testfile_nested_funcs.bz2.
+
+2013-08-30  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add varlocs.
+	(TESTS): Add run-varlocs.sh.
+	(EXTRA_DIST): Add run-varlocs.sh, testfile_const_type.c,
+	testfile_const_type.bz2, testfile_implicit_pointer.c,
+	testfile_implicit_pointer.bz2, testfile_parameter_ref.c,
+	testfile_entry_value.c, testfile_entry_value.bz2,
+	testfile_implicit_value.c and testfile_implicit_value.bz2.
+	(varlocs_LDADD): New.
+	* run-varlocs: New test.
+	* testfile_const_type.c: New test source file.
+	* testfile_entry_value.c: Likewise.
+	* testfile_implicit_pointer.c: Likewise.
+	* testfile_implicit_value.c: Likewise.
+	* testfile_parameter_ref.c: Likewise.
+	* testfile_const_type.bz2: New test file.
+	* testfile_entry_value.bz2: Likewise.
+	* testfile_implicit_pointer.bz2: Likewise.
+	* testfile_implicit_value.bz2: Likewise.
+	* testfile_parameter_ref.bz2: Likewise.
+	* varlocs.c: New test source.
+
+2013-08-29  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addrcfi.sh: Add case for EM_ARM.
+	* testfilearm.bz2: New testfile.
+	* Makefile.am (EXTRA_DIST): Add testfilesarm.bz2.
+
+2013-08-28  Mark Wielaard  <mjw@redhat.com>
+
+	* addrcfi.c (handle_cfi): Handle .debug_frame or .eh_frame
+	completely missing.
+	* run-addrcfi.sh: Add case for EM_S390 ELFCLASS32 and ELFCLASS64.
+	* testfiles390.bz2: New testfile.
+	* testfiles390x.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add testfiles390.bz2 and
+	testfiles390x.bz2.
+
+2013-08-28  Mark Wielaard  <mjw@redhat.com>
+
+	* addrcfi.c (handle_cfi): Use printf not error.
+	* run-addrcfi.sh: Add case for EM_PPC and EM_PPC64.
+	* testfileppc32.bz2: New testfile.
+	* testfileppc64.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add testfileppc32.bz2 and
+	testfileppc64.bz2.
+
+2013-08-27  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addrcfi.sh: New test.
+	* Makefile.am (TESTS): Add run-addrcfi.sh.
+	(EXTRA_DIST): Likewise.
+	* addrcfi.c (op_name): New function.
+	(print_detail): Call and print op_name. Check ops, not result
+	to check if this is "same value" or "undefined".
+	(handle_cfi): Make sure cfa_ops doesn't point to NULL.
+
+2013-08-13  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addr2line-i-test.sh: New test.
+	* testfile-inlines.bz2: New testfile.
+	* Makefile.am (EXTRA_DIST): Add run-addr2line-i-test.sh and
+	testfile-inlines.bz2.
+	(TESTS): Add run-addr2line-i-test.sh.
+
+2013-08-12  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addr2line-test.sh: New test.
+	* Makefile.am (EXTRA_DIST): Add run-addr2line-test.sh.
+	(TESTS): Likewise.
+
 2013-07-23  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* run-unstrip-n.sh (test-core.*): Ignore libc.so.6 entry and order of
