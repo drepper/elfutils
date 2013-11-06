@@ -65,6 +65,9 @@ ppc64_init (elf, machine, eh, ehlen)
   HOOK (eh, core_note);
   HOOK (eh, auxv_info);
   HOOK (eh, abi_cfi);
+  HOOK (eh, init_symbols);
+  HOOK (eh, get_symbol);
+  HOOK (eh, destr);
 
   return MODVERSION;
 }

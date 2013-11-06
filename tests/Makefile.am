@@ -245,7 +245,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-backtrace-native-core.sh run-backtrace-native-core-biarch.sh \
 	     run-backtrace-core-x86_64.sh run-backtrace-core-i386.sh \
 	     backtrace-subr.sh backtrace.i386.core.bz2 backtrace.i386.exec.bz2 \
-	     backtrace.x86_64.core.bz2 backtrace.x86_64.exec.bz2
+	     backtrace.x86_64.core.bz2 backtrace.x86_64.exec.bz2 \
+	     testfile66.bz2 testfile66.core.bz2
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --trace-children=yes --error-exitcode=1 --run-libc-freeres=no'

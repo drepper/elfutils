@@ -402,6 +402,34 @@ extern bool ebl_set_initial_registers_tid (Ebl *ebl,
 extern size_t ebl_frame_nregs (Ebl *ebl)
   __nonnull_attribute__ (1);
 
+/* Callback type for ebl_init_symbols,
+   it is forwarded to dwfl_module_getsym_elf.  */
+typedef const char *(ebl_getsym_t) (void *arg, int ndx, GElf_Sym *symp,
+				    GElf_Word *shndxp, Elf **elfp)
+  __nonnull_attribute__ (3);
+
+/* Initialize virtual backend symbol table for EBL->elf currently containing
+   SYMENTS symbols, EBL->elf is using MAIN_BIAS.  GETSYM is a callback to fetch
+   the existing EBL->elf symbols, ARG is an opaque parameter for GETSYM.
+   Fill in *EBL_SYMENTSP with the total number of virtual symbols found,
+   *EBL_FIRST_GLOBALP of them are local.  Function must be called exactly once
+   for new EBL.  Function returns false if there was an error; *EBL_SYMENTSP
+   and *EBL_FIRST_GLOBALP are left as zero in such case.  If function returns
+   true (success) *EBL_SYMENTSP and *EBL_FIRST_GLOBALP still can be zero,
+   if the file does not contain any matching symbols.  */
+extern bool ebl_init_symbols (Ebl *ebl, size_t syments, Dwarf_Addr symbias,
+			      ebl_getsym_t *getsym, void *arg,
+			      size_t *ebl_symentsp, int *ebl_first_globalp)
+  __nonnull_attribute__ (1, 4, 6, 7);
+
+/* Return NDXth virtual backend symbol from MOD, store it to *SYM and its
+   section to *SHNDX.  Return its name.  NDX must be less than *EBL_SYMENTSP
+   returned by init_symbols above.  SHNDXP may be NULL.  Returned name is valid
+   as long as EBL is valid.  */
+extern const char *ebl_get_symbol (Ebl *ebl, size_t ndx, GElf_Sym *symp,
+				   GElf_Word *shndxp)
+  __nonnull_attribute__ (1, 3);
+
 #ifdef __cplusplus
 }
 #endif

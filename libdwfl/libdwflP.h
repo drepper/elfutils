@@ -89,7 +89,8 @@ typedef struct Dwfl_Process Dwfl_Process;
   DWFL_ERROR (ATTACH_STATE_CONFLICT, N_("Dwfl already has attached state"))   \
   DWFL_ERROR (NO_ATTACH_STATE, N_("Dwfl has no attached state"))	      \
   DWFL_ERROR (NO_UNWIND, N_("Unwinding not supported for this architecture")) \
-  DWFL_ERROR (INVALID_ARGUMENT, N_("Invalid argument"))
+  DWFL_ERROR (INVALID_ARGUMENT, N_("Invalid argument"))			      \
+  DWFL_ERROR (INVALID_INDEX, N_("invalid section index"))
 
 #define DWFL_ERROR(name, text) DWFL_E_##name,
 typedef enum { DWFL_ERRORS DWFL_E_NUM } Dwfl_Error;
@@ -173,8 +174,10 @@ struct Dwfl_Module
   Elf_Data *aux_symdata;	/* Data in the auxiliary ELF symbol table.  */
   size_t syments;		/* sh_size / sh_entsize of that section.  */
   size_t aux_syments;		/* sh_size / sh_entsize of aux_sym section.  */
+  size_t ebl_syments;		/* Number of symbols from ebl_getsym.  */
   int first_global;		/* Index of first global symbol of table.  */
   int aux_first_global;		/* Index of first global of aux_sym table.  */
+  int ebl_first_global;		/* Index of first global from ebl_getsym.  */
   Elf_Data *symstrdata;		/* Data for its string table.  */
   Elf_Data *aux_symstrdata;	/* Data for aux_sym string table.  */
   Elf_Data *symxndxdata;	/* Data in the extended section index table. */

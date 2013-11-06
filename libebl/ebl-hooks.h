@@ -162,5 +162,14 @@ bool EBLHOOK(set_initial_registers_tid) (pid_t tid,
 					 ebl_tid_registers_t *setfunc,
 					 void *arg);
 
+/* See ebl_init_symbols.  */
+bool EBLHOOK(init_symbols) (Ebl *ebl, size_t syments, GElf_Addr main_bias,
+			    ebl_getsym_t *getsym, void *arg,
+			    size_t *ebl_symentsp, int *ebl_first_globalp);
+
+/* See ebl_get_symbol.  */
+const char *EBLHOOK(get_symbol) (Ebl *ebl, size_t ndx, GElf_Sym *symp,
+				 GElf_Word *shndxp);
+
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

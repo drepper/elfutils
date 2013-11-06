@@ -179,16 +179,17 @@ dwfl_module_addrsym_elf (Dwfl_Module *mod, GElf_Addr addr,
 	}
     }
 
-  /* First go through global symbols.  mod->first_global and
-     mod->aux_first_global are setup by dwfl_module_getsymtab to the
-     index of the first global symbol in those symbol tables.  Both
-     are non-zero when the table exist, except when there is only a
-     dynsym table loaded through phdrs, then first_global is zero and
-     there will be no auxiliary table.  All symbols with local binding
-     come first in the symbol table, then all globals.  The zeroth,
-     null entry, in the auxiliary table is skipped if there is a main
-     table.  */
-  int first_global = mod->first_global + mod->aux_first_global;
+  /* First go through global symbols.  mod->first_global,
+     mod->aux_first_global and mod->ebl_first_global are setup by
+     dwfl_module_getsymtab to the index of the first global symbol in
+     those symbol tables.  Both are non-zero when the table exist,
+     except when there is only a dynsym table loaded through phdrs, then
+     first_global is zero and there will be no auxiliary table.  All
+     symbols with local binding come first in the symbol table, then all
+     globals.  The zeroth, null entry, in the auxiliary table is skipped
+     if there is a main table.  */
+  int first_global = (mod->first_global + mod->aux_first_global
+		      + mod->ebl_first_global);
   if (mod->syments > 0 && mod->aux_syments > 0)
     first_global--;
   search_table (first_global == 0 ? 1 : first_global, syments);

@@ -54,8 +54,7 @@ dwfl_module_getsym_elf (Dwfl_Module *mod, int ndx,
   Elf_Data *symdata;
   Elf_Data *symxndxdata;
   Elf_Data *symstrdata;
-  if (mod->aux_symdata == NULL
-      || ndx < mod->first_global)
+  if (ndx < mod->first_global)
     {
       /* main symbol table (locals).  */
       tndx = ndx;
@@ -73,24 +72,61 @@ dwfl_module_getsym_elf (Dwfl_Module *mod, int ndx,
       symxndxdata = mod->aux_symxndxdata;
       symstrdata = mod->aux_symstrdata;
     }
-  else if ((size_t) ndx < mod->syments + mod->aux_first_global - skip_aux_zero)
+  else if (ndx < (mod->first_global + mod->aux_first_global
+		  + mod->ebl_first_global - skip_aux_zero))
+    {
+      /* ebl symbol lookup (locals).  */
+      symdata = NULL;
+      tndx = ndx - (mod->first_global + mod->aux_first_global - skip_aux_zero);
+    }
+  else if ((size_t) ndx < (mod->syments + mod->aux_first_global
+			   + mod->ebl_first_global - skip_aux_zero))
     {
       /* main symbol table (globals).  */
-      tndx = ndx - mod->aux_first_global + skip_aux_zero;
+      tndx = ndx - (mod->aux_first_global + mod->ebl_first_global
+		    - skip_aux_zero);
       elf = mod->symfile->elf;
       symdata = mod->symdata;
       symxndxdata = mod->symxndxdata;
       symstrdata = mod->symstrdata;
     }
-  else
+  else if ((size_t) ndx < (mod->syments + mod->aux_syments
+			   + mod->ebl_first_global - skip_aux_zero))
     {
       /* aux symbol table (globals).  */
-      tndx = ndx - mod->syments + skip_aux_zero;
+      tndx = ndx - (mod->syments + mod->ebl_first_global - skip_aux_zero);
       elf = mod->aux_sym.elf;
       symdata = mod->aux_symdata;
       symxndxdata = mod->aux_symxndxdata;
       symstrdata = mod->aux_symstrdata;
     }
+  else if ((size_t) ndx < (mod->syments + mod->aux_syments
+			   + mod->ebl_syments - skip_aux_zero))
+    {
+      /* ebl symbol lookup (globals).  */
+      symdata = NULL;
+      tndx = ndx - (mod->syments + mod->aux_syments - skip_aux_zero);
+    }
+  else
+    {
+      /* out of range NDX.  */
+      __libdwfl_seterrno (DWFL_E_INVALID_INDEX);
+      return NULL;
+    }
+
+  if (symdata == NULL)
+    {
+      const char *name = ebl_get_symbol (mod->ebl, tndx, sym, shndxp);
+      if (likely (name != NULL))
+	{
+	  if (elfp)
+	    *elfp = mod->main.elf;
+	  return name;
+	}
+      __libdwfl_seterrno (DWFL_E_LIBEBL);
+      return NULL;
+    }
+
   sym = gelf_getsymshndx (symdata, symxndxdata, tndx, sym, &shndx);
 
   if (unlikely (sym == NULL))

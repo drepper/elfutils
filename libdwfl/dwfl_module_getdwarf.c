@@ -962,6 +962,13 @@ find_aux_sym (Dwfl_Module *mod __attribute__ ((unused)),
 #endif
 }
 
+static const char *
+getsym_helper (void *arg, int ndx, GElf_Sym *sym, GElf_Word *shndxp, Elf **elfp)
+{
+  Dwfl_Module *mod = arg;
+  return dwfl_module_getsym_elf (mod, ndx, sym, shndxp, elfp, NULL);
+}
+
 /* Try to find a symbol table in either MOD->main.elf or MOD->debug.elf.  */
 static void
 find_symtab (Dwfl_Module *mod)
@@ -1081,7 +1088,7 @@ find_symtab (Dwfl_Module *mod)
 	  mod->aux_syments = 0;
 	  elf_end (mod->aux_sym.elf);
 	  mod->aux_sym.elf = NULL;
-	  return;
+	  goto aux_done;
 	}
 
       mod->aux_symstrdata = elf_getdata (elf_getscn (mod->aux_sym.elf,
@@ -1102,7 +1109,14 @@ find_symtab (Dwfl_Module *mod)
       mod->aux_symdata = elf_getdata (aux_symscn, NULL);
       if (mod->aux_symdata == NULL)
 	goto aux_cleanup;
+  aux_done:;
     }
+
+  Dwfl_Error error = __libdwfl_module_getebl (mod);
+  if (error == DWFL_E_NOERROR)
+    ebl_init_symbols (mod->ebl, mod->syments + mod->aux_syments,
+		      mod->main_bias, getsym_helper, mod,
+		      &mod->ebl_syments, &mod->ebl_first_global);
 }
 
 
@@ -1259,7 +1273,7 @@ dwfl_module_getsymtab (Dwfl_Module *mod)
   find_symtab (mod);
   if (mod->symerr == DWFL_E_NOERROR)
     /* We will skip the auxiliary zero entry if there is another one.  */
-    return (mod->syments + mod->aux_syments
+    return (mod->syments + mod->aux_syments + mod->ebl_syments
 	    - (mod->syments > 0 && mod->aux_syments > 0 ? 1 : 0));
 
   __libdwfl_seterrno (mod->symerr);

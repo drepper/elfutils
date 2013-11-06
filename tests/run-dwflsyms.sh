@@ -362,4 +362,104 @@ testrun_compare ${abs_builddir}/dwflsyms -e testfilebasmin <<\EOF
    8: FUNC	GLOBAL	bar (44) 0x40017a, rel: 0x40017a (.text)
 EOF
 
+testfiles testfile66
+testrun_compare ${abs_builddir}/dwflsyms -e testfile66 <<\EOF
+   0: NOTYPE	LOCAL	 (0) 0
+   1: SECTION	LOCAL	 (0) 0x190
+   2: SECTION	LOCAL	 (0) 0x1a4
+   3: SECTION	LOCAL	 (0) 0x1c8
+   4: SECTION	LOCAL	 (0) 0x1f8
+   5: SECTION	LOCAL	 (0) 0x288
+   6: SECTION	LOCAL	 (0) 0x2a8
+   7: SECTION	LOCAL	 (0) 0x2d8
+   8: SECTION	LOCAL	 (0) 0x102e0
+   9: SECTION	LOCAL	 (0) 0x103d0
+  10: SECTION	LOCAL	 (0) 0x103e8
+  11: SECTION	LOCAL	 (0) 0x103e8
+  12: OBJECT	LOCAL	_DYNAMIC (0) 0x102e0
+  13: FUNC	GLOBAL	_start (4) 0x103d0, rel: 0x103d0 (.opd)
+  14: NOTYPE	GLOBAL	__bss_start (0) 0x103f0
+  15: NOTYPE	GLOBAL	_edata (0) 0x103f0
+  16: NOTYPE	GLOBAL	_end (0) 0x103f0
+  17: FUNC	GLOBAL	._start (4) 0x2d8, rel: 0x2d8 (.text)
+EOF
+
+testfiles testfile66.core
+testrun_compare ${abs_builddir}/dwflsyms -e testfile66 --core=testfile66.core <<\EOF
+   0: NOTYPE	LOCAL	 (0) 0
+   1: SECTION	LOCAL	 (0) 0xfffb1af0410
+   2: NOTYPE	GLOBAL	__kernel_datapage_offset (0) 0xfffb1af05dc
+   3: OBJECT	GLOBAL	LINUX_2.6.15 (0) 0
+   4: NOTYPE	GLOBAL	__kernel_clock_getres (64) 0xfffb1af052c
+   5: NOTYPE	GLOBAL	__kernel_get_tbfreq (24) 0xfffb1af0620
+   6: NOTYPE	GLOBAL	__kernel_gettimeofday (84) 0xfffb1af0440
+   7: NOTYPE	GLOBAL	__kernel_sync_dicache (20) 0xfffb1af06c4
+   8: NOTYPE	GLOBAL	__kernel_sync_dicache_p5 (20) 0xfffb1af06c4
+   9: NOTYPE	GLOBAL	__kernel_sigtramp_rt64 (12) 0xfffb1af0418
+  10: NOTYPE	GLOBAL	__kernel_clock_gettime (152) 0xfffb1af0494
+  11: NOTYPE	GLOBAL	__kernel_get_syscall_map (44) 0xfffb1af05f4
+ld64.so.1: Callback returned failure
+   0: NOTYPE	LOCAL	 (0) 0
+   1: SECTION	LOCAL	 (0) 0x461b0190
+   2: SECTION	LOCAL	 (0) 0x461b01a4
+   3: SECTION	LOCAL	 (0) 0x461b01c8
+   4: SECTION	LOCAL	 (0) 0x461b01f8
+   5: SECTION	LOCAL	 (0) 0x461b0288
+   6: SECTION	LOCAL	 (0) 0x461b02a8
+   7: SECTION	LOCAL	 (0) 0x461b02d8
+   8: SECTION	LOCAL	 (0) 0x461c02e0
+   9: SECTION	LOCAL	 (0) 0x461c03d0
+  10: SECTION	LOCAL	 (0) 0x461c03e8
+  11: SECTION	LOCAL	 (0) 0x461c03e8
+  12: OBJECT	LOCAL	_DYNAMIC (0) 0x102e0
+  13: FUNC	GLOBAL	_start (4) 0x461c03d0, rel: 0x103d0 (.opd)
+  14: NOTYPE	GLOBAL	__bss_start (0) 0x103f0
+  15: NOTYPE	GLOBAL	_edata (0) 0x103f0
+  16: NOTYPE	GLOBAL	_end (0) 0x103f0
+  17: FUNC	GLOBAL	._start (4) 0x461b02d8, rel: 0x2d8 (.text)
+EOF
+
+# Test the already present dot-prefixed names do not get duplicated.
+testfiles hello_ppc64.ko
+testrun_compare ${abs_builddir}/dwflsyms -e hello_ppc64.ko <<\EOF
+   0: NOTYPE	LOCAL	 (0) 0
+   1: SECTION	LOCAL	 (0) 0
+   2: SECTION	LOCAL	 (0) 0x94
+   3: SECTION	LOCAL	 (0) 0xba
+   4: SECTION	LOCAL	 (0) 0xd0
+   5: SECTION	LOCAL	 (0) 0x13a
+   6: SECTION	LOCAL	 (0) 0x13a
+   7: SECTION	LOCAL	 (0) 0x150
+   8: SECTION	LOCAL	 (0) 0x170
+   9: SECTION	LOCAL	 (0) 0x188
+  10: SECTION	LOCAL	 (0) 0x410
+  11: SECTION	LOCAL	 (0) 0x434
+  12: SECTION	LOCAL	 (0) 0x438
+  13: SECTION	LOCAL	 (0) 0x438
+  14: SECTION	LOCAL	 (0) 0
+  15: SECTION	LOCAL	 (0) 0
+  16: SECTION	LOCAL	 (0) 0
+  17: SECTION	LOCAL	 (0) 0
+  18: SECTION	LOCAL	 (0) 0
+  19: SECTION	LOCAL	 (0) 0
+  20: SECTION	LOCAL	 (0) 0
+  21: SECTION	LOCAL	 (0) 0
+  22: SECTION	LOCAL	 (0) 0
+  23: SECTION	LOCAL	 (0) 0
+  24: FILE	LOCAL	init.c (0) 0
+  25: FILE	LOCAL	exit.c (0) 0
+  26: FILE	LOCAL	hello.mod.c (0) 0
+  27: OBJECT	LOCAL	__mod_srcversion23 (35) 0xd0
+  28: OBJECT	LOCAL	__module_depends (9) 0xf8
+  29: OBJECT	LOCAL	__mod_vermagic5 (50) 0x108
+  30: OBJECT	GLOBAL	__this_module (648) 0x188
+  31: FUNC	GLOBAL	.cleanup_module (72) 0x4c, rel: 0x4c (.text)
+  32: FUNC	GLOBAL	cleanup_module (24) 0x160, rel: 0x10 (.opd)
+  33: NOTYPE	GLOBAL	.printk (0) 0
+  34: FUNC	GLOBAL	init_module (24) 0x150, rel: 0 (.opd)
+  35: NOTYPE	GLOBAL	._mcount (0) 0
+  36: FUNC	GLOBAL	.init_module (76) 0, rel: 0 (.text)
+  37: NOTYPE	GLOBAL	_mcount (0) 0
+EOF
+
 exit 0

@@ -106,13 +106,16 @@ addr_in_section (Elf *elf, GElf_Word shndx, GElf_Addr addr)
 
 static int
 list_syms (struct Dwfl_Module *mod,
-	   void **user __attribute__ ((unused)),
-	   const char *mod_name __attribute__ ((unused)),
+	   void **user __attribute__ ((unused)), const char *mod_name,
 	   Dwarf_Addr low_addr __attribute__ ((unused)),
 	   void *arg __attribute__ ((unused)))
 {
   int syms = dwfl_module_getsymtab (mod);
-  assert (syms >= 0);
+  if (syms < 0)
+    {
+      printf ("%s: %s\n", mod_name, dwfl_errmsg (-1));
+      return DWARF_CB_OK;
+    }
 
   for (int ndx = 0; ndx < syms; ndx++)
     {

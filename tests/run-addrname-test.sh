@@ -298,6 +298,45 @@ __vdso_time
 ??:0
 EOF
 
+#	.section	".text"
+#	.globl _start
+#	.section	".opd","aw"
+#_start:	.quad	.L._start,.TOC.@tocbase
+#	.previous
+#	.type	_start, @function
+#.L._start:
+#	.byte	0x7d, 0x82, 0x10, 0x08
+#	.size	_start,.-.L._start
+testfiles testfile66 testfile66.core
+testrun_compare ${abs_top_builddir}/src/addr2line -S -e testfile66 _start 0x103d0 0x103d3 0x103d4 ._start 0x2d8 0x2db 0x2dc <<\EOF
+_start
+??:0
+_start
+??:0
+_start+0x3
+??:0
+()+0x103d4
+??:0
+._start
+??:0
+._start
+??:0
+._start+0x3
+??:0
+()+0x2dc
+??:0
+EOF
+testrun_compare ${abs_top_builddir}/src/addr2line -S -e testfile66 --core=testfile66.core _start 0x461c03d0 ._start 0x461b02d8 <<\EOF
+_start
+??:0
+_start
+??:0
+._start
+??:0
+._start
+??:0
+EOF
+
 testfiles testfile69.core testfile69.so
 testrun_compare ${abs_top_builddir}/src/addr2line --core=./testfile69.core -S 0x7f0bc6a33535 0x7f0bc6a33546 <<\EOF
 libstatic+0x9
