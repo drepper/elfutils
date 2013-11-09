@@ -29,6 +29,35 @@
 #include "libdwflP.h"
 #include <fcntl.h>
 #include "system.h"
+#include <endian.h>
+#include <byteswap.h>
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+# ifndef be64toh
+#  define be64toh(x) bswap_64 (x)
+# endif
+# ifndef le64toh
+#  define le64toh(x) (x)
+# endif
+# ifndef be32toh
+#  define be32toh(x) bswap_32 (x)
+# endif
+# ifndef le32toh
+#  define le32toh(x) (x)
+# endif
+#else
+# ifndef be64toh
+#  define be64toh(x) (x)
+# endif
+# ifndef le64toh
+#  define le64toh(x) bswap_64 (x)
+# endif
+# ifndef be32toh
+#  define be32toh(x) (x)
+# endif
+# ifndef le32toh
+#  define le32toh(x) bswap_32 (x)
+# endif
+#endif
 
 #ifndef MIN
 # define MIN(a, b) ((a) < (b) ? (a) : (b))

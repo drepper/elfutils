@@ -1,5 +1,11 @@
 2013-11-09  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
+	Older OS compatibility bits.
+	* linux-core-attach.c (be64toh, le64toh, be32toh, le32toh): Provide
+	fallbacks if not defined by system.
+
+2013-11-09  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
 	Handle T-stopped detach for old kernels.
 	* linux-pid-attach.c (struct pid_arg): New field stopped.
 	(ptrace_attach): New parameter stoppedp.  Set it appropriately.
