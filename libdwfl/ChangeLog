@@ -1,3 +1,12 @@
+2013-11-09  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Handle T-stopped detach for old kernels.
+	* linux-pid-attach.c (struct pid_arg): New field stopped.
+	(ptrace_attach): New parameter stoppedp.  Set it appropriately.
+	(pid_set_initial_registers): Pass the new field.
+	(pid_thread_detach): Handle the case of STOPPED for old kernels.
+	(__libdwfl_attach_state_for_pid): Initialize STOPPED.
+
 2013-11-07  Jan Kratochvil  <jan.kratochvil@redhat.com>
 	    Mark Wielaard  <mjw@redhat.com>
 

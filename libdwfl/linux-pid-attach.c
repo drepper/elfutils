@@ -42,6 +42,8 @@ struct pid_arg
   DIR *dir;
   /* It is 0 if not used.  */
   pid_t tid_attached;
+  /* TRUE if the process (first of its threads) was State: T (stopped).  */
+  bool stopped;
 };
 
 static bool
@@ -69,7 +71,7 @@ linux_proc_pid_is_stopped (pid_t pid)
 }
 
 static bool
-ptrace_attach (pid_t tid)
+ptrace_attach (pid_t tid, bool *stoppedp)
 {
   if (ptrace (PTRACE_ATTACH, tid, NULL, NULL) != 0)
     {
@@ -84,6 +86,7 @@ ptrace_attach (pid_t tid)
 	 above.  Which would make the waitpid below wait forever.  So emulate
 	 it.  Since there can only be one SIGSTOP notification pending this is
 	 safe.  See also gdb/linux-nat.c linux_nat_post_attach_wait.  */
+      *stoppedp = true;
       syscall (__NR_tkill, tid, SIGSTOP);
       ptrace (PTRACE_CONT, tid, NULL, NULL);
     }
@@ -213,7 +216,7 @@ pid_set_initial_registers (Dwfl_Thread *thread, void *thread_arg)
   struct pid_arg *pid_arg = thread_arg;
   assert (pid_arg->tid_attached == 0);
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
-  if (! ptrace_attach (tid))
+  if (! ptrace_attach (tid, &pid_arg->stopped))
     return false;
   pid_arg->tid_attached = tid;
   Dwfl_Process *process = thread->process;
@@ -237,7 +240,20 @@ pid_thread_detach (Dwfl_Thread *thread, void *thread_arg)
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
   assert (pid_arg->tid_attached == tid);
   pid_arg->tid_attached = 0;
-  ptrace (PTRACE_DETACH, tid, NULL, NULL);
+  if (! pid_arg->stopped)
+    {
+      ptrace (PTRACE_DETACH, tid, NULL, NULL);
+      return;
+    }
+  // Older kernels (tested kernel-2.6.18-348.12.1.el5.x86_64) need special
+  // handling of the detachment to keep the process State: T (stopped).
+  syscall (__NR_tkill, tid, SIGSTOP);
+  ptrace (PTRACE_DETACH, tid, NULL, (void *) (intptr_t) SIGSTOP);
+  // Wait till the SIGSTOP settles down.
+  int i;
+  for (i = 0; i < 100000; i++)
+    if (linux_proc_pid_is_stopped (tid))
+      break;
 }
 
 static const Dwfl_Thread_Callbacks pid_thread_callbacks =
@@ -271,6 +287,7 @@ __libdwfl_attach_state_for_pid (Dwfl *dwfl, pid_t pid)
     }
   pid_arg->dir = dir;
   pid_arg->tid_attached = 0;
+  pid_arg->stopped = false;
   if (! INTUSE(dwfl_attach_state) (dwfl, EM_NONE, pid, &pid_thread_callbacks,
 				   pid_arg))
     {
