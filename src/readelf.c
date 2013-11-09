@@ -4643,7 +4643,7 @@ print_debug_ranges_section (Dwfl_Module *dwflmod,
 				      offset, &readp, endp))
 	continue;
 
-      if (unlikely (data->d_size - offset < address_size * 2))
+      if (unlikely (data->d_size - offset < (size_t) address_size * 2))
 	{
 	  printf (gettext (" [%6tx]  <INVALID DATA>\n"), offset);
 	  break;
@@ -6559,7 +6559,7 @@ print_debug_loc_section (Dwfl_Module *dwflmod,
 				      &cu, offset, &readp, endp))
 	continue;
 
-      if (unlikely (data->d_size - offset < address_size * 2))
+      if (unlikely (data->d_size - offset < (size_t) address_size * 2))
 	{
 	  printf (gettext (" [%6tx]  <INVALID DATA>\n"), offset);
 	  break;

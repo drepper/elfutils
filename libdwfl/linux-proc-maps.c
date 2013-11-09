@@ -1,5 +1,5 @@
 /* Standard libdwfl callbacks for debugging a live Linux process.
-   Copyright (C) 2005-2010 Red Hat, Inc.
+   Copyright (C) 2005-2010, 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -232,7 +232,7 @@ proc_maps_report (Dwfl *dwfl, FILE *f, GElf_Addr sysinfo_ehdr, pid_t pid)
 	}
 
       char *file = line + nread + strspn (line + nread, " \t");
-      if (file[0] == '\0' || (ino == 0 && dmajor == 0 && dminor == 0))
+      if (file[0] != '/' || (ino == 0 && dmajor == 0 && dminor == 0))
 	/* This line doesn't indicate a file mapping.  */
 	continue;
 
@@ -299,6 +299,13 @@ dwfl_linux_proc_report (Dwfl *dwfl, pid_t pid)
   result = proc_maps_report (dwfl, f, sysinfo_ehdr, pid);
 
   fclose (f);
+
+  if (result == 0)
+    {
+      /* Possible error is ignored, DWFL still may be useful for non-unwinding
+	 operations.  */
+      __libdwfl_attach_state_for_pid (dwfl, pid);
+    }
 
   return result;
 }
@@ -373,7 +380,6 @@ dwfl_linux_proc_find_elf (Dwfl_Module *mod __attribute__ ((unused)),
       return -1;
     }
 
-  abort ();
   return -1;
 }
 INTDEF (dwfl_linux_proc_find_elf)

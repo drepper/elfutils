@@ -1,3 +1,40 @@
+2013-11-01  Michael Forney  <mforney@mforney.org>
+
+	* Makefile.am (TESTS_ENVIRONMENT): Use and export NM.
+	* run-arsymtest.sh: Use NM.
+
+2013-11-05  Mark Wielaard  <mjw@redhat.com>
+
+	* allfcts.c (main): Correct dwarf_getfuncs return value check.
+
+2013-10-10  Mark Wielaard  <mjw@redhat.com>
+	    Josh Stone  <jistone@redhat.com>
+
+	* run-allfcts-multi.sh: New test.
+	* test-offset-loop.bz2: New testfile.
+	* test-offset-loop.alt.bz2: New testfile.
+	* Makefile.am (TESTS): Add run-allcft-multi.sh if ENABLE_DWZ.
+	(EXTRA_DIST): Add run-allfcts-multi.sh, test-offset-loop.bz2 and
+	test-offset-loop.alt.bz2.
+
+2013-10-15  Mark Wielaard  <mjw@redhat.com>
+
+	* run-unstrip-M.sh: New test.
+	* Makefile.am (TESTS): Add run-unstrip-M.sh.
+	(EXTRA_DIST): Likewise.
+
+2013-10-06  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addrcfi.sh: Remove nop from expected ppc and ppc64
+	location expression.
+
+2013-10-03  Josh Stone  <jistone@redhat.com>
+
+	* typeiter2.c: New file, reversing typeiter.c.
+	* run-typeiter.sh: Also run typeiter2.
+	* Makefile.am (check_PROGRAMS): Add typeiter2.
+	(typeiter2_LDADD): New variable.
+
 2013-09-26  Petr Machata  <pmachata@redhat.com>
 
 	* run-readelf-mixed-corenote.sh: Update output of testfile71

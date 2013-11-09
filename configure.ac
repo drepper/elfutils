@@ -60,10 +60,13 @@ AC_DEFINE_UNQUOTED(DEFAULT_AR_DETERMINISTIC, $default_ar_deterministic,
 		   [Should ar and ranlib use -D behavior by default?])
 
 AC_ARG_ENABLE([thread-safety],
-AS_HELP_STRING([--enable-thread-safety], [enable thread safety of libraries]),
-use_locks=$enableval, use_locks=no)
+AS_HELP_STRING([--enable-thread-safety],
+               [enable thread safety of libraries EXPERIMENTAL]),
+               use_locks=$enableval, use_locks=no)
 AM_CONDITIONAL(USE_LOCKS, test "$use_locks" = yes)
 AS_IF([test "$use_locks" = yes], [AC_DEFINE(USE_LOCKS)])
+AS_IF([test "$use_locks" = yes],
+      [AC_MSG_WARN([thread-safety is EXPERIMENTAL tests might fail.])])
 
 AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
 
@@ -72,6 +75,8 @@ AS_HELP_STRING([--enable-dwz], [enable experimental GNU ref_alt FORM, dwz multi 
 enable_dwz=$enableval, enable_dwz=no)
 AM_CONDITIONAL(ENABLE_DWZ, test "$enable_dwz" = yes)
 AS_IF([test "$enable_dwz" = yes], [AC_DEFINE(ENABLE_DWZ)])
+AS_IF([test "$enable_dwz" = no -a -d /usr/lib/debug/.dwz],
+      [AC_MSG_WARN([--enable-dwz disabled and /usr/lib/debug/.dwz exists, native tests might fail])])
 
 AH_TEMPLATE([ENABLE_DWZ], [Defined if libdw should support GNU ref_alt FORM, dwz multi files.])
 
@@ -79,6 +84,10 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
+# Only available since automake 1.12
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
+AC_CHECK_TOOL([READELF], [readelf])
+AC_CHECK_TOOL([NM], [nm])
 
 AC_CACHE_CHECK([for gcc with C99 support], ac_cv_c99, [dnl
 old_CFLAGS="$CFLAGS"
@@ -372,5 +381,16 @@ esac
 
 # Round up to the next release API (x.y) version.
 eu_version=`expr \( $eu_version + 999 \) / 1000`
+
+AC_CHECK_SIZEOF(long)
+
+# On a 64-bit host where can can use $CC -m32, we'll run two sets of tests.
+# Likewise in a 32-bit build on a host where $CC -m64 works.
+utrace_BIARCH
+# `$utrace_biarch' will be `-m64' even on an uniarch i386 machine.
+AS_IF([test $utrace_cv_cc_biarch = yes],
+      [CC_BIARCH="$CC $utrace_biarch"],
+      [CC_BIARCH="$CC"])
+AC_SUBST([CC_BIARCH])
 
 AC_OUTPUT

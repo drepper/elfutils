@@ -1,5 +1,5 @@
 /* Core file handling.
-   Copyright (C) 2008-2010 Red Hat, Inc.
+   Copyright (C) 2008-2010, 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -397,14 +397,48 @@ clear_r_debug_info (struct r_debug_info *r_debug_info)
     }
 }
 
+static bool
+dynamic_vaddr_get (Elf *elf, GElf_Addr *vaddrp)
+{
+  size_t phnum;
+  if (unlikely (elf_getphdrnum (elf, &phnum) != 0))
+    return false;
+  for (size_t i = 0; i < phnum; ++i)
+    {
+      GElf_Phdr phdr_mem;
+      GElf_Phdr *phdr = gelf_getphdr (elf, i, &phdr_mem);
+      if (unlikely (phdr == NULL))
+	return false;
+      if (phdr->p_type == PT_DYNAMIC)
+	{
+	  *vaddrp = phdr->p_vaddr;
+	  return true;
+	}
+    }
+  return false;
+}
+
 int
-dwfl_core_file_report (Dwfl *dwfl, Elf *elf)
+dwfl_core_file_report (Dwfl *dwfl, Elf *elf, const char *executable)
 {
   size_t phnum;
   if (unlikely (elf_getphdrnum (elf, &phnum) != 0))
     {
       __libdwfl_seterrno (DWFL_E_LIBELF);
       return -1;
+    }
+
+  free (dwfl->executable_for_core);
+  if (executable == NULL)
+    dwfl->executable_for_core = NULL;
+  else
+    {
+      dwfl->executable_for_core = strdup (executable);
+      if (dwfl->executable_for_core == NULL)
+	{
+	  __libdwfl_seterrno (DWFL_E_NOMEM);
+	  return -1;
+	}
     }
 
   /* First report each PT_LOAD segment.  */
@@ -449,14 +483,14 @@ dwfl_core_file_report (Dwfl *dwfl, Elf *elf)
 
   struct r_debug_info r_debug_info;
   memset (&r_debug_info, 0, sizeof r_debug_info);
-  int listed = dwfl_link_map_report (dwfl, auxv, auxv_size,
+  int retval = dwfl_link_map_report (dwfl, auxv, auxv_size,
 				     dwfl_elf_phdr_memory_callback, elf,
 				     &r_debug_info);
+  int listed = retval > 0 ? retval : 0;
 
   /* Now sniff segment contents for modules hinted by information gathered
      from DT_DEBUG.  */
 
-  int sniffed = 0;
   ndx = 0;
   do
     {
@@ -472,7 +506,7 @@ dwfl_core_file_report (Dwfl *dwfl, Elf *elf)
       if (seg > ndx)
 	{
 	  ndx = seg;
-	  ++sniffed;
+	  ++listed;
 	}
       else
 	++ndx;
@@ -487,40 +521,66 @@ dwfl_core_file_report (Dwfl *dwfl, Elf *elf)
     lastmodp = &(*lastmodp)->next;
   for (struct r_debug_info_module *module = r_debug_info.module;
        module != NULL; module = module->next)
-    if (module->elf != NULL)
-      {
-	Dwfl_Module *mod;
-	mod = __libdwfl_report_elf (dwfl, basename (module->name), module->name,
-				    module->fd, module->elf, module->l_addr,
-				    true, true);
-	if (mod == NULL)
-	  continue;
-	module->elf = NULL;
-	module->fd = -1;
-	/* Move this module to the end of the list, so that we end
-	   up with a list in the same order as the link_map chain.  */
-	if (mod->next != NULL)
-	  {
-	    if (*lastmodp != mod)
-	      {
-		lastmodp = &dwfl->modulelist;
-		while (*lastmodp != mod)
-		  lastmodp = &(*lastmodp)->next;
-	      }
-	    *lastmodp = mod->next;
-	    mod->next = NULL;
-	    while (*lastmodp != NULL)
-	      lastmodp = &(*lastmodp)->next;
-	    *lastmodp = mod;
-	  }
-	lastmodp = &mod->next;
-      }
+    {
+      if (module->elf == NULL)
+	continue;
+      GElf_Addr file_dynamic_vaddr;
+      if (! dynamic_vaddr_get (module->elf, &file_dynamic_vaddr))
+	continue;
+      Dwfl_Module *mod;
+      mod = __libdwfl_report_elf (dwfl, basename (module->name), module->name,
+				  module->fd, module->elf,
+				  module->l_ld - file_dynamic_vaddr,
+				  true, true);
+      if (mod == NULL)
+	continue;
+      ++listed;
+      module->elf = NULL;
+      module->fd = -1;
+      /* Move this module to the end of the list, so that we end
+	 up with a list in the same order as the link_map chain.  */
+      if (mod->next != NULL)
+	{
+	  if (*lastmodp != mod)
+	    {
+	      lastmodp = &dwfl->modulelist;
+	      while (*lastmodp != mod)
+		lastmodp = &(*lastmodp)->next;
+	    }
+	  *lastmodp = mod->next;
+	  mod->next = NULL;
+	  while (*lastmodp != NULL)
+	    lastmodp = &(*lastmodp)->next;
+	  *lastmodp = mod;
+	}
+      lastmodp = &mod->next;
+    }
 
   clear_r_debug_info (&r_debug_info);
+
+  if (listed > 0)
+    {
+      /* Possible error is ignored, DWFL still may be useful for non-unwinding
+	 operations.  */
+      __libdwfl_attach_state_for_core (dwfl, elf);
+    }
 
   /* We return the number of modules we found if we found any.
      If we found none, we return -1 instead of 0 if there was an
      error rather than just nothing found.  */
-  return sniffed || listed >= 0 ? listed + sniffed : listed;
+  return listed > 0 ? listed : retval;
 }
 INTDEF (dwfl_core_file_report)
+NEW_VERSION (dwfl_core_file_report, ELFUTILS_0.158)
+
+#ifdef SHARED
+int _compat_without_executable_dwfl_core_file_report (Dwfl *dwfl, Elf *elf);
+COMPAT_VERSION_NEWPROTO (dwfl_core_file_report, ELFUTILS_0.146,
+			 without_executable)
+
+int
+_compat_without_executable_dwfl_core_file_report (Dwfl *dwfl, Elf *elf)
+{
+  return dwfl_core_file_report (dwfl, elf, NULL);
+}
+#endif

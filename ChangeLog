@@ -1,3 +1,26 @@
+2013-11-07  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* configure.ac: New AC_CHECK_SIZEOF for long.  Call utrace_BIARCH, new
+	AC_SUBST for CC_BIARCH.
+
+2013-11-06  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac (--enable-dwz): Add AC_MSG_WARN when disabled but
+	local system does have /usr/lib/debug/.dwz.
+
+2013-11-06  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac (--enable-thread-safety): Add AC_MSG_WARN experimental
+	option.
+
+2013-11-01  Michael Forney  <mforney@mforney.org>
+
+	* configure.ac: Call AM_PROG_AR and AC_CHECK_TOOL for readelf and nm.
+
+2013-10-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* NEWS (Version 0.158): New.
+
 2013-09-30  Mark Wielaard  <mjw@redhat.com>
 
 	* NEWS: Update for readelf NT_SIGINFO and NT_FILE core notes.

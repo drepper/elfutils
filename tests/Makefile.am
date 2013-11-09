@@ -50,7 +50,7 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
-		  alldts md5-sha1-test typeiter low_high_pc \
+		  alldts md5-sha1-test typeiter typeiter2 low_high_pc \
 		  test-elf_cntl_gelf_getshdr dwflsyms dwfllines \
 		  dwfl-report-elf-align varlocs
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
@@ -65,7 +65,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-strip-test3.sh run-strip-test4.sh run-strip-test5.sh \
 	run-strip-test6.sh run-strip-test7.sh run-strip-test8.sh \
 	run-strip-groups.sh run-strip-reloc.sh \
-	run-unstrip-test.sh run-unstrip-test2.sh \
+	run-unstrip-test.sh run-unstrip-test2.sh run-unstrip-M.sh \
 	run-ecp-test.sh run-ecp-test2.sh run-alldts.sh \
 	run-elflint-test.sh run-elflint-self.sh run-ranlib-test.sh \
 	run-ranlib-test2.sh run-ranlib-test3.sh run-ranlib-test4.sh \
@@ -106,7 +106,7 @@ TESTS += $(asm_TESTS)
 endif
 
 if ENABLE_DWZ
-TESTS += run-readelf-dwz-multi.sh
+TESTS += run-readelf-dwz-multi.sh run-allfcts-multi.sh
 endif
 
 
@@ -125,7 +125,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-strip-test7.sh run-strip-test8.sh run-strip-groups.sh \
 	     run-strip-reloc.sh hello_i386.ko.bz2 hello_x86_64.ko.bz2 \
 	     hello_ppc64.ko.bz2 hello_s390.ko.bz2 \
-	     run-unstrip-test.sh run-unstrip-test2.sh \
+	     run-unstrip-test.sh run-unstrip-test2.sh run-unstrip-M.sh\
 	     run-elflint-self.sh run-ranlib-test.sh run-ranlib-test2.sh \
 	     run-ranlib-test3.sh run-ranlib-test4.sh \
 	     run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
@@ -164,6 +164,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-dwz-multi.sh libtestfile_multi_shared.so.bz2 \
 	     testfile_multi.dwz.bz2 testfile_multi_main.bz2 \
 	     testfile-dwzstr.bz2 testfile-dwzstr.multi.bz2 \
+	     run-allfcts-multi.sh \
+	     test-offset-loop.bz2 test-offset-loop.alt.bz2 \
 	     run-prelink-addr-test.sh \
 	     testfile52-32.so.bz2 testfile52-32.so.debug.bz2 \
 	     testfile52-32.prelink.so.bz2 testfile52-32.noshdrs.so.bz2 \
@@ -229,7 +231,8 @@ installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir); \
 			      export abs_srcdir; export abs_builddir; \
 			      export abs_top_builddir; \
 			      export libdir; export bindir; \
-			      export LC_ALL; export LANG; export VALGRIND_CMD;
+			      export LC_ALL; export LANG; export VALGRIND_CMD; \
+			      NM=$(NM); export NM;
 installed_LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
 			 installed $(tests_rpath) \
 			 '$(program_transform_name)'
@@ -242,7 +245,8 @@ TESTS_ENVIRONMENT = LC_ALL=C; LANG=C; VALGRIND_CMD=$(valgrind_cmd); \
 		    abs_top_builddir=$(abs_top_builddir); \
 		    export abs_srcdir; export abs_builddir; \
 		    export abs_top_builddir; \
-		    export LC_ALL; export LANG; export VALGRIND_CMD;
+		    export LC_ALL; export LANG; export VALGRIND_CMD; \
+		    NM=$(NM); export NM;
 LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
 	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm
 
@@ -332,6 +336,7 @@ rerequest_tag_LDADD = $(libdw) $(libmudflap)
 alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
 md5_sha1_test_LDADD = $(libeu)
 typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
+typeiter2_LDADD = $(libdw) $(libelf) $(libmudflap)
 low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
 test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
 dwflsyms_LDADD = $(libdw) $(libelf) $(libmudflap)

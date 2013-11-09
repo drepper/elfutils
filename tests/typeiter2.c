@@ -1,4 +1,4 @@
-/* Copyright (C) 2005, 2013 Red Hat, Inc.
+/* Copyright (C) 2012, 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -22,21 +22,7 @@
 #include ELFUTILS_HEADER(dw)
 #include <stdio.h>
 #include <unistd.h>
-
-
-static int
-cb (Dwarf_Die *func, void *arg __attribute__ ((unused)))
-{
-  const char *file = dwarf_decl_file (func);
-  int line = -1;
-  dwarf_decl_line (func, &line);
-  const char *fct = dwarf_diename (func);
-
-  printf ("%s:%d:%s\n", file, line, fct);
-
-  return DWARF_CB_ABORT;
-}
-
+#include <dwarf.h>
 
 int
 main (int argc, char *argv[])
@@ -51,19 +37,46 @@ main (int argc, char *argv[])
 	  Dwarf_Off off = 0;
 	  size_t cuhl;
 	  Dwarf_Off noff;
+	  uint64_t type_sig;
+
+	  while (dwarf_next_unit (dbg, off, &noff, &cuhl, NULL, NULL, NULL,
+				  NULL, &type_sig, NULL) == 0)
+	    {
+	      Dwarf_Die die_mem;
+	      dwarf_offdie_types (dbg, off + cuhl, &die_mem);
+	      off = noff;
+	    }
+
+	  off = 0;
 
 	  while (dwarf_nextcu (dbg, off, &noff, &cuhl, NULL, NULL, NULL) == 0)
 	    {
 	      Dwarf_Die die_mem;
 	      Dwarf_Die *die = dwarf_offdie (dbg, off + cuhl, &die_mem);
 
-	      /* Explicitly stop in the callback and then resume each time.  */
-	      ptrdiff_t doff = 0;
-	      do
+	      Dwarf_Die iter_mem;
+	      Dwarf_Die *iter = &iter_mem;
+	      dwarf_child (die, &iter_mem);
+
+	      while (1)
 		{
-		  doff = dwarf_getfuncs (die, cb, NULL, doff);
+		  if (dwarf_tag (iter) == DW_TAG_variable)
+		    {
+		      Dwarf_Attribute attr_mem;
+		      Dwarf_Die form_mem, *form;
+		      form = dwarf_formref_die (dwarf_attr (iter, DW_AT_type,
+							    &attr_mem),
+						&form_mem);
+
+		      if (form == NULL)
+			printf ("fail\n");
+		      else
+			printf ("ok\n");
+		    }
+
+		  if (dwarf_siblingof (iter, &iter_mem) != 0)
+		    break;
 		}
-	      while (doff != 0 && dwarf_errno () == 0);
 
 	      off = noff;
 	    }

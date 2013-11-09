@@ -1,3 +1,48 @@
+2013-11-09  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_getaranges.c (dwarf_getaranges): Read segment_size and
+	check that it is zero.
+
+2013-11-07  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* cfi.h (struct Dwarf_Frame_s): Make the comment more specific.
+	* libdw.map (ELFUTILS_0.156): Add dwfl_attach_state, dwfl_pid,
+	dwfl_thread_dwfl, dwfl_thread_tid, dwfl_frame_thread,
+	dwfl_thread_state_registers, dwfl_thread_state_register_pc,
+	dwfl_getthreads, dwfl_thread_getframes and dwfl_frame_pc.
+
+2013-11-01  Michael Forney  <mforney@mforney.org>
+
+	* Makefile.am (libdwfl_objects): New definition.
+	(libdw_a_LIBADD): Use libdwfl_objects.
+
+2013-11-01  Michael Forney  <mforney@mforney.org>
+
+	* Makefile.am: Use READELF.
+
+2013-10-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* libdw.map (ELFUTILS_0.158): New.
+
+2013-10-10  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_getfuncs.c (struct visitor_info): Rename start_offset to
+	start_addr and rename last_offset to last_addr. Now both void *.
+	(tree_visitor): Use start_add and die_addr instead of start_offset
+	and die_offset.
+	(dwarf_getfuncs): Use last_addr instead of last_offset.
+
+2013-10-06  Mark Wielaard  <mjw@redhat.com>
+
+	* cfi.c (execute_cfi): Make sure DW_CFA_expression and
+	DW_CFA_val_expression are not used with abi_cfi.
+
+2013-10-03  Josh Stone  <jistone@redhat.com>
+
+	* dwarf_formref_die.c (dwarf_formref_die): Don't hash the sig8 here.
+	* libdw_findcu.c (__libdw_intern_next_unit): Since this never revisits
+	a unit, make sure to always hash the sig8 here, so none are missed.
+
 2013-09-29  Mark Wielaard  <mjw@redhat.com>
 
 	* dwarf_getlocation.c (store_implicit_value): Cast op->number2 to
