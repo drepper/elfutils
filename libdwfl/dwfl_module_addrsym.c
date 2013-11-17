@@ -41,6 +41,7 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 
   /* Return true iff we consider ADDR to lie in the same section as SYM.  */
   GElf_Word addr_shndx = SHN_UNDEF;
+  struct dwfl_file *addr_symfile = NULL;
   inline bool same_section (const GElf_Sym *sym, struct dwfl_file *symfile,
 			    GElf_Word shndx)
     {
@@ -49,11 +50,12 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 	return sym->st_value == addr;
 
       /* Figure out what section ADDR lies in.  */
-      if (addr_shndx == SHN_UNDEF)
+      if (addr_shndx == SHN_UNDEF || addr_symfile != symfile)
 	{
 	  GElf_Addr mod_addr = dwfl_deadjust_st_value (mod, symfile, addr);
 	  Elf_Scn *scn = NULL;
 	  addr_shndx = SHN_ABS;
+	  addr_symfile = symfile;
 	  while ((scn = elf_nextscn (symfile->elf, scn)) != NULL)
 	    {
 	      GElf_Shdr shdr_mem;
@@ -68,7 +70,7 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 	    }
 	}
 
-      return shndx == addr_shndx;
+      return shndx == addr_shndx && addr_symfile == symfile;
     }
 
   /* Keep track of the closest symbol we have seen so far.
@@ -91,7 +93,9 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 	{
 	  GElf_Sym sym;
 	  GElf_Word shndx;
-	  const char *name = INTUSE(dwfl_module_getsym) (mod, i, &sym, &shndx);
+	  struct dwfl_file *file;
+	  const char *name = __libdwfl_module_getsym (mod, i, &sym, &shndx,
+						      &file);
 	  if (name != NULL && name[0] != '\0'
 	      && sym.st_shndx != SHN_UNDEF
 	      && sym.st_value <= addr
@@ -136,11 +140,7 @@ dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr addr,
 			}
 		      else if (closest_name == NULL
 			       && sym.st_value >= min_label
-			       && same_section (&sym,
-						((size_t) i < mod->syments
-						 ? mod->symfile
-						 : &mod->aux_sym),
-						shndx))
+			       && same_section (&sym, file, shndx))
 			{
 			  /* Handwritten assembly symbols sometimes have no
 			     st_size.  If no symbol with proper size includes

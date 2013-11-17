@@ -201,10 +201,8 @@ pid_next_thread (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg,
 /* Implement the ebl_set_initial_registers_tid setfunc callback.  */
 
 static bool
-pid_thread_state_registers_cb (const int firstreg,
-			       unsigned nregs,
-			       const Dwarf_Word *regs,
-			       void *arg)
+pid_thread_state_registers_cb (int firstreg, unsigned nregs,
+			       const Dwarf_Word *regs, void *arg)
 {
   Dwfl_Thread *thread = (Dwfl_Thread *) arg;
   return INTUSE(dwfl_thread_state_registers) (thread, firstreg, nregs, regs);
@@ -288,7 +286,7 @@ __libdwfl_attach_state_for_pid (Dwfl *dwfl, pid_t pid)
   pid_arg->dir = dir;
   pid_arg->tid_attached = 0;
   pid_arg->stopped = false;
-  if (! INTUSE(dwfl_attach_state) (dwfl, EM_NONE, pid, &pid_thread_callbacks,
+  if (! INTUSE(dwfl_attach_state) (dwfl, NULL, pid, &pid_thread_callbacks,
 				   pid_arg))
     {
       closedir (dir);
