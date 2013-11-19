@@ -42,8 +42,8 @@ struct pid_arg
   DIR *dir;
   /* It is 0 if not used.  */
   pid_t tid_attached;
-  /* TRUE if the process (first of its threads) was State: T (stopped).  */
-  bool stopped;
+  /* Valid only if TID_ATTACHED is not zero.  */
+  bool tid_was_stopped;
 };
 
 static bool
@@ -71,14 +71,15 @@ linux_proc_pid_is_stopped (pid_t pid)
 }
 
 static bool
-ptrace_attach (pid_t tid, bool *stoppedp)
+ptrace_attach (pid_t tid, bool *tid_was_stoppedp)
 {
   if (ptrace (PTRACE_ATTACH, tid, NULL, NULL) != 0)
     {
       __libdwfl_seterrno (DWFL_E_ERRNO);
       return false;
     }
-  if (linux_proc_pid_is_stopped (tid))
+  *tid_was_stoppedp = linux_proc_pid_is_stopped (tid);
+  if (*tid_was_stoppedp)
     {
       /* Make sure there is a SIGSTOP signal pending even when the process is
 	 already State: T (stopped).  Older kernels might fail to generate
@@ -86,7 +87,6 @@ ptrace_attach (pid_t tid, bool *stoppedp)
 	 above.  Which would make the waitpid below wait forever.  So emulate
 	 it.  Since there can only be one SIGSTOP notification pending this is
 	 safe.  See also gdb/linux-nat.c linux_nat_post_attach_wait.  */
-      *stoppedp = true;
       syscall (__NR_tkill, tid, SIGSTOP);
       ptrace (PTRACE_CONT, tid, NULL, NULL);
     }
@@ -214,7 +214,7 @@ pid_set_initial_registers (Dwfl_Thread *thread, void *thread_arg)
   struct pid_arg *pid_arg = thread_arg;
   assert (pid_arg->tid_attached == 0);
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
-  if (! ptrace_attach (tid, &pid_arg->stopped))
+  if (! ptrace_attach (tid, &pid_arg->tid_was_stopped))
     return false;
   pid_arg->tid_attached = tid;
   Dwfl_Process *process = thread->process;
@@ -238,20 +238,24 @@ pid_thread_detach (Dwfl_Thread *thread, void *thread_arg)
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
   assert (pid_arg->tid_attached == tid);
   pid_arg->tid_attached = 0;
-  if (! pid_arg->stopped)
-    {
-      ptrace (PTRACE_DETACH, tid, NULL, NULL);
-      return;
-    }
   // Older kernels (tested kernel-2.6.18-348.12.1.el5.x86_64) need special
   // handling of the detachment to keep the process State: T (stopped).
-  syscall (__NR_tkill, tid, SIGSTOP);
-  ptrace (PTRACE_DETACH, tid, NULL, (void *) (intptr_t) SIGSTOP);
-  // Wait till the SIGSTOP settles down.
-  int i;
-  for (i = 0; i < 100000; i++)
-    if (linux_proc_pid_is_stopped (tid))
-      break;
+  if (pid_arg->tid_was_stopped)
+    syscall (__NR_tkill, tid, SIGSTOP);
+  /* This handling is needed only on older Linux kernels such as
+     2.6.32-358.23.2.el6.ppc64.  Later kernels such as 3.11.7-200.fc19.x86_64
+     remember the T (stopped) state themselves and no longer need to pass
+     SIGSTOP during PTRACE_DETACH.  */
+  ptrace (PTRACE_DETACH, tid, NULL,
+	  (void *) (intptr_t) (pid_arg->tid_was_stopped ? SIGSTOP : 0));
+  if (pid_arg->tid_was_stopped)
+    {
+      // Wait till the SIGSTOP settles down.
+      int i;
+      for (i = 0; i < 100000; i++)
+	if (linux_proc_pid_is_stopped (tid))
+	  break;
+    }
 }
 
 static const Dwfl_Thread_Callbacks pid_thread_callbacks =
@@ -285,7 +289,6 @@ __libdwfl_attach_state_for_pid (Dwfl *dwfl, pid_t pid)
     }
   pid_arg->dir = dir;
   pid_arg->tid_attached = 0;
-  pid_arg->stopped = false;
   if (! INTUSE(dwfl_attach_state) (dwfl, NULL, pid, &pid_thread_callbacks,
 				   pid_arg))
     {
