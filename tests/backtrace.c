@@ -36,6 +36,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <argp.h>
+#include <sys/syscall.h>
 #include ELFUTILS_HEADER(dwfl)
 
 static int
@@ -253,13 +254,43 @@ prepare_thread (pid_t pid2 __attribute__ ((unused)),
 #include <unistd.h>
 #define tgkill(pid, tid, sig) syscall (__NR_tgkill, (pid), (tid), (sig))
 
+static bool
+linux_proc_pid_is_stopped (pid_t pid)
+{
+  char buffer[64];
+  FILE *procfile;
+  bool retval, have_state;
+
+  snprintf (buffer, sizeof (buffer), "/proc/%ld/status", (long) pid);
+  procfile = fopen (buffer, "r");
+  if (procfile == NULL)
+    return false;
+
+  have_state = false;
+  while (fgets (buffer, sizeof (buffer), procfile) != NULL)
+    if (strncmp (buffer, "State:", 6) == 0)
+      {
+	have_state = true;
+	break;
+      }
+  retval = (have_state && strstr (buffer, "T (stopped)") != NULL);
+  fclose (procfile);
+  return retval;
+}
+
 static void
 ptrace_detach_stopped (pid_t pid)
 {
+  syscall (__NR_tkill, pid, SIGSTOP);
   errno = 0;
   long l = ptrace (PTRACE_DETACH, pid, NULL, (void *) (intptr_t) SIGSTOP);
   assert_perror (errno);
   assert (l == 0);
+  // Wait till the SIGSTOP settles down.
+  int i;
+  for (i = 0; i < 100000; i++)
+    if (linux_proc_pid_is_stopped (pid))
+      break;
 }
 
 static void

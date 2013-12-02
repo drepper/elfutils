@@ -1,5 +1,12 @@
 2013-12-02  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
+	Handle T-stopped detach for old kernels.
+	* backtrace.c: Include sys/syscall.h.
+	(linux_proc_pid_is_stopped): New function.
+	(ptrace_detach_stopped): Handle old kernels.
+
+2013-12-02  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
 	* Makefile.am (check_PROGRAMS): Add backtrace, backtrace-child,
 	backtrace-data and backtrace-dwarf.
 	(BUILT_SOURCES, clean-local, backtrace-child-biarch): New.
