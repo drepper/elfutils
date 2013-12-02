@@ -1,5 +1,5 @@
-/* Set up a session using libdwfl.
-   Copyright (C) 2005 Red Hat, Inc.
+/* AArch64 specific symbolic name handling.
+   Copyright (C) 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -26,27 +26,31 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
-#include "libdwflP.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
-Dwfl *
-dwfl_begin (const Dwfl_Callbacks *callbacks)
+#include <elf.h>
+#include <stddef.h>
+
+#define BACKEND		aarch64_
+#include "libebl_CPU.h"
+
+
+/* Check for the simple reloc types.  */
+Elf_Type
+aarch64_reloc_simple_type (Ebl *ebl __attribute__ ((unused)), int type)
 {
-  if (elf_version (EV_CURRENT) == EV_NONE)
+  switch (type)
     {
-      __libdwfl_seterrno (DWFL_E_LIBELF);
-      return NULL;
-    }
+    case R_AARCH64_ABS64:
+      return ELF_T_XWORD;
+    case R_AARCH64_ABS32:
+      return ELF_T_WORD;
+    case R_AARCH64_ABS16:
+      return ELF_T_HALF;
 
-  Dwfl *dwfl = calloc (1, sizeof *dwfl);
-  if (dwfl == NULL)
-    __libdwfl_seterrno (DWFL_E_NOMEM);
-  else
-    {
-      dwfl->callbacks = callbacks;
-      dwfl->offline_next_address = OFFLINE_REDZONE;
-      dwfl->process_attach_error = DWFL_E_NO_ATTACH_STATE;
+    default:
+      return ELF_T_NUM;
     }
-
-  return dwfl;
 }
-INTDEF (dwfl_begin)

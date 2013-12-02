@@ -1,5 +1,5 @@
-/* Set up a session using libdwfl.
-   Copyright (C) 2005 Red Hat, Inc.
+/* Initialization of AArch64 specific backend library.
+   Copyright (C) 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -26,27 +26,36 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
-#include "libdwflP.h"
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
-Dwfl *
-dwfl_begin (const Dwfl_Callbacks *callbacks)
+#define BACKEND		aarch64_
+#define RELOC_PREFIX	R_AARCH64_
+#include "libebl_CPU.h"
+
+/* This defines the common reloc hooks based on aarch64_reloc.def.  */
+#include "common-reloc.c"
+
+
+const char *
+aarch64_init (elf, machine, eh, ehlen)
+     Elf *elf __attribute__ ((unused));
+     GElf_Half machine __attribute__ ((unused));
+     Ebl *eh;
+     size_t ehlen;
 {
-  if (elf_version (EV_CURRENT) == EV_NONE)
-    {
-      __libdwfl_seterrno (DWFL_E_LIBELF);
-      return NULL;
-    }
+  /* Check whether the Elf_BH object has a sufficent size.  */
+  if (ehlen < sizeof (Ebl))
+    return NULL;
 
-  Dwfl *dwfl = calloc (1, sizeof *dwfl);
-  if (dwfl == NULL)
-    __libdwfl_seterrno (DWFL_E_NOMEM);
-  else
-    {
-      dwfl->callbacks = callbacks;
-      dwfl->offline_next_address = OFFLINE_REDZONE;
-      dwfl->process_attach_error = DWFL_E_NO_ATTACH_STATE;
-    }
+  /* We handle it.  */
+  eh->name = "AARCH64";
+  aarch64_init_reloc (eh);
+  HOOK (eh, register_info);
+  HOOK (eh, core_note);
+  HOOK (eh, reloc_simple_type);
+  HOOK (eh, return_value_location);
 
-  return dwfl;
+  return MODVERSION;
 }
-INTDEF (dwfl_begin)

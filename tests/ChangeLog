@@ -1,3 +1,66 @@
+2013-12-02  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add backtrace, backtrace-child,
+	backtrace-data and backtrace-dwarf.
+	(BUILT_SOURCES, clean-local, backtrace-child-biarch): New.
+	(TESTS): Add run-backtrace-native.sh, run-backtrace-data.sh,
+	run-backtrace-dwarf.sh, run-backtrace-native-biarch.sh,
+	run-backtrace-native-core.sh, run-backtrace-native-core-biarch.sh,
+	run-backtrace-core-x86_64.sh and run-backtrace-core-i386.sh.
+	<!BIARCH> Add export of ELFUTILS_DISABLE_BIARCH.
+	(EXTRA_DIST): Add run-backtrace-data.sh, run-backtrace-dwarf.sh,
+	cleanup-13.c, run-backtrace-native.sh, run-backtrace-native-biarch.sh,
+	run-backtrace-native-core.sh, run-backtrace-native-core-biarch.sh,
+	run-backtrace-core-x86_64.sh, run-backtrace-core-i386.sh,
+	backtrace-subr.sh, backtrace.i386.core.bz2, backtrace.i386.exec.bz2,
+	backtrace.x86_64.core.bz2, backtrace.x86_64.exec.bz2.
+	(backtrace_LDADD, backtrace_child_CFLAGS, backtrace_child_LDFLAGS)
+	(backtrace_data_LDADD, backtrace_dwarf_CFLAGS, backtrace_dwarf_LDADD):
+	New.
+	* backtrace-child.c: New file.
+	* backtrace-data.c: New file.
+	* backtrace-dwarf.c: New file.
+	* backtrace-subr.sh: New file.
+	* backtrace.c: New file.
+	* cleanup-13.c: New file.
+	* backtrace.i386.core.bz2: New file.
+	* backtrace.i386.exec.bz2: New file.
+	* backtrace.x86_64.core.bz2: New file.
+	* backtrace.x86_64.exec.bz2: New file.
+	* run-backtrace-core-i386.sh: New file.
+	* run-backtrace-core-x86_64.sh: New file.
+	* run-backtrace-native-biarch.sh: New file.
+	* run-backtrace-native-core-biarch.sh: New file.
+	* run-backtrace-native-core.sh: New file.
+	* run-backtrace-native.sh: New file.
+	* run-backtrace-data.sh: New file.
+	* run-backtrace-dwarf.sh: New file.
+
+2013-11-27  Mark Wielaard  <mjw@redhat.com>
+
+	* dwflsyms.c (gelf_bind_order): New function.
+	(elf_section_name): Likewise.
+	(addr_in_section): Likewise.
+	(list_syms): Use dwfl_module_getsym_elf and dwfl_module_addrsym_elf.
+	Refine assert using gelf_bind_order. Print elf_section_name. Check
+	bias with addr_in_section.
+	* run-dwflsyms.sh: Add section names to expected output.
+
+2013-11-26  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add run-funcretval.sh.
+
+2013-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* testfile_aarch64_core.bz2, hello_aarch64.ko.bz2: New files.
+	* funcretval_test.c, funcretval_test_aarch64.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add these.
+	(TESTS): Add run-funcretval.sh.
+	* run-allregs.sh: Use testfile_aarch64_core.bz2 for a regs_test.
+	* run-readelf-mixed-corenote.sh: ... and for a readelf -n test.
+	* run-strip-reloc.sh: Add a test on hello_aarch64.ko.bz2.
+	* run-funcretval.sh: New file.
+
 2013-11-18  Josh Stone  <jistone@redhat.com>
 
 	* testfilebazdbg_plr.bz2: New testfile.

@@ -1,3 +1,61 @@
+2013-11-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Introduce process_attach_error.
+	* dwfl_begin.c (dwfl_begin): Initialize process_attach_error.
+	* dwfl_frame.c (dwfl_pid, dwfl_getthreads): Use PROCESS_ATTACH_ERROR if
+	PROCESS is NULL.
+	* libdwflP.h (struct Dwfl): New field process_attach_error.
+	* linux-core-attach.c (__libdwfl_attach_state_for_core): Rename to ...
+	(attach_state_for_core): ... here, make it static, change return type,
+	no longer use __libdwfl_seterrno.
+	(__libdwfl_attach_state_for_core): New wrapper for it.
+
+2013-11-27  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_module_addrsym.c (dwfl_module_addrsym): Rename to and call...
+	(dwfl_module_addrsym_elf): this. Add elfp and biasp arguments,
+	keep track of symelf, addr_symelf, closest_elf and sizeless_elf
+	instead of tracking dwfl_files.
+	* dwfl_module_getsym.c (__libdwfl_module_getsym): Renamed to...
+	(dwfl_module_getsym_elf): ...this. Remove dwfl_file argument, add
+	new elfp and biasp arguments. Track elf instead of file.
+	(dwfl_module_getsym): Call dwfl_module_getsym_elf.
+	dwfl_module_info.c (dwfl_module_info): Pass elf to
+	dwfl_adjusted_st_value.
+	* libdwfl.h (dwfl_module_getsym): Document limitations of shndx.
+	(dwfl_module_getsym_elf): New function declaration.
+	(dwfl_module_addrsym_elf): Likewise.
+	* libdwflP.h (dwfl_module_addrsym_elf): INTDECL.
+	(dwfl_module_getsym_elf): Likewise.
+	(dwfl_adjusted_st_value): Take and check elf not dwfl_file.
+	(dwfl_deadjust_st_value): Likewise.
+	(__libdwfl_module_getsym): Removed.
+	* relocate.c (resolve_symbol): Pass elf to dwfl_adjusted_st_value.
+
+2013-11-21  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix non-build-id core files on build-id system.
+	* link_map.c (report_r_debug): Remove valid clearing if build-id cannot
+	be read from memory.
+
+2013-11-21  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* dwfl_segment_report_module.c (dwfl_segment_report_module): New
+	variable close_elf.  Call __libdwfl_find_elf_build_id and compare the
+	content, if possible.
+
+2013-11-21  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	link_map: Use proper bias, not l_addr.
+	* core-file.c (dynamic_vaddr_get): Rename to ...
+	(__libdwfl_dynamic_vaddr_get): ... here, make it global,
+	internal_function.
+	(dwfl_core_file_report): Update name in the caller.
+	* libdwflP.h (__libdwfl_dynamic_vaddr_get): New declaration.
+	* link_map.c (report_r_debug): New variable elf_dynamic_vaddr.  Call
+	__libdwfl_dynamic_vaddr_get for it.  Remove L_ADDR FIXME comment.
+	Use ELF_DYNAMIC_VADDR instead of L_ADDR.
+
 2013-11-19  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	Compatibility with older kernels such as RHEL-6.
