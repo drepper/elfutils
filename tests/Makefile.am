@@ -106,7 +106,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-backtrace-native.sh run-backtrace-data.sh run-backtrace-dwarf.sh \
 	run-backtrace-native-biarch.sh run-backtrace-native-core.sh \
 	run-backtrace-native-core-biarch.sh run-backtrace-core-x86_64.sh \
-	run-backtrace-core-i386.sh
+	run-backtrace-core-i386.sh run-backtrace-core-ppc64.sh \
+	run-backtrace-core-ppc.sh
 
 if !BIARCH
 export ELFUTILS_DISABLE_BIARCH = 1
@@ -246,7 +247,10 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-backtrace-core-x86_64.sh run-backtrace-core-i386.sh \
 	     backtrace-subr.sh backtrace.i386.core.bz2 backtrace.i386.exec.bz2 \
 	     backtrace.x86_64.core.bz2 backtrace.x86_64.exec.bz2 \
-	     testfile66.bz2 testfile66.core.bz2
+	     testfile66.bz2 testfile66.core.bz2 \
+	     backtrace.ppc64.core.bz2 backtrace.ppc64.exec.bz2 \
+	     backtrace.ppc.core.bz2 backtrace.ppc.exec.bz2 \
+	     run-backtrace-core-ppc64.sh run-backtrace-core-ppc.sh
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --trace-children=yes --error-exitcode=1 --run-libc-freeres=no'

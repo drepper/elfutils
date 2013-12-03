@@ -171,5 +171,9 @@ bool EBLHOOK(init_symbols) (Ebl *ebl, size_t syments, GElf_Addr main_bias,
 const char *EBLHOOK(get_symbol) (Ebl *ebl, size_t ndx, GElf_Sym *symp,
 				 GElf_Word *shndxp);
 
+/* Convert *REGNO as is in DWARF to a lower range suitable for
+   Dwarf_Frame->REGS indexing.  */
+bool EBLHOOK(dwarf_to_regno) (Ebl *ebl, unsigned *regno);
+
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

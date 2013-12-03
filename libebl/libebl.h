@@ -368,6 +368,7 @@ typedef struct
   Elf_Type type;
   char format;
   bool thread_identifier;
+  bool pc_register;
 } Ebl_Core_Item;
 
 /* Describe the format of a core file note with the given header and NAME.
@@ -383,7 +384,9 @@ extern int ebl_auxv_info (Ebl *ebl, GElf_Xword a_type,
 			  const char **name, const char **format)
   __nonnull_attribute__ (1, 3, 4);
 
-/* Callback type for ebl_set_initial_registers_tid.  */
+/* Callback type for ebl_set_initial_registers_tid.
+   Register -1 is mapped to PC (if arch PC has no DWARF number).
+   If FIRSTREG is -1 then NREGS has to be 1.  */
 typedef bool (ebl_tid_registers_t) (int firstreg, unsigned nregs,
 				    const Dwarf_Word *regs, void *arg)
   __nonnull_attribute__ (3);
@@ -429,6 +432,11 @@ extern bool ebl_init_symbols (Ebl *ebl, size_t syments, Dwarf_Addr symbias,
 extern const char *ebl_get_symbol (Ebl *ebl, size_t ndx, GElf_Sym *symp,
 				   GElf_Word *shndxp)
   __nonnull_attribute__ (1, 3);
+
+/* Convert *REGNO as is in DWARF to a lower range suitable for
+   Dwarf_Frame->REGS indexing.  */
+extern bool ebl_dwarf_to_regno (Ebl *ebl, unsigned *regno)
+  __nonnull_attribute__ (1, 2);
 
 #ifdef __cplusplus
 }
