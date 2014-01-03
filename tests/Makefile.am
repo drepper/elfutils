@@ -50,11 +50,24 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  dwfl-addr-sect dwfl-bug-report early-offscn \
 		  dwfl-bug-getmodules dwarf-getmacros addrcfi \
 		  test-flag-nobits dwarf-getstring rerequest_tag \
-		  alldts md5-sha1-test typeiter low_high_pc \
+		  alldts md5-sha1-test typeiter typeiter2 low_high_pc \
 		  test-elf_cntl_gelf_getshdr dwflsyms dwfllines \
-		  dwfl-report-elf-align varlocs
+		  dwfl-report-elf-align varlocs backtrace backtrace-child \
+		  backtrace-data backtrace-dwarf
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
+
+if BIARCH
+check_PROGRAMS += backtrace-child-biarch
+endif
+
+# Substitute $(COMPILE).
+backtrace-child-biarch$(EXEEXT): backtrace-child.c
+	$(CC_BIARCH) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+		     $(AM_CPPFLAGS) $(CPPFLAGS) \
+		     $(AM_CFLAGS) $(CFLAGS) $(backtrace_child_CFLAGS) \
+		     $(AM_LDFLAGS) $(LDFLAGS) $(backtrace_child_LDFLAGS) \
+		     -o $@ $<
 
 TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	update1 update2 update3 update4 \
@@ -65,7 +78,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-strip-test3.sh run-strip-test4.sh run-strip-test5.sh \
 	run-strip-test6.sh run-strip-test7.sh run-strip-test8.sh \
 	run-strip-groups.sh run-strip-reloc.sh \
-	run-unstrip-test.sh run-unstrip-test2.sh \
+	run-unstrip-test.sh run-unstrip-test2.sh run-unstrip-M.sh \
 	run-ecp-test.sh run-ecp-test2.sh run-alldts.sh \
 	run-elflint-test.sh run-elflint-self.sh run-ranlib-test.sh \
 	run-ranlib-test2.sh run-ranlib-test3.sh run-ranlib-test4.sh \
@@ -89,7 +102,16 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-test-archive64.sh run-readelf-vmcoreinfo.sh \
 	run-readelf-mixed-corenote.sh run-dwfllines.sh \
 	run-dwfl-report-elf-align.sh run-addr2line-test.sh \
-	run-addr2line-i-test.sh run-varlocs.sh
+	run-addr2line-i-test.sh run-varlocs.sh run-funcretval.sh \
+	run-backtrace-native.sh run-backtrace-data.sh run-backtrace-dwarf.sh \
+	run-backtrace-native-biarch.sh run-backtrace-native-core.sh \
+	run-backtrace-native-core-biarch.sh run-backtrace-core-x86_64.sh \
+	run-backtrace-core-i386.sh run-backtrace-core-ppc.sh \
+	run-backtrace-core-s390x.sh run-backtrace-core-s390.sh
+
+if !BIARCH
+export ELFUTILS_DISABLE_BIARCH = 1
+endif
 
 if !STANDALONE
 check_PROGRAMS += msg_tst md5-sha1-test
@@ -106,7 +128,7 @@ TESTS += $(asm_TESTS)
 endif
 
 if ENABLE_DWZ
-TESTS += run-readelf-dwz-multi.sh
+TESTS += run-readelf-dwz-multi.sh run-allfcts-multi.sh
 endif
 
 
@@ -124,8 +146,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-strip-test4.sh run-strip-test5.sh run-strip-test6.sh \
 	     run-strip-test7.sh run-strip-test8.sh run-strip-groups.sh \
 	     run-strip-reloc.sh hello_i386.ko.bz2 hello_x86_64.ko.bz2 \
-	     hello_ppc64.ko.bz2 hello_s390.ko.bz2 \
-	     run-unstrip-test.sh run-unstrip-test2.sh \
+	     hello_ppc64.ko.bz2 hello_s390.ko.bz2 hello_aarch64.ko.bz2 \
+	     run-unstrip-test.sh run-unstrip-test2.sh run-unstrip-M.sh\
 	     run-elflint-self.sh run-ranlib-test.sh run-ranlib-test2.sh \
 	     run-ranlib-test3.sh run-ranlib-test4.sh \
 	     run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
@@ -164,6 +186,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-dwz-multi.sh libtestfile_multi_shared.so.bz2 \
 	     testfile_multi.dwz.bz2 testfile_multi_main.bz2 \
 	     testfile-dwzstr.bz2 testfile-dwzstr.multi.bz2 \
+	     run-allfcts-multi.sh \
+	     test-offset-loop.bz2 test-offset-loop.alt.bz2 \
 	     run-prelink-addr-test.sh \
 	     testfile52-32.so.bz2 testfile52-32.so.debug.bz2 \
 	     testfile52-32.prelink.so.bz2 testfile52-32.noshdrs.so.bz2 \
@@ -187,6 +211,13 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-s.sh testfilebazdbg.bz2 testfilebazdyn.bz2 \
 	     testfilebazmin.bz2 testfilebazdbg.debug.bz2 testfilebazmdb.bz2 \
 	     testfilebaztab.bz2 testfilebasmin.bz2 \
+	     testfilebazdbg_pl.bz2 testfilebazmin_pl.bz2 \
+	     testfilebazdbg_plr.bz2 testfilebazmin_plr.bz2 \
+	     testfilebazdbgppc64.bz2 testfilebazdbgppc64.debug.bz2 \
+	     testfilebazdbgppc64_pl.bz2 testfilebazdbgppc64_plr.bz2 \
+	     testfilebazdynppc64.bz2 testfilebazmdbppc64.bz2 \
+	     testfilebazminppc64.bz2 testfilebazminppc64_pl.bz2 \
+	     testfilebazminppc64_plr.bz2 testfilebaztabppc64.bz2 \
 	     run-dwflsyms.sh \
 	     run-unstrip-n.sh testcore-rtlib.bz2 testcore-rtlib-ppc.bz2 \
 	     run-low_high_pc.sh testfile_low_high_pc.bz2 \
@@ -206,16 +237,29 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-addr2line-i-test.sh testfile-inlines.bz2 \
 	     testfileppc32.bz2 testfileppc64.bz2 \
 	     testfiles390.bz2 testfiles390x.bz2 \
-	     testfilearm.bz2 \
+	     testfilearm.bz2 testfileaarch64.bz2 \
 	     run-varlocs.sh \
 	     testfile_const_type.c testfile_const_type.bz2 \
 	     testfile_implicit_pointer.c testfile_implicit_pointer.bz2 \
 	     testfile_parameter_ref.c testfile_parameter_ref.bz2 \
 	     testfile_entry_value.c testfile_entry_value.bz2 \
-	     testfile_implicit_value.c testfile_implicit_value.bz2
+	     testfile_implicit_value.c testfile_implicit_value.bz2 \
+	     testfile_aarch64_core.bz2 \
+	     run-funcretval.sh funcretval_test.c funcretval_test_aarch64.bz2 \
+	     run-backtrace-data.sh run-backtrace-dwarf.sh cleanup-13.c \
+	     run-backtrace-native.sh run-backtrace-native-biarch.sh \
+	     run-backtrace-native-core.sh run-backtrace-native-core-biarch.sh \
+	     run-backtrace-core-x86_64.sh run-backtrace-core-i386.sh \
+	     backtrace-subr.sh backtrace.i386.core.bz2 backtrace.i386.exec.bz2 \
+	     backtrace.x86_64.core.bz2 backtrace.x86_64.exec.bz2 \
+	     backtrace.ppc.core.bz2 backtrace.ppc.exec.bz2 \
+	     run-backtrace-core-ppc.sh testfile66.bz2 testfile66.core.bz2 \
+	     backtrace.s390x.core.bz2 backtrace.s390x.exec.bz2 \
+	     backtrace.s390.core.bz2 backtrace.s390.exec.bz2 \
+	     run-backtrace-core-s390x.sh run-backtrace-core-s390.sh
 
 if USE_VALGRIND
-valgrind_cmd='valgrind -q --trace-children=yes --error-exitcode=1 --run-libc-freeres=no'
+valgrind_cmd='valgrind -q --error-exitcode=1 --run-libc-freeres=no'
 endif
 
 
@@ -229,7 +273,8 @@ installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir); \
 			      export abs_srcdir; export abs_builddir; \
 			      export abs_top_builddir; \
 			      export libdir; export bindir; \
-			      export LC_ALL; export LANG; export VALGRIND_CMD;
+			      export LC_ALL; export LANG; export VALGRIND_CMD; \
+			      NM=$(NM); export NM;
 installed_LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
 			 installed $(tests_rpath) \
 			 '$(program_transform_name)'
@@ -242,7 +287,8 @@ TESTS_ENVIRONMENT = LC_ALL=C; LANG=C; VALGRIND_CMD=$(valgrind_cmd); \
 		    abs_top_builddir=$(abs_top_builddir); \
 		    export abs_srcdir; export abs_builddir; \
 		    export abs_top_builddir; \
-		    export LC_ALL; export LANG; export VALGRIND_CMD;
+		    export LC_ALL; export LANG; export VALGRIND_CMD; \
+		    NM=$(NM); export NM;
 LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
 	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm
 
@@ -332,12 +378,21 @@ rerequest_tag_LDADD = $(libdw) $(libmudflap)
 alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
 md5_sha1_test_LDADD = $(libeu)
 typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
+typeiter2_LDADD = $(libdw) $(libelf) $(libmudflap)
 low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
 test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
 dwflsyms_LDADD = $(libdw) $(libelf) $(libmudflap)
 dwfllines_LDADD = $(libdw) $(libelf) $(libmudflap)
 dwfl_report_elf_align_LDADD = $(libdw) $(libmudflap)
 varlocs_LDADD = $(libdw) $(libelf) $(libmudflap)
+backtrace_LDADD = $(libdw) $(libelf) $(libmudflap)
+# backtrace-child-biarch also uses those *_CFLAGS and *_LDLAGS variables:
+backtrace_child_CFLAGS = -fPIE
+backtrace_child_LDFLAGS = -pie -pthread
+backtrace_child_biarch_SOURCES = backtrace-child.c
+backtrace_data_LDADD = $(libdw) $(libelf) $(libmudflap)
+backtrace_dwarf_CFLAGS = -Wno-unused-parameter
+backtrace_dwarf_LDADD = $(libdw) $(libelf) $(libmudflap)
 
 if GCOV
 check: check-am coverage

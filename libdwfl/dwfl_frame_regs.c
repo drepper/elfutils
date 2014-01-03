@@ -1,5 +1,5 @@
-/* Out of line functions for memory-access.h macros.
-   Copyright (C) 2005, 2006 Red Hat, Inc.
+/* Get Dwarf Frame state from modules present in DWFL.
+   Copyright (C) 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -26,25 +26,32 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-#include "libdwP.h"
-#include "memory-access.h"
+#include "libdwflP.h"
 
-uint64_t
-internal_function
-__libdw_get_uleb128 (uint64_t acc, unsigned int i, const unsigned char **addrp)
+bool
+dwfl_thread_state_registers (Dwfl_Thread *thread, int firstreg,
+			     unsigned nregs, const Dwarf_Word *regs)
 {
-  unsigned char __b;
-  get_uleb128_rest_return (acc, i, addrp);
+  Dwfl_Frame *state = thread->unwound;
+  assert (state && state->unwound == NULL);
+  assert (state->initial_frame);
+  for (unsigned regno = firstreg; regno < firstreg + nregs; regno++)
+    if (! __libdwfl_frame_reg_set (state, regno, regs[regno - firstreg]))
+      {
+	__libdwfl_seterrno (DWFL_E_INVALID_REGISTER);
+	return false;
+      }
+  return true;
 }
+INTDEF(dwfl_thread_state_registers)
 
-int64_t
-internal_function
-__libdw_get_sleb128 (int64_t acc, unsigned int i, const unsigned char **addrp)
+void
+dwfl_thread_state_register_pc (Dwfl_Thread *thread, Dwarf_Word pc)
 {
-  unsigned char __b;
-  int64_t _v = acc;
-  get_sleb128_rest_return (acc, i, addrp);
+  Dwfl_Frame *state = thread->unwound;
+  assert (state && state->unwound == NULL);
+  assert (state->initial_frame);
+  state->pc = pc;
+  state->pc_state = DWFL_FRAME_STATE_PC_SET;
 }
+INTDEF(dwfl_thread_state_register_pc)

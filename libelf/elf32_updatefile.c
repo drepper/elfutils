@@ -133,7 +133,7 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 	  (*fctp) ((char *) elf->map_address + elf->start_offset, ehdr,
 		   sizeof (ElfW2(LIBELFBITS,Ehdr)), 1);
 	}
-      else
+      else if (elf->map_address + elf->start_offset != ehdr)
 	memcpy (elf->map_address + elf->start_offset, ehdr,
 		sizeof (ElfW2(LIBELFBITS,Ehdr)));
 
@@ -640,7 +640,8 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 #endif
 
       ElfW2(LIBELFBITS,Shdr) *shdr_data;
-      if (change_bo || elf->state.ELFW(elf,LIBELFBITS).shdr == NULL)
+      if (change_bo || elf->state.ELFW(elf,LIBELFBITS).shdr == NULL
+	  || (elf->flags & ELF_F_DIRTY))
 	shdr_data = (ElfW2(LIBELFBITS,Shdr) *)
 	  alloca (shnum * sizeof (ElfW2(LIBELFBITS,Shdr)));
       else
@@ -771,7 +772,8 @@ __elfw2(LIBELFBITS,updatefile) (Elf *elf, int change_bo, size_t shnum)
 	    (*shdr_fctp) (&shdr_data[scn->index],
 			  scn->shdr.ELFW(e,LIBELFBITS),
 			  sizeof (ElfW2(LIBELFBITS,Shdr)), 1);
-	  else if (elf->state.ELFW(elf,LIBELFBITS).shdr == NULL)
+	  else if (elf->state.ELFW(elf,LIBELFBITS).shdr == NULL
+		   || (elf->flags & ELF_F_DIRTY))
 	    memcpy (&shdr_data[scn->index], scn->shdr.ELFW(e,LIBELFBITS),
 		    sizeof (ElfW2(LIBELFBITS,Shdr)));
 

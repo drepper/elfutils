@@ -32,11 +32,12 @@ AM_CPPFLAGS += -I$(top_srcdir)/libebl -I$(top_srcdir)/libasm \
 	   -I$(top_srcdir)/libelf -I$(top_srcdir)/libdw
 
 
-modules = i386 sh x86_64 ia64 alpha arm sparc ppc ppc64 s390 tilegx
-libebl_pic = libebl_i386_pic.a libebl_sh_pic.a libebl_x86_64_pic.a \
-	     libebl_ia64_pic.a libebl_alpha_pic.a libebl_arm_pic.a \
-	     libebl_sparc_pic.a libebl_ppc_pic.a libebl_ppc64_pic.a \
-	     libebl_s390_pic.a libebl_tilegx_pic.a
+modules = i386 sh x86_64 ia64 alpha arm aarch64 sparc ppc ppc64 s390 \
+	  tilegx
+libebl_pic = libebl_i386_pic.a libebl_sh_pic.a libebl_x86_64_pic.a    \
+	     libebl_ia64_pic.a libebl_alpha_pic.a libebl_arm_pic.a    \
+	     libebl_aarch64_pic.a libebl_sparc_pic.a libebl_ppc_pic.a \
+	     libebl_ppc64_pic.a libebl_s390_pic.a libebl_tilegx_pic.a
 noinst_LIBRARIES = $(libebl_pic)
 noinst_DATA = $(libebl_pic:_pic.a=.so)
 
@@ -50,7 +51,8 @@ libdw = ../libdw/libdw.so
 endif
 
 i386_SRCS = i386_init.c i386_symbol.c i386_corenote.c i386_cfi.c \
-	    i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c
+	    i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c \
+	    i386_initreg.c
 cpu_i386 = ../libcpu/libcpu_i386.a
 libebl_i386_pic_a_SOURCES = $(i386_SRCS)
 am_libebl_i386_pic_a_OBJECTS = $(i386_SRCS:.c=.os)
@@ -60,7 +62,8 @@ libebl_sh_pic_a_SOURCES = $(sh_SRCS)
 am_libebl_sh_pic_a_OBJECTS = $(sh_SRCS:.c=.os)
 
 x86_64_SRCS = x86_64_init.c x86_64_symbol.c x86_64_corenote.c x86_64_cfi.c \
-	      x86_64_retval.c x86_64_regs.c i386_auxv.c x86_64_syscall.c
+	      x86_64_retval.c x86_64_regs.c i386_auxv.c x86_64_syscall.c \
+	      x86_64_initreg.c
 cpu_x86_64 = ../libcpu/libcpu_x86_64.a
 libebl_x86_64_pic_a_SOURCES = $(x86_64_SRCS)
 am_libebl_x86_64_pic_a_OBJECTS = $(x86_64_SRCS:.c=.os)
@@ -79,6 +82,12 @@ arm_SRCS = arm_init.c arm_symbol.c arm_regs.c arm_corenote.c \
 libebl_arm_pic_a_SOURCES = $(arm_SRCS)
 am_libebl_arm_pic_a_OBJECTS = $(arm_SRCS:.c=.os)
 
+aarch64_SRCS = aarch64_init.c aarch64_regs.c aarch64_symbol.c	\
+	       aarch64_corenote.c aarch64_retval.c aarch64_cfi.c
+libebl_aarch64_pic_a_SOURCES = $(aarch64_SRCS)
+am_libebl_aarch64_pic_a_OBJECTS = $(aarch64_SRCS:.c=.os)
+aarch64_regs_no_Wformat = yes
+
 sparc_SRCS = sparc_init.c sparc_symbol.c sparc_regs.c sparc_retval.c \
 	     sparc_corenote.c sparc64_corenote.c sparc_auxv.c
 libebl_sparc_pic_a_SOURCES = $(sparc_SRCS)
@@ -86,18 +95,19 @@ am_libebl_sparc_pic_a_OBJECTS = $(sparc_SRCS:.c=.os)
 
 ppc_SRCS = ppc_init.c ppc_symbol.c ppc_retval.c ppc_regs.c \
 	   ppc_corenote.c ppc_auxv.c ppc_attrs.c ppc_syscall.c \
-	   ppc_cfi.c
+	   ppc_cfi.c ppc_initreg.c
 libebl_ppc_pic_a_SOURCES = $(ppc_SRCS)
 am_libebl_ppc_pic_a_OBJECTS = $(ppc_SRCS:.c=.os)
 
 ppc64_SRCS = ppc64_init.c ppc64_symbol.c ppc64_retval.c \
 	     ppc64_corenote.c ppc_regs.c ppc_auxv.c ppc_attrs.c ppc_syscall.c \
-	     ppc_cfi.c
+	     ppc_cfi.c ppc_initreg.c ppc64_resolve_sym.c
 libebl_ppc64_pic_a_SOURCES = $(ppc64_SRCS)
 am_libebl_ppc64_pic_a_OBJECTS = $(ppc64_SRCS:.c=.os)
 
 s390_SRCS = s390_init.c s390_symbol.c s390_regs.c s390_retval.c \
-	    s390_corenote.c s390x_corenote.c s390_cfi.c
+	    s390_corenote.c s390x_corenote.c s390_cfi.c s390_initreg.c \
+	    s390_unwind.c
 libebl_s390_pic_a_SOURCES = $(s390_SRCS)
 am_libebl_s390_pic_a_OBJECTS = $(s390_SRCS:.c=.os)
 

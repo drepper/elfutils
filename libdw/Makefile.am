@@ -28,7 +28,6 @@
 ## not, see <http://www.gnu.org/licenses/>.
 ##
 include $(top_srcdir)/config/eu.am
-DEFS += -DIS_LIBDW
 if BUILD_STATIC
 AM_CFLAGS += -fpic
 endif
@@ -79,7 +78,7 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getfuncs.c  \
 		  dwarf_decl_file.c dwarf_decl_line.c dwarf_decl_column.c \
 		  dwarf_func_inline.c dwarf_getsrc_file.c \
-		  libdw_findcu.c libdw_form.c libdw_alloc.c memory-access.c \
+		  libdw_findcu.c libdw_form.c libdw_alloc.c \
 		  libdw_visit_scopes.c \
 		  dwarf_entry_breakpoints.c \
 		  dwarf_next_cfi.c \
@@ -113,7 +112,7 @@ libdw.so: $(srcdir)/libdw.map libdw_pic.a \
 		-Wl,--version-script,$<,--no-undefined \
 		-Wl,--whole-archive $(filter-out $<,$^) -Wl,--no-whole-archive\
 		-ldl $(zip_LIBS)
-	if readelf -d $@ | fgrep -q TEXTREL; then exit 1; fi
+	if $(READELF) -d $@ | fgrep -q TEXTREL; then exit 1; fi
 	ln -fs $@ $@.$(VERSION)
 
 install: install-am libdw.so
@@ -129,7 +128,8 @@ uninstall: uninstall-am
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(includedir)/elfutils
 endif
 
-libdw_a_LIBADD = $(addprefix ../libdwfl/,$(shell $(AR) t ../libdwfl/libdwfl.a))
+libdwfl_objects = $(shell $(AR) t ../libdwfl/libdwfl.a)
+libdw_a_LIBADD = $(addprefix ../libdwfl/,$(libdwfl_objects))
 
 noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
 		 dwarf_sig8_hash.h cfi.h encoded-value.h

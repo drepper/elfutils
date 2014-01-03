@@ -60,32 +60,6 @@ static const struct argp_option options[] =
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
-/* Wrapper to provide proper FILE_NAME for -e|--executable.  */
-static int
-offline_find_elf (Dwfl_Module *mod, void **userdata, const char *modname,
-		  Dwarf_Addr base, char **file_name, Elf **elfp)
-{
-  if (modname != NULL && (strcmp (modname, "[exe]") == 0
-			  || strcmp (modname, "[pie]") == 0)
-      && mod->dwfl->executable_for_core)
-    {
-      /* When both --core and --executable are given in whatever order
-	 dwfl_core_file_report is called first and this callback will replace
-	 the Dwfl_Module main.name with the recorded --executable file when the
-	 modname is [exe] or [pie] (which then triggers opening and reporting
-	 of the executable).  */
-      char *e_dup = strdup (mod->dwfl->executable_for_core);
-      if (e_dup)
-	{
-	  free (*file_name);
-	  *file_name = e_dup;
-	  return -1;
-	}
-    }
-  return INTUSE(dwfl_build_id_find_elf) (mod, userdata, modname, base,
-                                         file_name, elfp);
-}
-
 static char *debuginfo_path;
 
 static const Dwfl_Callbacks offline_callbacks =
@@ -96,7 +70,7 @@ static const Dwfl_Callbacks offline_callbacks =
     .section_address = INTUSE(dwfl_offline_section_address),
 
     /* We use this table for core files too.  */
-    .find_elf = offline_find_elf,
+    .find_elf = INTUSE(dwfl_build_id_find_elf),
   };
 
 static const Dwfl_Callbacks proc_callbacks =
@@ -196,6 +170,11 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	    int result = INTUSE(dwfl_linux_proc_report) (dwfl, atoi (arg));
 	    if (result != 0)
 	      return fail (dwfl, result, arg);
+
+	    result = INTUSE(dwfl_linux_proc_attach) (dwfl, atoi (arg), false);
+	    if (result != 0)
+	      /* Non-fatal to not be able to attach to process.  */
+	      failure (dwfl, result, _("cannot attach to process"));
 	    opt->dwfl = dwfl;
 	  }
 	else
@@ -295,9 +274,6 @@ parse_opt (int key, char *arg, struct argp_state *state)
 
 	if (opt->core)
 	  {
-	    if (opt->e)
-	      dwfl->executable_for_core = strdup (opt->e);
-
 	    int fd = open64 (opt->core, O_RDONLY);
 	    if (fd < 0)
 	      {
@@ -317,13 +293,18 @@ parse_opt (int key, char *arg, struct argp_state *state)
 		return error == DWFL_E_ERRNO ? errno : EIO;
 	      }
 
-	    int result = INTUSE(dwfl_core_file_report) (dwfl, core);
+	    int result = INTUSE(dwfl_core_file_report) (dwfl, core, opt->e);
 	    if (result < 0)
 	      {
 		elf_end (core);
 		close (fd);
 		return fail (dwfl, result, opt->core);
 	      }
+
+	    result = INTUSE(dwfl_core_file_attach) (dwfl, core);
+	    if (result < 0)
+	      /* Non-fatal to not be able to attach to core.  */
+	      failure (dwfl, result, _("cannot attach to core"));
 
 	    /* From now we leak FD and CORE.  */
 

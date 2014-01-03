@@ -1,3 +1,222 @@
+2014-01-03  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addrcfi.sh: Add case for EM_AARCH64.
+	* testfileaarch64.bz2: New testfile.
+	* Makefile.am (EXTRA_DIST): Add testfilesaarch64.bz2.
+
+2013-12-30  Mark Wielaard  <mjw@redhat.com>
+
+	* backtrace-dwarf.c (report_pid): Explicitly call
+	dwfl_linux_proc_attach and check for errors.
+	* backtrace.c (report_pid): Likewise.
+
+2013-12-21  Mark Wielaard  <mjw@redhat.com>
+
+	* backtrace.c (callback_verify): Only assert that case 5 is the last
+	instruction of backtracegen on x86_64 native.
+
+2013-12-18  Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add testfile66.bz2, testfile66.core.bz2
+	and testfilebaz*ppc64*.bz2 files.
+	* dwflsyms.c (list_syms): Remove unused from parameter mod_name.  Print
+	error on dwfl_module_getsymtab error.
+	(list_syms): Use dwfl_module_getsym and dwfl_module_getsym_info.
+	Compare values for non-ET_REL. Use dwfl_module_addrinfo.
+	Also print section of actual value if different from sym.
+	* run-addrname-test.sh (testfile66, testfile66.core): New tests.
+	Test addr2line -x by showing different sections for address and
+	found name in testfile66.
+	* run-dwflsyms.sh (testfile66, testfile66.core, hello_ppc64.ko,
+	testfilebaz*ppc64): New tests.
+	* testfile66.bz2, testfile66.core.bz2, testfilebazdbgppc64.bz2,
+	testfilebazdbgppc64.debug.bz2, testfilebazdbgppc64_pl.bz2,
+	testfilebazdbgppc64_plr.bz2, testfilebazdynppc64.bz2,
+	testfilebazmdbppc64.bz2, testfilebazminppc64.bz2,
+	testfilebazminppc64_pl.bz2, testfilebazminppc64_plr.bz2,
+	testfilebaztabppc64.bz2: New test files.
+
+2013-12-18  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	unwinder: s390 and s390x
+	* Makefile.am (TESTS): Add run-backtrace-core-s390x.sh and
+	run-backtrace-core-s390.sh.
+	(EXTRA_DIST): Add backtrace.s390x.core.bz2, backtrace.s390x.exec.bz2,
+	backtrace.s390.core.bz2, backtrace.s390.exec.bz2,
+	run-backtrace-core-s390x.sh and run-backtrace-core-s390.sh.
+	* backtrace.s390.core.bz2: New file.
+	* backtrace.s390.exec.bz2: New file.
+	* backtrace.s390x.core.bz2: New file.
+	* backtrace.s390x.exec.bz2: New file.
+	* run-backtrace-core-s390.sh: New file.
+	* run-backtrace-core-s390x.sh: New file.
+
+2013-12-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* backtrace-dwarf.c (executable, find_elf, dwfl_offline): Remove unused
+	code.
+
+2013-12-15  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	unwinder: ppc
+	* Makefile.am (TESTS): Add run-backtrace-core-ppc.sh.
+	(EXTRA_DIST): Add backtrace.ppc.core.bz2,
+	backtrace.ppc.exec.bz2 and run-backtrace-core-ppc.sh.
+	* backtrace.ppc.core.bz2: New file.
+	* backtrace.ppc.exec.bz2: New file.
+	* run-backtrace-core-ppc.sh: New file.
+
+2013-12-10  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (backtrace_child_biarch_SOURCES): New backtrace-child.c.
+
+2013-12-10  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (valgrind_cmd): Remove --trace-children=yes.
+	* backtrace-subr.sh (check_native_core): Disable valgrind while
+	dumping core.
+	* run-backtrace-data.sh: Disable valgrind.
+	* run-backtrace-dwarf.sh: Likewise.
+
+2013-12-09  Mark Wielaard  <mjw@redhat.com>
+
+	* varlocs.c (print_expr): Update comment to explain empty location
+	associated with DW_OP_GNU_implicit_pointer.
+
+2013-12-05  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix test FAIL with -O2.
+	* backtrace-child.c (sigusr2): Add NOINLINE_NOCLONE and final asm stub.
+
+2013-12-05  Mark Wielaard  <mjw@redhat.com>
+
+	* backtrace-data.c (main): If unsupported also print to stderr.
+	* run-backtrace-dwarf.sh: Add check_unsupported and check_main.
+
+2013-12-04  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (backtrace-child-biarch): Add $(EXEEXT).
+
+2013-12-02  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (check_PROGRAMS): Add backtrace, backtrace-child,
+	backtrace-data and backtrace-dwarf.
+	(BUILT_SOURCES, clean-local, backtrace-child-biarch): New.
+	(TESTS): Add run-backtrace-native.sh, run-backtrace-data.sh,
+	run-backtrace-dwarf.sh, run-backtrace-native-biarch.sh,
+	run-backtrace-native-core.sh, run-backtrace-native-core-biarch.sh,
+	run-backtrace-core-x86_64.sh and run-backtrace-core-i386.sh.
+	<!BIARCH> Add export of ELFUTILS_DISABLE_BIARCH.
+	(EXTRA_DIST): Add run-backtrace-data.sh, run-backtrace-dwarf.sh,
+	cleanup-13.c, run-backtrace-native.sh, run-backtrace-native-biarch.sh,
+	run-backtrace-native-core.sh, run-backtrace-native-core-biarch.sh,
+	run-backtrace-core-x86_64.sh, run-backtrace-core-i386.sh,
+	backtrace-subr.sh, backtrace.i386.core.bz2, backtrace.i386.exec.bz2,
+	backtrace.x86_64.core.bz2, backtrace.x86_64.exec.bz2.
+	(backtrace_LDADD, backtrace_child_CFLAGS, backtrace_child_LDFLAGS)
+	(backtrace_data_LDADD, backtrace_dwarf_CFLAGS, backtrace_dwarf_LDADD):
+	New.
+	* backtrace-child.c: New file.
+	* backtrace-data.c: New file.
+	* backtrace-dwarf.c: New file.
+	* backtrace-subr.sh: New file.
+	* backtrace.c: New file.
+	* cleanup-13.c: New file.
+	* backtrace.i386.core.bz2: New file.
+	* backtrace.i386.exec.bz2: New file.
+	* backtrace.x86_64.core.bz2: New file.
+	* backtrace.x86_64.exec.bz2: New file.
+	* run-backtrace-core-i386.sh: New file.
+	* run-backtrace-core-x86_64.sh: New file.
+	* run-backtrace-native-biarch.sh: New file.
+	* run-backtrace-native-core-biarch.sh: New file.
+	* run-backtrace-native-core.sh: New file.
+	* run-backtrace-native.sh: New file.
+	* run-backtrace-data.sh: New file.
+	* run-backtrace-dwarf.sh: New file.
+
+2013-11-27  Mark Wielaard  <mjw@redhat.com>
+
+	* dwflsyms.c (gelf_bind_order): New function.
+	(elf_section_name): Likewise.
+	(addr_in_section): Likewise.
+	(list_syms): Use dwfl_module_getsym_elf and dwfl_module_addrsym_elf.
+	Refine assert using gelf_bind_order. Print elf_section_name. Check
+	bias with addr_in_section.
+	* run-dwflsyms.sh: Add section names to expected output.
+
+2013-11-26  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (EXTRA_DIST): Add run-funcretval.sh.
+
+2013-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* testfile_aarch64_core.bz2, hello_aarch64.ko.bz2: New files.
+	* funcretval_test.c, funcretval_test_aarch64.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add these.
+	(TESTS): Add run-funcretval.sh.
+	* run-allregs.sh: Use testfile_aarch64_core.bz2 for a regs_test.
+	* run-readelf-mixed-corenote.sh: ... and for a readelf -n test.
+	* run-strip-reloc.sh: Add a test on hello_aarch64.ko.bz2.
+	* run-funcretval.sh: New file.
+
+2013-11-18  Josh Stone  <jistone@redhat.com>
+
+	* testfilebazdbg_plr.bz2: New testfile.
+	* testfilebazmin_plr.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add the above files.
+	* run-dwflsyms.sh: Add prelink -r tests.
+
+2013-11-15  Mark Wielaard  <mjw@redhat.com>
+
+	* testfilebazmdb.bz2: Regenerated.
+	* testfilebazmin.bz2: Likewise.
+	* testfilebazdbg_pl.bz2: New testfile.
+	* testfilebazmin_pl.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add testfilebazdbg_pl.bz2 and
+	testfilebazmin_pl.bz2.
+	* dwflsyms.c (list_syms): Call dwfl_module_relocate_address and
+	print relative address of function symbols.
+	* run-dwflsyms.sh: Add prelink tests and adjust expected output.
+
+2013-11-01  Michael Forney  <mforney@mforney.org>
+
+	* Makefile.am (TESTS_ENVIRONMENT): Use and export NM.
+	* run-arsymtest.sh: Use NM.
+
+2013-11-05  Mark Wielaard  <mjw@redhat.com>
+
+	* allfcts.c (main): Correct dwarf_getfuncs return value check.
+
+2013-10-10  Mark Wielaard  <mjw@redhat.com>
+	    Josh Stone  <jistone@redhat.com>
+
+	* run-allfcts-multi.sh: New test.
+	* test-offset-loop.bz2: New testfile.
+	* test-offset-loop.alt.bz2: New testfile.
+	* Makefile.am (TESTS): Add run-allcft-multi.sh if ENABLE_DWZ.
+	(EXTRA_DIST): Add run-allfcts-multi.sh, test-offset-loop.bz2 and
+	test-offset-loop.alt.bz2.
+
+2013-10-15  Mark Wielaard  <mjw@redhat.com>
+
+	* run-unstrip-M.sh: New test.
+	* Makefile.am (TESTS): Add run-unstrip-M.sh.
+	(EXTRA_DIST): Likewise.
+
+2013-10-06  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addrcfi.sh: Remove nop from expected ppc and ppc64
+	location expression.
+
+2013-10-03  Josh Stone  <jistone@redhat.com>
+
+	* typeiter2.c: New file, reversing typeiter.c.
+	* run-typeiter.sh: Also run typeiter2.
+	* Makefile.am (check_PROGRAMS): Add typeiter2.
+	(typeiter2_LDADD): New variable.
+
 2013-09-26  Petr Machata  <pmachata@redhat.com>
 
 	* run-readelf-mixed-corenote.sh: Update output of testfile71

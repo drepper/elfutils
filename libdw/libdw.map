@@ -267,3 +267,28 @@ ELFUTILS_0.157 {
     dwarf_getlocation_die;
     dwarf_getlocation_attr;
 } ELFUTILS_0.156;
+
+ELFUTILS_0.158 {
+  global:
+    # Replaced ELFUTILS_0.146 version, which has a wrapper without executable.
+    dwfl_core_file_report;
+
+    dwfl_attach_state;
+    dwfl_pid;
+    dwfl_thread_dwfl;
+    dwfl_thread_tid;
+    dwfl_frame_thread;
+    dwfl_thread_state_registers;
+    dwfl_thread_state_register_pc;
+    dwfl_getthread_frames;
+    dwfl_getthreads;
+    dwfl_thread_getframes;
+    dwfl_frame_pc;
+
+    dwfl_module_getsymtab_first_global;
+    dwfl_module_addrinfo;
+    dwfl_module_getsym_info;
+
+    dwfl_core_file_attach;
+    dwfl_linux_proc_attach;
+} ELFUTILS_0.157;

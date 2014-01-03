@@ -1,3 +1,62 @@
+2014-01-03  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac: Set version to 0.158.
+	* NEWS: Add entries for version 0.158.
+
+2013-12-20  Mark Wielaard  <mjw@redhat.com>
+
+	* NEWS (libdwfl): Add dwfl_getthread_frames.
+	(stack): New entry.
+
+2013-12-18  Mark Wielaard  <mjw@redhat.com>
+
+	* NEWS (libdwfl): Add dwfl_module_getsym_info and
+	dwfl_module_addrinfo.
+	(addr2line): Add -x option.
+
+2013-12-17  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* NEWS (Version 0.158) (libdwfl): Added Dwfl_Thread_Callbacks,
+	Dwfl_Thread, Dwfl_Frame, dwfl_attach_state, dwfl_pid, dwfl_thread_dwfl,
+	dwfl_thread_tid, dwfl_frame_thread, dwfl_thread_state_registers,
+	dwfl_thread_state_register_pc, dwfl_getthreads, dwfl_thread_getframes
+	and dwfl_frame_pc.
+
+2013-12-16  Mark Wielaard  <mjw@redhat.com>
+
+	* NEWS (libdwfl): Add dwfl_module_getsymtab_first_global.
+
+2013-12-09  Josh Stone  <jistone@redhat.com>
+
+	* .gitignore: Add config/ar-lib, installed due to AM_PROG_AR.
+
+2013-12-02  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* configure.ac (CC_BIARCH): Remove AS_IF for it.
+
+2013-11-07  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* configure.ac: New AC_CHECK_SIZEOF for long.  Call utrace_BIARCH, new
+	AC_SUBST for CC_BIARCH.
+
+2013-11-06  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac (--enable-dwz): Add AC_MSG_WARN when disabled but
+	local system does have /usr/lib/debug/.dwz.
+
+2013-11-06  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac (--enable-thread-safety): Add AC_MSG_WARN experimental
+	option.
+
+2013-11-01  Michael Forney  <mforney@mforney.org>
+
+	* configure.ac: Call AM_PROG_AR and AC_CHECK_TOOL for readelf and nm.
+
+2013-10-30  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* NEWS (Version 0.158): New.
+
 2013-09-30  Mark Wielaard  <mjw@redhat.com>
 
 	* NEWS: Update for readelf NT_SIGINFO and NT_FILE core notes.

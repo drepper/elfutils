@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2000-2010 Red Hat, Inc.
+## Copyright (C) 2000-2010, 2013 Red Hat, Inc.
 ## This file is part of elfutils.
 ##
 ## This file is free software; you can redistribute it and/or modify
@@ -54,7 +54,8 @@ gen_SOURCES = eblopenbackend.c eblclosebackend.c eblstrtab.c \
 	      eblreginfo.c eblnonerelocp.c eblrelativerelocp.c \
 	      eblsysvhashentrysize.c eblauxvinfo.c eblcheckobjattr.c \
 	      ebl_check_special_section.c ebl_syscall_abi.c eblabicfi.c \
-	      eblstother.c
+	      eblstother.c eblinitreg.c ebldwarftoregno.c eblnormalizepc.c \
+	      eblunwind.c eblresolvesym.c
 
 libebl_a_SOURCES = $(gen_SOURCES)
 

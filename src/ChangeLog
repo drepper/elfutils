@@ -1,3 +1,176 @@
+2014-01-02  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (show_raw): Declare unconditionally.
+	(parse_opt): Handle '-r' unconditionally.
+	(main): Show "raw" option even without USE_DEMANGLE.
+
+2014-01-02  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (print_frames): Print 0x before build-id hex-offset.
+
+2014-01-02  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (maxframes): Increase to 2048.
+	(struct frames): Add allocated field.
+	(frame_callback): If frames used is frames allocated, realloc.
+	(print_frames): Show an error if maxframes has been reached.
+	(parse_opt): Allow -n 0 for unlimited frames.
+	(main): Document -n 0 and new default 2048 frames. Allocate initial
+	number of frames with malloc.
+
+2013-12-30  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (parse_opt): Explicitly call dwfl_linux_proc_attach
+	or dwfl_core_file_attach and check for errors.
+
+2013-12-28  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (print_frames): Remove address width code and use...
+	(get_addr_width): ...this new function.
+	(show_modules): New static boolean.
+	(module_callback): New static function.
+	(parse_opt): Handle '-l'.
+	(main): Add 'l' to options. If show_modules then use dwfl_getmodules
+	with module_callback to show all detected modules and possible
+	build_id, elf and dwarf files.
+
+2013-12-27  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (frames_shown): New static boolean.
+	(EXIT_OK,EXIT_ERROR,EXIT_BAD,EXIT_USAGES): New defines.
+	(frame_callback): Return -1 on error. Don't print error.
+	(print_frames): Add arguments, tid, dwflerr and what. Print tid.
+	If there was an error report it with address and module if possible.
+	Record whether any frames were actually printed.
+	(thread_callback): Collect tid and err, pass it to print_frames.
+	(parse_opt): Use EXIT_BAD for errors. On ARGP_KEY_END print errno
+	if dwfl_linux_proc_report returned it. Check whether we are properly
+	attached with dwfl_pid.
+	(main): Document exit status. Don't report DWARF_CB_ABORT from
+	callbacks as error. Pass real errors to print_frames. Return
+	EXIT_BAD if no frames could be shown. Return EXIT_ERROR if there
+	were any non-fatal errors.
+
+2013-12-23  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (stack_LDADD): Add demanglelib.
+	* stack.c (show_quiet): New static boolean, default false.
+	(show_raw): Likewise.
+	(demangle_buffer_len): New static size_t.
+	(demangle_buffer): New static char *.
+	(print_frames): Don't resolve pc name if show_quiet. Demangle name
+	unless show_raw.
+	(parse_opt): Handle '-q' and '-r'.
+	(main): Add 'q' and 'r' to options. Free demangle_buffer.
+
+2013-12-23  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (OPT_DEBUGINFO): New define.
+	(OPT_COREFILE): Likewise.
+	(pid): New static.
+	(core_fd): Likewise.
+	(core): Likewise.
+	(exec): Likewise.
+	(debuginfo_path): Likewise.
+	(parse_opt): Handle '-p', '--core', '-e' and '--debuginfo-path'.
+	Do argument sanity checking. Setup Dwfl.
+	(main): Add 'p', 'core', 'e' and 'debuginfo-path' to options.
+	Remove argp_child children, simplify argp doc, remove custom
+	usage message and construction of dwfl with dwfl_standard_argp.
+	Use pid directly as tid. close core and core_fd if opened. Print
+	pid of process or core.
+
+2013-12-23  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (show_build_id): New static boolean.
+	(print_frames): Print module build-id, load address and pc offset
+	if show_build_id is true.
+	(parse_opt): Handle '-b'.
+	(main): Add -b to options.
+
+2013-12-22  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (maxframes): New static unsigned. Initialize to 64.
+	(struct frame): New struct.
+	(struct frames): Likewise.
+	(dwfl): New static Dwfl pointer.
+	(frame_callback): Use arg as struct frames and fill it next frame.
+	Return DWARF_CB_ABORT when maxframes has been reached. Move
+	printing of frame to...
+	(print_frames): ...here. New function.
+	(thread_callback): Use arg as struct frames and set frames to zero.
+	Call print_frames.
+	(parse_opt): Handle '-n'.
+	(main): Add -n to options. Allocate frames using maxframes. Pass
+	frames to frame_callback and thread_callback.
+
+2013-12-20  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (show_one_tid): New static boolean.
+	(parse_opt): Handle '-1'.
+	(main): Add -1 to options. Call dwfl_getthread_frames when
+	show_one_tid is true.
+
+2013-12-18  Mark Wielaard  <mjw@redhat.com>
+
+	* addr2line.c (options): Add symbol-sections, 'x'.
+	(show_symbol_sections): New static bool.
+	(parse_opt): Handle 'x'.
+	(print_addrsym): Use dwfl_module_addrinfo value.r
+	Also show section of address with show_symbol_sections.
+	(find_symbol): Use dwfl_module_getsym_info and set value.
+	(handle_address): Request value and use it instead of sym.st_value.
+	* readelf.c (format_dwarf_addr): Use dwfl_module_addrinfo to get
+	name and offset.
+
+2013-12-17  Masatake YAMATO  <yamato@redhat.com>
+	    Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (show_activation, show_module, show_source): New variables.
+	(parse_opt): Set show_activation if -a option is given.
+	Set show_module if -m option is given. Set show_source if -s option
+	is given. Set all show booleans when -v option is given.
+	(main): Added `-a', `-m', `-s', and `-v' to the help message.
+	(frame_callback): Print module and source file information.
+
+2013-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* elflint.c (valid_e_machine): Add EM_AARCH64.
+
+2013-11-14  Petr Machata  <pmachata@redhat.com>
+
+	* readelf.c (handle_core_item) <'h'>: New branch for handling
+	fields that shouldn't be displayed.
+
+2013-11-10  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c: Use ARGP_PROGRAM_VERSION_HOOK_DEF and
+	ARGP_PROGRAM_BUG_ADDRESS_DEF.
+	(print_version): New function.
+
+2013-11-09  Mark Wielaard  <mjw@redhat.com>
+
+	* arlib.c (arlib_init): Call snprintf before using the result
+	with memcpy.
+	(arlib_finalize): Likewise.
+	* nm.c (show_symbols_sysv): Don't modify cnt inside assert.
+
+2013-11-07  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* Makefile.am (bin_PROGRAMS): Add stack.
+	(stack_LDADD): New.
+	* stack.c: New file.
+
+2013-11-05  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_debug_ranges_section): Cast address to size_t
+	before comparison.
+	(print_debug_loc_section): Likewise.
+
+2013-10-18  Mark Wielaard  <mjw@redhat.com>
+
+	* ar.c (main): Correct operation check when instance_specifed is set.
+
 2013-09-26  Petr Machata  <pmachata@redhat.com>
 
 	* readelf.c (handle_file_note): New function.

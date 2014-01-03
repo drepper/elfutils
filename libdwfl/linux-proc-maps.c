@@ -1,5 +1,5 @@
 /* Standard libdwfl callbacks for debugging a live Linux process.
-   Copyright (C) 2005-2010 Red Hat, Inc.
+   Copyright (C) 2005-2010, 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -29,6 +29,7 @@
 #include "libdwflP.h"
 #include <inttypes.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdio_ext.h>
@@ -232,7 +233,7 @@ proc_maps_report (Dwfl *dwfl, FILE *f, GElf_Addr sysinfo_ehdr, pid_t pid)
 	}
 
       char *file = line + nread + strspn (line + nread, " \t");
-      if (file[0] == '\0' || (ino == 0 && dmajor == 0 && dminor == 0))
+      if (file[0] != '/' || (ino == 0 && dmajor == 0 && dminor == 0))
 	/* This line doesn't indicate a file mapping.  */
 	continue;
 
@@ -338,6 +339,14 @@ dwfl_linux_proc_find_elf (Dwfl_Module *mod __attribute__ ((unused)),
 {
   if (module_name[0] == '/')
     {
+      /* When this callback is used together with dwfl_linux_proc_report
+	 then we might see mappings of special character devices.  Make
+	 sure we only open and return regular files.  Special devices
+	 might hang on open or read.  */
+      struct stat sb;
+      if (stat (module_name, &sb) == -1 || (sb.st_mode & S_IFMT) != S_IFREG)
+	return -1;
+
       int fd = open64 (module_name, O_RDONLY);
       if (fd >= 0)
 	{
@@ -373,7 +382,6 @@ dwfl_linux_proc_find_elf (Dwfl_Module *mod __attribute__ ((unused)),
       return -1;
     }
 
-  abort ();
   return -1;
 }
 INTDEF (dwfl_linux_proc_find_elf)

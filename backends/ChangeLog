@@ -1,3 +1,80 @@
+2014-01-03  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (aarch64_SRCS): Add aarch64_cfi.c.
+	* aarch64_cfi.c: New file.
+	* aarch64_init.c (aarch64_init): Hook abi_cfi.
+	* aarch64_regs.c (aarch64_register_info): Set *prefix to "".
+
+2013-12-19  Mark Wielaard  <mjw@redhat.com>
+
+	* aarch64_init.c (aarch64_init): Hook check_special_symbol.
+	* aarch64_symbol.c (aarch64_check_special_symbol): New function.
+
+2013-12-18  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (ppc64_SRCS): Add ppc64_resolve_sym.c.
+	* ppc64_resolve_sym.c: New file.
+	* ppc64_init.c: Hook resolve_sym_value and find function descriptor
+	table.
+
+2013-12-18  Mark Wielaard  <mjw@redhat.com>
+
+	* s390_initreg.c (s390_set_initial_registers_tid): Use union
+	to avoid type-punning when assigning a double to a Dwarf_Word.
+
+2013-12-18  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	unwinder: s390 and s390x
+	* Makefile.am (s390_SRCS): Add s390_initreg.c and s390_unwind.c.
+	* s390_corenote.c (prstatus_regs): Set PC_REGISTER.  Reindent all the
+	entries.
+	* s390_init.c (s390_init): Initialize frame_nregs,
+	set_initial_registers_tid, normalize_pc and unwind.
+	* s390_initreg.c: New file.
+	* s390_unwind.c: New file.
+
+2013-12-15  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	unwinder: ppc and ppc64
+	* Makefile.am (ppc_SRCS, ppc64_SRCS): Add ppc_initreg.c.
+	* ppc64_init.c (ppc64_init): Initialize also frame_nregs,
+	set_initial_registers_tid and dwarf_to_regno.
+	* ppc_corenote.c (PRSTATUS_REGSET_ITEMS) <nip>: Set PC_REGISTER.
+	* ppc_init.c (ppc64_init): Initialize also frame_nregs,
+	set_initial_registers_tid and dwarf_to_regno.
+	* ppc_initreg.c: New file.
+
+2013-11-25  Petr Machata  <pmachata@redhat.com>
+
+	* Makefile.am (modules): Add aarch64.
+	(libebl_pic): Add libebl_aarch64_pic.a.
+	(aarch64_SRCS): New variable.
+	(libebl_aarch64_pic_a_SOURCES): Likewise.
+	(am_libebl_aarch64_pic_a_OBJECTS): Likewise.
+	(aarch64_regs_no_Wformat): Likewise.
+	* aarch64_corenote.c, aarch64_init.c: New files.
+	* aarch64_regs.c, aarch64_reloc.def: Likewise.
+	* aarch64_retval.c, aarch64_symbol.c: Likewise.
+	* libebl_CPU.h (dwarf_peel_type): New function.
+	(dwarf_peeled_die_type): Likewise.
+
+2013-11-07  Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (i386_SRCS): Add i386_initreg.c.
+	(x86_64_SRCS): Add x86_64_initreg.c.
+	* i386_initreg.c: New file.
+	* i386_init.c (i386_init): Initialize frame_nregs and
+	set_initial_registers_tid.
+	* x86_64_initreg.c: New file.
+	* x86_64_init.c (x86_64_init): Initialize frame_nregs and
+	set_initial_registers_tid.
+
+2013-10-06  Mark Wielaard  <mjw@redhat.com>
+
+	* ppc_cfi.c (ppc_abi_cfi): Use DW_CFA_val_offset for reg1, not
+	DW_CFA_val_expression.
+
 2013-08-29  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am (arm_SRCS): Add arm_cfi.c.

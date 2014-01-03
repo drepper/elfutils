@@ -1,5 +1,5 @@
 /* Find debugging and symbol information for a module in libdwfl.
-   Copyright (C) 2005, 2006, 2007 Red Hat, Inc.
+   Copyright (C) 2005, 2006, 2007, 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -31,6 +31,8 @@
 const char *
 dwfl_module_addrname (Dwfl_Module *mod, GElf_Addr addr)
 {
+  GElf_Off off;
   GElf_Sym sym;
-  return INTUSE(dwfl_module_addrsym) (mod, addr, &sym, NULL);
+  return INTUSE(dwfl_module_addrinfo) (mod, addr, &off, &sym,
+				       NULL, NULL, NULL);
 }

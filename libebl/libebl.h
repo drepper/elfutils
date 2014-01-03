@@ -1,5 +1,5 @@
 /* Interface for libebl.
-   Copyright (C) 2000-2010 Red Hat, Inc.
+   Copyright (C) 2000-2010, 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -257,6 +257,11 @@ extern int ebl_syscall_abi (Ebl *ebl, int *sp, int *pc,
    before each CIE's initial instructions.  It should set the
    data_alignment_factor member if it affects the initial instructions.
 
+   The callback should not use the register rules DW_CFA_expression or
+   DW_CFA_val_expression.  Defining the CFA using DW_CFA_def_cfa_expression
+   is allowed.  This is an implementation detail since register rules
+   store expressions as offsets from the .eh_frame or .debug_frame data.
+
    As a shorthand for some common cases, for this instruction stream
    we overload some CFI instructions that cannot be used in a CIE:
 
@@ -351,6 +356,7 @@ typedef struct
   uint8_t bits;			/* Bits of data for one register.  */
   uint8_t pad;			/* Bytes of padding after register's data.  */
   Dwarf_Half count;		/* Consecutive register numbers here.  */
+  bool pc_register;
 } Ebl_Register_Location;
 
 /* Non-register data items in core notes.  */
@@ -363,6 +369,7 @@ typedef struct
   Elf_Type type;
   char format;
   bool thread_identifier;
+  bool pc_register;
 } Ebl_Core_Item;
 
 /* Describe the format of a core file note with the given header and NAME.
@@ -378,6 +385,65 @@ extern int ebl_auxv_info (Ebl *ebl, GElf_Xword a_type,
 			  const char **name, const char **format)
   __nonnull_attribute__ (1, 3, 4);
 
+/* Callback type for ebl_set_initial_registers_tid.
+   Register -1 is mapped to PC (if arch PC has no DWARF number).
+   If FIRSTREG is -1 then NREGS has to be 1.  */
+typedef bool (ebl_tid_registers_t) (int firstreg, unsigned nregs,
+				    const Dwarf_Word *regs, void *arg)
+  __nonnull_attribute__ (3);
+
+/* Callback to fetch process data from live TID.
+   EBL architecture has to have EBL_FRAME_NREGS > 0, otherwise the
+   backend doesn't support unwinding and this function call may crash.  */
+extern bool ebl_set_initial_registers_tid (Ebl *ebl,
+					   pid_t tid,
+					   ebl_tid_registers_t *setfunc,
+					   void *arg)
+  __nonnull_attribute__ (1, 3);
+
+/* Number of registers to allocate for ebl_set_initial_registers_tid.
+   EBL architecture can unwind iff EBL_FRAME_NREGS > 0.  */
+extern size_t ebl_frame_nregs (Ebl *ebl)
+  __nonnull_attribute__ (1);
+
+/* Convert *REGNO as is in DWARF to a lower range suitable for
+   Dwarf_Frame->REGS indexing.  */
+extern bool ebl_dwarf_to_regno (Ebl *ebl, unsigned *regno)
+  __nonnull_attribute__ (1, 2);
+
+/* Modify PC as fetched from inferior data into valid PC.  */
+extern void ebl_normalize_pc (Ebl *ebl, Dwarf_Addr *pc)
+  __nonnull_attribute__ (1, 2);
+
+/* Callback type for ebl_unwind's parameter getfunc.  */
+typedef bool (ebl_tid_registers_get_t) (int firstreg, unsigned nregs,
+					Dwarf_Word *regs, void *arg)
+  __nonnull_attribute__ (3);
+
+/* Callback type for ebl_unwind's parameter readfunc.  */
+typedef bool (ebl_pid_memory_read_t) (Dwarf_Addr addr, Dwarf_Word *data,
+				      void *arg)
+  __nonnull_attribute__ (3);
+
+/* Get previous frame state for an existing frame state.  Method is called only
+   if unwinder could not find CFI for current PC.  PC is for the
+   existing frame.  SETFUNC sets register in the previous frame.  GETFUNC gets
+   register from the existing frame.  Note that GETFUNC vs. SETFUNC act on
+   a disjunct set of registers.  READFUNC reads memory.  ARG has to be passed
+   for SETFUNC, GETFUNC and READFUNC.  *SIGNAL_FRAMEP is initialized to false,
+   it can be set to true if existing frame is a signal frame.  SIGNAL_FRAMEP is
+   never NULL.  */
+extern bool ebl_unwind (Ebl *ebl, Dwarf_Addr pc, ebl_tid_registers_t *setfunc,
+			ebl_tid_registers_get_t *getfunc,
+			ebl_pid_memory_read_t *readfunc, void *arg,
+			bool *signal_framep)
+  __nonnull_attribute__ (1, 3, 4, 5, 7);
+
+/* Returns true if the value can be resolved to an address in an
+   allocated section, which will be returned in *ADDR
+   (e.g. function descriptor resolving)  */
+extern bool ebl_resolve_sym_value (Ebl *ebl, GElf_Addr *addr)
+   __nonnull_attribute__ (2);
 
 #ifdef __cplusplus
 }
