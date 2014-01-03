@@ -1,5 +1,5 @@
 /* Internal definitions for libdwfl.
-   Copyright (C) 2005-2013 Red Hat, Inc.
+   Copyright (C) 2005-2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -89,7 +89,8 @@ typedef struct Dwfl_Process Dwfl_Process;
   DWFL_ERROR (ATTACH_STATE_CONFLICT, N_("Dwfl already has attached state"))   \
   DWFL_ERROR (NO_ATTACH_STATE, N_("Dwfl has no attached state"))	      \
   DWFL_ERROR (NO_UNWIND, N_("Unwinding not supported for this architecture")) \
-  DWFL_ERROR (INVALID_ARGUMENT, N_("Invalid argument"))
+  DWFL_ERROR (INVALID_ARGUMENT, N_("Invalid argument"))			      \
+  DWFL_ERROR (UNWIND_BAD_CFA, N_("Unwind not monotonous (corrupt stack?)"))
 
 #define DWFL_ERROR(name, text) DWFL_E_##name,
 typedef enum { DWFL_ERRORS DWFL_E_NUM } Dwfl_Error;
@@ -241,6 +242,8 @@ struct Dwfl_Frame
   Dwfl_Frame *unwound;
   bool signal_frame : 1;
   bool initial_frame : 1;
+  /* Used to catch infinite unwinding.  */
+  Dwarf_Addr cfa;
   enum
   {
     /* This structure is still being initialized or there was an error

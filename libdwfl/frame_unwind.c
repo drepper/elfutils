@@ -1,5 +1,5 @@
 /* Get previous frame state for an existing frame state.
-   Copyright (C) 2013 Red Hat, Inc.
+   Copyright (C) 2013-2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -105,8 +105,8 @@ bra_compar (const void *key_voidp, const void *elem_voidp)
    DW_OP_call_frame_cfa is no longer permitted.  */
 
 static bool
-expr_eval (Dwfl_Frame *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
-	   size_t nops, Dwarf_Addr *result, Dwarf_Addr bias)
+expr_eval (Dwfl_Frame *state, const Dwarf_Op *ops, size_t nops,
+	   Dwarf_Addr *result, Dwarf_Addr bias, const int elfclass)
 {
   Dwfl_Process *process = state->thread->process;
   if (nops == 0)
@@ -310,7 +310,6 @@ expr_eval (Dwfl_Frame *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
 	    }
 	  if (op->atom == DW_OP_deref_size)
 	    {
-	      const int elfclass = frame->cache->e_ident[EI_CLASS];
 	      const unsigned addr_bytes = elfclass == ELFCLASS32 ? 4 : 8;
 	      if (op->number > addr_bytes)
 		{
@@ -450,16 +449,15 @@ expr_eval (Dwfl_Frame *state, Dwarf_Frame *frame, const Dwarf_Op *ops,
 	  break;
 	/* DW_OP_* not listed in libgcc/unwind-dw2.c execute_stack_op:  */
 	case DW_OP_call_frame_cfa:;
-	  // Not used by CFI itself but it is synthetized by elfutils internation.
-	  Dwarf_Op *cfa_ops;
-	  size_t cfa_nops;
-	  Dwarf_Addr cfa;
-	  if (frame == NULL
-	      || dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) != 0
-	      || ! expr_eval (state, NULL, cfa_ops, cfa_nops, &cfa, bias)
-	      || ! push (cfa))
+	  if (state->unwound->cfa == 0)
 	    {
-	      __libdwfl_seterrno (DWFL_E_LIBDW);
+	      /* DW_OP_call_frame_cfa is needed to compute CFA itself.  */
+	      free (stack);
+	      __libdwfl_seterrno (DWFL_E_INVALID_DWARF);
+	      return false;
+	    }
+	  if (! push (state->unwound->cfa))
+	    {
 	      free (stack);
 	      return false;
 	    }
@@ -510,6 +508,7 @@ new_unwound (Dwfl_Frame *state)
   unwound->unwound = NULL;
   unwound->signal_frame = false;
   unwound->initial_frame = false;
+  unwound->cfa = 0;
   unwound->pc_state = DWFL_FRAME_STATE_ERROR;
   memset (unwound->regs_set, 0, sizeof (unwound->regs_set));
 }
@@ -536,11 +535,28 @@ handle_cfi (Dwfl_Frame *state, Dwarf_Addr pc, Dwarf_CFI *cfi, Dwarf_Addr bias)
   Ebl *ebl = process->ebl;
   size_t nregs = ebl_frame_nregs (ebl);
   assert (nregs > 0);
+  const int elfclass = frame->cache->e_ident[EI_CLASS];
 
   /* The return register is special for setting the unwound->pc_state.  */
   unsigned ra = frame->fde->cie->return_address_register;
   bool ra_set = false;
   ebl_dwarf_to_regno (ebl, &ra);
+
+  // Set unwound->CFA.
+  Dwarf_Op *cfa_ops;
+  size_t cfa_nops;
+  if (dwarf_frame_cfa (frame, &cfa_ops, &cfa_nops) != 0
+      || ! expr_eval (state, cfa_ops, cfa_nops, &unwound->cfa, bias, elfclass))
+    {
+      __libdwfl_seterrno (DWFL_E_LIBDW);
+      return;
+    }
+  if (unwound->cfa == 0
+      || (! state->initial_frame && unwound->cfa <= state->cfa))
+    {
+      __libdwfl_seterrno (DWFL_E_UNWIND_BAD_CFA);
+      return;
+    }
 
   for (unsigned regno = 0; regno < nregs; regno++)
     {
@@ -574,7 +590,7 @@ handle_cfi (Dwfl_Frame *state, Dwarf_Addr pc, Dwarf_CFI *cfi, Dwarf_Addr bias)
 	      continue;
 	    }
 	}
-      else if (! expr_eval (state, frame, reg_ops, reg_nops, &regval, bias))
+      else if (! expr_eval (state, reg_ops, reg_nops, &regval, bias, elfclass))
 	{
 	  /* PPC32 vDSO has various invalid operations, ignore them.  The
 	     register will look as unset causing an error later, if used.

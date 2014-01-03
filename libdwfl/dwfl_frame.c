@@ -1,5 +1,5 @@
 /* Get Dwarf Frame state for target PID or core file.
-   Copyright (C) 2013 Red Hat, Inc.
+   Copyright (C) 2013-2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -98,6 +98,7 @@ state_alloc (Dwfl_Thread *thread)
   state->thread = thread;
   state->signal_frame = false;
   state->initial_frame = true;
+  state->cfa = 0;
   state->pc_state = DWFL_FRAME_STATE_ERROR;
   memset (state->regs_set, 0, sizeof (state->regs_set));
   thread->unwound = state;
