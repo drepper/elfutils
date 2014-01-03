@@ -41,6 +41,12 @@ report_pid (Dwfl *dwfl, pid_t pid)
 
   if (dwfl_report_end (dwfl, NULL, NULL) != 0)
     error (2, 0, "dwfl_report_end: %s", dwfl_errmsg (-1));
+
+  result = dwfl_linux_proc_attach (dwfl, pid, false);
+  if (result < 0)
+    error (2, 0, "dwfl_linux_proc_attach: %s", dwfl_errmsg (-1));
+  else if (result > 0)
+    error (2, result, "dwfl_linux_proc_attach");
 }
 
 static Dwfl *
@@ -58,46 +64,6 @@ pid_to_dwfl (pid_t pid)
   if (dwfl == NULL)
     error (2, 0, "dwfl_begin: %s", dwfl_errmsg (-1));
   report_pid (dwfl, pid);
-  return dwfl;
-}
-
-static const char *executable = "/proc/self/exe";
-
-static int
-find_elf (Dwfl_Module *mod, void **userdata, const char *modname,
-	  Dwarf_Addr base, char **file_name, Elf **elfp)
-{
-  if (executable && modname != NULL
-      && (strcmp (modname, "[exe]") == 0 || strcmp (modname, "[pie]") == 0))
-    {
-      char *executable_dup = strdup (executable);
-      if (executable_dup)
-	{
-	  free (*file_name);
-	  *file_name = executable_dup;
-	  return -1;
-	}
-    }
-  return dwfl_build_id_find_elf (mod, userdata, modname, base, file_name, elfp);
-}
-
-static Dwfl *
-dwfl_offline (void)
-{
-  static char *debuginfo_path;
-  static const Dwfl_Callbacks offline_callbacks =
-    {
-      .find_debuginfo = dwfl_standard_find_debuginfo,
-      .debuginfo_path = &debuginfo_path,
-
-      .section_address = dwfl_offline_section_address,
-
-      /* We use this table for core files too.  */
-      .find_elf = find_elf,
-    };
-  Dwfl *dwfl = dwfl_begin (&offline_callbacks);
-  if (dwfl == NULL)
-    error (2, 0, "dwfl_begin: %s", dwfl_errmsg (-1));
   return dwfl;
 }
 

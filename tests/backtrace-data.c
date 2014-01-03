@@ -43,8 +43,10 @@
 #ifndef __x86_64__
 
 int
-main (void)
+main (int argc __attribute__ ((unused)), char **argv)
 {
+  fprintf (stderr, "%s: Unwinding not supported for this architecture\n",
+          argv[0]);
   return 77;
 }
 
@@ -203,6 +205,7 @@ set_initial_registers (Dwfl_Thread *thread,
 static const Dwfl_Thread_Callbacks callbacks =
 {
   next_thread,
+  NULL, /* get_thread */
   memory_read,
   set_initial_registers,
   NULL, /* detach */

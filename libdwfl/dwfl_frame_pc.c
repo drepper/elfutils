@@ -37,6 +37,7 @@ dwfl_frame_pc (Dwfl_Frame *state, Dwarf_Addr *pc, bool *isactivation)
 {
   assert (state->pc_state == DWFL_FRAME_STATE_PC_SET);
   *pc = state->pc;
+  ebl_normalize_pc (state->thread->process->ebl, pc);
   if (isactivation)
     {
       /* Bottom frame?  */

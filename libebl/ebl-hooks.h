@@ -162,5 +162,31 @@ bool EBLHOOK(set_initial_registers_tid) (pid_t tid,
 					 ebl_tid_registers_t *setfunc,
 					 void *arg);
 
+/* Convert *REGNO as is in DWARF to a lower range suitable for
+   Dwarf_Frame->REGS indexing.  */
+bool EBLHOOK(dwarf_to_regno) (Ebl *ebl, unsigned *regno);
+
+/* Optionally modify *PC as fetched from inferior data into valid PC
+   instruction pointer.  */
+void EBLHOOK(normalize_pc) (Ebl *ebl, Dwarf_Addr *pc);
+
+/* Get previous frame state for an existing frame state.  Method is called only
+   if unwinder could not find CFI for current PC.  PC is for the
+   existing frame.  SETFUNC sets register in the previous frame.  GETFUNC gets
+   register from the existing frame.  Note that GETFUNC vs. SETFUNC act on
+   a disjunct set of registers.  READFUNC reads memory.  ARG has to be passed
+   for SETFUNC, GETFUNC and READFUNC.  *SIGNAL_FRAMEP is initialized to false,
+   it can be set to true if existing frame is a signal frame.  SIGNAL_FRAMEP is
+   never NULL.  */
+bool EBLHOOK(unwind) (Ebl *ebl, Dwarf_Addr pc, ebl_tid_registers_t *setfunc,
+		      ebl_tid_registers_get_t *getfunc,
+		      ebl_pid_memory_read_t *readfunc, void *arg,
+		      bool *signal_framep);
+
+/* Returns true if the value can be resolved to an address in an
+   allocated section, which will be returned in *SHNDXP.
+   (e.g. function descriptor resolving)  */
+bool EBLHOOK(resolve_sym_value) (Ebl *ebl, GElf_Addr *addr);
+
 /* Destructor for ELF backend handle.  */
 void EBLHOOK(destr) (struct ebl *);

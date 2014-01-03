@@ -135,6 +135,23 @@ core_next_thread (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg,
   size_t desc_offset;
   Elf_Data *note_data = core_arg->note_data;
   size_t offset;
+
+  struct thread_arg *thread_arg;
+  if (*thread_argp == NULL)
+    {
+      core_arg->thread_note_offset = 0;
+      thread_arg = malloc (sizeof (*thread_arg));
+      if (thread_arg == NULL)
+	{
+	  __libdwfl_seterrno (DWFL_E_NOMEM);
+	  return -1;
+	}
+      thread_arg->core_arg = core_arg;
+      *thread_argp = thread_arg;
+    }
+  else
+    thread_arg = (struct thread_arg *) *thread_argp;
+
   while (offset = core_arg->thread_note_offset, offset < note_data->d_size
 	 && (core_arg->thread_note_offset = gelf_getnote (note_data, offset,
 							  &nhdr, &name_offset,
@@ -167,17 +184,11 @@ core_next_thread (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg,
 		? be32toh (val32) : le32toh (val32));
       pid_t tid = (int32_t) val32;
       eu_static_assert (sizeof val32 <= sizeof tid);
-      struct thread_arg *thread_arg = malloc (sizeof (*thread_arg));
-      if (thread_arg == NULL)
-	{
-	  __libdwfl_seterrno (DWFL_E_NOMEM);
-	  return -1;
-	}
-      thread_arg->core_arg = core_arg;
       thread_arg->note_offset = offset;
-      *thread_argp = thread_arg;
       return tid;
     }
+
+  free (thread_arg);
   return 0;
 }
 
@@ -227,16 +238,42 @@ core_set_initial_registers (Dwfl_Thread *thread, void *thread_arg_voidp)
   }
   /* core_next_thread already found this TID there.  */
   assert (tid == INTUSE(dwfl_thread_tid) (thread));
+  for (item = items; item < items + nitems; item++)
+    if (item->pc_register)
+      break;
+  if (item < items + nitems)
+    {
+      Dwarf_Word pc;
+      switch (gelf_getclass (core) == ELFCLASS32 ? 32 : 64)
+      {
+	case 32:;
+	  uint32_t val32 = *(const uint32_t *) (desc + item->offset);
+	  val32 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
+		   ? be32toh (val32) : le32toh (val32));
+	  /* Do a host width conversion.  */
+	  pc = val32;
+	  break;
+	case 64:;
+	  uint64_t val64 = *(const uint64_t *) (desc + item->offset);
+	  val64 = (elf_getident (core, NULL)[EI_DATA] == ELFDATA2MSB
+		   ? be64toh (val64) : le64toh (val64));
+	  pc = val64;
+	  break;
+	default:
+	  abort ();
+      }
+      INTUSE(dwfl_thread_state_register_pc) (thread, pc);
+    }
   desc += regs_offset;
   for (size_t regloci = 0; regloci < nregloc; regloci++)
     {
       const Ebl_Register_Location *regloc = reglocs + regloci;
-      if (regloc->regno >= nregs)
+      // Iterate even regs out of NREGS range so that we can find pc_register.
+      if (regloc->bits != 32 && regloc->bits != 64)
 	continue;
-      assert (regloc->bits == 32 || regloc->bits == 64);
       const char *reg_desc = desc + regloc->offset;
       for (unsigned regno = regloc->regno;
-	   regno < MIN (regloc->regno + (regloc->count ?: 1U), nregs);
+	   regno < regloc->regno + (regloc->count ?: 1U);
 	   regno++)
 	{
 	  /* PPC provides DWARF register 65 irrelevant for
@@ -244,7 +281,8 @@ core_set_initial_registers (Dwfl_Thread *thread, void *thread_arg_voidp)
 	     LR (108) is provided earlier (in NT_PRSTATUS) than the # 65.
 	     FIXME: It depends now on their order in core notes.
 	     FIXME: It uses private function.  */
-	  if (__libdwfl_frame_reg_get (thread->unwound, regno, NULL))
+	  if (regno < nregs
+	      && __libdwfl_frame_reg_get (thread->unwound, regno, NULL))
 	    continue;
 	  Dwarf_Word val;
 	  switch (regloc->bits)
@@ -269,7 +307,10 @@ core_set_initial_registers (Dwfl_Thread *thread, void *thread_arg_voidp)
 	      abort ();
 	  }
 	  /* Registers not valid for CFI are just ignored.  */
-	  INTUSE(dwfl_thread_state_registers) (thread, regno, 1, &val);
+	  if (regno < nregs)
+	    INTUSE(dwfl_thread_state_registers) (thread, regno, 1, &val);
+	  if (regloc->pc_register)
+	    INTUSE(dwfl_thread_state_register_pc) (thread, val);
 	  reg_desc += regloc->pad;
 	}
     }
@@ -287,36 +328,43 @@ core_detach (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg)
 static const Dwfl_Thread_Callbacks core_thread_callbacks =
 {
   core_next_thread,
+  NULL, /* get_thread */
   core_memory_read,
   core_set_initial_registers,
   core_detach,
   NULL, /* core_thread_detach */
 };
 
-static Dwfl_Error
-attach_state_for_core (Dwfl *dwfl, Elf *core)
+int
+dwfl_core_file_attach (Dwfl *dwfl, Elf *core)
 {
   Ebl *ebl = ebl_openbackend (core);
   if (ebl == NULL)
-    return DWFL_E_LIBEBL;
+    {
+      __libdwfl_seterrno (DWFL_E_LIBEBL);
+      return -1;
+    }
   size_t nregs = ebl_frame_nregs (ebl);
   if (nregs == 0)
     {
+      __libdwfl_seterrno (DWFL_E_NO_UNWIND);
       ebl_closebackend (ebl);
-      return DWFL_E_NO_UNWIND;
+      return -1;
     }
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (core, &ehdr_mem);
   if (ehdr == NULL)
     {
+      __libdwfl_seterrno (DWFL_E_LIBELF);
       ebl_closebackend (ebl);
-      return DWFL_E_LIBELF;
+      return -1;
     }
   assert (ehdr->e_type == ET_CORE);
   size_t phnum;
   if (elf_getphdrnum (core, &phnum) < 0)
     {
+      __libdwfl_seterrno (DWFL_E_LIBELF);
       ebl_closebackend (ebl);
-      return DWFL_E_LIBELF;
+      return -1;
     }
   pid_t pid = -1;
   Elf_Data *note_data = NULL;
@@ -375,14 +423,16 @@ attach_state_for_core (Dwfl *dwfl, Elf *core)
   if (pid == -1)
     {
       /* No valid NT_PRPSINFO recognized in this CORE.  */
+      __libdwfl_seterrno (DWFL_E_BADELF);
       ebl_closebackend (ebl);
-      return DWFL_E_BADELF;
+      return -1;
     }
   struct core_arg *core_arg = malloc (sizeof *core_arg);
   if (core_arg == NULL)
     {
+      __libdwfl_seterrno (DWFL_E_NOMEM);
       ebl_closebackend (ebl);
-      return DWFL_E_NOMEM;
+      return -1;
     }
   core_arg->core = core;
   core_arg->note_data = note_data;
@@ -391,31 +441,10 @@ attach_state_for_core (Dwfl *dwfl, Elf *core)
   if (! INTUSE(dwfl_attach_state) (dwfl, core, pid, &core_thread_callbacks,
 				   core_arg))
     {
-      Dwfl_Error error = dwfl_errno ();
-      assert (error != DWFL_E_NOERROR);
       free (core_arg);
       ebl_closebackend (ebl);
-      return error;
+      return -1;
     }
-  return DWFL_E_NOERROR;
+  return pid;
 }
-
-bool
-internal_function
-__libdwfl_attach_state_for_core (Dwfl *dwfl, Elf *core)
-{
-  if (dwfl->process != NULL)
-    {
-      __libdwfl_seterrno (DWFL_E_ATTACH_STATE_CONFLICT);
-      return false;
-    }
-  Dwfl_Error error = attach_state_for_core (dwfl, core);
-  assert ((dwfl->process != NULL) == (error == DWFL_E_NOERROR));
-  dwfl->process_attach_error = error;
-  if (error != DWFL_E_NOERROR)
-    {
-      __libdwfl_seterrno (error);
-      return false;
-    }
-  return true;
-}
+INTDEF (dwfl_core_file_attach)

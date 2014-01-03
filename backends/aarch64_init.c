@@ -56,6 +56,8 @@ aarch64_init (elf, machine, eh, ehlen)
   HOOK (eh, core_note);
   HOOK (eh, reloc_simple_type);
   HOOK (eh, return_value_location);
+  HOOK (eh, check_special_symbol);
+  HOOK (eh, abi_cfi);
 
   return MODVERSION;
 }

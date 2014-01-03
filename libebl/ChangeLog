@@ -1,3 +1,34 @@
+2013-12-18  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (gen_SOURCES): Add eblresolvesym.c.
+	* ebl-hooks.h (resolve_sym_value): New entry.
+	* eblresolvesym.c: New file.
+	* libebl.h (ebl_resolve_sym_value): New definition.
+	* libeblP.h (fd_addr): New field.
+	(fd_data): Likewise.
+
+2013-12-18  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	unwinder: s390 and s390x
+	* Makefile.am (gen_SOURCES): Add eblnormalizepc.c and eblunwind.c.
+	* ebl-hooks.h (normalize_pc, unwind): New.
+	* eblnormalizepc.c: New file.
+	* eblunwind.c: New file.
+	* libebl.h (Ebl_Register_Location): Add field pc_register.
+	(ebl_normalize_pc): New declaration.
+	(ebl_tid_registers_get_t, ebl_pid_memory_read_t): New definitions.
+	(ebl_unwind): New declaration.
+
+2013-12-15  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	unwinder: ppc and ppc64
+	* Makefile.am (gen_SOURCES): Add ebldwarftoregno.c.
+	* ebl-hooks.h (dwarf_to_regno): New.
+	* ebldwarftoregno.c: New file.
+	* libebl.h (Ebl_Core_Item): New field pc_register.
+	(ebl_tid_registers_t): Add FIRSTREG -1 to the comment.
+	(ebl_dwarf_to_regno): New.
+
 2013-11-25  Petr Machata  <pmachata@redhat.com>
 
 	* eblopenbackend.c (machines): Add entry for AArch64.

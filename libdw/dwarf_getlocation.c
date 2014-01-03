@@ -100,8 +100,7 @@ store_implicit_value (Dwarf *dbg, void **cache, Dwarf_Op *op)
   struct loc_block_s *block = libdw_alloc (dbg, struct loc_block_s,
 					   sizeof (struct loc_block_s), 1);
   const unsigned char *data = (const unsigned char *) (uintptr_t) op->number2;
-  Dwarf_Word blength; // Ignored, equal to op->number.
-  get_uleb128 (blength, data);
+  (void) __libdw_get_uleb128 (&data); // Ignored, equal to op->number.
   block->addr = op;
   block->data = (unsigned char *) data;
   block->length = op->number;
@@ -202,6 +201,13 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
 			   bool cfap, bool valuep,
 			   Dwarf_Op **llbuf, size_t *listlen, int sec_index)
 {
+  /* Empty location expressions don't have any ops to intern.  */
+  if (block->length == 0)
+    {
+      *listlen = 0;
+      return 0;
+    }
+
   /* Check whether we already looked at this list.  */
   struct loc_s fake = { .addr = block->data };
   struct loc_s **found = tfind (&fake, cache, loc_compare);
@@ -465,8 +471,8 @@ __libdw_intern_expression (Dwarf *dbg, bool other_byte_order,
   if (unlikely (n == 0))
     {
       /* This is not allowed.
-
-	 XXX Is it?  */
+	 It would mean an empty location expression, which we handled
+	 already as a special case above.  */
       goto invalid;
     }
 

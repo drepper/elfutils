@@ -1,5 +1,5 @@
-/* Out of line functions for memory-access.h macros.
-   Copyright (C) 2005, 2006 Red Hat, Inc.
+/* Get previous frame state for an existing frame state.
+   Copyright (C) 2013 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -29,22 +29,15 @@
 #ifdef HAVE_CONFIG_H
 # include <config.h>
 #endif
-#include "libdwP.h"
-#include "memory-access.h"
 
-uint64_t
-internal_function
-__libdw_get_uleb128 (uint64_t acc, unsigned int i, const unsigned char **addrp)
-{
-  unsigned char __b;
-  get_uleb128_rest_return (acc, i, addrp);
-}
+#include <libeblP.h>
 
-int64_t
-internal_function
-__libdw_get_sleb128 (int64_t acc, unsigned int i, const unsigned char **addrp)
+bool
+ebl_unwind (Ebl *ebl, Dwarf_Addr pc, ebl_tid_registers_t *setfunc,
+	    ebl_tid_registers_get_t *getfunc, ebl_pid_memory_read_t *readfunc,
+	    void *arg, bool *signal_framep)
 {
-  unsigned char __b;
-  int64_t _v = acc;
-  get_sleb128_rest_return (acc, i, addrp);
+  if (ebl == NULL || ebl->unwind == NULL)
+    return false;
+  return ebl->unwind (ebl, pc, setfunc, getfunc, readfunc, arg, signal_framep);
 }

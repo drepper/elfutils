@@ -44,6 +44,8 @@ struct pid_arg
   pid_t tid_attached;
   /* Valid only if TID_ATTACHED is not zero.  */
   bool tid_was_stopped;
+  /* True if threads are ptrace stopped by caller.  */
+  bool assume_ptrace_stopped;
 };
 
 static bool
@@ -164,6 +166,9 @@ pid_next_thread (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg,
 {
   struct pid_arg *pid_arg = dwfl_arg;
   struct dirent *dirent;
+  /* Start fresh on first traversal. */
+  if (*thread_argp == NULL)
+    rewinddir (pid_arg->dir);
   do
     {
       errno = 0;
@@ -198,6 +203,20 @@ pid_next_thread (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg,
   return tid;
 }
 
+/* Just checks that the thread id exists.  */
+static bool
+pid_getthread (Dwfl *dwfl __attribute__ ((unused)), pid_t tid,
+	       void *dwfl_arg, void **thread_argp)
+{
+  *thread_argp = dwfl_arg;
+  if (kill (tid, 0) < 0)
+    {
+      __libdwfl_seterrno (DWFL_E_ERRNO);
+      return false;
+    }
+  return true;
+}
+
 /* Implement the ebl_set_initial_registers_tid setfunc callback.  */
 
 static bool
@@ -205,6 +224,14 @@ pid_thread_state_registers_cb (int firstreg, unsigned nregs,
 			       const Dwarf_Word *regs, void *arg)
 {
   Dwfl_Thread *thread = (Dwfl_Thread *) arg;
+  if (firstreg < 0)
+    {
+      assert (firstreg == -1);
+      assert (nregs == 1);
+      INTUSE(dwfl_thread_state_register_pc) (thread, *regs);
+      return true;
+    }
+  assert (nregs > 0);
   return INTUSE(dwfl_thread_state_registers) (thread, firstreg, nregs, regs);
 }
 
@@ -214,7 +241,8 @@ pid_set_initial_registers (Dwfl_Thread *thread, void *thread_arg)
   struct pid_arg *pid_arg = thread_arg;
   assert (pid_arg->tid_attached == 0);
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
-  if (! ptrace_attach (tid, &pid_arg->tid_was_stopped))
+  if (! pid_arg->assume_ptrace_stopped
+      && ! ptrace_attach (tid, &pid_arg->tid_was_stopped))
     return false;
   pid_arg->tid_attached = tid;
   Dwfl_Process *process = thread->process;
@@ -238,63 +266,95 @@ pid_thread_detach (Dwfl_Thread *thread, void *thread_arg)
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
   assert (pid_arg->tid_attached == tid);
   pid_arg->tid_attached = 0;
-  // Older kernels (tested kernel-2.6.18-348.12.1.el5.x86_64) need special
-  // handling of the detachment to keep the process State: T (stopped).
-  if (pid_arg->tid_was_stopped)
-    syscall (__NR_tkill, tid, SIGSTOP);
-  /* This handling is needed only on older Linux kernels such as
-     2.6.32-358.23.2.el6.ppc64.  Later kernels such as 3.11.7-200.fc19.x86_64
-     remember the T (stopped) state themselves and no longer need to pass
-     SIGSTOP during PTRACE_DETACH.  */
-  ptrace (PTRACE_DETACH, tid, NULL,
-	  (void *) (intptr_t) (pid_arg->tid_was_stopped ? SIGSTOP : 0));
-  if (pid_arg->tid_was_stopped)
+  if (! pid_arg->assume_ptrace_stopped)
     {
-      // Wait till the SIGSTOP settles down.
-      int i;
-      for (i = 0; i < 100000; i++)
-	if (linux_proc_pid_is_stopped (tid))
-	  break;
+      // Older kernels (tested kernel-2.6.18-348.12.1.el5.x86_64) need special
+      // handling of the detachment to keep the process State: T (stopped).
+      if (pid_arg->tid_was_stopped)
+	syscall (__NR_tkill, tid, SIGSTOP);
+      /* This handling is needed only on older Linux kernels such as
+         2.6.32-358.23.2.el6.ppc64.  Later kernels such as 3.11.7-200.fc19.x86_64
+         remember the T (stopped) state themselves and no longer need to pass
+         SIGSTOP during PTRACE_DETACH.  */
+      ptrace (PTRACE_DETACH, tid, NULL,
+	      (void *) (intptr_t) (pid_arg->tid_was_stopped ? SIGSTOP : 0));
+      if (pid_arg->tid_was_stopped)
+	{
+	  // Wait till the SIGSTOP settles down.
+	  int i;
+	  for (i = 0; i < 100000; i++)
+	    if (linux_proc_pid_is_stopped (tid))
+	      break;
+	}
     }
 }
 
 static const Dwfl_Thread_Callbacks pid_thread_callbacks =
 {
   pid_next_thread,
+  pid_getthread,
   pid_memory_read,
   pid_set_initial_registers,
   pid_detach,
   pid_thread_detach,
 };
 
-bool
-internal_function
-__libdwfl_attach_state_for_pid (Dwfl *dwfl, pid_t pid)
+int
+dwfl_linux_proc_attach (Dwfl *dwfl, pid_t pid, bool assume_ptrace_stopped)
 {
+  char buffer[36];
+  FILE *procfile;
+
+  /* Make sure to report the actual PID (thread group leader) to
+     dwfl_attach_state.  */
+  snprintf (buffer, sizeof (buffer), "/proc/%ld/status", (long) pid);
+  procfile = fopen (buffer, "r");
+  if (procfile == NULL)
+    return errno;
+
+  char *line = NULL;
+  size_t linelen = 0;
+  while (getline (&line, &linelen, procfile) >= 0)
+    if (strncmp (line, "Tgid:", 5) == 0)
+      {
+	errno = 0;
+	char *endptr;
+	long val = strtol (&line[5], &endptr, 10);
+	if ((errno == ERANGE && val == LONG_MAX)
+	    || *endptr != '\n' || val < 0 || val != (pid_t) val)
+	  pid = 0;
+	else
+	  pid = (pid_t) val;
+	break;
+      }
+  free (line);
+  fclose (procfile);
+
+  if (pid == 0)
+    return ESRCH;
+
   char dirname[64];
   int i = snprintf (dirname, sizeof (dirname), "/proc/%ld/task", (long) pid);
   assert (i > 0 && i < (ssize_t) sizeof (dirname) - 1);
   DIR *dir = opendir (dirname);
   if (dir == NULL)
-    {
-      __libdwfl_seterrno (DWFL_E_ERRNO);
-      return false;
-    }
+    return errno;
   struct pid_arg *pid_arg = malloc (sizeof *pid_arg);
   if (pid_arg == NULL)
     {
       closedir (dir);
-      __libdwfl_seterrno (DWFL_E_NOMEM);
-      return false;
+      return ENOMEM;
     }
   pid_arg->dir = dir;
   pid_arg->tid_attached = 0;
+  pid_arg->assume_ptrace_stopped = assume_ptrace_stopped;
   if (! INTUSE(dwfl_attach_state) (dwfl, NULL, pid, &pid_thread_callbacks,
 				   pid_arg))
     {
       closedir (dir);
       free (pid_arg);
-      return false;
+      return -1;
     }
-  return true;
+  return 0;
 }
+INTDEF (dwfl_linux_proc_attach)

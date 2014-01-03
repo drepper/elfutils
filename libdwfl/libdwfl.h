@@ -361,16 +361,13 @@ extern int dwfl_linux_kernel_report_offline (Dwfl *dwfl, const char *release,
    supply non-NULL EXECUTABLE, otherwise dynamic libraries will not be loaded
    into the DWFL map.  This might call dwfl_report_elf on file names found in
    the dump if reading some link_map files is the only way to ascertain those
-   modules' addresses.  dwfl_attach_state is also called for DWFL,
-   dwfl_core_file_report does not fail if the dwfl_attach_state call has failed.
-   Returns the number of modules reported, or -1 for errors.  */
+   modules' addresses.  Returns the number of modules reported, or -1 for
+   errors.  */
 extern int dwfl_core_file_report (Dwfl *dwfl, Elf *elf, const char *executable);
 
 /* Call dwfl_report_module for each file mapped into the address space of PID.
-   dwfl_attach_state is also called for DWFL, dwfl_linux_proc_report does
-   not fail if the dwfl_attach_state call has failed.
    Returns zero on success, -1 if dwfl_report_module failed,
-   or an errno code if opening the kernel binary failed.  */
+   or an errno code if opening the proc files failed.  */
 extern int dwfl_linux_proc_report (Dwfl *dwfl, pid_t pid);
 
 /* Similar, but reads an input stream in the format of Linux /proc/PID/maps
@@ -430,6 +427,13 @@ extern Elf *dwfl_module_getelf (Dwfl_Module *, GElf_Addr *bias)
    or -1 for errors.  */
 extern int dwfl_module_getsymtab (Dwfl_Module *mod);
 
+/* Return the index of the first global symbol in the module's symbol
+   table, or -1 for errors.  In each symbol table, all symbols with
+   STB_LOCAL binding precede the weak and global symbols.  This
+   function returns the symbol table index one greater than the last
+   local symbol.  */
+extern int dwfl_module_getsymtab_first_global (Dwfl_Module *mod);
+
 /* Fetch one entry from the module's symbol table.  On errors, returns
    NULL.  If successful, fills in *SYM and returns the string for st_name.
    This works like gelf_getsym except that st_value is always adjusted to
@@ -440,37 +444,77 @@ extern int dwfl_module_getsymtab (Dwfl_Module *mod);
    Note that since symbols can come from either the main, debug or auxiliary
    ELF symbol file (either dynsym or symtab) the section index can only
    be reliably used to compare against special section constants like
-   SHN_UNDEF or SHN_ABS.  */
+   SHN_UNDEF or SHN_ABS.  It is recommended to use dwfl_module_getsym_info
+   which doesn't have these deficiencies.  */
 extern const char *dwfl_module_getsym (Dwfl_Module *mod, int ndx,
 				       GElf_Sym *sym, GElf_Word *shndxp)
   __nonnull_attribute__ (3);
 
-/* Same as dwfl_module_getsym but also returns the ELF file, if not NULL,
-   that the symbol came from so the section index can be reliably used.
-   Fills in *BIAS, if not NULL, with the difference between addresses
-   within the loaded module and those in symbol tables of the ELF file. */
-extern const char *dwfl_module_getsym_elf (Dwfl_Module *mod, int ndx,
-				           GElf_Sym *sym, GElf_Word *shndxp,
-					   Elf **elfp, Dwarf_Addr *bias)
-  __nonnull_attribute__ (3);
+/* Fetch one entry from the module's symbol table and the associated
+   address value.  On errors, returns NULL.  If successful, fills in
+   *SYM, *ADDR and returns the string for st_name.  This works like
+   gelf_getsym.  *ADDR is set to the st_value adjusted to an absolute
+   value based on the module's location, when the symbol is in an
+   SHF_ALLOC section.  For non-ET_REL files, if the arch uses function
+   descriptors, and the st_value points to one, *ADDR will be resolved
+   to the actual function entry address.  The SYM->ST_VALUE itself
+   isn't adjusted in any way.  Fills in ELFP, if not NULL, with the
+   ELF file the symbol originally came from.  Note that symbols can
+   come from either the main, debug or auxiliary ELF symbol file
+   (either dynsym or symtab).  If SHNDXP is non-null, it's set with
+   the section index (whether from st_shndx or extended index table);
+   in case of a symbol in a non-allocated section, *SHNDXP is instead
+   set to -1.  Fills in BIAS, if not NULL, with the difference between
+   addresses within the loaded module and those in symbol table of the
+   ELF file.  Note that the address associated with the symbol might
+   be in a different section than the returned symbol.  The section in
+   the main elf file in which returned ADDR falls can be found with
+   dwfl_module_address_section.  */
+extern const char *dwfl_module_getsym_info (Dwfl_Module *mod, int ndx,
+					    GElf_Sym *sym, GElf_Addr *addr,
+					    GElf_Word *shndxp,
+					    Elf **elfp, Dwarf_Addr *bias)
+  __nonnull_attribute__ (3, 4);
 
 /* Find the symbol that ADDRESS lies inside, and return its name.  */
 extern const char *dwfl_module_addrname (Dwfl_Module *mod, GElf_Addr address);
 
-/* Find the symbol that ADDRESS lies inside, and return detailed
-   information as for dwfl_module_getsym (above).  */
-extern const char *dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr address,
-					GElf_Sym *sym, GElf_Word *shndxp)
+/* Find the symbol associated with ADDRESS.  Return its name or NULL
+   when nothing was found.  If the architecture uses function
+   descriptors, and symbol st_value points to one, ADDRESS wil be
+   matched against either the adjusted st_value or the associated
+   function entry value as described in dwfl_module_getsym_info.  If
+   OFFSET is not NULL it will be filled in with the difference from
+   the start of the symbol (or function entry).  If SYM is not NULL it
+   is filled in with the symbol associated with the matched ADDRESS.
+   The SYM->ST_VALUE itself isn't adjusted in any way.  Fills in ELFP,
+   if not NULL, with the ELF file the symbol originally came from.
+   Note that symbols can come from either the main, debug or auxiliary
+   ELF symbol file (either dynsym or symtab).  If SHNDXP is non-null,
+   it's set with the section index (whether from st_shndx or extended
+   index table).  Fills in BIAS, if not NULL, with the difference
+   between addresses within the loaded module and those in symbol
+   table of the ELF file.  Note that the address matched against the
+   symbol might be in a different section than the returned symbol.
+   The section in the main elf file in ADDRESS falls can be found with
+   dwfl_module_address_section.  */
+extern const char *dwfl_module_addrinfo (Dwfl_Module *mod, GElf_Addr address,
+					 GElf_Off *offset, GElf_Sym *sym,
+					 GElf_Word *shndxp, Elf **elfp,
+					 Dwarf_Addr *bias)
   __nonnull_attribute__ (3);
 
-/* Same as dwfl_module_addrsym but also returns the ELF file, if not NULL,
-   that the symbol came from so the section index can be reliably used.
-   Fills in *BIAS, if not NULL, with the difference between addresses
-   within the loaded module and those in symbol tables of the ELF file. */
-extern const char *dwfl_module_addrsym_elf (Dwfl_Module *mod,
-					    GElf_Addr address, GElf_Sym *sym,
-					    GElf_Word *shndxp, Elf **elfp,
-					    Dwarf_Addr *bias)
+/* Find the symbol that ADDRESS lies inside, and return detailed
+   information as for dwfl_module_getsym (above).  Note that like
+   dwfl_module_getsym this function also adjusts SYM->ST_VALUE to an
+   absolute value based on the module's location.  ADDRESS is only
+   matched against this adjusted SYM->ST_VALUE.  This means that
+   depending on architecture this might only match symbols that
+   represent function descriptor addresses (and not function entry
+   addresses).  For these reasons it is recommended to use
+   dwfl_module_addrinfo instead.  */
+extern const char *dwfl_module_addrsym (Dwfl_Module *mod, GElf_Addr address,
+					GElf_Sym *sym, GElf_Word *shndxp)
   __nonnull_attribute__ (3);
 
 /* Find the ELF section that *ADDRESS lies inside and return it.
@@ -615,6 +659,17 @@ typedef struct
   pid_t (*next_thread) (Dwfl *dwfl, void *dwfl_arg, void **thread_argp)
     __nonnull_attribute__ (1);
 
+  /* Called to get a specific thread.  Returns true if there is a
+     thread with the given thread id number, returns false if no such
+     thread exists and will set dwfl_errno in that case.  THREAD_ARGP
+     is never NULL.  *THREAD_ARGP will be passed to
+     set_initial_registers or thread_detach callbacks together with
+     Dwfl_Thread *thread.  This method may be NULL and will then be
+     emulated using the next_thread callback. */
+  bool (*get_thread) (Dwfl *dwfl, pid_t tid, void *dwfl_arg,
+		      void **thread_argp)
+    __nonnull_attribute__ (1);
+
   /* Called during unwinding to access memory (stack) state.  Returns true for
      successfully read *RESULT or false and sets dwfl_errno () on failure.
      This method may be NULL - in such case dwfl_thread_getframes will return
@@ -658,6 +713,23 @@ bool dwfl_attach_state (Dwfl *dwfl, Elf *elf, pid_t pid,
                         const Dwfl_Thread_Callbacks *thread_callbacks,
 			void *dwfl_arg)
   __nonnull_attribute__ (1, 4);
+
+/* Calls dwfl_attach_state with Dwfl_Thread_Callbacks setup for extracting
+   thread state from the ELF core file.  Returns the pid number extracted
+   from the core file, or -1 for errors.  */
+extern int dwfl_core_file_attach (Dwfl *dwfl, Elf *elf);
+
+/* Calls dwfl_attach_state with Dwfl_Thread_Callbacks setup for extracting
+   thread state from the proc file system.  Uses ptrace to attach and stop
+   the thread under inspection and detaches when thread_detach is called
+   and unwinding for the thread is done, unless ASSUME_PTRACE_STOPPED is
+   true.  If ASSUME_PTRACE_STOPPED is true the caller should make sure that
+   the thread is ptrace attached and stopped before unwinding by calling
+   either dwfl_thread_getframes or dwfl_getthread_frames.  Returns zero on
+   success, -1 if dwfl_attach_state failed, or an errno code if opening the
+   proc files failed.  */
+extern int dwfl_linux_proc_attach (Dwfl *dwfl, pid_t pid,
+				   bool assume_ptrace_stopped);
 
 /* Return PID for the process associated with DWFL.  Function returns -1 if
    dwfl_attach_state was not called for DWFL.  */
@@ -714,6 +786,16 @@ int dwfl_thread_getframes (Dwfl_Thread *thread,
 			   int (*callback) (Dwfl_Frame *state, void *arg),
 			   void *arg)
   __nonnull_attribute__ (1, 2);
+
+/* Like dwfl_thread_getframes, but specifying the thread by its unique
+   identifier number.  Returns zero if all frames have been processed
+   by the callback, returns -1 on error (and when no thread with
+   the given thread id number exists), or the value of the callback
+   when not DWARF_CB_OK.  -1 returned on error will set dwfl_errno ().  */
+int dwfl_getthread_frames (Dwfl *dwfl, pid_t tid,
+			   int (*callback) (Dwfl_Frame *thread, void *arg),
+			   void *arg)
+  __nonnull_attribute__ (1, 3);
 
 /* Return *PC (program counter) for thread-specific frame STATE.
    Set *ISACTIVATION according to DWARF frame "activation" definition.

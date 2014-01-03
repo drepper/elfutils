@@ -15,6 +15,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-. $srcdir/test-subr.sh
+. $srcdir/backtrace-subr.sh
 
-testrun ${abs_builddir}/backtrace-dwarf
+# This test really cannot be run under valgrind, it tries to introspect
+# itself through ptrace and will find bits and pieces of valgrind.
+# On top of that valgrind also tries to read all the unwind info and
+# will warn and complain about various opcodes it doesn't understand...
+unset VALGRIND_CMD
+
+tempfiles dwarf.{bt,err}
+(set +ex; testrun ${abs_builddir}/backtrace-dwarf 1>dwarf.bt 2>dwarf.err; true)
+cat dwarf.{bt,err}
+check_unsupported dwarf.err dwarf
+check_main dwarf.bt dwarf

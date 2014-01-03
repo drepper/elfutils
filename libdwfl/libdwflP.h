@@ -108,7 +108,6 @@ struct Dwfl
   Dwfl_Module *modulelist;    /* List in order used by full traversals.  */
 
   Dwfl_Process *process;
-  Dwfl_Error process_attach_error;
 
   GElf_Addr offline_next_address;
 
@@ -388,6 +387,23 @@ struct dwfl_arange
 };
 
 
+/* Internal wrapper for old dwfl_module_getsym and new dwfl_module_getsym_info.
+   adjust_st_value set to true returns adjusted SYM st_value, set to false
+   it will not adjust SYM at all, but does match against resolved *ADDR. */
+extern const char *__libdwfl_getsym (Dwfl_Module *mod, int ndx, GElf_Sym *sym,
+				     GElf_Addr *addr, GElf_Word *shndxp,
+				     Elf **elfp, Dwarf_Addr *biasp,
+				     bool *resolved, bool adjust_st_value)
+  internal_function;
+
+/* Internal wrapper for old dwfl_module_addrsym and new dwfl_module_addrinfo.
+   adjust_st_value set to true returns adjusted SYM st_value, set to false
+   it will not adjust SYM at all, but does match against resolved values. */
+extern const char *__libdwfl_addrsym (Dwfl_Module *mod, GElf_Addr addr,
+				      GElf_Off *off, GElf_Sym *sym,
+				      GElf_Word *shndxp, Elf **elfp,
+				      Dwarf_Addr *bias,
+				      bool adjust_st_value) internal_function;
 
 extern void __libdwfl_module_free (Dwfl_Module *mod) internal_function;
 
@@ -402,6 +418,12 @@ extern void __libdwfl_getelf (Dwfl_Module *mod) internal_function;
 
    When DEBUG is false, apply partial relocation to all sections.  */
 extern Dwfl_Error __libdwfl_relocate (Dwfl_Module *mod, Elf *file, bool debug)
+  internal_function;
+
+/* Find the section index in mod->main.elf that contains the given
+   *ADDR.  Adjusts *ADDR to be section relative on success, returns
+   SHN_UNDEF on failure.  */
+extern size_t __libdwfl_find_section_ndx (Dwfl_Module *mod, Dwarf_Addr *addr)
   internal_function;
 
 /* Process (simple) relocations in arbitrary section TSCN of an ET_REL file.
@@ -506,14 +528,6 @@ extern void __libdwfl_process_free (Dwfl_Process *process)
    If STATE->unwound->pc_state == DWFL_FRAME_STATE_PC_UNDEFINED
    then STATE was the last valid frame.  */
 extern void __libdwfl_frame_unwind (Dwfl_Frame *state)
-  internal_function;
-
-/* Call dwfl_attach_state for PID, return true if successful.  */
-extern bool __libdwfl_attach_state_for_pid (Dwfl *dwfl, pid_t pid)
-  internal_function;
-
-/* Call dwfl_attach_state for CORE, return true if successful.  */
-extern bool __libdwfl_attach_state_for_core (Dwfl *dwfl, Elf *core)
   internal_function;
 
 /* Align segment START downwards or END upwards addresses according to DWFL.  */
@@ -634,18 +648,20 @@ INTDECL (dwfl_addrmodule)
 INTDECL (dwfl_addrsegment)
 INTDECL (dwfl_addrdwarf)
 INTDECL (dwfl_addrdie)
+INTDECL (dwfl_core_file_attach)
 INTDECL (dwfl_core_file_report)
 INTDECL (dwfl_getmodules)
 INTDECL (dwfl_module_addrdie)
 INTDECL (dwfl_module_address_section)
+INTDECL (dwfl_module_addrinfo)
 INTDECL (dwfl_module_addrsym)
-INTDECL (dwfl_module_addrsym_elf)
 INTDECL (dwfl_module_build_id)
 INTDECL (dwfl_module_getdwarf)
 INTDECL (dwfl_module_getelf)
 INTDECL (dwfl_module_getsym)
-INTDECL (dwfl_module_getsym_elf)
+INTDECL (dwfl_module_getsym_info)
 INTDECL (dwfl_module_getsymtab)
+INTDECL (dwfl_module_getsymtab_first_global)
 INTDECL (dwfl_module_getsrc)
 INTDECL (dwfl_module_report_build_id)
 INTDECL (dwfl_report_elf)
@@ -661,6 +677,7 @@ INTDECL (dwfl_standard_find_debuginfo)
 INTDECL (dwfl_link_map_report)
 INTDECL (dwfl_linux_kernel_find_elf)
 INTDECL (dwfl_linux_kernel_module_section_address)
+INTDECL (dwfl_linux_proc_attach)
 INTDECL (dwfl_linux_proc_report)
 INTDECL (dwfl_linux_proc_maps_report)
 INTDECL (dwfl_linux_proc_find_elf)
@@ -678,6 +695,7 @@ INTDECL (dwfl_thread_tid)
 INTDECL (dwfl_frame_thread)
 INTDECL (dwfl_thread_state_registers)
 INTDECL (dwfl_thread_state_register_pc)
+INTDECL (dwfl_getthread_frames)
 INTDECL (dwfl_getthreads)
 INTDECL (dwfl_thread_getframes)
 INTDECL (dwfl_frame_pc)

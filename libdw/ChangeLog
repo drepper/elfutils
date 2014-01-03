@@ -1,3 +1,54 @@
+2013-12-30  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.map (ELFUTILS_0.158): Add dwfl_core_file_attach and
+	dwfl_linux_proc_attach.
+
+2013-12-20  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.map (ELFUTILS_0.158): Add dwfl_getthread_frames.
+
+2013-12-18  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.map (ELFUTILS_0.158): Remove dwfl_module_addrsym_elf and
+	dwfl_module_getsym_elf. Add dwfl_module_addrinfo and
+	dwfl_module_getsym_info.
+
+2013-12-16  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.map (ELFUTILS_0.158): Add dwfl_module_getsymtab_first_global.
+
+2013-12-10  Josh Stone  <jistone@redhat.com>
+
+	* memory-access.h (get_uleb128_rest_return): Removed.
+	(get_sleb128_rest_return): Removed.
+	(get_uleb128_step): Make this a self-contained block.
+	(get_sleb128_step): Ditto, and use a bitfield to extend signs.
+	(get_uleb128): Make this wholly implemented by __libdw_get_uleb128.
+	(get_sleb128): Make this wholly implemented by __libdw_get_sleb128.
+	(__libdw_get_uleb128): Simplify and inline for all callers.
+	(__libdw_get_sleb128): Ditto.
+	* dwarf_getlocation.c (store_implicit_value): Void the unused uleb128.
+	* memory-access.c: Delete file.
+	* Makefile.am (libdw_a_SOURCES): Remove it.
+	(DEFS): Remove the now unused -DIS_LIBDW.
+
+2013-12-09  Josh Stone  <jistone@redhat.com>
+
+	* libdw_form.c (__libdw_form_val_compute_len): Renamed function from
+	__libdw_form_val_len, now handling only non-constant form lengths.
+	* libdwP.h (__libdw_form_val_len): New inlined function.
+
+2013-12-09  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_getlocation.c (__libdw_intern_expression): Handle empty
+	location expressions.
+	* dwarf_getlocation_attr.c (dwarf_getlocation_attr): When no
+	location found, return empty location expression.
+	* dwarf_getlocation_implicit_pointer.c
+	(dwarf_getlocation_implicit_pointer): Likewise.
+	(__libdw_empty_loc_attr): New internal function.
+	* libdwP.h (__libdw_empty_loc_attr): Define.
+
 2013-11-27  Mark Wielaard  <mjw@redhat.com>
 
 	* libdw.map (ELFUTILS_0.158): Add dwfl_module_addrsym_elf and

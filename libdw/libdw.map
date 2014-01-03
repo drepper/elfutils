@@ -280,10 +280,15 @@ ELFUTILS_0.158 {
     dwfl_frame_thread;
     dwfl_thread_state_registers;
     dwfl_thread_state_register_pc;
+    dwfl_getthread_frames;
     dwfl_getthreads;
     dwfl_thread_getframes;
     dwfl_frame_pc;
 
-    dwfl_module_addrsym_elf;
-    dwfl_module_getsym_elf;
+    dwfl_module_getsymtab_first_global;
+    dwfl_module_addrinfo;
+    dwfl_module_getsym_info;
+
+    dwfl_core_file_attach;
+    dwfl_linux_proc_attach;
 } ELFUTILS_0.157;

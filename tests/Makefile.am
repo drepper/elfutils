@@ -62,7 +62,7 @@ check_PROGRAMS += backtrace-child-biarch
 endif
 
 # Substitute $(COMPILE).
-backtrace-child-biarch: backtrace-child.c
+backtrace-child-biarch$(EXEEXT): backtrace-child.c
 	$(CC_BIARCH) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 		     $(AM_CPPFLAGS) $(CPPFLAGS) \
 		     $(AM_CFLAGS) $(CFLAGS) $(backtrace_child_CFLAGS) \
@@ -106,7 +106,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-backtrace-native.sh run-backtrace-data.sh run-backtrace-dwarf.sh \
 	run-backtrace-native-biarch.sh run-backtrace-native-core.sh \
 	run-backtrace-native-core-biarch.sh run-backtrace-core-x86_64.sh \
-	run-backtrace-core-i386.sh
+	run-backtrace-core-i386.sh run-backtrace-core-ppc.sh \
+	run-backtrace-core-s390x.sh run-backtrace-core-s390.sh
 
 if !BIARCH
 export ELFUTILS_DISABLE_BIARCH = 1
@@ -212,6 +213,11 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfilebaztab.bz2 testfilebasmin.bz2 \
 	     testfilebazdbg_pl.bz2 testfilebazmin_pl.bz2 \
 	     testfilebazdbg_plr.bz2 testfilebazmin_plr.bz2 \
+	     testfilebazdbgppc64.bz2 testfilebazdbgppc64.debug.bz2 \
+	     testfilebazdbgppc64_pl.bz2 testfilebazdbgppc64_plr.bz2 \
+	     testfilebazdynppc64.bz2 testfilebazmdbppc64.bz2 \
+	     testfilebazminppc64.bz2 testfilebazminppc64_pl.bz2 \
+	     testfilebazminppc64_plr.bz2 testfilebaztabppc64.bz2 \
 	     run-dwflsyms.sh \
 	     run-unstrip-n.sh testcore-rtlib.bz2 testcore-rtlib-ppc.bz2 \
 	     run-low_high_pc.sh testfile_low_high_pc.bz2 \
@@ -231,7 +237,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-addr2line-i-test.sh testfile-inlines.bz2 \
 	     testfileppc32.bz2 testfileppc64.bz2 \
 	     testfiles390.bz2 testfiles390x.bz2 \
-	     testfilearm.bz2 \
+	     testfilearm.bz2 testfileaarch64.bz2 \
 	     run-varlocs.sh \
 	     testfile_const_type.c testfile_const_type.bz2 \
 	     testfile_implicit_pointer.c testfile_implicit_pointer.bz2 \
@@ -245,10 +251,15 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-backtrace-native-core.sh run-backtrace-native-core-biarch.sh \
 	     run-backtrace-core-x86_64.sh run-backtrace-core-i386.sh \
 	     backtrace-subr.sh backtrace.i386.core.bz2 backtrace.i386.exec.bz2 \
-	     backtrace.x86_64.core.bz2 backtrace.x86_64.exec.bz2
+	     backtrace.x86_64.core.bz2 backtrace.x86_64.exec.bz2 \
+	     backtrace.ppc.core.bz2 backtrace.ppc.exec.bz2 \
+	     run-backtrace-core-ppc.sh testfile66.bz2 testfile66.core.bz2 \
+	     backtrace.s390x.core.bz2 backtrace.s390x.exec.bz2 \
+	     backtrace.s390.core.bz2 backtrace.s390.exec.bz2 \
+	     run-backtrace-core-s390x.sh run-backtrace-core-s390.sh
 
 if USE_VALGRIND
-valgrind_cmd='valgrind -q --trace-children=yes --error-exitcode=1 --run-libc-freeres=no'
+valgrind_cmd='valgrind -q --error-exitcode=1 --run-libc-freeres=no'
 endif
 
 
@@ -378,6 +389,7 @@ backtrace_LDADD = $(libdw) $(libelf) $(libmudflap)
 # backtrace-child-biarch also uses those *_CFLAGS and *_LDLAGS variables:
 backtrace_child_CFLAGS = -fPIE
 backtrace_child_LDFLAGS = -pie -pthread
+backtrace_child_biarch_SOURCES = backtrace-child.c
 backtrace_data_LDADD = $(libdw) $(libelf) $(libmudflap)
 backtrace_dwarf_CFLAGS = -Wno-unused-parameter
 backtrace_dwarf_LDADD = $(libdw) $(libelf) $(libmudflap)
