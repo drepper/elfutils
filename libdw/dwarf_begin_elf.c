@@ -187,9 +187,9 @@ check_section (Dwarf *result, GElf_Ehdr *ehdr, Elf_Scn *scn, bool inscngrp)
   /* Get the section header data.  */
   shdr = gelf_getshdr (scn, &shdr_mem);
   if (shdr == NULL)
-    /* This should never happen.  If it does something is
-       wrong in the libelf library.  */
-    abort ();
+    /* We may read /proc/PID/mem with only program headers mapped and section
+       headers out of the mapped pages.  */
+    return result;
 
   /* Ignore any SHT_NOBITS sections.  Debugging sections should not
      have been stripped, but in case of a corrupt file we won't try
