@@ -145,6 +145,12 @@ extern int dwfl_report_segment (Dwfl *dwfl, int ndx,
 extern Dwfl_Module *dwfl_report_module (Dwfl *dwfl, const char *name,
 					Dwarf_Addr start, Dwarf_Addr end);
 
+/* Call dwfl_report_module with support of possibly deleted files of running
+   live process with pid PID.  */
+extern Dwfl_Module *dwfl_report_module_pid (Dwfl *dwfl, const char *name,
+					    Dwarf_Addr start, Dwarf_Addr end,
+					    pid_t pid);
+
 /* Report a module to address BASE with start and end addresses computed
    from the ELF program headers in the given file - see the table below.
    FD may be -1 to open FILE_NAME.  On success, FD is consumed by the

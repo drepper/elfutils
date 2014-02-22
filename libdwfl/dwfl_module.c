@@ -175,6 +175,17 @@ dwfl_report_module (Dwfl *dwfl, const char *name,
 }
 INTDEF (dwfl_report_module)
 
+Dwfl_Module *
+dwfl_report_module_pid (Dwfl *dwfl, const char *name, Dwarf_Addr start,
+			Dwarf_Addr end, pid_t pid)
+{
+  assert (pid > 0);
+  Dwfl_Module *mod = dwfl_report_module (dwfl, name, start, end);
+  if (mod != NULL)
+    mod->pid = pid;
+  return mod;
+}
+INTDEF (dwfl_report_module_pid)
 
 /* Finish reporting the current set of modules to the library.
    If REMOVED is not null, it's called for each module that

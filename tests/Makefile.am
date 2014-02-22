@@ -53,7 +53,7 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  alldts md5-sha1-test typeiter typeiter2 low_high_pc \
 		  test-elf_cntl_gelf_getshdr dwflsyms dwfllines \
 		  dwfl-report-elf-align varlocs backtrace backtrace-child \
-		  backtrace-data backtrace-dwarf
+		  backtrace-data backtrace-dwarf deleted deleted-lib.so
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -108,7 +108,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-backtrace-native-core-biarch.sh run-backtrace-core-x86_64.sh \
 	run-backtrace-core-i386.sh run-backtrace-core-ppc.sh \
 	run-backtrace-core-s390x.sh run-backtrace-core-s390.sh \
-	run-backtrace-demangle.sh run-stack-d-test.sh run-stack-i-test.sh
+	run-backtrace-demangle.sh run-stack-d-test.sh run-stack-i-test.sh \
+	run-deleted.sh
 
 if !BIARCH
 export ELFUTILS_DISABLE_BIARCH = 1
@@ -266,7 +267,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile-backtrace-demangle.cc \
 	     testfile-backtrace-demangle.core.bz2 \
 	     run-stack-d-test.sh run-stack-i-test.sh \
-	     testfiledwarfinlines.bz2 testfiledwarfinlines.core.bz2
+	     testfiledwarfinlines.bz2 testfiledwarfinlines.core.bz2 \
+	     run-deleted.sh
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --error-exitcode=1 --run-libc-freeres=no'
@@ -402,6 +404,9 @@ backtrace_child_biarch_SOURCES = backtrace-child.c
 backtrace_data_LDADD = $(libdw) $(libelf) $(libmudflap)
 backtrace_dwarf_CFLAGS = -Wno-unused-parameter
 backtrace_dwarf_LDADD = $(libdw) $(libelf) $(libmudflap)
+deleted_LDADD = ./deleted-lib.so
+deleted_lib_so_LDFLAGS = -shared -rdynamic
+deleted_lib_so_CFLAGS = -fPIC
 
 if GCOV
 check: check-am coverage

@@ -177,14 +177,25 @@ proc_maps_report (Dwfl *dwfl, FILE *f, GElf_Addr sysinfo_ehdr, pid_t pid)
   unsigned int last_dmajor = -1, last_dminor = -1;
   uint64_t last_ino = -1;
   char *last_file = NULL;
-  Dwarf_Addr low = 0, high = 0;
+  Dwarf_Addr low = 0, high = 0, first_high = 0;
 
   inline bool report (void)
     {
       if (last_file != NULL)
 	{
-	  Dwfl_Module *mod = INTUSE(dwfl_report_module) (dwfl, last_file,
-							 low, high);
+	  size_t last_file_len = strlen (last_file);
+	  const char deleted[] = " (deleted)";
+	  const size_t deleted_len = strlen (deleted);
+	  Dwfl_Module *mod;
+	  if (last_file_len > deleted_len
+	      && strcmp (last_file + last_file_len - deleted_len, deleted) == 0)
+	    {
+	      last_file[last_file_len - deleted_len] = 0;
+	      mod = INTUSE(dwfl_report_module_pid) (dwfl, last_file,
+						    low, first_high, pid);
+	    }
+	  else
+	    mod = INTUSE(dwfl_report_module) (dwfl, last_file, low, high);
 	  free (last_file);
 	  last_file = NULL;
 	  if (unlikely (mod == NULL))
@@ -226,7 +237,7 @@ proc_maps_report (Dwfl *dwfl, FILE *f, GElf_Addr sysinfo_ehdr, pid_t pid)
 	    }
 
 	  low = start;
-	  high = end;
+	  high = first_high = end;
 	  if (asprintf (&last_file, "[vdso: %d]", (int) pid) < 0
 	      || report ())
 	    goto bad_report;
@@ -250,7 +261,7 @@ proc_maps_report (Dwfl *dwfl, FILE *f, GElf_Addr sysinfo_ehdr, pid_t pid)
 	  if (report ())
 	    goto bad_report;
 	  low = start;
-	  high = end;
+	  high = first_high = end;
 	  last_file = strdup (file);
 	  last_ino = ino;
 	  last_dmajor = dmajor;

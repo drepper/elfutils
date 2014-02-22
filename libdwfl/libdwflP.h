@@ -158,6 +158,7 @@ struct Dwfl_Module
 
   char *name;			/* Iterator name for this module.  */
   GElf_Addr low_addr, high_addr;
+  pid_t pid;			/* Used for /proc/PID/mem reading.  */
 
   struct dwfl_file main, debug, aux_sym;
   GElf_Addr main_bias;
@@ -709,6 +710,7 @@ INTDECL (dwfl_getthread_frames)
 INTDECL (dwfl_getthreads)
 INTDECL (dwfl_thread_getframes)
 INTDECL (dwfl_frame_pc)
+INTDECL (dwfl_report_module_pid)
 
 /* Leading arguments standard to callbacks passed a Dwfl_Module.  */
 #define MODCB_ARGS(mod)	(mod), &(mod)->userdata, (mod)->name, (mod)->low_addr

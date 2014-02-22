@@ -45,6 +45,16 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
 	 set it with an open failure below.  */
       errno = 0;
 
+      off_t start_offset = 0;
+      size_t maximum_size = ~((size_t) 0);
+      if (mod->pid != 0 && file == &mod->main)
+	{
+	  if (asprintf (&file->name, "/proc/%d/mem", mod->pid) < 0)
+	    return CBFAIL;
+	  start_offset = mod->low_addr;
+	  maximum_size = mod->high_addr - mod->low_addr;
+	}
+
       /* If there was a pre-primed file name left that the callback left
 	 behind, try to open that file name.  */
       if (file->fd < 0 && file->name != NULL)
@@ -53,7 +63,10 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
       if (file->fd < 0)
 	return CBFAIL;
 
-      Dwfl_Error error = __libdw_open_file (&file->fd, &file->elf, true, false);
+      Dwfl_Error error = __libdw_open_file_at_offset (&file->fd, &file->elf,
+						      start_offset,
+						      maximum_size,
+						      true, false);
       if (error != DWFL_E_NOERROR)
 	return error;
     }
