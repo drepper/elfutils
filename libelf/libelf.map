@@ -138,3 +138,8 @@ ELFUTILS_1.6 {
   global:
     elf_getphdrnum;
 } ELFUTILS_1.5;
+
+ELFUTILS_1.7 {
+  global:
+    elf_begin_at_offset;
+} ELFUTILS_1.6;

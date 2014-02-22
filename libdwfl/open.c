@@ -119,11 +119,14 @@ what_kind (int fd, Elf **elfp, Elf_Kind *kind, bool *close_fd)
 }
 
 Dwfl_Error internal_function
-__libdw_open_file (int *fdp, Elf **elfp, bool close_on_fail, bool archive_ok)
+__libdw_open_file_at_offset (int *fdp, Elf **elfp, off_t start_offset,
+			     size_t maximum_size, bool close_on_fail,
+			     bool archive_ok)
 {
   bool close_fd = false;
 
-  Elf *elf = elf_begin (*fdp, ELF_C_READ_MMAP_PRIVATE, NULL);
+  Elf *elf = elf_begin_at_offset (*fdp, ELF_C_READ_MMAP_PRIVATE, NULL,
+				  start_offset, maximum_size);
 
   Elf_Kind kind;
   Dwfl_Error error = what_kind (*fdp, &elf, &kind, &close_fd);
@@ -179,4 +182,11 @@ __libdw_open_file (int *fdp, Elf **elfp, bool close_on_fail, bool archive_ok)
 
   *elfp = elf;
   return error;
+}
+
+Dwfl_Error internal_function
+__libdw_open_file (int *fdp, Elf **elfp, bool close_on_fail, bool archive_ok)
+{
+  return __libdw_open_file_at_offset (fdp, elfp, 0, ~((size_t) 0),
+				      close_on_fail, archive_ok);
 }

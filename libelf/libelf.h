@@ -164,6 +164,12 @@ extern "C" {
 /* Return descriptor for ELF file to work according to CMD.  */
 extern Elf *elf_begin (int __fildes, Elf_Cmd __cmd, Elf *__ref);
 
+/* Call elf_begin but the ELF file starts in FILDES at START_OFFSET and
+   has length MAXIMUM_SIZE.  elf_begin defaults to 0 and ~((size_t) 0)
+   respectively.  */
+extern Elf *elf_begin_at_offset (int fildes, Elf_Cmd __cmd, Elf *__ref,
+				 off_t start_offset, size_t maximum_size);
+
 /* Create a clone of an existing ELF descriptor.  */
   extern Elf *elf_clone (Elf *__elf, Elf_Cmd __cmd);
 
