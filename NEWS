@@ -22,7 +22,7 @@ backends: Add CFI unwinding for arm. Relies on .debug_frame.
           Add arm process initial register state compatible mode to AARCH64.
           Add aarch64 native and core unwind support.
 
-Other: All separate elfutils-robustify patches have been merged.
+other: All separate elfutils-robustify patches have been merged.
        CVE-2014-0172 Check overflow before calling malloc to uncompress data.
 
 Version 0.158
