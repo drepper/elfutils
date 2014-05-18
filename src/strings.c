@@ -1,5 +1,5 @@
 /* Print the strings of printable characters in files.
-   Copyright (C) 2005-2010, 2012 Red Hat, Inc.
+   Copyright (C) 2005-2010, 2012, 2014 Red Hat, Inc.
    This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2005.
 
@@ -120,8 +120,15 @@ static bool char_7bit;
 /* True if file names should be printed before strings.  */
 static bool print_file_name;
 
-/* Location print format string.  */
-static const char *locfmt;
+/* Radix for printed numbers.  */
+static enum
+{
+  radix_none = 0,
+  radix_decimal,
+  radix_hex,
+  radix_octal
+} radix = radix_none;
+
 
 /* Page size in use.  */
 static size_t ps;
@@ -283,16 +290,16 @@ parse_opt (int key, char *arg,
       switch (arg[0])
 	{
 	case 'd':
-	  locfmt = "%7" PRId64 " ";
+	  radix = radix_decimal;
 	  break;
 
 	case 'o':
 	octfmt:
-	  locfmt = "%7" PRIo64 " ";
+	  radix = radix_octal;
 	  break;
 
 	case 'x':
-	  locfmt = "%7" PRIx64 " ";
+	  radix = radix_hex;
 	  break;
 
 	default:
@@ -359,8 +366,11 @@ process_chunk_mb (const char *fname, const unsigned char *buf, off64_t to,
 		  fputs_unlocked (": ", stdout);
 		}
 
-	      if (unlikely (locfmt != NULL))
-		printf (locfmt, (int64_t) to - len - (buf - start));
+	      if (unlikely (radix != radix_none))
+		printf ((radix == radix_octal ? "%7" PRIo64 " "
+			 : (radix == radix_decimal ? "%7" PRId64 " "
+			    : "%7" PRIx64 " ")),
+			(int64_t) to - len - (buf - start));
 
 	      if (unlikely (*unprinted != NULL))
 		{
@@ -424,8 +434,11 @@ process_chunk (const char *fname, const unsigned char *buf, off64_t to,
 		  fputs_unlocked (": ", stdout);
 		}
 
-	      if (likely (locfmt != NULL))
-		printf (locfmt, (int64_t) to - len - (buf - start));
+	      if (likely (radix != radix_none))
+		printf ((radix == radix_octal ? "%7" PRIo64 " "
+			 : (radix == radix_decimal ? "%7" PRId64 " "
+			    : "%7" PRIx64 " ")),
+			(int64_t) to - len - (buf - start));
 
 	      if (unlikely (*unprinted != NULL))
 		{
@@ -456,13 +469,6 @@ process_chunk (const char *fname, const unsigned char *buf, off64_t to,
 static void *
 map_file (int fd, off64_t start_off, off64_t fdlen, size_t *map_sizep)
 {
-#if _MUDFLAP
-  (void) fd;
-  (void) start_off;
-  (void) fdlen;
-  (void) map_sizep;
-  return MAP_FAILED;
-#else
   /* Maximum size we mmap.  We use an #ifdef to avoid overflows on
      32-bit machines.  64-bit machines these days do not have usable
      address spaces larger than about 43 bits.  Not that any file
@@ -509,7 +515,6 @@ map_file (int fd, off64_t start_off, off64_t fdlen, size_t *map_sizep)
 
   *map_sizep = map_size;
   return mem;
-#endif
 }
 
 

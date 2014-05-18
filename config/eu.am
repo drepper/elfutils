@@ -1,6 +1,6 @@
 ## Common automake fragments for elfutils subdirectory makefiles.
 ##
-## Copyright (C) 2010-2011 Red Hat, Inc.
+## Copyright (C) 2010-2011, 2014 Red Hat, Inc.
 ##
 ## This file is part of elfutils.
 ##
@@ -35,6 +35,7 @@ LD_AS_NEEDED = @LD_AS_NEEDED@
 DEFS = -D_GNU_SOURCE -DHAVE_CONFIG_H -DLOCALEDIR='"${localedir}"'
 AM_CPPFLAGS = -I. -I$(srcdir) -I$(top_srcdir)/lib -I..
 AM_CFLAGS = -std=gnu99 -Wall -Wshadow \
+	    $(if $($(*F)_no_Werror),,-Werror) \
 	    $(if $($(*F)_no_Wunused),,-Wunused $(WEXTRA)) \
 	    $(if $($(*F)_no_Wformat),-Wno-format,-Wformat=2) \
 	    $($(*F)_CFLAGS)
@@ -43,15 +44,7 @@ if BUILD_WERROR
 AM_CFLAGS += $(if $($(*F)_no_Werror),,-Werror)
 endif
 
-if MUDFLAP
-AM_CFLAGS += -fmudflap
-libmudflap = -lmudflap
-else
-libmudflap =
-endif
-
-COMPILE.os = $(filter-out -fprofile-arcs -ftest-coverage $(no_mudflap.os),\
-	     		  $(COMPILE))
+COMPILE.os = $(filter-out -fprofile-arcs -ftest-coverage, $(COMPILE))
 
 %.os: %.c %.o
 if AMDEP

@@ -35,10 +35,8 @@ AM_CPPFLAGS += -I$(srcdir)/../libelf
 VERSION = 1
 
 lib_LIBRARIES = libdw.a
-if !MUDFLAP
 noinst_LIBRARIES = libdw_pic.a
 noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
-endif
 
 include_HEADERS = dwarf.h
 pkginclude_HEADERS = libdw.h
@@ -87,7 +85,8 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_cfi_addrframe.c \
 		  dwarf_getcfi.c dwarf_getcfi_elf.c dwarf_cfi_end.c \
 		  dwarf_aggregate_size.c dwarf_getlocation_implicit_pointer.c \
-		  dwarf_getlocation_die.c dwarf_getlocation_attr.c
+		  dwarf_getlocation_die.c dwarf_getlocation_attr.c \
+		  dwarf_getalt.c dwarf_setalt.c
 
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
@@ -97,12 +96,11 @@ $(srcdir)/known-dwarf.h: $(top_srcdir)/config/known-dwarf.awk $(srcdir)/dwarf.h
 	mv -f $@.new $@
 endif
 
-if !MUDFLAP
 libdw_pic_a_SOURCES =
 am_libdw_pic_a_OBJECTS = $(libdw_a_SOURCES:.c=.os)
 
 libdw_so_SOURCES =
-libdw.so: $(srcdir)/libdw.map libdw_pic.a \
+libdw.so$(EXEEXT): $(srcdir)/libdw.map libdw_pic.a ../libdwelf/libdwelf_pic.a \
 	  ../libdwfl/libdwfl_pic.a ../libebl/libebl.a \
 	  ../libelf/libelf.so
 # The rpath is necessary for libebl because its $ORIGIN use will
@@ -126,10 +124,12 @@ uninstall: uninstall-am
 	rm -f $(DESTDIR)$(libdir)/libdw.so.$(VERSION)
 	rm -f $(DESTDIR)$(libdir)/libdw.so
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(includedir)/elfutils
-endif
 
 libdwfl_objects = $(shell $(AR) t ../libdwfl/libdwfl.a)
 libdw_a_LIBADD = $(addprefix ../libdwfl/,$(libdwfl_objects))
+
+libdwelf_objects = $(shell $(AR) t ../libdwelf/libdwelf.a)
+libdw_a_LIBADD += $(addprefix ../libdwelf/,$(libdwelf_objects))
 
 noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
 		 dwarf_sig8_hash.h cfi.h encoded-value.h

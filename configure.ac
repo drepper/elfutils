@@ -17,7 +17,7 @@ dnl  GNU General Public License for more details.
 dnl
 dnl  You should have received a copy of the GNU General Public License
 dnl  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-AC_INIT([elfutils],[0.158],[https://bugzilla.redhat.com/],[elfutils])
+AC_INIT([elfutils],[0.159],[https://bugzilla.redhat.com/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
@@ -69,16 +69,6 @@ AS_IF([test "$use_locks" = yes],
       [AC_MSG_WARN([thread-safety is EXPERIMENTAL tests might fail.])])
 
 AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
-
-AC_ARG_ENABLE([dwz],
-AS_HELP_STRING([--enable-dwz], [enable experimental GNU ref_alt FORM, dwz multi file support in libdw]),
-enable_dwz=$enableval, enable_dwz=no)
-AM_CONDITIONAL(ENABLE_DWZ, test "$enable_dwz" = yes)
-AS_IF([test "$enable_dwz" = yes], [AC_DEFINE(ENABLE_DWZ)])
-AS_IF([test "$enable_dwz" = no -a -d /usr/lib/debug/.dwz],
-      [AC_MSG_WARN([--enable-dwz disabled and /usr/lib/debug/.dwz exists, native tests might fail])])
-
-AH_TEMPLATE([ENABLE_DWZ], [Defined if libdw should support GNU ref_alt FORM, dwz multi files.])
 
 AC_PROG_CC
 AC_PROG_RANLIB
@@ -202,26 +192,6 @@ dnl Support to work around automake's inflexible dependency generation.
 dnl See src/Makefile.am for more information.
 AM_CONDITIONAL(NEVER, false)
 
-dnl Enable debugging via mudflap.  This option will cause most libraries
-dnl to be built as archives which are statically linked into the applications.
-dnl All code, as far as possible, is compiled instrumented to catch all
-dnl the bugs valgrind is able to catch.
-use_mudflap=no
-AC_ARG_ENABLE([mudflap],
-AS_HELP_STRING([--enable-mudflap],
-[build binaries with mudflap instrumentation]), [dnl
-if test "x$enable_mudflap" = xyes; then
-  # Check whether the compiler support -fmudflap.
-  old_CFLAGS="$CFLAGS"
-  CFLAGS="$CFLAGS -fmudflap"
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],[use_mudflap=yes],[use_mudflap=fail])
-  CFLAGS="$old_CFLAGS"
-fi])
-if test "$use_mudflap" = fail; then
-  AC_MSG_FAILURE([--enable-mudflap requires a compiler which understands this option])
-fi
-AM_CONDITIONAL(MUDFLAP, test "$use_mudflap" = yes)
-
 dnl enable debugging of branch prediction.
 AC_ARG_ENABLE([debugpred],
 AS_HELP_STRING([--enable-debugpred],[build binaries with support to debug branch prediction]),
@@ -262,7 +232,7 @@ fi
 AM_CONDITIONAL(USE_VALGRIND, test "$use_valgrind" = yes)
 
 AM_CONDITIONAL(BUILD_STATIC, [dnl
-test "$use_mudflap" = yes -o "$use_gprof" = yes -o "$use_gcov" = yes])
+test "$use_gprof" = yes -o "$use_gcov" = yes])
 
 AC_ARG_ENABLE([werror],
 AS_HELP_STRING([--disable-werror],[do not build with -Werror]),
@@ -312,6 +282,9 @@ AC_CONFIG_FILES([libelf/Makefile])
 
 dnl Higher-level ELF support library.
 AC_CONFIG_FILES([libebl/Makefile])
+
+dnl DWARF-ELF Lower-level Functions support library.
+AC_CONFIG_FILES([libdwelf/Makefile])
 
 dnl DWARF library.
 AC_CONFIG_FILES([libdw/Makefile])

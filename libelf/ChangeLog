@@ -1,3 +1,53 @@
+2014-04-13  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Remove !MUDFLAP conditions.
+	* elf_begin.c (read_file): Don't clear use_mmap when _MUDFLAP is
+	defined.
+	* elf_update.c (write_file): Remove _MUDFLAP condition.
+
+2014-01-17  Jakub Jelinek  <jakub@redhat.com>
+	    Roland McGrath  <roland@redhat.com>
+
+	* libelfP.h (INVALID_NDX): Define.
+	* gelf_getdyn.c (gelf_getdyn): Use it.  Remove ndx < 0 test if any.
+	* gelf_getlib.c (gelf_getlib): Likewise.
+	* gelf_getmove.c (gelf_getmove): Likewise.
+	* gelf_getrel.c (gelf_getrel): Likewise.
+	* gelf_getrela.c (gelf_getrela): Likewise.
+	* gelf_getsym.c (gelf_getsym): Likewise.
+	* gelf_getsyminfo.c (gelf_getsyminfo): Likewise.
+	* gelf_getsymshndx.c (gelf_getsymshndx): Likewise.
+	* gelf_getversym.c (gelf_getversym): Likewise.
+	* gelf_update_dyn.c (gelf_update_dyn): Likewise.
+	* gelf_update_lib.c (gelf_update_lib): Likewise.
+	* gelf_update_move.c (gelf_update_move): Likewise.
+	* gelf_update_rel.c (gelf_update_rel): Likewise.
+	* gelf_update_rela.c (gelf_update_rela): Likewise.
+	* gelf_update_sym.c (gelf_update_sym): Likewise.
+	* gelf_update_syminfo.c (gelf_update_syminfo): Likewise.
+	* gelf_update_symshndx.c (gelf_update_symshndx): Likewise.
+	* gelf_update_versym.c (gelf_update_versym): Likewise.
+
+2014-01-17  Jakub Jelinek  <jakub@redhat.com>
+
+	* elf32_getphdr.c (elfw2(LIBELFBITS,getphdr)): Check if program header
+	table fits into object's bounds.
+	* elf_getshdrstrndx.c (elf_getshstrndx): Add elf->start_offset to
+	elf->map_address.  Check if first section header fits into object's
+	bounds.
+	* elf32_getshdr.c (elfw2(LIBELFBITS,getshdr)):
+	Check if section header table fits into object's bounds.
+	* elf_begin.c (get_shnum): Ensure section headers fits into
+	object's bounds.
+	(file_read_elf): Make sure scncnt is small enough to allocate both
+	ElfXX_Shdr and Elf_Scn array.  Make sure section and program header
+	tables fit into object's bounds.  Avoid memory leak on failure.
+	* elf_newscn.c (elf_newscn): Check for overflow.
+	* elf32_updatefile.c (__elfw2(LIBELFBITS,updatemmap)): Likewise.
+	(__elfw2(LIBELFBITS,updatefile)): Likewise.
+	* elf32_newphdr.c (elfw2(LIBELFBITS,newphdr)): Likewise.
+	* elf_getarsym.c (elf_getarsym): Likewise.
+
 2013-11-08  Mark Wielaard  <mjw@redhat.com>
 
 	* elf32_updatefile.c (elfXX_updatemmap): Only memcpy ehdr when not

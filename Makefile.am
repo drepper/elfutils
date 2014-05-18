@@ -23,8 +23,8 @@ ACLOCAL_AMFLAGS = -I m4
 pkginclude_HEADERS = version.h
 
 # Add doc back when we have some real content.
-SUBDIRS = config m4 lib libelf libebl libdwfl libdw libcpu libasm backends \
-	  src po tests
+SUBDIRS = config m4 lib libelf libebl libdwelf libdwfl libdw libcpu libasm \
+	  backends src po tests
 
 EXTRA_DIST = elfutils.spec GPG-KEY NOTES CONTRIBUTING \
 	     COPYING COPYING-GPLV2 COPYING-LGPLV3
@@ -35,7 +35,7 @@ EXTRA_DIST = elfutils.spec GPG-KEY NOTES CONTRIBUTING \
 # Run all tests under valgrind.
 DISTCHECK_CONFIGURE_FLAGS = \
 	--libdir=`echo $(libdir) | sed "s,^$(exec_prefix),$$dc_install_base,"`\
-	--enable-valgrind --enable-dwz \
+	--enable-valgrind \
 	CC="$(CC)"
 
 distcheck-hook:

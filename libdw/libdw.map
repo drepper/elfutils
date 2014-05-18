@@ -292,3 +292,12 @@ ELFUTILS_0.158 {
     dwfl_core_file_attach;
     dwfl_linux_proc_attach;
 } ELFUTILS_0.157;
+
+ELFUTILS_0.159 {
+  global:
+    dwarf_getalt;
+    dwarf_setalt;
+    dwelf_dwarf_gnu_debugaltlink;
+    dwelf_elf_gnu_debuglink;
+    dwelf_elf_gnu_build_id;
+} ELFUTILS_0.158;

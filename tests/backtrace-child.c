@@ -79,6 +79,18 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#ifndef __linux__
+
+int
+main (int argc __attribute__ ((unused)), char **argv)
+{
+  fprintf (stderr, "%s: Unwinding not supported for this architecture\n",
+           argv[0]);
+  return 77;
+}
+
+#else /* __linux__ */
+
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
 #define NOINLINE_NOCLONE __attribute__ ((noinline, noclone))
 #else
@@ -100,7 +112,10 @@ sigusr2 (int signo)
   if (! gencore)
     {
       raise (SIGUSR1);
-      /* It should not be reached.  */
+      /* Do not return as stack may be invalid due to ptrace-patched PC to the
+	 jmp function.  */
+      pthread_exit (NULL);
+      /* Not reached.  */
       abort ();
     }
   /* Here we dump the core for --gencore.  */
@@ -218,6 +233,8 @@ main (int argc UNUSED, char **argv)
     pthread_join (thread, NULL);
   else
     raise (SIGUSR2);
-  /* Not reached.  */
-  abort ();
+  return 0;
 }
+
+#endif /* ! __linux__ */
+

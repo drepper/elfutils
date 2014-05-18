@@ -1,3 +1,141 @@
+2014-05-15  Mark Wielaard  <mjw@redhat.com>
+
+	* linux-proc-maps.c (grovel_auxv): Close fd on error.
+
+2014-05-02  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_module_getdwarf: Remove ENABLE_DWZ ifdefs so find_debug_altlink
+	is always called.
+
+2014-05-01  Mark Wielaard  <mjw@redhat.com>
+
+	* libdwflP.h (struct Dwfl_Module): Add alt, alt_fd and alt_elf fields.
+	(__libdwfl_open_mod_by_build_id): Renamed __libdwfl_open_by_build_id.
+	(__libdwfl_open_by_build_id): New declaration that takes an explicit
+	build-id.
+	* dwfl_build_id_find_debuginfo.c (dwfl_build_id_find_debuginfo): If
+	we already have the Dwarf then look for the alt dwz multi file by
+	build-id.
+	* dwfl_build_id_find_elf.c (__libdwfl_open_by_build_id): Add the
+	build-id we are looking for as argument.
+	(__libdwfl_open_mod_by_build_id): New function, calls
+	__libdwfl_open_by_build_id.
+	(dwfl_build_id_find_elf): Call __libdwfl_open_mod_by_build_id.
+	* dwfl_module.c (__libdwfl_module_free): Release alt, alt_elf and
+	close alt_fd if necessary.
+	* dwfl_module_getdwarf.c (__check_build_id): Removed.
+	(try_debugaltlink): Removed.
+	(open_debugaltlink): Removed.
+	(open_elf_file): First half of open_elf that just opens the elf
+	file but doesn't setup the load address.
+	(open_elf): Call open_elf_file.
+	(find_debug_altlink): New function.
+	(load_dw): Remove loading of dwz multifile.
+	(find_dw): Call find_debug_altlink.
+	* find-debuginfo.c (validate): Handle alt debug case using
+	dwelf_dwarf_gnu_debugaltlink and mod->alt_elf.
+	(find_debuginfo_in_path): Handle alt debug files possibly in .dwz
+	subdirs.
+	* linux-kernel-modules.c (try_kernel_name): Use fakemod.debug.name
+	to store name to find by dwfl_standard_find_debuginfo instead of
+	allocating an extra variable on stack.
+
+2014-04-30  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_module_build_id.c (__libdwfl_find_elf_build_id): Moved to
+	dwelf_elf_gnu_build_id.c.
+	(__libdwfl_find_build_id): Add assert to make sure mod is never NULL.
+	* dwfl_segment_report_module.c (dwfl_segment_report_module): Call
+	dwelf_elf_gnu_build_id directly instead of __libdwfl_find_build_id.
+	* dwfl_module_getdwarf.c (__check_build_id): Implement using
+	dwelf_elf_gnu_build_id.
+
+2014-04-15  Florian Weimer  <fweimer@redhat.com>
+
+	* dwfl_module_getdwarf.c (__check_build_id): Moved from libdw.
+	(try_debugaltlink): Likewise.
+	(open_debugaltlink): Likewise.
+	(load_dw): Locate alternate debug information using
+	dwelf_dwarf_gnu_debugaltlink and call open_debugaltlink.
+
+2014-04-11  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (AM_CPPFLAGS): Add libdwelf.
+	* libdwflP.h: Include libdwelfP.h.
+	* dwfl_module_getdwarf.c (find_debuglink): Moved to libdwelf.
+	(find_debuginfo): Use dwelf_elf_gnu_debuglink.
+
+2014-04-22  Mark Wielaard  <mjw@redhat.com>
+
+	* frame_unwind.c (__libdwfl_frame_reg_get): Use uint64_t when
+	checking bits.
+	(__libdwfl_frame_reg_set): Likewise.
+
+2014-04-22  Kurt Roeckx  <kurt@roeckx.be>
+
+	* linux-pid-attach.c: Make linux only.
+
+2014-03-14  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Remove !MUDFLAP and MUDFLAP conditions.
+	Remove libelf and libdw definitions when MUDFLAP is defined.
+	* argp-std.c (__libdwfl_argp_mudflap_options): Removed.
+
+2014-03-03  Mark Wielaard  <mjw@redhat.com>
+
+	* elf-from-memory.c (elf_from_remote_memory): Keep track of
+	segments_end_mem. Pass memsz to first handle_segment pass. Only
+	extend contents_size and use shdrs if only file bits are in
+	segment.
+
+2014-03-11  Josh Stone  <jistone@redhat.com>
+
+	* dwfl_module_getdwarf.c (open_elf): Only explicitly set
+	mod->e_type when processing the main ELF file.
+
+2014-03-04  Mark Wielaard  <mjw@redhat.com>
+
+	* libdwflP.h (struct __libdwfl_pid_arg): Moved here and renamed from
+	linux-pid-attach.c (struct pid_arg).
+	(__libdwfl_get_pid_arg): New internal function declaration.
+	(__libdwfl_ptrace_attach): Likewise.
+	(__libdwfl_ptrace_detach): Likewise.
+	* dwfl_frame.c (dwfl_attach_state): Add "(deleted)" files to the
+	special exception modules that cannot be checked at this point.
+	* linux-pid-attach.c (struct pid_arg): Moved to libdwflP.h
+	(ptrace_attach): Renamed to...
+	(__libdwfl_ptrace_attach): New internal function.
+	(__libdwfl_ptrace_detach): Likewise. Extracted from ...
+	(pid_thread_detach): Call __libdwfl_ptrace_detach now.
+	(__libdwfl_get_pid_arg): New internal function.
+	* linux-proc-maps.c (dwfl_linux_proc_find_elf): Check if special
+	module name contains "(deleted)" and dwfl_pid gives an attached
+	pid. If pid is set and try to (re)use ptrace attach state of
+	process before reading memory.
+
+2014-03-03  Mark Wielaard  <mjw@redhat.com>
+
+	* elf-from-memory.c (elf_from_remote_memory): Take pagesize as
+	argument. Free buffer when detecting bad elf. Check PT_LOAD
+	alignment requirements on first handle_segment pass. Calculate
+	loadbase, start and end of segment using pagesize, not p_align.
+	* linux-proc-maps.c (dwfl_linux_proc_find_elf): Provide pagesize
+	to elf_from_remote_memory.
+
+2014-02-26  Mark Wielaard  <mjw@redhat.com>
+
+	* linux-proc-maps.c (proc_maps_report): Don't assert on bad input.
+
+2014-02-26  Mark Wielaard  <mjw@redhat.com>
+
+	* elf-from-memory.c (elf_from_remote_memory): Check against p64
+	p_type in case ELFCLASS64, not against p32 p_type.
+
+2014-01-17  Petr Machata  <pmachata@redhat.com>
+
+	* relocate.c (relocate_section): Use gelf_fsize instead of relying
+	on shdr->sh_entsize.
+
 2014-01-05  Mark Wielaard  <mjw@redhat.com>
 
 	* frame_unwind.c (handle_cfi): Only skip resetting return register

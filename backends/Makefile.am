@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2000-2010, 2013 Red Hat, Inc.
+## Copyright (C) 2000-2010, 2013, 2014 Red Hat, Inc.
 ## Copyright (C) 2012 Tilera Corporation
 ## This file is part of elfutils.
 ##
@@ -42,13 +42,8 @@ noinst_LIBRARIES = $(libebl_pic)
 noinst_DATA = $(libebl_pic:_pic.a=.so)
 
 
-if MUDFLAP
-libelf = ../libelf/libelf.a
-libdw = ../libdw/libdw.a
-else
 libelf = ../libelf/libelf.so
 libdw = ../libdw/libdw.so
-endif
 
 i386_SRCS = i386_init.c i386_symbol.c i386_corenote.c i386_cfi.c \
 	    i386_retval.c i386_regs.c i386_auxv.c i386_syscall.c \
@@ -78,15 +73,15 @@ libebl_alpha_pic_a_SOURCES = $(alpha_SRCS)
 am_libebl_alpha_pic_a_OBJECTS = $(alpha_SRCS:.c=.os)
 
 arm_SRCS = arm_init.c arm_symbol.c arm_regs.c arm_corenote.c \
-	   arm_auxv.c arm_attrs.c arm_retval.c arm_cfi.c
+	   arm_auxv.c arm_attrs.c arm_retval.c arm_cfi.c arm_initreg.c
 libebl_arm_pic_a_SOURCES = $(arm_SRCS)
 am_libebl_arm_pic_a_OBJECTS = $(arm_SRCS:.c=.os)
 
 aarch64_SRCS = aarch64_init.c aarch64_regs.c aarch64_symbol.c	\
-	       aarch64_corenote.c aarch64_retval.c aarch64_cfi.c
+	       aarch64_corenote.c aarch64_retval.c aarch64_cfi.c \
+	       aarch64_initreg.c
 libebl_aarch64_pic_a_SOURCES = $(aarch64_SRCS)
 am_libebl_aarch64_pic_a_OBJECTS = $(aarch64_SRCS:.c=.os)
-aarch64_regs_no_Wformat = yes
 
 sparc_SRCS = sparc_init.c sparc_symbol.c sparc_regs.c sparc_retval.c \
 	     sparc_corenote.c sparc64_corenote.c sparc_auxv.c
@@ -124,7 +119,7 @@ libebl_%.so libebl_%.map: libebl_%_pic.a $(libelf) $(libdw)
 	$(LINK) -shared -o $(@:.map=.so) \
 		-Wl,--whole-archive $< $(cpu_$*) -Wl,--no-whole-archive \
 		-Wl,--version-script,$(@:.so=.map) \
-		-Wl,-z,defs $(LD_AS_NEEDED) $(libelf) $(libdw) $(libmudflap)
+		-Wl,-z,defs $(LD_AS_NEEDED) $(libelf) $(libdw)
 	$(textrel_check)
 
 libebl_i386.so: $(cpu_i386)

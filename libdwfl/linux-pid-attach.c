@@ -1,5 +1,5 @@
 /* Get Dwarf Frame state for target live PID process.
-   Copyright (C) 2013 Red Hat, Inc.
+   Copyright (C) 2013, 2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -37,16 +37,7 @@
 # define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-struct pid_arg
-{
-  DIR *dir;
-  /* It is 0 if not used.  */
-  pid_t tid_attached;
-  /* Valid only if TID_ATTACHED is not zero.  */
-  bool tid_was_stopped;
-  /* True if threads are ptrace stopped by caller.  */
-  bool assume_ptrace_stopped;
-};
+#ifdef __linux__
 
 static bool
 linux_proc_pid_is_stopped (pid_t pid)
@@ -72,8 +63,9 @@ linux_proc_pid_is_stopped (pid_t pid)
   return retval;
 }
 
-static bool
-ptrace_attach (pid_t tid, bool *tid_was_stoppedp)
+bool
+internal_function
+__libdwfl_ptrace_attach (pid_t tid, bool *tid_was_stoppedp)
 {
   if (ptrace (PTRACE_ATTACH, tid, NULL, NULL) != 0)
     {
@@ -121,7 +113,7 @@ ptrace_attach (pid_t tid, bool *tid_was_stoppedp)
 static bool
 pid_memory_read (Dwfl *dwfl, Dwarf_Addr addr, Dwarf_Word *result, void *arg)
 {
-  struct pid_arg *pid_arg = arg;
+  struct __libdwfl_pid_arg *pid_arg = arg;
   pid_t tid = pid_arg->tid_attached;
   assert (tid > 0);
   Dwfl_Process *process = dwfl->process;
@@ -164,7 +156,7 @@ static pid_t
 pid_next_thread (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg,
 		 void **thread_argp)
 {
-  struct pid_arg *pid_arg = dwfl_arg;
+  struct __libdwfl_pid_arg *pid_arg = dwfl_arg;
   struct dirent *dirent;
   /* Start fresh on first traversal. */
   if (*thread_argp == NULL)
@@ -238,11 +230,11 @@ pid_thread_state_registers_cb (int firstreg, unsigned nregs,
 static bool
 pid_set_initial_registers (Dwfl_Thread *thread, void *thread_arg)
 {
-  struct pid_arg *pid_arg = thread_arg;
+  struct __libdwfl_pid_arg *pid_arg = thread_arg;
   assert (pid_arg->tid_attached == 0);
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
   if (! pid_arg->assume_ptrace_stopped
-      && ! ptrace_attach (tid, &pid_arg->tid_was_stopped))
+      && ! __libdwfl_ptrace_attach (tid, &pid_arg->tid_was_stopped))
     return false;
   pid_arg->tid_attached = tid;
   Dwfl_Process *process = thread->process;
@@ -254,39 +246,47 @@ pid_set_initial_registers (Dwfl_Thread *thread, void *thread_arg)
 static void
 pid_detach (Dwfl *dwfl __attribute__ ((unused)), void *dwfl_arg)
 {
-  struct pid_arg *pid_arg = dwfl_arg;
+  struct __libdwfl_pid_arg *pid_arg = dwfl_arg;
   closedir (pid_arg->dir);
   free (pid_arg);
+}
+
+void
+internal_function
+__libdwfl_ptrace_detach (pid_t tid, bool tid_was_stopped)
+{
+  // Older kernels (tested kernel-2.6.18-348.12.1.el5.x86_64) need special
+  // handling of the detachment to keep the process State: T (stopped).
+  if (tid_was_stopped)
+    syscall (__NR_tkill, tid, SIGSTOP);
+
+  /* This handling is needed only on older Linux kernels such as
+     2.6.32-358.23.2.el6.ppc64.  Later kernels such as
+     3.11.7-200.fc19.x86_64 remember the T (stopped) state
+     themselves and no longer need to pass SIGSTOP during
+     PTRACE_DETACH.  */
+  ptrace (PTRACE_DETACH, tid, NULL,
+	  (void *) (intptr_t) (tid_was_stopped ? SIGSTOP : 0));
+
+  if (tid_was_stopped)
+    {
+      // Wait till the SIGSTOP settles down.
+      int i;
+      for (i = 0; i < 100000; i++)
+	if (linux_proc_pid_is_stopped (tid))
+	  break;
+    }
 }
 
 static void
 pid_thread_detach (Dwfl_Thread *thread, void *thread_arg)
 {
-  struct pid_arg *pid_arg = thread_arg;
+  struct __libdwfl_pid_arg *pid_arg = thread_arg;
   pid_t tid = INTUSE(dwfl_thread_tid) (thread);
   assert (pid_arg->tid_attached == tid);
   pid_arg->tid_attached = 0;
   if (! pid_arg->assume_ptrace_stopped)
-    {
-      // Older kernels (tested kernel-2.6.18-348.12.1.el5.x86_64) need special
-      // handling of the detachment to keep the process State: T (stopped).
-      if (pid_arg->tid_was_stopped)
-	syscall (__NR_tkill, tid, SIGSTOP);
-      /* This handling is needed only on older Linux kernels such as
-         2.6.32-358.23.2.el6.ppc64.  Later kernels such as 3.11.7-200.fc19.x86_64
-         remember the T (stopped) state themselves and no longer need to pass
-         SIGSTOP during PTRACE_DETACH.  */
-      ptrace (PTRACE_DETACH, tid, NULL,
-	      (void *) (intptr_t) (pid_arg->tid_was_stopped ? SIGSTOP : 0));
-      if (pid_arg->tid_was_stopped)
-	{
-	  // Wait till the SIGSTOP settles down.
-	  int i;
-	  for (i = 0; i < 100000; i++)
-	    if (linux_proc_pid_is_stopped (tid))
-	      break;
-	}
-    }
+    __libdwfl_ptrace_detach (tid, pid_arg->tid_was_stopped);
 }
 
 static const Dwfl_Thread_Callbacks pid_thread_callbacks =
@@ -339,7 +339,7 @@ dwfl_linux_proc_attach (Dwfl *dwfl, pid_t pid, bool assume_ptrace_stopped)
   DIR *dir = opendir (dirname);
   if (dir == NULL)
     return errno;
-  struct pid_arg *pid_arg = malloc (sizeof *pid_arg);
+  struct __libdwfl_pid_arg *pid_arg = malloc (sizeof *pid_arg);
   if (pid_arg == NULL)
     {
       closedir (dir);
@@ -358,3 +358,98 @@ dwfl_linux_proc_attach (Dwfl *dwfl, pid_t pid, bool assume_ptrace_stopped)
   return 0;
 }
 INTDEF (dwfl_linux_proc_attach)
+
+struct __libdwfl_pid_arg *
+internal_function
+__libdwfl_get_pid_arg (Dwfl *dwfl)
+{
+  if (dwfl != NULL && dwfl->process != NULL
+      && dwfl->process->callbacks == &pid_thread_callbacks)
+    return (struct __libdwfl_pid_arg *) dwfl->process->callbacks_arg;
+
+  return NULL;
+}
+
+#else	/* __linux__ */
+
+static pid_t
+pid_next_thread (Dwfl *dwfl __attribute__ ((unused)),
+	         void *dwfl_arg __attribute__ ((unused)),
+		 void **thread_argp __attribute__ ((unused)))
+{
+  errno = ENOSYS;
+  __libdwfl_seterrno (DWFL_E_ERRNO);
+  return -1;
+}
+
+static bool
+pid_getthread (Dwfl *dwfl __attribute__ ((unused)),
+	       pid_t tid __attribute__ ((unused)),
+	       void *dwfl_arg __attribute__ ((unused)),
+	       void **thread_argp __attribute__ ((unused)))
+{
+  errno = ENOSYS;
+  __libdwfl_seterrno (DWFL_E_ERRNO);
+  return false;
+}
+
+static bool
+pid_memory_read (Dwfl *dwfl __attribute__ ((unused)),
+                 Dwarf_Addr addr __attribute__ ((unused)),
+	         Dwarf_Word *result __attribute__ ((unused)),
+	         void *arg __attribute__ ((unused)))
+{
+  errno = ENOSYS;
+  __libdwfl_seterrno (DWFL_E_ERRNO);
+  return false;
+}
+
+static bool
+pid_set_initial_registers (Dwfl_Thread *thread __attribute__ ((unused)),
+			   void *thread_arg __attribute__ ((unused)))
+{
+  errno = ENOSYS;
+  __libdwfl_seterrno (DWFL_E_ERRNO);
+  return false;
+}
+
+static void
+pid_detach (Dwfl *dwfl __attribute__ ((unused)),
+	    void *dwfl_arg __attribute__ ((unused)))
+{
+}
+
+static void
+pid_thread_detach (Dwfl_Thread *thread __attribute__ ((unused)),
+		  void *thread_arg __attribute__ ((unused)))
+{
+}
+
+static const Dwfl_Thread_Callbacks pid_thread_callbacks =
+{
+  pid_next_thread,
+  pid_getthread,
+  pid_memory_read,
+  pid_set_initial_registers,
+  pid_detach,
+  pid_thread_detach,
+};
+
+int
+dwfl_linux_proc_attach (Dwfl *dwfl __attribute__ ((unused)),
+			pid_t pid __attribute__ ((unused)),
+			bool assume_ptrace_stopped __attribute__ ((unused)))
+{
+  return ENOSYS;
+}
+INTDEF (dwfl_linux_proc_attach)
+
+struct __libdwfl_pid_arg *
+internal_function
+__libdwfl_get_pid_arg (Dwfl *dwfl __attribute__ ((unused)))
+{
+  return NULL;
+}
+
+#endif /* ! __linux __ */
+

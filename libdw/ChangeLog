@@ -1,3 +1,77 @@
+2014-05-02  Mark Wielaard  <mjw@redhat.com>
+
+	* libdwP.h (__check_build_id): Removed now unused.
+
+2014-05-01  Mark Wielaard  <mjw@redhat.com>
+
+	* libdwP.h (struct Dwarf): Remove free_alt.
+	* dwarf_end.c (dwarf_end): Don't check free_alt, don't end alt_dwarf.
+	* dwarf_setalt.c (dwarf_setalt): Don't check or set free_alt.
+
+2014-04-30  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.map (ELFUTILS_0.159): Add dwelf_elf_gnu_build_id.
+
+2014-04-15  Florian Weimer  <fweimer@redhat.com>
+
+	* dwarf_begin_elf.c (__check_build_id, try_debugaltlink)
+	(open_debugaltlink): Move to libdwfl.
+	(check_section): Do not locate alternate debuginfo.
+
+2014-04-24  Florian Weimer  <fweimer@redhat.com>
+
+	* libdw.map (ELFUTILS_0.159): Export dwelf_dwarf_gnu_debugaltlink.
+
+2014-04-22  Florian Weimer  <fweimer@redhat.com>
+
+	* dwarf_getalt.c, dwarf_setalt.c: New files.
+	* Makefile.am (libdw_a_SOURCES): Add them.
+	* libdw.h (dwarf_getalt, dwarf_setalt): Add function declarations.
+	* libdwP.h (dwarf_getalt, dwarf_setalt): Add internal function
+	declarations.
+	* libdw.map (ELFUTILS_0.159): Export the two new functions.
+
+2014-04-15  Florian Weimer  <fweimer@redhat.com>
+
+	* libdwP.h (enum IDX_gnu_debugaltlink): New.
+	* dwarf_begin_elf.c (dwarf_scnnames): Increase string size and add
+	.gnu_debugaltlink.
+	(check_section): Obtain .gnu_debugaltlink section from the
+	setiondata array.
+
+2014-04-11  Mark Wielaard  <mjw@redhat.com>
+
+	* libdw.map (ELFUTILS_0.159): New. Add dwelf_elf_gnu_debuglink.
+	* Makefile.am (libdw.so): Depend on libdwelf_pic.a.
+	(libdwelf_objects): New variable.
+	(libdw_a_LIBADD): Add libdwelf objects.
+
+2014-04-22  Mark Wielaard  <mjw@redhat.com>
+
+	* memory-access.h (get_sleb128_step): Remove undefined behavior
+	of left shifting a signed value. Replace it with a multiplication.
+
+2014-04-13  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Remove !MUDFLAP conditions.
+
+2014-04-09  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_begin_elf.c (check_section): Check for unsigned overflow
+	before calling malloc to uncompress data.
+
+2014-03-03  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix abort() on missing section headers.
+	* dwarf_begin_elf.c (check_section): Replace abort call by goto err.
+	New label err to return NULL.
+
+2014-02-05  Josh Stone  <jistone@redhat.com>
+
+	* dwarf_decl_file.c (dwarf_decl_file): Read the idx as unsigned.
+	* dwarf_decl_line.c (__libdw_attr_intval): Read the line/column as
+	unsigned.  Change the range assert to DWARF_E_INVALID_DWARF.
+
 2013-12-30  Mark Wielaard  <mjw@redhat.com>
 
 	* libdw.map (ELFUTILS_0.158): Add dwfl_core_file_attach and

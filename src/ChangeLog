@@ -1,3 +1,147 @@
+2014-05-01  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (find_no_debuginfo): Call dwfl_standard_find_debuginfo
+	if looking for alternate debug file.
+
+2014-04-11  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (AM_CPPFLAGS): Add -I libdwelf.
+
+2014-04-22  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (handle_core_item): Make sure variable length array
+	contains at least enough space for terminating zero char.
+
+2014-04-22  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_gdb_index_section): Use unsigned int for 31 bits
+	left shift.
+
+2014-03-13  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Remove no_mudflap.os. Remove libmudflap from all
+	LDADD lines.
+	* strings.c (process_chunk): Remove _MUDFLAP condition.
+
+2014-04-09  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_debug_aranges_section): Don't get the raw section
+	data, use the possibly decompressed .[z]debug sectiondata.
+	(print_debug_ranges_section): Likewise.
+	(print_debug_frame_section): Likewise.
+	(print_debug_line_section): Likewise.
+	(print_debug_loc_section): Likewise.
+	(print_debug_macinfo_section): Likewise.
+	(print_debug_macro_section): Likewise.
+
+2014-04-10  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (buf_read_ulong): Pass actual long size to convert.
+
+2014-03-05  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (attr_callback): Print DW_FORM_sdata values as signed
+	numbers.
+
+2014-02-24  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf (print_phdr): Check there is a SHT_PROGBITS section at the
+	offset given by p_offsets for a PT_INTERP segment before trying to
+	display the interpreter string.
+
+2014-02-07  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_phdr): Check phdr->p_filesz and make sure
+	interpreter string is zero terminated before calling printf.
+
+2014-01-22  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (nm_no_Wformat): Removed.
+	(size_no_Wformat): Likewise.
+	(strings_no_Wformat): Likewise.
+	(addr2line_no_Wformat): Likewise.
+	* size.c (show_sysv): Use fmtstr directly as literal in printf.
+	(show_sysv_one_line): Likewise.
+	* strings.c (locfmt): Removed.
+	(radix): New static enum.
+	(parse_opt): Set radix, not locfmt.
+	(process_chunk_mb): Use fmtstr directly as literal in printf based
+	on radix.
+	(process_chunk): Likewise.
+	* nm.c (show_symbols_sysv): Use fmtstr directly as literal in printf.
+	(show_symbols_bsd): Likewise.
+	(show_symbols_posix): Likewise.
+
+2014-01-21  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (show_inlines): New static boolean.
+	(print_frame): New function split out from...
+	(print_frames): ..here. If show_inlines is true and we found a
+	DIE for the frame address, call print_inline_frames otherwise
+	call print_frame. Keep track of and track frame_nr.
+	(print_inline_frames): New function.
+	(parse_opt): Handle '-i'.
+	(main): Add 'i' to options.
+
+2014-01-27  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (maxframes): Initialize to 256.
+	(main): Document new default in options. Document magic number
+	used in frames.allocated initialization.
+
+2014-01-20  Mark Wielaard  <mjw@redhat.com>
+
+	* stack.c (show_debugname): New static boolean.
+	(die_name): New function.
+	(print_frames): If show_debugname is true set symname to the
+	first function-like DIE with a name in scope for the address in
+	the debuginfo.
+	(parse_opt): Handle '-d'.
+	(main): Add 'd' to options.
+
+2014-01-20  Mark Wielaard  <mjw@redhat.com>
+
+	* addr2line.c (handle_address): Initialize scopes to NULL.
+
+2014-01-17  Roland McGrath  <roland@redhat.com>
+
+	* strip.c (handle_elf): Check for bogus values in sh_link, sh_info,
+	st_shndx, e_shstrndx, and SHT_GROUP or SHT_SYMTAB_SHNDX data.
+	Don't use assert on input values, instead bail with "illformed" error.
+
+2014-01-17  Roland McGrath  <roland@redhat.com>
+
+	* readelf.c (handle_dynamic, handle_symtab): Check for bogus sh_link.
+	(handle_verneed, handle_verdef, handle_versym, handle_hash): Likewise.
+	(handle_scngrp): Check for bogus sh_info.
+
+2014-01-17  Jakub Jelinek  <jakub@redhat.com>
+
+	* elflint.c (section_name): Return "<invalid>" instead of
+	crashing on invalid section name.
+	(check_symtab, is_rel_dyn, check_rela, check_rel, check_dynamic,
+	check_symtab_shndx, check_hash, check_versym): Robustify.
+	(check_hash): Don't check entries beyond end of section.
+	(check_note): Don't crash if gelf_rawchunk fails.
+
+2014-01-17  Petr Machata  <pmachata@redhat.com>
+
+	* readelf.c (handle_dynamic, handle_relocs_rel)
+	(handle_relocs_rela, handle_versym, print_liblist):
+	Use gelf_fsize instead of relying on shdr->sh_entsize.
+
+2014-01-14  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_debug_macro_section): Clear vendor array before
+	use.
+
+2014-01-15  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix corruption of non-C++ symbols by the demangler.
+	* nm.c (show_symbols_sysv, show_symbols_bsd, show_symbols_posix)
+	(show_symbols): Check for _Z.
+	* stack.c (print_frames) <USE_DEMANGLE>: Check for _Z.
+
 2014-01-02  Mark Wielaard  <mjw@redhat.com>
 
 	* stack.c (show_raw): Declare unconditionally.

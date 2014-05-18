@@ -1,3 +1,156 @@
+2014-05-02  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): run-readelf-dwz-multi.sh and
+	run-allfcts-multi.sh are now added unconditionally.
+
+2014-05-01  Mark Wielaard  <mjw@redhat.com>
+
+	* run-readelf-dwz-multi.sh: Add tests with alt debug files in .dwz
+	subdir.
+
+2014-04-30  Mark Wielaard  <mjw@redhat.com>
+
+	* buildid.c, buildid.sh, testfile42_noshdrs.bz2: New files.
+	* Makefile.am (check_PROGRAMS): Add buildid.
+	(TESTS): Add run-buildid.sh.
+	(EXTRA_DISTS): Add run-buildid.sh and testfile42_noshdrs.bz2.
+	(buildid_LDADD): New variable.
+
+2014-04-24  Florian Weimer  <fweimer@redhat.com>
+
+	* allfcts.c (setup_alt): New function.
+	(main): Call it.  Implementation additional error checking and
+	reporting.
+
+2014-04-24  Florian Weimer  <fweimer@redhat.com>
+
+	* debugaltlink.c, run-debugaltlink.sh: New files.
+	* Makefile.am (check_PROGRAMS): Add debugaltlink.
+	(TESTS): Add run-debugaltlink.sh.
+	(debugaltlink_LDADD): New variable.
+
+2014-04-11  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (AM_CPPFLAGS): Add -I libdwelf.
+	(check_PROGRAMS): Add debuglink.
+	(TESTS): Add run-debuglink.sh
+	(EXTRA_DIST): Likewise.
+	(debuglink_LDADD): New.
+	* debuglink.c: New file.
+	* run-debuglink.sh: Likewise.
+
+2014-03-23  Mark Wielaard  <mjw@redhat.com>
+
+	* run-nm-self.sh: Use test = not == for string comparisons.
+
+2014-04-22  Kurt Roeckx  <kurt@roeckx.be>
+
+	* backtrace.c: Make Linux only.
+	* backtrace-child.c: Make Linux only.
+	* backtrace-data.c: Make Linux only.
+	* backtrace-dwarf.c: Make Linux only.
+	* backtrace-subr.sh: Skip core file unwinding tests when not supported.
+
+2014-03-14  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Remove MUDFLAP conditions. Remove libmudflap from all
+	LDADD lines.
+	* configure.ac: Remove MUDFLAP conditional.
+
+2014-04-09  Mark Wielaard  <mjw@redhat.com>
+
+	* run-readelf-zdebug.sh: New test.
+	* testfile-debug.bz2: New testfile.
+	* testfile-zdebug.bz2: New testfile.
+	* Makefile.am (TESTS): Add run-readelf-zdebug.sh if ZLIB.
+	(EXTRA_DIST): Add run-readelf-zdebug.sh, testfile-debug.bz2 and
+	testfile-zdebug.bz2.
+
+2014-04-10  Mark Wielaard  <mjw@redhat.com>
+
+	* testfile_i686_core.bz2: New test file.
+	* run-readelf-mixed-corenote.sh: Add testfile_i686_core test.
+	* Makefile.am (EXTRA_DIST): Add testfile_i686_core.bz2
+
+2014-04-09  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): Add run-backtrace-core-aarch64.sh.
+	(EXTRA_DIST): Add run-backtrace-core-aarch64.sh,
+	backtrace.aarch64.core.bz2 and backtrace.aarch64.exec.bz2.
+	* run-backtrace-core-aarch64.sh: New test.
+
+2014-03-11  Josh Stone  <jistone@redhat.com>
+
+	* testfilebaxmin.bz2: New testfile.
+	* Makefile.am (EXTRA_DIST): Add testfilebaxmin.bz2.
+	* run-readelf-s.sh: Test testfilebaxmin.
+	* run-dwflsyms.sh: Likewise.
+
+2014-01-26  Mark Wielaard  <mjw@redhat.com>
+
+	* backtrace-subr.sh (check_unsupported): Special case arm*.
+
+2014-01-25  Mark Wielaard  <mjw@redhat.com>
+
+	* run-addrcfi.sh (EM_ARM): Change reg13 (sp) from undefined to
+	location expression: call_frame_cfa stack_value.
+
+2014-01-22  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (line2addr_no_Wformat): Removed.
+
+2014-01-21  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): Add run-stack-i-test.sh.
+	(EXTRA_DIST): Likewise.
+	* run-stack-i-test.sh: New test.
+
+2014-01-20  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (TESTS): Add run-stack-d-test.sh.
+	(EXTRA_DIST): Add run-stack-d-test.sh, testfiledwarfinlines.bz2
+	testfiledwarfinlines.core.bz2.
+	* run-stack-d-test.sh: New test.
+	* testfiledwarfinlines.bz2: New test file.
+	* testfiledwarfinlines.core.bz2: Likewise.
+
+2014-01-16  Mark Wielaard  <mjw@redhat.com>
+
+	* run-nm-self.sh: Don't use testrun_on_self_quiet but just testrun
+	on one ET_REL, one ET_EXEC and one ET_DYN file.
+	* test-subr.sh (self_test_files): Add two ET_REL files, only add
+	two libebl ET_DYN backend files.
+
+2014-01-16  Mark Wielaard  <mjw@redhat.com>
+
+	* run-backtrace-demangle.sh: Check exitcode and max number of frames.
+
+2014-01-18  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix false FAILs on testsuite with ulimit -c unlimited.
+	* backtrace-child.c (sigusr2): Call pthread_exit.
+	(main): Return, do not call abort.
+
+2014-01-15  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix corruption of non-C++ symbols by the demangler.
+	* Makefile.am (TESTS): Add run-backtrace-demangle.sh.
+	<!DEMANGLE>: Add ELFUTILS_DISABLE_DEMANGLE export.
+	(EXTRA_DIST): Add run-backtrace-demangle.sh,
+	testfile-backtrace-demangle.bz2, testfile-backtrace-demangle.cc,
+	testfile-backtrace-demangle.core.bz2.
+	* backtrace-demangle.cc: New file.
+	* run-backtrace-demangle.sh: New file.
+	* testfile-backtrace-demangle.bz2: New file.
+	* testfile-backtrace-demangle.cc: New file.
+	* testfile-backtrace-demangle.core.bz2: New file.
+
+2014-01-07  Matthias Klose <doko@ubuntu.com>
+
+	* backtrace-subr.sh (check_native_core): Check to see if core file
+	was created without ".PID" extension, if so mv core to core.PID.
+	Skip test if no core file was created or could be found.
+
 2014-01-04  Mark Wielaard  <mjw@redhat.com>
 
 	* backtrace-data.c (main): Don't assert if raise returns.

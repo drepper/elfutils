@@ -1,5 +1,5 @@
 /* Internal definitions for libdwarf.
-   Copyright (C) 2002-2011, 2013 Red Hat, Inc.
+   Copyright (C) 2002-2011, 2013, 2014 Red Hat, Inc.
    This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2002.
 
@@ -74,6 +74,7 @@ enum
     IDX_debug_macinfo,
     IDX_debug_macro,
     IDX_debug_ranges,
+    IDX_gnu_debugaltlink,
     IDX_last
   };
 
@@ -145,9 +146,6 @@ struct Dwarf
 
   /* If true, we allocated the ELF descriptor ourselves.  */
   bool free_elf;
-
-  /* If true, we allocated the Dwarf descriptor for alt_dwarf ourselves.  */
-  bool free_alt;
 
   /* Information for traversing the .debug_pubnames section.  This is
      an array and separately allocated with malloc.  */
@@ -654,14 +652,6 @@ unsigned char * __libdw_formptr (Dwarf_Attribute *attr, int sec_index,
 				 Dwarf_Off *offsetp)
   internal_function;
 
-#ifdef ENABLE_DWZ
-/* Checks that the build_id of the underlying Elf matches the expected.
-   Returns zero on match, -1 on error or no build_id found or 1 when
-   build_id doesn't match.  */
-int __check_build_id (Dwarf *dw, const uint8_t *build_id, const size_t id_len)
-  internal_function;
-#endif /* ENABLE_DWZ */
-
 /* Fills in the given attribute to point at an empty location expression.  */
 void __libdw_empty_loc_attr (Dwarf_Attribute *attr, struct Dwarf_CU *cu)
   internal_function;
@@ -685,6 +675,7 @@ INTDECL (dwarf_formref_die)
 INTDECL (dwarf_formsdata)
 INTDECL (dwarf_formstring)
 INTDECL (dwarf_formudata)
+INTDECL (dwarf_getalt)
 INTDECL (dwarf_getarange_addr)
 INTDECL (dwarf_getarangeinfo)
 INTDECL (dwarf_getaranges)
@@ -700,6 +691,7 @@ INTDECL (dwarf_nextcu)
 INTDECL (dwarf_next_unit)
 INTDECL (dwarf_offdie)
 INTDECL (dwarf_ranges)
+INTDECL (dwarf_setalt)
 INTDECL (dwarf_siblingof)
 INTDECL (dwarf_srclang)
 INTDECL (dwarf_tag)

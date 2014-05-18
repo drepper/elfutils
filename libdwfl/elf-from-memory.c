@@ -1,5 +1,5 @@
 /* Reconstruct an ELF file by reading the segments out of remote memory.
-   Copyright (C) 2005-2011 Red Hat, Inc.
+   Copyright (C) 2005-2011, 2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -48,10 +48,14 @@
    MAXREAD bytes from the remote memory at target address ADDRESS into the
    local buffer at DATA; it should return -1 for errors (with code in
    `errno'), 0 if it failed to read at least MINREAD bytes due to EOF, or
-   the number of bytes read if >= MINREAD.  ARG is passed through.  */
+   the number of bytes read if >= MINREAD.  ARG is passed through.
+
+   PAGESIZE is the minimum page size and alignment used for the PT_LOAD
+   segments.  */
 
 Elf *
 elf_from_remote_memory (GElf_Addr ehdr_vma,
+			GElf_Xword pagesize,
 			GElf_Addr *loadbasep,
 			ssize_t (*read_memory) (void *arg, void *data,
 						GElf_Addr address,
@@ -83,6 +87,7 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
   if (memcmp (buffer, ELFMAG, SELFMAG) != 0)
     {
     bad_elf:
+      free (buffer);
       __libdwfl_seterrno (DWFL_E_BADELF);
       return NULL;
     }
@@ -191,25 +196,39 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
   /* Scan for PT_LOAD segments to find the total size of the file image.  */
   size_t contents_size = 0;
   GElf_Off segments_end = 0;
+  GElf_Off segments_end_mem = 0;
   GElf_Addr loadbase = ehdr_vma;
   bool found_base = false;
   switch (ehdr.e32.e_ident[EI_CLASS])
     {
-      inline void handle_segment (GElf_Addr vaddr, GElf_Off offset,
-				  GElf_Xword filesz, GElf_Xword align)
+      /* Sanity checks segments and calculates segment_end,
+	 segments_end, segments_end_mem and loadbase (if not
+	 found_base yet).  Returns true if sanity checking failed,
+	 false otherwise.  */
+      inline bool handle_segment (GElf_Addr vaddr, GElf_Off offset,
+				  GElf_Xword filesz, GElf_Xword memsz,
+				  GElf_Xword palign)
 	{
-	  GElf_Off segment_end = ((offset + filesz + align - 1) & -align);
+	  /* Sanity check the alignment requirements.  */
+	  if ((palign & (pagesize - 1)) != 0
+	      || ((vaddr - offset) & (palign - 1)) != 0)
+	    return true;
+
+	  GElf_Off segment_end = ((offset + filesz + pagesize - 1)
+				  & -pagesize);
 
 	  if (segment_end > (GElf_Off) contents_size)
 	    contents_size = segment_end;
 
-	  if (!found_base && (offset & -align) == 0)
+	  if (!found_base && (offset & -pagesize) == 0)
 	    {
-	      loadbase = ehdr_vma - (vaddr & -align);
+	      loadbase = ehdr_vma - (vaddr & -pagesize);
 	      found_base = true;
 	    }
 
 	  segments_end = offset + filesz;
+	  segments_end_mem = offset + memsz;
+	  return false;
 	}
 
     case ELFCLASS32:
@@ -218,8 +237,10 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
 	goto libelf_error;
       for (uint_fast16_t i = 0; i < phnum; ++i)
 	if (phdrs.p32[i].p_type == PT_LOAD)
-	  handle_segment (phdrs.p32[i].p_vaddr, phdrs.p32[i].p_offset,
-			  phdrs.p32[i].p_filesz, phdrs.p32[i].p_align);
+	  if (handle_segment (phdrs.p32[i].p_vaddr, phdrs.p32[i].p_offset,
+			      phdrs.p32[i].p_filesz, phdrs.p32[i].p_memsz,
+			      phdrs.p32[i].p_align))
+	    goto bad_elf;
       break;
 
     case ELFCLASS64:
@@ -228,8 +249,10 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
 	goto libelf_error;
       for (uint_fast16_t i = 0; i < phnum; ++i)
 	if (phdrs.p64[i].p_type == PT_LOAD)
-	  handle_segment (phdrs.p64[i].p_vaddr, phdrs.p64[i].p_offset,
-			  phdrs.p64[i].p_filesz, phdrs.p64[i].p_align);
+	  if (handle_segment (phdrs.p64[i].p_vaddr, phdrs.p64[i].p_offset,
+			      phdrs.p64[i].p_filesz, phdrs.p64[i].p_memsz,
+			      phdrs.p64[i].p_align))
+	    goto bad_elf;
       break;
 
     default:
@@ -239,9 +262,11 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
 
   /* Trim the last segment so we don't bother with zeros in the last page
      that are off the end of the file.  However, if the extra bit in that
-     page includes the section headers, keep them.  */
+     page includes the section headers and the memory isn't extended (which
+     might indicate it will have been reused otherwise), keep them.  */
   if ((GElf_Off) contents_size > segments_end
-      && (GElf_Off) contents_size >= shdrs_end)
+      && (GElf_Off) contents_size >= shdrs_end
+      && segments_end == segments_end_mem)
     {
       contents_size = segments_end;
       if ((GElf_Off) contents_size < shdrs_end)
@@ -259,15 +284,17 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
 
   switch (ehdr.e32.e_ident[EI_CLASS])
     {
+      /* Reads the given segment.  Returns true if reading fails,
+	 false otherwise.  */
       inline bool handle_segment (GElf_Addr vaddr, GElf_Off offset,
-				  GElf_Xword filesz, GElf_Xword align)
+				  GElf_Xword filesz)
 	{
-	  GElf_Off start = offset & -align;
-	  GElf_Off end = (offset + filesz + align - 1) & -align;
+	  GElf_Off start = offset & -pagesize;
+	  GElf_Off end = (offset + filesz + pagesize - 1) & -pagesize;
 	  if (end > (GElf_Off) contents_size)
 	    end = contents_size;
 	  nread = (*read_memory) (arg, buffer + start,
-				  (loadbase + vaddr) & -align,
+				  (loadbase + vaddr) & -pagesize,
 				  end - start, end - start);
 	  return nread <= 0;
 	}
@@ -276,7 +303,7 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
       for (uint_fast16_t i = 0; i < phnum; ++i)
 	if (phdrs.p32[i].p_type == PT_LOAD)
 	  if (handle_segment (phdrs.p32[i].p_vaddr, phdrs.p32[i].p_offset,
-			      phdrs.p32[i].p_filesz, phdrs.p32[i].p_align))
+			      phdrs.p32[i].p_filesz))
 	    goto read_error;
 
       /* If the segments visible in memory didn't include the section
@@ -301,9 +328,9 @@ elf_from_remote_memory (GElf_Addr ehdr_vma,
 
     case ELFCLASS64:
       for (uint_fast16_t i = 0; i < phnum; ++i)
-	if (phdrs.p32[i].p_type == PT_LOAD)
+	if (phdrs.p64[i].p_type == PT_LOAD)
 	  if (handle_segment (phdrs.p64[i].p_vaddr, phdrs.p64[i].p_offset,
-			      phdrs.p64[i].p_filesz, phdrs.p64[i].p_align))
+			      phdrs.p64[i].p_filesz))
 	    goto read_error;
 
       /* If the segments visible in memory didn't include the section

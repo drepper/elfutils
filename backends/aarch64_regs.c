@@ -1,5 +1,5 @@
 /* Register names and numbers for AArch64 DWARF.
-   Copyright (C) 2013 Red Hat, Inc.
+   Copyright (C) 2013, 2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <dwarf.h>
+#include <stdarg.h>
 
 #define BACKEND aarch64_
 #include "libebl_CPU.h"
@@ -46,12 +47,18 @@ aarch64_register_info (Ebl *ebl __attribute__ ((unused)),
   if (name == NULL)
     return 128;
 
+  __attribute__ ((format (printf, 3, 4)))
   ssize_t
-  regtype (const char *setname, int type, const char *fmt, int arg)
+  regtype (const char *setname, int type, const char *fmt, ...)
   {
     *setnamep = setname;
     *typep = type;
-    int s = snprintf (name, namelen, fmt, arg);
+
+    va_list ap;
+    va_start (ap, fmt);
+    int s = vsnprintf (name, namelen, fmt, ap);
+    va_end(ap);
+
     if (s < 0 || (unsigned) s >= namelen)
       return -1;
     return s + 1;
@@ -66,13 +73,13 @@ aarch64_register_info (Ebl *ebl __attribute__ ((unused)),
       return regtype ("integer", DW_ATE_signed, "x%d", regno);
 
     case 31:
-      return regtype ("integer", DW_ATE_address, "sp", 0);
+      return regtype ("integer", DW_ATE_address, "sp");
 
     case 32:
       return 0;
 
     case 33:
-      return regtype ("integer", DW_ATE_address, "elr", 0);
+      return regtype ("integer", DW_ATE_address, "elr");
 
     case 34 ... 63:
       return 0;

@@ -1,5 +1,5 @@
 /* Find debugging and symbol information for a module in libdwfl.
-   Copyright (C) 2005-2012 Red Hat, Inc.
+   Copyright (C) 2005-2012, 2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -27,19 +27,17 @@
    not, see <http://www.gnu.org/licenses/>.  */
 
 #include "libdwflP.h"
+#include <inttypes.h>
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
 #include "../libdw/libdwP.h"	/* DWARF_E_* values are here.  */
 #include "../libelf/libelfP.h"
 
-
-/* Open libelf FILE->fd and compute the load base of ELF as loaded in MOD.
-   When we return success, FILE->elf and FILE->vaddr are set up.  */
 static inline Dwfl_Error
-open_elf (Dwfl_Module *mod, struct dwfl_file *file)
+open_elf_file (Elf **elf, int *fd, char **name)
 {
-  if (file->elf == NULL)
+  if (*elf == NULL)
     {
       /* CBFAIL uses errno if it's set, so clear it first in case we don't
 	 set it with an open failure below.  */
@@ -47,24 +45,35 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
 
       /* If there was a pre-primed file name left that the callback left
 	 behind, try to open that file name.  */
-      if (file->fd < 0 && file->name != NULL)
-	file->fd = TEMP_FAILURE_RETRY (open64 (file->name, O_RDONLY));
+      if (*fd < 0 && *name != NULL)
+	*fd = TEMP_FAILURE_RETRY (open64 (*name, O_RDONLY));
 
-      if (file->fd < 0)
+      if (*fd < 0)
 	return CBFAIL;
 
-      Dwfl_Error error = __libdw_open_file (&file->fd, &file->elf, true, false);
-      if (error != DWFL_E_NOERROR)
-	return error;
+      return __libdw_open_file (fd, elf, true, false);
     }
-  else if (unlikely (elf_kind (file->elf) != ELF_K_ELF))
+  else if (unlikely (elf_kind (*elf) != ELF_K_ELF))
     {
-      elf_end (file->elf);
-      file->elf = NULL;
-      close (file->fd);
-      file->fd = -1;
+      elf_end (*elf);
+      *elf = NULL;
+      close (*fd);
+      *fd = -1;
       return DWFL_E_BADELF;
     }
+
+  /* Elf file already open and looks fine.  */
+  return DWFL_E_NOERROR;
+}
+
+/* Open libelf FILE->fd and compute the load base of ELF as loaded in MOD.
+   When we return success, FILE->elf and FILE->vaddr are set up.  */
+static inline Dwfl_Error
+open_elf (Dwfl_Module *mod, struct dwfl_file *file)
+{
+  Dwfl_Error error = open_elf_file (&file->elf, &file->fd, &file->name);
+  if (error != DWFL_E_NOERROR)
+    return error;
 
   GElf_Ehdr ehdr_mem, *ehdr = gelf_getehdr (file->elf, &ehdr_mem);
   if (ehdr == NULL)
@@ -77,7 +86,7 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
       return DWFL_E (LIBELF, elf_errno ());
     }
 
-  if (mod->e_type != ET_REL)
+  if (ehdr->e_type != ET_REL)
     {
       /* In any non-ET_REL file, we compute the "synchronization address".
 
@@ -131,11 +140,24 @@ open_elf (Dwfl_Module *mod, struct dwfl_file *file)
 	}
     }
 
-  mod->e_type = ehdr->e_type;
+  /* We only want to set the module e_type explictly once, derived from
+     the main ELF file.  (It might be changed for the kernel, because
+     that is special - see below.)  open_elf is always called first for
+     the main ELF file, because both find_dw and find_symtab call
+     __libdwfl_getelf first to open the main file.  So don't let debug
+     or aux files override the module e_type.  The kernel heuristic
+     below could otherwise trigger for non-kernel/non-main files, since
+     their phdrs might not match the actual load addresses.  */
+  if (file == &mod->main)
+    {
+      mod->e_type = ehdr->e_type;
 
-  /* Relocatable Linux kernels are ET_EXEC but act like ET_DYN.  */
-  if (mod->e_type == ET_EXEC && file->vaddr != mod->low_addr)
-    mod->e_type = ET_DYN;
+      /* Relocatable Linux kernels are ET_EXEC but act like ET_DYN.  */
+      if (mod->e_type == ET_EXEC && file->vaddr != mod->low_addr)
+	mod->e_type = ET_DYN;
+    }
+  else
+    assert (mod->main.elf != NULL);
 
   return DWFL_E_NOERROR;
 }
@@ -207,66 +229,6 @@ __libdwfl_getelf (Dwfl_Module *mod)
     mod_verify_build_id (mod);
 
   mod->main_bias = mod->e_type == ET_REL ? 0 : mod->low_addr - mod->main.vaddr;
-}
-
-/* Search an ELF file for a ".gnu_debuglink" section.  */
-static const char *
-find_debuglink (Elf *elf, GElf_Word *crc)
-{
-  size_t shstrndx;
-  if (elf_getshdrstrndx (elf, &shstrndx) < 0)
-    return NULL;
-
-  Elf_Scn *scn = NULL;
-  while ((scn = elf_nextscn (elf, scn)) != NULL)
-    {
-      GElf_Shdr shdr_mem;
-      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
-      if (shdr == NULL)
-	return NULL;
-
-      const char *name = elf_strptr (elf, shstrndx, shdr->sh_name);
-      if (name == NULL)
-	return NULL;
-
-      if (!strcmp (name, ".gnu_debuglink"))
-	break;
-    }
-
-  if (scn == NULL)
-    return NULL;
-
-  /* Found the .gnu_debuglink section.  Extract its contents.  */
-  Elf_Data *rawdata = elf_rawdata (scn, NULL);
-  if (rawdata == NULL)
-    return NULL;
-
-  Elf_Data crcdata =
-    {
-      .d_type = ELF_T_WORD,
-      .d_buf = crc,
-      .d_size = sizeof *crc,
-      .d_version = EV_CURRENT,
-    };
-  Elf_Data conv =
-    {
-      .d_type = ELF_T_WORD,
-      .d_buf = rawdata->d_buf + rawdata->d_size - sizeof *crc,
-      .d_size = sizeof *crc,
-      .d_version = EV_CURRENT,
-    };
-
-  GElf_Ehdr ehdr_mem;
-  GElf_Ehdr *ehdr = gelf_getehdr (elf, &ehdr_mem);
-  if (ehdr == NULL)
-    return NULL;
-
-  Elf_Data *d = gelf_xlatetom (elf, &crcdata, &conv, ehdr->e_ident[EI_DATA]);
-  if (d == NULL)
-    return NULL;
-  assert (d == &crcdata);
-
-  return rawdata->d_buf;
 }
 
 /* If the main file might have been prelinked, then we need to
@@ -531,7 +493,9 @@ find_debuginfo (Dwfl_Module *mod)
     return DWFL_E_NOERROR;
 
   GElf_Word debuglink_crc = 0;
-  const char *debuglink_file = find_debuglink (mod->main.elf, &debuglink_crc);
+  const char *debuglink_file;
+  debuglink_file = INTUSE(dwelf_elf_gnu_debuglink) (mod->main.elf,
+						    &debuglink_crc);
 
   mod->debug.fd = (*mod->dwfl->callbacks->find_debuginfo) (MODCB_ARGS (mod),
 							   mod->main.name,
@@ -544,6 +508,55 @@ find_debuginfo (Dwfl_Module *mod)
   return result;
 }
 
+/* Try to find the alternative debug link for the given DWARF and set
+   it if found.  Only called when mod->dw is already setup but still
+   might need an alternative (dwz multi) debug file.  filename is either
+   the main or debug name from which the Dwarf was created. */
+static void
+find_debug_altlink (Dwfl_Module *mod, const char *filename)
+{
+  assert (mod->dw != NULL);
+
+  const char *altname;
+  const void *build_id;
+  ssize_t build_id_len = INTUSE(dwelf_dwarf_gnu_debugaltlink) (mod->dw,
+							       &altname,
+							       &build_id);
+
+  if (build_id_len > 0)
+    {
+      /* We could store altfile in the module, but don't really need it.  */
+      char *altfile = NULL;
+      mod->alt_fd = (*mod->dwfl->callbacks->find_debuginfo) (MODCB_ARGS (mod),
+							     filename,
+							     altname,
+							     0,
+							     &altfile);
+
+      /* The (internal) callbacks might just set mod->alt_elf directly
+	 because they open the Elf anyway for sanity checking.
+	 Otherwise open either the given file name or use the fd
+	 returned.  */
+      Dwfl_Error error = open_elf_file (&mod->alt_elf, &mod->alt_fd,
+					&altfile);
+      if (error == DWFL_E_NOERROR)
+	{
+	  mod->alt = INTUSE(dwarf_begin_elf) (mod->alt_elf,
+					      DWARF_C_READ, NULL);
+	  if (mod->alt == NULL)
+	    {
+	      elf_end (mod->alt_elf);
+	      mod->alt_elf = NULL;
+	      close (mod->alt_fd);
+	      mod->alt_fd = -1;
+	    }
+	  else
+	    dwarf_setalt (mod->dw, mod->alt);
+	}
+
+      free (altfile); /* See above, we don't really need it.  */
+    }
+}
 
 /* Try to find a symbol table in FILE.
    Returns DWFL_E_NOERROR if a proper one is found.
@@ -1193,6 +1206,11 @@ find_dw (Dwfl_Module *mod)
     case DWFL_E_NOERROR:
       mod->debug.elf = mod->main.elf;
       mod->debug.address_sync = mod->main.address_sync;
+
+      /* The Dwarf might need an alt debug file, find that now after
+	 everything about the debug file has been setup (the
+	 find_debuginfo callback might need it).  */
+      find_debug_altlink (mod, mod->main.name);
       return;
 
     case DWFL_E_NO_DWARF:
@@ -1208,6 +1226,15 @@ find_dw (Dwfl_Module *mod)
     {
     case DWFL_E_NOERROR:
       mod->dwerr = load_dw (mod, &mod->debug);
+      if (mod->dwerr == DWFL_E_NOERROR)
+	{
+	  /* The Dwarf might need an alt debug file, find that now after
+	     everything about the debug file has been setup (the
+	     find_debuginfo callback might need it).  */
+	  find_debug_altlink (mod, mod->debug.name);
+	  return;
+	}
+
       break;
 
     case DWFL_E_CB:		/* The find_debuginfo hook failed.  */

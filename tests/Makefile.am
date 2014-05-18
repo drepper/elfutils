@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 1996-2013 Red Hat, Inc.
+## Copyright (C) 1996-2014 Red Hat, Inc.
 ## This file is part of elfutils.
 ##
 ## This file is free software; you can redistribute it and/or modify
@@ -17,17 +17,13 @@
 ## along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ##
 include $(top_srcdir)/config/eu.am
-if MUDFLAP
-BUILD_RPATH = \$$ORIGIN/../backends
-else
 BUILD_RPATH = \$$ORIGIN/../libasm:\$$ORIGIN/../libdw:\$$ORIGIN/../backends:\$$ORIGIN/../libelf
-endif
 
 AM_LDFLAGS =
 
 if !STANDALONE
 AM_CPPFLAGS += -I$(top_srcdir)/libasm -I$(top_srcdir)/libdw \
-	    -I$(top_srcdir)/libdwfl \
+	    -I$(top_srcdir)/libdwfl -I$(top_srcdir)/libdwelf \
 	    -I$(top_srcdir)/libebl -I$(top_srcdir)/libelf \
 	    -I$(top_srcdir)/lib -I..
 AM_LDFLAGS += -Wl,-rpath-link,../libasm:../libdw:../libelf
@@ -53,7 +49,9 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  alldts md5-sha1-test typeiter typeiter2 low_high_pc \
 		  test-elf_cntl_gelf_getshdr dwflsyms dwfllines \
 		  dwfl-report-elf-align varlocs backtrace backtrace-child \
-		  backtrace-data backtrace-dwarf
+		  backtrace-data backtrace-dwarf debuglink debugaltlink \
+		  buildid
+
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
 
@@ -90,6 +88,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-readelf-macro.sh run-readelf-loc.sh \
 	run-readelf-aranges.sh run-readelf-line.sh \
 	run-native-test.sh run-bug1-test.sh \
+	run-debuglink.sh run-debugaltlink.sh run-buildid.sh \
 	dwfl-bug-addr-overflow run-addrname-test.sh \
 	dwfl-bug-fd-leak dwfl-bug-report \
 	run-dwfl-bug-offline-rel.sh run-dwfl-addr-sect.sh \
@@ -107,10 +106,17 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-backtrace-native-biarch.sh run-backtrace-native-core.sh \
 	run-backtrace-native-core-biarch.sh run-backtrace-core-x86_64.sh \
 	run-backtrace-core-i386.sh run-backtrace-core-ppc.sh \
-	run-backtrace-core-s390x.sh run-backtrace-core-s390.sh
+	run-backtrace-core-s390x.sh run-backtrace-core-s390.sh \
+	run-backtrace-core-aarch64.sh \
+	run-backtrace-demangle.sh run-stack-d-test.sh run-stack-i-test.sh \
+	run-readelf-dwz-multi.sh run-allfcts-multi.sh
 
 if !BIARCH
 export ELFUTILS_DISABLE_BIARCH = 1
+endif
+
+if !DEMANGLE
+export ELFUTILS_DISABLE_DEMANGLE = 1
 endif
 
 if !STANDALONE
@@ -122,15 +128,14 @@ if LZMA
 TESTS += run-readelf-s.sh run-dwflsyms.sh
 endif
 
+if ZLIB
+TESTS += run-readelf-zdebug.sh
+endif
+
 if HAVE_LIBASM
 check_PROGRAMS += $(asm_TESTS)
 TESTS += $(asm_TESTS)
 endif
-
-if ENABLE_DWZ
-TESTS += run-readelf-dwz-multi.sh run-allfcts-multi.sh
-endif
-
 
 EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-show-die-info.sh run-get-files.sh run-get-lines.sh \
@@ -169,13 +174,15 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	     run-readelf-test4.sh run-readelf-twofiles.sh \
 	     run-bug1-test.sh testfile28.bz2 testfile28.rdwr.bz2 \
+	     run-debuglink.sh run-debugaltlink.sh run-buildid.sh \
 	     testfile29.bz2 testfile29.rdwr.bz2 \
 	     testfile30.bz2 testfile31.bz2 testfile32.bz2 testfile33.bz2 \
 	     testfile34.bz2 testfile35.bz2 testfile35.debug.bz2 \
 	     testfile36.bz2 testfile36.debug.bz2 \
 	     testfile37.bz2 testfile37.debug.bz2 \
 	     testfile38.bz2 testfile39.bz2 testfile40.bz2 testfile40.debug.bz2 \
-	     testfile41.bz2 testfile42.bz2 testfile43.bz2 \
+	     testfile41.bz2 testfile42.bz2 testfile42_noshdrs.bz2 \
+	     testfile43.bz2 \
 	     testfile44.S.bz2 testfile44.expect.bz2 run-disasm-x86.sh \
 	     testfile45.S.bz2 testfile45.expect.bz2 run-disasm-x86-64.sh \
 	     testfile46.bz2 testfile47.bz2 testfile48.bz2 testfile48.debug.bz2 \
@@ -210,7 +217,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfilegdbindex7.bz2 \
 	     run-readelf-s.sh testfilebazdbg.bz2 testfilebazdyn.bz2 \
 	     testfilebazmin.bz2 testfilebazdbg.debug.bz2 testfilebazmdb.bz2 \
-	     testfilebaztab.bz2 testfilebasmin.bz2 \
+	     testfilebaztab.bz2 testfilebasmin.bz2 testfilebaxmin.bz2 \
 	     testfilebazdbg_pl.bz2 testfilebazmin_pl.bz2 \
 	     testfilebazdbg_plr.bz2 testfilebazmin_plr.bz2 \
 	     testfilebazdbgppc64.bz2 testfilebazdbgppc64.debug.bz2 \
@@ -244,7 +251,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     testfile_parameter_ref.c testfile_parameter_ref.bz2 \
 	     testfile_entry_value.c testfile_entry_value.bz2 \
 	     testfile_implicit_value.c testfile_implicit_value.bz2 \
-	     testfile_aarch64_core.bz2 \
+	     testfile_aarch64_core.bz2 testfile_i686_core.bz2 \
 	     run-funcretval.sh funcretval_test.c funcretval_test_aarch64.bz2 \
 	     run-backtrace-data.sh run-backtrace-dwarf.sh cleanup-13.c \
 	     run-backtrace-native.sh run-backtrace-native-biarch.sh \
@@ -256,7 +263,15 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-backtrace-core-ppc.sh testfile66.bz2 testfile66.core.bz2 \
 	     backtrace.s390x.core.bz2 backtrace.s390x.exec.bz2 \
 	     backtrace.s390.core.bz2 backtrace.s390.exec.bz2 \
-	     run-backtrace-core-s390x.sh run-backtrace-core-s390.sh
+	     run-backtrace-core-s390x.sh run-backtrace-core-s390.sh \
+	     run-backtrace-core-aarch64.sh \
+	     backtrace.aarch64.core.bz2 backtrace.aarch64.exec.bz2 \
+	     run-backtrace-demangle.sh testfile-backtrace-demangle.bz2 \
+	     testfile-backtrace-demangle.cc \
+	     testfile-backtrace-demangle.core.bz2 \
+	     run-stack-d-test.sh run-stack-i-test.sh \
+	     testfiledwarfinlines.bz2 testfiledwarfinlines.core.bz2 \
+	     run-readelf-zdebug.sh testfile-debug.bz2 testfile-zdebug.bz2
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --error-exitcode=1 --run-libc-freeres=no'
@@ -298,10 +313,6 @@ installcheck-local:
 		LOG_COMPILER="$(installed_LOG_COMPILER)" check-TESTS
 endif !STANDALONE
 
-if MUDFLAP
-static_build = yes
-endif
-
 if STANDALONE
 libdw = -ldw
 libelf = -lelf
@@ -321,78 +332,81 @@ libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
 endif !STANDALONE
 
-arextract_LDADD = $(libelf) $(libmudflap)
-arsymtest_LDADD = $(libelf) $(libmudflap)
-newfile_LDADD = $(libelf) $(libmudflap)
-saridx_LDADD = $(libelf) $(libmudflap)
-scnnames_LDADD = $(libelf) $(libmudflap)
-sectiondump_LDADD = $(libelf) $(libmudflap)
-showptable_LDADD = $(libelf) $(libmudflap)
-hash_LDADD = $(libelf) $(libmudflap)
-test_nlist_LDADD = $(libelf) $(libmudflap)
-msg_tst_LDADD = $(libelf) $(libmudflap)
-newscn_LDADD = $(libelf) $(libmudflap)
-early_offscn_LDADD = $(libelf) $(libmudflap)
-ecp_LDADD = $(libelf) $(libmudflap)
-update1_LDADD = $(libelf) $(libmudflap)
-update2_LDADD = $(libelf) $(libmudflap)
-update3_LDADD = $(libebl) $(libelf) $(libmudflap)
-update4_LDADD = $(libebl) $(libelf) $(libmudflap)
-show_die_info_LDADD = $(libdw) $(libelf) $(libmudflap)
-get_pubnames_LDADD = $(libdw) $(libelf) $(libmudflap)
-show_abbrev_LDADD = $(libdw) $(libelf) $(libmudflap)
-get_lines_LDADD = $(libdw) $(libelf) $(libmudflap)
-get_files_LDADD = $(libdw) $(libelf) $(libmudflap)
-get_aranges_LDADD = $(libdw) $(libelf) $(libmudflap)
-allfcts_LDADD = $(libdw) $(libelf) $(libmudflap)
+arextract_LDADD = $(libelf)
+arsymtest_LDADD = $(libelf)
+newfile_LDADD = $(libelf)
+saridx_LDADD = $(libelf)
+scnnames_LDADD = $(libelf)
+sectiondump_LDADD = $(libelf)
+showptable_LDADD = $(libelf)
+hash_LDADD = $(libelf)
+test_nlist_LDADD = $(libelf)
+msg_tst_LDADD = $(libelf)
+newscn_LDADD = $(libelf)
+early_offscn_LDADD = $(libelf)
+ecp_LDADD = $(libelf)
+update1_LDADD = $(libelf)
+update2_LDADD = $(libelf)
+update3_LDADD = $(libebl) $(libelf)
+update4_LDADD = $(libebl) $(libelf)
+show_die_info_LDADD = $(libdw) $(libelf)
+get_pubnames_LDADD = $(libdw) $(libelf)
+show_abbrev_LDADD = $(libdw) $(libelf)
+get_lines_LDADD = $(libdw) $(libelf)
+get_files_LDADD = $(libdw) $(libelf)
+get_aranges_LDADD = $(libdw) $(libelf)
+allfcts_LDADD = $(libdw) $(libelf)
 line2addr_no_Wformat = yes
-line2addr_LDADD = $(libdw) $(libmudflap)
-addrscopes_LDADD = $(libdw) $(libmudflap)
-funcscopes_LDADD = $(libdw) $(libmudflap)
-funcretval_LDADD = $(libdw) $(libmudflap)
-allregs_LDADD = $(libdw) $(libmudflap)
-find_prologues_LDADD = $(libdw) $(libmudflap)
-#show_ciefde_LDADD = ../libdwarf/libdwarf.so $(libelf) $(libmudflap)
-asm_tst1_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst2_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst3_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst4_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst5_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst6_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst7_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst8_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-asm_tst9_LDADD = $(libasm) $(libebl) $(libelf) $(libmudflap) -ldl
-dwflmodtest_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-rdwrmmap_LDADD = $(libelf) $(libmudflap)
-dwfl_bug_addr_overflow_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-arls_LDADD = $(libelf) $(libmudflap)
-dwfl_bug_fd_leak_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-dwfl_bug_report_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-dwfl_bug_getmodules_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-dwfl_addr_sect_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-dwarf_getmacros_LDADD = $(libdw) $(libmudflap)
-dwarf_getstring_LDADD = $(libdw) $(libmudflap)
-addrcfi_LDADD = $(libdw) $(libebl) $(libelf) $(libmudflap) -ldl
-test_flag_nobits_LDADD = $(libelf) $(libmudflap)
-rerequest_tag_LDADD = $(libdw) $(libmudflap)
-alldts_LDADD = $(libebl) $(libelf) $(libmudflap)
+line2addr_LDADD = $(libdw)
+addrscopes_LDADD = $(libdw)
+funcscopes_LDADD = $(libdw)
+funcretval_LDADD = $(libdw)
+allregs_LDADD = $(libdw)
+find_prologues_LDADD = $(libdw)
+#show_ciefde_LDADD = ../libdwarf/libdwarf.so $(libelf)
+asm_tst1_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst2_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst3_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst4_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst5_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst6_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst7_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst8_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+asm_tst9_LDADD = $(libasm) $(libebl) $(libelf) -ldl
+dwflmodtest_LDADD = $(libdw) $(libebl) $(libelf) -ldl
+rdwrmmap_LDADD = $(libelf)
+dwfl_bug_addr_overflow_LDADD = $(libdw) $(libebl) $(libelf) -ldl
+arls_LDADD = $(libelf)
+dwfl_bug_fd_leak_LDADD = $(libdw) $(libebl) $(libelf) -ldl
+dwfl_bug_report_LDADD = $(libdw) $(libebl) $(libelf) -ldl
+dwfl_bug_getmodules_LDADD = $(libdw) $(libebl) $(libelf) -ldl
+dwfl_addr_sect_LDADD = $(libdw) $(libebl) $(libelf) -ldl
+dwarf_getmacros_LDADD = $(libdw)
+dwarf_getstring_LDADD = $(libdw)
+addrcfi_LDADD = $(libdw) $(libebl) $(libelf) -ldl
+test_flag_nobits_LDADD = $(libelf)
+rerequest_tag_LDADD = $(libdw)
+alldts_LDADD = $(libebl) $(libelf)
 md5_sha1_test_LDADD = $(libeu)
-typeiter_LDADD = $(libdw) $(libelf) $(libmudflap)
-typeiter2_LDADD = $(libdw) $(libelf) $(libmudflap)
-low_high_pc_LDADD = $(libdw) $(libelf) $(libmudflap)
-test_elf_cntl_gelf_getshdr_LDADD = $(libelf) $(libmudflap)
-dwflsyms_LDADD = $(libdw) $(libelf) $(libmudflap)
-dwfllines_LDADD = $(libdw) $(libelf) $(libmudflap)
-dwfl_report_elf_align_LDADD = $(libdw) $(libmudflap)
-varlocs_LDADD = $(libdw) $(libelf) $(libmudflap)
-backtrace_LDADD = $(libdw) $(libelf) $(libmudflap)
+typeiter_LDADD = $(libdw) $(libelf)
+typeiter2_LDADD = $(libdw) $(libelf)
+low_high_pc_LDADD = $(libdw) $(libelf)
+test_elf_cntl_gelf_getshdr_LDADD = $(libelf)
+dwflsyms_LDADD = $(libdw) $(libelf)
+dwfllines_LDADD = $(libdw) $(libelf)
+dwfl_report_elf_align_LDADD = $(libdw)
+varlocs_LDADD = $(libdw) $(libelf)
+backtrace_LDADD = $(libdw) $(libelf)
 # backtrace-child-biarch also uses those *_CFLAGS and *_LDLAGS variables:
 backtrace_child_CFLAGS = -fPIE
 backtrace_child_LDFLAGS = -pie -pthread
 backtrace_child_biarch_SOURCES = backtrace-child.c
-backtrace_data_LDADD = $(libdw) $(libelf) $(libmudflap)
+backtrace_data_LDADD = $(libdw) $(libelf)
 backtrace_dwarf_CFLAGS = -Wno-unused-parameter
-backtrace_dwarf_LDADD = $(libdw) $(libelf) $(libmudflap)
+backtrace_dwarf_LDADD = $(libdw) $(libelf)
+debuglink_LDADD = $(libdw) $(libelf)
+debugaltlink_LDADD = $(libdw) $(libelf)
+buildid_LDADD = $(libdw) $(libelf)
 
 if GCOV
 check: check-am coverage

@@ -74,6 +74,18 @@ check_unsupported()
     echo >&2 $testname: arch not supported
     exit 77
   fi
+
+  # ARM is special. It is supported, but it doesn't use .eh_frame by default
+  # making the native tests fail unless debuginfo (for glibc) is installed
+  # and we can fall back on .debug_frame for the CFI.
+  case "`uname -m`" in
+    arm* )
+      if grep 'dwfl_thread_getframes: No DWARF information found' $1; then
+	echo >&2 $testname: arm needs debuginfo installed for all libraries
+	exit 77
+      fi
+    ;;
+  esac
 }
 
 check_core()
@@ -84,6 +96,7 @@ check_core()
   echo ./backtrace ./backtrace.$arch.{exec,core}
   testrun ${abs_builddir}/backtrace -e ./backtrace.$arch.exec --core=./backtrace.$arch.core 1>backtrace.$arch.bt 2>backtrace.$arch.err || true
   cat backtrace.$arch.{bt,err}
+  check_unsupported backtrace.$arch.err backtrace.$arch.core
   check_all backtrace.$arch.{bt,err} backtrace.$arch.core
 }
 
@@ -111,6 +124,11 @@ check_native_core()
 
   # Skip the test if we cannot adjust core ulimit.
   core="core.`ulimit -c unlimited || exit 77; set +ex; testrun ${abs_builddir}/$child --gencore; true`"
+  # see if /proc/sys/kernel/core_uses_pid is set to 0
+  if [ -f core ]; then
+    mv core "$core"
+  fi
+  if [ ! -f "$core" ]; then exit 77; fi
 
   if [ "x$SAVED_VALGRIND_CMD" != "x" ]; then
     VALGRIND_CMD="$SAVED_VALGRIND_CMD"

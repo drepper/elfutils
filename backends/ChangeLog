@@ -1,3 +1,68 @@
+2014-04-22  Kurt Roeckx  <kurt@roeckx.be>
+
+	* i386_initreg.c: Make Linux only.
+	* x86_64_initreg.c: Make Linux only.
+
+2014-04-13  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am: Remove libelf and libdw definitions when MUDFLAP
+	is defined. Remove libmudflap from LINK line.
+
+2014-04-09  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (aarch64_SRCS): Add aarch64_initreg.c.
+	* aarch64_corenote.c (prstatus_regs): Mark pc_register.
+	* aarch64_init.c: Assign frame_nregs. Hook set_initial_registers_tid.
+	* aarch64_initreg: New file.
+
+2014-03-28  Jean Pihet  <jean.pihet@linaro.org>
+
+	* arm_initreg.c (arm_set_initial_registers_tid): Handle compat mode.
+	ARM compatible code running on AARCH64.
+
+2014-03-19  Mark Wielaard  <mjw@redhat.com>
+
+	* aarch64_reloc.def: AARCH64_ABS32 and AARCH64_ABS64 are also valid
+	in ET_REL.
+
+2014-01-30  Petr Machata  <pmachata@redhat.com>
+
+	* aarch64_regs.c (aarch64_register_info.regtype): Make this
+	variadic printf-like function.  Call one vsnprintf instead of two
+	snprintf's.
+	(regtyper, regtypen): Drop.
+	(aarch64_register_info): Adjust callers.
+
+2014-01-26  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (arm_SRCS): Add arm_initreg.c.
+	* arm_init.c (arm_init): Define frame_nregs and hook
+	set_initial_registers_tid.
+	* arm_initreg.c: New file.
+
+2014-01-25  Mark Wielaard  <mjw@redhat.com>
+
+	* arm_cfi.c (arm_abi_cfi): Restore SP (r13) from CFA.
+
+2014-01-24  Mark Wielaard  <mjw@redhat.com>
+
+	* arm_reloc.def: Update list.
+
+2014-01-22  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (aarch64_regs_no_Wformat): Removed.
+	* aarch64_regs.c (regtype): Add bool nr argument. snprintf arg
+	when nr is true.
+	(regtyper): New function.
+	(regtypen): Likewise.
+	(aarch64_register_info): Call either regtyper or regtypen not
+	regtype directly.
+
+2014-01-14  Mark Wielaard  <mjw@redhat.com>
+
+	* aarch64_symbol.c (aarch64_check_special_symbol): Check shdr is
+	not NULL before usage.
+
 2014-01-04  Mark Wielaard  <mjw@redhat.com>
 
 	* ppc64_symbol.c (ppc64_machine_flag_check): New function.

@@ -1,5 +1,5 @@
 /* Unwinding of frames like gstack/pstack.
-   Copyright (C) 2013 Red Hat, Inc.
+   Copyright (C) 2013-2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include ELFUTILS_HEADER(dwfl)
 
+#include <dwarf.h>
 #include <system.h>
 
 /* Name and version of program.  */
@@ -49,8 +50,10 @@ static bool show_one_tid = false;
 static bool show_quiet = false;
 static bool show_raw = false;
 static bool show_modules = false;
+static bool show_debugname = false;
+static bool show_inlines = false;
 
-static int maxframes = 2048;
+static int maxframes = 256;
 
 struct frame
 {
@@ -192,6 +195,167 @@ frame_callback (Dwfl_Frame *state, void *arg)
   return DWARF_CB_OK;
 }
 
+static const char*
+die_name (Dwarf_Die *die)
+{
+  Dwarf_Attribute attr;
+  const char *name;
+  name = dwarf_formstring (dwarf_attr_integrate (die,
+						 DW_AT_MIPS_linkage_name,
+						 &attr)
+			   ?: dwarf_attr_integrate (die,
+						    DW_AT_linkage_name,
+						    &attr));
+  if (name == NULL)
+    name = dwarf_diename (die);
+
+  return name;
+}
+
+static void
+print_frame (int nr, Dwarf_Addr pc, bool isactivation,
+	     Dwarf_Addr pc_adjusted, Dwfl_Module *mod,
+	     const char *symname, Dwarf_Die *cudie,
+	     Dwarf_Die *die)
+{
+  int width = get_addr_width (mod);
+  printf ("#%-2u 0x%0*" PRIx64, nr, width, (uint64_t) pc);
+
+  if (show_activation)
+    printf ("%4s", ! isactivation ? "- 1" : "");
+
+  if (symname != NULL)
+    {
+#ifdef USE_DEMANGLE
+      // Require GNU v3 ABI by the "_Z" prefix.
+      if (! show_raw && symname[0] == '_' && symname[1] == 'Z')
+	{
+	  int status = -1;
+	  char *dsymname = __cxa_demangle (symname, demangle_buffer,
+					   &demangle_buffer_len, &status);
+	  if (status == 0)
+	    symname = demangle_buffer = dsymname;
+	}
+#endif
+      printf (" %s", symname);
+    }
+
+  const char* fname;
+  Dwarf_Addr start;
+  fname = dwfl_module_info(mod, NULL, &start,
+			   NULL, NULL, NULL, NULL, NULL);
+  if (show_module)
+    {
+      if (fname != NULL)
+	printf (" - %s", fname);
+    }
+
+  if (show_build_id)
+    {
+      const unsigned char *id;
+      GElf_Addr id_vaddr;
+      int id_len = dwfl_module_build_id (mod, &id, &id_vaddr);
+      if (id_len > 0)
+	{
+	  printf ("\n    [");
+	  do
+	    printf ("%02" PRIx8, *id++);
+	  while (--id_len > 0);
+	  printf ("]@0x%0" PRIx64 "+0x%" PRIx64,
+		  start, pc_adjusted - start);
+	}
+    }
+
+  if (show_source)
+    {
+      int line, col;
+      const char* sname;
+      line = col = -1;
+      sname = NULL;
+      if (die != NULL)
+	{
+	  Dwarf_Files *files;
+	  if (dwarf_getsrcfiles (cudie, &files, NULL) == 0)
+	    {
+	      Dwarf_Attribute attr;
+	      Dwarf_Word val;
+	      if (dwarf_formudata (dwarf_attr (die, DW_AT_call_file, &attr),
+				   &val) == 0)
+		{
+		  sname = dwarf_filesrc (files, val, NULL, NULL);
+		  if (dwarf_formudata (dwarf_attr (die, DW_AT_call_line,
+						   &attr), &val) == 0)
+		    {
+		      line = val;
+		      if (dwarf_formudata (dwarf_attr (die, DW_AT_call_column,
+						       &attr), &val) == 0)
+			col = val;
+		    }
+		}
+	    }
+	}
+      else
+	{
+	  Dwfl_Line *lineobj = dwfl_module_getsrc(mod, pc_adjusted);
+	  if (lineobj)
+	    sname = dwfl_lineinfo (lineobj, NULL, &line, &col, NULL, NULL);
+	}
+
+      if (sname != NULL)
+	{
+	  printf ("\n    %s", sname);
+	  if (line > 0)
+	    {
+	      printf (":%d", line);
+	      if (col > 0)
+		printf (":%d", col);
+	    }
+	}
+    }
+  printf ("\n");
+}
+
+static void
+print_inline_frames (int *nr, Dwarf_Addr pc, bool isactivation,
+		     Dwarf_Addr pc_adjusted, Dwfl_Module *mod,
+		     const char *symname, Dwarf_Die *cudie, Dwarf_Die *die)
+{
+  Dwarf_Die *scopes = NULL;
+  int nscopes = dwarf_getscopes_die (die, &scopes);
+  if (nscopes > 0)
+    {
+      /* scopes[0] == die, the lowest level, for which we already have
+	 the name.  This is the actual source location where it
+	 happened.  */
+      print_frame ((*nr)++, pc, isactivation, pc_adjusted, mod, symname,
+		   NULL, NULL);
+
+      /* last_scope is the source location where the next frame/function
+	 call was done. */
+      Dwarf_Die *last_scope = &scopes[0];
+      for (int i = 1; i < nscopes && (maxframes == 0 || *nr < maxframes); i++)
+	{
+	  Dwarf_Die *scope = &scopes[i];
+	  int tag = dwarf_tag (scope);
+	  if (tag != DW_TAG_inlined_subroutine
+	      && tag != DW_TAG_entry_point
+	      && tag != DW_TAG_subprogram)
+	    continue;
+
+	  symname = die_name (scope);
+	  print_frame ((*nr)++, pc, isactivation, pc_adjusted, mod, symname,
+		       cudie, last_scope);
+
+	  /* Found the "top-level" in which everything was inlined?  */
+	  if (tag == DW_TAG_subprogram)
+	    break;
+
+	  last_scope = scope;
+	}
+    }
+  free (scopes);
+}
+
 static void
 print_frames (struct frames *frames, pid_t tid, int dwflerr, const char *what)
 {
@@ -199,7 +363,9 @@ print_frames (struct frames *frames, pid_t tid, int dwflerr, const char *what)
     frames_shown = true;
 
   printf ("TID %d:\n", tid);
-  for (int nr = 0; nr < frames->frames; nr++)
+  int frame_nr = 0;
+  for (int nr = 0; nr < frames->frames && (maxframes == 0
+					   || frame_nr < maxframes); nr++)
     {
       Dwarf_Addr pc = frames->frame[nr].pc;
       bool isactivation = frames->frame[nr].isactivation;
@@ -208,80 +374,54 @@ print_frames (struct frames *frames, pid_t tid, int dwflerr, const char *what)
       /* Get PC->SYMNAME.  */
       Dwfl_Module *mod = dwfl_addrmodule (dwfl, pc_adjusted);
       const char *symname = NULL;
+      Dwarf_Die die_mem;
+      Dwarf_Die *die = NULL;
+      Dwarf_Die *cudie = NULL;
       if (mod && ! show_quiet)
-	symname = dwfl_module_addrname (mod, pc_adjusted);
-
-      int width = get_addr_width (mod);
-      printf ("#%-2u 0x%0*" PRIx64, nr, width, (uint64_t) pc);
-
-      if (show_activation)
-	printf ("%4s", ! isactivation ? "- 1" : "");
-
-      if (symname != NULL)
 	{
-#ifdef USE_DEMANGLE
-	  if (! show_raw)
+	  if (show_debugname)
 	    {
-	      int status = -1;
-	      char *dsymname = __cxa_demangle (symname, demangle_buffer,
-					       &demangle_buffer_len, &status);
-	      if (status == 0)
-		symname = demangle_buffer = dsymname;
-	    }
-#endif
-	  printf (" %s", symname);
-	}
+	      Dwarf_Addr bias = 0;
+	      Dwarf_Die *scopes = NULL;
+	      cudie = dwfl_module_addrdie (mod, pc_adjusted, &bias);
+	      int nscopes = dwarf_getscopes (cudie, pc_adjusted - bias,
+					     &scopes);
 
-      const char* fname;
-      Dwarf_Addr start;
-      fname = dwfl_module_info(mod, NULL, &start,
-			       NULL, NULL, NULL, NULL, NULL);
-      if (show_module)
-	{
-	  if (fname != NULL)
-	    printf (" - %s", fname);
-	}
-
-      if (show_build_id)
-	{
-	  const unsigned char *id;
-	  GElf_Addr id_vaddr;
-	  int id_len = dwfl_module_build_id (mod, &id, &id_vaddr);
-	  if (id_len > 0)
-	    {
-	      printf ("\n    [");
-	      do
-		printf ("%02" PRIx8, *id++);
-	      while (--id_len > 0);
-	      printf ("]@0x%0" PRIx64 "+0x%" PRIx64,
-		      start, pc_adjusted - start);
-	    }
-	}
-
-      if (show_source)
-	{
-	  Dwfl_Line *lineobj = dwfl_module_getsrc(mod, pc_adjusted);
-	  if (lineobj)
-	    {
-	      int line, col;
-	      const char* sname;
-	      line = col = -1;
-	      sname = dwfl_lineinfo (lineobj, NULL, &line, &col, NULL, NULL);
-	      if (sname != NULL)
+	      /* Find the first function-like DIE with a name in scope.  */
+	      for (int i = 0; symname == NULL && i < nscopes; i++)
 		{
-		  printf ("\n    %s", sname);
-		  if (line > 0)
+		  Dwarf_Die *scope = &scopes[i];
+		  int tag = dwarf_tag (scope);
+		  if (tag == DW_TAG_subprogram
+		      || tag == DW_TAG_inlined_subroutine
+		      || tag == DW_TAG_entry_point)
+		    symname = die_name (scope);
+
+		  if (symname != NULL)
 		    {
-		      printf (":%d", line);
-		      if (col > 0)
-			printf (":%d", col);
+		      die_mem = *scope;
+		      die = &die_mem;
 		    }
 		}
+	      free (scopes);
 	    }
+
+	  if (symname == NULL)
+	    symname = dwfl_module_addrname (mod, pc_adjusted);
 	}
-      printf ("\n");
+
+      if (show_inlines && die != NULL)
+	print_inline_frames (&frame_nr, pc, isactivation, pc_adjusted, mod,
+			     symname, cudie, die);
+      else
+	print_frame (frame_nr++, pc, isactivation, pc_adjusted, mod, symname,
+		     NULL, NULL);
     }
-  if (dwflerr != 0)
+
+  if (frames->frames > 0 && frame_nr == maxframes)
+    error (0, 0, "tid %d: shown max number of frames "
+	   "(%d, use -n 0 for unlimited)", tid, maxframes);
+  else if (dwflerr != 0)
     {
       if (frames->frames > 0)
 	{
@@ -306,9 +446,6 @@ print_frames (struct frames *frames, pid_t tid, int dwflerr, const char *what)
       else
 	error (0, 0, "%s tid %d: %s", what, tid, dwfl_errmsg (dwflerr));
     }
-  else if (frames->frames > 0 && frames->frames == maxframes)
-    error (0, 0, "tid %d: shown max number of frames "
-	   "(%d, use -n 0 for unlimited)", tid, maxframes);
 }
 
 static int
@@ -381,8 +518,17 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       show_activation = true;
       break;
 
+    case 'd':
+      show_debugname = true;
+      break;
+
+    case 'i':
+      show_inlines = show_debugname = true;
+      break;
+
     case 'v':
-      show_activation = show_source = show_module = true;
+      show_activation = show_source = show_module = show_debugname = true;
+      show_inlines = true;
       break;
 
     case 'b':
@@ -505,12 +651,17 @@ main (int argc, char **argv)
       { NULL, 0, NULL, 0, N_("Output selection options:"), 0 },
       { "activation",  'a', NULL, 0,
 	N_("Additionally show frame activation"), 0 },
+      { "debugname",  'd', NULL, 0,
+	N_("Additionally try to lookup DWARF debuginfo name for frame address"),
+	0 },
+      { "inlines",  'i', NULL, 0,
+	N_("Additionally show inlined function frames using DWARF debuginfo if available (implies -d)"), 0 },
       { "module",  'm', NULL, 0,
 	N_("Additionally show module file information"), 0 },
       { "source",  's', NULL, 0,
 	N_("Additionally show source file information"), 0 },
       { "verbose", 'v', NULL, 0,
-	N_("Show all additional information (activation, module and source)"), 0 },
+	N_("Show all additional information (activation, debugname, inlines, module and source)"), 0 },
       { "quiet", 'q', NULL, 0,
 	N_("Do not resolve address to function symbol name"), 0 },
       { "raw", 'r', NULL, 0,
@@ -520,7 +671,7 @@ main (int argc, char **argv)
       { NULL, '1', NULL, 0,
 	N_("Show the backtrace of only one thread"), 0 },
       { NULL, 'n', "MAXFRAMES", 0,
-	N_("Show at most MAXFRAMES per thread (default 2048, use 0 for unlimited)"), 0 },
+	N_("Show at most MAXFRAMES per thread (default 256, use 0 for unlimited)"), 0 },
       { "list-modules", 'l', NULL, 0,
 	N_("Show module memory map with build-id, elf and debug files detected"), 0 },
       { NULL, 0, NULL, 0, NULL, 0 }
@@ -550,6 +701,8 @@ invoked with bad or missing arguments it will exit with return code 64.")
     }
 
   struct frames frames;
+  /* When maxframes is zero, then 2048 is just the initial allocation
+     that will be increased using realloc in framecallback ().  */
   frames.allocated = maxframes == 0 ? 2048 : maxframes;
   frames.frames = 0;
   frames.frame = malloc (sizeof (struct frame) * frames.allocated);
