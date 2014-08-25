@@ -1,3 +1,49 @@
+2014-08-14  Mark Wielaard  <mjw@redhat.com>
+
+	* linux-kernel-modules.c (check-suffix): Also TRY .ko.xz.
+
+2014-07-24  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix report_r_debug for prelinked libraries.
+	* link_map.c (report_r_debug): Comment out variable l_addr.
+	Use instead new variable base recalculated from l_ld.
+
+2014-06-24  Kurt Roeckx  <kurt@roeckx.be>
+
+	* linux-pid-attach.c: Make it build on non linux hosts.
+
+2014-06-17  Mark Wielaard  <mjw@redhat.com>
+
+	* frame_unwind.c (handle_cfi): Use ebl_func_addr_mask.
+	* dwfl_module_getsym.c (__libdwfl_getsym): Likewise.
+
+2014-06-15  Mark Wielaard  <mjw@redhat.com>
+
+	* linux-core-attach.c (core_memory_read): Use libdw/memory-access.h
+	macros read_4ubyte_unaligned_noncvt and read_8ubyte_unaligned_noncvt
+	to read possibly unaligned data.
+	(core_next_thread): Likewise.
+	(core_set_initial_registers): Likewise.
+	(dwfl_core_file_attach): Likewise.
+
+2014-06-11  Mark Wielaard  <mjw@redhat.com>
+
+	* dwfl_frame.c (__libdwfl_process_free): Reset dwfl->attacherr.
+	(dwfl_attach_state): Set dwfl->attacherr.
+	(dwfl_pid): Check and return dwfl->attacherr if set.
+	(dwfl_getthreads): Likewise.
+	(getthread): Likewise.
+	* libdwflP.h: Add DWFL_E_NO_CORE_FILE.
+	(struct Dwfl): Add attacherr field.
+	* linux-core-attach.c (dwfl_core_file_attach): Set dwfl->attacherr.
+	Don't assert if ELF file is not ET_CORE, just return error.
+	* linux-pid-attach.c (dwfl_linux_proc_attach): Set dwfl->attacherr.
+
+2014-06-10  Mark Wielaard  <mjw@redhat.com>
+
+	* argp-std.c (parse_opt): Ignore errors from dwfl_core_file_attach
+	or dwfl_linux_proc_attach.
+
 2014-05-15  Mark Wielaard  <mjw@redhat.com>
 
 	* linux-proc-maps.c (grovel_auxv): Close fd on error.

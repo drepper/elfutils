@@ -17,7 +17,7 @@ dnl  GNU General Public License for more details.
 dnl
 dnl  You should have received a copy of the GNU General Public License
 dnl  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-AC_INIT([elfutils],[0.159],[https://bugzilla.redhat.com/],[elfutils])
+AC_INIT([elfutils],[0.160],[https://bugzilla.redhat.com/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
@@ -356,6 +356,19 @@ esac
 eu_version=`expr \( $eu_version + 999 \) / 1000`
 
 AC_CHECK_SIZEOF(long)
+
+# On aarch64 before glibc 2.20 we would get the kernel user_pt_regs instead
+# of the user_regs_struct from sys/user.h. They are structurally the same
+# but we get either one or the other.
+AC_CHECK_TYPE([struct user_regs_struct],
+              [sys_user_has_user_regs=yes], [sys_user_has_user_regs=no],
+              [[#include <sys/ptrace.h>]
+               [#include <sys/time.h>]
+               [#include <sys/user.h>]])
+if test "$sys_user_has_user_regs" = "yes"; then
+  AC_DEFINE(HAVE_SYS_USER_REGS, 1,
+            [Define to 1 if <sys/user.h> defines struct user_regs_struct])
+fi
 
 # On a 64-bit host where can can use $CC -m32, we'll run two sets of tests.
 # Likewise in a 32-bit build on a host where $CC -m64 works.

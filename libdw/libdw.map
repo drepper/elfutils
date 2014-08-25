@@ -301,3 +301,9 @@ ELFUTILS_0.159 {
     dwelf_elf_gnu_debuglink;
     dwelf_elf_gnu_build_id;
 } ELFUTILS_0.158;
+
+ELFUTILS_0.160 {
+  global:
+    dwarf_cu_getdwarf;
+    dwarf_cu_die;
+} ELFUTILS_0.159;

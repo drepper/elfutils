@@ -1,5 +1,5 @@
-/* Fetch live process Dwfl_Frame from PID.
-   Copyright (C) 2013, 2014 Red Hat, Inc.
+/* Internal definitions for libdwarf.
+   Copyright (C) 2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -30,29 +30,39 @@
 # include <config.h>
 #endif
 
-#include <libeblP.h>
-#include <assert.h>
+#include <stddef.h>
+#include "libdwP.h"
 
-bool
-ebl_set_initial_registers_tid (Ebl *ebl, pid_t tid,
-			       ebl_tid_registers_t *setfunc,
-			       void *arg)
-{
-  /* Otherwise caller could not allocate THREAD frame of proper size.
-     If set_initial_registers_tid is unsupported then FRAME_NREGS is zero.  */
-  assert (ebl->set_initial_registers_tid != NULL);
-  return ebl->set_initial_registers_tid (tid, setfunc, arg);
-}
 
-size_t
-ebl_frame_nregs (Ebl *ebl)
+Dwarf_Die *
+dwarf_cu_die (cu, result, versionp, abbrev_offsetp, address_sizep,
+	      offset_sizep, type_signaturep, type_offsetp)
+    Dwarf_CU *cu;
+    Dwarf_Die *result;
+    Dwarf_Half *versionp;
+    Dwarf_Off *abbrev_offsetp;
+    uint8_t *address_sizep;
+    uint8_t *offset_sizep;
+    uint64_t *type_signaturep;
+    Dwarf_Off *type_offsetp;
 {
-  return ebl == NULL ? 0 : ebl->frame_nregs;
-}
+  if (cu == NULL)
+    return NULL;
 
-GElf_Addr
-ebl_func_addr_mask (Ebl *ebl)
-{
-  return ((ebl == NULL || ebl->func_addr_mask == 0)
-	  ? ~(GElf_Addr)0 : ebl->func_addr_mask);
+  *result = CUDIE (cu);
+
+  if (versionp != NULL)
+    *versionp = cu->version;
+  if (abbrev_offsetp != NULL)
+    *abbrev_offsetp = cu->orig_abbrev_offset;
+  if (address_sizep != NULL)
+    *address_sizep = cu->address_size;
+  if (offset_sizep != NULL)
+    *offset_sizep = cu->offset_size;
+  if (type_signaturep != NULL)
+    *type_signaturep = cu->type_sig8;
+  if (type_offsetp != NULL)
+    *type_offsetp = cu->type_offset;
+
+  return result;
 }

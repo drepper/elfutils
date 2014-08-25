@@ -1,5 +1,5 @@
 /* Interfaces for libdw.
-   Copyright (C) 2002-2010, 2013 Red Hat, Inc.
+   Copyright (C) 2002-2010, 2013, 2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -112,6 +112,7 @@ typedef struct Dwarf_Aranges_s Dwarf_Aranges;
 
 /* CU representation.  */
 struct Dwarf_CU;
+typedef struct Dwarf_CU Dwarf_CU;
 
 /* Macro information.  */
 typedef struct Dwarf_Macro_s Dwarf_Macro;
@@ -260,6 +261,12 @@ extern Dwarf *dwarf_begin_elf (Elf *elf, Dwarf_Cmd cmd, Elf_Scn *scngrp);
 /* Retrieve ELF descriptor used for DWARF access.  */
 extern Elf *dwarf_getelf (Dwarf *dwarf);
 
+/* Retieve DWARF descriptor used for a Dwarf_Die or Dwarf_Attribute.
+   A Dwarf_Die or a Dwarf_Attribute is associated with a particular
+   Dwarf_CU handle.  This function returns the DWARF descriptor for
+   that Dwarf_CU.  */
+extern Dwarf *dwarf_cu_getdwarf (Dwarf_CU *cu);
+
 /* Retrieves the DWARF descriptor for debugaltlink data.  Returns NULL
    if no alternate debug data has been supplied.  */
 extern Dwarf *dwarf_getalt (Dwarf *main);
@@ -355,6 +362,23 @@ extern Dwarf_Off dwarf_cuoffset (Dwarf_Die *die);
 /* Return CU DIE containing given DIE.  */
 extern Dwarf_Die *dwarf_diecu (Dwarf_Die *die, Dwarf_Die *result,
 			       uint8_t *address_sizep, uint8_t *offset_sizep)
+     __nonnull_attribute__ (2);
+
+/* Return the CU DIE and the header info associated with a Dwarf_Die
+   or Dwarf_Attribute.  A Dwarf_Die or a Dwarf_Attribute is associated
+   with a particular Dwarf_CU handle.  This function returns the CU or
+   type unit DIE and header information for that Dwarf_CU.  The
+   returned DIE is either a compile_unit, partial_unit or type_unit.
+   If it is a type_unit, then the type signature and type offset are
+   also provided, otherwise type_offset will be set to zero.  See also
+   dwarf_diecu and dwarf_next_unit.  */
+extern Dwarf_Die *dwarf_cu_die (Dwarf_CU *cu, Dwarf_Die *result,
+				Dwarf_Half *versionp,
+				Dwarf_Off *abbrev_offsetp,
+				uint8_t *address_sizep,
+				uint8_t *offset_sizep,
+				uint64_t *type_signaturep,
+				Dwarf_Off *type_offsetp)
      __nonnull_attribute__ (2);
 
 /* Return CU DIE containing given address.  */

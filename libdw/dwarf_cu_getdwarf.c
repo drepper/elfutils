@@ -1,5 +1,5 @@
-/* Fetch live process Dwfl_Frame from PID.
-   Copyright (C) 2013, 2014 Red Hat, Inc.
+/* Retrieve Dwarf descriptor underlying a Dwarf_CU.
+   Copyright (C) 2014 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -30,29 +30,18 @@
 # include <config.h>
 #endif
 
-#include <libeblP.h>
-#include <assert.h>
+#include <stddef.h>
 
-bool
-ebl_set_initial_registers_tid (Ebl *ebl, pid_t tid,
-			       ebl_tid_registers_t *setfunc,
-			       void *arg)
-{
-  /* Otherwise caller could not allocate THREAD frame of proper size.
-     If set_initial_registers_tid is unsupported then FRAME_NREGS is zero.  */
-  assert (ebl->set_initial_registers_tid != NULL);
-  return ebl->set_initial_registers_tid (tid, setfunc, arg);
-}
+#include "libdwP.h"
 
-size_t
-ebl_frame_nregs (Ebl *ebl)
-{
-  return ebl == NULL ? 0 : ebl->frame_nregs;
-}
 
-GElf_Addr
-ebl_func_addr_mask (Ebl *ebl)
+Dwarf *
+dwarf_cu_getdwarf (cu)
+     Dwarf_CU *cu;
 {
-  return ((ebl == NULL || ebl->func_addr_mask == 0)
-	  ? ~(GElf_Addr)0 : ebl->func_addr_mask);
+  if (cu == NULL)
+    /* Some error occurred before.  */
+    return NULL;
+
+  return cu->dbg;
 }
