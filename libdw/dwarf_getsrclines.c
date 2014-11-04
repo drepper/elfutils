@@ -778,9 +778,6 @@ __libdw_getsrclines (Dwarf *dbg, Dwarf_Off debug_line_offset,
 const char *
 __libdw_getcompdir (Dwarf_Die *cudie)
 {
-  if (cudie == NULL)
-    return NULL;
-
   Dwarf_Attribute compdir_attr_mem;
   Dwarf_Attribute *compdir_attr = INTUSE(dwarf_attr) (cudie,
 						      DW_AT_comp_dir,

@@ -1,3 +1,11 @@
+Version 0.161
+
+libdw: dwarf_getmacros will now serve either of .debug_macro and
+       .debug_macinfo transparently.  New interfaces
+       dwarf_getmacros_off, dwarf_macro_getsrcfiles,
+       dwarf_macro_getparamcnt, and dwarf_macro_param are available
+       for more generalized inspection of macros and their parameters.
+
 Version 0.160
 
 libdw: New functions dwarf_cu_getdwarf, dwarf_cu_die.

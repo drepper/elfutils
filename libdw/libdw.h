@@ -831,8 +831,8 @@ extern int dwarf_entry_breakpoints (Dwarf_Die *die, Dwarf_Addr **bkpts);
    CALLBACK returns DWARF_CB_OK.  If the callback returns
    DWARF_CB_ABORT, it stops iterating and returns a continuation
    token, which can be used to restart the iteration at the point
-   where it ended.  Returns -1 for errors or 0 if there are no more
-   macro entries.
+   where it ended.  A TOKEN of 0 starts the iteration.  Returns -1 for
+   errors or 0 if there are no more macro entries.
 
    Note that the Dwarf_Macro pointer passed to the callback is only
    valid for the duration of the callback invocation.
@@ -849,10 +849,9 @@ extern ptrdiff_t dwarf_getmacros (Dwarf_Die *cudie,
      __nonnull_attribute__ (2);
 
 /* This is similar in operation to dwarf_getmacros, but selects the
-   unit to iterate through by offset instead of by CU.  This can be
-   used for handling DW_MACRO_GNU_transparent_include's or similar
-   opcodes.  Note that with TOKEN of 0, this will always choose to
-   iterate through .debug_macro, never .debug_macinfo.
+   unit to iterate through by offset instead of by CU, and always
+   iterates .debug_macro.  This can be used for handling
+   DW_MACRO_GNU_transparent_include's or similar opcodes.
 
    It is not appropriate to obtain macro unit offset by hand from a CU
    DIE and then request iteration through this interface.  The reason
@@ -876,16 +875,19 @@ extern int dwarf_macro_getsrcfiles (Dwarf *dbg, Dwarf_Macro *macro,
   __nonnull_attribute__ (2, 3, 4);
 
 /* Return macro opcode.  That's a constant that can be either from
-   DW_MACINFO_* domain if version of MACRO is 0, or from
-   DW_MACRO_GNU_* domain if the version is 4.  */
+   DW_MACINFO_* domain or DW_MACRO_GNU_* domain.  The two domains have
+   compatible values, so it's OK to use either of them for
+   comparisons.  The only differences is 0xff, which currently is
+   never served from .debug_macro, and can thus be safely assumed to
+   mean DW_MACINFO_vendor_ext.  */
 extern int dwarf_macro_opcode (Dwarf_Macro *macro, unsigned int *opcodep)
      __nonnull_attribute__ (2);
 
 /* Get number of parameters of MACRO and store it to *PARAMCNTP.  */
 extern int dwarf_macro_getparamcnt (Dwarf_Macro *macro, size_t *paramcntp);
 
-/* Get IDX-th parameter of MACRO, and stores it to *ATTRIBUTE.
-   Returns 0 on success or -1 for errors.
+/* Get IDX-th parameter of MACRO (numbered from zero), and stores it
+   to *ATTRIBUTE.  Returns 0 on success or -1 for errors.
 
    After a successful call, you can query ATTRIBUTE by dwarf_whatform
    to determine which of the dwarf_formX calls to make to get actual

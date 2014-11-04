@@ -117,10 +117,7 @@ init_macinfo_table (void)
 }
 
 static Dwarf_Macro_Op_Table *
-get_macinfo_table (Dwarf *dbg, Dwarf_Word macoff,
-		   __attribute__ ((unused)) const unsigned char *readp,
-		   __attribute__ ((unused)) const unsigned char *const endp,
-		   Dwarf_Die *cudie)
+get_macinfo_table (Dwarf *dbg, Dwarf_Word macoff, Dwarf_Die *cudie)
 {
   assert (cudie != NULL);
 
@@ -276,7 +273,7 @@ cache_op_table (Dwarf *dbg, int sec_index, Dwarf_Off macoff,
 
   Dwarf_Macro_Op_Table *table = sec_index == IDX_debug_macro
     ? get_table_for_offset (dbg, macoff, startp, endp, cudie)
-    : get_macinfo_table (dbg, macoff, startp, endp, cudie);
+    : get_macinfo_table (dbg, macoff, cudie);
 
   if (table == NULL)
     return NULL;
@@ -436,13 +433,8 @@ dwarf_getmacros_off (Dwarf *dbg, Dwarf_Off macoff,
      -1 also signifies an error, but that's fine, because .debug_macro
      always contains at least three bytes of headers and after
      iterating one opcode, we should never see anything above -4.  */
+  assert (token <= 0);
 
-  if (token > 0)
-    /* A continuation call from DW_AT_macro_info iteration.  */
-    return macro_info_getmacros_off (dbg, macoff, callback, arg, token, NULL);
-
-  /* Either a DW_AT_GNU_macros continuation, or a fresh start
-     thereof.  */
   return gnu_macros_getmacros_off (dbg, macoff, callback, arg, token, true,
 				   NULL);
 }
