@@ -41,7 +41,7 @@ dwarf_macro_param1 (Dwarf_Macro *macro, Dwarf_Word *paramp)
     return -1;
 
   Dwarf_Attribute param;
-  if (dwarf_macro_param (macro, 1, &param) != 0)
+  if (dwarf_macro_param (macro, 0, &param) != 0)
     return -1;
 
   return dwarf_formudata (&param, paramp);
