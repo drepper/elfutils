@@ -1,4 +1,4 @@
-/* Return a version of a macro.
+/* Find line information for a given macro.
    Copyright (C) 2014 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -69,9 +69,9 @@ dwarf_macro_getsrcfiles (Dwarf *dbg, Dwarf_Macro *macro,
 
 	 So when the interfaces are used correctly, COMP_DIR value is
 	 always right.  That means that we can cache the parsed
-	 .debug_line unit without fear that later on when someone
-	 requests the same unit through dwarf_getsrcfiles, and the
-	 file names will be broken.  */
+	 .debug_line unit without fear that later on someone requests
+	 the same unit through dwarf_getsrcfiles, and the file names
+	 will be broken.  */
 
       if (__libdw_getsrclines (dbg, line_offset, table->comp_dir,
 			       table->is_64bit ? 8 : 4,
