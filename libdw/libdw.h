@@ -896,13 +896,13 @@ extern int dwarf_macro_getparamcnt (Dwarf_Macro *macro, size_t *paramcntp);
 extern int dwarf_macro_param (Dwarf_Macro *macro, size_t idx,
 			      Dwarf_Attribute *attribute);
 
-/* Return first macro parameter.  This will return -1 if the parameter
-   is not an integral value.  Use dwarf_macro_param for more general
-   access.  */
+/* Return macro parameter with index 0.  This will return -1 if the
+   parameter is not an integral value.  Use dwarf_macro_param for more
+   general access.  */
 extern int dwarf_macro_param1 (Dwarf_Macro *macro, Dwarf_Word *paramp)
      __nonnull_attribute__ (2);
 
-/* Return second macro parameter.  This will return -1 if the
+/* Return macro parameter with index 1.  This will return -1 if the
    parameter is not an integral or string value.  Use
    dwarf_macro_param for more general access.  */
 extern int dwarf_macro_param2 (Dwarf_Macro *macro, Dwarf_Word *paramp,
