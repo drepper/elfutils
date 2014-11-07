@@ -123,5 +123,7 @@ main (int argc __attribute__ ((unused)), char *argv[])
 	break;
       }
 
+  dwarf_end (dbg);
+
   return 0;
 }
