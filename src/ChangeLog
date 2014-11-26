@@ -1,3 +1,11 @@
+2014-11-26  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* stack.c: Include sys/ptrace.h and sys/wait.h.
+	(OPT_CORE_PATTERN, opt_core_pattern, core_pattern): New.
+	(parse_opt): Handle OPT_CORE_PATTERN.  Check opt_core_pattern option
+	validity.  Call core_pattern.  Pass it as assume_ptrace_stopped.
+	(main): Add "core-pattern" to options.
+
 2014-11-24  Mark Wielaard  <mjw@redhat.com>
 
 	* readelf.c (print_debug_line_section): Check line_range is not zero

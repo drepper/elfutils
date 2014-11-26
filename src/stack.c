@@ -26,6 +26,8 @@
 #include <string.h>
 #include <locale.h>
 #include <fcntl.h>
+#include <sys/ptrace.h>
+#include <sys/wait.h>
 #include ELFUTILS_HEADER(dwfl)
 
 #include <dwarf.h>
@@ -39,8 +41,9 @@ ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 /* non-printable argp options.  */
-#define OPT_DEBUGINFO	0x100
-#define OPT_COREFILE	0x101
+#define OPT_DEBUGINFO		0x100
+#define OPT_COREFILE		0x101
+#define OPT_CORE_PATTERN	0x102
 
 static bool show_activation = false;
 static bool show_module = false;
@@ -52,6 +55,7 @@ static bool show_raw = false;
 static bool show_modules = false;
 static bool show_debugname = false;
 static bool show_inlines = false;
+static bool opt_core_pattern = false;
 
 static int maxframes = 256;
 
@@ -476,6 +480,35 @@ print_version (FILE *stream, struct argp_state *state __attribute__ ((unused)))
   fprintf (stream, "stack (%s) %s\n", PACKAGE_NAME, PACKAGE_VERSION);
 }
 
+/* Provide PTRACE_ATTACH like operation compatible with Linux core_pattern
+   handler.  */
+
+static void
+core_pattern (void)
+{
+  if (ptrace (PTRACE_SEIZE, pid, NULL, (void *) (uintptr_t) PTRACE_O_TRACEEXIT)
+      != 0)
+    error (EXIT_BAD, errno, "ptrace (PTRACE_SEIZE, PTRACE_O_TRACEEXIT)");
+  if (close (0) != 0)
+    error (EXIT_BAD, errno, "close (0; core file fd)");
+  int status;
+  pid_t got = waitpid (pid, &status, 0);
+  if (got == -1)
+    error (EXIT_BAD, errno, "waitpid ()");
+  if (got != pid)
+    error (EXIT_BAD, 0, "waitpid () returned %d but %d was expected",
+	   got, pid);
+  if (! WIFSTOPPED (status))
+    error (EXIT_BAD, 0,
+	   "waitpid () returned status 0x%x but WIFSTOPPED was expected",
+	   status);
+  if ((status >> 8) != (SIGTRAP | (PTRACE_EVENT_EXIT << 8)))
+    error (EXIT_BAD, 0,
+	   "waitpid () returned status 0x%x but (status >> 8)"
+	   " == (SIGTRAP | (PTRACE_EVENT_EXIT << 8)) was expected",
+	   status);
+}
+
 static error_t
 parse_opt (int key, char *arg __attribute__ ((unused)),
 	   struct argp_state *state)
@@ -560,6 +593,10 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       show_modules = true;
       break;
 
+    case OPT_CORE_PATTERN:
+      opt_core_pattern = true;
+      break;
+
     case ARGP_KEY_END:
       if (core == NULL && exec != NULL)
 	argp_error (state,
@@ -572,6 +609,12 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
       if ((pid == 0 && core == NULL) || (pid != 0 && core != NULL))
 	argp_error (state,
 		    N_("One of -p PID or --core COREFILE should be given."));
+
+      /* Other threads are already dead (WIFSIGNALED) and they cannot be
+         ptraced anymore.  */
+      if (opt_core_pattern == true && show_one_tid == false)
+	argp_error (state,
+		    N_("--core-pattern requires -1"));
 
       if (pid != 0)
 	{
@@ -601,7 +644,9 @@ parse_opt (int key, char *arg __attribute__ ((unused)),
 
       if (pid != 0)
 	{
-	  int err = dwfl_linux_proc_attach (dwfl, pid, false);
+	  if (opt_core_pattern)
+	    core_pattern ();
+	  int err = dwfl_linux_proc_attach (dwfl, pid, opt_core_pattern);
 	  if (err < 0)
 	    error (EXIT_BAD, 0, "dwfl_linux_proc_attach pid %d: %s", pid,
 		   dwfl_errmsg (-1));
@@ -674,6 +719,10 @@ main (int argc, char **argv)
 	N_("Show at most MAXFRAMES per thread (default 256, use 0 for unlimited)"), 0 },
       { "list-modules", 'l', NULL, 0,
 	N_("Show module memory map with build-id, elf and debug files detected"), 0 },
+      { "core-pattern", OPT_CORE_PATTERN, NULL, 0,
+	N_("Attach process as Linux core_pattern handler; use --pid=%i; "
+	   "core file fd 0 must be owned only by this process (e.g. use shell exec); "
+	   "see man 5 core"), 0 },
       { NULL, 0, NULL, 0, NULL, 0 }
     };
 
