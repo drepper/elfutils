@@ -17,7 +17,7 @@ dnl  GNU General Public License for more details.
 dnl
 dnl  You should have received a copy of the GNU General Public License
 dnl  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-AC_INIT([elfutils],[0.160],[https://bugzilla.redhat.com/],[elfutils])
+AC_INIT([elfutils],[0.161],[https://bugzilla.redhat.com/],[elfutils])
 
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_FILES([config/Makefile])
@@ -267,6 +267,11 @@ AC_SUBST([zip_LIBS])
 AC_CHECK_LIB([stdc++], [__cxa_demangle], [dnl
 AC_DEFINE([USE_DEMANGLE], [1], [Defined if demangling is enabled])])
 AM_CONDITIONAL(DEMANGLE, test "$ac_cv_lib_stdcpp___cxa_demangle" = yes)
+
+AC_ARG_ENABLE([textrelcheck],
+AS_HELP_STRING([--disable-textrelcheck],
+               [Disable textrelcheck being a fatal error]))
+AM_CONDITIONAL(FATAL_TEXTREL, [test "x$enable_textrelcheck" != "xno"])
 
 dnl The directories with content.
 

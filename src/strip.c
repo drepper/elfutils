@@ -518,6 +518,11 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
     error (EXIT_FAILURE, 0,
 	   gettext ("cannot get section header string table index"));
 
+  /* Get the number of phdrs in the old file.  */
+  size_t phnum;
+  if (elf_getphdrnum (elf, &phnum) != 0)
+    error (EXIT_FAILURE, 0, gettext ("cannot get number of phdrs"));
+
   /* We now create a new ELF descriptor for the same file.  We
      construct it almost exactly in the same way with some information
      dropped.  */
@@ -529,7 +534,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
   if (unlikely (gelf_newehdr (newelf, gelf_getclass (elf)) == 0)
       || (ehdr->e_type != ET_REL
-	  && unlikely (gelf_newphdr (newelf, ehdr->e_phnum) == 0)))
+	  && unlikely (gelf_newphdr (newelf, phnum) == 0)))
     {
       error (0, 0, gettext ("cannot create new file '%s': %s"),
 	     output_fname, elf_errmsg (-1));
@@ -538,7 +543,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
   /* Copy over the old program header if needed.  */
   if (ehdr->e_type != ET_REL)
-    for (cnt = 0; cnt < ehdr->e_phnum; ++cnt)
+    for (cnt = 0; cnt < phnum; ++cnt)
       {
 	GElf_Phdr phdr_mem;
 	GElf_Phdr *phdr = gelf_getphdr (elf, cnt, &phdr_mem);
@@ -553,7 +558,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       debugelf = elf_begin (debug_fd, ELF_C_WRITE_MMAP, NULL);
       if (unlikely (gelf_newehdr (debugelf, gelf_getclass (elf)) == 0)
 	  || (ehdr->e_type != ET_REL
-	      && unlikely (gelf_newphdr (debugelf, ehdr->e_phnum) == 0)))
+	      && unlikely (gelf_newphdr (debugelf, phnum) == 0)))
 	{
 	  error (0, 0, gettext ("cannot create new file '%s': %s"),
 		 debug_fname, elf_errmsg (-1));
@@ -562,7 +567,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
       /* Copy over the old program header if needed.  */
       if (ehdr->e_type != ET_REL)
-	for (cnt = 0; cnt < ehdr->e_phnum; ++cnt)
+	for (cnt = 0; cnt < phnum; ++cnt)
 	  {
 	    GElf_Phdr phdr_mem;
 	    GElf_Phdr *phdr = gelf_getphdr (elf, cnt, &phdr_mem);

@@ -1,3 +1,20 @@
+2014-12-18  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac: Set version to 0.161.
+	* NEWS: Add dwarf.h additions.
+
+2014-12-15  Josh Stone  <jistone@redhat.com>
+
+	* .gitignore: Add config/compile as installed by automake 1.14.
+
+2014-11-27  Mark Wielaard  <mjw@redhat.com>
+
+	* configure.ac: Add --disable-textrelcheck.
+
+2014-10-06  Mark Wielaard  <mjw@redhat.com>
+
+	* NEWS: New section 0.161. Add dwarf_peel_type.
+
 2014-08-25  Mark Wielaard  <mjw@redhat.com>
 
 	* configure.ac: Set version to 0.160.

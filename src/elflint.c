@@ -3266,7 +3266,7 @@ section [%2d] '%s': offset %zu: unterminated vendor name string\n"),
 	    unsigned const char *chunk = q;
 
 	    unsigned int subsection_tag;
-	    get_uleb128 (subsection_tag, q);
+	    get_uleb128 (subsection_tag, q, p);
 
 	    if (q >= p)
 	      {
@@ -3321,13 +3321,13 @@ section [%2d] '%s': offset %zu: attribute subsection has unexpected tag %u\n"),
 		while (chunk < q)
 		  {
 		    unsigned int tag;
-		    get_uleb128 (tag, chunk);
+		    get_uleb128 (tag, chunk, q);
 
 		    uint64_t value = 0;
 		    const unsigned char *r = chunk;
 		    if (tag == 32 || (tag & 1) == 0)
 		      {
-			get_uleb128 (value, r);
+			get_uleb128 (value, r, q);
 			if (r > q)
 			  {
 			    ERROR (gettext ("\
@@ -3532,7 +3532,7 @@ cannot get section header for section [%2zu] '%s': %s\n"),
 
 		GElf_Word good_type = special_sections[s].type;
 		if (IS_KNOWN_SPECIAL (s, ".plt", false)
-		    && ebl_bss_plt_p (ebl, ehdr))
+		    && ebl_bss_plt_p (ebl))
 		  good_type = SHT_NOBITS;
 
 		/* In a debuginfo file, any normal section can be SHT_NOBITS.
