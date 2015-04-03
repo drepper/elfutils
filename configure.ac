@@ -71,6 +71,7 @@ AS_IF([test "$use_locks" = yes],
 AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
 
 AC_PROG_CC
+AC_PROG_CXX
 AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
@@ -88,6 +89,33 @@ int foo (int a) { for (int i = 0; i < a; ++i) if (i % 4) break; int s = a; retur
 CFLAGS="$old_CFLAGS"])
 AS_IF([test "x$ac_cv_c99" != xyes],
       AC_MSG_ERROR([gcc with C99 support required]))
+
+AC_LANG_PUSH([C++])
+
+# Above, we check for C++ compiler.  However even if none is available,
+# CXX is set to a non-empty value.  So we need to figure out whether a
+# C++ compiler is actually available.
+
+# We in fact use -std=gnu++98.  Check that the compiler supports this.
+SAVE_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -std=gnu++98"
+
+AC_CACHE_CHECK([for C++ compiler that supports -std=gnu++98],
+	       ac_cv_cxx_works,
+[AC_COMPILE_IFELSE([AC_LANG_SOURCE([dnl
+struct foo {
+  int i;
+  explicit foo () : i (0) {}
+  virtual ~foo () {}
+};
+
+struct A { int i; int j; } a = {.i = 1, .j = 2};
+])], ac_cv_cxx_works=yes, ac_cv_cxx_works=no)])
+
+CXXFLAGS="$SAVE_CXXFLAGS"
+AC_LANG_POP()
+
+AM_CONDITIONAL(HAVE_CXX, test "$ac_cv_cxx_works" = yes)
 
 AC_CACHE_CHECK([for __thread support], ac_cv_tls, [dnl
 # Use the same flags that we use for our DSOs, so the test is representative.

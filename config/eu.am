@@ -1,6 +1,6 @@
 ## Common automake fragments for elfutils subdirectory makefiles.
 ##
-## Copyright (C) 2010, 2014 Red Hat, Inc.
+## Copyright (C) 2010, 2014, 2015 Red Hat, Inc.
 ##
 ## This file is part of elfutils.
 ##
@@ -35,11 +35,17 @@ AM_CFLAGS = -std=gnu99 -Wall -Wshadow -Wformat=2 \
 	    $(if $($(*F)_no_Werror),,-Werror) \
 	    $(if $($(*F)_no_Wunused),,-Wunused -Wextra) \
 	    $($(*F)_CFLAGS)
+AM_CXXFLAGS = -std=gnu++98 -Wall -Wshadow -Wformat=2 \
+	    $(if $($(*F)_no_Werror),,-Werror) \
+	    $(if $($(*F)_no_Wunused),,-Wunused -Wextra) \
+	    $($(*F)_CXXFLAGS)
 
 COMPILE.os = $(filter-out -fprofile-arcs -ftest-coverage, $(COMPILE))
+CXXCOMPILE.os = $(filter-out -fprofile-arcs -ftest-coverage, $(CXXCOMPILE))
 
 %.os: %.c %.o
 if AMDEP
+	test -d $(DEPDIR)/$(*D) || mkdir $(DEPDIR)/$(*D)
 	if $(COMPILE.os) -c -o $@ -fpic -DPIC -DSHARED -MT $@ -MD -MP \
 	  -MF "$(DEPDIR)/$*.Tpo" `test -f '$<' || echo '$(srcdir)/'`$<; \
 	then cat "$(DEPDIR)/$*.Tpo" >> "$(DEPDIR)/$*.Po"; \
@@ -48,6 +54,19 @@ if AMDEP
 	fi
 else
 	$(COMPILE.os) -c -o $@ -fpic -DPIC -DSHARED $<
+endif
+
+%.os: %.cc %.o
+if AMDEP
+	test -d $(DEPDIR)/$(*D) || mkdir $(DEPDIR)/$(*D)
+	if $(CXXCOMPILE.os) -c -o $@ -fpic -DPIC -DSHARED -MT $@ -MD -MP \
+	  -MF "$(DEPDIR)/$*.Tpo" `test -f '$<' || echo '$(srcdir)/'`$<; \
+	then cat "$(DEPDIR)/$*.Tpo" >> "$(DEPDIR)/$*.Po"; \
+	     rm -f "$(DEPDIR)/$*.Tpo"; \
+	else rm -f "$(DEPDIR)/$*.Tpo"; exit 1; \
+	fi
+else
+	$(CXXCOMPILE.os) -c -o $@ -fpic -DPIC -DSHARED $<
 endif
 
 CLEANFILES = *.gcno *.gcda

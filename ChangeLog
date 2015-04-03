@@ -1,3 +1,7 @@
+2015-04-14  Petr Machata  <pmachata@redhat.com>
+
+	* configure.ac (HAVE_CXX): New conditional.
+
 2015-03-13  Mark Wielaard  <mjw@redhat.com>
 
 	* configure.ac (ac_cv_c99): Add explicit return.

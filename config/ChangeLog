@@ -1,3 +1,9 @@
+2015-04-14  Petr Machata  <pmachata@redhat.com>
+
+	* eu.am (AM_CXXFLAGS, CXXCOMPILE.os): New variables.
+	(%.os: %.c %.o): Create dep-file subdirectory if necessary.
+	(%.os: %.cc %.o): New rule.
+
 2015-03-18  Petr Machata  <pmachata@redhat.com>
 
 	* known-dwarf.awk (comment): Drop all uses of this variable.
