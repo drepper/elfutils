@@ -1,3 +1,22 @@
+2015-04-14  Petr Machata  <pmachata@redhat.com>
+
+	* c++: New directory.
+	* c++/libdw, c++/libdwP.hh: New header files.
+	* c++/attr_iterator.cc, c++/child_iterator.cc: New files.
+	* c++/die_tree_iterator.cc, c++/unit_iterator.cc: Likewise.
+	* Makefile.am (AUTOMAKE_OPTIONS): New variable.
+	[HAVE_CXX] (lib_LIBRARIES): Add libdwpp.a.
+	[HAVE_CXX] (noinst_LIBRARIES): Add libdwpp_pic.a.
+	[HAVE_CXX] (pkginclude_HEADERS): Add c++/libdw.
+	[HAVE_CXX] (libdwpp_a_SOURCES, libdwpp_so_SOURCES): New variables.
+	[HAVE_CXX] (libdwpp_pic_a_SOURCES, am_libdwpp_pic_a_OBJECTS): Likewise.
+	[HAVE_CXX] (libdwpp.so$(EXEEXT)): New rule.
+	(INSTALL_DEPS): New variable, contains libdwpp.so if HAVE_CXX.
+	(install): Depend on $(INSTALL_DEPS).
+	[HAVE_CXX] (install): Install libdwpp.so et.al.
+	[HAVE_CXX] (uninstall): Uninstall them.
+	(MOSTLYCLEANFILES): Add libdwpp-related files.
+
 2015-04-01  Petr Machata  <pmachata@redhat.com>
 
 	* libdwP.h (DWARF_E_NOT_CUDIE): New enumerator.

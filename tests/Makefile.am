@@ -143,6 +143,11 @@ check_PROGRAMS += $(asm_TESTS)
 TESTS += $(asm_TESTS)
 endif
 
+if HAVE_CXX
+check_PROGRAMS += test-iterators
+TESTS += run-test-iterators.sh
+endif
+
 EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-show-die-info.sh run-get-files.sh run-get-lines.sh \
 	     run-get-pubnames.sh run-get-aranges.sh \
@@ -293,7 +298,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-getsrc-die.sh run-strptr.sh \
 	     testfile-x32-core.bz2 testfile-x32.bz2 \
 	     backtrace.x32.core.bz2 backtrace.x32.exec.bz2 \
-	     testfile-x32-s.bz2 testfile-x32-d.bz2 testfile-x32-debug.bz2
+	     testfile-x32-s.bz2 testfile-x32-d.bz2 testfile-x32-debug.bz2 \
+	     run-test-iterators.sh
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --error-exitcode=1 --run-libc-freeres=no'
@@ -337,16 +343,19 @@ endif !STANDALONE
 
 if STANDALONE
 libdw = -ldw
+libdwpp = -ldwpp
 libelf = -lelf
 libasm = -lasm
 libebl = -lebl
 else !STANDALONE
 if BUILD_STATIC
 libdw = ../libdw/libdw.a $(zip_LIBS) $(libelf) $(libebl) -ldl
+libdwpp = ../libdw/libdwpp.a $(libdw)
 libelf = ../libelf/libelf.a
 libasm = ../libasm/libasm.a
 else
 libdw = ../libdw/libdw.so
+libdwpp = ../libdw/libdwpp.so
 libelf = ../libelf/libelf.so
 libasm = ../libasm/libasm.so
 endif
@@ -438,6 +447,8 @@ getsrc_die_LDADD = $(libdw) $(libelf)
 strptr_LDADD = $(libelf)
 newdata_LDADD = $(libelf)
 elfstrtab_LDADD = $(libelf)
+test_iterators_SOURCES = test-iterators.cc
+test_iterators_LDADD = $(libdw) $(libdwpp)
 
 if GCOV
 check: check-am coverage

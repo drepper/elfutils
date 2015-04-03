@@ -1,5 +1,9 @@
 2015-04-14  Petr Machata  <pmachata@redhat.com>
 
+	* NEWS: Mention <elfutils/libdw>, <elfutils/libdwfl>, and libdwpp.
+
+2015-04-14  Petr Machata  <pmachata@redhat.com>
+
 	* configure.ac (HAVE_CXX): New conditional.
 
 2015-03-13  Mark Wielaard  <mjw@redhat.com>

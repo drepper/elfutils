@@ -1,3 +1,10 @@
+2015-04-14  Petr Machata  <pmachata@redhat.com>
+
+	* test-iterators.cc, run-test-iterators.sh: New files.
+	* Makefile.am (check_PROGRAMS) [HAVE_CXX]: Add test-iterators.
+	(TESTS) [HAVE_CXX]: Add run-test-iterators.sh.
+	(libdwpp): New variable.
+
 2015-04-01  H.J. Lu  <hjl.tools@gmail.com>
 
 	* Makefile.am (TESTS): Add run-strip-test10.sh.

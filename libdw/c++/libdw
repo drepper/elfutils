@@ -1,0 +1,251 @@
+/* -*-c++-*-
+   Copyright (C) 2009, 2010, 2011, 2012, 2014, 2015 Red Hat, Inc.
+   This file is part of elfutils.
+
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of either
+
+     * the GNU Lesser General Public License as published by the Free
+       Software Foundation; either version 3 of the License, or (at
+       your option) any later version
+
+   or
+
+     * the GNU General Public License as published by the Free
+       Software Foundation; either version 2 of the License, or (at
+       your option) any later version
+
+   or both in parallel, as here.
+
+   elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received copies of the GNU General Public License and
+   the GNU Lesser General Public License along with this program.  If
+   not, see <http://www.gnu.org/licenses/>.  */
+
+#ifndef _LIBDW_CPP
+#define _LIBDW_CPP	1
+
+#include <vector>
+#include <iterator>
+
+#include "libdw.h"
+
+namespace elfutils
+{
+namespace v1
+{
+  // The iterators presented here have operators * and -> as non-const
+  // member functions.  The reason is that the libdw interfaces do not
+  // take, say, Dwarf_Die const *, but Dwarf_Die *, and therefore
+  // returning a const reference of some sort would not be useful.  We
+  // don't want to give out copies either, as that adds unnecessary
+  // overhead.  And we simply don't care much if anyone does end up
+  // changing the internal copy of the current CU, DIE, or whatever.
+
+
+  // An iterator that goes over compile units (full or partial) in a
+  // given DWARF file.  The type that it points to (yields on
+  // dereference) is CU_INFO (see below).
+  //
+  // Example usage:
+  // {
+  //   std::vector <Dwarf_Off> v
+  //   for (elfutils::cu_iterator jt (dw);
+  //        jt != elfutils::cu_iterator::end (); ++jt)
+  //     v.push_back (dwarf_dieoffset (&jt->cudie));
+  // }
+  class unit_iterator;
+
+  // Helper structure with data about each compile unit.
+  struct unit_info
+  {
+    Dwarf_Die cudie;
+    Dwarf_Off abbrev_offset;
+    uint64_t type_signature; // Valid for DW_TAG_type_unit
+    Dwarf_Half version;
+    uint8_t address_size;
+    uint8_t offset_size;
+  };
+
+  class unit_iterator
+    : public std::iterator <std::input_iterator_tag, unit_info>
+  {
+    Dwarf *m_dw;
+    Dwarf_Off m_offset;
+    Dwarf_Off m_old_offset;
+    unit_info m_info;
+    bool m_types;
+
+    struct end_it {};
+    explicit unit_iterator (end_it);
+
+    bool move ();
+
+  public:
+    // Construct a unit iterator that will iterate through all units
+    // in DW.
+    explicit unit_iterator (Dwarf *dw);
+
+    // Construct a unit iterator for DW such that it points to a
+    // compile (or other type of) unit represented by CUDIE.
+    unit_iterator (Dwarf *dw, Dwarf_Die cudie);
+
+    // Return a unit_iterator pointing one after the last actual CU.
+    static unit_iterator end ();
+
+    bool operator== (unit_iterator const &that) const;
+    bool operator!= (unit_iterator const &that) const;
+
+    unit_iterator &operator++ ();
+    unit_iterator operator++ (int);
+
+    // N.B. see top of the file for explanation of non-constness of
+    // operators * and ->.
+
+    unit_info &operator* ();
+    unit_info *operator-> ();
+  };
+
+
+  // An iterator that goes through children of a given DIE.
+  // Example usage:
+  // {
+  //    size_t nchildren = std::distance (elfutils::child_iterator (type_die),
+  //                                      elfutils::child_iterator::end ());
+  // }
+
+  class child_iterator
+    : public std::iterator <std::input_iterator_tag, Dwarf_Die>
+  {
+    Dwarf_Die m_die;
+
+    struct end_it {};
+    child_iterator (end_it);
+
+  public:
+    explicit child_iterator (Dwarf_Die parent);
+
+    // Return a child_iterator pointing one after the last actual
+    // child.
+    static child_iterator end ();
+
+    bool operator== (child_iterator const &that) const;
+    bool operator!= (child_iterator const &that) const;
+
+    child_iterator &operator++ ();
+    child_iterator operator++ (int);
+
+    // N.B. see top of the file for explanation of non-constness of
+    // operators * and ->.
+    Dwarf_Die &operator* ();
+    Dwarf_Die *operator-> ();
+  };
+
+
+  // Tree flattening iterator.  It pre-order iterates all DIEs in
+  // given DWARF file, optionally starting from a given CU iterator.
+  // It keeps track of path from CU root to the current DIE, and that
+  // can be requested through stack() member function.
+  //
+  // Example usage:
+  // {
+  //   for (elfutils::die_tree_iterator it (dw);
+  //        it != elfutils::die_tree_iterator::end (); ++it)
+  //     {
+  //       typedef elfutils::die_tree_iterator::stack_type stack_type;
+  //       stack_type const &stack = it.stack ();
+  //       for (stack_type::const_iterator jt = stack.begin ();
+  //            jt != stack.end (); ++jt)
+  //         ...;
+  //     }
+  // }
+  class die_tree_iterator
+    : public std::iterator <std::input_iterator_tag, Dwarf_Die>
+  {
+    unit_iterator m_cuit;
+    // Internally, only offsets are kept on the stack.
+    std::vector <Dwarf_Off> m_stack;
+    Dwarf_Die m_die;
+
+    struct end_it {};
+    die_tree_iterator (end_it);
+
+    bool move ();
+
+  public:
+    explicit die_tree_iterator (Dwarf *dw);
+    explicit die_tree_iterator (unit_iterator const &cuit);
+
+    // Return a die_tree_iterator pointing one after the last actual
+    // DIE.
+    static die_tree_iterator end ();
+
+    bool operator== (die_tree_iterator const &that) const;
+    bool operator!= (die_tree_iterator const &that) const;
+
+    die_tree_iterator &operator++ ();
+    die_tree_iterator operator++ (int);
+
+    // N.B. see top of the file for explanation of non-constness of
+    // operators * and ->.
+
+    Dwarf_Die &operator* ();
+    Dwarf_Die *operator-> ();
+
+    // Return a die_tree_iterator referencing a parent of a DIE that
+    // this iterator points at.  Returns an end iterator if there is
+    // no parent.  Technically a const, but can't be one due to
+    // dwarf_tag call inside.
+    die_tree_iterator parent ();
+  };
+
+  // Return a list of DIE's representing the path from CU DIE to the
+  // current DIE (both ends inclusive).  The first element of the
+  // returned stack is the CU DIE, the last one the current DIE.
+  std::vector <Dwarf_Die> path_from_root (die_tree_iterator &it);
+
+  // An attribute iterator goes through attributes of a given DIE.
+  class attr_iterator
+    : public std::iterator <std::input_iterator_tag, Dwarf_Attribute>
+  {
+    Dwarf_Die *m_die;
+    Dwarf_Attribute m_at;
+    ptrdiff_t m_offset;
+
+    struct end_it {};
+    attr_iterator (end_it);
+
+    bool move ();
+
+  public:
+    attr_iterator (Dwarf_Die *die);
+
+    // Return an attr_iterator pointing one after the last actual
+    // attribute.
+    static attr_iterator end ();
+
+    bool operator== (attr_iterator const &that) const;
+    bool operator!= (attr_iterator const &that) const;
+
+    attr_iterator &operator++ ();
+    attr_iterator operator++ (int);
+
+    // N.B. see top of the file for explanation of non-constness of
+    // operators * and ->.
+
+    Dwarf_Attribute &operator* ();
+    Dwarf_Attribute *operator-> ();
+  };
+}
+}
+
+namespace elfutils
+{
+  using namespace elfutils::v1;
+}
+
+#endif

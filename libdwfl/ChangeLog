@@ -1,3 +1,16 @@
+2015-04-14  Petr Machata  <pmachata@redhat.com>
+
+	* c++: New directory.
+	* c++/libdwfl, c++/libdwflP.hh: New header files.
+	* Makefile.am (AUTOMAKE_OPTIONS): New variable.
+	[HAVE_CXX] (pkginclude_HEADERS): Add c++/libdwfl.
+	[HAVE_CXX] (noinst_LIBRARIES): Add libdwflpp.a, libdwflpp_pic.a.
+	[HAVE_CXX] (libdwflpp_a_SOURCES, libdwflpp, libdwpp): New variables.
+	[HAVE_CXX] (libdwflpp_pic_a_SOURCES): Likewise.
+	[HAVE_CXX] (am_libdwflpp_pic_a_OBJECTS): Likewise.
+	(noinst_HEADERS): Add c++/libdwflP.hh.
+	[HAVE_CXX] (CLEANFILES): Add $(am_libdwflpp_pic_a_OBJECTS).
+
 2015-01-26  Mark Wielaard  <mjw@redhat.com>
 
 	* dwfl_module_getdwarf.c (find_symtab): Explicitly clear symdata,

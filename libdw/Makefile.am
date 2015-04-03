@@ -1,6 +1,6 @@
 ## Process this file with automake to create Makefile.in
 ##
-## Copyright (C) 2002-2010, 2012, 2014 Red Hat, Inc.
+## Copyright (C) 2002-2010, 2012, 2014, 2015 Red Hat, Inc.
 ## This file is part of elfutils.
 ##
 ## This file is free software; you can redistribute it and/or modify
@@ -34,12 +34,26 @@ endif
 AM_CPPFLAGS += -I$(srcdir)/../libelf
 VERSION = 1
 
+# For c++/ subdir.
+AUTOMAKE_OPTIONS = subdir-objects
+
 lib_LIBRARIES = libdw.a
+if HAVE_CXX
+lib_LIBRARIES += libdwpp.a
+endif
+
 noinst_LIBRARIES = libdw_pic.a
+if HAVE_CXX
+noinst_LIBRARIES += libdwpp_pic.a
+endif
+
 noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
 
 include_HEADERS = dwarf.h
 pkginclude_HEADERS = libdw.h known-dwarf.h
+if HAVE_CXX
+pkginclude_HEADERS += c++/libdw
+endif
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \
@@ -91,6 +105,11 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getalt.c dwarf_setalt.c dwarf_cu_getdwarf.c \
 		  dwarf_cu_die.c dwarf_peel_type.c
 
+if HAVE_CXX
+libdwpp_a_SOURCES = c++/unit_iterator.cc c++/die_tree_iterator.cc	\
+		    c++/child_iterator.cc c++/attr_iterator.cc
+endif
+
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
 MAINTAINERCLEANFILES = $(srcdir)/known-dwarf.h
@@ -101,6 +120,11 @@ endif
 
 libdw_pic_a_SOURCES =
 am_libdw_pic_a_OBJECTS = $(libdw_a_SOURCES:.c=.os)
+
+if HAVE_CXX
+libdwpp_pic_a_SOURCES =
+am_libdwpp_pic_a_OBJECTS = $(libdwpp_a_SOURCES:.cc=.os)
+endif
 
 libdw_so_SOURCES =
 libdw.so$(EXEEXT): $(srcdir)/libdw.map libdw_pic.a ../libdwelf/libdwelf_pic.a \
@@ -116,16 +140,44 @@ libdw.so$(EXEEXT): $(srcdir)/libdw.map libdw_pic.a ../libdwelf/libdwelf_pic.a \
 	@$(textrel_check)
 	ln -fs $@ $@.$(VERSION)
 
-install: install-am libdw.so
+if HAVE_CXX
+libdwpp_so_SOURCES =
+libdwpp.so$(EXEEXT): libdwpp_pic.a ../libdwfl/libdwflpp_pic.a	\
+		     libdw.so$(EXEEXT)
+	$(CXXLINK) -shared -o $@ -Wl,--soname,$@.$(VERSION),-z,defs \
+		-Wl,--enable-new-dtags,--no-undefined \
+		-Wl,--whole-archive $^ -Wl,--no-whole-archive\
+		libdw.so$(EXEEXT)
+	@$(textrel_check)
+	ln -fs $@ $@.$(VERSION)
+endif
+
+if HAVE_CXX
+INSTALL_DEPS = libdwpp.so
+else
+INSTALL_DEPS =
+endif
+
+install: install-am libdw.so $(INSTALL_DEPS)
 	$(mkinstalldirs) $(DESTDIR)$(libdir)
 	$(INSTALL_PROGRAM) libdw.so $(DESTDIR)$(libdir)/libdw-$(PACKAGE_VERSION).so
 	ln -fs libdw-$(PACKAGE_VERSION).so $(DESTDIR)$(libdir)/libdw.so.$(VERSION)
 	ln -fs libdw.so.$(VERSION) $(DESTDIR)$(libdir)/libdw.so
+if HAVE_CXX
+	$(INSTALL_PROGRAM) libdwpp.so $(DESTDIR)$(libdir)/libdwpp-$(PACKAGE_VERSION).so
+	ln -fs libdwpp-$(PACKAGE_VERSION).so $(DESTDIR)$(libdir)/libdwpp.so.$(VERSION)
+	ln -fs libdwpp.so.$(VERSION) $(DESTDIR)$(libdir)/libdwpp.so
+endif
 
 uninstall: uninstall-am
 	rm -f $(DESTDIR)$(libdir)/libdw-$(PACKAGE_VERSION).so
 	rm -f $(DESTDIR)$(libdir)/libdw.so.$(VERSION)
 	rm -f $(DESTDIR)$(libdir)/libdw.so
+if HAVE_CXX
+	rm -f $(DESTDIR)$(libdir)/libdwpp-$(PACKAGE_VERSION).so
+	rm -f $(DESTDIR)$(libdir)/libdwpp.so.$(VERSION)
+	rm -f $(DESTDIR)$(libdir)/libdwpp.so
+endif
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(includedir)/elfutils
 
 libdwfl_objects = $(shell $(AR) t ../libdwfl/libdwfl.a)
@@ -139,4 +191,5 @@ noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
 
 EXTRA_DIST = libdw.map
 
-MOSTLYCLEANFILES = $(am_libdw_pic_a_OBJECTS) libdw.so.$(VERSION)
+MOSTLYCLEANFILES = $(am_libdw_pic_a_OBJECTS) libdw.so.$(VERSION) \
+	$(am_libdwpp_pic_a_OBJECTS) libdwpp.so.$(VERSION)
