@@ -28,6 +28,19 @@
 #include "../libdw/c++/libdwP.hh"
 #include "../libdwfl/c++/libdwflP.hh"
 
+template <class T>
+void
+traverse_tree (T const &begin, T const &end)
+{
+  for (T it = begin; it != end; ++it)
+    std::cerr << std::dec
+	      << std::distance (elfutils::child_iterator (*it),
+				elfutils::child_iterator::end ()) << ' '
+	      << std::distance (elfutils::attr_iterator (&*it),
+				elfutils::attr_iterator::end ())
+	      << std::endl;
+}
+
 int
 main (int, char *argv[])
 {
@@ -73,14 +86,12 @@ main (int, char *argv[])
       assert (elfutils::die_tree_iterator (elfutils::unit_iterator::end ())
 	      == elfutils::die_tree_iterator::end ());
 
-      for (elfutils::die_tree_iterator it (dw);
-	   it != elfutils::die_tree_iterator::end (); ++it)
-	std::cerr << std::dec
-		  << std::distance (elfutils::child_iterator (*it),
-				    elfutils::child_iterator::end ()) << ' '
-		  << std::distance (elfutils::attr_iterator (&*it),
-				    elfutils::attr_iterator::end ())
-		  << std::endl;
+      std::cerr << "--- raw ---\n";
+      traverse_tree (elfutils::die_tree_iterator (dw),
+		     elfutils::die_tree_iterator::end ());
+      std::cerr << "--- logical ---\n";
+      traverse_tree (elfutils::logical_die_tree_iterator (dw),
+		     elfutils::logical_die_tree_iterator::end ());
     }
 
   dwfl_end (dwfl);

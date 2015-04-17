@@ -107,6 +107,7 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 
 if HAVE_CXX
 libdwpp_a_SOURCES = c++/unit_iterator.cc c++/die_tree_iterator.cc	\
+		    c++/logical_die_tree_iterator.cc			\
 		    c++/child_iterator.cc c++/attr_iterator.cc
 endif
 

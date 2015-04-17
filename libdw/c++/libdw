@@ -208,6 +208,43 @@ namespace v1
   // returned stack is the CU DIE, the last one the current DIE.
   std::vector <Dwarf_Die> path_from_root (die_tree_iterator &it);
 
+  class logical_die_tree_iterator
+    : public std::iterator <std::input_iterator_tag, Dwarf_Die>
+  {
+    // m_stack.last is the current iterator, the rest is import
+    // history.
+    std::vector <std::pair <die_tree_iterator, die_tree_iterator> > m_stack;
+
+    struct end_it {};
+    logical_die_tree_iterator (end_it);
+
+    bool move ();
+
+  public:
+    logical_die_tree_iterator (Dwarf *dw);
+    logical_die_tree_iterator (unit_iterator const &cuit);
+
+    static logical_die_tree_iterator end ();
+
+    bool operator== (logical_die_tree_iterator const &that) const;
+    bool operator!= (logical_die_tree_iterator const &that) const;
+
+    logical_die_tree_iterator &operator++ ();
+    logical_die_tree_iterator operator++ (int);
+
+    // N.B. see top of the file for explanation of non-constness of
+    // operators * and ->.
+
+    Dwarf_Die &operator* ();
+    Dwarf_Die *operator-> ();
+
+    // Return a logical_die_tree_iterator referencing a parent of a
+    // DIE that this iterator points at.  Returns an end iterator if
+    // there is no parent.  Technically a const, but can't be one due
+    // to dwarf_tag call inside.
+    logical_die_tree_iterator parent ();
+  };
+
   // An attribute iterator goes through attributes of a given DIE.
   class attr_iterator
     : public std::iterator <std::input_iterator_tag, Dwarf_Attribute>

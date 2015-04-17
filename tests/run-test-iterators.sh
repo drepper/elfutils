@@ -17,13 +17,19 @@
 
 . $srcdir/test-subr.sh
 
-testfiles testfile39 testfile-debug-types
+testfiles testfile39 testfile-debug-types testfile_multi_main testfile_multi.dwz
 
 testrun_compare ${abs_top_builddir}/tests/test-iterators testfile39 <<\EOF
 0xb
 0x9e
 0x135
 0x1c8
+--- raw ---
+0 7
+0 7
+0 7
+0 7
+--- logical ---
 0 7
 0 7
 0 7
@@ -34,6 +40,7 @@ testrun_compare ${abs_top_builddir}/tests/test-iterators testfile-debug-types <<
 0xb
 0x17
 0x5a
+--- raw ---
 4 6
 0 9
 0 3
@@ -47,6 +54,55 @@ testrun_compare ${abs_top_builddir}/tests/test-iterators testfile-debug-types <<
 2 4
 0 3
 0 5
+--- logical ---
+4 6
+0 9
+0 3
+0 6
+0 6
+2 3
+1 4
+0 2
+0 5
+1 3
+2 4
+0 3
+0 5
+EOF
+
+testrun_compare ${abs_top_builddir}/tests/test-iterators testfile_multi_main <<\EOF
+0xb
+--- raw ---
+4 7
+0 1
+0 2
+3 11
+0 5
+0 5
+0 5
+0 2
+--- logical ---
+4 7
+0 3
+0 3
+0 3
+0 3
+0 3
+0 3
+0 3
+0 3
+0 3
+0 3
+2 5
+0 5
+0 5
+0 2
+0 2
+3 11
+0 5
+0 5
+0 5
+0 2
 EOF
 
 exit 0
