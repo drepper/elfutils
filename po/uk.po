@@ -2,7 +2,7 @@
 # Copyright (C) 2010 Free Software Foundation, Inc.
 # This file is distributed under the same license as the elfutils package.
 #
-# Yuri Chornoivan <yurchor@ukr.net>, 2010, 2011, 2012, 2013.
+# Yuri Chornoivan <yurchor@ukr.net>, 2010, 2011, 2012, 2013, 2014.
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
@@ -375,63 +375,59 @@ msgstr "дані розділу «.gnu.prelink_undo» пошкоджено"
 
 #: libdwfl/libdwflP.h:82
 msgid "Internal error due to ebl"
-msgstr ""
+msgstr "Внутрішня помилка через ebl"
 
 #: libdwfl/libdwflP.h:83
 msgid "Missing data in core file"
-msgstr ""
+msgstr "У файлі ядра не вистачає даних"
 
 #: libdwfl/libdwflP.h:84
-#, fuzzy
 msgid "Invalid register"
-msgstr "некоректний параметр"
+msgstr "Некоректний регістр"
 
 #: libdwfl/libdwflP.h:85
 msgid "Error reading process memory"
-msgstr ""
+msgstr "Помилка під час спроби читання пам’яті процесу"
 
 #: libdwfl/libdwflP.h:86
 msgid "Couldn't find architecture of any ELF"
-msgstr ""
+msgstr "Не вдалося знайти хоч якусь архітектуру ELF"
 
 #: libdwfl/libdwflP.h:87
 msgid "Error parsing /proc filesystem"
-msgstr ""
+msgstr "Помилка під час спроби обробки файлової системи /proc"
 
 #: libdwfl/libdwflP.h:88
-#, fuzzy
 msgid "Invalid DWARF"
-msgstr "некоректний запис DWARF"
+msgstr "Некоректний запис DWARF"
 
 #: libdwfl/libdwflP.h:89
 msgid "Unsupported DWARF"
-msgstr ""
+msgstr "Непідтримуваний запис DWARF"
 
 #: libdwfl/libdwflP.h:90
 msgid "Unable to find more threads"
-msgstr ""
+msgstr "Не вдалося знайти додаткові потоки"
 
 #: libdwfl/libdwflP.h:91
 msgid "Dwfl already has attached state"
-msgstr ""
+msgstr "Dwfl уже перебуває у стані долучення до процесу"
 
 #: libdwfl/libdwflP.h:92
 msgid "Dwfl has no attached state"
-msgstr ""
+msgstr "Dwfl не перебуває у стані долучення до процесу"
 
 #: libdwfl/libdwflP.h:93
 msgid "Unwinding not supported for this architecture"
-msgstr ""
+msgstr "Для цієї архітектури розгортання не передбачено"
 
 #: libdwfl/libdwflP.h:94
-#, fuzzy
 msgid "Invalid argument"
-msgstr "некоректний параметр"
+msgstr "Некоректний аргумент"
 
 #: libdwfl/libdwflP.h:95
-#, fuzzy
 msgid "Not an ET_CORE ELF file"
-msgstr "не є коректним файлом ELF"
+msgstr "Не є файлом ET_CORE ELF"
 
 #: libebl/eblbackendname.c:42
 msgid "No backend"
@@ -680,7 +676,6 @@ msgid "Also show symbol or section names"
 msgstr "Показувати також назви символів та розділів"
 
 #: src/addr2line.c:64
-#, fuzzy
 msgid "Also show symbol and the section names"
 msgstr "Показувати також назви символів та розділів"
 
@@ -2036,13 +2031,13 @@ msgid "section [%2d] '%s': bitmask size not power of 2: %u\n"
 msgstr "розділ [%2d] «%s»: розмір бітової маски не є степенем 2: %u\n"
 
 #: src/elflint.c:2092
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "section [%2d] '%s': hash table section is too small (is %ld, expected at "
 "least %ld)\n"
 msgstr ""
-"розділ [%2d] «%s»: розділ таблиці хешів занадто малий (розмір %ld, мало бути "
-"не менше %ld)\n"
+"розділ [%2d] «%s»: розділ таблиці хешів є надто малим (маємо %ld, мало бути "
+"принаймні %ld)\n"
 
 #: src/elflint.c:2100
 #, c-format
@@ -4720,7 +4715,7 @@ msgstr "<НЕКОРЕКТНИЙ РОЗДІЛ>"
 #: src/readelf.c:2846 src/readelf.c:2920 src/readelf.c:4610
 #, fuzzy, c-format
 msgid "invalid sh_link value in section %Zu"
-msgstr "некоректний розділ .debug_line"
+msgstr "некоректне значення sh_link у розділі %Zu"
 
 #: src/readelf.c:1588
 #, c-format
@@ -6523,6 +6518,8 @@ msgstr "Вивести лише список назв модулів, файлі
 #: src/unstrip.c:86
 msgid "Force combining files even if some ELF headers don't seem to match"
 msgstr ""
+"Примусово поєднати файли, навіть якщо буде встановлено невідповідність "
+"якихось із заголовків ELF"
 
 #: src/unstrip.c:130
 #, c-format
@@ -6748,27 +6745,27 @@ msgstr "не вдалося створити дескриптор ELF: %s"
 
 #: src/unstrip.c:1967
 msgid "WARNING: "
-msgstr ""
+msgstr "УВАГА: "
 
 #: src/unstrip.c:1969
 msgid ", use --force"
-msgstr ""
+msgstr ", скористайтеся --force"
 
 #: src/unstrip.c:1992
 msgid "ELF header identification (e_ident) different"
-msgstr ""
+msgstr "Різні ідентифікатори заголовків ELF (e_ident)"
 
 #: src/unstrip.c:1995
 msgid "ELF header type (e_type) different"
-msgstr ""
+msgstr "Різні типи заголовків ELF (e_type)"
 
 #: src/unstrip.c:1998
 msgid "ELF header machine type (e_machine) different"
-msgstr ""
+msgstr "Різні типи архітектур заголовків ELF (e_machine)"
 
 #: src/unstrip.c:2001
 msgid "stripped program header (e_phnum) smaller than unstripped"
-msgstr ""
+msgstr "очищений заголовок програми (e_phnum) є меншим за неочищений"
 
 #: src/unstrip.c:2031
 #, c-format

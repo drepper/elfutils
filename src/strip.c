@@ -1,5 +1,5 @@
 /* Discard section not used at runtime from object files.
-   Copyright (C) 2000-2012, 2014 Red Hat, Inc.
+   Copyright (C) 2000-2012, 2014, 2015 Red Hat, Inc.
    This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2000.
 
@@ -30,7 +30,6 @@
 #include <libelf.h>
 #include <libintl.h>
 #include <locale.h>
-#include <mcheck.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdio_ext.h>
@@ -44,12 +43,6 @@
 #include <elf-knowledge.h>
 #include <libebl.h>
 #include <system.h>
-
-#ifdef HAVE_FUTIMES
-# define FUTIMES(fd, fname, tvp) futimes (fd, tvp)
-#else
-# define FUTIMES(fd, fname, tvp) utimes (fname, tvp)
-#endif
 
 typedef uint8_t GElf_Byte;
 
@@ -116,15 +109,24 @@ static int process_file (const char *fname);
 
 /* Handle one ELF file.  */
 static int handle_elf (int fd, Elf *elf, const char *prefix,
-		       const char *fname, mode_t mode, struct timeval tvp[2]);
+		       const char *fname, mode_t mode, struct timespec tvp[2]);
 
 /* Handle all files contained in the archive.  */
 static int handle_ar (int fd, Elf *elf, const char *prefix, const char *fname,
-		      struct timeval tvp[2]);
+		      struct timespec tvp[2]) __attribute__ ((unused));
+
+static int debug_fd = -1;
+static char *tmp_debug_fname = NULL;
+
+/* Close debug file descriptor, if opened. And remove temporary debug file.  */
+static void cleanup_debug ();
 
 #define INTERNAL_ERROR(fname) \
-  error (EXIT_FAILURE, 0, gettext ("%s: INTERNAL ERROR %d (%s-%s): %s"),      \
-	 fname, __LINE__, PACKAGE_VERSION, __DATE__, elf_errmsg (-1))
+  do { \
+    cleanup_debug (); \
+    error (EXIT_FAILURE, 0, gettext ("%s: INTERNAL ERROR %d (%s): %s"),      \
+	   fname, __LINE__, PACKAGE_VERSION, elf_errmsg (-1)); \
+  } while (0)
 
 
 /* Name of the output file.  */
@@ -160,9 +162,6 @@ main (int argc, char *argv[])
 {
   int remaining;
   int result = 0;
-
-  /* Make memory leak detection possible.  */
-  mtrace ();
 
   /* We use no threads here which can interfere with handling a stream.  */
   __fsetlocking (stdin, FSETLOCKING_BYCALLER);
@@ -312,7 +311,7 @@ process_file (const char *fname)
      now.  We cannot use fstat() after opening the file since the open
      would change the access time.  */
   struct stat64 pre_st;
-  struct timeval tv[2];
+  struct timespec tv[2];
  again:
   if (preserve_dates)
     {
@@ -324,18 +323,8 @@ process_file (const char *fname)
 
       /* If we have to preserve the timestamp, we need it in the
 	 format utimes() understands.  */
-#ifdef HAVE_STRUCT_STAT_ST_ATIM
-      TIMESPEC_TO_TIMEVAL (&tv[0], &pre_st.st_atim);
-#else
-      tv[0].tv_sec = pre_st.st_atime;
-      tv[0].tv_usec = 0;
-#endif
-#ifdef HAVE_STRUCT_STAT_ST_MTIM
-      TIMESPEC_TO_TIMEVAL (&tv[1], &pre_st.st_mtim);
-#else
-      tv[1].tv_sec = pre_st.st_atime;
-      tv[1].tv_usec = 0;
-#endif
+      tv[0] = pre_st.st_atim;
+      tv[1] = pre_st.st_mtim;
     }
 
   /* Open the file.  */
@@ -385,7 +374,17 @@ process_file (const char *fname)
 	  result = 1;
 	}
       else
-	result = handle_ar (fd, elf, NULL, fname, preserve_dates ? tv : NULL);
+	{
+	  /* We would like to support ar archives, but currently it just
+	     doesn't work at all since we call elf_clone on the members
+	     which doesn't really support ar members.
+	     result = handle_ar (fd, elf, NULL, fname,
+				 preserve_dates ? tv : NULL);
+	   */
+	  error (0, 0, gettext ("%s: no support for stripping archive"),
+		 fname);
+	  result = 1;
+	}
       break;
 
     default:
@@ -408,14 +407,14 @@ process_file (const char *fname)
 
 static int
 handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
-	    mode_t mode, struct timeval tvp[2])
+	    mode_t mode, struct timespec tvp[2])
 {
   size_t prefix_len = prefix == NULL ? 0 : strlen (prefix);
   size_t fname_len = strlen (fname) + 1;
   char *fullname = alloca (prefix_len + 1 + fname_len);
   char *cp = fullname;
   Elf *debugelf = NULL;
-  char *tmp_debug_fname = NULL;
+  tmp_debug_fname = NULL;
   int result = 0;
   size_t shdridx = 0;
   size_t shstrndx;
@@ -469,7 +468,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	}
     }
 
-  int debug_fd = -1;
+  debug_fd = -1;
 
   /* Get the EBL handling.  Removing all debugging symbols with the -g
      option or resolving all relocations between debug sections with
@@ -494,7 +493,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	 the debug file if the file would not contain any
 	 information.  */
       size_t debug_fname_len = strlen (debug_fname);
-      tmp_debug_fname = (char *) alloca (debug_fname_len + sizeof (".XXXXXX"));
+      tmp_debug_fname = (char *) xmalloc (debug_fname_len + sizeof (".XXXXXX"));
       strcpy (mempcpy (tmp_debug_fname, debug_fname, debug_fname_len),
 	      ".XXXXXX");
 
@@ -515,13 +514,19 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
   /* Get the section header string table index.  */
   if (unlikely (elf_getshdrstrndx (elf, &shstrndx) < 0))
-    error (EXIT_FAILURE, 0,
-	   gettext ("cannot get section header string table index"));
+    {
+      cleanup_debug ();
+      error (EXIT_FAILURE, 0,
+	     gettext ("cannot get section header string table index"));
+    }
 
   /* Get the number of phdrs in the old file.  */
   size_t phnum;
   if (elf_getphdrnum (elf, &phnum) != 0)
-    error (EXIT_FAILURE, 0, gettext ("cannot get number of phdrs"));
+    {
+      cleanup_debug ();
+      error (EXIT_FAILURE, 0, gettext ("cannot get number of phdrs"));
+    }
 
   /* We now create a new ELF descriptor for the same file.  We
      construct it almost exactly in the same way with some information
@@ -537,7 +542,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	  && unlikely (gelf_newphdr (newelf, phnum) == 0)))
     {
       error (0, 0, gettext ("cannot create new file '%s': %s"),
-	     output_fname, elf_errmsg (-1));
+	     output_fname ?: fname, elf_errmsg (-1));
       goto fail;
     }
 
@@ -639,9 +644,10 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	goto illformed;
 
       /* Sections in files other than relocatable object files which
-	 are not loaded can be freely moved by us.  In relocatable
-	 object files everything can be moved.  */
+	 don't contain any file content or are not loaded can be freely
+	 moved by us.  In relocatable object files everything can be moved.  */
       if (ehdr->e_type == ET_REL
+	  || shdr_info[cnt].shdr.sh_type == SHT_NOBITS
 	  || (shdr_info[cnt].shdr.sh_flags & SHF_ALLOC) == 0)
 	shdr_info[cnt].shdr.sh_offset = 0;
 
@@ -657,7 +663,8 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	  /* Cross-reference the sections contained in the section
 	     group.  */
 	  shdr_info[cnt].data = elf_getdata (shdr_info[cnt].scn, NULL);
-	  if (shdr_info[cnt].data == NULL)
+	  if (shdr_info[cnt].data == NULL
+	      || shdr_info[cnt].data->d_size < sizeof (Elf32_Word))
 	    INTERNAL_ERROR (fname);
 
 	  /* XXX Fix for unaligned access.  */
@@ -728,7 +735,9 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	while (idx != 0)
 	  {
 	    /* The section group data is already loaded.  */
-	    assert (shdr_info[idx].data != NULL);
+	    elf_assert (shdr_info[idx].data != NULL
+			&& shdr_info[idx].data->d_buf != NULL
+			&& shdr_info[idx].data->d_size >= sizeof (Elf32_Word));
 
 	    /* If the references section group is a normal section
 	       group and has one element remaining, or if it is an
@@ -784,11 +793,16 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		  for (size_t in = 1;
 		       in < shdr_info[cnt].data->d_size / sizeof (Elf32_Word);
 		       ++in)
-		    if (shdr_info[grpref[in]].idx != 0)
+		    if (grpref[in] < shnum)
 		      {
-			shdr_info[cnt].idx = 1;
-			break;
+			if (shdr_info[grpref[in]].idx != 0)
+			  {
+			    shdr_info[cnt].idx = 1;
+			    break;
+			  }
 		      }
+		    else
+		      goto illformed;
 		}
 	    }
 
@@ -830,8 +844,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
 		  /* Go through all symbols and make sure the section they
 		     reference is not removed.  */
-		  size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1,
-					      ehdr->e_version);
+		  size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1, EV_CURRENT);
 
 		  for (size_t inner = 0;
 		       inner < shdr_info[cnt].data->d_size / elsize;
@@ -918,7 +931,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
 	      inline void check_preserved (size_t i)
 	      {
-		if (i != 0 && shdr_info[i].idx != 0
+		if (i != 0 && i < shnum + 2 && shdr_info[i].idx != 0
 		    && shdr_info[i].debug_data == NULL)
 		  {
 		    if (shdr_info[i].data == NULL)
@@ -947,9 +960,12 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	{
 	  scn = elf_newscn (debugelf);
 	  if (scn == NULL)
-	    error (EXIT_FAILURE, 0,
-		   gettext ("while generating output file: %s"),
-		   elf_errmsg (-1));
+	    {
+	      cleanup_debug ();
+	      error (EXIT_FAILURE, 0,
+		     gettext ("while generating output file: %s"),
+		     elf_errmsg (-1));
+	    }
 
 	  bool discard_section = (shdr_info[cnt].idx > 0
 				  && shdr_info[cnt].debug_data == NULL
@@ -989,6 +1005,8 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    {
 	      /* Copy the original data before it gets modified.  */
 	      shdr_info[cnt].debug_data = debugdata;
+	      if (debugdata->d_buf == NULL)
+		INTERNAL_ERROR (fname);
 	      debugdata->d_buf = memcpy (xmalloc (debugdata->d_size),
 					 debugdata->d_buf, debugdata->d_size);
 	    }
@@ -1024,8 +1042,11 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
   /* We need a string table for the section headers.  */
   shst = ebl_strtabinit (true);
   if (shst == NULL)
-    error (EXIT_FAILURE, errno, gettext ("while preparing output for '%s'"),
-	   output_fname ?: fname);
+    {
+      cleanup_debug ();
+      error (EXIT_FAILURE, errno, gettext ("while preparing output for '%s'"),
+	     output_fname ?: fname);
+    }
 
   /* Assign new section numbers.  */
   shdr_info[0].idx = 0;
@@ -1037,8 +1058,12 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	/* Create a new section.  */
 	shdr_info[cnt].newscn = elf_newscn (newelf);
 	if (shdr_info[cnt].newscn == NULL)
-	  error (EXIT_FAILURE, 0, gettext ("while generating output file: %s"),
-		 elf_errmsg (-1));
+	  {
+	    cleanup_debug ();
+	    error (EXIT_FAILURE, 0,
+		   gettext ("while generating output file: %s"),
+		   elf_errmsg (-1));
+	  }
 
 	elf_assert (elf_ndxscn (shdr_info[cnt].newscn) == shdr_info[cnt].idx);
 
@@ -1074,15 +1099,21 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       /* Create the section.  */
       shdr_info[cnt].newscn = elf_newscn (newelf);
       if (shdr_info[cnt].newscn == NULL)
-	error (EXIT_FAILURE, 0,
-	       gettext ("while create section header section: %s"),
-	       elf_errmsg (-1));
+	{
+	  cleanup_debug ();
+	  error (EXIT_FAILURE, 0,
+		 gettext ("while create section header section: %s"),
+		 elf_errmsg (-1));
+	}
       elf_assert (elf_ndxscn (shdr_info[cnt].newscn) == shdr_info[cnt].idx);
 
       shdr_info[cnt].data = elf_newdata (shdr_info[cnt].newscn);
       if (shdr_info[cnt].data == NULL)
-	error (EXIT_FAILURE, 0, gettext ("cannot allocate section data: %s"),
-	       elf_errmsg (-1));
+	{
+	  cleanup_debug ();
+	  error (EXIT_FAILURE, 0, gettext ("cannot allocate section data: %s"),
+		 elf_errmsg (-1));
+	}
 
       char *debug_basename = basename (debug_fname_embed ?: debug_fname);
       off_t crc_offset = strlen (debug_basename) + 1;
@@ -1131,18 +1162,24 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
   /* Create the section.  */
   shdr_info[cnt].newscn = elf_newscn (newelf);
   if (shdr_info[cnt].newscn == NULL)
-    error (EXIT_FAILURE, 0,
-	   gettext ("while create section header section: %s"),
-	   elf_errmsg (-1));
+    {
+      cleanup_debug ();
+      error (EXIT_FAILURE, 0,
+	     gettext ("while create section header section: %s"),
+	     elf_errmsg (-1));
+    }
   elf_assert (elf_ndxscn (shdr_info[cnt].newscn) == idx);
 
   /* Finalize the string table and fill in the correct indices in the
      section headers.  */
   shstrtab_data = elf_newdata (shdr_info[cnt].newscn);
   if (shstrtab_data == NULL)
-    error (EXIT_FAILURE, 0,
-	   gettext ("while create section header string table: %s"),
-	   elf_errmsg (-1));
+    {
+      cleanup_debug ();
+      error (EXIT_FAILURE, 0,
+	     gettext ("while create section header string table: %s"),
+	     elf_errmsg (-1));
+    }
   ebl_strtabfinalize (shst, shstrtab_data);
 
   /* We have to set the section size.  */
@@ -1156,7 +1193,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	Elf_Data *newdata;
 
 	scn = elf_getscn (newelf, shdr_info[cnt].idx);
-	assert (scn != NULL);
+	elf_assert (scn != NULL);
 
 	/* Update the name.  */
 	shdr_info[cnt].shdr.sh_name = ebl_strtaboffset (shdr_info[cnt].se);
@@ -1169,13 +1206,17 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
 	if (shdr_info[cnt].shdr.sh_type == SHT_GROUP)
 	  {
-	    assert (shdr_info[cnt].data != NULL);
+	    elf_assert (shdr_info[cnt].data != NULL
+			&& shdr_info[cnt].data->d_buf != NULL);
 
 	    Elf32_Word *grpref = (Elf32_Word *) shdr_info[cnt].data->d_buf;
 	    for (size_t inner = 0;
 		 inner < shdr_info[cnt].data->d_size / sizeof (Elf32_Word);
 		 ++inner)
-	      grpref[inner] = shdr_info[grpref[inner]].idx;
+	      if (grpref[inner] < shnum)
+		grpref[inner] = shdr_info[grpref[inner]].idx;
+	      else
+		goto illformed;
 	  }
 
 	/* Handle the SHT_REL, SHT_RELA, and SHF_INFO_LINK flag.  */
@@ -1213,19 +1254,18 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		Elf_Data *versiondata = NULL;
 		Elf_Data *shndxdata = NULL;
 
-		size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1,
-					    ehdr->e_version);
+		size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1, EV_CURRENT);
 
 		if (shdr_info[cnt].symtab_idx != 0)
 		  {
-		    assert (shdr_info[cnt].shdr.sh_type == SHT_SYMTAB_SHNDX);
+		    elf_assert (shdr_info[cnt].shdr.sh_type == SHT_SYMTAB_SHNDX);
 		    /* This section has extended section information.
 		       We have to modify that information, too.  */
 		    shndxdata = elf_getdata (shdr_info[shdr_info[cnt].symtab_idx].scn,
 					     NULL);
 
 		    elf_assert ((versiondata->d_size / sizeof (Elf32_Word))
-			    >= shdr_info[cnt].data->d_size / elsize);
+				>= shdr_info[cnt].data->d_size / elsize);
 		  }
 
 		if (shdr_info[cnt].version_idx != 0)
@@ -1237,8 +1277,10 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		    versiondata = elf_getdata (shdr_info[shdr_info[cnt].version_idx].scn,
 					       NULL);
 
-		    elf_assert ((versiondata->d_size / sizeof (GElf_Versym))
-			    >= shdr_info[cnt].data->d_size / elsize);
+		    elf_assert (versiondata != NULL
+				&& versiondata->d_buf != NULL
+				&& ((versiondata->d_size / sizeof (GElf_Versym))
+				    >= shdr_info[cnt].data->d_size / elsize));
 		  }
 
 		shdr_info[cnt].newsymidx
@@ -1292,7 +1334,8 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		      sec = shdr_info[sym->st_shndx].idx;
 		    else
 		      {
-			elf_assert (shndxdata != NULL);
+			elf_assert (shndxdata != NULL
+				    && shndxdata->d_buf != NULL);
 
 			sec = shdr_info[xshndx].idx;
 		      }
@@ -1401,6 +1444,8 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	      /* libelf will use d_size to set sh_size.  */
 	      Elf_Data *debugdata = elf_getdata (elf_getscn (debugelf,
 							     cnt), NULL);
+	      if (debugdata == NULL)
+		INTERNAL_ERROR (fname);
 	      debugdata->d_size = newdata->d_size;
 	    }
 	}
@@ -1412,6 +1457,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	  continue;
 
 	const Elf32_Word symtabidx = shdr_info[cnt].old_sh_link;
+	elf_assert (symtabidx < shnum + 2);
 	const Elf32_Word *const newsymidx = shdr_info[symtabidx].newsymidx;
 	switch (shdr_info[cnt].shdr.sh_type)
 	  {
@@ -1438,10 +1484,14 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 				       : elf_getscn (newelf,
 						     shdr_info[cnt].idx),
 				       NULL);
-	    assert (d != NULL);
+	    elf_assert (d != NULL && d->d_buf != NULL
+			&& shdr_info[cnt].shdr.sh_entsize != 0);
 	    size_t nrels = (shdr_info[cnt].shdr.sh_size
 			    / shdr_info[cnt].shdr.sh_entsize);
 
+	    size_t symsize = gelf_fsize (elf, ELF_T_SYM, 1, EV_CURRENT);
+	    const Elf32_Word symidxn = (shdr_info[symtabidx].data->d_size
+					/ symsize);
 	    if (shdr_info[cnt].shdr.sh_type == SHT_REL)
 	      for (size_t relidx = 0; relidx < nrels; ++relidx)
 		{
@@ -1450,6 +1500,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		    INTERNAL_ERROR (fname);
 
 		  size_t symidx = GELF_R_SYM (rel_mem.r_info);
+		  elf_assert (symidx < symidxn);
 		  if (newsymidx[symidx] != symidx)
 		    {
 		      rel_mem.r_info
@@ -1468,6 +1519,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		    INTERNAL_ERROR (fname);
 
 		  size_t symidx = GELF_R_SYM (rel_mem.r_info);
+		  elf_assert (symidx < symidxn);
 		  if (newsymidx[symidx] != symidx)
 		    {
 		      rel_mem.r_info
@@ -1486,7 +1538,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
 	    /* We have to recompute the hash table.  */
 
-	    assert (shdr_info[cnt].idx > 0);
+	    elf_assert (shdr_info[cnt].idx > 0);
 
 	    /* The hash section in the new file.  */
 	    scn = elf_getscn (newelf, shdr_info[cnt].idx);
@@ -1495,31 +1547,38 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    Elf_Data *symd = elf_getdata (elf_getscn (newelf,
 						      shdr_info[symtabidx].idx),
 					  NULL);
-	    assert (symd != NULL);
+	    elf_assert (symd != NULL && symd->d_buf != NULL);
 
 	    /* The hash table data.  */
 	    Elf_Data *hashd = elf_getdata (scn, NULL);
-	    assert (hashd != NULL);
+	    elf_assert (hashd != NULL && hashd->d_buf != NULL);
 
 	    if (shdr_info[cnt].shdr.sh_entsize == sizeof (Elf32_Word))
 	      {
 		/* Sane arches first.  */
+		elf_assert (hashd->d_size >= 2 * sizeof (Elf32_Word));
 		Elf32_Word *bucket = (Elf32_Word *) hashd->d_buf;
 
 		size_t strshndx = shdr_info[symtabidx].old_sh_link;
-		size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1,
-					    ehdr->e_version);
+		size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1, EV_CURRENT);
+
+		Elf32_Word nchain = bucket[1];
+		Elf32_Word nbucket = bucket[0];
+		uint64_t used_buf = ((2ULL + nchain + nbucket)
+				     * sizeof (Elf32_Word));
+		elf_assert (used_buf <= hashd->d_size);
 
 		/* Adjust the nchain value.  The symbol table size
 		   changed.  We keep the same size for the bucket array.  */
 		bucket[1] = symd->d_size / elsize;
-		Elf32_Word nbucket = bucket[0];
 		bucket += 2;
 		Elf32_Word *chain = bucket + nbucket;
 
 		/* New size of the section.  */
-		hashd->d_size = ((2 + symd->d_size / elsize + nbucket)
+		size_t n_size = ((2 + symd->d_size / elsize + nbucket)
 				 * sizeof (Elf32_Word));
+		elf_assert (n_size <= hashd->d_size);
+		hashd->d_size = n_size;
 		update_section_size (hashd);
 
 		/* Clear the arrays.  */
@@ -1536,7 +1595,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
 		    const char *name = elf_strptr (elf, strshndx,
 						   sym->st_name);
-		    elf_assert (name != NULL);
+		    elf_assert (name != NULL && nbucket != 0);
 		    size_t hidx = elf_hash (name) % nbucket;
 
 		    if (bucket[hidx] == 0)
@@ -1545,7 +1604,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		      {
 			hidx = bucket[hidx];
 
-			while (chain[hidx] != 0)
+			while (chain[hidx] != 0 && chain[hidx] < nchain)
 			  hidx = chain[hidx];
 
 			chain[hidx] = inner;
@@ -1561,19 +1620,27 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		Elf64_Xword *bucket = (Elf64_Xword *) hashd->d_buf;
 
 		size_t strshndx = shdr_info[symtabidx].old_sh_link;
-		size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1,
-					    ehdr->e_version);
+		size_t elsize = gelf_fsize (elf, ELF_T_SYM, 1, EV_CURRENT);
+
+		elf_assert (symd->d_size >= 2 * sizeof (Elf64_Xword));
+		Elf64_Xword nbucket = bucket[0];
+		Elf64_Xword nchain = bucket[1];
+		uint64_t maxwords = hashd->d_size / sizeof (Elf64_Xword);
+		elf_assert (maxwords >= 2
+			    && maxwords - 2 >= nbucket
+			    && maxwords - 2 - nbucket >= nchain);
 
 		/* Adjust the nchain value.  The symbol table size
 		   changed.  We keep the same size for the bucket array.  */
 		bucket[1] = symd->d_size / elsize;
-		Elf64_Xword nbucket = bucket[0];
 		bucket += 2;
 		Elf64_Xword *chain = bucket + nbucket;
 
 		/* New size of the section.  */
-		hashd->d_size = ((2 + symd->d_size / elsize + nbucket)
+		size_t n_size = ((2 + symd->d_size / elsize + nbucket)
 				 * sizeof (Elf64_Xword));
+		elf_assert (n_size <= hashd->d_size);
+		hashd->d_size = n_size;
 		update_section_size (hashd);
 
 		/* Clear the arrays.  */
@@ -1590,7 +1657,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
 		    const char *name = elf_strptr (elf, strshndx,
 						   sym->st_name);
-		    elf_assert (name != NULL);
+		    elf_assert (name != NULL && nbucket != 0);
 		    size_t hidx = elf_hash (name) % nbucket;
 
 		    if (bucket[hidx] == 0)
@@ -1599,7 +1666,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		      {
 			hidx = bucket[hidx];
 
-			while (chain[hidx] != 0)
+			while (chain[hidx] != 0 && chain[hidx] < nchain)
 			  hidx = chain[hidx];
 
 			chain[hidx] = inner;
@@ -1613,7 +1680,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    if (no_symtab_updates ())
 	      break;
 
-	    assert (shdr_info[cnt].idx > 0);
+	    elf_assert (shdr_info[cnt].idx > 0);
 
 	    /* The symbol version section in the new file.  */
 	    scn = elf_getscn (newelf, shdr_info[cnt].idx);
@@ -1621,20 +1688,22 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    /* The symbol table data.  */
 	    symd = elf_getdata (elf_getscn (newelf, shdr_info[symtabidx].idx),
 				NULL);
-	    assert (symd != NULL);
+	    elf_assert (symd != NULL && symd->d_buf != NULL);
+	    size_t symz = gelf_fsize (elf, ELF_T_SYM, 1, EV_CURRENT);
+	    const Elf32_Word syms = (shdr_info[symtabidx].data->d_size / symz);
 
 	    /* The version symbol data.  */
 	    Elf_Data *verd = elf_getdata (scn, NULL);
-	    assert (verd != NULL);
+	    elf_assert (verd != NULL && verd->d_buf != NULL);
 
 	    /* The symbol version array.  */
 	    GElf_Half *verstab = (GElf_Half *) verd->d_buf;
 
 	    /* Walk through the list and */
-	    size_t elsize = gelf_fsize (elf, verd->d_type, 1,
-					ehdr->e_version);
-	    for (size_t inner = 1; inner < verd->d_size / elsize; ++inner)
-	      if (newsymidx[inner] != 0)
+	    size_t elsize = gelf_fsize (elf, verd->d_type, 1, EV_CURRENT);
+	    Elf32_Word vers = verd->d_size / elsize;
+	    for (size_t inner = 1; inner < vers && inner < syms; ++inner)
+	      if (newsymidx[inner] != 0 && newsymidx[inner] < vers)
 		/* Overwriting the same array works since the
 		   reordering can only move entries to lower indices
 		   in the array.  */
@@ -1644,8 +1713,8 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    verd->d_size = gelf_fsize (newelf, verd->d_type,
 				       symd->d_size
 				       / gelf_fsize (elf, symd->d_type, 1,
-						     ehdr->e_version),
-				       ehdr->e_version);
+						     EV_CURRENT),
+				       EV_CURRENT);
 	    update_section_size (verd);
 	    break;
 
@@ -1658,8 +1727,12 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	    scn = elf_getscn (newelf, shdr_info[cnt].idx);
 	    GElf_Shdr shdr_mem;
 	    GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
-	    assert (shdr != NULL);
+	    elf_assert (shdr != NULL);
 
+	    size_t symsz = gelf_fsize (elf, ELF_T_SYM, 1, EV_CURRENT);
+	    const Elf32_Word symn = (shdr_info[symtabidx].data->d_size
+				     / symsz);
+	    elf_assert (shdr->sh_info < symn);
 	    shdr->sh_info = newsymidx[shdr->sh_info];
 
 	    (void) gelf_update_shdr (scn, shdr);
@@ -1703,18 +1776,23 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	      /* OK, lets relocate all trivial cross debug section
 		 relocations. */
 	      Elf_Data *reldata = elf_getdata (scn, NULL);
+	      if (reldata == NULL || reldata->d_buf == NULL)
+		INTERNAL_ERROR (fname);
 	      /* We actually wanted the rawdata, but since we already
 		 accessed it earlier as elf_getdata () that won't
 		 work. But debug sections are all ELF_T_BYTE, so it
 		 doesn't really matter.  */
 	      Elf_Data *tdata = elf_getdata (tscn, NULL);
-	      if (tdata->d_type != ELF_T_BYTE)
+	      if (tdata == NULL || tdata->d_buf == NULL
+		  || tdata->d_type != ELF_T_BYTE)
 		INTERNAL_ERROR (fname);
 
 	      /* Pick up the symbol table and shndx table to
 		 resolve relocation symbol indexes.  */
 	      Elf64_Word symt = shdr->sh_link;
 	      Elf_Data *symdata, *xndxdata;
+	      elf_assert (symt < shnum + 2);
+	      elf_assert (shdr_info[symt].symtab_idx < shnum + 2);
 	      symdata = (shdr_info[symt].debug_data
 			 ?: shdr_info[symt].data);
 	      xndxdata = (shdr_info[shdr_info[symt].symtab_idx].debug_data
@@ -1747,6 +1825,9 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 						  &xndx);
 		Elf32_Word sec = (sym->st_shndx == SHN_XINDEX
 				  ? xndx : sym->st_shndx);
+		if (sec >= shnum + 2)
+		  INTERNAL_ERROR (fname);
+
 		if (ebl_debugscn_p (ebl, shdr_info[sec].name))
 		  {
 		    size_t size;
@@ -1770,7 +1851,10 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 
 		    if (offset > tdata->d_size
 			|| tdata->d_size - offset < size)
-		      error (0, 0, gettext ("bad relocation"));
+		      {
+			cleanup_debug ();
+			error (EXIT_FAILURE, 0, gettext ("bad relocation"));
+		      }
 
 		    /* When the symbol value is zero then for SHT_REL
 		       sections this is all that needs to be checked.
@@ -1842,6 +1926,9 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 		return false;
 	      }
 
+	      if (shdr->sh_entsize == 0)
+		INTERNAL_ERROR (fname);
+
 	      size_t nrels = shdr->sh_size / shdr->sh_entsize;
 	      size_t next = 0;
 	      if (shdr->sh_type == SHT_REL)
@@ -1888,7 +1975,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       if (unlikely (elf_update (debugelf, ELF_C_WRITE) == -1))
 	{
 	  error (0, 0, gettext ("while writing '%s': %s"),
-		 debug_fname, elf_errmsg (-1));
+		 tmp_debug_fname, elf_errmsg (-1));
 	  result = 1;
 	  goto fail_close;
 	}
@@ -1904,6 +1991,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	}
 
       /* The temporary file does not exist anymore.  */
+      free (tmp_debug_fname);
       tmp_debug_fname = NULL;
 
       if (!remove_shdrs)
@@ -1976,7 +2064,8 @@ while computing checksum for debug information"));
   if (gelf_update_ehdr (newelf, newehdr) == 0)
     {
       error (0, 0, gettext ("%s: error while creating ELF header: %s"),
-	     fname, elf_errmsg (-1));
+	     output_fname ?: fname, elf_errmsg (-1));
+      cleanup_debug ();
       return 1;
     }
 
@@ -1985,6 +2074,7 @@ while computing checksum for debug information"));
     {
       error (0, 0, gettext ("%s: error while reading the file: %s"),
 	     fname, elf_errmsg (-1));
+      cleanup_debug ();
       return 1;
     }
 
@@ -1998,7 +2088,7 @@ while computing checksum for debug information"));
   if (elf_update (newelf, ELF_C_WRITE) == -1)
     {
       error (0, 0, gettext ("while writing '%s': %s"),
-	     fname, elf_errmsg (-1));
+	     output_fname ?: fname, elf_errmsg (-1));
       result = 1;
     }
 
@@ -2023,7 +2113,7 @@ while computing checksum for debug information"));
 	      || ftruncate64 (fd, shdr_info[shdridx].shdr.sh_offset) < 0)
 	    {
 	      error (0, errno, gettext ("while writing '%s'"),
-		     fname);
+		     output_fname ?: fname);
 	      result = 1;
 	    }
 	}
@@ -2043,7 +2133,7 @@ while computing checksum for debug information"));
 	      || ftruncate64 (fd, shdr_info[shdridx].shdr.sh_offset) < 0)
 	    {
 	      error (0, errno, gettext ("while writing '%s'"),
-		     fname);
+		     output_fname ?: fname);
 	      result = 1;
 	    }
 	}
@@ -2079,8 +2169,8 @@ while computing checksum for debug information"));
   /* That was it.  Close the descriptors.  */
   if (elf_end (newelf) != 0)
     {
-      error (0, 0, gettext ("error while finishing '%s': %s"), fname,
-	     elf_errmsg (-1));
+      error (0, 0, gettext ("error while finishing '%s': %s"),
+	     output_fname ?: fname, elf_errmsg (-1));
       result = 1;
     }
 
@@ -2096,18 +2186,19 @@ while computing checksum for debug information"));
   if (ebl != NULL)
     ebl_closebackend (ebl);
 
-  /* Close debug file descriptor, if opened */
-  if (debug_fd >= 0)
-    {
-      if (tmp_debug_fname != NULL)
-	unlink (tmp_debug_fname);
-      close (debug_fd);
-    }
+  cleanup_debug ();
 
   /* If requested, preserve the timestamp.  */
   if (tvp != NULL)
     {
-      if (FUTIMES (fd, output_fname, tvp) != 0)
+#ifdef HAVE_FUTIMENS
+      if (futimens (fd, tvp) != 0)
+#else
+      struct timeval times[2];
+      TIMESPEC_TO_TIMEVAL (&times[0], &tvp[0]);
+      TIMESPEC_TO_TIMEVAL (&times[1], &tvp[1]);
+      if (futimes (fd, times) != 0)
+#endif
 	{
 	  error (0, errno, gettext ("\
 cannot set access and modification date of '%s'"),
@@ -2123,10 +2214,25 @@ cannot set access and modification date of '%s'"),
   return result;
 }
 
+static void
+cleanup_debug ()
+{
+  if (debug_fd >= 0)
+    {
+      if (tmp_debug_fname != NULL)
+	{
+	  unlink (tmp_debug_fname);
+	  free (tmp_debug_fname);
+	  tmp_debug_fname = NULL;
+	}
+      close (debug_fd);
+      debug_fd = -1;
+    }
+}
 
 static int
 handle_ar (int fd, Elf *elf, const char *prefix, const char *fname,
-	   struct timeval tvp[2])
+	   struct timespec tvp[2])
 {
   size_t prefix_len = prefix == NULL ? 0 : strlen (prefix);
   size_t fname_len = strlen (fname) + 1;
@@ -2164,7 +2270,14 @@ handle_ar (int fd, Elf *elf, const char *prefix, const char *fname,
 
   if (tvp != NULL)
     {
-      if (unlikely (FUTIMES (fd, fname, tvp) != 0))
+#ifdef HAVE_FUTIMENS
+      if (unlikely (futimens (fd, tvp) != 0))
+#else
+      struct timeval times[2];
+      TIMESPEC_TO_TIMEVAL (&times[0], &tvp[0]);
+      TIMESPEC_TO_TIMEVAL (&times[1], &tvp[1]);
+      if (unlikely (futimes (fd, times) != 0))
+#endif
 	{
 	  error (0, errno, gettext ("\
 cannot set access and modification date of '%s'"), fname);
