@@ -1,3 +1,20 @@
+2015-10-14  Mark Wielaard  <mjw@redhat.com>
+
+	* libelf.h (elf32_getchdr): New declaration.
+	(elf64_getchdr): Likewise.
+	* gelf.h (GElf_Chdr): New typedef.
+	(gelf_getchdr): New declaration.
+	* elf32_getchdr.c: New file.
+	* elf64_getchdr.c: New file.
+	* gelf_getchdr.c: New file.
+	* elf_end.c (elf_end): Free chdr.
+	* elf_error.c: Add ELF_E_NOT_COMPRESSED.
+	* libelf.h: Likewise.
+	* Makefile.am (libelf_a_SOURCES): Add elf32_getchdr.c,
+	elf64_getchdr.c and gelf_getchdr.c.
+	* libelf.map (ELFUTILS_1.7): New set. Add elf32_getchdr,
+	elf64_getchdr and gelf_getchdr.
+
 2015-10-16  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am (libelf_so_LDLIBS): Add -lz.

@@ -150,6 +150,12 @@ elf_end (Elf *elf)
 		  /* It doesn't matter which pointer.  */
 		  free (scn->shdr.e32);
 
+		void *chdr = (elf->class == ELFCLASS32
+			      ? (void *) scn->chdr.e32
+			      : (void *) scn->chdr.e64);
+		if (chdr != (void *) -1 && chdr != scn->data_base)
+		  free (chdr);
+
 		/* If the file has the same byte order and the
 		   architecture doesn't require overly stringent
 		   alignment the raw data buffer is the same as the

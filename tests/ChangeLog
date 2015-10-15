@@ -1,3 +1,17 @@
+2015-10-14  Mark Wielaard  <mjw@redhat.com>
+
+	* msg_tst.c: Add ELF_E_NOT_COMPRESSED.
+	* run-elfgetchdr.sh: New test.
+	* testfile-zgnu32.bz2: New testfile.
+	* testfile-zgnu64.bz2: Likewise.
+	* testfile-zgabi32.bz2: Likewise.
+	* testfile-zgabi64.bz2: Likewise.
+	* Makefile.am (check_PROGRAMS): Add elfgetchdr.
+	(TESTS): Add run-elfgetchdr.sh.
+	(EXTRA_DIST): Add run-elfgetchdr.sh, testfile-zgnu32.bz2,
+	testfile-zgnu64.bz2, testfile-zgabi32.bz2 and testfile-zgabi64.bz2.
+	(elfgetchdr_LDADD): New variable.
+
 2015-10-16  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am [BUILD_STATIC] (libdw): Add -lz.

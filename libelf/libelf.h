@@ -1,5 +1,5 @@
 /* Interface for libelf.
-   Copyright (C) 1998-2010 Red Hat, Inc.
+   Copyright (C) 1998-2010, 2015 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -128,6 +128,15 @@ typedef enum
   ELF_K_NUM
 } Elf_Kind;
 
+/* Different compression types a section can have.  */
+
+typedef enum
+{
+  ELF_ZSCN_T_NONE,  /* No compression.  */
+  ELF_ZSCN_T_GNU,   /* Old GNU style (Always uses ZLIB, no real Chdr).  */
+  ELF_ZSCN_T_ELF,   /* ELF style (with Chdr giving compression type).  */
+  ELF_ZSCN_T_NUM    /* Number of different compression types.  */
+} Elf_ZScn_Type;
 
 /* Archive member header.  */
 typedef struct
@@ -267,6 +276,20 @@ extern Elf32_Shdr *elf32_getshdr (Elf_Scn *__scn);
 /* Similar for ELFCLASS64.  */
 extern Elf64_Shdr *elf64_getshdr (Elf_Scn *__scn);
 
+/* Returns compression header for a section if section data is
+   compressed.  Returns the compression type (Elf_ZScn_Type) in
+   __TYPE.  If the type is ELF_ZSCN_T_GNU then the returned
+   compression header is artificial (since the old GNU style
+   compressed section data didn't contain a real header).  The ch_type
+   of such an artificial header is always ELFCOMPRESS_ZLIB and the
+   ch_addralign equals the sh_addralign of the Shdr of the section.
+   If an error occurs NULL is returned and __TYPE will be -1.
+   Allocated or no bits sections are never compressed. Requesting the
+   Chdr for a section that isn't compressed returns NULL and sets
+   __TYPE to ELF_ZSCN_T_NONE, elf_errno will be set to indicate the
+   section wasn't compressed.  */
+extern Elf32_Chdr *elf32_getchdr (Elf_Scn *__scn, int *__type);
+extern Elf64_Chdr *elf64_getchdr (Elf_Scn *__scn, int *__type);
 
 /* Set or clear flags for ELF file.  */
 extern unsigned int elf_flagelf (Elf *__elf, Elf_Cmd __cmd,

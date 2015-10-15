@@ -1,5 +1,5 @@
 /* Internal interfaces for libelf.
-   Copyright (C) 1998-2010 Red Hat, Inc.
+   Copyright (C) 1998-2010, 2015 Red Hat, Inc.
    This file is part of elfutils.
    Contributed by Ulrich Drepper <drepper@redhat.com>, 1998.
 
@@ -138,6 +138,7 @@ enum
   ELF_E_INVALID_PHDR,
   ELF_E_NO_PHDR,
   ELF_E_INVALID_OFFSET,
+  ELF_E_NOT_COMPRESSED,
   /* Keep this as the last entry.  */
   ELF_E_NUM
 };
@@ -207,6 +208,14 @@ struct Elf_Scn
   Elf_Data_List *data_list_rear; /* Pointer to the rear of the data list. */
 
   Elf_Data_Scn rawdata;		/* Uninterpreted data of the section.  */
+
+  union
+  {				/* 32/64bit Chdr used for section data.     */
+    Elf32_Chdr *e32;		/* NULL means not accessed yet.             */
+    Elf64_Chdr *e64;		/* Might point at data_base or is malloced. */
+  } chdr;			/* -1 means not compressed.  Check ch_type. */
+
+  int chdr_type;		/* ELF_ZSCN_T_{NONE,GNU,ELF} chdr != NULL. */
 
   int data_read;		/* Nonzero if the section was created by the
 				   user or if the data from the file/memory

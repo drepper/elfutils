@@ -85,6 +85,8 @@ typedef Elf64_Rela GElf_Rela;
 /* Program segment header.  */
 typedef Elf64_Phdr GElf_Phdr;
 
+typedef Elf64_Chdr GElf_Chdr;
+
 /* Dynamic section entry.  */
 typedef Elf64_Dyn GElf_Dyn;
 
@@ -182,6 +184,13 @@ extern int gelf_update_phdr (Elf *__elf, int __ndx, GElf_Phdr *__src);
 
 /* Create new program header with PHNUM entries.  */
 extern unsigned long int gelf_newphdr (Elf *__elf, size_t __phnum);
+
+/* Get compression header and compression type of section data, if
+   any.  Returns NULL and sets __TYPE to -1 on failure.  When the
+   section data isn't compressed __TYPE is set to ELF_ZSCN_T_NONE and
+   NULL is returned.  Otherwise __DEST is returned and __TYPE is
+   set.  */
+extern GElf_Chdr *gelf_getchdr (Elf_Scn *__scn, GElf_Chdr *__dst, int *__type);
 
 
 /* Convert data structure from the representation in the file represented
