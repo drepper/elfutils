@@ -144,4 +144,8 @@ ELFUTILS_1.7 {
     elf32_getchdr;
     elf64_getchdr;
     gelf_getchdr;
+
+    elf32_zscn_compress;
+    elf64_zscn_compress;
+    gelf_zscn_compress;
 } ELFUTILS_1.6;

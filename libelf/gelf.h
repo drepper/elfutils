@@ -192,6 +192,8 @@ extern unsigned long int gelf_newphdr (Elf *__elf, size_t __phnum);
    set.  */
 extern GElf_Chdr *gelf_getchdr (Elf_Scn *__scn, GElf_Chdr *__dst, int *__type);
 
+extern GElf_Shdr *gelf_zscn_compress (Elf_Scn *scn, GElf_Shdr *shdr,
+				      int type, int ch_type);
 
 /* Convert data structure from the representation in the file represented
    by ELF to their memory representation.  */

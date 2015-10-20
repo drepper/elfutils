@@ -291,6 +291,40 @@ extern Elf64_Shdr *elf64_getshdr (Elf_Scn *__scn);
 extern Elf32_Chdr *elf32_getchdr (Elf_Scn *__scn, int *__type);
 extern Elf64_Chdr *elf64_getchdr (Elf_Scn *__scn, int *__type);
 
+/* When type is ELF_ZSCN_T_NONE then ch_type is ignored and the raw
+  section data is decompressed if the section was compressed before.
+  The returned section header will have an updated sh_size,
+  sh_addralign and will have SHF_COMPRESSED cleared from the
+  sh_flags. sh_entsize isn't changed.  If the section wasn't
+  compressed, or an error occurred while decompressing the section
+  date NULL is returned and elf_err is set.
+
+  When type is ELF_ZSCN_T_GNU or ELF_ZSCN_T_ELF ch_type must be a
+  valid ELFCOMPRESS algorithm.  Currently the only valid value is
+  ELFCOMPRESS_ZLIB.  If the section wasn't compressed yet then the
+  Elf_Data is converted to the raw format of the Elf image and
+  compressed using the given algorithm.  The correct compression
+  format header will be added at the start of the new raw data for the
+  section.  The returned section header will have an updated sh_size,
+  sh_addralign and if type was ELF_ZSCN_T_ELF sh_flags will have
+  SHF_COMPRESSED set. sh_entsize isn't changed.  If the section data
+  was already compressed, or an unknown compression type or algorithm
+  was given or if an error occurred while compressing NULL is returned
+  and elf_err is set.
+
+  Too switch between GNU and ELF compression types or to use another
+  compression algorithm one has to uncompress the section first and
+  then compress using the other type/algorithm.
+
+  All previous returned Elf_Data buffers are invalidated by this call
+  and should no longer be accessed.
+
+  Note that although this changes the header and data returned it
+  doesn't mark the section as dirty.  To keep the changes when calling
+  elf_update the section has to be flagged ELF_F_DIRTY.  */
+extern Elf32_Shdr *elf32_zscn_compress (Elf_Scn *scn, int type, int ch_type);
+extern Elf64_Shdr *elf64_zscn_compress (Elf_Scn *scn, int type, int ch_type);
+
 /* Set or clear flags for ELF file.  */
 extern unsigned int elf_flagelf (Elf *__elf, Elf_Cmd __cmd,
 				 unsigned int __flags);
@@ -311,8 +345,11 @@ extern unsigned int elf_flagshdr (Elf_Scn *__scn, Elf_Cmd __cmd,
 				  unsigned int __flags);
 
 
-/* Get data from section while translating from file representation
-   to memory representation.  */
+/* Get data from section while translating from file representation to
+   memory representation.  The Elf_Data d_type is set based on the
+   section type if known.  Otherwise d_type is set to ELF_T_BYTE.  If
+   the section contains compressed data d_type is also set to
+   ELF_T_BYTE.  */
 extern Elf_Data *elf_getdata (Elf_Scn *__scn, Elf_Data *__data);
 
 /* Get uninterpreted section content.  */

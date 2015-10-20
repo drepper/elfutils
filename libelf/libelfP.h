@@ -139,6 +139,10 @@ enum
   ELF_E_NO_PHDR,
   ELF_E_INVALID_OFFSET,
   ELF_E_NOT_COMPRESSED,
+  ELF_E_ALREADY_COMPRESSED,
+  ELF_E_UNKNOWN_COMPRESSION_TYPE,
+  ELF_E_COMPRESS_ERROR,
+  ELF_E_DECOMPRESS_ERROR,
   /* Keep this as the last entry.  */
   ELF_E_NUM
 };
@@ -238,6 +242,8 @@ struct Elf_Scn
 
   char *rawdata_base;		/* The unmodified data of the section.  */
   char *data_base;		/* The converted data of the section.  */
+
+  char *zdata_base;		/* The uncompressed data of the section.  */
 
   struct Elf_ScnList *list;	/* Pointer to the section list element the
 				   data is in.  */
@@ -446,6 +452,11 @@ extern const uint_fast8_t __libelf_type_aligns[EV_NUM - 1][ELFCLASSNUM - 1][ELF_
 #else
 # define __libelf_type_align(class, type)	1
 #endif
+
+/* Given an Elf handle and a section type returns the Elf_Data d_type.
+   Should not be called when SHF_COMPRESSED is set, the d_type should
+   be ELF_T_BYTE.  */
+extern Elf_Type __libelf_data_type (Elf *elf, int sh_type) internal_function;
 
 /* The libelf API does not have such a function but it is still useful.
    Get the memory size for the given type.
