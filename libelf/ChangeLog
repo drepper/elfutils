@@ -1,3 +1,29 @@
+2015-10-21  Mark Wielaard  <mjw@redhat.com>
+
+	* Makefile.am (libelf_a_SOURCES): Add elf32_zscn_compress.c,
+	elf64_zscn_compress.c and gelf_zscn_compress.c.
+	* elf32_zscn_compress.c: New file.
+	* elf64_zscn_compress.c: Likewise.
+	* gelf_zscn_compress.c: Likewise.
+	* elf_end.c (elf_end): Free zdata_base.
+	* elf_error.c: Add ELF_E_ALREADY_COMPRESSED,
+	ELF_E_UNKNOWN_COMPRESSION_TYPE, ELF_E_COMPRESS_ERROR and
+	ELF_E_DECOMPRESS_ERROR.
+	* elf_data.c (__libelf_data_type): New internal function extracted
+	from convert_data.
+	(convert_data): Handle SHF_COMPRESSED.
+	* gelf.h:  Define gelf_zscn_compress.
+	* libelf.h: Define elf32_zscn_compress and elf64_zscn_compress.
+	* libelf.map (ELFUTILS_1.7): Add elf32_zscn_compress,
+	elf64_zscn_compress and gelf_zscn_compress.
+	* libelfP.h: Add ELF_E_ALREADY_COMPRESSED,
+	ELF_E_UNKNOWN_COMPRESSION_TYPE, ELF_E_COMPRESS_ERROR and
+	ELF_E_DECOMPRESS_ERROR. Define __libelf_data_type.
+	(__libelf_compress): New internal function definition.
+	(__libelf_decompress): Likewise.
+	(__libelf_reset_rawdata): Likewise.
+	(struct Elf_Scn): Add zdata_base.
+
 2015-10-16  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am (libelf_so_LDLIBS): Add -lz.

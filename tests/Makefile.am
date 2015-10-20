@@ -52,7 +52,8 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  backtrace-data backtrace-dwarf debuglink debugaltlink \
 		  buildid deleted deleted-lib.so aggregate_size vdsosyms \
 		  getsrc_die strptr newdata elfstrtab dwfl-proc-attach \
-		  elfshphehdr elfstrmerge dwelfgetchdr
+		  elfshphehdr elfstrmerge dwelfgetchdr \
+		  elfgetzdata elfputzdata
 
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -120,7 +121,8 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-readelf-dwz-multi.sh run-allfcts-multi.sh run-deleted.sh \
 	run-linkmap-cut.sh run-aggregate-size.sh vdsosyms run-readelf-A.sh \
 	run-getsrc-die.sh run-strptr.sh newdata elfstrtab dwfl-proc-attach \
-	elfshphehdr run-lfs-symbols.sh run-dwelfgetchdr.sh
+	elfshphehdr run-lfs-symbols.sh run-dwelfgetchdr.sh \
+	run-elfgetzdata.sh run-elfputzdata.sh
 
 if !BIARCH
 export ELFUTILS_DISABLE_BIARCH = 1
@@ -308,7 +310,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-lfs-symbols.sh lfs-symbols testfile-nolfs.bz2 \
 	     testfile-zgnu32.bz2 testfile-zgnu64.bz2 \
 	     testfile-zgabi32.bz2 testfile-zgabi64.bz2 \
-	     run-dwelfgetchdr.sh
+	     run-dwelfgetchdr.sh run-elfgetzdata.sh run-elfputzdata
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --error-exitcode=1 --run-libc-freeres=no'
@@ -458,6 +460,8 @@ dwfl_proc_attach_LDFLAGS = -pthread $(AM_LDFLAGS)
 elfshphehdr_LDADD =$(libelf)
 elfstrmerge_LDADD = $(libebl) $(libelf)
 dwelfgetchdr_LDADD = $(libelf) $(libdw)
+elfgetzdata_LDADD = $(libelf)
+elfputzdata_LDADD = $(libelf)
 
 if GCOV
 check: check-am coverage

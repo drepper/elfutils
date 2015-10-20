@@ -183,7 +183,6 @@ extern int gelf_update_phdr (Elf *__elf, int __ndx, GElf_Phdr *__src);
 /* Create new program header with PHNUM entries.  */
 extern unsigned long int gelf_newphdr (Elf *__elf, size_t __phnum);
 
-
 /* Convert data structure from the representation in the file represented
    by ELF to their memory representation.  */
 extern Elf_Data *gelf_xlatetom (Elf *__elf, Elf_Data *__dest,

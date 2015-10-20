@@ -88,7 +88,8 @@ libelf_a_SOURCES = elf_version.c elf_hash.c elf_error.c elf_fill.c \
 		   elf32_offscn.c elf64_offscn.c gelf_offscn.c \
 		   elf_getaroff.c \
 		   elf_gnu_hash.c \
-		   elf_scnshndx.c
+		   elf_scnshndx.c \
+		   elf_compress.c elf_compress_gnu.c
 
 libelf_pic_a_SOURCES =
 am_libelf_pic_a_OBJECTS = $(libelf_a_SOURCES:.c=.os)
