@@ -114,7 +114,7 @@ static const struct argp_option options[] =
   { "wide", 'W', NULL, 0,
     N_("Ignored for compatibility (lines always wide)"), 0 },
   { "decompress", 'z', NULL, 0,
-    N_("Show compression information for compressed sections (when used with -S)."), 0 },
+    N_("Show compression information for compressed sections (when used with -S); decompress section before dumping data (when used with -p or -x)"), 0 },
   { NULL, 0, NULL, 0, NULL, 0 }
 };
 
@@ -9456,16 +9456,34 @@ dump_data_section (Elf_Scn *scn, const GElf_Shdr *shdr, const char *name)
 	    elf_ndxscn (scn), name);
   else
     {
+      if (print_decompress)
+	{
+	  /* We try to decompress the section, but keep the old shdr around
+	     so we can show both the original shdr size and the uncompressed
+	     data size.   */
+	  if ((shdr->sh_flags & SHF_COMPRESSED) != 0)
+	    elf_compress (scn, 0);
+	  else if (strncmp (name, ".zdebug", strlen (".zdebug")) == 0)
+	    elf_compress_gnu (scn, 0);
+	}
+
       Elf_Data *data = elf_rawdata (scn, NULL);
       if (data == NULL)
 	error (0, 0, gettext ("cannot get data for section [%zu] '%s': %s"),
 	       elf_ndxscn (scn), name, elf_errmsg (-1));
       else
 	{
-	  printf (gettext ("\nHex dump of section [%zu] '%s', %" PRIu64
-			   " bytes at offset %#0" PRIx64 ":\n"),
-		  elf_ndxscn (scn), name,
-		  shdr->sh_size, shdr->sh_offset);
+	  if (data->d_size == shdr->sh_size)
+	    printf (gettext ("\nHex dump of section [%zu] '%s', %" PRIu64
+			     " bytes at offset %#0" PRIx64 ":\n"),
+		    elf_ndxscn (scn), name,
+		    shdr->sh_size, shdr->sh_offset);
+	  else
+	    printf (gettext ("\nHex dump of section [%zu] '%s', %" PRIu64
+			     " bytes (%zd uncompressed) at offset %#0"
+			     PRIx64 ":\n"),
+		    elf_ndxscn (scn), name,
+		    shdr->sh_size, data->d_size, shdr->sh_offset);
 	  hex_dump (data->d_buf, data->d_size);
 	}
     }
@@ -9479,16 +9497,34 @@ print_string_section (Elf_Scn *scn, const GElf_Shdr *shdr, const char *name)
 	    elf_ndxscn (scn), name);
   else
     {
+      if (print_decompress)
+	{
+	  /* We try to decompress the section, but keep the old shdr around
+	     so we can show both the original shdr size and the uncompressed
+	     data size.  */
+	  if ((shdr->sh_flags & SHF_COMPRESSED) != 0)
+	    elf_compress (scn, 0);
+	  else if (strncmp (name, ".zdebug", strlen (".zdebug")) == 0)
+	    elf_compress_gnu (scn, 0);
+	}
+
       Elf_Data *data = elf_rawdata (scn, NULL);
       if (data == NULL)
 	error (0, 0, gettext ("cannot get data for section [%zu] '%s': %s"),
 	       elf_ndxscn (scn), name, elf_errmsg (-1));
       else
 	{
-	  printf (gettext ("\nString section [%zu] '%s' contains %" PRIu64
-			   " bytes at offset %#0" PRIx64 ":\n"),
-		  elf_ndxscn (scn), name,
-		  shdr->sh_size, shdr->sh_offset);
+	  if (data->d_size == shdr->sh_size)
+	    printf (gettext ("\nString section [%zu] '%s' contains %" PRIu64
+			     " bytes at offset %#0" PRIx64 ":\n"),
+		    elf_ndxscn (scn), name,
+		    shdr->sh_size, shdr->sh_offset);
+	  else
+	    printf (gettext ("\nString section [%zu] '%s' contains %" PRIu64
+			     " bytes (%zd uncompressed) at offset %#0"
+			     PRIx64 ":\n"),
+		    elf_ndxscn (scn), name,
+		    shdr->sh_size, data->d_size, shdr->sh_offset);
 
 	  const char *start = data->d_buf;
 	  const char *const limit = start + data->d_size;

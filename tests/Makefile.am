@@ -117,7 +117,7 @@ TESTS = run-arextract.sh run-arsymtest.sh newfile test-nlist \
 	run-backtrace-core-s390x.sh run-backtrace-core-s390.sh \
 	run-backtrace-core-aarch64.sh \
 	run-backtrace-demangle.sh run-stack-d-test.sh run-stack-i-test.sh \
-	run-stack-demangled-test.sh \
+	run-stack-demangled-test.sh run-readelf-zx.sh run-readelf-zp.sh \
 	run-readelf-dwz-multi.sh run-allfcts-multi.sh run-deleted.sh \
 	run-linkmap-cut.sh run-aggregate-size.sh vdsosyms run-readelf-A.sh \
 	run-getsrc-die.sh run-strptr.sh newdata elfstrtab dwfl-proc-attach \
@@ -298,6 +298,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh \
 	     run-stack-demangled-test.sh \
 	     testfiledwarfinlines.bz2 testfiledwarfinlines.core.bz2 \
 	     run-readelf-zdebug.sh testfile-debug.bz2 testfile-zdebug.bz2 \
+	     run-readelf-zx.sh run-readelf-zp.sh \
 	     run-deleted.sh run-linkmap-cut.sh linkmap-cut-lib.so.bz2 \
 	     linkmap-cut.bz2 linkmap-cut.core.bz2 \
 	     run-aggregate-size.sh testfile-sizes1.o.bz2 testfile-sizes2.o.bz2 \
