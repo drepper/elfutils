@@ -1,5 +1,5 @@
 /* Interfaces for libdwelf. DWARF ELF Low-level Functions.
-   Copyright (C) 2014 Red Hat, Inc.
+   Copyright (C) 2014, 2015 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -64,6 +64,22 @@ extern ssize_t dwelf_dwarf_gnu_debugaltlink (Dwarf *dwarf,
    build ID is returned.  Returns 0 if the ELF lacks a NT_GNU_BUILD_ID
    note.  Returns -1 in case of malformed data or other errors.  */
 extern ssize_t dwelf_elf_gnu_build_id (Elf *elf, const void **build_idp);
+
+/* Can represent either an Elf32_Chdr or Elf64_Chdr.  */
+typedef Elf64_Chdr DWElf_Chdr;
+
+/* Puts the compression header of a section into DEST and returns it.
+   Returns NULL if scn is NULL, or the section isn't compressed
+   (doesn't have SHF_COMPRESSED set).  If an error occurs NULL is
+   returned and elf_errno is set.  */
+extern DWElf_Chdr *dwelf_scn_getchdr (Elf_Scn *scn, DWElf_Chdr *dest);
+
+  /* Returns the size of the uncompressed data of a GNU compressed
+     section.  The section name should start with .zdebug (but this
+     isn't checked by this function).  If the section isn't compressed
+     (the section data doesn't start with ZLIB) -1 is returned. If an
+     error occured -1 is returned and elf_errno is set.  */
+extern ssize_t dwelf_scn_gnu_compressed_size (Elf_Scn *scn);
 
 #ifdef __cplusplus
 }

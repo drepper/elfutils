@@ -1,3 +1,17 @@
+2015-10-28  Mark Wielaard  <mjw@redhat.com>
+
+	* dwelfgetchdr.c: New file.
+	* run-dwelfgetchdr.sh: New test.
+	* testfile-zgnu32.bz2: New testfile.
+	* testfile-zgnu64.bz2: Likewise.
+	* testfile-zgabi32.bz2: Likewise.
+	* testfile-zgabi64.bz2: Likewise.
+	* Makefile.am (check_PROGRAMS): Add dwelfgetchdr.
+	(TESTS): Add run-dwelfgetchdr.sh.
+	(EXTRA_DIST): Add run-dwelfgetchdr.sh, testfile-zgnu32.bz2,
+	testfile-zgnu64.bz2, testfile-zgabi32.bz2 and testfile-zgabi64.bz2.
+	(dwelfgetchdr_LDADD): New variable.
+
 2015-10-16  Mark Wielaard  <mjw@redhat.com>
 
 	* Makefile.am [BUILD_STATIC] (libdw): Add -lz.
