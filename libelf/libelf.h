@@ -274,6 +274,37 @@ extern Elf64_Shdr *elf64_getshdr (Elf_Scn *__scn);
 extern Elf32_Chdr *elf32_getchdr (Elf_Scn *__scn);
 extern Elf64_Chdr *elf64_getchdr (Elf_Scn *__scn);
 
+/* Compress or decompress the data of a section and adjust the section
+   header.
+
+   elf_compress works by setting or clearing the SHF_COMPRESS flag
+   from the section Shdr and will encode or decode a Elf32_Chdr or
+   Elf64_Chdr at the start of the section data.  elf_compress_gnu will
+   encode or decode any section, but is traditionally only used for
+   sections that have a name starting with a ".debug" when
+   uncompressed or ".zdebug" when compressed and stores just the
+   uncompressed size.  The GNU compression method is deprecated and
+   should only be used for legacy support.
+
+   elf_compress takes a compression type that should be either zero to
+   decompress or an ELFCOMPRESS algorithm to use for compression.
+   Currently only ELFCOMPRESS_ZLIB is supported.  elf_compress_gnu
+   will compress in the traditional GNU compression format when
+   compress is one and decompress the section data when compress is
+   zero.
+
+   On successful compression or decompression the function returns
+   zero.  Otherwise -1 is returned and elf_errno is set.
+
+   All previous returned Shdrs and Elf_Data buffers are invalidated by
+   this call and should no longer be accessed.
+
+   Note that although this changes the header and data returned it
+   doesn't mark the section as dirty.  To keep the changes when
+   calling elf_update the section has to be flagged ELF_F_DIRTY.  */
+extern int elf_compress (Elf_Scn *scn, int type);
+extern int elf_compress_gnu (Elf_Scn *scn, int compress);
+
 /* Set or clear flags for ELF file.  */
 extern unsigned int elf_flagelf (Elf *__elf, Elf_Cmd __cmd,
 				 unsigned int __flags);
@@ -294,8 +325,11 @@ extern unsigned int elf_flagshdr (Elf_Scn *__scn, Elf_Cmd __cmd,
 				  unsigned int __flags);
 
 
-/* Get data from section while translating from file representation
-   to memory representation.  */
+/* Get data from section while translating from file representation to
+   memory representation.  The Elf_Data d_type is set based on the
+   section type if known.  Otherwise d_type is set to ELF_T_BYTE.  If
+   the section contains compressed data then d_type is always set to
+   ELF_T_CHDR.  */
 extern Elf_Data *elf_getdata (Elf_Scn *__scn, Elf_Data *__data);
 
 /* Get uninterpreted section content.  */
