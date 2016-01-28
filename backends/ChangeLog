@@ -1,3 +1,8 @@
+2015-12-28  Mark Wielaard  <mjw@redhat.com>
+
+	* i386_reloc.def: Add GOT32X.
+	* x86_64_reloc.def: Add GOTPCRELX and REX_GOTPCRELX.
+
 2015-12-08  Jose E. Marchesi  <jose.marchesi@oracle.com>
 
 	* sparc_init.c (sparc_init): Hook sparc_set_initial_registers_tid.
