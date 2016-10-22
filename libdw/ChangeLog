@@ -1,5 +1,9 @@
 2016-10-22  Mark Wielaard  <mjw@redhat.com>
 
+	* dwarf.h: Add DW_CC_pass_by_reference and DW_CC_pass_by_reference.
+
+2016-10-22  Mark Wielaard  <mjw@redhat.com>
+
 	* dwarf.h: Correct spelling of DW_LANG_PLI. Add compatibility define.
 	* dwarf_aggregate_size.c (array_size): Use correct spelling of
 	DW_LANG_PLI.
