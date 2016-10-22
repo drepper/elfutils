@@ -1,4 +1,10 @@
-2015-10-11  Akihiko Odaki  <akihiko.odaki.4i@stu.hosei.ac.jp>
+2016-10-22  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Correct spelling of DW_LANG_PLI. Add compatibility define.
+	* dwarf_aggregate_size.c (array_size): Use correct spelling of
+	DW_LANG_PLI.
+
+2016-10-11  Akihiko Odaki  <akihiko.odaki.4i@stu.hosei.ac.jp>
 
 	* dwarf_getpubnames.c: Remove sys/param.h include, add system.h.
 	* libdw_alloc.c: Likewise.
