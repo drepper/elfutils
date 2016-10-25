@@ -93,9 +93,14 @@ enum
     DW_TAG_type_unit = 0x41,
     DW_TAG_rvalue_reference_type = 0x42,
     DW_TAG_template_alias = 0x43,
-
-    /* DWARF 5.  */
+    DW_TAG_coarray_type = 0x44,
+    DW_TAG_generic_subrange = 0x45,
+    DW_TAG_dynamic_type = 0x46,
     DW_TAG_atomic_type = 0x47,
+    DW_TAG_call_site = 0x48,
+    DW_TAG_call_site_parameter = 0x49,
+    DW_TAG_skeleton_unit = 0x4a,
+    DW_TAG_immutable_type = 0x4b,
 
     DW_TAG_lo_user = 0x4080,
 
