@@ -1,3 +1,14 @@
+2016-10-27  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_default_lower_bound.c: New file.
+	* Makefile.am (libdw_a_SOURCES): Add dwarf_default_lower_bound.c.
+	* dwarf_aggregate_size.c (array_size): Use dwarf_default_lower_bound.
+	* dwarf_error.c (errmsgs): Add DWARF_E_UNKNOWN_LANGUAGE.
+	* libdw.h: Add dwarf_default_lower_bound.
+	* libdw.map (ELFUTILS_0.168): New section.
+	* libdwP.h: Add DWARF_E_UNKNOWN_LANGUAGE and
+	dwarf_default_lower_bound INTDECL.
+
 2016-10-22  Mark Wielaard  <mjw@redhat.com>
 
 	* dwarf.h: Add DW_LANG_OpenCL, DW_LANG_Modula3,

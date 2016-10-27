@@ -1,4 +1,11 @@
-2015-10-11  Akihiko Odaki  <akihiko.odaki.4i@stu.hosei.ac.jp>
+2016-10-27  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf_default_lower_bound.c: New test.
+	* Makefile.am (check_PROGRAMS): Add dwarf_default_lower_bound.
+	(TESTS): Likewise.
+	(dwarf_default_lower_bound_LDADD): New variable.
+
+2016-10-11  Akihiko Odaki  <akihiko.odaki.4i@stu.hosei.ac.jp>
 
 	* arextract.c: Remove sys/param.h include, add system.h include.
 

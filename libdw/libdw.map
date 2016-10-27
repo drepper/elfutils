@@ -338,3 +338,8 @@ ELFUTILS_0.167 {
     dwelf_strent_str;
     dwelf_strtab_free;
 } ELFUTILS_0.165;
+
+ELFUTILS_0.168 {
+  global:
+    dwarf_default_lower_bound;
+} ELFUTILS_0.167;
