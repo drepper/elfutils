@@ -1,3 +1,10 @@
+2016-10-28  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h: Add DW_MACRO_* and compat defines for DW_MACRO_GNU_*.
+	* dwarf_getmacros.c (get_table_for_offset): Accept either version
+	4 or 5. Use DW_MACRO names instead of DW_MACRO_GNU names.
+	(read_macros): Use table version for fake_cu.
+
 2016-10-25  Mark Wielaard  <mjw@redhat.com>
 
 	* dwarf.h: Add DW_TAG_coarray_type, DW_TAG_generic_subrange,

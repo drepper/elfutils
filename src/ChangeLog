@@ -1,4 +1,11 @@
-2015-10-11  Akihiko Odaki  <akihiko.odaki.4i@stu.hosei.ac.jp>
+2016-10-28  Mark Wielaard  <mjw@redhat.com>
+
+	* readelf.c (print_debug_macro_section): Accept either version 4 or
+	version 5. Use DW_MACRO names instead of DW_MACRO_GNU names. Add
+	minimal support for DW_MACRO_define_sup, DW_MACRO_undef_sup,
+	DW_MACRO_import_sup, DW_MACRO_define_strx and DW_MACRO_undef_strx.
+
+2016-10-11  Akihiko Odaki  <akihiko.odaki.4i@stu.hosei.ac.jp>
 
 	* arlib.c: Remove system.h include, add libeu.h include.
 	* arlib2.c: Remove sys/param.h include.
