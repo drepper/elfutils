@@ -1,3 +1,10 @@
+2017-02-13  Ulf Hermann  <ulf.hermann@qt.io>
+
+	* Makefile.am: Add test for unwinding with frame pointers on aarch64
+	* backtrace.aarch64.fp.core.bz2: New file
+	* backtrace.aarch64.fp.exec.bz2: New file
+	* run-backtrace-fp-core-aarch64.sh: New file
+
 2017-04-06  Mark Wielaard  <mark@klomp.org>
 
 	* run-backtrace-fp-core-i386.sh: New test.
