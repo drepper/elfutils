@@ -32,7 +32,10 @@ noinst_LIBRARIES = libar.a
 
 libar_a_SOURCES = arlib.c arlib2.c arlib-argp.c
 
-EXTRA_DIST = arlib.h debugpred.h
+# XXX dwarf-opcodes and dwarfstrings are only used in dwarflint
+EXTRA_DIST = arlib.h debugpred.h \
+	dwarf-opcodes.h dwarfstrings.c dwarfstrings.h
+
 
 bin_SCRIPTS = make-debug-archive
 EXTRA_DIST += make-debug-archive.in
