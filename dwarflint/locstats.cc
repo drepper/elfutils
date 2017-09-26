@@ -29,6 +29,7 @@
 
 #include <sstream>
 #include <bitset>
+#include <string>
 #include <unistd.h>
 
 using elfutils::dwarf;
@@ -50,6 +51,11 @@ global_opt<string_option> opt_tabulation_rule
 or special value 0.0 indicating cases with no coverage whatsoever \
 (i.e. not those that happen to round to 0%).",
    "start[:step][,...]", "tabulate");
+
+global_opt<string_option> opt_var_group
+  ("Report the summary for specific sub-category of variables, \
+group may be formal_parameters (function arguments) or variables (local variables).",
+ "group", "sub-category");
 
 // where.c needs to know how to format certain wheres.  The module
 // doesn't know that we don't use these :)
@@ -295,6 +301,13 @@ is_inlined (dwarf::debug_info_entry const &die)
   return false;
 }
 
+typedef struct var_category
+{
+  std::string name;
+  bool local_var_in;
+  bool func_args_in;
+}Var_category;
+
 void
 process(Dwarf *c_dw, dwarf const &dw)
 {
@@ -309,6 +322,24 @@ process(Dwarf *c_dw, dwarf const &dw)
 		       ? opt_tabulation_rule.value () : "10:10");
   die_type_matcher ignore (opt_ignore.seen () ? opt_ignore.value () : "");
   die_type_matcher dump (opt_dump.seen () ? opt_dump.value () : "");
+
+  Var_category vars;
+  vars.local_var_in = false;
+  vars.func_args_in = false;
+  vars.name = std::string (opt_var_group.seen() ?  opt_var_group.value() : "");
+
+  if (vars.name.compare("") != 0)
+  {
+	if (vars.name.compare("formal_parameters") == 0)
+		 // We are interested only in formal parameters
+		 vars.func_args_in = true;
+	else if (vars.name.compare("variables") == 0)
+		 // We are interested only in variables
+		 vars.local_var_in = true;
+	else
+		 std::cerr << "Ignore unknown variables category" << std::endl;
+  }
+
   std::bitset<dt__count> interested = ignore | dump;
   bool interested_mutability
     = interested.test (dt_mutable) || interested.test (dt_immutable);
@@ -319,10 +350,24 @@ process(Dwarf *c_dw, dwarf const &dw)
       std::bitset<dt__count> die_type;
       dwarf::debug_info_entry const &die = *it;
 
-      // We are interested in variables and formal parameters
       bool is_formal_parameter = die.tag () == DW_TAG_formal_parameter;
-      if (!is_formal_parameter && die.tag () != DW_TAG_variable)
-	continue;
+      bool is_local_var = die.tag () == DW_TAG_variable;
+
+      // We are interested in variables and formal parameters,
+      // but if --sub-category option is set we choose one
+      // of these.
+      if (vars.func_args_in || vars.local_var_in)
+      {
+		 if (vars.func_args_in && !is_formal_parameter)
+			continue;
+		 else if (vars.local_var_in && !is_local_var)
+			continue;
+      }
+      else
+      {
+		 if (!is_formal_parameter && !is_local_var)
+			continue;
+      }
 
       dwarf::debug_info_entry::attributes_type const &attrs
 	= die.attributes ();
