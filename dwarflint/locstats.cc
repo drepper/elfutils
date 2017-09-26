@@ -622,7 +622,8 @@ process(Dwarf *c_dw, dwarf const &dw)
   std::cout << "cov%\tsamples\tcumul" << std::endl;
   for (int i = cov_00; i <= 100; ++i)
     {
-      cumulative += tally.find (i)->second;
+      if (tally.find (i) != tally.end())
+	    cumulative += tally.find (i)->second;
       if (tabrules.match (i))
 	{
 	  long int samples = cumulative - last;
