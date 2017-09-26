@@ -513,9 +513,9 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 		    handled = false;
 		    switch (extended)
 		      {
-#define ONE_KNOWN_DW_LNE(NAME, CODE) case CODE: break;
-			ALL_KNOWN_DW_LNE
-#undef ONE_KNOWN_DW_LNE
+#define DWARF_ONE_KNOWN_DW_LNE(NAME, CODE) case CODE: break;
+			DWARF_ALL_KNOWN_DW_LNE
+#undef DWARF_ONE_KNOWN_DW_LNE
 		      default:
 			/* No we don't, emit a warning.  */
 			wr_message (op_where, mc_impact_2 | mc_line)
@@ -601,9 +601,9 @@ check_debug_line::check_debug_line (checkstack &stack, dwarflint &lint)
 
 	      switch (opcode)
 		{
-#define ONE_KNOWN_DW_LNS(NAME, CODE) case CODE: break;
-		  ALL_KNOWN_DW_LNS
-#undef ONE_KNOWN_DW_LNS
+#define DWARF_ONE_KNOWN_DW_LNS(NAME, CODE) case CODE: break;
+		  DWARF_ALL_KNOWN_DW_LNS
+#undef DWARF_ONE_KNOWN_DW_LNS
 
 		default:
 		  if (opcode < opcode_base)

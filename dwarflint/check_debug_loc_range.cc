@@ -673,7 +673,7 @@ namespace
 	   the CU chain.  So just take the address size of the first CU in
 	   chain.  */
 	struct hole_info hi = {
-	  sec->id, cat, ctx.data->d_buf, cu_chain->head->address_size
+	  sec->id, cat, ctx.data->d_buf, (unsigned)cu_chain->head->address_size
 	};
 	coverage.find_holes (0, ctx.data->d_size, found_hole, &hi);
 

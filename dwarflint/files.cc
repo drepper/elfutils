@@ -28,6 +28,7 @@
 #include <cstring>
 #include <cerrno>
 #include <stdexcept>
+#include <unistd.h>
 
 namespace
 {

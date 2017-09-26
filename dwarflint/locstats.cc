@@ -29,6 +29,7 @@
 
 #include <sstream>
 #include <bitset>
+#include <unistd.h>
 
 using elfutils::dwarf;
 

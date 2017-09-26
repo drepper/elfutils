@@ -30,6 +30,7 @@
 #include <cstring>
 #include <cerrno>
 #include <stdexcept>
+#include <unistd.h>
 
 std::ostream &
 operator << (std::ostream &o, checkstack const &stack)

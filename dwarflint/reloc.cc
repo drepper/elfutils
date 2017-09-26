@@ -497,7 +497,7 @@ read_rel (struct elf_file *file,
 	  if (value != 0)
 	    wr_message (mc_impact_2 | mc_reloc, &where,
 			": SHR_RELA relocates a place with non-zero value (addend=%#"
-			PRIx64", value=%#"PRIx64").\n", rela->r_addend, value);
+			 PRIx64 ", value=%#" PRIx64 ").\n", rela->r_addend, value);
 	  cur->addend = rela->r_addend;
 	}
       else

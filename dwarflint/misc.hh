@@ -23,7 +23,7 @@
 
 extern "C"
 {
-#include "../lib/system.h"
+#include "../lib/libeu.h"
 }
 
 #define REALLOC(A, BUF)					\
