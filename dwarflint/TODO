@@ -1,0 +1,161 @@
+-*-org-*-
+* Generic DWARF support
+  We now have dwarf_version, form and attribute classes.  These can be
+  (and are) set up to support DWARF 2, 3 and 4 separately, as well as
+  the MIPS extension (in a kinda-sorta way, since I've got no binaries
+  to check this).
+
+  But there's still some code around that depends on per-form/per-attr
+  switches, namely check_debug_info.cc::reloc_target and the
+  reference-checking code in the same file.  Maybe the way to do this
+  is to merge all the cl_*ptr into one class cl_pointer and have
+  dwarflint know that the attribute determines what it points to.
+  (Except that some forms determine the target themselves.)  Then
+  declare at relevant attributes the pointer target (a section_id), if
+  any.  I.e. type the forms more richly.
+
+  So that's about the FORMs and ATs.  But there's more, e.g. DW_OP_
+  support.
+
+* low-level checks
+** DW_TAG_type_unit
+   For each type defined in a compilation unit, a contribution may be
+   made to the .debug_types section of the object file. Each such
+   contribution consists of a type unit header (see Section 7.5.1.2)
+   followed by a DW_TAG_type_unit entry, together with its children.
+
+* high-level checks
+
+** DW_OP_GNU_implicit_pointer
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00869.html
+
+** const values vs. addresses
+   http://www.mail-archive.com/elfutils-devel@lists.fedorahosted.org/msg00816.html
+
+** dwarflint --stats
+*** mutability probably needs to take into account DW_OP_call*
+   https://fedorahosted.org/pipermail/elfutils-devel/2010-October/001628.html
+
+** expected trees/attributes
+   This is about the check_expected_trees check.  All attributes are
+   marked optional. In future, we need to go through the standard, or
+   employ some other source of knowledge, and adjust the optionality
+   level.
+
+   Also the approach we are taking now is no good.  It ignores changes
+   in DWARF revisions and doesn't tackle the expected children case at
+   all.  It seems that what we need is some sort of XPath-like
+   approach to matching sub-graphs.  Each time one of the queries
+   triggers, a check would be done for expected "neighborhood" of the
+   node.  Such a query might reach far from the original node,
+   spanning layers of parent/child or die/neighbor relationship.
+
+*** DW_AT_byte_size at DW_TAG_pointer_type
+
+    That's from my conversation with Mark:
+
+<mjw> machatap: I was surprised to see all these DW_TAG_pointer_type and
+      DW_TAG_reference_type having an explicit DW_AT_byte_size
+							     [2010-09-06 16:59]
+<mjw> machatap: I see that you added the following note in dwarflint:
+							     [2010-09-06 17:00]
+<mjw>     .optional (DW_AT_byte_size) // XXX added to reflect reality
+<mjw> Any idea why reality is like that?
+<machatap> mjw: yeah, the XXX meaning "we need to look into that"
+<machatap> I'm afraid I added it there during the mass checks without also
+	   putting it on the wiki or somewhere
+<mjw> OK, so you also think that is strange. good. I might not be crazy after
+      all :) [2010-09-06 17:01]
+<machatap> well, it's certainly not per the standard
+
+** DW_AT_location missing vs. optimized-out check
+   a variable/formal_parameter DIE should have some
+   location/declaration/const_value attr
+   https://fedorahosted.org/pipermail/elfutils-devel/2009-March/000179.html
+
+** DW_FORM_* basic sanity checks on attribute values
+   - cache min/max aggregate size per abbrev
+   - when variable-size, check .debug_info data sanity
+
+   This is taken from wiki where it was put way back from some e-mail.
+   I don't even remember what that means anymore but perhaps that's to
+   checks stuff like -1s encoded as signed 0xffffffff etc.
+
+** .debug_frame/.eh_frame (CFI)
+   This wasn't even started yet.
+
+** .debug_loc opcodes
+*** DW_OP_xderef, DW_OP_xderef_size
+    probably flag as unsupported.
+*** DW_OP_call_{2,4}
+    check the operand matches DIE (put off till later)
+*** DW_OP_call_ref
+    this deals with inter-DSO relationships, dwarflint in its current
+    one-file mode can't handle it. Put off till later
+*** DW_OP_nop
+    are these even useful?
+
+* messages
+
+** streams vs fmtstring
+   We now use C++ streams in most places (there are remnants of C
+   printfs in places).  But streams suck for localization.  Personally
+   I'm not too enthusiastic about non-English bugreports, but rest of
+   elfutils is localized, and dwarflint should be too.  I'm afraid
+   that means moving back to some sort of formatting strings.
+
+** filtering
+
+   The current way of filtering is lacking.  We want to filter
+   messages based on:
+   - severity (low, medium, high)
+   - category (e.g. unresolved reference)
+   - area (e.g. .debug_info)
+   - check in question (e.g. check_debug_info)
+   - the message in question (aka I don't want to see this particular
+     message at all)
+
+   What's now there basically works, but it's not configurable from
+   command line, and it's awkward to use.  Plus it stops about halfway
+   through, the bottom part of the stack needs to be implemented via
+   grepping, and that turns our messages into API.
+
+   It seems there are at least two trees of abstractness (area, check
+   and message in question form one, category potentially another,
+   albeit perhaps degenerated) that we may want to filter
+   independently.  E.g. I might want to filter out all
+   .debug_info/sev<1, or I might want to simply filter out sev<1 right
+   away.
+
+* quirks
+
+  Some compilers produce files broken in various ways.  Not to be
+  swamped with irrelevant known-broken stuff, we'd like dwarflint to
+  know about these "quirks" and be able to suppress them.  I expect
+  there to be frequent additions to this "quirks table", so it should
+  be fairly easy to extend this.
+
+  (Maybe quirk is simply a dwarf_version.  After loading the CU DIE,
+  dwarflint would consult the quirk table and construct new
+  dwarf_version with appropriate exceptions.)
+
+  The current option --tolerant will go away when this is implemented.
+  I don't think it even works anyway.
+
+* multi-file mode
+
+  While dwarflint can check several files (meaning you can put several
+  file names to a command line), it treats each of them in isolation.
+  In theory these files can link to each other and form graphs, and
+  dwarflint should be able to check the whole graph.
+
+* failure tolerance
+
+  We'd like dwarflint to do things like checking each CU the abbrev
+  table of which I was able to read.  In fact dwarflint should check
+  even CUs that it has at least partial information about.  It could
+  bail out as soon as it hits invalid abbrev, or abbrev with unknown
+  attribute.  Even then it might give up its goal of validating
+  sibling references, and use them blindly to skip unknown portions.
+  Current check granularity makes this very awkward to express, I'll
+  have to rework how checks are defined and executed.
