@@ -344,3 +344,9 @@ ELFUTILS_0.170 {
     dwarf_default_lower_bound;
     dwarf_line_file;
 } ELFUTILS_0.167;
+
+# This will go away when we figure out the C++ exports.
+ELFUTILS_PRIVATE_TMP {
+  global:
+    __libdw_formptr;
+};
