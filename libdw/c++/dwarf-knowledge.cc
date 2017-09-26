@@ -121,9 +121,11 @@ expected_value_space (int attr, int tag)
       return VS(rangelistptr);
 
     case DW_AT_low_pc:
-    case DW_AT_high_pc:
     case DW_AT_entry_pc:
       return VS(address);
+
+    case DW_AT_high_pc:
+      return VS(address) | VS(constant);
 
     case DW_AT_discr:
       return VS(reference);
