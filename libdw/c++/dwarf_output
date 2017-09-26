@@ -1,0 +1,2912 @@
+/* elfutils::dwarf_output -- DWARF file generation in -*- C++ -*-
+   Copyright (C) 2009, 2010 Red Hat, Inc.
+   This file is part of elfutils.
+
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of either
+
+     * the GNU Lesser General Public License as published by the Free
+       Software Foundation; either version 3 of the License, or (at
+       your option) any later version
+
+   or
+
+     * the GNU General Public License as published by the Free
+       Software Foundation; either version 2 of the License, or (at
+       your option) any later version
+
+   or both in parallel, as here.
+
+   elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received copies of the GNU General Public License and
+   the GNU Lesser General Public License along with this program.  If
+   not, see <http://www.gnu.org/licenses/>.  */
+
+#ifndef _ELFUTILS_DWARF_OUTPUT
+#define _ELFUTILS_DWARF_OUTPUT	1
+
+#include "dwarf"
+#include "dwarf_edit"
+#include "dwarf_comparator"
+#include <algorithm>
+#include <functional>
+#include <iterator>
+#include <vector>
+#include <stack>
+#include <queue>
+#include <bitset>
+#include <set>
+#include <tr1/unordered_set>
+
+/* Read the comments for elfutils::dwarf first.
+
+   The elfutils::dwarf_output class is template-compatible with the logical
+   containers described in elfutils::dwarf and elfutils::dwarf_edit.
+
+   The dwarf_output representation of the DWARF data is immutable once
+   created.  The only way to create the object is by copy-construction
+   from another compatible object: dwarf, dwarf_edit, or dwarf_output.
+   Construction collects all the information necessary to generate the
+   formatted DWARF sections.  */
+
+namespace elfutils
+{
+  class dwarf_output_collector;
+
+  class dwarf_output
+  {
+  private:
+    friend class dwarf_output_collector;
+    friend class dwarf_data;
+    typedef dwarf_output me;
+
+  public:
+    typedef dwarf_data::source_file source_file;
+    typedef dwarf_data::line_entry<source_file> line_entry;
+    typedef dwarf_data::line_table<line_entry> line_table;
+    typedef dwarf_data::line_info_table<line_table> line_info_table;
+    typedef dwarf_data::dwarf_enum dwarf_enum;
+    typedef dwarf_data::range_list range_list;
+    typedef dwarf_data::location_attr location_attr;
+
+    class compile_units_type;
+    class debug_info_entry;
+    class attr_value;
+
+  protected:
+    static inline void never_copy ()
+    {
+      throw std::logic_error
+	("must copy-construct top-level dwarf_output object instead");
+    }
+
+    template<typename input> class copier; // Below.
+
+#if 0
+    /* An iterator adapter for use in iterator-based constructors.
+       collectify (iterator) yields an iterator on input where *i
+       constructs output::value_type (input::value_type v, collector).  */
+    template<typename input, typename output>
+    static inline typename subr::argifier<input, output,
+					  dwarf_output_collector &>::result_type
+    collectify (const typename input::const_iterator &in,
+		dwarf_output_collector &c)
+    {
+      return subr::argifier<input, output, dwarf_output_collector &> (c) (in);
+    }
+#endif
+
+    /* Every kind of value is made by calling into the copier, which
+       returns a const pointer into a value_set living in the collector.  */
+    struct value
+      : public dwarf_data::value<dwarf_output, false>
+    {
+      typedef const value_dispatch value_cell_type;
+
+      typedef dwarf_data::value<dwarf_output> data;
+
+      template<typename copier_type> struct maker;
+
+      template<typename arg_type>
+      static inline maker<arg_type> make (arg_type &arg)
+      {
+	return maker<arg_type> (arg);
+      }
+
+      struct value_reference;	// Defined below.
+    };
+
+    struct die_info;
+    typedef std::pair<const debug_info_entry, die_info> die_info_pair;
+
+  public:
+
+    class debug_info_entry
+    {
+      friend class dwarf_output;
+      friend class dwarf_output_collector;
+
+      __attribute__((used)) die_info_pair *info () const
+      {
+       return reinterpret_cast<die_info_pair *>
+         (const_cast<debug_info_entry *> (this));
+      }
+
+    public:
+      class attributes_type
+	: public dwarf_data::attributes_type<dwarf_output, value>
+      {
+	friend class dwarf_output;
+
+      private:
+	typedef dwarf_data::attributes_type<dwarf_output, value> _base;
+
+	size_t _m_hash;
+
+	inline attributes_type ()
+	  : _base (), _m_hash (0)
+	{}
+
+	struct same_attr : public std::equal_to<value_type>
+	{
+	  bool operator () (const value_type &a,
+			    const value_type &b) const
+	  {
+	    return a.first == b.first && a.second.is (b.second);
+	  }
+	};
+
+	inline void do_hash ()
+	{
+	  // Precompute our hash value based on our contents.
+	  for (iterator i = begin (); i != end (); ++i)
+	    subr::hash_combine (_m_hash, *i);
+	}
+
+	inline const _base &base () const
+	{
+	  return *this;
+	}
+
+      public:
+	template<typename iter>
+	inline attributes_type (const iter &from, const iter &to)
+	  : _base (from, to), _m_hash (0)
+	{
+	  do_hash ();
+	}
+
+	friend class subr::hashed_hasher<attributes_type>;
+	typedef subr::hashed_hasher<attributes_type> hasher;
+
+	template<typename input, typename arg_type>
+	inline attributes_type (const input &other, arg_type &c)
+	  : _base (other, c), _m_hash (0)
+	{
+	  do_hash ();
+	}
+
+	inline bool is (const attributes_type &these) const
+	{
+	  return (_m_hash == these._m_hash
+		  && size () == these.size ()
+		  && std::equal (begin (), end (), these.begin (),
+				 same_attr ()));
+	}
+      };
+
+      class children_type
+	: public std::vector<die_info_pair *>
+      {
+	friend class dwarf_output;
+	friend class dwarf_output_collector;
+
+      protected:
+	typedef std::vector<die_info_pair *> _base;
+
+	size_t _m_hash;
+
+	inline void set_hash ()
+	{
+	  _m_hash = 0;
+	  for (_base::iterator i = _base::begin (); i != _base::end (); ++i)
+	    subr::hash_combine (_m_hash, (uintptr_t) *i);
+	}
+
+        inline children_type () {}
+
+	inline const _base &info () const
+	{
+	  return *this;
+	}
+
+	struct deref
+	  : public std::unary_function<die_info_pair *,
+				       const debug_info_entry &>
+	{
+	  inline deref (...) {}
+	  inline const debug_info_entry &operator () (die_info_pair *) const;
+	};
+
+	template<typename circular>
+	inline void reify_children (die_info_pair *, bool, unsigned int &)
+	  const;
+
+      public:
+	template<typename iter>
+	inline children_type (const iter &first, const iter &last)
+	  : _base (first, last)
+	{
+	  set_hash ();
+	}
+
+	friend class subr::hashed_hasher<children_type>;
+	typedef subr::hashed_hasher<children_type> hasher;
+
+	typedef debug_info_entry value_type;
+	typedef debug_info_entry &reference;
+	typedef debug_info_entry &const_reference;
+	typedef debug_info_entry *pointer;
+	typedef debug_info_entry *const_pointer;
+
+	inline bool is (const children_type &these) const
+	{
+	  return (_m_hash == these._m_hash
+		  && size () == these.size ()
+		  && std::equal (_base::begin (), _base::end (),
+				 these._base::begin ()));
+	}
+
+	typedef subr::wrapped_input_iterator<
+	  _base, deref, const debug_info_entry> const_iterator;
+	typedef const_iterator iterator;
+
+	inline const_iterator begin () const
+	{
+	  return const_iterator (_base::begin (), subr::nothing ());
+	}
+
+	inline const_iterator end () const
+	{
+	  return const_iterator (_base::end (), subr::nothing ());
+	}
+      };
+
+      typedef children_type::iterator pointer;
+      typedef children_type::const_iterator const_pointer;
+
+    protected:
+      const children_type *_m_children;
+      const attributes_type *_m_attributes;
+      size_t _m_hash;
+      int _m_tag;
+
+      // This is can only be used by the children_type constructor,
+      // which immediately calls set.
+      inline debug_info_entry ()
+	: _m_children (NULL),
+	  _m_attributes (NULL),
+	  _m_hash (0),
+	  _m_tag (-1)
+      {}
+
+      inline debug_info_entry (int what,
+			       const children_type *childs,
+			       const attributes_type *attrs)
+	: _m_children (childs),
+	  _m_attributes (attrs),
+	  _m_tag (what)
+      {
+	set_hash ();
+      }
+
+      inline void set_hash ()
+      {
+	_m_hash = _m_tag;
+	subr::hash_combine (_m_hash, *_m_attributes);
+	subr::hash_combine (_m_hash, *_m_children);
+      }
+
+    public:
+      friend class subr::hashed_hasher<debug_info_entry>;
+      typedef subr::hashed_hasher<debug_info_entry> hasher;
+
+      inline bool is (const debug_info_entry &that) const
+      {
+	return (_m_hash == that._m_hash
+		&& _m_tag == that._m_tag
+		&& _m_attributes == that._m_attributes
+		&& _m_children == that._m_children);
+      }
+
+      inline std::string to_string () const;
+
+      inline int tag () const
+      {
+	return _m_tag;
+      }
+
+      inline bool has_children () const
+      {
+	return !_m_children->empty ();
+      }
+
+      inline const children_type &children () const
+      {
+	return *_m_children;
+      }
+
+      inline const attributes_type &attributes () const
+      {
+	return *_m_attributes;
+      }
+
+      template<typename die>
+      bool operator== (const die &other) const
+      {
+	return (other.tag () == tag ()
+		&& other.attributes () == attributes ()
+		&& other.children () == children ());
+      }
+      template<typename die>
+      bool operator!= (const die &other) const
+      {
+	return !(*this == other);
+      }
+
+      inline dwarf::debug_info_entry::identity_type identity () const
+      {
+	return (uintptr_t) this;
+      }
+
+      inline ::Dwarf_Off offset () const
+      {
+	return identity ();
+      }
+
+      inline ::Dwarf_Off cost () const
+      {
+	return 0;
+      }
+    };
+
+    struct value::value_reference
+      : public dwarf_data::value<dwarf_output, false>::value_reference
+    {
+      typedef dwarf_data::value<dwarf_output, false>::value_reference _base;
+
+      // Default constructor: reference to nowhere, invalid.
+      inline value_reference ()
+	: _base ()
+      {}
+
+      inline value_reference (const value_type &i, subr::nothing &dummy)
+	: _base (i, dummy)
+      {}
+
+      /* The hash of a value_reference is its referent's local hash,
+	 which only takes non-reference values into account.  This
+	 method is virtual for the circular_reference case, below.  */
+      inline size_t hash () const
+      {
+	struct die_info *info = get_die_info ();
+	return info->_m_reference_hash;
+      }
+
+      virtual die_info *get_die_info () const
+      {
+	return &ref->info ()->second;
+      }
+    };
+
+    class attr_value
+      : public dwarf_data::attr_value<dwarf_output, value>
+    {
+      friend class dwarf_output;
+
+    private:
+      typedef dwarf_data::attr_value<dwarf_output, value> _base;
+
+    public:
+      inline std::string to_string () const;
+
+      /* These constructors can only be used by the containers
+	 used in the collector.  The attributes_type map in an
+	 actual debug_info_entry object is always const.  */
+      inline attr_value ()
+	: _base ()
+      {}
+
+      inline attr_value (const attr_value &other)
+	: _base ()
+      {
+	_m_value = other._m_value;
+      }
+
+      /* Two identical values in fact share the same cell in the collector.
+	 So we can use simple pointer comparison here.  */
+      inline bool is (const attr_value &that) const
+      {
+	return _m_value == that._m_value;
+      }
+
+      // The is () test works only on a dwarf_output sharing the same collector.
+      inline bool operator== (const attr_value &other) const
+      {
+	return is (other) || _base::operator== (other);
+      }
+      inline bool operator!= (const attr_value &other) const
+      {
+	return !(*this == other);
+      }
+
+      /* We can use the _m_value pointer itself as a perfect hash,
+	 because all identical values share the same cell in the
+	 collector.  The exception to this is for references.  See
+	 value_reference::hash.  */
+      struct hasher : public std::unary_function<attr_value, size_t>
+      {
+	inline size_t operator () (const attr_value &v) const
+	{
+	  const value::value_reference *ref
+	    = dynamic_cast<const value::value_reference *> (v._m_value);
+	  return ref == NULL ? (uintptr_t) v._m_value : ref->hash ();
+	}
+      };
+    };
+
+    typedef debug_info_entry::attributes_type::value_type attribute;
+
+    typedef dwarf_data::compile_unit<dwarf_output> compile_unit;
+
+    /* Main container anchoring all the output.
+
+       This is the only container that actually lives in the dwarf_output
+       object.  All others live in the dwarf_output_collector's sets, and
+       we return const references to those copies.
+
+       This list is actually mutable as a std::list.  But note that you
+       should never remove a compile_unit, though you can reorder the
+       list.  Nothing is ever removed from the collector, so your final
+       output file can wind up with unreferenced data being encoded.  If
+       you do remove any elements, then you should start a fresh collector
+       and construct a new dwarf_output object by copying using that
+       collector (or, equivalently, call o.compile_units ().recollect (C)
+       on the new collector C).  */
+    class compile_units_type
+      : public dwarf_data::compile_units_type<dwarf_output>
+    {
+      friend class dwarf_output;
+
+    private:
+      inline compile_units_type (const compile_units_type &)
+	: dwarf_data::compile_units_type<dwarf_output> ()
+      {
+	never_copy ();
+      }
+
+      template<typename input, typename copier_type>
+      static inline void
+      cu_maker (const iterator &out,
+		const typename input::const_iterator &in,
+		bool,	// last-sibling
+		copier_type &c)
+      {
+	c.make_unit (in, out);
+      }
+
+      // Constructor copying CUs from input container.
+      template<typename input, typename copier>
+      inline compile_units_type (const input &other, copier &c)
+      {
+	subr::create_container (this, other, c, cu_maker<input, copier>);
+      }
+
+    public:
+      // Default constructor: an empty container, no CUs.
+      inline compile_units_type () {}
+    };
+
+  private:
+    compile_units_type _m_units;
+
+  public:
+    class compile_units_type &compile_units ()
+    {
+      return _m_units;
+    }
+    const class compile_units_type &compile_units () const
+    {
+      return _m_units;
+    }
+
+  private:
+    // Bind default copy-constructor and prevent it.
+    inline dwarf_output (const dwarf_output &)
+    {
+      throw std::logic_error ("copying dwarf_output requires a collector");
+    }
+
+  public:
+    // Constructor for an empty file, can add to its compile_units ().
+    inline dwarf_output () {}
+
+    /* Constructor copying CUs from an input file (can be any of dwarf,
+       dwarf_edit, or dwarf_output).  Supply your own copier to reuse a
+       copier across multiple input files.  This is worthwhile only if
+       they share a string table and such in memory.  */
+    template<typename input>
+    inline dwarf_output (const input &dw, copier<input> &maker)
+      : _m_units (dw.compile_units (), maker)
+    {}
+
+    // Normal construction instantiates a copier derived from the collector.
+    template<typename input>
+    inline dwarf_output (const input &dw, dwarf_output_collector &c)
+    {
+      copier<input> maker (c);
+      compile_units_type tmp_units (dw.compile_units (), maker);
+      _m_units.swap (tmp_units);
+    }
+
+    template<typename file>
+    inline bool operator== (const file &other) const
+    {
+      return compile_units () == other.compile_units ();
+    }
+    template<typename file>
+    inline bool operator!= (const file &other) const
+    {
+      return !(*this == other);
+    }
+
+  protected:
+    struct die_info
+    {
+      die_info_pair *_m_parent;
+      std::queue<value::value_reference *> _m_refs;
+      std::set< ::Dwarf_Off> _m_originals; // XXX fix for cross-file sharing input
+      size_t _m_original_cost;
+      std::bitset<2> _m_with_sibling;
+      unsigned int _m_uses;
+
+      /* The local hash of the die, set when die_info is created.
+	 Uses only none-reference values.  */
+      size_t _m_local_hash;
+
+      /* The reference hash of the die, based on just reference
+	 attribute values.  Needs all local hashes of referenced dies
+	 to be set.  */
+      size_t _m_reference_hash;
+
+      inline die_info (size_t local_hash)
+	: _m_parent (NULL), _m_refs (),
+	  _m_originals (), _m_original_cost (0),
+	  _m_with_sibling (), _m_uses (0),
+	  _m_local_hash (local_hash),
+	  _m_reference_hash (0)
+      {}
+
+      inline ~die_info ()
+      {
+	while (!_m_refs.empty ())
+	  {
+	    delete _m_refs.front ();
+	    _m_refs.pop ();
+	  }
+      }
+
+      inline void original (unsigned int &incoming_count,
+			    ::Dwarf_Off off, ::Dwarf_Off cost)
+      {
+	assert ((::Dwarf_Off) (size_t) cost == cost);
+	if (_m_originals.insert (off).second)
+	  {
+	    ++incoming_count;
+	    _m_original_cost += cost;
+	  }
+      }
+
+      inline std::set< ::Dwarf_Off>::size_type count_originals () const
+      {
+	return _m_originals.size ();
+      }
+
+      inline ptrdiff_t original_cost () const
+      {
+	return _m_original_cost;
+      }
+
+      inline ::Dwarf_Off original_offset () const
+      {
+	return *_m_originals.begin ();
+      }
+
+      template<typename streamish>
+      inline streamish &dump_originals (streamish &out) const
+      {
+	out << std::hex;
+	for (typename std::set< ::Dwarf_Off>::const_iterator i
+	       = _m_originals.begin ();
+	     i !=_m_originals.end ();
+	     ++i)
+	  out << " " << *i;
+	return out << std::dec;
+      }
+
+      inline ptrdiff_t output_cost () const
+      {
+	// XXX temporary proxy
+	return (double (_m_original_cost) / double (count_originals ())) + 0.5;
+      }
+
+      inline std::ostream &list_originals (std::ostream &o) const
+      {
+	for (std::set< ::Dwarf_Off>::const_iterator i = _m_originals.begin ();
+	     i != _m_originals.end ();
+	     ++i)
+	  o << " " << std::hex << *i;
+	return o;
+      }
+
+      inline unsigned int uses () const
+      {
+	return _m_uses;
+      }
+
+      inline void assert_unused () const
+      {
+	assert (uses () == 0);
+	assert (_m_with_sibling.none ());
+	assert (_m_refs.empty ());
+      }
+
+      inline void self (value::value_reference *ref)
+      {
+	_m_refs.push (ref);
+      }
+
+      inline void
+      self (const debug_info_entry::pointer &ref)
+      {
+	subr::nothing dummy;
+	self (new value::value_reference (ref, dummy));
+      }
+
+      inline void
+      self (const debug_info_entry::children_type::_base::const_iterator &ref)
+      {
+	self (debug_info_entry::pointer (ref, subr::nothing ()));
+      }
+
+      inline bool selfless () const
+      {
+	return _m_refs.empty ();
+      }
+
+      inline value::value_reference *self () const
+      {
+	assert (!selfless ());
+	return _m_refs.front ();
+      }
+
+      template<typename circular>
+      inline void
+      reify_refs (const debug_info_entry::pointer &ref)
+      {
+	for (size_t n = _m_refs.size (); n > 0; --n)
+	  {
+	    value::value_reference *self_ref = _m_refs.front ();
+	    self_ref->ref = ref;
+	    _m_refs.pop ();
+	    _m_refs.push (self_ref);
+
+	    circular *circle = dynamic_cast<circular *> (self_ref);
+	    if (circle != NULL && !circle->final ())
+	      circle->placed ();
+	  }
+      }
+
+      template<typename circular>
+      inline void
+      placed (die_info_pair *parent, const debug_info_entry::pointer &ref,
+	      bool have_sibling, unsigned int &total)
+      {
+	// Record first parent.
+	if (_m_parent == NULL)
+	  {
+	    assert (uses () == 0 || parent == NULL);
+	    _m_parent = parent;
+	  }
+	else
+	  assert (uses () > 0);
+
+	if (selfless ())
+	  {
+	    assert (uses () == 0);
+	    self (ref);
+	  }
+	else
+	  reify_refs<circular> (ref);
+
+	++total;
+	++_m_uses;
+	_m_with_sibling[have_sibling] = true;
+      }
+    };
+  };
+
+  // Explicit specializations.
+  template<>
+  std::string to_string<dwarf_output::debug_info_entry>
+  (const dwarf_output::debug_info_entry &);
+  inline std::string dwarf_output::debug_info_entry::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+  template<>
+  std::string
+  to_string<dwarf_output::attribute> (const dwarf_output::attribute &);
+  template<>
+  std::string
+  to_string<dwarf_output::attr_value> (const dwarf_output::attr_value &);
+
+  inline std::string dwarf_output::attr_value::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+
+  template<typename copier_type>
+  struct dwarf_output::value::maker
+  {
+    inline explicit maker (copier_type &) {}
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_string *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_string (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_identifier *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_identifier (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_reference *&,
+		      int, const input &x, copier_type &c)
+    {
+      c.add_reference (x, &v);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_flag *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_flag (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_address *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_address (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_rangelistptr *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_ranges (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_lineptr *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_line_info (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_constant *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_constant (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_constant_block *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_constant_block (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_dwarf_constant *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_dwarf_constant (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_source_file *&,
+		      int attr, const input &x, copier_type &c)
+    {
+      v = c ().add_source_file (attr, x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_source_line *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_source_line (x);
+    }
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_source_column *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_source_column (x);
+    }
+
+    // XXX macptr
+
+    template<typename input>
+    inline void make (const value_dispatch *&v, value_location *&,
+		      int, const input &x, copier_type &c)
+    {
+      v = c ().add_location (x);
+    }
+  };
+
+  template<>
+  struct dwarf_output::value::maker<subr::nothing>
+  {
+    inline explicit maker (subr::nothing &) {}
+
+    template<typename... args>
+    inline void make (args&&...)
+    {
+      throw std::logic_error ("dwarf_output cannot be default-constructed");
+    }
+  };
+
+  template<>
+  inline subr::nostream &
+  dwarf_output::die_info::dump_originals (subr::nostream &out) const
+  {
+    return out;
+  }
+
+  /* This is the wrapper in the guts of a children_type iterator.
+     It turns the real pointer we store into a debug_info_entry
+     reference for the generic tree-walk API.  */
+  inline const dwarf_output::debug_info_entry &
+  dwarf_output::debug_info_entry::children_type::deref::operator ()
+    (dwarf_output::die_info_pair *p) const
+  {
+    return p->first;
+  }
+
+  /* This is called when a children_type is installed freshly in the collector.
+     Fill in its back pointers.  */
+  template<typename circular>
+  inline void
+  dwarf_output::debug_info_entry::children_type::
+  reify_children (die_info_pair *parent, bool placed, unsigned int &total) const
+  {
+    _base::const_iterator i = _base::begin ();
+    bool have_sibling = i != _base::end ();
+    while (have_sibling)
+      {
+	const const_iterator here (i, subr::nothing ());
+	have_sibling = ++i != _base::end ();
+	die_info &child = (*here.base ())->second;
+	if (placed)
+	  child.placed<circular> (parent, here, have_sibling, total);
+	else
+	  child.reify_refs<circular> (here);
+      }
+  }
+
+  class dwarf_output_collector
+  {
+    friend class dwarf_output;
+
+  private:
+    unsigned int _m_total;
+    unsigned int _m_incoming;
+
+    typedef dwarf_output::die_info die_info;
+    typedef dwarf_output::die_info_pair die_info_pair;
+    typedef dwarf_output::debug_info_entry die_type;
+    typedef die_type::attributes_type attrs_type;
+    typedef die_type::children_type children_type;
+    typedef children_type::const_iterator die_ptr;
+
+    // Simple value sets for leaf types.
+    subr::value_set<dwarf_output::value::value_string> _m_strings;
+    subr::value_set<dwarf_output::value::value_identifier> _m_identifiers;
+    subr::value_set<dwarf_output::value::value_address> _m_address;
+    subr::value_set<dwarf_output::value::value_rangelistptr> _m_ranges;
+    subr::value_set<dwarf_output::value::value_lineptr> _m_line_info;
+    subr::value_set<dwarf_output::value::value_constant> _m_constants;
+    subr::value_set<dwarf_output::value::value_constant_block> _m_const_block;
+    subr::value_set<dwarf_output::value::value_dwarf_constant> _m_dwarf_const;
+    subr::value_set<dwarf_output::value::value_source_file> _m_source_file;
+    subr::value_set<dwarf_output::value::value_source_line> _m_source_line;
+    subr::value_set<dwarf_output::value::value_source_column> _m_source_column;
+    subr::value_set<dwarf_output::value::value_location> _m_locations;
+
+    // The set of Boolean flags is a doubleton.
+    static const dwarf_output::value::value_flag flag_true;
+    static const dwarf_output::value::value_flag flag_false;
+    static inline const dwarf_output::value::value_flag *flag (bool flag)
+    {
+      return flag ? &flag_true : &flag_false;
+    }
+
+    // Set of attribute maps.
+    typedef std::pair<attrs_type, int> attrs_pair;
+    subr::dynamic_equality_set<attrs_pair> _m_attr_sets;
+
+    template<typename match_type>
+    inline const attrs_pair *
+    add_attributes (int tag, const attrs_type &candidate, match_type &matcher)
+    {
+      return _m_attr_sets.add (std::make_pair (candidate, tag), matcher);
+    }
+
+    // Set of children lists.
+    subr::identity_set<children_type> _m_broods;
+
+    inline const children_type *
+    add_children (const children_type &candidate, bool &fresh)
+    {
+      std::pair<subr::identity_set<children_type>::iterator, bool> p
+	= _m_broods.insert (candidate);
+      const children_type &result = *p.first;
+      fresh = p.second;
+      return &result;
+    }
+
+    // Set of unique DIEs.
+    typedef subr::identity_map<die_type, die_info> die_map;
+    die_map _m_unique;
+
+    inline die_info_pair *add_entry (int tag,
+				     const children_type *children,
+				     const attrs_type *attrs,
+				     die_info *info)
+    {
+      std::pair <die_map::iterator, bool>
+	ins = _m_unique.insert (std::make_pair (die_type (tag, children, attrs),
+						*info));
+      die_info_pair &x = *ins.first;
+      if (ins.second)
+	x.second.assert_unused ();
+
+      return &x;
+    }
+
+    struct stats_cmp
+      : public std::binary_function<const die_map::value_type *,
+				    const die_map::value_type *,
+				    void>
+    {
+      inline bool operator () (const die_map::value_type *a,
+			       const die_map::value_type *b) const
+      {
+	// Sort by number of input entries collected into this one entry.
+	if (a->second.count_originals () != b->second.count_originals ())
+	  return a->second.count_originals () > b->second.count_originals ();
+
+	// Secondarily sort by aggregate input cost.
+	if (a->second.original_cost () != b->second.original_cost ())
+	  return a->second.original_cost () > b->second.original_cost ();
+
+	// Finally, sort by input file order.
+	return a->second.original_offset () > b->second.original_offset ();
+      }
+    };
+
+    typedef std::multiset<const die_map::value_type *, stats_cmp
+			  > die_stats_order;
+
+    struct die_stats_sorter
+      : public std::unary_function<die_map::value_type, void>
+    {
+      die_stats_order &_m_order;
+      inline explicit die_stats_sorter (die_stats_order &o) : _m_order (o) {}
+
+      inline void operator () (const die_map::value_type &elt)
+      {
+	_m_order.insert (&elt);
+      }
+    };
+
+    static void die_stats (std::ostream &out, const die_map::value_type *elt)
+    {
+      const die_info *info = &elt->second;
+      out << std::dec << info->uses ()
+	  << "\thash=" << std::hex << subr::hash_this (elt->first)
+	  << "\t(" << info->_m_with_sibling.to_string () << ") "
+	  << std::dec << info->original_cost ()
+	  << " (" << (info->original_cost () - info->output_cost ())
+	  << ")\t" << to_string (elt->first) << "\t";
+      info->list_originals (out)
+	<< "\n";
+    }
+
+    struct attr_collision
+    {
+      std::ostream &_m_out;
+      inline explicit attr_collision (std::ostream &out) : _m_out (out) {}
+
+      inline void
+      operator () (size_t hash,
+		   const subr::dynamic_equality_set<attrs_pair>::bucket_type &b)
+	const
+      {
+	_m_out << "attrs bucket " << std::hex << hash
+	       << std::dec << ": " << b.size () << " collisions\n";
+	subr::for_each (b, *this);
+      }
+
+      inline void operator () (const attrs_pair &attrs) const
+      {
+	_m_out << "\t" << dwarf::tags::name (attrs.second)
+	       << " " << attrs.first.size ();
+	subr::for_each (attrs.first, *this);
+	_m_out << "\n";
+      }
+
+      inline void operator () (const attrs_type::value_type &attr) const
+      {
+	_m_out << " " << dwarf::attributes::name (attr.first);
+      }
+    };
+
+    const bool _m_ignore_context;
+
+    inline dwarf_output_collector (const dwarf_output_collector &)
+      : _m_ignore_context (false)
+    {
+      throw std::logic_error ("cannot copy-construct");
+    }
+
+  public:
+    inline dwarf_output_collector (bool ignore = true) // XXX
+      : _m_total (0), _m_incoming (0), _m_ignore_context (ignore)
+    {}
+
+    inline bool ignore_context () const
+    {
+      return _m_ignore_context;
+    }
+
+    void stats (std::ostream &out = std::cout) const
+    {
+      out << "collected " << std::dec << _m_unique.size ()
+	  << " unique of " << _m_total << " total from "
+	  << _m_incoming << " DIEs\n";
+
+      subr::container_hash_stats (out, "strings", _m_strings);
+      subr::container_hash_stats (out, "identifiers", _m_identifiers);
+      subr::container_hash_stats (out, "address", _m_address);
+      subr::container_hash_stats (out, "ranges", _m_ranges);
+      subr::container_hash_stats (out, "line_info", _m_line_info);
+      subr::container_hash_stats (out, "constants", _m_constants);
+      subr::container_hash_stats (out, "const_block", _m_const_block);
+      subr::container_hash_stats (out, "dwarf_const", _m_dwarf_const);
+      subr::container_hash_stats (out, "source_file", _m_source_file);
+      subr::container_hash_stats (out, "source_line", _m_source_line);
+      subr::container_hash_stats (out, "source_column", _m_source_column);
+      subr::container_hash_stats (out, "locations", _m_locations);
+
+      subr::container_hash_stats (out, "broods", _m_broods);
+      _m_attr_sets.hash_stats (out, "attr_sets", attr_collision (out));
+
+      die_stats_order ordered;
+      subr::for_each (_m_unique, die_stats_sorter (ordered));
+      subr::for_each (ordered, std::bind1st (std::ptr_fun (die_stats), out));
+    }
+  };
+
+  template<typename dw>
+  class dwarf_output::copier
+  {
+    friend class dwarf_output;
+  private:
+    typedef typename dw::debug_info_entry input_die;
+    typedef typename input_die::children_type::const_iterator input_die_ptr;
+
+    dwarf_output_collector *_m_collector;
+
+    /* A copier::entry represents one dw::debug_info_entry from the input,
+       indexed by identity.  With real input files (dw=dwarf), that means
+       one input entry for each unique DIE offset in each file.  (We also
+       record its offset in the input file, just for use in debugging and
+       statistics output.)  An entry is in one of four states:
+
+       undefined: we have seen references in attributes, but have not yet
+       seen the entry itself in the copying walk of the input DIE tree;
+
+       pending: the entry is in the midst of being copied, or it has
+       references to non-final entries;
+
+       final: the entry is finished and stored in the collector, but
+       is not yet pointed to by any real children_type vector;
+
+       placed: the entry is final and at least one logical parent's
+       children_type vector is also finished and stored in the collector,
+       permitting final bookkeeping and reference iterator updates.
+
+       Whenever there are no undefined entries outstanding, it should by
+       definition be possible to turn every pending entry into a final
+       entry.  To avoid complex bookkeeping, we simply keep track of the
+       total count of undefined entries.  When we first encounter an entry
+       or a reference to it before we've copied, we increment that count.
+       Upon completing the copying of an entry, we decrement it.  If that
+       makes the count reach zero, we immediately "finalize" the entry,
+       which is recursive on all its references and children not yet final.
+
+    */
+
+    struct entry;		// Below.
+    struct entry_copier;	// Below.
+    struct entry_finalizer;	// Below.
+
+    /* An attr_value cell points to one of these when it's a reference to
+       an entry not already in the collector at finalization time, i.e. a
+       circular reference.  To compare circular references during attribute
+       finalization, we follow the pending () pointer; see dwarf_pending,
+       below.  Thereafter, the base type's ref element is initialized and
+       we can use that directly.  */
+    class circular_reference
+      : public value::value_reference
+    {
+    private:
+      const std::vector<entry *> *_m_entry;
+      bool _m_final;
+
+      inline circular_reference (const circular_reference &)
+	: value::value_reference ()
+      {
+	throw std::logic_error ("cannot copy-construct");
+      }
+
+    public:
+      inline circular_reference (const entry *die, copier *)
+	: value::value_reference (),
+	  _m_entry (new std::vector<entry *> (1, const_cast<entry *> (die))),
+	  _m_final (false)
+      {
+	die->dump () << " new circular_reference " << this << "\n";
+      }
+
+      inline bool final () const
+      {
+	// XXX was return _m_entry == NULL;
+	return _m_final;
+      }
+
+      inline typename std::vector<entry *>::const_iterator pending () const
+      {
+	return _m_entry->begin ();
+      }
+
+      inline entry *pending_entry () const
+      {
+	return *pending ();
+      }
+
+      // We've been stored in the collector, so we are no longer pending.
+      inline void placed ()
+      {
+	pending_entry ()->dump () << " placed circular_reference "
+				  << this << "\n";
+	// XXX Keeping around for local hash...
+	_m_final = true;
+	// delete _m_entry;
+	// _m_entry = NULL;
+      }
+
+      inline ~circular_reference ()
+      {
+	if (unlikely (_m_entry != NULL))
+	  {
+	    pending_entry ()->dump () << " destroy circular_reference "
+				      << this << "\n";
+	    delete _m_entry;
+	  }
+      }
+
+      /* We have a special case for a reference attribute that is part
+	 of a circular chain.  It gets calculated from the
+	 pending_entry. */
+      virtual die_info *get_die_info () const
+      {
+	return pending_entry ()->get_die_info ();
+      }
+    };
+
+    struct pending_entry
+    {
+      /* Pointers to each entry that appears in _m_attributes.
+	 When a referent is already final, the entry * does not
+	 appear in the attr_value and does not count here.  */
+      std::stack<const value::value_dispatch **> _m_pending_refs;
+
+      // Set if we are attempting to finalize this entry right now.
+      entry_finalizer *_m_finalizing;
+
+      // Reference to ourself, pre-built in a circularity.
+      circular_reference *_m_self;
+
+      /* Cache of the final entry we already know we will become.
+	 We'll set this when the walk of a reference comparison hits
+	 this entry while finalizing another entry and records that it
+	 is identical to an existing final entry.  When the main walk
+	 doing finalization hits us, we can short-circuit matching our
+	 redundant entry in the collector sets.  */
+      die_info_pair *_m_matched;
+
+      std::set<uintptr_t> _m_mismatched;
+
+      typedef dwarf_data::attributes_type<dwarf_output, value> attr_map;
+      attr_map _m_attributes;
+      std::vector<entry *> _m_children;
+      const int _m_tag;
+
+      // Set if _m_children contains any entries not already final.
+      bool _m_unfinished_children;
+
+      // The die_info that will be used when putting the die into
+      // the collector. Stores local hash as soon as all children
+      // are defined in defined_self ().
+      die_info *_m_info;
+
+      inline pending_entry (int tag)
+	: _m_finalizing (NULL), _m_self (NULL), _m_matched (NULL),
+	  _m_tag (tag), _m_unfinished_children (false), _m_info (NULL)
+      {}
+
+      inline ~pending_entry ()
+      {
+	if (unlikely (_m_self != NULL))
+	  {
+	    if (_m_self->final ())
+	      entry::debug () << "XXX ~pending_entry _m_self is final\n";
+	    else
+	      _m_self->pending_entry ()->dump () << " ~pending_entry _m_self\n";
+	    delete _m_self;
+	  }
+      }
+
+      inline typename std::vector<entry *>::const_iterator
+      child (typename std::vector<entry *>::size_type i) const
+      {
+	return _m_children.begin () + i;
+      }
+
+      /* Finalize each pending entry that we refer to.
+	 This is called only when we have a non-empty _m_pending_refs.  */
+      inline void finalize_refs (copier *c)
+      {
+	do
+	  {
+	    const value::value_dispatch **const attr = _m_pending_refs.top ();
+	    const entry *ref = dynamic_cast<const entry *> (*attr);
+	    if (ref != NULL)
+	      *attr = const_cast<entry *> (ref)->finalize_ref (c);
+	    _m_pending_refs.pop ();
+	  }
+	while (!_m_pending_refs.empty ());
+      }
+
+      // Finalize each unfinished child.
+      inline void finalize_children (copier *c)
+      {
+	_m_unfinished_children = false;
+	subr::for_each
+	  (_m_children,
+	   std::bind2nd (std::mem_fun (&entry::get_finalized),
+			 std::make_pair (c, &_m_unfinished_children)));
+      }
+
+      /* This is called from finalize_ref (below) when we are
+	 resolving a circular reference attribute.  We cache the
+	 uninitialized reference in _m_self, and return it.  */
+      inline value::value_reference *
+      make_circular_reference (const entry *self, copier *c)
+      {
+	if (_m_self == NULL)
+	  _m_self = new circular_reference (self, c);
+	return _m_self;
+      }
+
+      typedef std::pair <debug_info_entry::attributes_type, int> attrs_pair;
+      struct attrs_matcher
+      {
+	copier *_m_copier;
+	inline explicit attrs_matcher (copier *c) : _m_copier (c) {}
+
+	inline bool operator () (const attrs_pair &a, const attrs_pair &b)
+	{
+	  return (a.second == b.second
+		  && _m_copier->attrs_match (a.first, b.first));
+	}
+      };
+
+      /* We can only get here when all our children have been finalized.
+	 So all we have to do is fetch that pointer.  */
+      static inline die_info_pair *get_final_child (entry *child)
+      {
+	assert (child->_m_final != NULL);
+	return child->_m_final;
+      }
+
+      typedef typename subr::wrapped_input_iterator<
+	std::vector<entry *>,
+	std::pointer_to_unary_function<entry *, die_info_pair *>
+	> final_children_getter;
+      typedef typename final_children_getter::
+      template copy<debug_info_entry::children_type> get_final_children;
+
+      inline size_t get_reference_hash (std::vector<const entry *> &stack) const
+      {
+	assert (_m_info != NULL);
+
+	// Could already have been set by forward reference.
+	if (_m_info->_m_reference_hash != 0)
+	  return _m_info->_m_reference_hash;
+
+	size_t rhash = _m_info->_m_local_hash;
+	size_t attr_rhashes = 0;
+	for (attr_map::const_iterator it = _m_attributes.begin ();
+             it != _m_attributes.end ();
+             ++it)
+          {
+	    // XXX XOR is for order irrelevance, but shouldn't be necessary.
+	    // See also calculate_local_hash, which does the same.
+	    const entry *ref
+	      = dynamic_cast<const entry *> (it->second._m_value);
+	    if (ref != NULL)
+	      {
+		// Workaround weird cases of self-referential DIE.
+		// This really is a bug in the producer and dwarflint
+		// should warn about it. But it is easy to work around
+		// so just do it for now, by ignoring such values.
+		if (ref->_m_pending == this)
+		  continue;
+		else
+		  attr_rhashes ^= ref->get_reference_hash (stack);
+	      }
+          }
+	subr::hash_combine (rhash, attr_rhashes);
+
+	return rhash;
+      }
+
+      inline size_t calculate_local_hash ()
+      {
+	// Calculate the local hash for this new die.
+	// XOR the attribute values together (so order doesn't matter)
+	// but exclude reference attributes values (just include
+	// their tag). XXX - shouldn't be necessary, double check.
+	size_t lhash = _m_tag;
+	size_t attr_hash = 0;
+	for (attr_map::const_iterator it = _m_attributes.begin ();
+	     it != _m_attributes.end ();
+	     ++it)
+	  {
+	    if (it->second.what_space () != dwarf::VS_reference)
+	      attr_hash ^= subr::hash_this (*it);
+	    else
+	      attr_hash ^= (it->first << 3);
+	  }
+	subr::hash_combine (lhash, attr_hash);
+
+	size_t children_hash = 0;
+	for (typename std::vector<entry *>::const_iterator it
+	       = _m_children.begin ();
+	     it != _m_children.end ();
+	     ++it)
+	  {
+	    // child lhash is always in the die_info, which might
+	    // be in the pending_entry when not yet finalized, or
+	    // part of the finalized child die_info.
+	    size_t child_lhash;
+	    struct pending_entry *pending = (*it)->_m_pending;
+	    if (pending)
+	      child_lhash = pending->_m_info->_m_local_hash;
+	    else
+	      {
+		die_info_pair *final_child = get_final_child (*it);
+		child_lhash = final_child->second._m_local_hash;
+	      }
+	    subr::hash_combine (children_hash, child_lhash);
+	  }
+	subr::hash_combine (lhash, children_hash);
+
+	return lhash;
+      }
+
+      inline die_info_pair *final (copier *c,
+				   ::Dwarf_Off offset, ::Dwarf_Off cost)
+      {
+	dwarf_output_collector *const co = c->_m_collector;
+
+	assert (_m_pending_refs.empty ());
+
+	bool fresh = false;
+	if (_m_matched == NULL)
+	  {
+	    attrs_matcher equalator (c);
+	    const debug_info_entry::attributes_type *attrs
+	      = &co->add_attributes (_m_tag, _m_attributes, equalator)->first;
+
+	    const debug_info_entry::children_type *children
+	      = co->add_children (get_final_children ()
+				  (_m_children, std::ptr_fun (get_final_child)),
+				  fresh);
+
+	    _m_matched = co->add_entry (_m_tag, children, attrs, _m_info);
+	  }
+
+	// Final bookkeeping in the collector for this copied entry.
+	_m_matched->second.original (co->_m_incoming, offset, cost);
+
+	/* Now our entry is finalized in the collector (either newly
+	   created there, or discovered to be a duplicate already
+	   there).  If this was part of a circularity, it created the
+	   _m_self object and stored pointers to it in the collector
+	   attributes maps.  Now move that object into the final
+	   entry's _m_refs list.  From there it will get initialized.  */
+	if (_m_self != NULL)
+	  {
+	    assert (!_m_self->final ());
+	    _m_self->pending_entry ()->dump ()
+	      << " register circular_reference " << _m_self << " "
+	      << _m_matched->first.to_string () << " from";
+	    _m_matched->second.dump_originals (entry::debug ()) << "\n";
+	    _m_matched->second.self (_m_self);
+	    _m_self = NULL;
+	  }
+
+	/* Now we have a children_type in the collector.  Fix up all
+	   the backpointers to point into that _m_broods copy.  Also
+	   make sure each child gets its _m_parent pointer.  Even if
+	   this candidate children_type didn't actually get inserted
+	   into the set (was not unique), we may need to reify new refs
+	   to these children.  */
+	_m_matched->first._m_children->reify_children<circular_reference>
+	  (_m_matched, fresh, co->_m_total);
+
+	return _m_matched;
+      }
+
+      inline void notice_mismatch (const die_info_pair *not_me)
+      {
+	_m_mismatched.insert ((uintptr_t) not_me);
+      }
+
+      inline bool cached_mismatch (const die_info_pair *not_me)
+      {
+	return _m_mismatched.find ((uintptr_t) not_me) != _m_mismatched.end ();
+      }
+
+      static inline void dump_pending_ref (const value::value_dispatch **attr)
+      {
+	const entry *ref = dynamic_cast<const entry *> (*attr);
+	if (ref != NULL)
+	  ref->debug () << " " << std::hex << ref->_m_offset << std::dec;
+	else
+	  {
+	    const circular_reference *circular
+	      = dynamic_cast<const circular_reference *> (*attr);
+	    if (circular != NULL && !circular->final ())
+	      {
+		ref = circular->pending_entry ();
+		ref->debug () << " *" << std::hex << ref->_m_offset << std::dec;
+	      }
+	  }
+      }
+
+      inline void dump_tree (const entry *self) const
+      {
+	self->dump (true) << " " << dwarf::tags::name (_m_tag) << " "
+			  << _m_children.size () << " children, "
+			  << _m_pending_refs.size () << " refs";
+	//subr::for_each (_m_pending_refs, dump_pending_ref); XXX
+	self->debug () << "\n";
+	subr::for_each (_m_children, std::mem_fun (&entry::dump_entry));
+	self->dump (false, true) << " ends\n";
+      }
+    };
+
+    // This keeps state in the pending_entry's _m_finalizing pointer while live.
+    struct entry_finalizer
+    {
+      entry *const _m_entry;
+
+      inline entry_finalizer (entry *die)
+	: _m_entry (die)
+      {
+	_m_entry->debug () << std::flush;
+	assert (_m_entry->_m_pending->_m_finalizing == NULL);
+	_m_entry->_m_pending->_m_finalizing = this;
+	_m_entry->dump (true) << " finalizing\n";
+      }
+
+      inline ~entry_finalizer ()
+      {
+	if (unlikely (_m_entry->_m_pending != NULL))
+	  {
+	    assert (_m_entry->_m_pending->_m_finalizing == this);
+	    _m_entry->_m_pending->_m_finalizing = NULL;
+	    _m_entry->dump (false, true) << " failed to finalize!\n";
+	  }
+	else
+	  {
+	    _m_entry->dump (false, true) << " finalized\n";
+	    assert (_m_entry->_m_final != NULL);
+	    _m_entry->dump_entry ();
+	  }
+      }
+    };
+
+    /* This is what we record about each input DIE we have considered.
+       An attr_value that is a dangling reference to a DIE not yet
+       built in the output has one of these in place of a value_reference.
+       These all live in the _m_entries map, one per input-side DIE.  */
+    struct entry
+      : public value::value_reference
+    {
+      ::Dwarf_Off _m_offset; // For debugging and statistics only.
+      ::Dwarf_Off _m_cost;   // For statistics only.
+
+      // Completed DIE in the collector, or NULL.
+      die_info_pair *_m_final;
+
+      // Pending entry made with new, or NULL.
+      pending_entry *_m_pending;
+
+      // Set if we are building this in the copying walk right now.
+      entry_copier *_m_building;
+
+      // Set if we are in attrs_match on this entry right now.
+      die_info_pair *_m_comparing;
+
+      /* When we're final but not placed, we allocate a singleton vector
+	 here and set a value_reference to an iterator in that vector.
+	 That will be replaced with the iterator into a proper children
+	 vector when we're placed.  */
+      debug_info_entry::children_type::_base *_m_final_ref;
+
+      // First parent, for tracker purposes.
+      entry *_m_parent;
+      typename std::vector<entry *>::size_type _m_self_idx;
+
+      inline entry ()
+	: _m_offset (0), _m_final (NULL), _m_pending (NULL),
+	  _m_building (NULL), _m_comparing (NULL),
+	  _m_final_ref (NULL), _m_parent (NULL), _m_self_idx (0)
+      {}
+
+      inline void setup (copier *c, const input_die &in)
+      {
+	if (_m_offset == 0)
+	  {
+	    _m_offset = in.offset ();
+	    ++c->_m_undefined_entries;
+	    dump () << " seen => " << c->_m_undefined_entries << "\n";
+	  }
+      }
+
+      inline ~entry ()
+      {
+	assert (_m_building == NULL);
+	if (_m_final_ref != NULL)
+	  delete _m_final_ref;
+
+	// This should only hit in an exception case abandoning the copier.
+	if (unlikely (_m_pending != NULL))
+	  delete _m_pending;
+      }
+
+      /* If we need a reference before we're placed, fake one up with
+	 a singleton vector pointing to us, stored in _m_final_ref.  */
+      inline value::value_reference *self ()
+      {
+	if (_m_final->second.selfless ())
+	  {
+	    assert (_m_final_ref == NULL);
+	    _m_final_ref
+	      = new debug_info_entry::children_type::_base (1, _m_final);
+	    _m_final->second.self (_m_final_ref->begin ());
+	  }
+	return _m_final->second.self ();
+      };
+
+      /* Called by entry_copier::add_reference, below.
+	 We're adding a reference attribute pointing to this input entry.  */
+      inline void refer (entry *referrer, const value::value_dispatch **backptr)
+      {
+	referrer->dump () << " refers to "
+			  << std::hex << _m_offset << std::dec
+			  << " (" << (_m_final ? "final"
+				      : _m_pending ? "pending" : "undefined")
+			  << (_m_building ? ", building" : "") << ")\n";
+
+	if (_m_final != NULL)
+	  // It's finished, resolve the final reference.
+	  *backptr = self ();
+	else
+	  {
+	    *backptr = this;
+	    referrer->_m_pending->_m_pending_refs.push (backptr);
+	  }
+      }
+
+      /* We are no longer an undefined entry, so decrement the count.
+	 But don't finalize yet. Since all children are known now we
+	 can create a candidate die_info that includes the local hash
+	 for this entry.  */
+      inline void defined_self (copier *c)
+      {
+	assert (_m_final == NULL);
+	assert (_m_pending != NULL);
+	assert (c->_m_undefined_entries > 0);
+	--c->_m_undefined_entries;
+	dump () << " defined_self => " << c->_m_undefined_entries << "\n";
+
+	size_t lhash = _m_pending->calculate_local_hash ();
+	_m_pending->_m_info = new die_info (lhash);
+      }
+
+      /* A reference-following matching operation noticed along
+	 the way that we have a doppleganger in the collector.  */
+      inline void record_prematch (die_info_pair *doppleganger,
+				   bool lhs)
+      {
+	doppleganger->second.dump_originals
+	  (dump ()
+	   << " record_prematch to " << doppleganger->first.to_string ()
+	   << " from")
+	  << (lhs ? " on lhs\n" : " on rhs\n");
+	/* XXX disabled! tentative circularity matches taint this record!
+	   must record taint to avoid caching, or punt caching.
+	 */
+	//_m_pending->_m_matched = doppleganger;
+      }
+
+      /* This is called by finalize_children.  In case of imported_unit
+	 use in the input, we could already have finalized this earlier
+	 in the copying walk of the logical CU, so there is nothing to
+	 do.  Or, inside a circularity in finalize_refs, we might be
+	 finalizing this child already in an outer recursion.  In that
+	 case, we can't finish it here.  */
+      inline void get_finalized (const std::pair<copier *, bool *> p)
+      {
+	if (_m_final == NULL && _m_pending->_m_finalizing == NULL)
+	  finalize (p.first);
+	if (_m_final == NULL)
+	  *p.second = true;
+      }
+
+      /* Recursively sets up reference hashes for the die_info of this
+	 pending_entry.  Depends on all local hashes having been setup
+	 already.  At this point all entries are still pending.  */
+      inline void setup_reference_hash () const
+      {
+	std::vector<const entry *> stack;
+	_m_pending->_m_info->_m_reference_hash = get_reference_hash (stack);
+	assert (stack.empty ());
+
+        for (typename std::vector<entry *>::const_iterator it
+               = _m_pending->_m_children.begin ();
+             it != _m_pending->_m_children.end ();
+             ++it)
+	  (*it)->setup_reference_hash ();
+      }
+
+      inline size_t get_reference_hash (std::vector<const entry *> &stack) const
+      {
+	if (std::find (stack.begin (), stack.end (), this) != stack.end ())
+	  {
+	    std::cout << "Reference chain cycle detected\n"
+		      << "offset=[0x" << std::hex << _m_offset << std::dec
+		      << "] already on the reference chain stack\n";
+	    typename std::vector<const entry *>::iterator it;
+	    for (it = stack.begin ();
+		 it != stack.end ();
+		 it++)
+	      {
+		std::cout << "offset=[0x" << std::hex << (*it)->_m_offset
+			  << std::dec << "] "
+			  << dwarf::tags::name ((*it)->_m_pending->_m_tag)
+			  << "\n";
+	      }
+	    abort ();
+	  }
+
+	stack.push_back (this);
+	size_t res = _m_pending->get_reference_hash (stack);
+	stack.pop_back ();
+	return res;
+      }
+
+      // Attempt to turn the pending entry into a final entry.
+      void finalize (copier *c)
+      {
+	entry_finalizer finalizing (this);
+
+	if (c->_m_undefined_entries == 0)
+	  {
+	    // Nothing is undefined, so we can resolve pending references.
+	    if (!_m_pending->_m_pending_refs.empty ())
+	      {
+		dump (true) << " finalize_refs\n";
+		_m_pending->finalize_refs (c);
+		dump (false, true) << " finalize_refs done\n";
+	      }
+
+	    // Now we can finish off all our children.
+	    if (_m_pending->_m_unfinished_children)
+	      {
+		dump (true) << " finalize_children\n";
+		_m_pending->finalize_children (c);
+		dump (false, true) << " finalize_children done\n";
+	      }
+	  }
+
+	/* If there were no pending references or children to finish, or
+	   if we just finished them all off, we can finally finalize!  */
+	if (_m_pending->_m_pending_refs.empty ()
+	    && !_m_pending->_m_unfinished_children)
+	  {
+	    // Create it in the collector.
+	    _m_final = _m_pending->final (c, _m_offset, _m_cost);
+
+	    // No more pending_entry required!
+	    delete _m_pending;
+	    _m_pending = NULL;
+	  }
+      }
+
+      // Called by a referrer trying to finalize us.
+      inline const value_dispatch *finalize_ref (copier *c)
+      {
+	assert (c->_m_undefined_entries == 0);
+	if (_m_final == NULL)
+	  {
+	    if (_m_pending->_m_finalizing == NULL)
+	      finalize (c);
+	    if (_m_final == NULL)
+	      {
+		dump () << " finalize_ref caught circularity\n" << std::flush;
+
+		/* We are recursing inside a finalize call.
+		   This means we have a circular reference.  */
+		return _m_pending->make_circular_reference (this, c);
+	      }
+	  }
+	return self ();
+      }
+
+// Toggle this to enable massive debugging spew during construction.
+// #define _DWARF_OUTPUT_DEBUG_SPEW 1
+#ifdef _DWARF_OUTPUT_DEBUG_SPEW
+      static inline std::ostream &debug ()
+      {
+	return std::cout;
+      }
+
+      static inline std::ostream &
+      debug_prefix (bool in = false, bool out = false, bool print = true)
+      {
+	static std::string prefix;
+	if (out)
+	  prefix.erase (--prefix.end ());
+	if (print)
+	  debug () << prefix;
+	if (in)
+	  prefix.push_back (' ');
+	return debug ();
+      }
+
+      std::ostream &dump (bool in = false, bool out = false) const
+      {
+	debug_prefix (in, out) << "XXX " << std::hex << _m_offset << std::dec;
+	if (_m_pending != NULL && _m_pending->_m_finalizing != NULL)
+	  debug () << " (finalizing "
+		   << (void *) _m_pending->_m_finalizing << ")";
+	return debug ();
+      }
+
+      void dump_entry () const
+      {
+	if (_m_final != NULL)
+	  {
+	    dump () << " final " << _m_final->first.to_string ()
+		    << " hash=" << std::hex << subr::hash_this (_m_final->first)
+		    << " from";
+	    _m_final->second.dump_originals (debug ()) << "\n";
+	  }
+	else if (_m_pending != NULL)
+	  _m_pending->dump_tree (this);
+	else
+	  dump () << " undefined\n";
+      }
+#else
+      static inline subr::nostream &debug ()
+      {
+	static subr::nostream n;
+	return n;
+      }
+
+      static inline subr::nostream &
+      debug_prefix (bool = false, bool = false, bool = true)
+      {
+	return debug ();
+      }
+
+      inline subr::nostream &dump (bool = false, bool = false) const
+      {
+	return debug ();
+      }
+
+      inline void dump_entry () const
+      {}
+#endif
+
+      // Find ourselves in a parent pending_entry's children vector.
+      inline typename std::vector<entry *>::const_iterator pending_self () const
+      {
+	debug () << std::flush;
+	assert (_m_pending != NULL);
+	return _m_parent->_m_pending->child (_m_self_idx);
+      }
+
+      /* The local hash of the debug_info_entry if we are already
+	 final, otherwise get it from the pending_entry. */
+      inline die_info *get_die_info () const
+      {
+	if (_m_final)
+	  return &_m_final->second;
+	return _m_pending->_m_info;
+      }
+    };
+
+    // This object lives while we are copying one particular input DIE.
+    struct entry_copier
+    {
+      copier *_m_copier;
+      entry *_m_in;
+      pending_entry *_m_out;
+
+      /* On creation we set _m_building in DIE's record.
+	 It should never be set already.  */
+      inline entry_copier (copier *c, entry *die, const input_die &in)
+	: _m_copier (c),
+	  _m_in (die),
+	  _m_out (new pending_entry (in.tag ()))
+      {
+	if (unlikely (_m_in->_m_building != NULL))
+	  throw std::runtime_error ("detected cycle in logical DWARF tree");
+	_m_in->_m_building = this;
+	_m_in->_m_cost = in.cost ();
+	_m_in->dump (true) << " copying (cost=" << _m_in->_m_cost << ")\n";
+      }
+
+      // On destruction, we clear _m_building.
+      inline ~entry_copier ()
+      {
+	_m_in->dump (false, true) << " copied\n";
+	assert (_m_in->_m_building == this);
+	_m_in->_m_building = NULL;
+	if (unlikely (_m_out != NULL)) // Exception unwind case only.
+	  delete _m_out;
+      }
+
+      /* Populate _m_out from the corresponding input DIE.  This invokes
+	 all the main work of copying.  The interesting parts happen in
+	 add_reference and add_child, below.  */
+      inline void populate (const input_die &in)
+      {
+	assert (_m_in->_m_pending == NULL);
+	_m_in->_m_pending = _m_out;
+
+	try
+	  {
+	    // This calls add_reference for each pending reference.
+	    _m_out->_m_attributes.set (in.attributes (), *this);
+
+	    for (input_die_ptr i = in.children ().begin ();
+		 i != in.children ().end ();
+		 ++i)
+	      add_child (*i);
+	  }
+	catch (...)
+	  {
+	    _m_in->_m_pending = NULL;
+	    throw;
+	  }
+
+	_m_out = NULL;
+	_m_in->defined_self (_m_copier);
+      }
+
+      // We're adding a reference attribute inside populate, above.
+      inline void add_reference (const input_die_ptr &to,
+				 const value::value_dispatch **backptr)
+      {
+	_m_copier->enter (*to)->refer (_m_in, backptr);
+      }
+
+      // We're adding a child entry inside populate, above.
+      inline void add_child (const input_die &in)
+      {
+	entry *child = _m_copier->enter (in);
+	_m_out->_m_children.push_back (child);
+
+	/* If the input used DW_TAG_imported_unit, then the logical walk
+	   can hit the same DIE twice.  If so, we short-circuit right here.  */
+	if (child->_m_final == NULL && child->_m_pending == NULL)
+	  {
+	    child->_m_parent = _m_in;
+	    child->_m_self_idx = _m_out->_m_children.size () - 1;
+	    entry_copier (_m_copier, child, in).populate (in);
+	  }
+
+	if (child->_m_final == NULL)
+	  // Record that it didn't finalize immediately, we'll do it later.
+	  _m_out->_m_unfinished_children = true;
+      }
+
+      // Use "c ()" as a shorthand to get the copier out of the entry_copier.
+      inline copier &operator () () const
+      {
+	return *_m_copier;
+      }
+
+      /* Walk over the whole cu again to set reference hashes up.
+	 Then try to finalize everything at once.
+	 Complain if we still have dangling references.
+	 If not, it should be impossible to have pending entries left.  */
+      inline die_info_pair *final_unit () const
+      {
+	assert (_m_out == NULL);
+
+	// First walk over the whole CU tree again to setup the
+	// reference hash for each die_info.
+	_m_in->setup_reference_hash ();
+
+	// We should now be able to finalize everything at once.
+	if (_m_copier->_m_undefined_entries == 0)
+	  _m_in->finalize (_m_copier);
+
+	if (unlikely (_m_in->_m_final == NULL))
+	  {
+	    _m_in->dump_entry ();
+	    _m_in->debug () << std::flush;
+	    assert (_m_copier->_m_undefined_entries > 0);
+	    throw std::runtime_error
+	      ("compile_unit contains dangling reference attributes");
+	  }
+	assert (_m_copier->_m_undefined_entries == 0);
+	return _m_in->_m_final;
+      }
+    };
+
+    struct unit_copier : public entry_copier
+    {
+      inline unit_copier (copier *c, const typename dw::compile_unit &in)
+	: entry_copier (c, c->enter (in), in)
+      {
+	populate (in);
+      }
+    };
+
+    struct dump_unplaced
+      : public std::unary_function<circular_reference *, void>
+    {
+      inline void operator () (circular_reference *ref)
+      {
+	std::cout << "XXX unplaced ref to "
+		  << std::hex << (ref->pending_entry ())->_m_offset
+		  << std::dec << "\n";
+      }
+    };
+
+    // Create a whole CU in the output.
+    inline void
+    make_unit (const typename dw::compile_units_type::const_iterator &in,
+	       const compile_units_type::iterator &out)
+    {
+      die_info_pair *cu = unit_copier (this, *in).final_unit ();
+
+      // This really just increments _m_total for us, but also _m_uses.
+      cu->second.placed<circular_reference> (NULL,
+					     cu->first.children ().end (),
+					     false, _m_collector->_m_total);
+
+      *out = cu->first;
+    }
+
+    typedef std::tr1::unordered_map< ::Dwarf_Off, entry> entry_map;
+    entry_map _m_entries;
+    unsigned int _m_undefined_entries; // Count of _m_entries not copied yet.
+
+    inline entry *enter (const input_die &in)
+    {
+      entry *die = &_m_entries[in.identity ()];
+      die->setup (this, in);
+      return die;
+    }
+
+    /* This is an entire shadow of the dwarf:: interface, sufficient to
+       instantiate dwarf_comparator below.  All its objects are
+       ephemeral and simply wrap a pending_entry and its constituents.
+       We always start with finalized attributes, but those can include
+       circular_reference objects pointing to pending entries that can't
+       be finalized until the finalization that this comparison is part
+       of has been done.  Hence these objects have to bifurcate between
+       wrapping pending_entry and wrapping die_info_pair.  */
+    class pending_dwarf
+    {
+    public:
+      class debug_info_entry;
+      class attr_value;
+      typedef std::pair<const int, attr_value> attribute;
+
+      typedef debug_info_entry compile_unit;
+
+    private:
+
+      // Both debug_info_entry and iterators just hold this pair of pointers.
+      struct entry_pointers
+      {
+	entry *pending;
+	die_info_pair *final;
+
+	inline entry_pointers (entry *a, die_info_pair *b)
+	  : pending (a), final (b)
+	{}
+      };
+
+      struct pending_cu
+	: public std::unary_function<dwarf_output::compile_unit, compile_unit>
+      {
+	inline const compile_unit
+	operator () (const dwarf_output::compile_unit &) const
+	{
+	  throw std::logic_error ("XXX implement me");
+	}
+      };
+
+    public:
+      // Not really used so far, just for completeness.
+      typedef subr::wrapped_input_container<class dwarf_output::compile_units_type,
+					    pending_cu> compile_units_type;
+
+      class debug_info_entry
+      {
+      private:
+	entry_pointers _m_ptr;
+
+	static inline const debug_info_entry
+	child (const entry_pointers &ptr, size_t i)
+	{
+	  if (ptr.final == NULL)
+	    return debug_info_entry (ptr.pending->_m_pending->_m_children[i]);
+	  return debug_info_entry (ptr.final->first.children ().info ()[i]);
+	}
+
+	// Turns an attribute into an attribute!
+	struct pending_attr
+	  : public std::unary_function<dwarf_output::attribute, attribute>
+	{
+	  inline pending_attr (const subr::nothing &) {}
+
+	  inline const attribute
+	  operator () (const dwarf_output::attribute &attr) const
+	  {
+	    return attribute (attr.first, attr.second);
+	  }
+	};
+
+      public:
+	inline debug_info_entry ()
+	  : _m_ptr (NULL, NULL)
+	{}
+
+	inline debug_info_entry (const debug_info_entry &entry)
+	  : _m_ptr (entry._m_ptr)
+	{}
+
+	inline explicit debug_info_entry (die_info_pair *die)
+	  : _m_ptr (NULL, die)
+	{}
+
+	inline explicit debug_info_entry (entry *die)
+	  : _m_ptr (die, die->_m_final)
+	{}
+
+	inline bool final () const
+	{
+	  return _m_ptr.final != NULL;
+	}
+
+	inline die_info_pair *get_final () const
+	{
+	  assert (_m_ptr.final != NULL);
+	  return _m_ptr.final;
+	}
+
+	inline entry *get_pending () const
+	{
+	  assert (_m_ptr.pending != NULL);
+	  return _m_ptr.pending;
+	}
+
+	inline bool is (const debug_info_entry &other) const
+	{
+	  return (_m_ptr.final == other._m_ptr.final
+		  && (final () || _m_ptr.pending == other._m_ptr.pending));
+	}
+
+	// Used by the tracker.
+	inline std::pair<die_info_pair *, entry *> context () const
+	{
+	  return std::make_pair (_m_ptr.final, _m_ptr.pending);
+	}
+
+	inline int tag () const
+	{
+	  return (_m_ptr.final != NULL
+		  ? _m_ptr.final->first.tag ()
+		  : _m_ptr.pending->_m_pending->_m_tag);
+	}
+
+	typedef subr::wrapped_input_container<typename pending_entry::attr_map,
+					      pending_attr> attributes_type;
+
+	inline const attributes_type attributes () const
+	{
+	  return attributes_type (_m_ptr.final == NULL
+				  ? _m_ptr.pending->_m_pending->_m_attributes
+				  : _m_ptr.final->first._m_attributes->base (),
+				  subr::nothing ());
+	}
+
+	class children_type
+	{
+	  friend class debug_info_entry;
+	private:
+	  entry_pointers _m_ptr;
+
+	  inline explicit children_type (const entry_pointers &ptr)
+	    : _m_ptr (ptr)
+	  {}
+
+	public:
+	  class const_iterator
+	    : public std::iterator<std::input_iterator_tag, debug_info_entry>
+	  {
+	    friend class children_type;
+	    friend class attr_value;
+
+	  private:
+	    dwarf_output::debug_info_entry::children_type::
+	    _base::const_iterator _m_final_iter;
+	    typename std::vector<entry *>::const_iterator _m_pending_iter;
+	    bool _m_final;
+
+	    inline const_iterator
+	    (const dwarf_output::debug_info_entry::const_pointer &i)
+	      : _m_final_iter (i.base ()), _m_final (true)
+	    {}
+
+	    inline const_iterator
+	    (const typename std::vector<entry *>::const_iterator &i)
+	      : _m_pending_iter (i), _m_final (false)
+	    {}
+
+	    /* We have what appears to be a final reference attribute.
+	       If it's actually a circular_reference, it might really
+	       not be final after all.  */
+	    inline void init_from_ref (const value::value_reference *ref)
+	    {
+	      const circular_reference *circle
+		= dynamic_cast<const circular_reference *> (ref);
+	      _m_final = circle == NULL || circle->final ();
+	      if (_m_final)
+		_m_final_iter = ref->ref;
+	      else
+		_m_pending_iter = circle->pending ();
+	    }
+
+	    // This is called only by attr_value::reference, below.
+	    inline const_iterator (const value::value_reference *ref)
+	    {
+	      init_from_ref (ref);
+	      assert ((**this).identity () == (**this).identity ());
+	    }
+
+	    /* This is called only by attr_value::reference, below.
+	       We have what appears to be a reference to a pending entry.
+	       In fact, this entry might already have been finalized even
+	       though this reference to it has not been.  */
+	    inline const_iterator (entry *ref)
+	      : _m_final (ref->_m_final != NULL)
+	    {
+	      if (_m_final)
+		init_from_ref (ref->self ());
+	      else
+		_m_pending_iter = ref->pending_self ();
+	      assert ((**this).identity () == (**this).identity ());
+	    }
+
+	  public:
+	    inline const_iterator ()
+	    {}
+
+	    inline const_iterator (const const_iterator &other)
+	    {
+	      *this = other;
+	    }
+
+	    inline const debug_info_entry operator* () const
+	    {
+	      return (_m_final
+		      ? debug_info_entry (*_m_final_iter)
+		      : debug_info_entry (*_m_pending_iter));
+	    }
+
+	    inline bool operator== (const const_iterator &other) const
+	    {
+	      return (_m_final == other._m_final
+		      && (_m_final
+			  ? _m_final_iter == other._m_final_iter
+			  : _m_pending_iter == other._m_pending_iter));
+	    }
+	    inline bool operator!= (const const_iterator &other) const
+	    {
+	      return !(*this == other);
+	    }
+
+	    inline const_iterator &operator= (const const_iterator &other)
+	    {
+	      _m_final = other._m_final;
+	      if (_m_final)
+		_m_final_iter = other._m_final_iter;
+	      else
+		_m_pending_iter = other._m_pending_iter;
+	      return *this;
+	    }
+
+	    inline const_iterator &operator++ () // prefix
+	    {
+	      if (_m_final)
+		++_m_final_iter;
+	      else
+		++_m_pending_iter;
+	      return *this;
+	    }
+	    inline const_iterator operator++ (int) // postfix
+	    {
+	      const const_iterator old = *this;
+	      ++*this;
+	      return old;
+	    }
+	  };
+
+	  inline bool empty () const
+	  {
+	    return size () == 0;
+	  }
+
+	  inline size_t size () const
+	  {
+	    return (_m_ptr.final != NULL
+		    ? _m_ptr.final->first.children ().size ()
+		    : _m_ptr.pending->_m_pending->_m_children.size ());
+	  }
+
+	  inline const_iterator begin () const
+	  {
+	    return (_m_ptr.final != NULL
+		    ? const_iterator (_m_ptr.final->first.children ()
+				      .begin ())
+		    : const_iterator (_m_ptr.pending->_m_pending->_m_children
+				      .begin ()));
+	  }
+
+	  inline const_iterator end () const
+	  {
+	    return (_m_ptr.final != NULL
+		    ? const_iterator (_m_ptr.final->first.children ()
+				      .end ())
+		    : const_iterator (_m_ptr.pending->_m_pending->_m_children
+				      .end ()));
+	  }
+	};
+
+	typedef typename children_type::const_iterator const_pointer;
+	typedef const_pointer pointer;
+
+	inline const children_type children () const
+	{
+	  return children_type (_m_ptr);
+	}
+
+	inline bool has_children () const
+	{
+	  return !children ().empty ();
+	}
+
+	inline uintptr_t identity () const
+	{
+	  return (uintptr_t) _m_ptr.final ?: (uintptr_t) _m_ptr.pending;
+	}
+
+	inline ::Dwarf_Off original_offset () const
+	{
+	  if (_m_ptr.final == NULL)
+	    return _m_ptr.pending->_m_offset;
+	  return _m_ptr.final->second.original_offset ();
+	}
+      };
+
+      // This wrapper class exists only to enhance reference variant.
+      struct attr_value
+	: public dwarf_output::attr_value
+      {
+	inline attr_value (const dwarf_output::attr_value &other)
+	  : dwarf_output::attr_value (other)
+	{}
+
+	// An entry * in a pending_entry's attr_map counts as a reference.
+	inline dwarf::value_space what_space () const
+	{
+	  return (dynamic_cast<const entry *> (this->_m_value) != NULL
+		  ? dwarf::VS_reference
+		  : dwarf_output::attr_value::what_space ());
+	}
+
+	inline typename debug_info_entry::const_pointer reference () const
+	{
+	  const entry *ref = dynamic_cast<const entry *> (_m_value);
+	  if (ref == NULL)
+	    // Either really a final reference, or a circular reference.
+	    return typename debug_info_entry::const_pointer
+	      (dynamic_cast<const value::value_reference *> (_m_value));
+
+	  /* This is an attribute comparison inside the attrs_match
+	     comparator.  The attribute sets passed to attrs_match
+	     directly don't hit this--they've already been finalized.
+	     But following those references we got to another
+	     pending_entry and its attributes that are not yet
+	     finalized.  If attrs_match winds up returning true, these
+	     will never be finalized because they are duplicates.  */
+	  return typename debug_info_entry::const_pointer
+	    (const_cast<entry *> (ref));
+	}
+      };
+
+      // Convenience wrapper.
+      static inline const typename debug_info_entry::attributes_type
+      attributes (const dwarf_output::debug_info_entry::attributes_type &attrs)
+      {
+	return typename debug_info_entry::attributes_type (attrs.base (),
+							   subr::nothing ());
+      }
+    };
+
+    /* This is a specialized tracker used solely in attrs_match, below.
+       We are comparing final entries already in the collector against
+       the almost-final pending_entry ready to be stored.  Both sides
+       are pending_dwarf rather than dwarf_output begin the left-hand
+       side, because a reference attribute of a "final" entry can be a
+       circular_reference that still points back to a pending entry.  */
+    class tracker
+      : public dwarf_tracker_base<pending_dwarf, pending_dwarf>
+    {
+    private:
+      typedef dwarf_tracker_base<pending_dwarf, pending_dwarf> _base;
+
+      const bool _m_ignore_context;
+
+      inline bool ignore_context () const
+      {
+	return _m_ignore_context;
+      }
+
+    public:
+      typedef typename _base::cu1 cu1;
+      typedef typename _base::cu2 cu2;
+      typedef typename _base::die1 die1;
+      typedef typename _base::die2 die2;
+
+      inline explicit tracker (copier *c)
+	: _m_ignore_context (c->_m_collector->ignore_context ())
+      {}
+
+      typedef die_info_pair *left_context_type;
+      typedef std::pair<die_info_pair *, entry *> right_context_type;
+
+      // Return the lhs context of an arbitrary DIE.
+      inline left_context_type left_context (const die1 &ref)
+      {
+	return (*ref).get_final ();
+      }
+
+      // Return the rhs context of an arbitrary DIE.
+      inline const right_context_type right_context (const die2 &ref)
+      {
+	return (*ref).context ();
+      }
+
+      /* Comparing two final DIEs for context.  They match only if their
+	 immediate parents are the same final entry in the collector, or
+	 if they are both top-level children of a CU.  */
+      inline bool final_context_match (die_info_pair *a, die_info_pair *b)
+      {
+	a = a->second._m_parent;
+	b = b->second._m_parent;
+	if (a == b)
+	  return true;
+	if (a == NULL || b == NULL)
+	  return false;
+	return a->second._m_parent == NULL && b->second._m_parent == NULL;
+      }
+
+      inline bool context_quick_mismatch (const left_context_type &lhs,
+					  const right_context_type &rhs)
+
+      {
+	if (ignore_context ())
+	  return false;
+
+	if (rhs.first != NULL)
+	  // Comparing final to final.
+	  return !final_context_match (lhs, rhs.first);
+
+	// Comparing final to pending.  XXX track depth??
+	return ((rhs.second->_m_parent == NULL)
+		!= (lhs->second._m_parent == NULL));
+      }
+
+      inline bool context_match (const left_context_type &lhs,
+				 const right_context_type &rhs)
+      {
+	if (ignore_context ())
+	  return true;
+
+	if (rhs.first != NULL)
+	  // Comparing final to final.
+	  return final_context_match (lhs, rhs.first);
+
+	// Comparing final to pending.
+	die_info_pair *a = lhs->second._m_parent;
+	entry *b = rhs.second->_m_parent;
+	while (a != NULL)
+	  {
+	    if (b == NULL)
+	      return false;
+
+	    if (a->second._m_parent == NULL)
+	      /* A is the top-level CU entry.
+		 We don't compare the CU attributes.
+		 It's a match if B is also up to its top level.  */
+	      return b->_m_parent == NULL;
+
+	    if (!(dwarf_comparator<dwarf_output, pending_dwarf>::equal_enough
+		  (a->first, typename pending_dwarf::debug_info_entry (b))))
+	      return false;
+
+	    a = a->second._m_parent;
+	    b = b->_m_parent;
+	  }
+
+	// We can only get here if these were actually CU references.
+	return b == NULL;
+      }
+
+#ifdef _DWARF_OUTPUT_DEBUG_SPEW
+      static inline std::ostream &
+      dump (const typename pending_dwarf::debug_info_entry &a,
+	    const typename pending_dwarf::debug_info_entry &b,
+	    bool in = false, bool out = false)
+      {
+	return entry::debug_prefix (in, out)
+	  << "XXX " << (a.final () ? "final " : "pending ")
+	  << std::hex << a.original_offset ()
+	  << " vs " << (b.final () ? "final " : "pending ")
+	  << b.original_offset () << std::dec;
+      }
+
+      static inline std::ostream &
+      dump (const die1 &ref1, const die2 &ref2,
+	    bool in = false, bool out = false)
+      {
+	return dump (*ref1, *ref2, in, out);
+      }
+
+      struct step : public _base::step
+      {
+	inline step (tracker *t, const die1 &a, const die2 &b)
+	  : _base::step (t, a, b)
+	{
+	  dump (*a, *b, true) << " cmp\n";
+	}
+	inline ~step ()
+	{
+	  entry::debug_prefix (false, true, false);
+	}
+      };
+#else
+      static inline subr::nostream &
+      dump (const typename pending_dwarf::debug_info_entry &,
+	    const typename pending_dwarf::debug_info_entry &,
+	    bool = false, bool = false)
+      {
+	return entry::debug ();
+      }
+
+      static inline subr::nostream &
+      dump (const die1 &, const die2 &,
+	    bool = false, bool = false)
+      {
+	return entry::debug ();
+      }
+#endif
+
+      class reference_match
+      {
+	entry *_m_pending;
+
+      public:
+	inline reference_match ()
+	  : _m_pending (NULL)
+	{
+	  entry::debug_prefix (true, false, false);
+	}
+
+	inline bool prematch (tracker *, const die1 &ref1, const die2 &ref2)
+	{
+	  const typename pending_dwarf::debug_info_entry a = *ref1;
+	  const typename pending_dwarf::debug_info_entry b = *ref2;
+
+	  dump (a, b) << " reference_match\n";
+
+	  if (!a.final ())
+	    // XXX pending circular lhs can never match ???
+	    return !b.final () && a.get_pending () == b.get_pending ();
+
+	  die_info_pair *const lhs = a.get_final ();
+
+	  if (b.final ())
+	    return lhs == b.get_final ();
+
+	  entry *const rhs = b.get_pending ();
+
+	  if (rhs->_m_pending->_m_matched != NULL)
+	    return lhs == rhs->_m_pending->_m_matched;
+
+	  if (rhs->_m_comparing != NULL)
+	    {
+	      /* We have a circularity on the right-hand side.  We can tell
+		 because _m_comparing remains set from an outer recursion
+		 still in progress.
+
+		 The circular chain of references rooted at A matches B if B
+		 is also the root of its own circularity and everything along
+		 those parallel chains matches.  If the chains hadn't matched
+		 so far, we would not have kept following them to get here.
+
+		 So, this matches if what we were comparing to was the same A.
+		 If it didn't match, we have left _m_pending clear, which makes
+		 negative_cache trigger (below).  */
+
+	      if (rhs->_m_comparing != lhs)
+		return false;
+
+	      dump (a, b) << " tentative circular match\n";
+	      return true;
+	    }
+
+	  if (rhs->_m_pending->cached_mismatch (lhs))
+	    return false;
+
+	  /* Record that we have a walk in progress crossing B.  When this
+	     reference_match object goes out of scope in our caller, its
+	     destructor will reset _m_comparing to clear this record.  */
+	  rhs->_m_comparing = lhs;
+	  _m_pending = rhs;
+	  return false;
+	}
+
+	inline bool negative_cache () const
+	{
+	  return _m_pending == NULL;
+	}
+
+	inline ~reference_match ()
+	{
+	  if (_m_pending != NULL)
+	    {
+	      assert (_m_pending->_m_comparing != NULL);
+	      _m_pending->_m_comparing = NULL;
+	    }
+	  entry::debug_prefix (false, true, false);
+	}
+      };
+
+      // This call is used purely in hopes of a cache hit.
+      inline bool prematch (reference_match &matched,
+			    const die1 &a, const die2 &b)
+      {
+	bool same = matched.prematch (this, a, b);
+	dump (a, b) << " prematch => " << same << "\n";
+	return same;
+      }
+
+      // This call is used only as part of a real reference lookup.
+      inline bool reference_matched (reference_match &matched,
+				     const die1 &a, const die2 &b)
+      {
+	bool same = matched.prematch (this, a, b);
+	dump (a, b) << " reference_matched => " << same << "\n";
+	return same;
+      }
+
+      // Check for a negative cache hit after prematch or reference_match.
+      inline bool cannot_match (reference_match &matched,
+				const die1 &, const die2 &)
+      {
+	return matched.negative_cache ();
+      }
+
+      // This can cache a result.
+      inline bool notice_match (reference_match &matched,
+				const die1 &ref1, const die2 &ref2,
+				bool result)
+      {
+	if (result && matched.negative_cache ())
+	  {
+	    /* This positive result is from a tentative match of congruent
+	       circular references.  That doesn't mean they really match,
+	       only that they might if the rest of their trees do.  Don't
+	       cache it as a match now.  */
+	    dump (ref1, ref2) << " should ignore tentative match\n";
+	    return result;
+	  }
+
+	const typename pending_dwarf::debug_info_entry a = *ref1;
+	const typename pending_dwarf::debug_info_entry b = *ref2;
+	dump (a, b) << " notice_match (" << result << ")\n";
+	if (result)
+	  {
+	    /* We've found two matching entries.  If we just matched a
+	       final entry to a pending entry, cache that knowledge so
+	       we don't bother with the whole hash lookup and comparison
+	       when we come to finalizing that pending entry itself.  */
+
+	    if (a.final ())
+	      {
+		if (!b.final ())
+		  b.get_pending ()->record_prematch (a.get_final (), false);
+	      }
+	    else if (b.final ())
+	      a.get_pending ()->record_prematch (b.get_final (), true);
+	  }
+	else
+	  b.get_pending ()->_m_pending->notice_mismatch (a.get_final ());
+	return result;
+      }
+
+      template<typename item1, typename item2>
+      inline bool identical (const item1 &, const item2 &)
+      {
+	return false;
+      }
+
+      inline bool identical (const typename pending_dwarf::debug_info_entry &a,
+			     const typename pending_dwarf::debug_info_entry &b)
+      {
+	return a.is (b);
+      }
+
+      inline bool identical (const typename pending_dwarf::attr_value &a,
+			     const typename pending_dwarf::attr_value &b)
+      {
+	return a.is (b);
+      }
+
+      typedef tracker subtracker;
+      inline tracker (const tracker &proto, reference_match &,
+		      const left_context_type &,
+		      const right_context_type &)
+	: _m_ignore_context (proto._m_ignore_context)
+      {}
+    };
+
+    typedef dwarf_comparator<pending_dwarf, pending_dwarf,
+			     false, tracker> comparator;
+
+    // This is what the entire pending_dwarf class exists for.
+    inline bool attrs_match (const debug_info_entry::attributes_type &a,
+			     const debug_info_entry::attributes_type &b)
+    {
+      tracker t (this);
+      return comparator (t).equals (pending_dwarf::attributes (a),
+				    pending_dwarf::attributes (b));
+    }
+
+    /* We're likely to come across the same strings/identifiers and source
+       files many times in a copying run.  When they are the very same
+       pointers into the input dwarf object data, we can optimize the
+       ordinary string hash lookup in the value_set by caching the mapping
+       of input pointers to output values.  */
+    template<typename value_type>
+    struct string_cache
+    {
+      std::map<uintptr_t, const value_type *> _m_cache;
+
+      template<typename input>
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    uintptr_t key, const input &x)
+      {
+	const value_type *&cache = _m_cache[key];
+	if (cache == NULL)
+	  cache = set.add (x);
+	return cache;
+      }
+
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    const char *x)
+      {
+	return add (set, (uintptr_t) x, x);
+      }
+
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    const std::string &x)
+      {
+	return add (set, (uintptr_t) &x, x);
+      }
+
+      template<typename input>
+      inline const value_type *add (subr::value_set<value_type> &set,
+				    const input &x)
+      {
+	return set.add (x);
+      }
+    };
+
+    string_cache<value::value_string> _m_strings;
+    string_cache<value::value_identifier> _m_identifiers;
+
+    std::tr1::unordered_map<
+      uintptr_t, const value::value_source_file *> _m_source_file_cache;
+
+    template<typename input>
+    inline const value::value_source_file *add_source_file (int /*whatattr*/,
+							    const input &x)
+    {
+      const value::value_source_file *&cache
+	= _m_source_file_cache[x.identity ()];
+      if (cache == NULL)
+	cache = _m_collector->_m_source_file.add (x);
+      return cache;
+    }
+
+    template<typename input>
+    inline const value::value_string *add_string (const input &x)
+    {
+      return _m_strings.add (_m_collector->_m_strings, x);
+    }
+
+    template<typename input>
+    inline const value::value_string *add_identifier (const input &x)
+    {
+      return _m_identifiers.add (_m_collector->_m_identifiers, x);
+    }
+
+    template<typename input>
+    inline const value::value_flag *add_flag (const input &x)
+    {
+      return dwarf_output_collector::flag (x);
+    }
+
+    template<typename input>
+    inline const value::value_address *add_address (const input &x)
+    {
+      return _m_collector->_m_address.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_rangelistptr *add_ranges (const input &x)
+    {
+      return _m_collector->_m_ranges.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_lineptr *add_line_info (const input &x)
+    {
+      return _m_collector->_m_line_info.add (x, *_m_collector);
+    }
+
+    template<typename input>
+    inline const value::value_constant *add_constant (const input &x)
+    {
+      return _m_collector->_m_constants.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_constant_block *
+    add_constant_block (const input &x)
+    {
+      return _m_collector->_m_const_block.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_dwarf_constant *
+    add_dwarf_constant (const input &x)
+    {
+      return _m_collector->_m_dwarf_const.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_source_line *add_source_line (const input &x)
+    {
+      return _m_collector->_m_source_line.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_source_column *add_source_column (const input &x)
+    {
+      return _m_collector->_m_source_column.add (x);
+    }
+
+    template<typename input>
+    inline const value::value_location *add_location (const input &x)
+    {
+      return _m_collector->_m_locations.add (x);
+    }
+
+  public:
+    inline explicit copier (dwarf_output_collector &c)
+      : _m_collector (&c), _m_entries (), _m_undefined_entries (0)
+    {}
+
+    inline operator dwarf_output_collector & () const
+    {
+      return *_m_collector;
+    }
+  };
+
+  // Explicit instantiations.
+  extern template class dwarf_data::value<dwarf_output, false>;
+  extern template class dwarf_data::attr_value<dwarf_output,
+					       dwarf_output::value>;
+  extern template class dwarf_data::attributes_type<dwarf_output,
+						    dwarf_output::value>;
+  extern template class dwarf_data::compile_unit<dwarf_output>;
+  extern template class dwarf_data::compile_units_type<dwarf_output>;
+
+  extern template class dwarf_output::copier<dwarf>;
+  extern template class dwarf_output::copier<dwarf_edit>;
+};
+
+#endif	// <elfutils/dwarf_output>

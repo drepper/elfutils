@@ -1,0 +1,738 @@
+/* elfutils::dwarf_ref_tracker -- DWARF reference tracking in -*- C++ -*-
+   Copyright (C) 2009-2011 Red Hat, Inc.
+   This file is part of elfutils.
+
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of either
+
+     * the GNU Lesser General Public License as published by the Free
+       Software Foundation; either version 3 of the License, or (at
+       your option) any later version
+
+   or
+
+     * the GNU General Public License as published by the Free
+       Software Foundation; either version 2 of the License, or (at
+       your option) any later version
+
+   or both in parallel, as here.
+
+   elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received copies of the GNU General Public License and
+   the GNU Lesser General Public License along with this program.  If
+   not, see <http://www.gnu.org/licenses/>.  */
+
+#ifndef _ELFUTILS_DWARF_TRACKER
+#define _ELFUTILS_DWARF_TRACKER	1
+
+#include "subr.hh"
+#include "dwarf"
+#include "dwarf_comparator"
+#include <tr1/unordered_map>
+#include <tr1/unordered_set>
+
+namespace elfutils
+{
+  // Basic tracker of tree-walk paths to DIEs.
+  template<typename dw>
+  class dwarf_path_finder
+  {
+  public:
+    typedef typename dw::compile_units_type::const_iterator cu;
+    typedef typename dw::debug_info_entry::children_type::const_iterator die;
+
+    /* We maintain the current path down the logical DIE tree from the CU
+       as a stack of iterators pointing to the DIE at each level.
+
+       Note that the path to a DIE includes the iterator to that DIE
+       itself as the last element.  This is necessary to permit sharing
+       our _m_seen cache across CUs.  That sharing is useful when CUs
+       might share children (i.e. they use DW_TAG_imported_unit).
+       But when they do, then the "construct a derived tracker that
+       jump-starts a walk" case for following a reference might be for
+       a reference to another CU than the one the base tracker is
+       walking (_m_root).  When path_to finds the "context" path to the
+       referent, the iterator that jump-starts a new walk must be an
+       iterator pointing to the referent, but must be an iterator
+       somewhere in the _m_root CU's tree, not another CU's.
+
+       NOTE!!! XXX
+       This scenario means we can have a die_path in our _m_seen that
+       is not from our current _m_root CU.  This is only safe as long
+       as we are sure that we have already completely walked the other
+       CU that die_path came from so all its entries are in _m_seen.
+       This ensures that a derived tracker that jump-starts its walk at
+       a path in another CU will never actually have to do any walking.
+       If it ever walked, it could go awry failing to recognize the end
+       of its CU's children list--it's not _m_root->children ().end ().
+       If we want to generalize dwarf_path_finder so it can be used as
+       a generic cache when we might not have walked whole CUs, then we
+       need to change things.  We'd have to store _m_root along with
+       _m_path in _m_seen so that a derived tracker made from path_to
+       "context" can use the right _m_root.
+    */
+    typedef subr::sharing_stack<die> die_path;
+
+  private:
+    // We use an empty list as a marker; every path includes at least one DIE.
+    static inline const die_path bad_die_path ()
+    {
+      return die_path ();
+    }
+    static inline bool bad_die_path (const die_path &path)
+    {
+      return path.empty ();
+    }
+
+    /* We record every DIE we have seen here, mapping its .identity () to
+       the die_path of parent DIEs taken to reach it, including itself.  */
+    typedef std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+				    const die_path> die_map;
+    die_map *_m_seen;
+
+    /* The original object that this was cloned from, or NULL if this is
+       it.  That object owns the _m_seen map and will delete it.  */
+    dwarf_path_finder *_m_owner;
+
+    /* A cloned object used for walking ahead to satisfy path_to.
+       This is only ever set in an original object, where _m_owner is NULL.  */
+    dwarf_path_finder *_m_walkahead;
+
+    // The total number of DIEs visited in this object's walk.
+    unsigned int _m_steps_taken;
+
+    cu _m_root;
+
+    die_path _m_path;
+
+    explicit dwarf_path_finder (const dwarf_path_finder &)
+    {
+      throw std::logic_error ("not copy-constructible");
+    }
+
+    explicit dwarf_path_finder (dwarf_path_finder *owner)
+      : _m_seen (owner->_m_seen), _m_owner (owner),
+	_m_walkahead (NULL), _m_steps_taken (owner->_m_steps_taken),
+	_m_root (owner->_m_root), _m_path (owner->_m_path)
+    {
+    }
+
+    inline bool at_top () const
+    {
+      return _m_path.empty ();
+    }
+
+    inline const die &current_die () const
+    {
+      assert (!at_top ());
+      return _m_path.top ();
+    }
+
+    inline dwarf::debug_info_entry::identity_type current_identity () const
+    {
+      return (*current_die ()).identity ();
+    }
+
+    inline die current_end () const
+    {
+      assert (!at_top ());
+      const typename die_path::const_reverse_iterator i = ++_m_path.rbegin ();
+      return (i == _m_path.rend ()
+	      ? (*_m_root).children ().end ()
+	      : (**i).children ().end ());
+    }
+
+    // Append this DIE to the path we'll record for it and its children.
+    inline void step_forward (const die &here)
+    {
+      _m_path.push (here);
+      assert (!bad_die_path (_m_path));
+      ++_m_steps_taken;
+      record_step ();
+    }
+
+    inline void step_back ()
+    {
+      _m_path.pop ();
+    }
+
+    inline void clear_walkahead ()
+    {
+      delete _m_walkahead;
+      _m_walkahead = NULL;
+    }
+
+    inline void clear_walk ()
+    {
+      if (_m_walkahead != NULL)
+	clear_walkahead ();
+      _m_steps_taken = 0;
+    }
+
+    // Record the path down from the CU to see this DIE.
+    inline void record_step ()
+    {
+      if (_m_walkahead != NULL)
+	{
+	  if (_m_steps_taken == _m_walkahead->_m_steps_taken)
+	    // We have caught up to the walkahead, so it's now superfluous.
+	    clear_walkahead ();
+	  else
+	    // The walkahead is past us, so there is nothing to record.
+	    assert (_m_steps_taken < _m_walkahead->_m_steps_taken);
+	}
+      else
+	_m_seen->insert (std::make_pair (current_identity (), _m_path));
+    }
+
+  public:
+    // Default constructor: an original tracker.
+    inline dwarf_path_finder ()
+      : _m_seen (new die_map), _m_owner (NULL),
+	_m_walkahead (NULL), _m_steps_taken (0)
+    {}
+
+    // Construct a derived tracker: does its own whole walk, but sharing caches.
+    inline dwarf_path_finder (const dwarf_path_finder &proto, bool)
+      : _m_seen (proto._m_seen), _m_owner (&proto),
+	_m_walkahead (NULL), _m_steps_taken (0)
+    {}
+
+    /* Construct a derived tracker that jump-starts a walk.
+       CONTEXT is from a path_to call made on PROTO.  */
+    inline dwarf_path_finder (dwarf_path_finder &proto,
+			      const die_path &context)
+      : _m_seen (proto._m_seen), _m_owner (proto._m_owner ?: &proto),
+	_m_walkahead (NULL), _m_steps_taken (0),
+	_m_root (proto._m_root), _m_path (context)
+    {}
+
+    inline ~dwarf_path_finder ()
+    {
+      if (_m_owner == NULL)
+	{
+	  delete _m_seen;
+	  // We should never be left with a partial walk on the books.
+	  assert (_m_path.empty ());
+	}
+    }
+
+    // Main hooks for a normal walk.
+
+    /* A walk object does set-up work when constructed and tear-down
+       work when destroyed, so tear-down is done even for exceptions.  */
+    struct walk
+    {
+      dwarf_path_finder *_m_tracker;
+      bool _m_jumped;
+
+      inline walk (dwarf_path_finder *w, const cu &root)
+	: _m_tracker (w), _m_jumped (false)
+      {
+	assert (_m_tracker->_m_path.empty ());
+	assert (_m_tracker->_m_steps_taken == 0);
+	assert (_m_tracker->_m_walkahead == NULL);
+	_m_tracker->_m_root = root;
+      }
+
+      inline ~walk ()
+      {
+	if (_m_jumped)
+	  _m_tracker->_m_path.clear ();
+	else
+	  assert (_m_tracker->_m_path.empty ());
+	_m_tracker->clear_walk ();
+      }
+
+      inline void jump (const typename dw::debug_info_entry &there)
+      {
+	_m_jumped = true;
+	_m_tracker->prime_path_to (there);
+      }
+    };
+
+    /* A step object does pre-order work when constructed and post-order
+       work when destroyed, so post-order is done even for exceptions.
+       While this object lives, HERE is on the _m_path stack.  */
+    struct step
+    {
+      dwarf_path_finder *_m_walker;
+      inline step (dwarf_path_finder *w, const die &here)
+	: _m_walker (w)
+      {
+	_m_walker->step_forward (here);
+      }
+      inline ~step ()
+      {
+	_m_walker->step_back ();
+      }
+    };
+
+    inline void unreachable (const typename dw::debug_info_entry &) const
+    {
+      throw std::runtime_error ("DIE not reachable from CU!");
+    }
+
+    inline void prime_path_to (const typename dw::debug_info_entry &there)
+    {
+      if (_m_owner != NULL)
+	{
+	  /* Since this is a cloned tracker,
+	     _m_steps_taken counting does not matter.  */
+	  assert (this != _m_owner->_m_walkahead);
+	  _m_path = path_to (there);
+	}
+      else
+	{
+	  /* Spin the walk ahead until we get THERE.  */
+	  const dwarf::debug_info_entry::identity_type id = there.identity ();
+	  if (_m_seen->find (id) != _m_seen->end ())
+	    {
+	      /* We're walking backwards now.  We have to repeat the
+		 whole walk to recover our _m_steps_taken state correctly.  */
+	      _m_path.clear ();
+	      clear_walk ();
+	    }
+
+	  if (at_top ())
+	    {
+	      /* We have to get the walk started.  */
+	      const die first = (*_m_root).children ().begin ();
+	      if (first == (*_m_root).children ().end ())
+		unreachable (there); // Empty CU!
+
+	      step_forward (first);
+	      if ((*first).identity () == id)
+		return;
+	    }
+
+	  /* We have not walked past it yet, so just keep walking.  */
+	  if (! walk_to (id))
+	    unreachable (there);
+	}
+    }
+
+    // Random access to a DIE, find the path of the walk that gets there.
+    inline const die_path &path_to (const die &a)
+    {
+      return path_to (*a);
+    }
+
+    inline const die_path &path_to (const typename dw::debug_info_entry &a)
+    {
+      if (_m_owner != NULL)
+	return _m_owner->path_to (a);
+
+      const dwarf::debug_info_entry::identity_type id = a.identity ();
+      const typename die_map::const_iterator found = _m_seen->find (id);
+      if (found != _m_seen->end ())
+	return found->second;
+
+      /* It's not in our _m_seen map.  Our main walk recording
+	 into _m_seen is exhaustive, so this can only be a forward
+	 reference.  That is, we didn't already hit this DIE in
+	 our top-level walk and so it is not in _m_seen yet.
+	 We must walk ahead to find it.  */
+      return walk_ahead_to (a, id);
+    }
+
+  private:
+    /* Do some walkahead to find the target entry.
+       This can only be used on the master object, not its clones.  */
+    inline const die_path &
+    walk_ahead_to (const typename dw::debug_info_entry &a,
+		   dwarf::debug_info_entry::identity_type id)
+    {
+      assert (_m_owner == NULL);
+      if (_m_walkahead == NULL)
+	// Create our walkahead clone.
+	_m_walkahead = new dwarf_path_finder (this);
+      if (! _m_walkahead->walk_to (id))
+	unreachable (a);
+      return _m_walkahead->_m_path;
+    }
+
+    // Do some actual walkahead.  This is used only on the walkahead clone.
+    inline bool walk_to (dwarf::debug_info_entry::identity_type id)
+    {
+      return walk_down_to (id) || walk_over_to (id) || walk_up_to (id);
+    }
+
+    // Descend into child HERE (already pushed) looking for THERE.
+    inline bool walk_in_to (const typename die::value_type &here,
+			    dwarf::debug_info_entry::identity_type there)
+    {
+      return (here.has_children ()
+	      && walk_through_to (here.children ().begin (),
+				  here.children ().end (),
+				  there));
+    }
+
+    // Walk through siblings [IT,END) looking for THERE.
+    bool walk_through_to (die it, const die &end,
+			  dwarf::debug_info_entry::identity_type there)
+    {
+      for (; it != end; ++it)
+	{
+	  /* Do step_forward even for a childless non-match, because it
+	     records this DIE in _m_seen, which we will rely on later.  */
+	  step_forward (it);
+
+	  const typename die::value_type &child = *it;
+
+	  /* Note that we compare identities here, rather than passing down
+	     a THERE iterator and comparing iterators.  In dwarf_output, we
+	     can have multiple iterators into distinct children_type vectors
+	     that all point to the same entry.  A reference could be one of
+	     these iterators, and all mean the same entry.  */
+	  if (child.identity () == there || walk_in_to (child, there))
+	    return true;
+
+	  // Come back out of this child to look at the next.
+	  step_back ();
+	}
+      return false;
+    }
+
+    /* First descend into the current DIE's children.
+       _m_path already has the current DIE, so it is ready to go.  */
+    // XXX is a reference to an owned DIE really possible??
+    inline bool walk_down_to (dwarf::debug_info_entry::identity_type there)
+    {
+      return walk_in_to (*current_die (), there);
+    }
+
+    /* Now wind the walk forward starting from the current DIE's
+       immediate sibling.  If we fail, we wind up at this DIE's parent.  */
+    inline bool walk_over_to (dwarf::debug_info_entry::identity_type there)
+    {
+      // Fetch the current DIE and end-point before we step back.
+      die here (current_die ());
+      const die end = current_end ();
+
+      step_back ();
+      return walk_through_to (++here, end, there);
+    }
+
+    /* We have already stepped back from the current DIE to its parent.
+       Now wind the walk forward from that parent's immediate sibling.  */
+    inline bool walk_up_to (dwarf::debug_info_entry::identity_type there)
+    {
+      while (!at_top ())
+	if (walk_over_to (there))
+	  return true;
+      return false;
+    }
+  };
+
+  // Standard tracker.
+  template<class dwarf1, class dwarf2>
+  class dwarf_ref_tracker : public dwarf_tracker_base<dwarf1, dwarf2>
+  {
+  private:
+    typedef dwarf_tracker_base<dwarf1, dwarf2> _base;
+
+    explicit dwarf_ref_tracker (const dwarf_ref_tracker &)
+       : _base ()
+    {
+      throw std::logic_error ("not copy-constructible");
+    }
+
+  public:
+    typedef typename _base::cu1 cu1;
+    typedef typename _base::cu2 cu2;
+    typedef typename _base::die1 die1;
+    typedef typename _base::die2 die2;
+    class reference_match;
+
+  protected:
+    typedef dwarf_path_finder<dwarf1> tracker1;
+    typedef dwarf_path_finder<dwarf2> tracker2;
+
+    tracker1 _m_left;
+    tracker2 _m_right;
+
+    struct ref_hasher : public std::unary_function<die2, size_t>
+    {
+      inline size_t operator () (const die2 &i) const
+      {
+	return (*i).identity ();
+      }
+    };
+
+    struct same_ref : public std::equal_to<die2>
+    {
+      inline bool operator () (const die2 &a, const die2 &b) const
+      {
+	return (*a).identity () == (*b).identity ();
+      }
+    };
+
+    typedef std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+				    reference_match *> active_map;
+    active_map _m_active;
+
+    typedef std::pair<const die2 *,
+		      std::tr1::unordered_set<die2, ref_hasher, same_ref>
+		      > equiv_list;
+    typedef std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+				    equiv_list> equiv_map;
+    equiv_map *_m_equiv;
+    bool _m_delete_equiv;
+
+    inline equiv_list *equiv_to (const die1 &a)
+    {
+      return &(*_m_equiv)[a->identity ()];
+    }
+
+    struct equal_enough : public std::binary_function<die1, die2, bool>
+    {
+      inline bool operator () (const die1 &a, const die2 &b)
+      {
+	return dwarf_comparator<dwarf1, dwarf2>::equal_enough (*a, *b);
+      }
+    };
+
+  public:
+    inline dwarf_ref_tracker ()
+      : _m_equiv (new equiv_map), _m_delete_equiv (true)
+    {}
+
+    inline dwarf_ref_tracker (const tracker1 &proto)
+      : _m_left (proto, true),
+	_m_equiv (new equiv_map), _m_delete_equiv (true)
+    {}
+
+    inline ~dwarf_ref_tracker ()
+    {
+      if (_m_delete_equiv)
+	delete _m_equiv;
+    }
+
+    inline void reset ()
+    {
+      _m_equiv->clear ();
+      assert (!_m_right->_m_delete_seen);
+      _m_right._m_seen->clear ();
+    }
+
+    struct walk
+    {
+      typename tracker1::walk _m_left;
+      typename tracker2::walk _m_right;
+
+      inline walk (dwarf_ref_tracker *w, const cu1 &a, const cu2 &b)
+	: _m_left (&w->_m_left, a), _m_right (&w->_m_right, b)
+      {}
+
+      // Wind forward to cache everything up through A and B.
+      inline void jump (const typename dwarf1::debug_info_entry &a,
+			const typename dwarf2::debug_info_entry &b)
+      {
+	_m_left.jump (a);
+	_m_right.jump (b);
+      }
+    };
+
+    struct step
+    {
+      typename tracker1::step _m_left;
+      typename tracker2::step _m_right;
+
+      inline step (dwarf_ref_tracker *w, const die1 &a, const die2 &b)
+	: _m_left (&w->_m_left, a), _m_right (&w->_m_right, b)
+      {}
+    };
+
+    typedef typename tracker1::die_path left_context_type;
+    inline const left_context_type &left_context (const die1 &die)
+    {
+      return _m_left.path_to (die);
+    }
+
+    typedef typename tracker2::die_path right_context_type;
+    inline const right_context_type &right_context (const die2 &die)
+    {
+      return _m_right.path_to (die);
+    }
+
+    // Very cheap check for an obvious mismatch of contexts.
+    inline bool context_quick_mismatch (const left_context_type &a,
+					const right_context_type &b)
+
+    {
+      return a.size () != b.size ();
+    }
+
+    // Full match when context_quick_mismatch has returned false.
+    inline bool context_match (const left_context_type &a,
+			       const right_context_type &b)
+    {
+      equal_enough equalator;
+      // Ignore the top of the stack, which is the target DIE itself.
+      return a.equal (b, equalator, 1);
+    }
+
+    class reference_match
+    {
+      friend class dwarf_ref_tracker;
+    protected:
+      equiv_list *_m_lhs;
+      typename active_map::value_type *_m_rhs;
+      active_map *_m_active;
+
+    public:
+
+      inline reference_match ()
+	: _m_lhs (NULL), _m_rhs (NULL), _m_active (NULL)
+      {}
+
+      inline ~reference_match ()
+      {
+	if (_m_lhs != NULL)
+	  _m_lhs->first = NULL;
+	if (_m_rhs != NULL)
+	  _m_active->erase (_m_rhs->first);
+      }
+    };
+
+    /* A prematch during the main tree walk does the same cache lookup
+       as real reference matching.  But it doesn't record itself as a
+       "walk in progress" for the circularity-catching logic.  Doing so
+       can break that logic for comparison purposes.  Since we key our
+       cache on identity, a lookup can hit a shared DIE as well as one
+       that is truly involved in our current walk.  If we hit a shared
+       DIE on the main walk, and within that recursion (i.e. somewhere
+       in its children or along its own references) we encounter a
+       circularity, we'd take the main-walk's equiv_list record as the
+       root of the circularity on one side, while on the other side the
+       DIEs may not have been shared and so the same circularity is
+       actually rooted at the second instance of an identical DIE.  */
+    inline bool prematch (reference_match &matched,
+			  const die1 &a, const die2 &b)
+    {
+      return reference_matched (matched, a, b, false);
+    }
+
+    inline bool
+    reference_matched (reference_match &matched, const die1 &a, const die2 &b,
+		       bool record = true)
+    {
+      equiv_list *elt = equiv_to (a);
+      if (elt->first == NULL)
+	{
+	  matched._m_lhs = elt;
+
+	  if (record)
+	    /* Record that we have a walk in progress crossing A.
+	       When MATCHED goes out of scope in our caller, its
+	       destructor will reset ELT->first to clear this record.  */
+	    elt->first = &b;
+
+	  // Short-circuit if we have already matched B to A.
+	  return elt->second.find (b) != elt->second.end ();
+	}
+
+      /* We have a circularity on the left-hand side.  We can tell because
+	 ELT->first remains set from an outer recursion still in progress.
+
+	 The circular chain of references rooted at A matches B if B is
+	 also the root of its own circularity and everything along those
+	 parallel chains matches.  If the chains hadn't matched so far,
+	 we would not have kept following them to get here.
+
+	 We recorded the B that arrived at the first comparison with A.
+	 We actually record the pointer on the caller's stack rather
+	 than a copy of B, just because the iterator might be larger.  */
+
+      if ((**elt->first).identity () == (*b).identity ())
+	return true;
+
+      /* Our right-hand side is not in lock-step on a matching circularity.
+	 But it's still possible this is a matching reference nonetheless.
+	 A difference in the sharing vs duplication of DIEs between the
+	 left-hand and right-hand sides could mean that one side's chain of
+	 references reaches the same cycle sooner than the other's.
+
+	 Consider:
+
+	 	A1 -> A2 -> ... -> A1' -> A2 ...
+	 	B1 -> B2 -> ... -> B1  -> B2 ...
+
+	 Here A1' is an identical copy of A1, duplicated in the A object.
+	 Otherwise A1 matches B1, A2 matches B2, etc.  The B walk started
+	 at B1 and hits it again at the step comparing B1 to A1'.  But the
+	 A walk has not hit A1 again yet (and perhaps it never will), so
+	 our test above does not match.
+
+	 This is the simplest example.  There might be more steps of the
+	 reference chain that have duplicates on one side but have been
+	 consolidated to a single entry on the other.  There can also be
+	 multiple reference attributes at each node that differ on this
+	 issue, making all manner of tangled graphs that all really match
+	 the same simpler graph (and thus each other).
+
+	 Now we start recording the state of the right-hand side reference
+	 chain walk, and keep going.  When the right-hand side then becomes
+	 circular, we check that it has coincided with the left-hand side.
+
+	 This is guaranteed to terminate, at least.  It should never have
+	 any false positives, since that continuing walk would eventually
+	 find the differences.  We hope it doesn't have any false negatives
+	 either, but to be sure of that would require more graph theory
+	 than your humble writer can bring to bear.  */
+
+      const std::pair<typename active_map::iterator, bool> p
+	= _m_active.insert (std::make_pair ((*b).identity (), &matched));
+      if (p.second)
+	{
+	  assert (p.first->second == &matched);
+	  matched._m_lhs = elt;
+	  matched._m_active = &_m_active;
+	  matched._m_rhs = &*p.first;
+	  return false;
+	}
+
+      assert (p.first->second != &matched);
+      return p.first->second->_m_lhs == elt;
+    }
+
+    inline bool cannot_match (reference_match &matched,
+			      const die1 &, const die2 &)
+    {
+      return matched._m_lhs == NULL && matched._m_rhs == NULL;
+    }
+
+    inline bool notice_match (reference_match &/*matched*/,
+			      const die1 &, const die2 &/*b*/, bool matches)
+    {
+      /* XXX not reliable!
+	 This match could be predicated on a tentative match of a
+	 circular ref inside.  We can't cache that!
+      if (matches && matched._m_lhs != NULL)
+	matched._m_lhs->second.insert (b);
+      */
+      return matches;
+    }
+
+    typedef dwarf_ref_tracker subtracker;
+
+    // Share the _m_seen maps with the prototype tracker,
+    // but start a fresh walk from the given starting point.
+    inline dwarf_ref_tracker (dwarf_ref_tracker &proto, reference_match &,
+			      const left_context_type &lhs,
+			      const right_context_type &rhs)
+      : _m_left (proto._m_left, lhs),
+	_m_right (proto._m_right, rhs),
+	_m_equiv (proto._m_equiv), _m_delete_equiv (false)
+    {
+      // We are starting a recursive consideration of LHS vs RHS.
+    }
+  };
+};
+
+#endif	// <elfutils/dwarf_tracker>

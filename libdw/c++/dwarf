@@ -1,0 +1,2476 @@
+/* -*- C++ -*- interfaces for libdw.
+   Copyright (C) 2009-2011 Red Hat, Inc.
+   This file is part of elfutils.
+
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of either
+
+     * the GNU Lesser General Public License as published by the Free
+       Software Foundation; either version 3 of the License, or (at
+       your option) any later version
+
+   or
+
+     * the GNU General Public License as published by the Free
+       Software Foundation; either version 2 of the License, or (at
+       your option) any later version
+
+   or both in parallel, as here.
+
+   elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received copies of the GNU General Public License and
+   the GNU Lesser General Public License along with this program.  If
+   not, see <http://www.gnu.org/licenses/>.  */
+
+#ifndef _ELFUTILS_DWARF
+#define _ELFUTILS_DWARF	1
+
+#include "libdw.h"
+#include "dwarf.h"
+#include "subr.hh"
+#include <stdexcept>
+
+#include <list>
+#include <map>
+#include <set>
+#include <vector>
+#include <algorithm>
+#include <functional>
+#include <tr1/unordered_map>
+
+/* Abstractly, one DWARF object file consists of a few containers.
+   (We omit .debug_frame for now.  It does not interact with the others.)
+
+   1. list of compilation units		(.debug_info)
+   2. map of PC ranges to CU		(.debug_aranges)
+   3. map of global names to CU+DIE	(.debug_pubnames)
+   4. map of type names to CU+DIE	(.debug_pubtypes)
+
+   These maps refer to the CUs in .debug_info and optimize lookups
+   compared to simple iteration.
+
+   A compile_unit is a debug_info_entry.
+   A debug_info_entry consists of a tag (int/enum), and two containers:
+   children and attributes.  The attributes are an unordered map of name
+   (int/enum) to attribute value (complex variant record).  Children are
+   in an ordered list, each also a debug_info_entry.
+
+   dwarf.compile_units ()		works like list<compile_unit>
+	-> compile_unit : debug_info_entry
+		.attributes ()		like unordered_map<int, attr_value>
+		.children ()		works like list<debug_info_entry>
+			-> debug_info_entry
+				.attributes ()
+				.children ()
+
+  A compile_unit is not deeply special, it's just a debug_info_entry.
+  It has its own class just for some convenience methods that only
+  make sense for a compile_unit DIE.
+
+  This is the "logical" view of the file, grafting and eliding parts of the
+  raw information that are purely the structural elements of DWARF and not
+  part of the abstract semantics.  In the file reader (elfutils::dwarf),
+  these containers form a layer above the raw containers that expose the
+  file data directly (as the libdw C interfaces do).
+
+  dwarf.raw_compile_units ()		works like list<compile_unit>
+	-> compile_unit : debug_info_entry
+		.raw_attributes ()	like unordered_map<int, attr_value>
+		.raw_children ()	works like list<debug_info_entry>
+			-> debug_info_entry
+				.raw_attributes ()
+				.raw_children ()
+
+  compile_units () elides DW_TAG_partial_unit members,
+  raw_compile_units () includes them.
+
+  attributes () elides DW_AT_sibling, raw_attributes () includes it.
+
+  raw_children () reports DW_TAG_imported_unit as any other child.
+  children () flattens imported units into the containing list.
+
+  The == and != comparisons for dwarf and debug_info_entry objects compare
+  their logical containers, not the raw containers.  The comparisons are
+  defined via templates, so you can compare elfutils::dwarf with any other
+  class that implements the same structure of containers with input iterators.
+
+  The elfutils::dwarf class and its inner classes form a thin, read-only
+  layer of virtual containers that ideally could inline away entirely to
+  calls into the C libdw API and small amounts of stack storage.  The tree
+  of objects described above never exists in memory in its entirety.  The
+  objects are constructed on the fly in each call to a container method.
+
+  See the dwarf_edit and dwarf_output headers for other classes that are
+  template-compatible with the "logical view" interface above, but do not
+  support any of the "raw" container variants.  These == and != comparisons
+  are template-driven too, so all different classes can be compared.
+
+  The output classes have template-driven copy constructors, so they can be
+  copied from files or substructures of the elfutils::dwarf input classes.
+
+  ------ XXX to be done: more file-level containers
+
+  input side only:
+
+  units_by_addr : map<pair<begin,end>, CU> and map<address, CU>
+	use dwarf_getarange_addr
+
+  pub{names,types} : map<string, debug_info_entry> (across all CUs)
+
+  output too:
+
+  pubnames_map : map<string, debug_info_entry>
+  pub{names,types}_units : map<compile_unit, pubnames_map>
+	too much lang knowledge to autogenerate for now,
+	output will do it explicitly
+
+ */
+
+// DWARF reader interfaces: front end to <libdw.h> routines
+namespace elfutils
+{
+  template<typename type>
+  inline std::string to_string (const type &item)
+  {
+    return item.to_string ();
+  }
+
+  template<typename key1, typename value1, class pair2>
+  inline bool operator== (const std::pair<key1, value1> &a, const pair2 &b)
+  {
+    return a.first == b.first && a.second == b.second;
+  }
+
+  // Used like std::vector<elt>, but is really just a simple fixed array.
+  template<typename elt>
+  class const_vector
+  {
+  private:
+    size_t _m_size;
+    const elt *_m_array;
+
+  public:
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef elt value_type;
+    typedef const elt *const_iterator;
+
+    const_vector ()
+      : _m_size (0), _m_array (NULL) {}
+    const_vector (const const_vector &v)
+      : _m_size (v._m_size), _m_array (v._m_array) {}
+    const_vector (const elt *start, const elt *stop)
+      : _m_size (stop - start), _m_array (start) {}
+    const_vector (const ::Dwarf_Block &b)
+      : _m_size (b.length), _m_array (reinterpret_cast<const elt *> (b.data)) {}
+
+    inline const_vector &operator= (const const_vector &v)
+    {
+      _m_size = v._m_size;
+      _m_array = v._m_array;
+      return *this;
+    }
+
+    inline size_t size () const
+    {
+      return _m_size;
+    }
+    inline bool empty () const
+    {
+      return _m_size == 0;
+    }
+
+    const_iterator begin () const
+    {
+      return _m_array;
+    }
+    const_iterator end () const
+    {
+      return &_m_array[_m_size];
+    }
+
+    template<typename other>
+    inline operator other () const
+    {
+      return other (begin (), end ());
+    }
+
+    template<typename vec>
+    inline bool operator== (const vec &other) const
+    {
+      return (other.size () == size ()
+	      && std::equal (begin (), end (), other.begin ()));
+    }
+    template<typename vec>
+    inline bool operator!= (const vec &other) const
+    {
+      return !(*this == other);
+    }
+
+  };
+
+  // One DWARF object file.
+  class dwarf
+  {
+  private:
+    static const char *known_tag (int);
+    static const char *known_attribute (int);
+
+  public:
+    typedef subr::known<__typeof ("DW_TAG_"), known_tag> tags;
+    typedef subr::known<__typeof ("DW_AT_"), known_attribute> attributes;
+
+    template<typename attribute>
+    static inline std::string attribute_name (const attribute &attr)
+    {
+      int code = attr.first;
+      return attributes::name (code);
+    }
+
+    template<int key>
+    class known_enum
+    {
+    public:
+      static size_t prefix_length ();
+      static const char *identifier (int);
+      inline static const char *name (int value)
+      {
+	const char *id = identifier (value);
+	return id != NULL ? id + prefix_length () : NULL;
+      }
+
+      // XXX perhaps have iterator/lookup methods like a read-only map?
+    };
+
+    typedef known_enum< ::DW_AT_producer> forms;
+    typedef known_enum< ::DW_AT_location> ops;
+
+  private:
+    static void throw_libdw (::Dwarf *dw); // XXX raises (...)
+    static void throw_libdw (::Dwarf_CU *); // XXX raises (...)
+
+    inline void xif (bool fail) const
+    {
+      if (unlikely (fail))
+	throw_libdw (_m_dw);
+    }
+    static inline void xif (::Dwarf_CU *cu, bool fail)
+    {
+      if (unlikely (fail))
+	throw_libdw (cu);
+    }
+
+    static inline void xif (const ::Dwarf_Attribute *attr, bool fail)
+    {
+      xif (attr->cu, fail);
+    }
+    static inline void xif (const ::Dwarf_Die *die, bool fail)
+    {
+      xif (die->cu, fail);
+    }
+
+    template<typename raw, typename raw_element, typename element,
+	     bool skip (const raw_element &)>
+    class skipping_wrapper
+    {
+    protected:
+      typedef typename raw::const_iterator raw_iterator;
+
+      raw _m_raw;
+
+    protected:
+      inline skipping_wrapper (const raw &r) : _m_raw (r) {}
+
+    public:
+      inline skipping_wrapper (const skipping_wrapper &w) : _m_raw (w._m_raw) {}
+
+      /*
+	iterator: wraps raw iterator, skips DW_AT_sibling
+	size/empty: search for DW_AT_sibling, adjust raw size
+      */
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, element>
+      {
+	friend class skipping_wrapper<raw, raw_element, element, skip>;
+      private:
+	raw_iterator _m_raw;
+	const raw_iterator _m_end;
+
+	inline void jiggle ()
+	{
+	  while (_m_raw != _m_end && unlikely (skip (*_m_raw)))
+	    ++_m_raw;
+	}
+
+      public:
+	inline const_iterator ()
+	  : _m_raw (), _m_end (raw::end ())
+	{
+	}
+
+	const_iterator (const const_iterator &i)
+	  : _m_raw (i._m_raw), _m_end (i._m_end) {}
+
+	// Start at the raw position and skip as necessary.
+	const_iterator (const raw_iterator &begin, const raw_iterator &end)
+	  : _m_raw (begin), _m_end (end)
+	{
+	  jiggle ();
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_raw = other._m_raw;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_raw == other._m_raw;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	struct hasher : public std::unary_function<const_iterator, size_t>
+	{
+	  size_t operator () (const const_iterator &i) const
+	  {
+	    return subr::hash_this (i._m_raw);
+	  }
+	};
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  ++_m_raw;
+	  jiggle ();
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+
+	inline element operator* () const
+	{
+	  return static_cast<element> (*_m_raw);
+	}
+      };
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (_m_raw.begin (), _m_raw.end ());
+      }
+      inline const_iterator end () const
+      {
+	const raw_iterator raw_end = _m_raw.end ();
+	return const_iterator (raw_end, raw_end);
+      }
+    };
+
+  public:
+    /*
+      getstring
+    */
+
+    class attribute;
+    class attr_value;
+    class location_attr;
+    class range_list;
+    class ranges;
+    class line_info_table;
+    class file_table;
+    class line_table;
+    class line_entry;
+    class dwarf_enum;
+
+    class debug_info_entry
+    {
+    private:
+      ::Dwarf_Die _m_die;
+      inline ::Dwarf_Die *thisdie () const
+      {
+	return const_cast< ::Dwarf_Die *> (&_m_die);
+      }
+
+      friend class dwarf;
+      friend class attr_value;
+    protected:
+
+      inline void xif (bool fail) const
+      {
+	dwarf::xif (_m_die.cu, fail);
+      }
+
+      inline debug_info_entry ()
+      {
+	memset (&_m_die, 0, sizeof _m_die);
+      }
+
+    public:
+      debug_info_entry (const debug_info_entry &die) : _m_die (die._m_die) {}
+
+      inline debug_info_entry (const dwarf &dw, ::Dwarf_Off off)
+      {
+	dw.xif (::dwarf_offdie (dw._m_dw, off, &_m_die) == NULL);
+      }
+
+      /* Return the compile_unit entry containing this entry.
+	 Note this might be a DW_TAG_partial_unit.  */
+      inline debug_info_entry compile_unit () const
+      {
+	debug_info_entry result;
+	xif (::dwarf_diecu (thisdie (), &result._m_die, NULL, NULL) == NULL);
+	return result;
+      }
+
+      // Containers, see class definitions below.
+      class raw_children_type;
+      inline raw_children_type raw_children () const;
+      class raw_attributes_type;
+      raw_attributes_type raw_attributes () const;
+      class children_type;
+      inline children_type children () const;
+      class attributes_type;
+      attributes_type attributes () const;
+
+      class const_pointer;
+
+      inline std::string to_string () const;
+
+      inline int tag () const
+      {
+	int t = ::dwarf_tag (thisdie ());
+	xif (t <= 0);
+	return t;
+      }
+
+      bool has_children () const
+      {
+	int has = ::dwarf_haschildren (thisdie ());
+	xif (has < 0);
+	return has != 0;
+      }
+
+      /*
+	const char *tag_name () const
+	const_string tag_name () const // "name" or "0x123"
+      */
+
+      template<typename die>
+      bool operator== (const die &other) const
+      {
+	return (tag () == other.tag ()
+		&& attributes () == other.attributes ()
+		&& children () == other.children ());
+      }
+      template<typename die>
+      bool operator!= (const die &other) const
+      {
+	return !(*this == other);
+      }
+
+      ::Dwarf_Off offset () const
+      {
+	return ::dwarf_dieoffset (thisdie ());
+      }
+
+      inline const dwarf::ranges ranges () const
+      {
+	return dwarf::ranges (*this);
+      }
+
+      /* This is an identity pointer that only matches the very same
+	 DIE in the very same file (same opened Dwarf instance).  */
+      typedef uintptr_t identity_type;
+      inline identity_type identity () const
+      {
+	return (uintptr_t) _m_die.addr;
+      }
+
+      ::Dwarf_Off cost () const;
+    };
+
+    // Container for raw list of child DIEs, intended to be a compatible with
+    // a read-only, unidirectional subset of std::list<debug_info_entry>.
+    class debug_info_entry::raw_children_type
+    {
+      friend class debug_info_entry;
+    private:
+      const debug_info_entry &_m_die;
+
+    protected:
+      inline raw_children_type (const debug_info_entry &die) : _m_die (die) {}
+
+    public:
+      typedef debug_info_entry value_type;
+
+      inline raw_children_type (const raw_children_type &c)
+	: _m_die (c._m_die)
+      {}
+
+      bool empty () const
+      {
+	return begin () == end ();
+      }
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, debug_info_entry>
+      {
+	friend class debug_info_entry;
+	friend class attr_value;
+      private:
+	debug_info_entry _m_die;
+
+	inline const_iterator ()
+	{}
+
+	inline const_iterator (const debug_info_entry &parent)
+	{
+	  int result = ::dwarf_child (parent.thisdie (), &_m_die._m_die);
+	  parent.xif (result < 0);
+	}
+
+	// Construct from a reference attribute.
+	inline const_iterator (Dwarf_Attribute *attr)
+	{
+	  dwarf::xif (attr, ::dwarf_formref_die (attr, &_m_die._m_die) == NULL);
+	}
+
+      public:
+	inline const_iterator (const const_iterator &i) : _m_die (i._m_die) {}
+
+	inline const debug_info_entry &operator* () const
+	{
+	  if (unlikely (_m_die._m_die.addr == NULL))
+	    throw std::runtime_error ("dereferencing end iterator");
+	  return _m_die;
+	}
+	inline const debug_info_entry *operator-> () const
+	{
+	  return &(operator* ());
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  return *this;
+	}
+
+	// Assign directly from a DIE, as if "taking its address".
+	inline const_iterator &operator= (const debug_info_entry &die)
+	{
+	  _m_die = die;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_die._m_die.addr == other._m_die._m_die.addr;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	struct hasher : public std::unary_function<const_iterator, size_t>
+	{
+	  size_t operator () (const const_iterator &i) const
+	  {
+	    return subr::hash_this ((uintptr_t) i._m_die._m_die.addr);
+	  }
+	};
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  int result = ::dwarf_siblingof (&_m_die._m_die, &_m_die._m_die);
+	  _m_die.xif (result < 0);
+	  if (result > 0)	// Hit the end.
+	    *this = const_iterator ();
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+      const_iterator begin () const
+      {
+	return const_iterator (_m_die);
+      }
+      static inline const_iterator end ()
+      {
+	return const_iterator ();
+      }
+
+      template<typename other_children>
+      bool operator== (const other_children &other) const
+      {
+	return subr::container_equal (*this, other);
+      }
+      template<typename other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    // Container for list of raw attributes as (name, value) pairs,
+    // intended to be compatible with a read-only, unidirectional
+    // subset of std::list<std::pair<int, attr_value>>.
+    class debug_info_entry::raw_attributes_type
+    {
+      friend class debug_info_entry;
+    private:
+      const debug_info_entry &_m_die;
+
+      raw_attributes_type (const debug_info_entry &die)
+	: _m_die (die)
+      {}
+
+    public:
+      typedef attribute value_type;
+
+      inline raw_attributes_type (const raw_attributes_type &a)
+	: _m_die (a._m_die)
+      {}
+
+      size_t size () const;
+      inline bool empty () const
+      {
+	return size () == 0;
+      }
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, attribute>
+      {
+	friend class raw_attributes_type;
+      private:
+	debug_info_entry _m_die;
+	ptrdiff_t _m_offset; // Offset for next iteration in dwarf_getattrs.
+	::Dwarf_Attribute _m_attr;
+
+	/* We get called up to twice per iteration.  The first time, we
+	   store *ATTR in the instance variable and return DWARF_CB_OK so
+	   that we might be called again.  The second time, we return
+	   DWARF_CB_ABORT so that the iteration will stop at the next
+	   attribute's offset.  */
+	static int getattrs_callback (Dwarf_Attribute *attr, void *arg)
+	{
+	  const_iterator *i = static_cast<const_iterator *> (arg);
+	  if (i->_m_attr.valp == NULL)
+	    {
+	      i->_m_attr = *attr;
+	      return DWARF_CB_OK;
+	    }
+	  return DWARF_CB_ABORT;
+	}
+
+	inline const_iterator (const debug_info_entry &die, ptrdiff_t offset)
+	  : _m_die (die), _m_offset (offset), _m_attr ()
+	{}
+
+	inline const_iterator (ptrdiff_t offset)
+	  : _m_die (), _m_offset (offset), _m_attr ()
+	{}
+
+      public:
+	// Default constructor: invalid for anything but operator=.
+	inline const_iterator ()
+	  : _m_die (), _m_offset (-1), _m_attr ()
+	{}
+
+	inline const_iterator (const const_iterator &i)
+	  : _m_die (i._m_die), _m_offset (i._m_offset), _m_attr (i._m_attr)
+	{}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  _m_offset = other._m_offset;
+	  _m_attr = other._m_attr;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return (_m_die._m_die.addr == other._m_die._m_die.addr
+		  && _m_attr.valp == other._m_attr.valp);
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  _m_attr.valp = NULL;
+	  int result = ::dwarf_getattrs (&_m_die._m_die, &getattrs_callback,
+					 (void *) this, _m_offset);
+	  _m_die.xif (result < 0);
+	  _m_offset = result;
+	  if (result == 1)
+	    // End iterators have no live pointers.
+	    _m_die._m_die.addr = NULL;
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+
+	inline attribute operator* () const
+	{
+	  if (unlikely (_m_attr.valp == NULL))
+	    throw std::runtime_error ("dereferencing end iterator");
+	  return attribute (_m_die, _m_attr);
+	}
+      };
+      inline const_iterator begin () const
+      {
+	const_iterator i = const_iterator (_m_die, 0);
+	return ++i;
+      }
+      static inline const_iterator end ()
+      {
+	return const_iterator (1);
+      }
+
+      // XXX can do faster internal (?)
+      inline const_iterator find (int name) const
+      {
+	const_iterator i = begin ();
+	while (i != end () && (*i).first != name)
+	  ++i;
+	return i;
+      }
+    };
+
+    // Container for list of child DIEs, intended to be a compatible with
+    // a read-only, unidirectional subset of std::list<debug_info_entry>.
+    // Same as raw_children, but flattens DW_TAG_imported_unit children.
+    class debug_info_entry::children_type
+      : public debug_info_entry::raw_children_type
+    {
+      friend class debug_info_entry;
+    private:
+
+      inline children_type (const debug_info_entry &die)
+	: raw_children_type::raw_children_type (die) {}
+
+    public:
+      typedef debug_info_entry value_type;
+
+      inline children_type (const children_type &c)
+	: raw_children_type (c)
+      {}
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, debug_info_entry>
+      {
+	friend class children_type;
+      private:
+
+	typedef raw_children_type::const_iterator raw_iterator;
+	subr::sharing_stack<raw_iterator> _m_stack;
+
+	/* Push and pop until _m_stack.top () == raw_children_type::end ()
+	   or it's looking at a DIE other than DW_TAG_imported_unit.  */
+	inline void jiggle ()
+	{
+	  while (true)
+	    {
+	      const raw_iterator &i = _m_stack.const_top ();
+
+	      if (i == raw_children_type::end ())
+		{
+		  /* We're at the end of this raw DIE.
+		     Pop out to the iterator on the importing unit.  */
+		  _m_stack.pop ();
+
+		  if (_m_stack.empty ())
+		    // That was the outermost unit, this is the end.
+		    break;
+
+		  continue;
+		}
+
+	      if (i->tag () == ::DW_TAG_imported_unit)
+		// We have an imported unit.  Look at its referent.
+		_m_stack.push (i->attributes ().at (::DW_AT_import)
+			       .reference ()->raw_children ().begin ());
+	      else
+		// This is some other DIE.  Iterate on it.
+		break;
+	    }
+	}
+
+      public:
+	inline const_iterator ()
+	  : _m_stack ()
+	{}
+
+	inline const_iterator (const raw_iterator &i)
+	{
+	  _m_stack.push (i);
+	  jiggle ();
+	}
+
+	inline const_iterator (const const_iterator &i)
+	  : _m_stack (i._m_stack)
+	{}
+
+	// Construct directly from a DIE, as if "taking its address".
+	inline const_iterator (const debug_info_entry &die)
+	{
+	  raw_iterator it;
+	  it = die;
+	  _m_stack.push (it);
+	  jiggle ();
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_stack = other._m_stack;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_stack == other._m_stack;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const debug_info_entry &operator* () const
+	{
+	  return *_m_stack.top ();
+	}
+	inline const debug_info_entry *operator-> () const
+	{
+	  return &(operator* ());
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  ++_m_stack.top ();
+	  jiggle ();
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      // Actually always const.
+      typedef const_iterator iterator;
+
+      const_iterator begin () const
+      {
+	return const_iterator (raw_children_type::begin ());
+      }
+      const_iterator end () const
+      {
+	return const_iterator (raw_children_type::end ());
+      }
+
+      template<typename other_children>
+      bool operator== (const other_children &other) const
+      {
+	return subr::container_equal (*this, other);
+      }
+      template<typename other_children>
+      bool operator!= (const other_children &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    class debug_info_entry::const_pointer
+      : public debug_info_entry::children_type::const_iterator
+    {};
+
+  private:
+    static inline bool skip_sibling (const attribute &attr)
+    {
+      return attr.first == ::DW_AT_sibling;
+    }
+
+    // Circumvent C++ namespace lookup.
+    typedef class debug_info_entry::raw_attributes_type die_raw_attrs;
+    typedef skipping_wrapper<die_raw_attrs, attribute, attribute, skip_sibling>
+    attributes_base;
+
+  public:
+    // Container for attributes, indexed by name, intended to be compatible
+    // with a read-only subset of std::unordered_map<int, attr_value>.
+    // This excludes DW_AT_sibling.
+    class debug_info_entry::attributes_type : public attributes_base
+    {
+      friend class dwarf;
+    private:
+      inline attributes_type (const raw_attributes_type &raw)
+	: attributes_base (raw) {}
+
+    public:
+      typedef int key_type;
+      typedef attr_value mapped_type;
+      typedef attribute value_type;
+
+      static inline bool ordered ()
+      {
+	return false;
+      }
+
+      inline attributes_type (const attributes_type &a)
+	: attributes_base (a)
+      {}
+
+      typedef attributes_base::const_iterator const_iterator;
+
+      /*
+	iterator: wraps raw_attributes iterator, skips DW_AT_sibling
+	size/empty: search for DW_AT_sibling, adjust raw_attributes size
+       */
+
+      inline const_iterator find (int name) const
+      {
+	if (unlikely (name == ::DW_AT_sibling))
+	  return end ();
+	return const_iterator (_m_raw.find (name), _m_raw.end ());
+      }
+
+      /*
+	Same as find (), but if the attribute name isn't found,
+	but there is  is an abstract_origin or specification
+	attribute, then will try to find_integrate () the name
+	from that reference.
+      */
+      inline const_iterator find_integrate (int name) const
+      {
+	const_iterator result = find (name);
+	if (result != end ())
+	  return result;
+
+	result = find (DW_AT_abstract_origin);
+	if (result == end ())
+	  result = find (DW_AT_specification);
+
+	if (result != end ())
+	  {
+	    debug_info_entry integrate = (*(*result).second.reference ());
+	    return integrate.attributes ().find_integrate (name);
+	  }
+
+	return end ();
+      }
+
+      inline const attr_value at (int name)
+      {
+	const_iterator i = find (name);
+	if (unlikely (i == end ()))
+	  throw std::out_of_range ("XXX");
+	return (*i).second;
+      }
+      inline const attr_value operator[] (int name)
+      {
+	return at (name);
+      }
+
+      // We are rvalue-coercible into a std::map, which is sorted by name.
+      inline operator std::map<int, attr_value> () const
+      {
+	return std::map<int, attr_value> (begin (), end ());
+      }
+      /*
+      template<typename attrs>
+      inline operator attrs () const
+      {
+	return attrs (begin (), end ());
+      }
+      */
+
+      template<typename attrs>
+      bool operator== (const attrs &other) const
+      {
+	/* Our container is unordered (i.e., in file order).  A set of
+	   attributes is conceptually equal if all the pairs match,
+	   regardless of the order.  But the container_equal algorithm will
+	   compare corresponding elements in order.  So we need an ordered
+	   map of our attributes for the comparison.  */
+	const std::map<int, attr_value> mine = *this;
+	const std::map<int, typename attrs::mapped_type> his = other;
+	return mine.size () == his.size () && subr::container_equal (mine, his);
+      }
+
+      template<typename attrs>
+      bool operator!= (const attrs &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    class compile_unit : public debug_info_entry
+    {
+    public:
+      inline compile_unit (const debug_info_entry &die)
+	: debug_info_entry (die) {}
+
+      // Fetch the CU's DW_AT_stmt_list.
+      const line_info_table line_info () const;
+
+      // Convenience methods for line_info_table sub-containers.
+      inline const file_table files () const
+      {
+	return line_info ().files ();
+      }
+      inline const line_table lines () const
+      {
+	return line_info ().lines ();
+      }
+
+      /*
+	containers/iterators:
+
+	XXX macros
+
+	abbrevs (punt)
+
+      */
+    };
+
+    // These are the kinds of values that attributes can have.
+    enum value_space
+      {
+	// These spaces refer purely to DWARF concepts.
+	VS_flag,		// Boolean.
+	VS_dwarf_constant,	// Known DW_X_* space of integer constants.
+	VS_discr_list,		// Block as used for DW_AT_discr_list.
+	VS_reference,		// Pointer to another DIE.
+	VS_lineptr,		// Pointer into .debug_line section.
+	VS_macptr,		// Pointer into .debug_macinfo section.
+	VS_rangelistptr,	// Pointer into .debug_ranges section.
+
+	// These spaces refer to textual details of the program source.
+	VS_identifier,		// String, identifier in source language.
+	VS_string,		// String, miscellaneous use.
+	VS_source_file,		// Source file, string or index into file table.
+	VS_source_line,		// Line number in source file.
+	VS_source_column,	// Column number in source file.
+
+	// These spaces refer to target-format values in the debuggee.
+	VS_address,	   // Address constant.
+	VS_constant,	   // Other constant, integer or in target formats.
+	VS_location,	   // Location expression or location list.
+      };
+
+    /* A source file can be just a file name.  When represented in the
+       .debug_line file table, it can also have a modtime and a file size.
+       If the modtime or size stored is zero, it doesn't count.  */
+    class source_file
+    {
+      friend class attr_value;
+      friend class file_table;
+      friend class line_entry;
+    private:
+      ::Dwarf_Attribute _m_attr;
+      inline ::Dwarf_Attribute *thisattr () const
+      {
+	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
+      }
+
+      source_file (const Dwarf_Attribute &attr) : _m_attr (attr) {}
+
+    public:
+      std::string to_string () const;
+
+      const char *name () const;
+      ::Dwarf_Word mtime () const;
+      ::Dwarf_Word size () const;
+
+      template<typename other_file>
+      bool operator== (const other_file &other) const
+      {
+	if (mtime () != 0)
+	  {
+	    ::Dwarf_Word other_mtime = other.mtime ();
+	    if (other_mtime != 0 && other_mtime != mtime ())
+	      return false;
+	  }
+	if (size () != 0)
+	  {
+	    ::Dwarf_Word other_size = other.size ();
+	    if (other_size != 0 && other_size != size ())
+	      return false;
+	  }
+	return subr::name_equal<typeof (other.name ())> () (name (),
+							    other.name ());
+      }
+      template<typename other_file>
+      inline bool operator!= (const other_file &other) const
+      {
+	return !(*this == other);
+      }
+
+      /* Return a value unique to us while we're in memory.
+	 This is a stable pointer into the Dwarf_Files data
+         or to a static empty string.  */
+      inline uintptr_t identity () const
+      {
+	return (uintptr_t) name ();
+      }
+    };
+
+    // This describes the value of an attribute.
+    class attr_value
+    {
+      friend class attribute;
+      friend class location_attr;
+      friend class range_list;
+      friend class dwarf_enum;
+    private:
+      const int _m_tag;
+      ::Dwarf_Attribute _m_attr;
+      inline ::Dwarf_Attribute *thisattr () const
+      {
+	return const_cast< ::Dwarf_Attribute *> (&_m_attr);
+      }
+      inline int whatattr () const
+      {
+	return ::dwarf_whatattr (thisattr ());
+      }
+
+      attr_value (int tag, const ::Dwarf_Attribute &attr)
+	: _m_tag (tag), _m_attr (attr) {}
+
+      inline bool same (const attr_value &other) const
+      {
+	return _m_attr.valp == other._m_attr.valp;
+      }
+
+    public:
+      // not copyable, don't worry about ref lifetime(?)
+      // attr_value (const attr_value &v) : _m_attr (v.attr) {}
+
+      value_space what_space () const;
+      inline std::string to_string () const;
+
+      // Return an iterator on which * will yield the referent debug_info_entry.
+      inline debug_info_entry::children_type::const_iterator
+      reference () const
+      {
+	return (debug_info_entry::raw_children_type::const_iterator
+		(thisattr ()));
+      }
+
+      // XXX reloc, dwfl
+      ::Dwarf_Addr address () const;
+
+      bool flag () const;
+
+      const location_attr location () const;
+
+      const char *string () const;
+      inline const char *identifier () const
+      {
+	return string ();
+      }
+
+      const dwarf::source_file source_file () const;
+      inline unsigned int source_line () const
+      {
+	return constant ();
+      }
+      inline unsigned int source_column () const
+      {
+	return constant ();
+      }
+
+      // XXX reloc
+      ::Dwarf_Word constant () const;
+      ::Dwarf_Sword signed_constant () const;
+      const_vector<uint8_t> constant_block () const;
+      bool constant_is_integer () const;
+
+      inline const dwarf_enum dwarf_constant () const
+      {
+	return dwarf_enum (*this);
+      }
+
+      inline const range_list ranges () const
+      {
+	return range_list (*this);
+      }
+
+      const line_info_table line_info () const;
+
+      // XXX macptr
+
+      template<typename value>
+      inline bool operator== (const value &other) const
+      {
+	const value_space what = what_space ();
+	if (likely (other.what_space () == what))
+	  switch (what)
+	    {
+	    case VS_reference:
+	      // Stateless reference equality is just identity.
+	      return (reference ()->identity ()
+		      == other.reference ()->identity ());
+
+	    case VS_flag:
+	      return flag () == other.flag ();
+
+	    case VS_rangelistptr:
+	      return ranges () == other.ranges ();
+
+	    case VS_lineptr:
+	      return line_info () == other.line_info ();
+
+	    case VS_macptr:	// XXX punt for now, treat as constant
+	      /*FALLTHRU*/
+	    case VS_dwarf_constant:
+	      return constant () == other.constant ();
+
+	    case VS_constant:
+	      if (constant_is_integer ())
+		return (other.constant_is_integer ()
+			&& constant () == other.constant ());
+	      return (!other.constant_is_integer ()
+		      && constant_block () == other.constant_block ());
+
+	    case VS_source_line:
+	      return source_line () == other.source_line ();
+	    case VS_source_column:
+	      return source_column () == other.source_column ();
+
+	    case VS_identifier:
+	      return subr::name_equal<typeof (other.identifier ())> ()
+		(identifier (), other.identifier ());
+
+	    case VS_string:
+	      return subr::name_equal<typeof (other.string ())> ()
+		(string (), other.string ());
+
+	    case VS_address:
+	      return address () == other.address ();
+
+	    case VS_source_file:
+	      return source_file () == other.source_file ();
+
+	    case VS_location:
+	      return location () == other.location ();
+
+	    case VS_discr_list:
+	      throw std::runtime_error ("XXX unimplemented");
+	    }
+	return false;
+      }
+      template<typename value>
+      inline bool operator!= (const value &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    /* The DW_AT_ranges attribute yields a range list.
+       XXX reloc
+       This is equivalent to unordered_set<pair<Dwarf_Addr, Dwarf_Addr> >.  */
+    class range_list
+    {
+      friend class attr_value;
+    private:
+      const attr_value _m_attr;
+
+      range_list (const attr_value &attr) : _m_attr (attr) {}
+
+    public:
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
+      typedef key_type value_type;
+
+      static inline bool ordered ()
+      {
+	return false;
+      }
+
+      inline bool canonical () const
+      {
+	return false;
+      }
+
+      inline range_list (const range_list &other)
+	: _m_attr (other._m_attr)
+      {}
+
+      std::string to_string () const;
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, value_type>
+      {
+	friend class range_list;
+      protected:
+	::Dwarf_Addr _m_base;	// XXX reloc
+	::Dwarf_Addr _m_begin;	// XXX reloc
+	::Dwarf_Addr _m_end;	// XXX reloc
+	::Dwarf_CU *_m_cu;
+	unsigned char *_m_readptr;
+
+	static unsigned char *formptr (int secndx, Dwarf_Attribute *);
+	const_iterator (int secndx, Dwarf_Attribute *, unsigned char *readptr);
+
+      public:
+	// Default constructor: only valid for operator=.
+	inline const_iterator ()
+	  : _m_base (-1), _m_begin (0), _m_end (0), _m_cu (NULL), _m_readptr ((unsigned char *)1)
+	{}
+
+	inline const_iterator (const const_iterator &i)
+	  : _m_base (i._m_base), _m_begin (i._m_begin), _m_end (i._m_end),
+	    _m_cu (i._m_cu), _m_readptr (i._m_readptr)
+	{}
+
+	inline value_type operator* () const
+	{
+	  if (unlikely (_m_readptr == (unsigned char *)-1))
+	    throw std::runtime_error ("dereferencing end iterator");
+	  return std::make_pair (_m_base + _m_begin, _m_base + _m_end);
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_base = other._m_base;
+	  _m_begin = other._m_begin;
+	  _m_end = other._m_end;
+	  _m_cu = other._m_cu;
+	  _m_readptr = other._m_readptr;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_readptr == other._m_readptr && _m_cu == other._m_cu;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	const_iterator &operator++ (); // prefix
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      const_iterator begin () const;
+      const_iterator end () const
+      {
+	return const_iterator (-1, _m_attr.thisattr (), (unsigned char *)-1);
+      }
+
+      const_iterator find (const key_type &match) const
+      {
+	return std::find (begin (), end (), match);
+      }
+
+    private:
+      struct entry_contains
+	: public std::binary_function<key_type, ::Dwarf_Addr, bool>
+      {
+	inline bool operator() (const key_type &range, const ::Dwarf_Addr addr)
+	  const
+	{
+	  return addr >= range.first && addr < range.second;
+	}
+      };
+
+    public:
+      const_iterator find (const ::Dwarf_Addr addr) const
+      {
+	return std::find_if (begin (), end (),
+			     std::bind2nd (entry_contains (), addr));
+      }
+
+      inline operator std::set<key_type> () const
+      {
+	return std::set<key_type> (begin (), end ());
+      }
+
+      template<typename ranges>
+      inline bool operator== (const ranges &other) const
+      {
+	/* Our container is unordered (i.e., in file order).  A range list
+	   is conceptually equal if all the pairs match, regardless of the
+	   order.  But the std::equal algorithm will compare corresponding
+	   elements in order.  So we need an ordered set for comparison.  */
+	std::set<key_type> mine = *this;
+	coalesce (mine);
+	std::set<key_type> his = other;
+	coalesce (his);
+	return mine == his;
+      }
+      template<typename ranges>
+      inline bool operator!= (const ranges &other) const
+      {
+	return !(*this == other);
+      }
+
+      // Not very wise to call.
+      size_t size () const
+      {
+	return subr::length (begin (), end ());
+      }
+    };
+
+    /* A location attribute yields a location expression.
+       Either it's a single expression, or a map of PC to location.  */
+    class location_attr
+    {
+      friend class attr_value;
+    private:
+      attr_value _m_attr;
+
+      location_attr (const attr_value &attr) : _m_attr (attr) {}
+
+      inline bool same (const location_attr &it) const
+      {
+	return _m_attr.same (it._m_attr);
+      }
+
+      template<typename pair>
+      struct nonempty : public std::unary_function<pair, bool>
+      {
+	inline bool operator () (const pair &x)
+	{
+	  return !x.second.empty ();
+	}
+      };
+
+      template<typename pair>
+      struct any : public std::unary_function<pair, bool>
+      {
+	inline bool operator () (const pair &)
+	{
+	  return true;
+	}
+      };
+
+    public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      // XXX need proper type for exprs
+      typedef const_vector<uint8_t> mapped_type;
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
+      typedef std::pair<const key_type, mapped_type> value_type;
+
+      std::string to_string () const;
+
+      bool is_list () const;
+
+      inline mapped_type location () const
+      {
+	if (is_list ())
+	  throw std::runtime_error ("location is list, not single location");
+	return _m_attr.constant_block ();
+      }
+
+      class const_iterator
+	: public range_list::const_iterator
+      {
+	friend class location_attr;
+      private:
+	::Dwarf_Block _m_block;
+
+	void advance ();
+
+	// For end iterator.
+	inline explicit const_iterator (Dwarf_Attribute *attr)
+	  : dwarf::range_list::const_iterator (-1, attr, (unsigned char *)-1)
+	  , _m_block ()
+	{}
+
+      public:
+	typedef location_attr::value_type value_type;
+
+	inline const_iterator ()
+	  : _m_block ()
+	{}
+
+	inline const_iterator (const const_iterator &i)
+	  : range_list::const_iterator (i), _m_block (i._m_block)
+	{}
+
+	inline const_iterator &operator= (const const_iterator &i)
+	{
+	  range_list::const_iterator::operator= (i);
+	  _m_block = i._m_block;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &it) const
+	{
+	  return _m_block.data == it._m_block.data;
+	}
+	inline bool operator!= (const const_iterator &it) const
+	{
+	  return !(*this == it);
+	};
+
+	const_iterator &operator++ (); // prefix
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+
+	inline value_type operator* () const
+	{
+	  if (unlikely (_m_block.data == NULL))
+	    throw std::runtime_error ("dereferencing end iterator");
+
+	  return value_type (key_type (_m_base + _m_begin, _m_base + _m_end),
+			     const_vector<uint8_t> (_m_block));
+	}
+      };
+
+      const_iterator begin () const;
+      inline const_iterator end () const
+      {
+	return const_iterator (_m_attr.thisattr ());
+      }
+
+      inline bool empty () const
+      {
+	if (is_list ())
+	  return std::find_if (begin (), end (),
+			       nonempty<value_type> ()) == end ();
+	return location ().empty ();
+      }
+      inline size_type size () const
+      {
+	if (is_list ())
+	  return subr::length (begin (), end ());
+	return location ().empty () ? 0 : 1;
+      }
+
+      template<typename other_attr>
+      bool operator== (const other_attr &other) const
+      {
+	if (empty ())
+	  return (other.empty ()
+		  || std::find_if (other.begin (), other.end (),
+				   nonempty<typename other_attr::value_type> ()
+				   ) == other.end ());
+
+	if (!is_list () && !other.is_list ())
+	  return !other.empty () && location () == other.location ();
+
+	return subr::container_equal (*this, other);
+      }
+      template<typename other_file>
+      inline bool operator!= (const other_file &other) const
+      {
+	return !(*this == other);
+      }
+
+      /*
+	XXX missing: find, at; by key_type or by PC
+	XXX worse than that: multiple overlapping matches!
+       */
+    };
+
+    /* This describes a CU's file table.  It works like a read-only
+       std::vector<source_file>, and also supports lookup by name.  */
+    class file_table
+    {
+    private:
+      ::Dwarf_Files *_m_files;
+
+    public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      typedef source_file value_type;
+
+      inline file_table (::Dwarf_Files *const files)
+	: _m_files (files) {}
+      inline file_table (const file_table &t)
+	: _m_files (t._m_files) {}
+
+      inline file_table &operator= (const file_table &t)
+      {
+	_m_files = t._m_files;
+	return *this;
+      }
+
+      typedef subr::indexed_iterator<file_table> const_iterator;
+
+      inline bool empty () const
+      {
+	return size () == 0;
+      }
+
+      size_t size () const;
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (*this, 0);
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator (*this, size ());
+      }
+
+      const source_file at (size_t idx) const;
+      const source_file operator[] (size_t idx) const
+      {
+	return at (idx);
+      }
+
+      // Look up by matching file name.
+      const_iterator find (const source_file &) const;
+      const_iterator find (const char *filename) const
+      {
+	const_iterator i = begin ();
+	while (i != end () && strcmp ((*i).name (), filename) != 0)
+	  ++i;
+	return i;
+      }
+      template<typename string>
+      const_iterator find (const string &filename) const
+      {
+	const_iterator i = begin ();
+	while (i != end () && filename != (*i).name ())
+	  ++i;
+	return i;
+      }
+    };
+
+    // This describes one entry in the line information table.
+    class line_entry
+    {
+    private:
+      ::Dwarf_Line *_m_line;
+
+    public:
+      line_entry (::Dwarf_Line *entry) : _m_line (entry) {}
+      line_entry (const line_entry &entry) : _m_line (entry._m_line) {}
+
+      // XXX reloc, dwfl
+      ::Dwarf_Addr address () const;
+
+      bool statement () const;
+      bool basic_block () const;
+      bool end_sequence () const;
+      bool prologue_end () const;
+      bool epilogue_begin () const;
+
+      const source_file file () const;
+      unsigned int line () const;
+      unsigned int column () const;
+
+      template<typename entry>
+      bool operator< (const entry &other) const
+      {
+	return address () < other.address ();
+      }
+      template<typename entry>
+      bool operator> (const entry &other) const
+      {
+	return address () > other.address ();
+      }
+      template<typename entry>
+      bool operator<= (const entry &other) const
+      {
+	return address () <= other.address ();
+      }
+      template<typename entry>
+      bool operator>= (const entry &other) const
+      {
+	return address () >= other.address ();
+      }
+
+      template<typename entry>
+      inline bool operator== (const entry &other) const
+      {
+	return (address () == other.address ()
+		&& line () == other.line ()
+		&& column () == other.column ()
+		&& statement () == other.statement ()
+		&& basic_block () == other.basic_block ()
+		&& end_sequence () == other.end_sequence ()
+		&& prologue_end () == other.prologue_end ()
+		&& epilogue_begin () == other.epilogue_begin ()
+		&& file () == other.file ());
+      }
+      template<typename entry>
+      inline bool operator!= (const entry &other) const
+      {
+	return !(*this == other);
+      }
+      // Short-circuit for our own type.
+      bool operator== (const line_entry &other) const;
+    };
+
+    /* This describes a CU's line information table.
+       It works like a read-only std::vector<line_entry>,
+       and also supports lookup by address.
+       XXX later, by file/line
+    */
+    class line_table
+    {
+    private:
+      ::Dwarf_Lines *_m_lines;
+
+    public:
+      typedef size_t size_type;
+      typedef ptrdiff_t difference_type;
+      typedef line_entry value_type;
+
+      inline line_table (::Dwarf_Lines *const lines)
+	: _m_lines (lines) {}
+      inline line_table (const line_table &t)
+	: _m_lines (t._m_lines) {}
+
+      inline line_table &operator= (const line_table &t)
+      {
+	_m_lines = t._m_lines;
+	return *this;
+      }
+
+      std::string to_string () const;
+
+      typedef subr::indexed_iterator<line_table> const_iterator;
+
+      inline bool empty () const
+      {
+	return size () == 0;
+      }
+
+      size_t size () const;
+
+      inline const_iterator begin () const
+      {
+	return const_iterator (*this, 0);
+      }
+      inline const_iterator end () const
+      {
+	return const_iterator (*this, size ());
+      }
+
+      const line_entry at (size_t idx) const;
+      const line_entry operator[] (size_t idx) const
+      {
+	return at (idx);
+      }
+
+      template<typename table>
+      inline bool operator== (const table &other) const
+      {
+	return size () == other.size () && subr::container_equal (*this, other);
+      }
+      template<typename table>
+      inline bool operator!= (const table &other) const
+      {
+	return !(*this == other);
+      }
+      // Short-circuit for comparing to self.
+      inline bool operator== (const line_table &other) const
+      {
+	return (_m_lines == other._m_lines
+		|| subr::container_equal (*this, other));
+      }
+
+      // Look up by matching address.
+      const_iterator find (::Dwarf_Addr) const;
+    };
+
+    // The DW_AT_stmt_list attribute yields a line info table.
+    class line_info_table
+    {
+    private:
+      ::Dwarf_Files *_m_files;
+
+    public:
+      inline line_info_table (::Dwarf_Files *const t)
+	: _m_files (t) {}
+      inline line_info_table (const line_info_table &t)
+	: _m_files (t._m_files) {}
+
+      inline line_info_table &operator= (const line_info_table &t)
+      {
+	_m_files = t._m_files;
+	return *this;
+      }
+
+      std::string to_string () const;
+
+      inline const file_table files () const
+      {
+	return file_table (_m_files);
+      }
+      const line_table lines () const;
+
+      template<typename table>
+      inline bool operator== (const table &other) const
+      {
+	return lines () == other.lines ();
+      }
+      template<typename table>
+      inline bool operator!= (const table &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    class dwarf_enum
+    {
+      friend class attr_value;
+    private:
+      const attr_value _m_attr;
+
+      dwarf_enum (const attr_value &attr) : _m_attr (attr) {}
+
+    public:
+      inline operator unsigned int () const
+      {
+	return _m_attr.constant ();
+      }
+
+      std::string to_string () const;
+
+      const char *identifier () const;
+      const char *name () const;
+
+      // Return the DW_AT_* indicating which enum this value belongs to.
+      unsigned int which () const
+      {
+	return _m_attr.whatattr ();
+      }
+
+      template<typename constant>
+      inline bool operator== (const constant &other) const
+      {
+	return (static_cast<unsigned int> (*this)
+		== static_cast<unsigned int> (other));
+      }
+      template<typename constant>
+      inline bool operator!= (const constant &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    // This describes one attribute, equivalent to pair<const int, attr_value>.
+    class attribute
+    {
+      friend class debug_info_entry::raw_attributes_type::const_iterator;
+      friend class attr_value;
+    private:
+      inline ::Dwarf_Attribute *thisattr () const
+      {
+	return second.thisattr ();
+      }
+
+      class lhs
+      {
+	friend class attribute;
+      private:
+	const attribute &_m_attr;
+
+	lhs (attribute &attr) : _m_attr (attr) {}
+
+      public:
+	operator int () const
+	{
+	  return ::dwarf_whatattr (_m_attr.thisattr ());
+	}
+      };
+
+      attribute (const debug_info_entry &die, const ::Dwarf_Attribute &attr)
+	: first (*this), second (die.tag (), attr) {}
+
+    public:
+      lhs first;
+      attr_value second;
+
+      inline attribute (const attribute &a)
+	: first (*this), second (a.second) {}
+
+      // This lets pair<...> x = (attribute) y work.
+      template<typename value>
+      operator std::pair<const int, value> () const
+      {
+	return std::make_pair (static_cast<int> (first), value (second));
+      }
+
+      template<typename pair>
+      inline bool operator== (const pair &other) const
+      {
+	return first == other.first && second == other.second;
+      }
+      template<typename pair>
+      inline bool operator!= (const pair &other) const
+      {
+	return !(*this == other);
+      }
+
+      inline std::string to_string () const;
+    };
+
+    /* This works like range_list, but is based on a debug_info_entry using
+       dwarf_ranges.  If the entry has DW_AT_low_pc and DW_AT_high_pc, this
+       will present a singleton list; if it has a DW_AT_ranges, it will be
+       the same as the range_list presentation.  If neither, an empty list.  */
+    class ranges
+    {
+      friend class debug_info_entry;
+    private:
+      debug_info_entry _m_die;
+
+      ranges (const debug_info_entry &die) : _m_die (die) {}
+
+    public:
+      typedef std::pair< ::Dwarf_Addr, ::Dwarf_Addr> key_type; // XXX reloc
+      typedef key_type value_type;
+
+      ranges (const ranges &other) : _m_die (other._m_die) {}
+
+      std::string to_string () const;
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, value_type>
+      {
+	friend class ranges;
+      private:
+	debug_info_entry _m_die;
+	::Dwarf_Addr _m_base;	// XXX reloc
+	::Dwarf_Addr _m_begin;	// XXX reloc
+	::Dwarf_Addr _m_end;	// XXX reloc
+	ptrdiff_t _m_offset;
+
+	inline const_iterator (const debug_info_entry &die)
+	  : _m_die (die), _m_offset (0) {}
+
+      public:
+	inline const_iterator (const const_iterator &i)
+	  : _m_die (i._m_die), _m_base (i._m_base),
+	    _m_begin (i._m_begin), _m_end (i._m_end),
+	    _m_offset (i._m_offset) {}
+
+	inline value_type operator* () const
+	{
+	  if (unlikely (_m_offset == 0))
+	    throw std::runtime_error ("dereferencing end iterator");
+	  return std::make_pair (_m_begin, _m_end);
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  _m_base = other._m_base;
+	  _m_begin = other._m_begin;
+	  _m_end = other._m_end;
+	  _m_offset = other._m_offset;
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return (_m_die._m_die.addr == other._m_die._m_die.addr
+		  && _m_offset == other._m_offset);
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	const_iterator &operator++ () // prefix
+	{
+	  do
+	    _m_offset = dwarf_ranges (_m_die.thisdie (), _m_offset,
+				      &_m_base, &_m_begin, &_m_end);
+	  // Skip over empty ranges.
+	  while (_m_offset != 0 && _m_begin == _m_end);
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      const_iterator begin () const
+      {
+	const_iterator it (_m_die);
+	return ++it;
+      }
+      const_iterator end () const
+      {
+	return const_iterator (_m_die);
+      }
+
+      inline bool empty () const
+      {
+	return begin () == end ();
+      }
+
+      const_iterator find (const key_type &match) const
+      {
+	return std::find (begin (), end (), match);
+      }
+
+    private:
+      struct entry_contains
+	: public std::binary_function<key_type, ::Dwarf_Addr, bool>
+      {
+	inline bool operator() (const key_type &range, const ::Dwarf_Addr addr)
+	  const
+	{
+	  return addr >= range.first && addr < range.second;
+	}
+      };
+
+    public:
+      const_iterator find (const ::Dwarf_Addr addr) const
+      {
+	return std::find_if (begin (), end (),
+			     std::bind2nd (entry_contains (), addr));
+      }
+
+      inline operator std::set<key_type> () const
+      {
+	return std::set<key_type> (begin (), end ());
+      }
+
+      template<typename ranges>
+      inline bool operator== (const ranges &other) const
+      {
+	/* Our container is unordered (i.e., in file order).  A range list
+	   is conceptually equal if all the pairs match, regardless of the
+	   order.  But the std::equal algorithm will compare corresponding
+	   elements in order.  So we need an ordered set for comparison.  */
+	std::set<key_type> mine = *this;
+	coalesce (mine);
+	std::set<key_type> his = other;
+	coalesce (his);
+	return mine == his;
+      }
+      template<typename ranges>
+      inline bool operator!= (const ranges &other) const
+      {
+	return !(*this == other);
+      }
+    };
+
+    // Container for raw CUs in file order, intended to be compatible
+    // with a read-only subset of std::list<compile_unit>.
+    class raw_compile_units_type
+    {
+      friend class dwarf;
+    private:
+      const dwarf &_m_file;
+
+      raw_compile_units_type (const dwarf &file) : _m_file (file) {}
+
+    public:
+      typedef compile_unit value_type;
+
+      inline raw_compile_units_type (const raw_compile_units_type &u)
+	: _m_file (u._m_file) {}
+
+      class const_iterator
+	: public std::iterator<std::input_iterator_tag, compile_unit>
+      {
+	friend class raw_compile_units_type;
+      private:
+	debug_info_entry _m_die;
+	const dwarf *_m_file;	// XXX
+	::Dwarf_Off _m_next;	// XXX
+
+	inline const_iterator (const dwarf &file)
+	  : _m_file (&file), _m_next (0) {}
+
+      public:
+	inline const_iterator ()
+	  : _m_die (), _m_file (NULL), _m_next (-1)
+	{}
+
+	inline const_iterator (const const_iterator &i)
+	  : _m_die (i._m_die), _m_file (i._m_file), _m_next (i._m_next) {}
+
+	inline const debug_info_entry &operator* () const
+	{
+	  if (unlikely (_m_next == (::Dwarf_Off) -1))
+	    throw std::runtime_error ("dereferencing end iterator");
+	  return _m_die;
+	}
+	inline const debug_info_entry *operator-> () const
+	{
+	  return &(operator* ());
+	}
+
+	inline const_iterator &operator= (const const_iterator &other)
+	{
+	  _m_die = other._m_die;
+	  _m_next = other._m_next;
+	  _m_file = other._m_file; // XXX
+	  return *this;
+	}
+
+	inline bool operator== (const const_iterator &other) const
+	{
+	  return _m_next == other._m_next && _m_file == other._m_file;
+	}
+	inline bool operator!= (const const_iterator &other) const
+	{
+	  return !(*this == other);
+	}
+
+	inline const_iterator &operator++ () // prefix
+	{
+	  // XXX should be rewritten to use libdw_findcu internals
+	  // slow way for first crack to avoid DSO issues
+	  _m_next = _m_file->nextcu (_m_next, _m_die.thisdie ());
+	  if (_m_next == (::Dwarf_Off) -1)
+	    // End iterators have no file pointer.
+	    _m_file = NULL;
+	  return *this;
+	}
+	inline const_iterator operator++ (int) // postfix
+	{
+	  const_iterator prev = *this;
+	  ++*this;
+	  return prev;
+	}
+      };
+
+      const_iterator begin () const
+      {
+	const_iterator it (_m_file);
+	return ++it;
+      }
+      static inline const_iterator end ()
+      {
+	return const_iterator ();
+      }
+    };
+    inline raw_compile_units_type raw_compile_units () const
+    {
+      return raw_compile_units_type (*this);
+    }
+
+  private:
+    static inline bool skip_partial_unit (const compile_unit &unit)
+    {
+      switch (unit.tag ())
+	{
+	case ::DW_TAG_partial_unit:
+	  return true;
+	case ::DW_TAG_compile_unit:
+	  return false;
+	default:
+	  throw std::exception(); // XXX invalid dwarf
+	}
+    }
+
+    typedef skipping_wrapper<class raw_compile_units_type,
+			     compile_unit, compile_unit,
+			     skip_partial_unit> compile_units_base;
+
+  public:
+
+    // Container for logical CUs in file order, intended to be compatible
+    // with a read-only subset of std::list<compile_unit>.
+    class compile_units_type : public compile_units_base
+    {
+      friend class dwarf;
+    private:
+      compile_units_type (class raw_compile_units_type raw) : compile_units_base (raw) {}
+
+    public:
+      typedef compile_unit value_type;
+
+      compile_units_type (const compile_units_type &u) : compile_units_base (u) {}
+
+      template<typename units>
+      bool operator== (const units &other) const
+      {
+	return subr::container_equal (*this, other);
+      }
+      template<typename units>
+      bool operator!= (const units &other) const
+      {
+	return !(*this == other);
+      }
+    };
+    inline class compile_units_type compile_units () const
+    {
+      return compile_units_type (raw_compile_units ());
+    }
+
+  private:
+    ::Dwarf *_m_dw;
+
+  public:
+    // XXX temp hack
+    inline ::Dwarf_Off nextcu (::Dwarf_Off offset, ::Dwarf_Die *die) const
+    {
+      ::Dwarf_Off next;
+      ::size_t header_size;
+      int result = ::dwarf_nextcu (_m_dw, offset, &next, &header_size,
+				   NULL, NULL, NULL);
+      xif (result < 0);
+      if (result == 0)
+	xif (::dwarf_offdie (_m_dw, offset + header_size, die) == NULL);
+      else
+	memset (die, 0, sizeof *die);
+      return next;
+    }
+
+    inline dwarf (::Dwarf *dw) : _m_dw (dw) {};
+
+    inline dwarf (const dwarf &dw) : _m_dw (dw._m_dw) {};
+
+    template<typename file>
+    inline bool operator== (const file &other) const
+    {
+      return compile_units () == other.compile_units ();
+    }
+    template<typename file>
+    inline bool operator!= (const file &other) const
+    {
+      return !(*this == other);
+    }
+
+    // XXX reloc
+    class arange_list
+      : public std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> >
+    {
+    private:
+      typedef std::set<std::pair< ::Dwarf_Addr, ::Dwarf_Addr> > _base;
+
+    public:
+      typedef _base::key_type key_type;
+      typedef _base::value_type value_type;
+      typedef _base::iterator iterator;
+      typedef _base::const_iterator const_iterator;
+
+      static inline bool ordered ()
+      {
+	return true;
+      }
+
+      struct hasher : public subr::container_hasher<arange_list> {};
+
+      inline arange_list () {}
+      inline arange_list (const arange_list &other)
+	: _base (static_cast<const _base &> (other))
+      {}
+
+      template<typename iterator>
+      arange_list (iterator first, iterator last)
+	: _base (first, last)
+      {}
+
+      template<typename input>
+      inline arange_list (const input &other)
+	: _base (other.begin (), other.end ())
+      {}
+
+      std::string to_string () const;
+
+      inline std::string to_string ()
+      {
+	coalesce (*this);
+	return ((const arange_list *) this)->to_string ();
+      }
+
+      inline bool canonical () const
+      {
+	// Can't be sure.
+	return false;
+      }
+
+      inline bool canonical ()
+      {
+	// Make it so.
+	coalesce (*this);
+	return true;
+      }
+
+      inline bool operator== (arange_list &other)
+      {
+	// Since we are not const, coalesce both in place.
+	coalesce (other);
+	if (size () < other.size ())
+	  // Coalescing can only make us smaller.
+	  return false;
+	coalesce (*this);
+	return size () == other.size () && subr::container_equal (*this, other);
+      }
+
+      template<typename list>
+      inline bool operator== (const list &other)
+      {
+	// Since we are not const, coalesce in place.
+	coalesce (*this);
+
+	if (list::ordered () && other.canonical ()
+	    && size () != other.size ())
+	  return false;
+
+	// If he happens to be sorted and canonical, we'll match.
+	if (subr::container_equal (*this, other))
+	  return true;
+
+	// If he was sorted and canonical and we didn't match, it's conclusive.
+	if (list::ordered () && other.canonical ())
+	  return false;
+
+	// Make a sorted and canonicalized copy to compare to.
+	_base his (other);
+	if (size () > his.size ()
+	    || (list::ordered () && size () == his.size ()))
+	  // Coalescing can only make him smaller.
+	  return false;
+	coalesce (his);
+	return subr::container_equal (*this, his);
+      }
+
+      template<typename list>
+      inline bool operator== (const list &other) const
+      {
+	if (list::ordered () && other.canonical ()
+	    && size () < other.size ())
+	  // Coalescing can only make us smaller.
+	  return false;
+
+	// If we both happen to be sorted and canonical, we'll match.
+	if (subr::container_equal (*this, other))
+	  return true;
+
+	// Make a non-const copy that will coalesce in its operator==.
+	if (list::ordered () && other.canonical ())
+	  return size () != other.size () && arange_list (*this) == other;
+
+	return arange_list (other) == *this;
+      }
+    };
+
+  private:
+    struct arange_less
+      : public std::binary_function<compile_unit, compile_unit, bool>
+    {
+      inline bool operator() (const compile_unit &a, const compile_unit &b)
+	const
+      {
+	return a.offset () < b.offset ();
+      }
+    };
+
+  public:
+    typedef std::map<compile_unit, arange_list, arange_less> aranges_map;
+
+    aranges_map aranges () const;
+
+  private:
+    static bool adjacency (const arange_list::key_type &a,
+			   const arange_list::key_type &b)
+    {
+      return a.second == b.first;
+    }
+
+    // Coalesce adjacent ranges.
+    static void coalesce (std::set<arange_list::key_type> &set)
+    {
+      for (std::set<arange_list::key_type>::iterator i = set.begin ();
+	   (i = std::adjacent_find (i, set.end (), adjacency)) != set.end ();
+	   ++i)
+	{
+	  std::set<arange_list::key_type>::iterator j = i;
+	  std::set<arange_list::key_type>::iterator k = ++j;
+	  while (++k != set.end () && adjacency (*j, *k))
+	    ++j;
+	  const arange_list::key_type joined (i->first, j->second);
+	  set.erase (i, k);
+	  i = set.insert (joined).first;
+	}
+    }
+  };
+
+  inline class dwarf::debug_info_entry::raw_children_type
+  dwarf::debug_info_entry::raw_children () const
+  {
+    return raw_children_type (*this);
+  }
+
+  inline class dwarf::debug_info_entry::children_type
+  dwarf::debug_info_entry::children () const
+  {
+    return children_type (*this);
+  }
+
+  inline class dwarf::debug_info_entry::raw_attributes_type
+  dwarf::debug_info_entry::raw_attributes () const
+  {
+    return raw_attributes_type (*this);
+  }
+
+  inline class dwarf::debug_info_entry::attributes_type
+  dwarf::debug_info_entry::attributes () const
+  {
+    return attributes_type (raw_attributes ());
+  }
+
+  // Explicit specializations.
+  template<>
+  std::string
+  to_string<dwarf::debug_info_entry> (const dwarf::debug_info_entry &);
+  inline std::string dwarf::debug_info_entry::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+  template<>
+  std::string to_string<dwarf::attribute> (const dwarf::attribute &);
+  inline std::string dwarf::attribute::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+  template<>
+  std::string to_string<dwarf::attr_value> (const dwarf::attr_value &);
+  inline std::string dwarf::attr_value::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+  template<>
+  std::string to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &);
+  inline std::string dwarf::dwarf_enum::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+
+};
+
+#endif	// <elfutils/dwarf>

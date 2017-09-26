@@ -1,0 +1,167 @@
+/* elfutils::dwarf_ref_maker -- -*- C++ -*- template type specification
+   Copyright (C) 2009-2010 Red Hat, Inc.
+   This file is part of elfutils.
+
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of either
+
+     * the GNU Lesser General Public License as published by the Free
+       Software Foundation; either version 3 of the License, or (at
+       your option) any later version
+
+   or
+
+     * the GNU General Public License as published by the Free
+       Software Foundation; either version 2 of the License, or (at
+       your option) any later version
+
+   or both in parallel, as here.
+
+   elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received copies of the GNU General Public License and
+   the GNU Lesser General Public License along with this program.  If
+   not, see <http://www.gnu.org/licenses/>.  */
+
+#ifndef _ELFUTILS_DWARF_REF_MAKER
+#define _ELFUTILS_DWARF_REF_MAKER	1
+
+#include "dwarf"
+#include <tr1/unordered_map>
+#include <vector>
+
+namespace elfutils
+{
+  // Prototypical stub for reference maker object.
+  // This keeps no state and can't really be used.
+  template<class output, class input>
+  struct dwarf_ref_maker_base
+  {
+    typedef typename input::debug_info_entry input_entry;
+    typedef typename input_entry::children_type::const_iterator input_ref;
+    typedef typename output::debug_info_entry::pointer output_ref;
+
+    // These are called around a whole-file construction.
+    inline void start () {}
+
+    // If called, all pointers passed in since start () before are bogus.
+    inline void abort () {}
+
+    // Construction is complete: now snap in all recorded references.
+    inline void finish (output &file) {}
+
+    // The referenced output DIE has been constructed to match the input DIE.
+    inline void equivalence (const output_ref &to, const input_ref &from)
+    {
+    }
+
+    // *REF is an uninitialized attr_value.reference ().
+    // It's meant to refer to the output DIE equivalent to the given input DIE.
+    inline void refer (output_ref *ref, const input_ref &target)
+    {
+      throw std::logic_error ("dwarf_ref_maker_base cannot make references");
+    }
+  };
+
+  // Simple maker used for a single copy-construction.
+  template<class output, class input>
+  class dwarf_ref_maker : public dwarf_ref_maker_base<output, input>
+  {
+  public:
+    typedef typename input::debug_info_entry input_entry;
+    typedef typename output::debug_info_entry output_entry;
+    typedef typename input_entry::children_type::const_iterator input_ref;
+    typedef typename output_entry::children_type::iterator output_ref;
+
+  private:
+
+    struct seen
+    {
+      bool _m_known;
+      output_ref _m_out;
+      std::vector<output_ref *> _m_refs;
+
+      inline seen ()
+	: _m_known (false), _m_out (), _m_refs ()
+      {}
+
+      // Copy construction only valid for initial state.
+      inline seen (const seen &other)
+	: _m_known (false), _m_out (), _m_refs ()
+      {
+	if (unlikely (other._m_known) || unlikely (!other._m_refs.empty ()))
+	  throw std::logic_error
+	    ("seen copy constructs only from default-constructed");
+      }
+
+      inline void resolve ()
+      {
+	for (; !_m_refs.empty (); _m_refs.pop_back ())
+	  *_m_refs.back () = _m_out;
+      }
+
+      inline void resolve (const output_ref &to)
+      {
+	_m_out = to;
+	_m_known = true;
+	resolve ();
+      }
+
+      inline void refer (output_ref *out)
+      {
+	_m_refs.push_back (out);
+	if (_m_known)
+	  resolve ();
+      }
+    };
+
+    std::tr1::unordered_map<dwarf::debug_info_entry::identity_type,
+			    seen> _m_map;
+
+  public:
+    inline dwarf_ref_maker ()
+      : _m_map ()
+    {}
+
+    inline dwarf_ref_maker (const dwarf_ref_maker &other)
+      : _m_map ()
+    {
+      if (unlikely (!other._m_map.empty ()))
+	throw std::logic_error
+	  ("dwarf_ref_maker copy constructs only from default-constructed");
+    }
+
+    inline ~dwarf_ref_maker ()
+    {}
+
+    inline void abort ()
+    {
+      _m_map.clear ();
+    }
+
+    inline void equivalence (const output_ref &out, const input_ref &in)
+    {
+      _m_map[in->identity ()].resolve (out);
+    }
+
+    inline void refer (output_ref *out, const input_ref &in)
+    {
+      _m_map[in->identity ()].refer (out);
+    }
+
+    inline void finish (output &file)
+    {
+      while (_m_map.begin () != _m_map.end ())
+	if (_m_map.begin ()->second._m_known)
+	  _m_map.erase (_m_map.begin ());
+	else
+	  throw std::logic_error ("construction finished with unresolved refs");
+    }
+  };
+
+};
+
+#endif	// <elfutils/dwarf_ref_maker>

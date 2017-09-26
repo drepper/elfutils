@@ -1,0 +1,376 @@
+/* elfutils::dwarf_edit -- mutable DWARF representation in -*- C++ -*-
+   Copyright (C) 2009-2010 Red Hat, Inc.
+   This file is part of elfutils.
+
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of either
+
+     * the GNU Lesser General Public License as published by the Free
+       Software Foundation; either version 3 of the License, or (at
+       your option) any later version
+
+   or
+
+     * the GNU General Public License as published by the Free
+       Software Foundation; either version 2 of the License, or (at
+       your option) any later version
+
+   or both in parallel, as here.
+
+   elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received copies of the GNU General Public License and
+   the GNU Lesser General Public License along with this program.  If
+   not, see <http://www.gnu.org/licenses/>.  */
+
+#ifndef _ELFUTILS_DWARF_EDIT
+#define _ELFUTILS_DWARF_EDIT	1
+
+#include "dwarf"
+#include "dwarf_data"
+#include "dwarf_ref_maker"
+
+#include <type_traits>
+
+
+/* Read the comments for elfutils::dwarf first.
+
+   The elfutils::dwarf_edit class is template-compatible with the logical
+   containers described in elfutils::dwarf, and copy-constructible from the
+   input class.
+
+   The elfutils::dwarf_edit containers are mutable, unlike the input
+   classes.  You can modify the DWARF directly in all the normal ways the
+   corresponding std containers have, or build it up from scratch.  When
+   you have it how you want it, you can pass it into elfutils::dwarf_output.
+
+   The dwarf_edit classes will use unreasonable amounts of memory for large
+   DWARF data sets, like from reading in whole large program and DSO files.
+   To transform input files efficiently, you should construct dwarf_output
+   directly from input dwarf with transformations applied on the fly, and
+   not use dwarf_edit at all.
+
+   dwarf_edit is the only mutable representation and so it's easy to use in
+   a straightforward imperative style.  Use it for transformations on small
+   data files, or for creating small data sets from scratch.  */
+
+// DWARF manipulation interfaces (pure object construction)
+namespace elfutils
+{
+  template<typename elt>
+  inline bool operator== (const std::vector<elt> &a, const const_vector<elt> &b)
+  {
+    return a.size () == b.size () && subr::container_equal (a, b);
+  }
+
+  class dwarf_edit
+  {
+  private:
+    friend class dwarf_data;
+    typedef dwarf_edit me;
+
+  public:
+    typedef dwarf_data::source_file source_file;
+    typedef dwarf_data::line_entry<source_file> line_entry;
+    typedef dwarf_data::line_table<line_entry> line_table;
+    typedef dwarf_data::line_info_table<line_table> line_info_table;
+    typedef dwarf_data::dwarf_enum dwarf_enum;
+    typedef dwarf_data::range_list range_list;
+    typedef dwarf_data::location_attr location_attr;
+    typedef dwarf_data::attr_value<dwarf_edit> attr_value;
+
+    class debug_info_entry
+    {
+      friend class subr::create_container;
+
+    public:
+      typedef dwarf_data::attributes_type<dwarf_edit> attributes_type;
+
+      class children_type : public std::list<debug_info_entry>
+      {
+	friend class debug_info_entry;
+      private:
+        inline children_type () {}
+
+	template<typename input, typename tracker>
+	static inline void
+	equivalence (const iterator &out,
+		     const typename input::const_iterator &in,
+		     bool,	// last-sibling
+		     tracker &t)
+	{
+	  out->set (*in, t);
+	  t.equivalence (out, in);
+	}
+
+	template<typename input, typename tracker>
+	inline children_type (const input &other, tracker &t)
+	{
+	  subr::create_container (this, other, t, equivalence<input, tracker>);
+	}
+
+      public:
+	typedef debug_info_entry value_type;
+
+	inline iterator add_entry (int tag, const iterator &pos)
+	{
+	  return insert (pos, debug_info_entry (tag));
+	}
+
+	inline iterator add_entry (int tag)
+	{
+	  return add_entry (tag, end ());
+	}
+      };
+
+      typedef children_type::iterator pointer;
+      typedef children_type::const_iterator const_pointer;
+
+    protected:
+      int _m_tag;
+      attributes_type _m_attributes;
+      children_type _m_children;
+
+      // This is can only be used by the children_type constructor,
+      // which immediately calls set.
+      inline debug_info_entry ()
+	: _m_tag (-1), _m_attributes (), _m_children ()
+      {}
+
+      template<typename die_type, typename arg_type>
+      inline void set (const die_type &die, arg_type &arg)
+      {
+	try
+	  {
+	    _m_tag = die.tag ();
+	    attributes_type t_attrs (die.attributes (), arg);
+	    _m_attributes.swap (t_attrs);
+	    children_type t_children (die.children (), arg);
+	    _m_children.swap (t_children);
+	  }
+	catch (...)
+	  {
+	    // Never leave a partially-formed DIE.
+	    _m_tag = -1;
+	    _m_attributes.clear ();
+	    _m_children.clear ();
+	    throw;
+	  };
+      }
+
+    public:
+      inline debug_info_entry (int t)
+	: _m_tag (t), _m_attributes (), _m_children ()
+      {
+	if (unlikely (t <= 0))
+	  throw std::invalid_argument ("invalid tag");
+      }
+
+      /* The template constructor lets us copy in from any class that has
+	 compatibly iterable containers for attributes and children.  */
+      template<typename die_type, typename tracker>
+      debug_info_entry (const die_type &die, tracker &t)
+	: _m_tag (die.tag ()),
+	  _m_attributes (die.attributes (), t),
+	  _m_children (die.children (), t)
+      {}
+
+      inline std::string to_string () const;
+
+      inline int tag () const
+      {
+	return _m_tag;
+      }
+
+      inline bool has_children () const
+      {
+	return !_m_children.empty ();
+      }
+
+      inline children_type &children ()
+      {
+	return _m_children;
+      }
+      inline const children_type &children () const
+      {
+	return _m_children;
+      }
+
+      inline attributes_type &attributes ()
+      {
+	return _m_attributes;
+      }
+      inline const attributes_type &attributes () const
+      {
+	return _m_attributes;
+      }
+
+      template<typename die>
+      bool operator== (const die &other) const
+      {
+	return (other.tag () == tag ()
+		&& other.attributes () == attributes ()
+		&& other.children () == children ());
+      }
+      template<typename die>
+      bool operator!= (const die &other) const
+      {
+	return !(*this == other);
+      }
+
+      inline dwarf::debug_info_entry::identity_type identity () const
+      {
+	return (uintptr_t) this;
+      }
+
+      inline ::Dwarf_Off offset () const
+      {
+	return identity ();
+      }
+
+      inline ::Dwarf_Off cost () const
+      {
+	return 0;
+      }
+
+      // Convenience entry point.
+      inline pointer add_entry (int child_tag)
+      {
+	return children ().add_entry (child_tag);
+      }
+    };
+
+    typedef debug_info_entry::attributes_type::value_type attribute;
+
+    typedef dwarf_data::compile_unit<dwarf_edit> compile_unit;
+
+    // Main container anchoring all the output.
+    class compile_units_type
+      : public dwarf_data::compile_units_type<dwarf_edit>
+    {
+      friend class dwarf_edit;
+
+    private:
+      inline compile_units_type (const compile_units_type &)
+	: dwarf_data::compile_units_type<dwarf_edit> ()
+      {
+	throw std::logic_error
+	  ("must copy-construct top-level dwarf_edit object instead");
+      }
+
+      // Constructor copying CUs from input container.
+      template<typename input, typename tracker>
+      inline compile_units_type (const input &other, tracker &t)
+      {
+	subr::create_container (this, other, t);
+      }
+
+    public:
+      // Default constructor: an empty container, no CUs.
+      inline compile_units_type () {}
+
+      inline compile_unit &add_unit ()
+      {
+	push_back (compile_unit ());
+	return back ();
+      }
+    };
+
+  private:
+    compile_units_type _m_units;
+
+    typedef dwarf_ref_maker<dwarf_edit, dwarf_edit> edit_ref_maker;
+
+  public:
+    class compile_units_type &compile_units ()
+    {
+      return _m_units;
+    }
+    const class compile_units_type &compile_units () const
+    {
+      return _m_units;
+    }
+
+    // Convenience entry point.
+    inline compile_unit &add_unit ()
+    {
+      return compile_units ().add_unit ();
+    }
+
+    // Default constructor: an empty container, no CUs.
+    inline dwarf_edit () {}
+
+    // Constructor copying CUs from an input file (dwarf or dwarf_edit).
+    template<typename input, typename tracker>
+    inline dwarf_edit (const input &dw, tracker &t,
+		       subr::guard<tracker> guard = subr::guard<tracker> ())
+      : _m_units (dw.compile_units (), guard (t))
+    {
+      guard.clear ();
+    }
+
+    // Copying constructor with default ref-maker.
+    template<typename input>
+    inline dwarf_edit (const input &dw,
+		       dwarf_ref_maker<dwarf_edit, input> t
+		       = dwarf_ref_maker<dwarf_edit, input> (),
+		       subr::guard<dwarf_ref_maker<dwarf_edit, input> > guard
+		       = subr::guard<dwarf_ref_maker<dwarf_edit, input> > ())
+      : _m_units (dw.compile_units (), guard (t))
+    {
+      guard.clear ();
+    }
+
+    // We have to write this explicitly or it will do default-copying!
+    inline dwarf_edit (const dwarf_edit &dw,
+		       edit_ref_maker t = edit_ref_maker (),
+		       subr::guard<edit_ref_maker > guard
+		       = subr::guard<edit_ref_maker > ())
+      : _m_units (dw.compile_units (), guard (t))
+    {
+      guard.clear ();
+    }
+
+    template<typename file>
+    inline bool operator== (const file &other) const
+    {
+      return compile_units () == other.compile_units ();
+    }
+    template<typename file>
+    inline bool operator!= (const file &other) const
+    {
+      return !(*this == other);
+    }
+  };
+
+  // Explicit specializations.
+  template<>
+  std::string to_string<dwarf_edit::debug_info_entry>
+  (const dwarf_edit::debug_info_entry &);
+  inline std::string dwarf_edit::debug_info_entry::to_string () const
+  {
+    return elfutils::to_string (*this); // Use that.
+  }
+  template<>
+  std::string to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &);
+  template<>
+  std::string to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value&);
+
+  template<>
+  std::string dwarf_edit::line_table::to_string () const;
+  template<>
+  std::string dwarf_edit::line_info_table::to_string () const;
+
+  // Explicit instantiations.
+  extern template class dwarf_data::line_entry<dwarf_edit::source_file>;
+  extern template class dwarf_data::line_table<dwarf_edit::line_entry>;
+  extern template class dwarf_data::line_info_table<dwarf_edit::line_table>;
+  extern template class dwarf_data::attr_value<dwarf_edit>;
+  extern template class dwarf_data::value<dwarf_edit>;
+
+};
+
+#endif	// <elfutils/dwarf_edit>
