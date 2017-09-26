@@ -2013,7 +2013,7 @@ namespace elfutils
       inline unit_copier (copier *c, const typename dw::compile_unit &in)
 	: entry_copier (c, c->enter (in), in)
       {
-	populate (in);
+	this->populate (in);
       }
     };
 

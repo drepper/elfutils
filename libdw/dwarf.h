@@ -93,7 +93,7 @@ enum
     DW_TAG_unspecified_type = 0x3b,
     DW_TAG_partial_unit = 0x3c,
     DW_TAG_imported_unit = 0x3d,
-    /* 0x3e reserved.  Was DW_TAG_mutable_type.  */
+    DW_TAG_mutable_type = 0x3e,
     DW_TAG_condition = 0x3f,
     DW_TAG_shared_type = 0x40,
     DW_TAG_type_unit = 0x41,

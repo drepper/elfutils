@@ -226,6 +226,7 @@ struct Dwarf_Abbrev
 /* Files in line information records.  */
 struct Dwarf_Files_s
   {
+    struct Dwarf_CU *cu;
     unsigned int ndirs;
     unsigned int nfiles;
     struct Dwarf_Fileinfo_s
@@ -335,16 +336,32 @@ struct Dwarf_CU
   ((type_unit) ? ((cu_offset) + 4 * (offset_size) - 4 + 3 + 8)		\
    : ((cu_offset) + 3 * (offset_size) - 4 + 3))
 
-#define CUDIE(fromcu)							      \
-  ((Dwarf_Die)								      \
-   {									      \
-     .cu = (fromcu),							      \
+#ifdef __cplusplus
+#define CUDIE_INIT(fromcu)                  \
+  {                       \
+    ((char *) fromcu->dbg->sectiondata[cu_sec_idx (fromcu)]->d_buf               \
+     + DIE_OFFSET_FROM_CU_OFFSET ((fromcu)->start,            \
+          (fromcu)->offset_size,          \
+          (fromcu)->type_offset != 0)),         \
+    (fromcu),                     \
+    NULL, 0l                      \
+  }
+#else
+#define CUDIE_INIT(fromcu)                  \
+{                       \
+     .cu = (fromcu),                    \
      .addr = ((char *) fromcu->dbg->sectiondata[cu_sec_idx (fromcu)]->d_buf   \
-	      + DIE_OFFSET_FROM_CU_OFFSET ((fromcu)->start,		      \
-					   (fromcu)->offset_size,	      \
-					   (fromcu)->type_offset != 0))	      \
-   })									      \
+        + DIE_OFFSET_FROM_CU_OFFSET ((fromcu)->start,         \
+             (fromcu)->offset_size,       \
+             (fromcu)->type_offset != 0))       \
+}
+#endif
 
+#ifdef __cplusplus
+# define CUDIE(name, fromcu)  Dwarf_Die name = CUDIE_INIT (fromcu)
+#else
+# define CUDIE(fromcu)    ((Dwarf_Die) CUDIE_INIT (fromcu))
+#endif
 
 /* Prototype of a single .debug_macro operator.  */
 typedef struct
@@ -466,8 +483,8 @@ __libdw_dieabbrev (Dwarf_Die *die, const unsigned char **readp)
     {
       /* Get the abbreviation code.  */
       unsigned int code;
-      const unsigned char *addr = die->addr;
-      get_uleb128 (code, addr, die->cu->endp);
+      const unsigned char *addr = (unsigned char *)die->addr;
+      get_uleb128 (code, addr, (unsigned char *)die->cu->endp);
       if (readp != NULL)
 	*readp = addr;
 
@@ -484,6 +501,7 @@ extern size_t __libdw_form_val_compute_len (struct Dwarf_CU *cu,
 					    const unsigned char *valp)
      __nonnull_attribute__ (1, 3) internal_function;
 
+#ifndef __cplusplus
 /* Find the length of a form attribute.  */
 static inline size_t
 __nonnull_attribute__ (1, 3)
@@ -521,6 +539,7 @@ __libdw_form_val_len (struct Dwarf_CU *cu, unsigned int form,
   /* Other forms require some computation.  */
   return __libdw_form_val_compute_len (cu, form, valp);
 }
+#endif
 
 /* Helper function for DW_FORM_ref* handling.  */
 extern int __libdw_formref (Dwarf_Attribute *attr, Dwarf_Off *return_offset)
@@ -642,8 +661,10 @@ __libdw_in_section (Dwarf *dbg, int sec_index,
   Elf_Data *data = __libdw_checked_get_data (dbg, sec_index);
   if (data == NULL)
     return false;
-  if (unlikely (addr < data->d_buf)
-      || unlikely (data->d_size - (addr - data->d_buf) < size))
+  if (unlikely ((const char *) addr < (const char *) data->d_buf)
+      || unlikely (data->d_size - ((const char *) addr
+           - (const char *) data->d_buf)
+       < size))
     {
       __libdw_seterrno (DWARF_E_INVALID_OFFSET);
       return false;
@@ -717,11 +738,13 @@ cu_sec_idx (struct Dwarf_CU *cu)
   return cu->type_offset == 0 ? IDX_debug_info : IDX_debug_types;
 }
 
+#ifndef __cplusplus
 static inline bool
 is_cudie (Dwarf_Die *cudie)
 {
   return CUDIE (cudie->cu).addr == cudie->addr;
 }
+#endif
 
 /* Read up begin/end pair and increment read pointer.
     - If it's normal range record, set up *BEGINP and *ENDP and return 0.
