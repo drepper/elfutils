@@ -89,6 +89,7 @@ AC_PROG_CC
 AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
+AC_PROG_CXX
 # Only available since automake 1.12
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 AC_CHECK_TOOL([READELF], [readelf])
@@ -276,6 +277,7 @@ AC_ARG_ENABLE([gprof],
 AS_HELP_STRING([--enable-gprof],[build binaries with gprof support]), [use_gprof=$enableval], [use_gprof=no])
 if test "$use_gprof" = yes; then
   CFLAGS="$CFLAGS -pg"
+  CXXFLAGS="$CXXFLAGS -pg"
   LDFLAGS="$LDFLAGS -pg"
 fi
 AM_CONDITIONAL(GPROF, test "$use_gprof" = yes)
@@ -516,7 +518,7 @@ dnl CPU-specific backend libraries.
 AC_CONFIG_FILES([backends/Makefile])
 
 dnl Tools.
-AC_CONFIG_FILES([src/Makefile po/Makefile.in])
+AC_CONFIG_FILES([src/Makefile po/Makefile.in dwarflint/Makefile])
 
 dnl Test suite.
 AM_CONDITIONAL(STANDALONE, false)dnl Used in tests/Makefile.am, which see.

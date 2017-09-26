@@ -28,7 +28,7 @@ pkginclude_HEADERS = version.h
 
 # Add doc back when we have some real content.
 SUBDIRS = config m4 lib libelf libebl libdwelf libdwfl libdw libcpu libasm \
-	  backends src po tests
+	  backends src po tests dwarflint
 
 EXTRA_DIST = elfutils.spec GPG-KEY NOTES CONTRIBUTING \
 	     COPYING COPYING-GPLV2 COPYING-LGPLV3
