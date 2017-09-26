@@ -33,7 +33,7 @@
 #include "libdwP.h"
 
 int
-dwarf_macro_getsrcfiles (Dwarf *dbg, Dwarf_Macro *macro,
+dwarf_macro_getsrcfiles (Dwarf_Die *cudie, Dwarf *dbg, Dwarf_Macro *macro,
 			 Dwarf_Files **files, size_t *nfiles)
 {
   /* macro is declared NN */
@@ -71,7 +71,7 @@ dwarf_macro_getsrcfiles (Dwarf *dbg, Dwarf_Macro *macro,
 	 the same unit through dwarf_getsrcfiles, and the file names
 	 will be broken.  */
 
-      if (__libdw_getsrclines (dbg, line_offset, table->comp_dir,
+      if (__libdw_getsrclines (cudie, dbg, line_offset, table->comp_dir,
 			       table->is_64bit ? 8 : 4,
 			       NULL, &table->files) < 0)
 	table->files = (void *) -1;

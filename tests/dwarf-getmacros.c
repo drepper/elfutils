@@ -60,7 +60,9 @@ mac (Dwarf_Macro *macro, void *dbg)
       {
 	Dwarf_Files *files;
 	size_t nfiles;
-	if (dwarf_macro_getsrcfiles (dbg, macro, &files, &nfiles) < 0)
+  Dwarf_Die cudie_mem, *cudie = dwarf_offdie (dbg, 0, &cudie_mem);
+
+	if (dwarf_macro_getsrcfiles (cudie, dbg, macro, &files, &nfiles) < 0)
 	  printf ("dwarf_macro_getsrcfiles: %s\n",
 		  dwarf_errmsg (dwarf_errno ()));
 

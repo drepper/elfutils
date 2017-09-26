@@ -147,12 +147,15 @@ add_new_line (struct line_state *state, struct linelist *new_line)
 }
 
 static int
-read_srclines (Dwarf *dbg,
+read_srclines (Dwarf_Die *cudie, Dwarf *dbg,
 	       const unsigned char *linep, const unsigned char *lineendp,
 	       const char *comp_dir, unsigned address_size,
 	       Dwarf_Lines **linesp, Dwarf_Files **filesp)
 {
   int res = -1;
+
+  /* Get the information if it is not already known.  */
+  struct Dwarf_CU *const cu = cudie->cu;
 
   size_t nfilelist = 0;
   unsigned int ndirlist = 0;
@@ -763,6 +766,12 @@ read_srclines (Dwarf *dbg,
   if (filesp != NULL)
     *filesp = files;
 
+  /* Remember the referring CU.  */
+  files->cu = cu;
+
+  /* Make the file data structure available through the CU.  */
+  cu->files = files;
+
   size_t buf_size = (sizeof (Dwarf_Lines)
 		     + (sizeof (Dwarf_Line) * state.nlinelist));
   void *buf = libdw_alloc (dbg, Dwarf_Lines, buf_size, 1);
@@ -848,7 +857,7 @@ files_lines_compare (const void *p1, const void *p2)
 
 int
 internal_function
-__libdw_getsrclines (Dwarf *dbg, Dwarf_Off debug_line_offset,
+__libdw_getsrclines (Dwarf_Die *cudie, Dwarf *dbg, Dwarf_Off debug_line_offset,
 		     const char *comp_dir, unsigned address_size,
 		     Dwarf_Lines **linesp, Dwarf_Files **filesp)
 {
@@ -869,7 +878,7 @@ __libdw_getsrclines (Dwarf *dbg, Dwarf_Off debug_line_offset,
       struct files_lines_s *node = libdw_alloc (dbg, struct files_lines_s,
 						sizeof *node, 1);
 
-      if (read_srclines (dbg, linep, lineendp, comp_dir, address_size,
+      if (read_srclines (cudie, dbg, linep, lineendp, comp_dir, address_size,
 			 &node->lines, &node->files) != 0)
 	return -1;
 
@@ -934,7 +943,7 @@ dwarf_getsrclines (Dwarf_Die *cudie, Dwarf_Lines **lines, size_t *nlines)
 			   NULL, &debug_line_offset) == NULL)
 	return -1;
 
-      if (__libdw_getsrclines (cu->dbg, debug_line_offset,
+      if (__libdw_getsrclines (cudie, cu->dbg, debug_line_offset,
 			       __libdw_getcompdir (cudie),
 			       cu->address_size, &cu->lines, &cu->files) < 0)
 	return -1;

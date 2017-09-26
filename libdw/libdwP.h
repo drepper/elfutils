@@ -771,7 +771,7 @@ void __libdw_empty_loc_attr (Dwarf_Attribute *attr)
    the loaded unit and optionally set *LINESP and/or *FILESP (if not
    NULL) with loaded information.  Returns 0 for success or a negative
    value for failure.  */
-int __libdw_getsrclines (Dwarf *dbg, Dwarf_Off debug_line_offset,
+int __libdw_getsrclines (Dwarf_Die *cudie, Dwarf *dbg, Dwarf_Off debug_line_offset,
 			 const char *comp_dir, unsigned address_size,
 			 Dwarf_Lines **linesp, Dwarf_Files **filesp)
   internal_function

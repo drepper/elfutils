@@ -895,8 +895,8 @@ extern ptrdiff_t dwarf_getmacros_off (Dwarf *dbg, Dwarf_Off macoff,
    invalid.  (Which is to say it's only valid within the
    dwarf_getmacros* callback.)  Returns 0 for success or a negative
    value in case of an error.  */
-extern int dwarf_macro_getsrcfiles (Dwarf *dbg, Dwarf_Macro *macro,
-				    Dwarf_Files **files, size_t *nfiles)
+extern int dwarf_macro_getsrcfiles (Dwarf_Die *cudie, Dwarf *dbg,
+  Dwarf_Macro *macro, Dwarf_Files **files, size_t *nfiles)
   __nonnull_attribute__ (2, 3, 4);
 
 /* Return macro opcode.  That's a constant that can be either from
