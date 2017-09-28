@@ -55,6 +55,8 @@ case "$1" in
     LD_LIBRARY_PATH="${libdir}:${libdir}/elfutils$old_path"
   fi
   export LD_LIBRARY_PATH
+  export elfutils_testrun program_transform_name
+  export elfutils_tests_rpath
   ;;
 esac
 

@@ -19,9 +19,9 @@
 
 srcdir=$srcdir/tests
 
-testfiles location-leaks
+testfiles tests/location-leaks
 
-testrun_compare ./dwarflint location-leaks <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint location-leaks <<EOF
 warning: .debug_loc: loclist 0x38: entry covers no range.
 error: .debug_info: DIE 0x62: attribute \`location': PC range [0x400495, 0x40049a) outside containing scope.
 error: .debug_info: DIE 0x51: in this context: [0x400498, 0x4004b2).

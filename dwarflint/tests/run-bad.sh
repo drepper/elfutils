@@ -19,16 +19,16 @@
 
 srcdir=$srcdir/tests
 
-testfiles hello.bad-1 hello.bad-3 empty-1 \
-    garbage-1 garbage-2 garbage-3 garbage-4 \
-    garbage-5 garbage-6 garbage-7 garbage-8 \
-    garbage-9 garbage-10 garbage-11 garbage-12
+testfiles tests/hello.bad-1 tests/hello.bad-3 tests/empty-1 \
+    tests/garbage-1 tests/garbage-2 tests/garbage-3 tests/garbage-4 \
+    tests/garbage-5 tests/garbage-6 tests/garbage-7 tests/garbage-8 \
+    tests/garbage-9 tests/garbage-10 tests/garbage-11 tests/garbage-12
 
-testrun_compare ./dwarflint hello.bad-1 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint hello.bad-1 <<EOF
 error: .debug_info: DIE 0x83: abbrev section at 0x0 doesn't contain code 83.
 EOF
 
-testrun_compare ./dwarflint --check=@low hello.bad-3 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=@low hello.bad-3 <<EOF
 error: .debug_info: DIE 0x2d: This DIE had children, but no DW_AT_sibling attribute.
 error: .debug_info: DIE 0xb: This DIE had children, but no DW_AT_sibling attribute.
 error: .debug_info: DIE 0x91: toplevel DIE chain contains more than one DIE.
@@ -38,39 +38,39 @@ error: .debug_info: DIE 0xa4: toplevel DIE chain contains more than one DIE.
 error: .debug_info: DIE 0xab: toplevel DIE chain contains more than one DIE.
 EOF
 
-testrun_compare ./dwarflint empty-1 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint empty-1 <<EOF
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_line: table 0: no CU uses this line table.
 error: .debug_info: DIE 0x29, attr. decl_file: references .debug_line table, but CU DIE lacks DW_AT_stmt_list.
 EOF
 
-testrun_compare ./dwarflint garbage-1 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-1 <<EOF
 error: Broken ELF: offset out of range.
 error: .debug_abbrev: data not found.
 error: .debug_info: data not found.
 EOF
 
-testrun_compare ./dwarflint garbage-2 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-2 <<EOF
 error: .debug_info: CU 0: toplevel DIE must be either compile_unit or partial_unit.
 error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
-testrun_compare ./dwarflint --check=@low garbage-3 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=@low garbage-3 <<EOF
 error: .debug_abbrev: abbr. attribute 0xc: invalid attribute code 0.
 EOF
 
-testrun_compare ./dwarflint garbage-4 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-4 <<EOF
 error: .debug_info: DIE 0x6c: this DIE claims that its sibling is 0x80000085 but it's actually 0x85.
 error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
-testrun_compare ./dwarflint garbage-5 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-5 <<EOF
 error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 error: .debug_line: offset 0x3e: not enough data to read an opcode of length 5.
 error: .debug_info: DIE 0xb, attr. stmt_list: unresolved reference to .debug_line table 0x0.
 EOF
 
-testrun_compare ./dwarflint garbage-6 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-6 <<EOF
 error: .debug_info: CU 0: invalid address size: 9 (only 4 or 8 allowed).
 error: .debug_info: couldn't load CU headers for processing .debug_abbrev; assuming latest DWARF flavor.
 error: .debug_abbrev: abbr. 0x0, attr. stmt_list: attribute with invalid form DW_FORM_data4.
@@ -78,31 +78,31 @@ error: .debug_abbrev: abbr. 0x13, attr. frame_base: attribute with invalid form 
 error: .debug_abbrev: abbr. 0x2c, attr. location: attribute with invalid form DW_FORM_block1.
 EOF
 
-testrun_compare ./dwarflint garbage-7 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-7 <<EOF
 warning: .debug_abbrev: abbr. attribute 0x7e: invalid or unknown name 0x703.
 error: .debug_abbrev: abbr. 0x7a, attr. 0x703: invalid form 0x0.
 error: .debug_abbrev: missing zero to mark end-of-table.
 EOF
 
-testrun_compare ./dwarflint garbage-8 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-8 <<EOF
 error: .debug_info: DIE 0x6c, attr. sibling: has a value of 0.
 error: .debug_info: DIE 0x6c: This DIE had children, but no DW_AT_sibling attribute.
 error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
-testrun_compare ./dwarflint garbage-9 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-9 <<EOF
 error: .debug_info: DIE 0x84, attr. type: invalid reference outside the CU: 0xef00ab.
 error: .debug_info: DIE 0x6c: is the last sibling in chain, but has a DW_AT_sibling attribute.
 error: .debug_info: DIE 0xab: DIE chain not terminated with null entry.
 EOF
 
-testrun_compare ./dwarflint garbage-10 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-10 <<EOF
 warning: .rela 0xc of .debug_info: DIE 0xb, attr. producer: relocation formed using STT_SECTION symbol with non-zero value.
 error: .rela 0x11 of .debug_info: DIE 0xb, attr. comp_dir: couldn't obtain symbol #7208969: invalid section index.
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 EOF
 
-testrun_compare ./dwarflint garbage-11 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-11 <<EOF
 error: .rela 0x600 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
 error: .rela 0xc00 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
 error: .rela 0x1100 of .debug_info: invalid relocation 2560 (<INVALID RELOC>).
@@ -119,7 +119,7 @@ error: .debug_line: table 0: header claims that it has a size of 542, but in fac
 error: .debug_info: DIE 0xb, attr. stmt_list: unresolved reference to .debug_line table 0x0.
 EOF
 
-testrun_compare ./dwarflint garbage-12 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint garbage-12 <<EOF
 error: Broken ELF: invalid section header.
 error: .debug_abbrev: data not found.
 error: .debug_info: data not found.

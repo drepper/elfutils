@@ -19,12 +19,12 @@
 
 srcdir=$srcdir/tests
 
-testfiles hello.bad-2
+testfiles tests/hello.bad-2
 
-../src/readelf -winfo ./tests/test-all-dies-it | grep '^ \[ *[0-9a-f]*\]' |
+../../src/readelf -winfo ../tests/test-all-dies-it | grep '^ \[ *[0-9a-f]*\]' |
   sed 's/ \[ *\([0-9a-f]\+\).*/0x\1/' |
-  testrun_compare ./tests/test-all-dies-it ./tests/test-all-dies-it
+  testrun_compare ../tests/test-all-dies-it ../tests/test-all-dies-it
 
-testrun_compare ./tests/test-all-dies-it hello.bad-2 <<EOF
+testrun_compare ../tests/test-all-dies-it hello.bad-2 <<EOF
 0xb
 EOF

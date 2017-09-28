@@ -42,7 +42,7 @@ srcdir=$srcdir/tests
 # }
 #
 # This would crash the low-level check_debug_info in the past.
-testfiles upper
+testfiles tests/upper
 
-testrun_compare ./dwarflint --quiet --check=@low upper <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --quiet --check=@low upper <<EOF
 EOF

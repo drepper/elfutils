@@ -19,33 +19,33 @@
 
 srcdir=$srcdir/tests
 
-testfiles nodebug null.o
+testfiles tests/nodebug tests/null.o
 
-testrun_compare ./dwarflint nodebug <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint nodebug <<EOF
 error: .debug_abbrev: data not found.
 error: .debug_info: data not found.
 EOF
 
-testrun_compare ./dwarflint -i nodebug <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint -i nodebug <<EOF
 No errors
 EOF
 
-testrun_compare ./dwarflint -q -i nodebug <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint -q -i nodebug <<EOF
 EOF
 
 # This has nothing to do with the nodebug test, but we can just as
 # well stick it in there.
-testrun_compare ./dwarflint --check=oentuh -q nodebug <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=oentuh -q nodebug <<EOF
 warning: the rule \`oentuh' never matched.
 EOF
 
 # ... and since we are testing this here, also check that we don't get
 # this message in situations where it makes no sense.
-LANG=C testrun_compare ./dwarflint --check=oentuh -q noeuht <<EOF
+LANG=C testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=oentuh -q noeuht <<EOF
 error: Cannot open input file: No such file or directory.
 EOF
 
-LANG=C testrun_compare ./dwarflint --check=oentuh -q noeuht nodebug <<EOF
+LANG=C testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=oentuh -q noeuht nodebug <<EOF
 
 noeuht:
 error: Cannot open input file: No such file or directory.
@@ -54,7 +54,7 @@ nodebug:
 warning: the rule \`oentuh' never matched.
 EOF
 
-LANG=C testrun_compare ./dwarflint --check=oentuh -q nodebug nodebug <<EOF
+LANG=C testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=oentuh -q nodebug nodebug <<EOF
 
 nodebug:
 
@@ -62,12 +62,12 @@ nodebug:
 warning: the rule \`oentuh' never matched.
 EOF
 
-testrun_compare ./dwarflint null.o <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint null.o <<EOF
 warning: .debug_abbrev: [0x0, 0x1): unnecessary padding with zero bytes.
 warning: .debug_abbrev: no abbreviations.
 error: .debug_info: data not found.
 EOF
 
-testrun_compare ./dwarflint --ignore-bloat --nodebug:ignore null.o <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --ignore-bloat --nodebug:ignore null.o <<EOF
 No errors
 EOF

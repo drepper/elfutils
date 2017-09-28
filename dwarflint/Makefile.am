@@ -55,7 +55,7 @@ dwarflint_SOURCES = \
 	files.cc files.hh \
 	highlevel_check.cc highlevel_check.hh highlevel_check_i.hh \
 	locus.cc locus.hh \
-	main.cc \
+	main.cc main.hh \
 	messages.cc messages.hh \
 	misc.cc misc.hh \
 	option.cc option.hh option_i.hh \
@@ -127,11 +127,14 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 	tests/crc7.ko.debug.bz2 \
 	tests/location-leaks.bz2 \
 	tests/nodebug.bz2 \
+	tests/null.o.bz2 \
 	tests/check_range_out_of_scope-1.bz2 \
 	tests/check_debug_info_refs-1.bz2 \
-	tests/aranges_terminate_early.bz2
+	tests/check_debug_info_refs-2.bz2 \
+	tests/aranges_terminate_early.bz2 \
 	tests/libdl-2.12.so.debug.bz2 \
 	tests/hello.bad-1.bz2 \
+	tests/hello.bad-2.bz2 \
 	tests/hello.bad-3.bz2 \
 	tests/empty-1.bz2 \
 	tests/garbage-1.bz2 \
@@ -154,18 +157,36 @@ EXTRA_DIST = $(EXTRA_TESTS) \
 
 installed_TESTS_ENVIRONMENT = libdir=$(DESTDIR)$(libdir) \
 			      bindir=$(DESTDIR)$(bindir) \
-			      $(top_srcdir)/tests/test-wrapper.sh \
-			      installed $(tests_rpath) \
-			      $(program_transform_name)
+			      LC_ALL=C; LANG=C; \
+			      abs_srcdir=$(abs_srcdir); \
+			      abs_builddir=$(abs_builddir); \
+			      abs_top_builddir=$(abs_top_builddir); \
+			      export abs_srcdir; export abs_builddir; \
+			      export abs_top_builddir; \
+			      export libdir; export bindir; \
+			      export LC_ALL; export LANG; \
+			      NM=$(NM); export NM;
+installed_LOG_COMPILER = $(top_srcdir)/tests/test-wrapper.sh \
+			 installed $(tests_rpath) \
+			 '$(program_transform_name)'
 if STANDALONE
 TESTS_ENVIRONMENT = $(installed_TESTS_ENVIRONMENT)
+LOG_COMPILER = $(installed_LOG_COMPILER)
 else !STANDALONE
-TESTS_ENVIRONMENT = $(top_srcdir)/tests/test-wrapper.sh \
-		    ../libdw:../backends:../libelf:../libasm
+TESTS_ENVIRONMENT = LC_ALL=C; LANG=C; \
+		    abs_srcdir=$(abs_srcdir);  abs_builddir=$(abs_builddir); \
+		    abs_top_builddir=$(abs_top_builddir); \
+		    export abs_srcdir; export abs_builddir; \
+		    export abs_top_builddir; \
+		    export LC_ALL; export LANG; \
+		    NM=$(NM); export NM;
+LOG_COMPILER = $(abs_srcdir)/../tests/test-wrapper.sh \
+	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm
 
 installcheck-local:
 	$(MAKE) $(AM_MAKEFLAGS) \
-		TESTS_ENVIRONMENT='$(installed_TESTS_ENVIRONMENT)' check-TESTS
+		TESTS_ENVIRONMENT="$(installed_TESTS_ENVIRONMENT)"
+		LOG_COMPILER="$(installed_LOG_COMPILER)" check-TESTS
 endif !STANDALONE
 
 if BUILD_STATIC

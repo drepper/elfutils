@@ -19,8 +19,8 @@
 
 srcdir=$srcdir/tests
 
-testfiles check_self_referential_die
+testfiles tests/check_self_referential_die
 
-testrun_compare ./dwarflint --check=check_self_referential_die --ignore-bloat check_self_referential_die <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=check_self_referential_die --ignore-bloat check_self_referential_die <<EOF
 warning: .debug_info: DIE 0x19dc2: structure_type attribute containing_type references DIE itself.
 EOF

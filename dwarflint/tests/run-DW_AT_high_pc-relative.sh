@@ -21,8 +21,8 @@ srcdir=$srcdir/tests
 
 # Hand-crafted file that has 0,0 pair in aranges presented before the
 # actual end of the table.
-testfiles DW_AT_high_pc-relative
+testfiles tests/DW_AT_high_pc-relative
 
-testrun_compare ./dwarflint --check=@low DW_AT_high_pc-relative <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=@low DW_AT_high_pc-relative <<EOF
 No errors
 EOF

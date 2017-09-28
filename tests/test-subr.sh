@@ -47,8 +47,9 @@ tempfiles()
 testfiles()
 {
   for file; do
-    bunzip2 -c ${abs_srcdir}/${file}.bz2 > ${file} || exit 77
-    remove_files="$remove_files $file"
+    file_name=$(basename $file)
+    bunzip2 -c ${abs_srcdir}/${file}.bz2 > $file_name || exit 77
+    remove_files="$remove_files $file_name"
   done
 }
 

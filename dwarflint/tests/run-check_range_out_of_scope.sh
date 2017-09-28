@@ -19,9 +19,9 @@
 
 srcdir=$srcdir/tests
 
-testfiles check_range_out_of_scope-1
+testfiles tests/check_range_out_of_scope-1
 
-testrun_compare ./dwarflint --check=check_range_out_of_scope check_range_out_of_scope-1 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=check_range_out_of_scope check_range_out_of_scope-1 <<EOF
 error: .debug_info: DIE 0x8b: PC range [0x4004d0, 0x4004d1) is not a sub-range of containing scope.
 error: .debug_info: DIE 0x7a: in this context: [0x4004d4, 0x4004db)
 EOF

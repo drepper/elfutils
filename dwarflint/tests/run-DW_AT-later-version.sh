@@ -19,9 +19,9 @@
 
 srcdir=$srcdir/tests
 
-testfiles DW_AT-later-version
+testfiles tests/DW_AT-later-version
 
-testrun_compare ./dwarflint --nognu DW_AT-later-version <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --nognu DW_AT-later-version <<EOF
 warning: .debug_abbrev: abbr. 0x11, attr. endianity: attribute from later DWARF version.
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_info: DIE 0x29: variable has decl_file, but NOT decl_line

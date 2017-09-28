@@ -19,19 +19,21 @@
 
 srcdir=$srcdir/tests
 
-testfiles check_debug_info_refs-{1,2}
+testfiles tests/check_debug_info_refs-1
 
-testrun_compare ./dwarflint --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
 error: .debug_aranges: table 48 (CU DIE 95): there has already been arange section for this CU.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF
 
-testrun_compare ./dwarflint --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=check_debug_info_refs check_debug_info_refs-1 <<EOF
 error: .debug_aranges: table 48 (CU DIE 95): there has already been arange section for this CU.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF
 
-testrun_compare ./dwarflint --check=check_debug_info_refs check_debug_info_refs-2 <<EOF
+testfiles tests/check_debug_info_refs-2
+
+testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=check_debug_info_refs check_debug_info_refs-2 <<EOF
 warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
 warning: .debug_info: CU 0: no aranges table is associated with this CU.
 EOF

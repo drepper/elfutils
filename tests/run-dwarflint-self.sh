@@ -1,5 +1,5 @@
 #! /bin/sh
-# Copyright (C) 2011 Red Hat, Inc.
+# Copyright (C) 2009, 2010 Red Hat, Inc.
 # This file is part of elfutils.
 #
 # This file is free software; you can redistribute it and/or modify
@@ -15,14 +15,32 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-. $srcdir/../tests/test-subr.sh
+. $srcdir/test-subr.sh
 
-srcdir=$srcdir/tests
+status=0
+runtest()
+{
+  for file; do
+    if [ -f $file ]; then
+      testrun ../dwarflint/dwarflint -q -i --check=@low $file ||
+      { echo "*** failure in $file"; status=1; }
+    fi
+  done
+}
 
-# Hand-crafted file that has 0,0 pair in aranges presented before the
-# actual end of the table.
-testfiles tests/DW_AT_high_pc-below
+runtest ../src/addr2line
+runtest ../src/dwarfcmp
+runtest ../src/elfcmp
+runtest ../src/elflint
+runtest ../src/findtextrel
+runtest ../src/ld
+runtest ../src/nm
+runtest ../src/objdump
+runtest ../src/readelf
+runtest ../src/size
+runtest ../src/strip
+runtest ../src/unstrip
+runtest ../*/*.so
+runtest ../dwarflint/dwarflint
 
-testrun_compare ${abs_top_builddir}/dwarflint/dwarflint --check=@low DW_AT_high_pc-below <<EOF
-warning: .debug_info: DIE 0xb: DW_AT_low_pc value not below DW_AT_high_pc.
-EOF
+exit $status
