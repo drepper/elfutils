@@ -90,6 +90,7 @@ AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
 AC_PROG_CXX
+AX_CXX_COMPILE_STDCXX_11
 # Only available since automake 1.12
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 AC_CHECK_TOOL([READELF], [readelf])

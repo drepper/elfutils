@@ -34,12 +34,16 @@ endif
 AM_CPPFLAGS += -I$(srcdir)/../libelf
 VERSION = 1
 
-lib_LIBRARIES = libdw.a
+lib_LIBRARIES = libdw.a libdwpp.a
 noinst_LIBRARIES = libdw_pic.a
 noinst_PROGRAMS = $(noinst_LIBRARIES:_pic.a=.so)
 
 include_HEADERS = dwarf.h
-pkginclude_HEADERS = libdw.h known-dwarf.h
+pkginclude_HEADERS = libdw.h known-dwarf.h \
+		     c++/subr.hh c++/dwarf_data \
+		     c++/dwarf c++/dwarf_edit c++/dwarf_output \
+		     c++/dwarf_tracker c++/dwarf_ref_maker \
+		     c++/dwarf_comparator
 
 libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getpubnames.c dwarf_getabbrev.c dwarf_tag.c \
@@ -91,6 +95,13 @@ libdw_a_SOURCES = dwarf_begin.c dwarf_begin_elf.c dwarf_end.c dwarf_getelf.c \
 		  dwarf_getalt.c dwarf_setalt.c dwarf_cu_getdwarf.c \
 		  dwarf_cu_die.c dwarf_peel_type.c dwarf_default_lower_bound.c
 
+libdwpp_a_SOURCES = c++/values.cc \
+		    c++/exception.cc \
+		    c++/known.cc \
+		    c++/line_info.cc \
+		    c++/edit-values.cc \
+		    c++/output-values.cc
+
 if MAINTAINER_MODE
 BUILT_SOURCES = $(srcdir)/known-dwarf.h
 MAINTAINERCLEANFILES = $(srcdir)/known-dwarf.h
@@ -138,7 +149,8 @@ libdwelf_objects = $(shell $(AR) t ../libdwelf/libdwelf.a)
 libdw_a_LIBADD += $(addprefix ../libdwelf/,$(libdwelf_objects))
 
 noinst_HEADERS = libdwP.h memory-access.h dwarf_abbrev_hash.h \
-		 dwarf_sig8_hash.h cfi.h encoded-value.h
+		 dwarf_sig8_hash.h cfi.h encoded-value.h \
+		 known-dwarf.h c++/dwarf-knowledge.cc c++/data-values.hh
 
 EXTRA_DIST = libdw.map
 
