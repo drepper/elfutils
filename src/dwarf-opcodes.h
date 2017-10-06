@@ -195,4 +195,5 @@
   DW_OP_2 (DW_OP_GNU_regval_type, DW_FORM_udata, DW_FORM_udata)	\
   DW_OP_2 (DW_OP_GNU_deref_type, DW_FORM_data1, DW_FORM_udata)	\
   DW_OP_1 (DW_OP_GNU_convert, DW_FORM_udata)			\
+  DW_OP_1 (DW_OP_GNU_parameter_ref, DW_FORM_ref4) \
   DW_OP_1 (DW_OP_GNU_reinterpret, DW_FORM_udata)
