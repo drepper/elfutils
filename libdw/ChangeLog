@@ -1,3 +1,16 @@
+2018-02-26  David Malcolm  <dmalcolm@redhat.com>
+
+	* c++/edit-values.cc (to_string<dwarf_edit::attribute>):
+	Explicitly qualify with "elfutils::".
+	* c++/known.cc (to_string<dwarf::dwarf_enum>): Likewise.
+	(to_string<dwarf_data::dwarf_enum>): Likewise.
+	* c++/output-values.cc (to_string<dwarf_output::attribute>):
+	Likewise.
+	* c++/values.cc (to_string<dwarf::attribute>): Likewise.
+	(to_string<dwarf::attr_value>): Likewise.
+	(to_string<dwarf_edit::attr_value>): Likewise.
+	(to_string<dwarf_output::attr_value>): Likewise.
+
 2017-10-03  Mark Wielaard  <mark@klomp.org>
 
 	* libdw.h: Define LIBDW_CIE_ID and use it in dwarf_cfi_cie_p.

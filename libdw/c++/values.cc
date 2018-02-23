@@ -227,28 +227,28 @@ value_string (const value_type &value)
 
 template<>
 string
-to_string<dwarf::attribute> (const dwarf::attribute &attr)
+elfutils::to_string<dwarf::attribute> (const dwarf::attribute &attr)
 {
   return attribute_string (attr);
 }
 
 template<>
 string
-to_string<dwarf::attr_value> (const dwarf::attr_value &value)
+elfutils::to_string<dwarf::attr_value> (const dwarf::attr_value &value)
 {
   return value_string (value);
 }
 
 template<>
 string
-to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &value)
+elfutils::to_string<dwarf_edit::attr_value> (const dwarf_edit::attr_value &value)
 {
   return value_string (value);
 }
 
 template<>
 string
-to_string<dwarf_output::attr_value> (const dwarf_output::attr_value &value)
+elfutils::to_string<dwarf_output::attr_value> (const dwarf_output::attr_value &value)
 {
   return value_string (value);
 }

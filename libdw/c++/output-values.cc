@@ -46,7 +46,7 @@ template class dwarf_output::copier<dwarf_edit>;
 
 template<>
 std::string
-to_string<dwarf_output::attribute> (const dwarf_output::attribute &attr)
+elfutils::to_string<dwarf_output::attribute> (const dwarf_output::attribute &attr)
 {
   return attribute_string (attr);
 }

@@ -41,7 +41,7 @@ template class dwarf_data::value<dwarf_edit>;
 
 template<>
 std::string
-to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &attr)
+elfutils::to_string<dwarf_edit::attribute> (const dwarf_edit::attribute &attr)
 {
   return attribute_string (attr);
 }

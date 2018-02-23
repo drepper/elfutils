@@ -217,14 +217,14 @@ enum_string (const value_type &value)
 
 template<>
 string
-to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &value)
+elfutils::to_string<dwarf::dwarf_enum> (const dwarf::dwarf_enum &value)
 {
   return enum_string (value);
 }
 
 template<>
 string
-to_string<dwarf_data::dwarf_enum> (const dwarf_data::dwarf_enum &value)
+elfutils::to_string<dwarf_data::dwarf_enum> (const dwarf_data::dwarf_enum &value)
 {
   return enum_string (value);
 }
