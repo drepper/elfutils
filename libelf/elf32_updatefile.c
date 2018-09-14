@@ -203,7 +203,7 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 		   sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum, 1);
 	}
       else
-	memcpy (elf->map_address + elf->start_offset + ehdr->e_phoff,
+	memmove (elf->map_address + elf->start_offset + ehdr->e_phoff,
 		elf->state.ELFW(elf,LIBELFBITS).phdr,
 		sizeof (ElfW2(LIBELFBITS,Phdr)) * phnum);
 
@@ -236,7 +236,7 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 	}
       char *const shdr_start = ((char *) elf->map_address + elf->start_offset
 				+ ehdr->e_shoff);
-      char *const shdr_end = shdr_start + ehdr->e_shnum * ehdr->e_shentsize;
+      char *const shdr_end = shdr_start + shnum * ehdr->e_shentsize;
 
 #if EV_NUM != 2
       xfct_t shdr_fctp = __elf_xfctstom[__libelf_version - 1][EV_CURRENT - 1][ELFW(ELFCLASS, LIBELFBITS) - 1][ELF_T_SHDR];
@@ -371,9 +371,11 @@ __elfw2(LIBELFBITS,updatemmap) (Elf *elf, int change_bo, size_t shnum)
 			last_position += dl->data.d.d_size;
 		      }
 		    else if (dl->data.d.d_size != 0)
-		      last_position = mempcpy (last_position,
-					       dl->data.d.d_buf,
-					       dl->data.d.d_size);
+		      {
+			memmove (last_position, dl->data.d.d_buf,
+				 dl->data.d.d_size);
+			last_position += dl->data.d.d_size;
+		      }
 
 		    scn_changed = true;
 		  }

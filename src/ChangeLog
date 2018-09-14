@@ -1,3 +1,98 @@
+2018-09-13  Mark Wielaard  <mark@klomp.org>
+
+	* readelf.c (print_shdr): Get number of section with elf_getshdrnum.
+	(print_phdr): Likewise.
+
+2018-09-13  Mark Wielaard  <mark@klomp.org>
+
+	* strip.c (handle_elf): Check against shstrndx, not e_shstrndx.
+	Explicitly set shdrstrndx for debug file.
+	* unstrip.c (copy_elf): Explicitly copy shstrndx.
+	(find_alloc_sections_prelink): Document shnum usage.
+
+2018-09-13  Mark Wielaard  <mark@klomp.org>
+
+	* elflint.c (check_elf_header): Use shnum instead of e_shnum for all
+	checks.
+	(check_symtab): Use shstrndx instead of e_shstrndx to get section
+	names.
+
+2018-09-13  Mark Wielaard  <mark@klomp.org>
+
+	* elfcmp.c (main): Get, check and shdrstrndx for section names.
+
+2018-09-12  Mark Wielaard  <mark@klomp.org>
+
+	* elfcmp.c (main): Call ebl_section_strip_p without ehdr.
+	* strip.c (handle_elf): Likewise.
+
+2018-09-12  Mark Wielaard  <mark@klomp.org>
+
+	* elflint.c (check_symtab): Call ebl_check_special_symbol without
+	ehdr.
+
+2018-07-30  Mark Wielaard  <mark@klomp.org>
+
+	* strip.c (handle_elf): Track allocated/unallocated sections seen. Set
+	section offset of unallocated sections after handling all allocated
+	sections.
+
+2018-08-18  Mark Wielaard  <mark@klomp.org>
+
+	* readelf.c (print_debug_aranges_section): Make sure there is enough
+	data to read the header segment size.
+
+2018-08-18  Mark Wielaard  <mark@klomp.org>
+
+	* elflint.c (check_sysv_hash): Calculate needed size using unsigned
+	long long int to prevent overflow.
+	(check_sysv_hash64): Calculate maxwords used separately before
+	comparison to prevent overflow.
+
+2018-07-24  Mark Wielaard  <mark@klomp.org>
+
+	* unstrip.c (compare_unalloc_sections): Also compare sh_size.
+
+2018-07-21  Mark Wielaard  <mark@klomp.org>
+
+	* unstrip.c (adjust_all_relocs): Skip SHT_GROUP sections.
+
+2018-07-21  Mark Wielaard  <mark@klomp.org>
+
+	* elfcompress.c (get_sections): New function.
+	(process_file): Check whether section needs to change. Don't rewrite
+	file if no section data needs changing.
+	(main): Update 'force' help text.
+
+2018-07-21  Mark Wielaard  <mark@klomp.org>
+
+	* elfcompress.c (process_file): Swap fchmod and fchown calls.
+
+2018-07-04  Mark Wielaard  <mark@klomp.org>
+
+	* readelf.c (print_debug_addr_section): Rename index var to uidx.
+	(attr_callback): Rename index var to word.
+	(print_debug_str_offsets_section): Rename index var to uidx.
+
+2018-07-04  Ross Burton <ross.burton@intel.com>
+
+	* addr2line.c: Remove error.h include.
+	* ar.c: Likewise.
+	* arlib.c: Likewise and add system.h include.
+	* arlib2.c: Likewise.
+	* elfcmp.c: Likewise.
+	* elfcompress.c: Likewise.
+	* elflint.c: Likewise.
+	* findtextrel.c: Likewise.
+	* nm.c: Likewise.
+	* objdump.c: Likewise.
+	* ranlib.c: Likewise.
+	* readelf.c: Likewise.
+	* stack.c: Likewise.
+	* strings.c: Likewise.
+	* strip.c: Likewise.
+	* unstrip.c: Likewise.
+
 2018-06-25  Mark Wielaard  <mark@klomp.org>
 
 	* readelf.c (print_decoded_line_section): Use dwarf_next_lines

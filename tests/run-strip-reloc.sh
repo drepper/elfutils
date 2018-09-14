@@ -32,6 +32,8 @@ runtest() {
   outfile2=out.stripped2
   debugfile2=out.debug2
 
+  rm -f $outfile1 $debugfile1 $outfile2 $debugfile2
+
   testrun ${abs_top_builddir}/src/strip -o $outfile1 -f $debugfile1 $infile ||
   { echo "*** failure strip $infile"; status=1; }
 
@@ -68,6 +70,7 @@ runtest() {
 }
 
 # Most simple hello world kernel module for various architectures.
+# Make sure that it contains debuginfo with CONFIG_DEBUG_INFO=y.
 # ::::::::::::::
 # Makefile
 # ::::::::::::::
@@ -75,7 +78,8 @@ runtest() {
 # hello-y := init.o exit.o
 # 
 # all:
-# 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+# 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) \
+#		CONFIG_DEBUG_INFO=y modules
 # ::::::::::::::
 # init.c
 # ::::::::::::::

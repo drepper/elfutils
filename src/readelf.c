@@ -24,7 +24,6 @@
 #include <ctype.h>
 #include <dwarf.h>
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <gelf.h>
 #include <inttypes.h>
@@ -1185,15 +1184,24 @@ print_shdr (Ebl *ebl, GElf_Ehdr *ehdr)
   size_t shstrndx;
 
   if (! print_file_header)
-    printf (gettext ("\
-There are %d section headers, starting at offset %#" PRIx64 ":\n\
+    {
+      size_t sections;
+      if (unlikely (elf_getshdrnum (ebl->elf, &sections) < 0))
+	error (EXIT_FAILURE, 0,
+	       gettext ("cannot get number of sections: %s"),
+	       elf_errmsg (-1));
+
+      printf (gettext ("\
+There are %zd section headers, starting at offset %#" PRIx64 ":\n\
 \n"),
-	    ehdr->e_shnum, ehdr->e_shoff);
+	      sections, ehdr->e_shoff);
+    }
 
   /* Get the section header string table index.  */
   if (unlikely (elf_getshdrstrndx (ebl->elf, &shstrndx) < 0))
     error (EXIT_FAILURE, 0,
-	   gettext ("cannot get section header string table index"));
+	   gettext ("cannot get section header string table index: %s"),
+	   elf_errmsg (-1));
 
   puts (gettext ("Section Headers:"));
 
@@ -1385,7 +1393,13 @@ print_phdr (Ebl *ebl, GElf_Ehdr *ehdr)
 	}
     }
 
-  if (ehdr->e_shnum == 0)
+  size_t sections;
+  if (unlikely (elf_getshdrnum (ebl->elf, &sections) < 0))
+    error (EXIT_FAILURE, 0,
+           gettext ("cannot get number of sections: %s"),
+           elf_errmsg (-1));
+
+  if (sections == 0)
     /* No sections in the file.  Punt.  */
     return;
 
@@ -5262,14 +5276,14 @@ print_debug_addr_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 	  addresses /= 10;
 	}
 
-      unsigned int index = 0;
+      unsigned int uidx = 0;
       size_t index_offset =  readp - (const unsigned char *) data->d_buf;
       printf (" Addresses start at offset 0x%zx:\n", index_offset);
       while (readp <= next_unitp - address_size)
 	{
 	  Dwarf_Addr addr = read_addr_unaligned_inc (address_size, dbg,
 						     readp);
-	  printf (" [%*u] ", digits, index++);
+	  printf (" [%*u] ", digits, uidx++);
 	  print_dwarf_addr (dwflmod, address_size, addr, addr);
 	  printf ("\n");
 	}
@@ -5448,6 +5462,8 @@ print_debug_aranges_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 	  goto next_table;
 	}
 
+      if (readp + 1 > readendp)
+	goto invalid_data;
       unsigned int segment_size = *readp++;
       printf (gettext (" Segment size:  %6" PRIu64 "\n\n"),
 	      (uint64_t) segment_size);
@@ -6967,12 +6983,12 @@ attr_callback (Dwarf_Attribute *attrp, void *arg)
 	    }
 	  if (form != DW_FORM_addr )
 	    {
-	      Dwarf_Word index;
-	      if (dwarf_formudata (attrp, &index) != 0)
+	      Dwarf_Word word;
+	      if (dwarf_formudata (attrp, &word) != 0)
 		goto attrval_out;
 	      printf ("           %*s%-20s (%s) [%" PRIx64 "] ",
 		      (int) (level * 2), "", dwarf_attr_name (attr),
-		      dwarf_form_name (form), index);
+		      dwarf_form_name (form), word);
 	    }
 	  else
 	    printf ("           %*s%-20s (%s) ",
@@ -10256,7 +10272,7 @@ print_debug_str_offsets_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 	  offsets /= 10;
 	}
 
-      unsigned int index = 0;
+      unsigned int uidx = 0;
       size_t index_offset =  readp - (const unsigned char *) data->d_buf;
       printf (" Offsets start at 0x%zx:\n", index_offset);
       while (readp <= next_unitp - offset_size)
@@ -10268,7 +10284,7 @@ print_debug_str_offsets_section (Dwfl_Module *dwflmod __attribute__ ((unused)),
 	    offset = read_8ubyte_unaligned_inc (dbg, readp);
 	  const char *str = dwarf_getstring (dbg, offset, NULL);
 	  printf (" [%*u] [%*" PRIx64 "]  \"%s\"\n",
-		  digits, index++, (int) offset_size * 2, offset, str ?: "???");
+		  digits, uidx++, (int) offset_size * 2, offset, str ?: "???");
 	}
       printf ("\n");
 

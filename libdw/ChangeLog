@@ -1,3 +1,28 @@
+2018-09-13  Mark Wielaard  <mark@klomp.org>
+
+	* dwarf_begin_elf.c (check_section): Drop ehdr argument, add and
+	use shstrndx argument.
+	(global_read): Likewise.
+	(scngrp_read): Likewise.
+	(dwarf_begin_elf): Call elf_getshdrstrndx. Pass shstrndx to
+	global_read or scngrp_read.
+
+2018-08-18  Mark Wielaard  <mark@klomp.org>
+
+	* dwarf_getabbrev.c (__libdw_getabbrev): Continue until both name
+	and form are zero.
+	* dwarf_hasattr.c (dwarf_hasattr): Stop when both name and form
+	are zero.
+
+2018-08-18  Mark Wielaard  <mark@klomp.org>
+
+	* dwarf_getaranges.c (dwarf_getaranges.c): Make sure there is enough
+	data to read the address and segment size.
+
+2018-07-04  Ross Burton <ross.burton@intel.com>
+
+	* libdw_alloc.c: Remove error.h include.
+
 2018-06-28  Mark Wielaard  <mark@klomp.org>
 
 	* dwarf_next_cfi.c (dwarf_next_cfi): Check whether length is zero.

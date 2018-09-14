@@ -31,7 +31,6 @@
 #include <argp.h>
 #include <assert.h>
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <libintl.h>
@@ -48,6 +47,7 @@
 #include <gelf.h>
 #include <libebl.h>
 #include <libdwfl.h>
+#include "system.h"
 #include "libdwelf.h"
 #include "libeu.h"
 #include "printversion.h"
@@ -239,8 +239,27 @@ copy_elf (Elf *outelf, Elf *inelf)
   ELF_CHECK (gelf_newehdr (outelf, gelf_getclass (inelf)),
 	     _("cannot create ELF header: %s"));
 
+  size_t shstrndx;
+  ELF_CHECK (elf_getshdrstrndx (inelf, &shstrndx) == 0,
+	     _("cannot get shdrstrndx:%s"));
+
   GElf_Ehdr ehdr_mem;
   GElf_Ehdr *ehdr = gelf_getehdr (inelf, &ehdr_mem);
+  if (shstrndx < SHN_LORESERVE)
+    ehdr->e_shstrndx = shstrndx;
+  else
+    {
+      ehdr->e_shstrndx = SHN_XINDEX;
+      Elf_Scn *scn0 = elf_getscn (outelf, 0);
+      GElf_Shdr shdr0_mem;
+      GElf_Shdr *shdr0 = gelf_getshdr (scn0, &shdr0_mem);
+      ELF_CHECK (shdr0 != NULL,
+		 _("cannot get new zero section: %s"));
+      shdr0->sh_link = shstrndx;
+      ELF_CHECK (gelf_update_shdr (scn0, shdr0),
+		 _("cannot update new zero section: %s"));
+    }
+
   ELF_CHECK (gelf_update_ehdr (outelf, ehdr),
 	     _("cannot copy ELF header: %s"));
 
@@ -563,7 +582,11 @@ adjust_all_relocs (Elf *elf, Elf_Scn *symtab, const GElf_Shdr *symshdr,
 	GElf_Shdr shdr_mem;
 	GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
 	ELF_CHECK (shdr != NULL, _("cannot get section header: %s"));
-	if (shdr->sh_type != SHT_NOBITS && shdr->sh_link == new_sh_link)
+	/* Don't redo SHT_GROUP, groups are in both the stripped and debug,
+	   it will already have been done by adjust_relocs for the
+	   stripped_symtab.  */
+	if (shdr->sh_type != SHT_NOBITS && shdr->sh_type != SHT_GROUP
+	    && shdr->sh_link == new_sh_link)
 	  adjust_relocs (scn, scn, shdr, map, symshdr);
       }
 }
@@ -703,6 +726,12 @@ compare_unalloc_sections (const GElf_Shdr *shdr1, const GElf_Shdr *shdr2,
   if (shdr1->sh_flags < shdr2->sh_flags)
     return -1;
   if (shdr1->sh_flags > shdr2->sh_flags)
+    return 1;
+
+  /* Sizes should be the same.  */
+  if (shdr1->sh_size < shdr2->sh_size)
+    return -1;
+  if (shdr1->sh_size > shdr2->sh_size)
     return 1;
 
   /* Sort by name as last resort.  */
@@ -1015,7 +1044,7 @@ find_alloc_sections_prelink (Elf *debug, Elf_Data *debug_shstrtab,
 		 _("cannot read '.gnu.prelink_undo' section: %s"));
 
       uint_fast16_t phnum;
-      uint_fast16_t shnum;
+      uint_fast16_t shnum;  /* prelink doesn't handle > SHN_LORESERVE.  */
       if (ehdr.e32.e_ident[EI_CLASS] == ELFCLASS32)
 	{
 	  phnum = ehdr.e32.e_phnum;

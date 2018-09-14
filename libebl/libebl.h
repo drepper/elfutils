@@ -152,7 +152,7 @@ extern bool ebl_dynamic_tag_check (Ebl *ebl, int64_t tag);
 
 /* Check whether given symbol's st_value and st_size are OK despite failing
    normal checks.  */
-extern bool ebl_check_special_symbol (Ebl *ebl, GElf_Ehdr *ehdr,
+extern bool ebl_check_special_symbol (Ebl *ebl,
 				      const GElf_Sym *sym, const char *name,
 				      const GElf_Shdr *destshdr);
 
@@ -205,7 +205,7 @@ extern bool ebl_none_reloc_p (Ebl *ebl, int reloc);
 extern bool ebl_relative_reloc_p (Ebl *ebl, int reloc);
 
 /* Check whether section should be stripped.  */
-extern bool ebl_section_strip_p (Ebl *ebl, const GElf_Ehdr *ehdr,
+extern bool ebl_section_strip_p (Ebl *ebl,
 				 const GElf_Shdr *shdr, const char *name,
 				 bool remove_comment, bool only_remove_debug);
 

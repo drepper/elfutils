@@ -24,7 +24,6 @@
 #include <assert.h>
 #include <byteswap.h>
 #include <endian.h>
-#include <error.h>
 #include <fcntl.h>
 #include <gelf.h>
 #include <inttypes.h>
@@ -542,7 +541,7 @@ invalid number of program header table entries\n"));
       if (ehdr->e_shentsize != 0 && ehdr->e_shentsize != sizeof (Elf64_Shdr))
 	ERROR (gettext ("invalid section header size: %hd\n"),
 	       ehdr->e_shentsize);
-      else if (ehdr->e_shoff + ehdr->e_shnum * ehdr->e_shentsize > size)
+      else if (ehdr->e_shoff + shnum * ehdr->e_shentsize > size)
 	ERROR (gettext ("invalid section header position or size\n"));
     }
 }
@@ -797,7 +796,7 @@ section [%2d] '%s': symbol %zu: function in COMMON section is nonsense\n"),
 		st_value = sym->st_value;
 	      if (GELF_ST_TYPE (sym->st_info) != STT_TLS)
 		{
-		  if (! ebl_check_special_symbol (ebl, ehdr, sym, name,
+		  if (! ebl_check_special_symbol (ebl, sym, name,
 						  destshdr))
 		    {
 		      if (st_value - sh_addr > destshdr->sh_size)
@@ -957,7 +956,7 @@ section [%2d] '%s': symbol %zu: non-local section symbol\n"),
 		      destshdr = gelf_getshdr (gscn, &destshdr_mem);
 		      assert (destshdr != NULL);
 		      const char *sname = elf_strptr (ebl->elf,
-						      ehdr->e_shstrndx,
+						      shstrndx,
 						      destshdr->sh_name);
 		      if (sname != NULL)
 			{
@@ -978,7 +977,7 @@ section [%2d] '%s': symbol %zu: non-local section symbol\n"),
 
 	      const char *sname = ((destshdr == NULL || xndx == SHN_UNDEF)
 				   ? NULL
-				   : elf_strptr (ebl->elf, ehdr->e_shstrndx,
+				   : elf_strptr (ebl->elf, shstrndx,
 						 destshdr->sh_name));
 	      if (sname == NULL)
 		{
@@ -998,7 +997,7 @@ section [%2d] '%s'\n"),
 	      if (destshdr != NULL)
 		{
 		  /* Found it.  */
-		  if (!ebl_check_special_symbol (ebl, ehdr, sym, name,
+		  if (!ebl_check_special_symbol (ebl, sym, name,
 						 destshdr))
 		    {
 		      if (ehdr->e_type != ET_REL
@@ -2024,7 +2023,7 @@ check_sysv_hash (Ebl *ebl, GElf_Shdr *shdr, Elf_Data *data, int idx,
   Elf32_Word nbucket = ((Elf32_Word *) data->d_buf)[0];
   Elf32_Word nchain = ((Elf32_Word *) data->d_buf)[1];
 
-  if (shdr->sh_size < (2 + nbucket + nchain) * sizeof (Elf32_Word))
+  if (shdr->sh_size < (2ULL + nbucket + nchain) * sizeof (Elf32_Word))
     {
       ERROR (gettext ("\
 section [%2d] '%s': hash table section is too small (is %ld, expected %ld)\n"),
@@ -2078,7 +2077,10 @@ check_sysv_hash64 (Ebl *ebl, GElf_Shdr *shdr, Elf_Data *data, int idx,
   Elf64_Xword nbucket = ((Elf64_Xword *) data->d_buf)[0];
   Elf64_Xword nchain = ((Elf64_Xword *) data->d_buf)[1];
 
-  if (shdr->sh_size < (2 + nbucket + nchain) * sizeof (Elf64_Xword))
+  uint64_t maxwords = shdr->sh_size / sizeof (Elf64_Xword);
+  if (maxwords < 2
+      || maxwords - 2 < nbucket
+      || maxwords - 2 - nbucket < nchain)
     {
       ERROR (gettext ("\
 section [%2d] '%s': hash table section is too small (is %ld, expected %ld)\n"),

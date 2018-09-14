@@ -21,10 +21,10 @@
 #include <stdio_ext.h>
 #include <locale.h>
 #include <errno.h>
-#include <error.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include ELFUTILS_HEADER(dwfl)
+#include "system.h"
 
 #ifndef __linux__
 
@@ -124,6 +124,7 @@ thread_callback (Dwfl_Thread *thread, void *thread_arg)
 }
 
 int
+__attribute__((section(".main"))) /* Defeat -freorder-blocks-and-partition  */
 main (int argc __attribute__ ((unused)), char **argv)
 {
   /* We use no threads here which can interfere with handling a stream.  */

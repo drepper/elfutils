@@ -24,7 +24,6 @@
 #include <assert.h>
 #include <byteswap.h>
 #include <endian.h>
-#include <error.h>
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <gelf.h>
@@ -662,6 +661,11 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       memset (shdr_info, '\0', (shnum + 2) * sizeof (struct shdr_info));
     }
 
+  /* Track whether allocated sections all come before non-allocated ones.  */
+  bool seen_allocated = false;
+  bool seen_unallocated = false;
+  bool mixed_allocated_unallocated = false;
+
   /* Prepare section information data structure.  */
   scn = NULL;
   cnt = 1;
@@ -676,6 +680,17 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       /* Get the header.  */
       if (gelf_getshdr (scn, &shdr_info[cnt].shdr) == NULL)
 	INTERNAL_ERROR (fname);
+
+      /* Normally (in non-ET_REL files) we see all allocated sections first,
+	 then all non-allocated.  */
+      if ((shdr_info[cnt].shdr.sh_flags & SHF_ALLOC) == 0)
+	seen_unallocated = true;
+      else
+	{
+	  if (seen_unallocated && seen_allocated)
+	    mixed_allocated_unallocated = true;
+	  seen_allocated = true;
+	}
 
       /* Get the name of the section.  */
       shdr_info[cnt].name = elf_strptr (elf, shstrndx,
@@ -802,10 +817,10 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
     /* Check whether the section can be removed.  Since we will create
        a new .shstrtab assume it will be removed too.  */
     if (remove_shdrs ? !(shdr_info[cnt].shdr.sh_flags & SHF_ALLOC)
-	: (ebl_section_strip_p (ebl, ehdr, &shdr_info[cnt].shdr,
+	: (ebl_section_strip_p (ebl, &shdr_info[cnt].shdr,
 				shdr_info[cnt].name, remove_comment,
 				remove_debug)
-	   || cnt == ehdr->e_shstrndx
+	   || cnt == shstrndx
 	   || section_name_matches (remove_secs, shdr_info[cnt].name)))
       {
 	/* The user might want to explicitly keep this one.  */
@@ -963,7 +978,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 			   original table in the debug file.  Unless
 			   it is a redundant data marker to a debug
 			   (data only) section.  */
-			if (! (ebl_section_strip_p (ebl, ehdr,
+			if (! (ebl_section_strip_p (ebl,
 						    &shdr_info[scnidx].shdr,
 						    shdr_info[scnidx].name,
 						    remove_comment,
@@ -1066,7 +1081,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 				  && shdr_info[cnt].debug_data == NULL
 				  && shdr_info[cnt].shdr.sh_type != SHT_NOTE
 				  && shdr_info[cnt].shdr.sh_type != SHT_GROUP
-				  && cnt != ehdr->e_shstrndx);
+				  && cnt != shstrndx);
 
 	  /* Set the section header in the new file.  */
 	  GElf_Shdr debugshdr = shdr_info[cnt].shdr;
@@ -1119,7 +1134,42 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
       debugehdr->e_version = ehdr->e_version;
       debugehdr->e_entry = ehdr->e_entry;
       debugehdr->e_flags = ehdr->e_flags;
-      debugehdr->e_shstrndx = ehdr->e_shstrndx;
+
+      size_t shdrstrndx;
+      if (elf_getshdrstrndx (elf, &shdrstrndx) < 0)
+	{
+	  error (0, 0, gettext ("%s: error while getting shdrstrndx: %s"),
+		 fname, elf_errmsg (-1));
+	  result = 1;
+	  goto fail_close;
+	}
+
+      if (shstrndx < SHN_LORESERVE)
+	debugehdr->e_shstrndx = shdrstrndx;
+      else
+	{
+	  debugehdr->e_shstrndx = SHN_XINDEX;
+	  Elf_Scn *scn0 = elf_getscn (debugelf, 0);
+	  GElf_Shdr shdr0_mem;
+	  GElf_Shdr *shdr0 = gelf_getshdr (scn0, &shdr0_mem);
+	  if (shdr0 == NULL)
+	    {
+	      error (0, 0, gettext ("%s: error getting zero section: %s"),
+		     debug_fname, elf_errmsg (-1));
+	      result = 1;
+	      goto fail_close;
+	    }
+
+	  shdr0->sh_link = shdrstrndx;
+	  if (gelf_update_shdr (scn0, shdr0) == 0)
+	    {
+	      error (0, 0, gettext ("%s: error while updating zero section: %s"),
+		     debug_fname, elf_errmsg (-1));
+	      result = 1;
+	      goto fail_close;
+	    }
+
+	}
 
       if (unlikely (gelf_update_ehdr (debugelf, debugehdr) == 0))
 	{
@@ -1172,7 +1222,7 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
      the .shstrtab section which we would add again.  */
   bool removing_sections = !(cnt == idx
 			     || (cnt == idx + 1
-				 && shdr_info[ehdr->e_shstrndx].idx == 0));
+				 && shdr_info[shstrndx].idx == 0));
   if (output_fname == NULL && !removing_sections)
       goto fail_close;
 
@@ -1536,23 +1586,57 @@ handle_elf (int fd, Elf *elf, const char *prefix, const char *fname,
 	      }
 	  }
 
-	/* If we have to, compute the offset of the section.  */
-	if (shdr_info[cnt].shdr.sh_offset == 0)
-	  shdr_info[cnt].shdr.sh_offset
-	    = ((lastoffset + shdr_info[cnt].shdr.sh_addralign - 1)
-	       & ~((GElf_Off) (shdr_info[cnt].shdr.sh_addralign - 1)));
+	/* If we have to, compute the offset of the section.
+	   If allocate and unallocated sections are mixed, we only update
+	   the allocated ones now.  The unallocated ones come second.  */
+	if (! mixed_allocated_unallocated
+	    || (shdr_info[cnt].shdr.sh_flags & SHF_ALLOC) != 0)
+	  {
+	    if (shdr_info[cnt].shdr.sh_offset == 0)
+	      shdr_info[cnt].shdr.sh_offset
+		= ((lastoffset + shdr_info[cnt].shdr.sh_addralign - 1)
+		   & ~((GElf_Off) (shdr_info[cnt].shdr.sh_addralign - 1)));
 
-	/* Set the section header in the new file.  */
-	if (unlikely (gelf_update_shdr (scn, &shdr_info[cnt].shdr) == 0))
-	  /* There cannot be any overflows.  */
-	  INTERNAL_ERROR (fname);
+	    /* Set the section header in the new file.  */
+	    if (unlikely (gelf_update_shdr (scn, &shdr_info[cnt].shdr) == 0))
+	      /* There cannot be any overflows.  */
+	      INTERNAL_ERROR (fname);
 
-	/* Remember the last section written so far.  */
-	GElf_Off filesz = (shdr_info[cnt].shdr.sh_type != SHT_NOBITS
-			   ? shdr_info[cnt].shdr.sh_size : 0);
-	if (lastoffset < shdr_info[cnt].shdr.sh_offset + filesz)
-	  lastoffset = shdr_info[cnt].shdr.sh_offset + filesz;
+	    /* Remember the last section written so far.  */
+	    GElf_Off filesz = (shdr_info[cnt].shdr.sh_type != SHT_NOBITS
+			       ? shdr_info[cnt].shdr.sh_size : 0);
+	    if (lastoffset < shdr_info[cnt].shdr.sh_offset + filesz)
+	      lastoffset = shdr_info[cnt].shdr.sh_offset + filesz;
+	  }
       }
+
+  /* We might have to update the unallocated sections after we done the
+     allocated ones.  lastoffset is set to right after the last allocated
+     section.  */
+  if (mixed_allocated_unallocated)
+    for (cnt = 1; cnt <= shdridx; ++cnt)
+      if (shdr_info[cnt].idx > 0)
+	{
+	  scn = elf_getscn (newelf, shdr_info[cnt].idx);
+	  if ((shdr_info[cnt].shdr.sh_flags & SHF_ALLOC) == 0)
+	    {
+	      if (shdr_info[cnt].shdr.sh_offset == 0)
+		shdr_info[cnt].shdr.sh_offset
+		  = ((lastoffset + shdr_info[cnt].shdr.sh_addralign - 1)
+		     & ~((GElf_Off) (shdr_info[cnt].shdr.sh_addralign - 1)));
+
+	      /* Set the section header in the new file.  */
+	      if (unlikely (gelf_update_shdr (scn, &shdr_info[cnt].shdr) == 0))
+		/* There cannot be any overflows.  */
+		INTERNAL_ERROR (fname);
+
+	      /* Remember the last section written so far.  */
+	      GElf_Off filesz = (shdr_info[cnt].shdr.sh_type != SHT_NOBITS
+				 ? shdr_info[cnt].shdr.sh_size : 0);
+	      if (lastoffset < shdr_info[cnt].shdr.sh_offset + filesz)
+		lastoffset = shdr_info[cnt].shdr.sh_offset + filesz;
+	    }
+	}
 
   /* Adjust symbol references if symbol tables changed.  */
   if (any_symtab_changes)

@@ -57,6 +57,8 @@ riscv_init (Elf *elf __attribute__ ((unused)),
   eh->frame_nregs = 66;
   HOOK (eh, check_special_symbol);
   HOOK (eh, machine_flag_check);
+  HOOK (eh, set_initial_registers_tid);
+  HOOK (eh, core_note);
 
   return MODVERSION;
 }

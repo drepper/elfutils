@@ -17,7 +17,7 @@ dnl  GNU General Public License for more details.
 dnl
 dnl  You should have received a copy of the GNU General Public License
 dnl  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-AC_INIT([elfutils],[0.173],[https://sourceware.org/bugzilla],[elfutils],[http://elfutils.org/])
+AC_INIT([elfutils],[0.174],[https://sourceware.org/bugzilla],[elfutils],[http://elfutils.org/])
 
 dnl Workaround for older autoconf < 2.64
 m4_ifndef([AC_PACKAGE_URL],
@@ -623,6 +623,10 @@ if test "x$enable_maintainer_mode" = xyes; then
   AC_CHECK_PROG(HAVE_BISON, bison, yes, no)
   if test "$HAVE_BISON" = "no"; then
     AC_MSG_ERROR([bison needed in maintainer mode])
+  fi
+  AC_CHECK_PROG(HAVE_GAWK, gawk, yes, no)
+  if test "$HAVE_GAWK" = "no"; then
+    AC_MSG_ERROR([gawk needed in maintainer mode])
   fi
 else
   if test ! -f ${srcdir}/libdw/known-dwarf.h; then

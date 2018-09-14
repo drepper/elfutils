@@ -59,7 +59,8 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  elfgetzdata elfputzdata zstrptr emptyfile vendorelf \
 		  fillfile dwarf_default_lower_bound dwarf-die-addr-die \
 		  get-units-invalid get-units-split attr-integrate-skel \
-		  all-dwarf-ranges unit-info next_cfi
+		  all-dwarf-ranges unit-info next_cfi \
+		  elfcopy addsections
 
 asm_TESTS = asm-tst1 asm-tst2 asm-tst3 asm-tst4 asm-tst5 \
 	    asm-tst6 asm-tst7 asm-tst8 asm-tst9
@@ -152,7 +153,9 @@ TESTS = run-arextract.sh run-arsymtest.sh run-ar.sh newfile test-nlist \
 	run-attr-integrate-skel.sh \
 	run-all-dwarf-ranges.sh run-unit-info.sh \
 	run-reloc-bpf.sh \
-	run-next-cfi.sh run-next-cfi-self.sh
+	run-next-cfi.sh run-next-cfi-self.sh \
+	run-copyadd-sections.sh run-copymany-sections.sh \
+	run-typeiter-many.sh run-strip-test-many.sh
 
 if !BIARCH
 export ELFUTILS_DISABLE_BIARCH = 1
@@ -191,7 +194,10 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     run-strip-test4.sh run-strip-test5.sh run-strip-test6.sh \
 	     run-strip-test7.sh run-strip-test8.sh run-strip-groups.sh \
 	     run-strip-test9.sh run-strip-test10.sh run-strip-test11.sh \
+	     run-strip-test12.sh \
 	     run-strip-nothing.sh run-strip-remove-keep.sh run-strip-g.sh \
+	     run-annobingroup.sh testfile-annobingroup.o.bz2 \
+	     testfile-annobingroup-i386.o.bz2 \
 	     run-strip-strmerge.sh run-strip-nobitsalign.sh \
 	     testfile-nobitsalign.bz2 testfile-nobitsalign.strip.bz2 \
 	     run-strip-reloc.sh hello_i386.ko.bz2 hello_x86_64.ko.bz2 \
@@ -397,7 +403,11 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     run-attr-integrate-skel.sh \
 	     run-all-dwarf-ranges.sh testfilesplitranges4.debug.bz2 \
 	     testfile-ranges-hello.dwo.bz2 testfile-ranges-world.dwo.bz2 \
-	     run-unit-info.sh run-next-cfi.sh run-next-cfi-self.sh
+	     run-unit-info.sh run-next-cfi.sh run-next-cfi-self.sh \
+	     testfile-riscv64.bz2 testfile-riscv64-s.bz2 \
+	     testfile-riscv64-core.bz2 \
+	     run-copyadd-sections.sh run-copymany-sections.sh \
+	     run-typeiter-many.sh run-strip-test-many.sh
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --leak-check=full --error-exitcode=1'
@@ -567,6 +577,8 @@ attr_integrate_skel_LDADD = $(libdw)
 all_dwarf_ranges_LDADD = $(libdw)
 unit_info_LDADD = $(libdw)
 next_cfi_LDADD = $(libelf) $(libdw)
+elfcopy_LDADD = $(libelf)
+addsections_LDADD = $(libelf)
 
 # We want to test the libelf header against the system elf.h header.
 # Don't include any -I CPPFLAGS.
