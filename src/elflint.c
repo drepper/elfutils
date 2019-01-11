@@ -1,5 +1,5 @@
 /* Pedantic checking of ELF files compliance with gABI/psABI spec.
-   Copyright (C) 2001-2015, 2017 Red Hat, Inc.
+   Copyright (C) 2001-2015, 2017, 2018 Red Hat, Inc.
    This file is part of elfutils.
    Written by Ulrich Drepper <drepper@redhat.com>, 2001.
 
@@ -4331,7 +4331,31 @@ section [%2d] '%s': unknown core file note type %" PRIu32
 	  case NT_GNU_HWCAP:
 	  case NT_GNU_BUILD_ID:
 	  case NT_GNU_GOLD_VERSION:
-	    break;
+	  case NT_GNU_PROPERTY_TYPE_0:
+	    if (nhdr.n_namesz == sizeof ELF_NOTE_GNU
+		&& strcmp (data->d_buf + name_offset, ELF_NOTE_GNU) == 0)
+	      break;
+	    else
+	      {
+		/* NT_VERSION is 1, same as NT_GNU_ABI_TAG.  It has no
+		   descriptor and (ab)uses the name as version string.  */
+		if (nhdr.n_descsz == 0 && nhdr.n_type == NT_VERSION)
+		  break;
+	      }
+	      goto unknown_note;
+
+	  case NT_GNU_BUILD_ATTRIBUTE_OPEN:
+	  case NT_GNU_BUILD_ATTRIBUTE_FUNC:
+	    /* GNU Build Attributes store most data in the owner
+	       name, which must start with the
+	       ELF_NOTE_GNU_BUILD_ATTRIBUTE_PREFIX "GA".  */
+	    if (nhdr.n_namesz >= sizeof ELF_NOTE_GNU_BUILD_ATTRIBUTE_PREFIX
+		&& strncmp (data->d_buf + name_offset,
+			    ELF_NOTE_GNU_BUILD_ATTRIBUTE_PREFIX,
+			    strlen (ELF_NOTE_GNU_BUILD_ATTRIBUTE_PREFIX)) == 0)
+	      break;
+	    else
+	      goto unknown_note;
 
 	  case 0:
 	    /* Linux vDSOs use a type 0 note for the kernel version word.  */
@@ -4340,16 +4364,21 @@ section [%2d] '%s': unknown core file note type %" PRIu32
 	      break;
 	    FALLTHROUGH;
 	  default:
+	    {
+	    unknown_note:
 	    if (shndx == 0)
 	      ERROR (gettext ("\
-phdr[%d]: unknown object file note type %" PRIu32 " at offset %zu\n"),
-		     phndx, (uint32_t) nhdr.n_type, offset);
+phdr[%d]: unknown object file note type %" PRIu32 " with owner name '%s' at offset %zu\n"),
+		     phndx, (uint32_t) nhdr.n_type,
+		     (char *) data->d_buf + name_offset, offset);
 	    else
 	      ERROR (gettext ("\
 section [%2d] '%s': unknown object file note type %" PRIu32
-			      " at offset %zu\n"),
+			      " with owner name '%s' at offset %zu\n"),
 		     shndx, section_name (ebl, shndx),
-		     (uint32_t) nhdr.n_type, offset);
+		     (uint32_t) nhdr.n_type,
+		     (char *) data->d_buf + name_offset, offset);
+	    }
 	  }
     }
 
@@ -4376,7 +4405,8 @@ phdr[%d]: no note entries defined for the type of file\n"),
   GElf_Off notes_size = 0;
   Elf_Data *data = elf_getdata_rawchunk (ebl->elf,
 					 phdr->p_offset, phdr->p_filesz,
-					 ELF_T_NHDR);
+					 (phdr->p_align == 8
+					  ? ELF_T_NHDR8 : ELF_T_NHDR));
   if (data != NULL && data->d_buf != NULL)
     notes_size = check_note_data (ebl, ehdr, data, 0, cnt, phdr->p_offset);
 
@@ -4603,8 +4633,10 @@ program header offset in ELF header and PHDR entry do not match"));
 	      any = true;
 	      shdr = gelf_getshdr (scn, &shdr_mem);
 	      if (shdr != NULL
-		  && shdr->sh_type == (is_debuginfo
-				       ? SHT_NOBITS : SHT_PROGBITS)
+		  && ((is_debuginfo && shdr->sh_type == SHT_NOBITS)
+		      || (! is_debuginfo
+			  && (shdr->sh_type == SHT_PROGBITS
+			      || shdr->sh_type == SHT_X86_64_UNWIND)))
 		  && elf_strptr (ebl->elf, shstrndx, shdr->sh_name) != NULL
 		  && ! strcmp (".eh_frame_hdr",
 			       elf_strptr (ebl->elf, shstrndx, shdr->sh_name)))

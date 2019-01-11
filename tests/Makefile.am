@@ -99,12 +99,14 @@ TESTS = run-arextract.sh run-arsymtest.sh run-ar.sh newfile test-nlist \
 	run-find-prologues.sh run-allregs.sh run-addrcfi.sh \
 	run-dwarfcfi.sh \
 	run-nm-self.sh run-readelf-self.sh run-readelf-info-plus.sh \
+	run-readelf-compressed.sh \
 	run-readelf-const-values.sh \
 	run-varlocs-self.sh run-exprlocs-self.sh \
 	run-readelf-test1.sh run-readelf-test2.sh run-readelf-test3.sh \
 	run-readelf-test4.sh run-readelf-twofiles.sh \
 	run-readelf-macro.sh run-readelf-loc.sh run-readelf-ranges.sh \
 	run-readelf-aranges.sh run-readelf-line.sh run-readelf-z.sh \
+	run-readelf-n.sh \
 	run-native-test.sh run-bug1-test.sh \
 	run-debuglink.sh run-debugaltlink.sh run-buildid.sh \
 	dwfl-bug-addr-overflow run-addrname-test.sh \
@@ -198,6 +200,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     run-strip-nothing.sh run-strip-remove-keep.sh run-strip-g.sh \
 	     run-annobingroup.sh testfile-annobingroup.o.bz2 \
 	     testfile-annobingroup-i386.o.bz2 \
+	     testfile-annobingroup-x86_64.o.bz2 \
 	     run-strip-strmerge.sh run-strip-nobitsalign.sh \
 	     testfile-nobitsalign.bz2 testfile-nobitsalign.strip.bz2 \
 	     run-strip-reloc.sh hello_i386.ko.bz2 hello_x86_64.ko.bz2 \
@@ -213,6 +216,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     run-ranlib-test3.sh run-ranlib-test4.sh \
 	     run-addrscopes.sh run-strings-test.sh run-funcscopes.sh \
 	     run-nm-self.sh run-readelf-self.sh run-readelf-info-plus.sh \
+	     run-readelf-compressed.sh \
 	     run-readelf-const-values.sh testfile-const-values.debug.bz2 \
 	     run-addrcfi.sh run-dwarfcfi.sh \
 	     testfile11-debugframe.bz2 testfile12-debugframe.bz2 \
@@ -270,6 +274,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     testfile-dwzstr.bz2 testfile-dwzstr.multi.bz2 \
 	     run-readelf-addr.sh run-readelf-str.sh \
 	     run-readelf-types.sh \
+	     run-readelf-n.sh \
+	     testfile-gnu-property-note.bz2 testfile-gnu-property-note.o.bz2 \
 	     run-allfcts-multi.sh \
 	     test-offset-loop.bz2 test-offset-loop.alt.bz2 \
 	     run-prelink-addr-test.sh \
@@ -407,7 +413,10 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     testfile-riscv64.bz2 testfile-riscv64-s.bz2 \
 	     testfile-riscv64-core.bz2 \
 	     run-copyadd-sections.sh run-copymany-sections.sh \
-	     run-typeiter-many.sh run-strip-test-many.sh
+	     run-typeiter-many.sh run-strip-test-many.sh \
+	     testfile-debug-rel-ppc64-g.o.bz2 \
+	     testfile-debug-rel-ppc64-z.o.bz2 \
+	     testfile-debug-rel-ppc64.o.bz2
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --leak-check=full --error-exitcode=1'

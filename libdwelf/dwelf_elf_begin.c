@@ -1,5 +1,5 @@
-/* Check relocation type for simple types.
-   Copyright (C) 2005 Red Hat, Inc.
+/* Creates an ELF handle from a possibly compressed file descriptor.
+   Copyright (C) 2018 Red Hat, Inc.
    This file is part of elfutils.
 
    This file is free software; you can redistribute it and/or modify
@@ -30,11 +30,33 @@
 # include <config.h>
 #endif
 
-#include <libeblP.h>
+#include "libdwelfP.h"
+#include "libdwflP.h"
+#include "libelfP.h"
 
+#include <unistd.h>
 
-Elf_Type
-ebl_reloc_simple_type (Ebl *ebl, int reloc, int *addsub)
+Elf *
+dwelf_elf_begin (int fd)
 {
-  return ebl != NULL ? ebl->reloc_simple_type (ebl, reloc, addsub) : ELF_T_NUM;
+  Elf *elf = NULL;
+  Dwfl_Error e = __libdw_open_elf (fd, &elf);
+  if (elf != NULL && elf_kind (elf) != ELF_K_NONE)
+    return elf;
+
+  /* Elf wasn't usable.  Make sure there is a proper elf error message.  */
+
+  if (elf != NULL)
+    elf_end (elf);
+
+  if (e != DWFL_E_LIBELF)
+    {
+      /* Force a bad ELF error.  */
+      char badelf[EI_NIDENT] = { };
+      Elf *belf = elf_memory (badelf, EI_NIDENT);
+      elf32_getehdr (belf);
+      elf_end (belf);
+    }
+
+  return NULL;
 }

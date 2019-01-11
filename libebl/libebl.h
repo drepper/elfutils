@@ -99,8 +99,10 @@ extern bool ebl_reloc_type_check (Ebl *ebl, int reloc);
 extern bool ebl_reloc_valid_use (Ebl *ebl, int reloc);
 
 /* Check if relocation type is for simple absolute relocations.
-   Return ELF_T_{BYTE,HALF,SWORD,SXWORD} for a simple type, else ELF_T_NUM.  */
-extern Elf_Type ebl_reloc_simple_type (Ebl *ebl, int reloc);
+   Return ELF_T_{BYTE,HALF,SWORD,SXWORD} for a simple type, else ELF_T_NUM.
+   If the relocation type is an ADD or SUB relocation, set *ADDSUB to 1 or -1,
+   resp.  */
+extern Elf_Type ebl_reloc_simple_type (Ebl *ebl, int reloc, int *addsub);
 
 /* Return true if the symbol type is that referencing the GOT.  E.g.,
    R_386_GOTPC.  */
@@ -173,12 +175,12 @@ extern const char *ebl_core_note_type_name (Ebl *ebl, uint32_t type, char *buf,
 
 /* Return name of the note section type for an object file.  */
 extern const char *ebl_object_note_type_name (Ebl *ebl, const char *name,
-					      uint32_t type, char *buf,
-					      size_t len);
+					      uint32_t type, GElf_Word descsz,
+					      char *buf, size_t len);
 
 /* Print information about object note if available.  */
-extern void ebl_object_note (Ebl *ebl, const char *name, uint32_t type,
-			     uint32_t descsz, const char *desc);
+extern void ebl_object_note (Ebl *ebl, uint32_t namesz, const char *name,
+			     uint32_t type, uint32_t descsz, const char *desc);
 
 /* Check whether an attribute in a .gnu_attributes section is recognized.
    Fills in *TAG_NAME with the name for this tag.

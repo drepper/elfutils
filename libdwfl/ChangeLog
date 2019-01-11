@@ -1,3 +1,36 @@
+2018-10-20  Mark Wielaard  <mark@klomp.org>
+
+	* libdwflP.h (__libdw_open_elf): New internal function declaration.
+	* open.c (what_kind): Rename close_fd to may_close_fd.
+	(__libdw_open_file): Replaced (and renamed) by a call to ...
+	(libdw_open_elf): this. And add never_close_fd argument.
+	(__libdw_open_elf): New function that calls libdw_open_elf.
+
+2018-10-18  Mark Wielaard  <mark@klomp.org>
+
+	* dwfl_segment_report_module.c (consider_note): Take align as new
+	argument.  Use align to set d_type and calculate padding.
+	(dwfl_segment_report_module): Pass align to consider_notes.
+	* core-file.c (dwfl_core_file_report): Check p_align to set ELF
+	type.
+	* linux-kernel-modules.c (check_notes): Check name and type of note
+	to determine padding.
+
+2018-10-19  Mark Wielaard  <mark@klomp.org>
+
+	* dwfl_module_getdwarf.c (find_aux_sym): Check sh_entsize is not zero.
+
+2018-10-14  Mark Wielaard  <mark@klomp.org>
+
+	* dwfl_segment_report_module.c (read_portion): Check requested
+	filesz isn't larger than buffer_available.
+	(dwfl_segment_report_module): Check data_size vs filesz after
+	read_portion call.
+
+2018-10-02  Andreas Schwab  <schwab@suse.de>
+
+	* relocate.c (relocate): Handle ADD/SUB relocations.
+
 2018-09-13  Mark Wielaard  <mark@klomp.org>
 
 	* dwfl_segment_report_module.c (dwfl_segment_report_module):

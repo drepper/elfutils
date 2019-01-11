@@ -144,9 +144,10 @@ elf_compress_gnu (Elf_Scn *scn, int inflate, unsigned int flags)
   else if (inflate == 0)
     {
       /* In theory the user could have constucted a compressed section
-	 by hand.  But we always just take the rawdata directly and
-	 decompress that.  */
-      Elf_Data *data = elf_rawdata (scn, NULL);
+	 by hand.  And in practice they do. For example when copying
+	 a section from one file to another using elf_newdata. So we
+	 have to use elf_getdata (not elf_rawdata).  */
+      Elf_Data *data = elf_getdata (scn, NULL);
       if (data == NULL)
 	return -1;
 
@@ -196,7 +197,7 @@ elf_compress_gnu (Elf_Scn *scn, int inflate, unsigned int flags)
 	}
 
       __libelf_reset_rawdata (scn, buf_out, size, sh_addralign,
-			      __libelf_data_type (elf, sh_type));
+			      __libelf_data_type (elf, sh_type, sh_addralign));
 
       scn->zdata_base = buf_out;
 

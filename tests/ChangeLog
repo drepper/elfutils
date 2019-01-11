@@ -1,3 +1,74 @@
+2018-11-09  Mark Wielaard  <mark@klomp.org>
+
+	* run-strip-reloc.sh: Also test testfile-debug-rel-ppc64-z.o
+	testfile-debug-rel-ppc64-g.o.
+
+2018-11-12  Mark Wielaard  <mark@klomp.org>
+
+	* run-readelf-n.sh: Add testfile-annobingroup.o test.
+
+2018-11-11  Mark Wielaard  <mark@klomp.org>
+
+	* run-readelf-n.sh: Fix NT_GNU_ABI_TAG type. Add testfile11 test
+	for NT_VERSION.
+
+2018-11-04  Mark Wielaard  <mark@klomp.org>
+
+	* testfile-bpf-reloc.expect.bz2: Update with new expected jump
+	variants.
+
+2018-10-20  Mark Wielaard  <mark@klomp.org>
+
+	* run-readelf-compressed.sh: New test.
+	* Makefile.am (TESTS): Add run-readelf-compressed.sh.
+	(EXTRA_DIST): Likewise.
+
+2018-11-09  Mark Wielaard  <mark@klomp.org>
+
+	* testfile-debug-rel-ppc64-g.o.bz2: New test file.
+	* testfile-debug-rel-ppc64-z.o.bz2: Likewise.
+	* testfile-debug-rel-ppc64.o.bz2: Likewise.
+	* Makefile.am (EXTRA_DIST): Add testfile-debug-rel-ppc64-g.o.bz2,
+	testfile-debug-rel-ppc64-z.o.bz2 and testfile-debug-rel-ppc64.o.bz2.
+	* run-strip-reloc.sh: Also test on testfile-debug-rel-ppc64.o.
+	* run-readelf-zdebug-rel.sh: Also test on testfile-debug-rel-ppc64*.o.
+
+2018-10-26  Mark Wielaard  <mark@klomp.org>
+
+	* run-strip-reloc.sh: Add a test for --reloc-debug-sections-only.
+
+2018-10-18  Mark Wielaard  <mark@klomp.org>
+
+	* run-readelf-n.sh: New test.
+	* testfile-gnu-property-note.bz2: New testfile.
+	* testfile-gnu-property-note.o.bz2: Likewise.
+	* Makefile.am (TESTS): Add run-readelf-n.sh.
+	(EXTRA_DIST): Likewise and testfile-gnu-property-note.bz2,
+	testfile-gnu-property-note.o.bz2.
+
+2018-10-12  Mark Wielaard  <mark@klomp.org>
+
+	* run-readelf-zdebug.sh: Adjust flags output.
+	* run-readelf-macro.sh: Likewise.
+	* run-readelf-macros.sh: New test.
+	* testfile-macros-object.o.bz2: New test file.
+	* Makefile.am (TESTS): Add run-readelf-macros.sh.
+	(EXTRA_DIST): Add run-readelf-macros.sh and
+	testfile-macros-object.o.bz2.
+
+2018-09-12  Mark Wielaard  <mark@klomp.org>
+
+	* run-annobingroup.sh: Add x86_64 ET_REL testcase.
+	* testfile-annobingroup-x86_64.o.bz2: New test file.
+	* Makefile.am (EXTRA_DIST): Add testfile-annobingroup-x86_64.o.bz2.
+
+2018-09-18  Mark Wielaard  <mark@klomp.org>
+
+	* backtrace-dwarf.c (thread_callback): Only error when
+	dwfl_thread_getframes returns an error.
+	(main): Don't call abort or assert but print an error when
+	something unexpected happens.
+
 2018-09-13  Mark Wielaard  <mark@klomp.org>
 
 	* run-strip-test-many.sh: New test.

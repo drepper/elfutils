@@ -1,3 +1,38 @@
+2018-11-15  Mark Wielaard  <mark@klomp.org>
+
+	* eblobjnotetypename.c (ebl_object_note_type_name): Don't update
+	w, t and len unnecessarily.
+
+2018-11-12  Mark Wielaard  <mark@klomp.org>
+
+	* libebl.h (ebl_object_note): Add new argument namesz.
+	* eblobjnote.c (ebl_object_note): Likewise and handle GNU Build
+	Attribute notes.
+	* eblobjnotetypename.c (ebl_object_note_type_name): Handle GNU
+	Build Attribute notes.
+
+2018-11-11  Mark Wielaard  <mark@klomp.org>
+
+	* eblobjnote.c (ebl_object_note): Recognize NT_VERSION with zero
+	descriptor. Add explicit "GNU" name check.
+	* eblobjnotetypename.c (ebl_object_note_type_name): Add extra
+	argument descsz. Recognize NT_VERSION using descsz. With "GNU"
+	name it is  NT_GNU_ABI_TAG.
+	* libebl.h (ebl_object_note_type_name): Add extra argument descsz.
+
+2018-10-18  Mark Wielaard  <mark@klomp.org>
+
+	* eblobjnote.c (ebl_object_note): Handle NT_GNU_PROPERTY_TYPE_0.
+	* eblobjnotetypename.c (ebl_object_note_type_name): Add
+	GNU_PROPERTY_TYPE_0.
+
+2018-10-02  Andreas Schwab  <schwab@suse.de>
+
+	* ebl-hooks.h (EBLHOOK(reloc_simple_type)): Add third parameter.
+	* libebl.h (ebl_reloc_simple_type): Likewise.
+	* eblopenbackend.c (default_reloc_simple_type): Likewise.
+	* eblrelocsimpletype.c (ebl_reloc_simple_type): Pass it down.
+
 2018-09-12  Mark Wielaard  <mark@klomp.org>
 
 	* eblsectionstripp.c (ebl_section_strip_p): Drop ehdr argument.
