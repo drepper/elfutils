@@ -1,3 +1,32 @@
+2019-02-15  Mark Wielaard  <mark@klomp.org>
+
+	* s390_init.c (s390_init): Hook check_special_symbol.
+	* s390_symbol.c (s390_check_sepcial_symbol): New function.
+
+2018-12-27  Jim Wilson  <jimw@sifive.com>
+
+	* Makefile.am (riscv_SRCS): Add riscv64_corenote.c.
+	* riscv64_corenote.c: New file.
+	* riscv_corenote.c (BITS): New.
+	(BACKEND): Conditional on BITS.
+	(ULONG, UID_T, GID_T, ALIGN_ULONG, ALIGN_UID_T, ALIGN_GID_T): Likewise.
+	(TYPE_ULONG, TYPE_UID_T, TYPE_GID_T): Likewise.
+	(prstatus_regs): Use BITS/8 instead of 8.
+	(PRSTATUS_REGS_SIZE): Likewise.
+	* riscv_init.c (riscv64_core_note): Declare.
+	(riscv_init): If ELFCLASS64 then use riscv64_core_note hook.
+
+	* Makefile.am (riscv_SRCS): Add riscv_retval.c.
+	* riscv_init.c: Include libelfP.h.
+	(riscv_return_value_location_lp64d): Declare.
+	(riscv_init): Delete unused attribute from elf parameter.  Register
+	riscv_return_value_location_lp64d hook if 64-bit ELF and 64-bit FP
+	registers.
+	* riscv_retval.c: New file.
+
+	* riscv_corenote.c (prstatus_regs): Change offset from 1 to 8.
+	(PRSTATUS_REGSET_ITEMS): New.
+
 2018-11-06  Mark Wielaard  <mark@klomp.org>
 
 	* x86_64_symbol.c (x86_64_section_type_name): New function.

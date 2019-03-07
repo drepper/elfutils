@@ -1,3 +1,69 @@
+2019-01-24  Mark Wielaard  <mark@klomp.org>
+
+	* Makefile.am (system_elf_libelf_test_CPPFLAGS): Guard by
+	!INSTALL_ELFH.
+
+2019-01-31  Mark Wielaard  <mark@klomp.org>
+
+	* backtrace-child.c (stdarg): Remove assert (errno == 0).
+	(main): Likewise.
+	* backtrace-data.c (maps_lookup): Likewise.
+	(set_initial_registers): Likewise.
+	(main): Likewise.
+	* backtrace.c (prepare_thread): Likewise.
+	(exec_dump): Likewise.
+
+2019-01-29  Yonghong Song  <yhs@fb.com>
+
+	* backtrace-data.c (maps_lookup): Use %*u, not %*x, to parse
+	inode number.
+
+2019-01-18  Ulf Hermann <ulf.hermann@qt.io>
+
+	* run-annobingroup.sh: Use different files for strip output.
+	* run-strip-test-many.sh: Use different files for strip output,
+	check results of strip, unstrip, elflint.
+
+2019-01-24  Mark Wielaard  <mark@klomp.org>
+
+	* addsections.c (add_sections): Change the name of the old shstrtab
+	section to ".old_shstrtab" and give the old shstrtab name to the
+	new shstrtab section.
+
+2019-01-09  Ulf Hermann <ulf.hermann@qt.io>
+
+	* run-readelf-compressed.sh: Skip if USE_BZIP2 not found.
+
+2018-12-27  Jim Wilson  <jimw@sifive.com>
+
+	* run-readelf-mixed-corenote.sh: Update with new riscv64 output.
+
+2018-12-02  Mark Wielaard  <mark@klomp.org>
+
+	* testfile_gnu_props.32le.o.bz2: New testfile.
+	* testfile_gnu_props.64le.o.bz2: Likewise.
+	* testfile_gnu_props.32be.o.bz2: Likewise.
+	* testfile_gnu_props.64be.o.bz2: Likewise.
+	* Makefile (EXTRA_DIST): Add new testfiles.
+	* run-readelf-n.sh: Run tests on new testfiles.
+
+2018-11-28  Mark Wielaard  <mark@klomp.org>
+
+	* backtrace-data.c (main): Improve error message.
+	* run-backtrace-data.sh: Skip exit 77 return.
+
+2018-11-21  Mark Wielaard  <mark@klomp.org>
+
+	* backtrace-subr.sh (check_unsupported): Call test_cleanup before
+	exit.
+
+2018-11-17  Mark Wielaard  <mark@klomp.org>
+
+	* run-strip-version.sh: New test.
+	* testfile-version.bz2: New test file.
+	* Makefile.am (TESTS): Add run-strip-version.sh.
+	(EXTRA_DIST): Add run-strip-version.sh and testfile-version.bz2.
+
 2018-11-09  Mark Wielaard  <mark@klomp.org>
 
 	* run-strip-reloc.sh: Also test testfile-debug-rel-ppc64-z.o

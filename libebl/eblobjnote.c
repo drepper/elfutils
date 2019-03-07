@@ -350,6 +350,13 @@ ebl_object_note (Ebl *ebl, uint32_t namesz, const char *name, uint32_t type,
 		  desc += 8;
 		  descsz -= 8;
 
+		  if (prop.pr_datasz > descsz)
+		    {
+		      printf ("BAD property datasz: %" PRId32 "\n",
+			      prop.pr_datasz);
+		      return;
+		    }
+
 		  int elfclass = gelf_getclass (ebl->elf);
 		  char *elfident = elf_getident (ebl->elf, NULL);
 		  GElf_Ehdr ehdr;
@@ -360,15 +367,22 @@ ebl_object_note (Ebl *ebl, uint32_t namesz, const char *name, uint32_t type,
 		  if (prop.pr_type == GNU_PROPERTY_STACK_SIZE)
 		    {
 		      printf ("STACK_SIZE ");
-		      if (prop.pr_datasz == 4 || prop.pr_datasz == 8)
+		      union
 			{
-			  GElf_Addr addr;
+			  Elf64_Addr a64;
+			  Elf32_Addr a32;
+			} addr;
+		      if ((elfclass == ELFCLASS32 && prop.pr_datasz == 4)
+			  || (elfclass == ELFCLASS64 && prop.pr_datasz == 8))
+			{
 			  in.d_type = ELF_T_ADDR;
 			  out.d_type = ELF_T_ADDR;
 			  in.d_size = prop.pr_datasz;
-			  out.d_size = sizeof (addr);
+			  out.d_size = prop.pr_datasz;
 			  in.d_buf = (void *) desc;
-			  out.d_buf = (void *) &addr;
+			  out.d_buf = (elfclass == ELFCLASS32
+				       ? (void *) &addr.a32
+				       : (void *) &addr.a64);
 
 			  if (gelf_xlatetom (ebl->elf, &out, &in,
 					     elfident[EI_DATA]) == NULL)
@@ -376,7 +390,10 @@ ebl_object_note (Ebl *ebl, uint32_t namesz, const char *name, uint32_t type,
 			      printf ("%s\n", elf_errmsg (-1));
 			      return;
 			    }
-			  printf ("%#" PRIx64 "\n", addr);
+			  if (elfclass == ELFCLASS32)
+			    printf ("%#" PRIx32 "\n", addr.a32);
+			  else
+			    printf ("%#" PRIx64 "\n", addr.a64);
 			}
 		      else
 			printf (" (garbage datasz: %" PRIx32 ")\n",
@@ -479,16 +496,17 @@ ebl_object_note (Ebl *ebl, uint32_t namesz, const char *name, uint32_t type,
 			  printf ("%02" PRIx8 "\n", (uint8_t) desc[i]);
 			}
 		    }
+
 		  if (elfclass == ELFCLASS32)
-		    {
-		      desc += NOTE_ALIGN4 (prop.pr_datasz);
-		      descsz -= NOTE_ALIGN4 (prop.pr_datasz);
-		    }
+		    prop.pr_datasz = NOTE_ALIGN4 (prop.pr_datasz);
 		  else
-		    {
-		      desc += NOTE_ALIGN8 (prop.pr_datasz);
-		      descsz -= NOTE_ALIGN8 (prop.pr_datasz);
-		    }
+		    prop.pr_datasz = NOTE_ALIGN8 (prop.pr_datasz);
+
+		  desc += prop.pr_datasz;
+		  if (descsz > prop.pr_datasz)
+		    descsz -= prop.pr_datasz;
+		  else
+		    descsz = 0;
 		}
 	    }
 	  break;

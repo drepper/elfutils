@@ -8444,7 +8444,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	}
       else
 	{
-	  while (*linep != 0)
+	  while (linep < lineendp && *linep != 0)
 	    {
 	      unsigned char *endp = memchr (linep, '\0', lineendp - linep);
 	      if (unlikely (endp == NULL))
@@ -8454,6 +8454,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
 	      linep = endp + 1;
 	    }
+	  if (linep >= lineendp || *linep != 0)
+	    goto invalid_unit;
 	  /* Skip the final NUL byte.  */
 	  ++linep;
 	}
@@ -8523,7 +8525,7 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
       else
 	{
 	  puts (gettext (" Entry Dir   Time      Size      Name"));
-	  for (unsigned int cnt = 1; *linep != 0; ++cnt)
+	  for (unsigned int cnt = 1; linep < lineendp && *linep != 0; ++cnt)
 	    {
 	      /* First comes the file name.  */
 	      char *fname = (char *) linep;
@@ -8553,6 +8555,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 	      printf (" %-5u %-5u %-9u %-9u %s\n",
 		      cnt, diridx, mtime, fsize, fname);
 	    }
+	  if (linep >= lineendp || *linep != '\0')
+	    goto invalid_unit;
 	  /* Skip the final NUL byte.  */
 	  ++linep;
 	}
@@ -8699,7 +8703,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
 		case DW_LNE_set_discriminator:
 		  /* Takes one ULEB128 parameter, the discriminator.  */
-		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		  if (unlikely (standard_opcode_lengths[opcode] != 1
+				|| lineendp - linep < 1))
 		    goto invalid_unit;
 
 		  get_uleb128 (u128, linep, lineendp);
@@ -8726,6 +8731,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 		case DW_LNS_advance_pc:
 		  /* Takes one uleb128 parameter which is added to the
 		     address.  */
+		  if (lineendp - linep < 1)
+		    goto invalid_unit;
 		  get_uleb128 (u128, linep, lineendp);
 		  advance_pc (u128);
 		  {
@@ -8741,6 +8748,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 		case DW_LNS_advance_line:
 		  /* Takes one sleb128 parameter which is added to the
 		     line.  */
+		  if (lineendp - linep < 1)
+		    goto invalid_unit;
 		  get_sleb128 (s128, linep, lineendp);
 		  line += s128;
 		  printf (gettext ("\
@@ -8750,6 +8759,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
 		case DW_LNS_set_file:
 		  /* Takes one uleb128 parameter which is stored in file.  */
+		  if (lineendp - linep < 1)
+		    goto invalid_unit;
 		  get_uleb128 (u128, linep, lineendp);
 		  printf (gettext (" set file to %" PRIu64 "\n"),
 			  (uint64_t) u128);
@@ -8757,7 +8768,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
 		case DW_LNS_set_column:
 		  /* Takes one uleb128 parameter which is stored in column.  */
-		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		  if (unlikely (standard_opcode_lengths[opcode] != 1
+				|| lineendp - linep < 1))
 		    goto invalid_unit;
 
 		  get_uleb128 (u128, linep, lineendp);
@@ -8797,7 +8809,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 		case DW_LNS_fixed_advance_pc:
 		  /* Takes one 16 bit parameter which is added to the
 		     address.  */
-		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		  if (unlikely (standard_opcode_lengths[opcode] != 1
+				|| lineendp - linep < 2))
 		    goto invalid_unit;
 
 		  u128 = read_2ubyte_unaligned_inc (dbg, linep);
@@ -8824,7 +8837,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 
 		case DW_LNS_set_isa:
 		  /* Takes one uleb128 parameter which is stored in isa.  */
-		  if (unlikely (standard_opcode_lengths[opcode] != 1))
+		  if (unlikely (standard_opcode_lengths[opcode] != 1
+				|| lineendp - linep < 1))
 		    goto invalid_unit;
 
 		  get_uleb128 (u128, linep, lineendp);
@@ -8841,7 +8855,8 @@ print_debug_line_section (Dwfl_Module *dwflmod, Ebl *ebl, GElf_Ehdr *ehdr,
 				" unknown opcode with %" PRIu8 " parameters:",
 				standard_opcode_lengths[opcode]),
 		      standard_opcode_lengths[opcode]);
-	      for (int n = standard_opcode_lengths[opcode]; n > 0; --n)
+	      for (int n = standard_opcode_lengths[opcode];
+		   n > 0 && linep < lineendp; --n)
 		{
 		  get_uleb128 (u128, linep, lineendp);
 		  if (n != standard_opcode_lengths[opcode])
@@ -12153,7 +12168,7 @@ handle_core_note (Ebl *ebl, const GElf_Nhdr *nhdr,
   size_t nitems;
   const Ebl_Core_Item *items;
 
-  if (! ebl_core_note (ebl, nhdr, name,
+  if (! ebl_core_note (ebl, nhdr, name, desc,
 		       &regs_offset, &nregloc, &reglocs, &nitems, &items))
     return;
 

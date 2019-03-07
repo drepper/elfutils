@@ -1,3 +1,23 @@
+2019-01-25  Yonghong Song  <yhs@fb.com>
+
+	* linux-proc-maps.c (proc_maps_report): Use PRIu64, not PRIi64, to
+	read the inode number.
+
+2019-01-20  Mark Wielaard  <mark@klomp.org>
+
+	* dwfl_segment_report_module.c (dwfl_segment_report_module): Check
+	dyn_filesz vs dyn_data_size after read_portion call.
+
+2019-01-16  Mark Wielaard  <mark@klomp.org>
+
+	* linux-core-attach.c (core_next_thread): Pass desc to ebl_core_note.
+	(core_set_initial_registers): Likewise.
+
+2018-10-23  Mark Wielaard  <mark@klomp.org>
+
+	* relocate.c (relocate_section): Only sanity check mmapped Elf files
+	for overlap. Don't error when section data was malloced, not mmapped.
+
 2018-10-20  Mark Wielaard  <mark@klomp.org>
 
 	* libdwflP.h (__libdw_open_elf): New internal function declaration.

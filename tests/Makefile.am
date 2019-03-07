@@ -157,7 +157,8 @@ TESTS = run-arextract.sh run-arsymtest.sh run-ar.sh newfile test-nlist \
 	run-reloc-bpf.sh \
 	run-next-cfi.sh run-next-cfi-self.sh \
 	run-copyadd-sections.sh run-copymany-sections.sh \
-	run-typeiter-many.sh run-strip-test-many.sh
+	run-typeiter-many.sh run-strip-test-many.sh \
+	run-strip-version.sh
 
 if !BIARCH
 export ELFUTILS_DISABLE_BIARCH = 1
@@ -276,6 +277,10 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     run-readelf-types.sh \
 	     run-readelf-n.sh \
 	     testfile-gnu-property-note.bz2 testfile-gnu-property-note.o.bz2 \
+	     testfile_gnu_props.32le.o.bz2 \
+	     testfile_gnu_props.64le.o.bz2 \
+	     testfile_gnu_props.32be.o.bz2 \
+	     testfile_gnu_props.64be.o.bz2 \
 	     run-allfcts-multi.sh \
 	     test-offset-loop.bz2 test-offset-loop.alt.bz2 \
 	     run-prelink-addr-test.sh \
@@ -416,7 +421,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     run-typeiter-many.sh run-strip-test-many.sh \
 	     testfile-debug-rel-ppc64-g.o.bz2 \
 	     testfile-debug-rel-ppc64-z.o.bz2 \
-	     testfile-debug-rel-ppc64.o.bz2
+	     testfile-debug-rel-ppc64.o.bz2 \
+	     run-strip-version.sh testfile-version.bz2
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --leak-check=full --error-exitcode=1'
@@ -590,8 +596,12 @@ elfcopy_LDADD = $(libelf)
 addsections_LDADD = $(libelf)
 
 # We want to test the libelf header against the system elf.h header.
-# Don't include any -I CPPFLAGS.
+# Don't include any -I CPPFLAGS. Except when we install our own elf.h.
+if !INSTALL_ELFH
 system_elf_libelf_test_CPPFLAGS =
+else
+system_elf_libelf_test_CPPFLAGS = -I$(top_srcdir)/libelf
+endif
 system_elf_libelf_test_LDADD = $(libelf)
 
 # A lock file used to make sure only one test dumps core at a time
