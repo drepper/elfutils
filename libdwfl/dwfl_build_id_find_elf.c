@@ -34,7 +34,9 @@
 #include <inttypes.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <dlfcn.h>
 #include "system.h"
+#include "dbgserver-client.h"
 
 
 int
@@ -187,7 +189,31 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
       free (*file_name);
       *file_name = NULL;
     }
-  else if (errno == 0 && mod->build_id_len > 0)
+#if ENABLE_DBGSERVER
+  else {
+    static void *dbgserver_so;
+    static __typeof__ (dbgserver_find_executable) *fp_dbgserver_find_executable;
+
+    if (dbgserver_so == NULL)
+      dbgserver_so = dlopen("libdbgserver-" VERSION ".so", RTLD_LAZY);
+    if (dbgserver_so == NULL)
+      dbgserver_so = dlopen("libdbgserver.so", RTLD_LAZY);
+    if (dbgserver_so != NULL && fp_dbgserver_find_executable == NULL)
+      fp_dbgserver_find_executable = dlsym (dbgserver_so, "dbgserver_find_executable");
+
+    if (fp_dbgserver_find_executable != NULL)
+      {
+        /* If all else fails and a build-id is available, query the
+           debuginfo-server if enabled.  */
+        if (fd < 0 && mod->build_id_len > 0)
+          fd = (*fp_dbgserver_find_executable) (mod->build_id_bits,
+                                                mod->build_id_len,
+                                                NULL);
+      }
+  }
+#endif /* ENABLE_DBGSERVER */
+  
+  if (fd < 0 && errno == 0 && mod->build_id_len > 0)
     /* Setting this with no file yet loaded is a marker that
        the build ID is authoritative even if we also know a
        putative *FILE_NAME.  */

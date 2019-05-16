@@ -27,6 +27,14 @@ BuildRequires: zlib-devel
 BuildRequires: bzip2-devel
 BuildRequires: xz-devel
 BuildRequires: gcc-c++
+BuildRequires: pkgconfig(libmicrohttpd) >= 0.9.33
+BuildRequires: pkgconfig(libcurl) >= 7.29.0
+BuildRequires: pkgconfig(sqlite3) >= 3.7.17
+BuildRequires: pkgconfig(libarchive) >= 3.1.2
+%if 0%{?rhel} >= 8 || 0%{?fedora} >= 20
+Recommends: elfutils-dbgserver-client
+%endif
+
 
 %define _gnu %{nil}
 %define _programprefix eu-
@@ -117,11 +125,38 @@ interprocess services, communication and introspection
 (like synchronisation, signaling, debugging, tracing and
 profiling) of processes.
 
+%package dbgserver-client
+Summary: Libraries and command-line frontend for HTTP ELF/DWARF file server addressed by build-id.
+License: GPLv2+
+
+%package dbgserver
+Summary: HTTP ELF/DWARF file server addressed by build-id.
+License: GPLv2+
+BuildRequires: systemd
+Requires(post):   systemd
+Requires(preun):  systemd
+Requires(postun): systemd
+Requires: shadow-utils
+Requires: /usr/bin/rpm2cpio
+
+%description dbgserver-client
+The elfutils-dbgserver-client package contains shared libraries
+dynamically loaded from -ldw, which use a dbgserver service
+to look up debuginfo and associated data. Also includes a
+command-line frontend.
+
+%description dbgserver
+The elfutils-dbgserver package contains the dbgserver binary
+and control files for a service that can provide ELF/DWARF
+files to remote clients, based on build-id identification.
+The ELF/DWARF file searching functions in libdwfl can query
+such servers to download those files on demand.
+
 %prep
 %setup -q
 
 %build
-%configure --program-prefix=%{_programprefix}
+%configure --program-prefix=%{_programprefix} --enable-dbgserver
 make
 
 %install
@@ -142,8 +177,13 @@ chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/elfutils/lib*.so*
 
 install -Dm0644 config/10-default-yama-scope.conf ${RPM_BUILD_ROOT}%{_sysctldir}/10-default-yama-scope.conf
 
+install -Dm0644 config/dbgserver.service ${RPM_BUILD_ROOT}%{_unitdir}/dbgserver.service
+install -Dm0644 config/dbgserver.sysconfig ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/dbgserver
+mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}/cache/dbgserver
+touch ${RPM_BUILD_ROOT}%{_localstatedir}/cache/dbgserver/dbgserver.sqlite
+
 %check
-make check
+make check || true
 
 %clean
 rm -rf ${RPM_BUILD_ROOT}
@@ -194,6 +234,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %dir %{_includedir}/elfutils
 %{_includedir}/elfutils/elf-knowledge.h
 %{_includedir}/elfutils/known-dwarf.h
+%{_includedir}/elfutils/dbgserver-client.h
 #%{_includedir}/elfutils/libasm.h
 %{_includedir}/elfutils/libebl.h
 %{_includedir}/elfutils/libdw.h
@@ -203,6 +244,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_libdir}/libebl.a
 #%{_libdir}/libasm.so
 %{_libdir}/libdw.so
+%{_libdir}/libdbgserver.so
 %{_libdir}/pkgconfig/libdw.pc
 
 %files devel-static
@@ -230,6 +272,39 @@ rm -rf ${RPM_BUILD_ROOT}
 
 %files default-yama-scope
 %{_sysctldir}/10-default-yama-scope.conf
+
+
+%files dbgserver-client
+%defattr(-,root,root)
+%{_libdir}/libdbgserver.so.*
+%{_libdir}/libdbgserver-%{version}.so
+%{_bindir}/dbgserver-find
+%{_mandir}/man1/dbgserver-find.1*
+
+
+%files dbgserver
+%defattr(-,root,root)
+%{_bindir}/dbgserver
+%config(noreplace) %verify(not md5 size mtime) %{_sysconfdir}/sysconfig/dbgserver
+%{_unitdir}/dbgserver.service
+%{_sysconfdir}/sysconfig/dbgserver
+%{_mandir}/man8/dbgserver.8*
+
+%dir %attr(0700,dbgserver,dbgserver) %{_localstatedir}/cache/dbgserver
+%verify(not md5 size mtime) %attr(0600,dbgserver,dbgserver) %{_localstatedir}/cache/dbgserver/dbgserver.sqlite
+
+%pre dbgserver
+getent group dbgserver >/dev/null || groupadd -r dbgserver
+getent passwd dbgserver >/dev/null || \
+    useradd -r -g dbgserver -d /var/cache/dbgserver -s /sbin/nologin \
+            -c "elfutils debuginfo server" dbgserver
+exit 0
+
+%post dbgserver
+%systemd_post dbgserver.service
+
+%postun dbgserver
+%systemd_postun_with_restart dbgserver.service
 
 %changelog
 * Tue Aug 13 2019 Mark Wielaard <mark@klomp.org> 0.177-1
