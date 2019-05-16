@@ -31,9 +31,13 @@
 #endif
 
 #include "libdwflP.h"
+#ifdef ENABLE_DBGSERVER
+#include "dbgserver-client.h"
+#endif
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <dlfcn.h>
 #include <sys/stat.h>
 #include "system.h"
 
@@ -359,7 +363,8 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
      other than just by finding nothing, that's all we do.  */
   const unsigned char *bits;
   GElf_Addr vaddr;
-  if (INTUSE(dwfl_module_build_id) (mod, &bits, &vaddr) > 0)
+  int bits_len;
+  if ((bits_len = INTUSE(dwfl_module_build_id) (mod, &bits, &vaddr)) > 0)
     {
       /* Dropping most arguments means we cannot rely on them in
 	 dwfl_build_id_find_debuginfo.  But leave it that way since
@@ -396,6 +401,28 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
 				     debuginfo_file_name);
       free (canon);
     }
+
+#if ENABLE_DBGSERVER
+  {
+    static void *dbgserver_so;
+    static __typeof__ (dbgserver_find_debuginfo) *fp_dbgserver_find_debuginfo;
+
+    if (dbgserver_so == NULL)
+      dbgserver_so = dlopen("libdbgserver-" VERSION ".so", RTLD_LAZY);
+    if (dbgserver_so == NULL)
+      dbgserver_so = dlopen("libdbgserver.so", RTLD_LAZY);
+    if (dbgserver_so != NULL && fp_dbgserver_find_debuginfo == NULL)
+      fp_dbgserver_find_debuginfo = dlsym (dbgserver_so, "dbgserver_find_debuginfo");
+
+    if (fp_dbgserver_find_debuginfo != NULL)
+      {
+        /* If all else fails and a build-id is available, query the
+           debuginfo-server if enabled.  */
+        if (fd < 0 && bits_len > 0)
+          fd = (*fp_dbgserver_find_debuginfo) (bits, bits_len, NULL);
+      }
+  }
+#endif /* ENABLE_DBGSERVER */
 
   return fd;
 }

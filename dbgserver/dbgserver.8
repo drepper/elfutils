@@ -1,0 +1,205 @@
+'\"! tbl | nroff \-man
+'\" t macro stdmacro
+
+.de SAMPLE
+.br
+.RS 0
+.nf
+.nh
+..
+.de ESAMPLE
+.hy
+.fi
+.RE
+..
+
+.TH DBGSERVER 8
+.SH NAME
+dbgserver \- debuginfo-related http file-server daemon
+
+.SH SYNOPSIS
+.B dbgserver
+[\fIoptions\fP]
+
+.SH DESCRIPTION
+\fBdbgserver\fP serves debuginfo-related artifacts over HTTP.  It
+periodically scans a set of directories for ELF/DWARF files and their
+associated source code, as well as RPM files containing the above, to
+build an index by their buildid.  This index is used when remote
+clients use the HTTP webapi, to fetch these files by the same
+buildid.
+
+If a dbgserver cannot service a given buildid artifact request itself,
+and it is configured with information about upstream dbgservers, it
+will query them for the same information, just as \fBdbgserver-find\fP
+would.  If successful, it locally caches then relays the file content
+to the original requester.
+
+
+.SH OPTIONS
+.TP
+.BR \-F, \-\-source\-files=PATH
+Add a thread to scan for ELF/DWARF/source files under the given
+directory.  This option may be repeated to scan multiple paths.
+Source files are matched with DWARF files based on the AT_comp_dir
+(compilation directory) attributes inside it.
+
+.TP
+.BR \-R, \-\-source\-rpms=PATH
+Add a thread to scan for ELF/DWARF/source files contained in RPMs
+under the given directory.  This option may be repeated to scan
+multiple paths.
+
+.TP
+.BR \-d, \-\-database=FILE
+Set the path of the SQLITE database used to store the index.  This
+file is disposable in the sense that a later rescan will repopulate
+data.  It will contain absolute file path names, so it may not be
+portable across machines.  It will be frequently read/written, so it
+may perform well while sharing across machines or users either, due
+to SQLITE locking performance.  The default database file is
+$HOME/.dbgserver.sqlite.
+
+.TP
+.BR \-p, \-\-port=NUM
+Set the TCP port number on which dbgserver should listen, to service
+HTTP requests.  Both IPv4 and IPV6 sockets are opened, if possible.
+The webapi is documented below.  The default port number is 8002.
+
+.TP
+.BR \-t, \-\-rescan\-time=SECONDS
+Set the rescan time for the file and RPM directories.  This is the
+amount of time the scanning threads will wait after finishing a scan,
+before doing it again.  A rescan for unchanged files is fast (because
+the index also stores the file mtimes).  A time of zero is acceptable,
+and means that only one initial scan should performed.  The default
+rescan time is 300 seconds.
+
+.TP
+.BR \-v
+Increase verbosity of logging to the standard error file descriptor.
+May be repeated to increase details.  The default verbosity is 0.
+
+.SH WEBAPI
+
+.\" Much of the following text is duplicated with dbgserver-find.1
+
+The dbgserver's webapi resembles ordinary file service, where a GET
+request with a path containing a known buildid results in a file.
+Unknown buildid / request combinations result in HTTP error codes.
+This file service resemblance is intentional, so that an installation
+can take advantage of standard HTTP management infrastructure.
+
+There are three requests.  In each case, the buildid is encoded as a
+lowercase hexadecimal string.  For example, for a program /bin/ls,
+look at the ELF note GNU_BUILD_ID:
+
+.SAMPLE
+% readelf -n /bin/ls | grep -A4 build.id
+Note section [ 4] '.note.gnu.buildid' of 36 bytes at offset 0x340:
+Owner          Data size  Type
+GNU                   20  GNU_BUILD_ID
+Build ID: 8713b9c3fb8a720137a4a08b325905c7aaf8429d
+.ESAMPLE
+
+Then the hexadecimal BUILDID is simply:
+
+.SAMPLE
+8713b9c3fb8a720137a4a08b325905c7aaf8429d
+.ESAMPLE
+
+.SS /buildid/\fIBUILDID\fP/debuginfo
+
+If the given buildid is known to the server, this request will result
+in a binary object that contains the customary \fB.*debug_*\fP
+sections.  This may be a split debuginfo file as created by
+\fBstrip\fP, or it may be an original unstripped executable.
+
+.SS /buildid/\fIBUILDID\fP/executable
+
+If the given buildid is known to the server, this request will result
+in a binary object that contains the normal executable segments.  This
+may be a executable stripped by \fBstrip\fP, or it may be an original
+unstripped executable.  \fBET_DYN\fP shared libraries are considered
+to be a type of executable.
+
+.SS /buildid/\fIBUILDID\fP/source\fI/SOURCE/FILE\fP
+
+If the given buildid is known to the server, this request will result
+in a binary object that contains the source file mentioned.  The path
+should be absolute.  Relative path names commonly appear in the DWARF
+file's source directory, but these paths are relative to
+individual compilation unit AT_comp_dir paths, and yet an executable
+is made up of multiple CUs.  Therefore, to disambiguate, dbgserver
+expects source queries to prefix relative path names with the CU
+compilation-directory.
+
+Note: contrary to RFC 3986, the client should not elide \fB../\fP or
+\fB/./\fP sorts of relative path components in the directory names,
+because if this is how those names appear in the DWARF files, that
+is what dbgserver needs to see too.
+
+For example:
+.TS
+l l.
+#include <stdio.h>	/buildid/BUILDID/source/usr/include/stdio.h
+/path/to/foo.c	/buildid/BUILDID/source/path/to/foo.c
+\../bar/foo.c AT_comp_dir=/zoo	/buildid/BUILDID/source/zoo/../bar/foo.c
+.TE
+
+.SH SECURITY
+
+dbgserver \fBdoes not\fP include any particular security features.
+While it is robust with respect to inputs, some abuse is possible.  It
+forks a new thread for each incoming HTTP request, which could lead to
+a denial-of-service in terms of RAM, CPU, disk I/O, or network I/O.
+If this is a problem, users are advised to install dbgserver with a
+HTTPS reverse-proxy front-end that enforces site policies for
+firewalling, authentication, integrity, authorization, and load
+control.
+
+When relaying queries to upstream dbgservers, dbgserver \fBdoes not\fP
+include any particular security features.  It trusts that the binaries
+returned by the dbgservers are accurate.  Therefore, the list of
+servers should include only trustworthy ones.  If accessed across HTTP
+rather than HTTPS, the network should be trustworthy.
+
+
+.SH "ENVIRONMENT VARIABLES"
+
+.TP 21
+.B DBGSERVER_URLS
+This environment variable contains a list of URL prefixes for trusted
+dbgserver instances.  Alternate URL prefixes are separated by space.
+Avoid referential loops that cause a server to contact itself, directly
+or indirectly - the results would be hilarious.
+
+.TP 21
+.B DBGSERVER_TIMEOUT
+This environment variable governs the timeout for each dbgserver HTTP
+connection.  A server that fails to respond within this many seconds
+is skipped.  The default is 5.
+
+.TP 21
+.B DBGSERVER_CACHE_PATH
+This environment variable governs the location of the cache where
+downloaded files are kept.  It is cleaned periodically as this
+program is reexecuted.  The default is $HOME/.dbgserver_client_cache.
+.\" XXX describe cache eviction policy
+
+.SH FILES
+.LP
+.PD .1v
+.TP 20
+.B $HOME/.dbgserver.sqlite
+Default database file.
+.PD
+
+.TP 20
+.B $HOME/.dbgserver_client_cache
+Default cache directory for content from upstream dbgservers.
+.PD
+
+
+.SH "SEE ALSO"
+.I "dbgserver-find(1)"
