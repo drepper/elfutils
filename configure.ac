@@ -60,6 +60,8 @@ AC_CONFIG_FILES([m4/Makefile])
 dnl The RPM spec file.  We substitute a few values in the file.
 AC_CONFIG_FILES([elfutils.spec:config/elfutils.spec.in])
 
+dnl debuginfo-server client & server parts.
+AC_CONFIG_FILES([dbgserver/Makefile])
 
 AC_CANONICAL_HOST
 
@@ -86,6 +88,8 @@ AS_IF([test "$use_locks" = yes],
 AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
 
 AC_PROG_CC
+AC_PROG_CXX
+AX_CXX_COMPILE_STDCXX(11, noext, optional)
 AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
@@ -639,6 +643,22 @@ if test "$HAVE_BUNZIP2" = "no"; then
   AC_MSG_WARN([No bunzip2, needed to run make check])
 fi
 
+# Look for libmicrohttpd, libcurl, libarchive, sqlite for debuginfo server
+# minimum versions as per rhel7.  Single --enable-* option arranges to build
+# both client libs and server process.
+
+PKG_PROG_PKG_CONFIG
+AC_ARG_ENABLE([dbgserver], AC_HELP_STRING([--enable-dbgserver], [Build debuginfo server and client solib]))
+AS_IF([test "x$enable_dbgserver" = "xyes"], [
+    AC_DEFINE([ENABLE_DBGSERVER],[1],[Build debuginfo-server])
+    PKG_CHECK_MODULES([libmicrohttpd],[libmicrohttpd >= 0.9.33])
+    PKG_CHECK_MODULES([libcurl],[libcurl >= 7.29.0])
+    PKG_CHECK_MODULES([sqlite3],[sqlite3 >= 3.7.17])
+    PKG_CHECK_MODULES([libarchive],[libarchive >= 3.1.2])
+], [enable_dbgserver="no"])
+AM_CONDITIONAL([DBGSERVER],[test "x$enable_dbgserver" = "xyes"])
+
+
 AC_OUTPUT
 
 AC_MSG_NOTICE([
@@ -668,6 +688,7 @@ AC_MSG_NOTICE([
   OTHER FEATURES
     Deterministic archives by default  : ${default_ar_deterministic}
     Native language support            : ${USE_NLS}
+    Debuginfo server support           : ${enable_dbgserver}
 
   EXTRA TEST FEATURES (used with make check)
     have bunzip2 installed (required)  : ${HAVE_BUNZIP2}

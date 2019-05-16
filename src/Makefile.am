@@ -84,6 +84,7 @@ unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD) -ldl
 stack_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD) -ldl $(demanglelib)
 elfcompress_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD)
 
+
 installcheck-binPROGRAMS: $(bin_PROGRAMS)
 	bad=0; pid=$$$$; list="$(bin_PROGRAMS)"; for p in $$list; do \
 	  case ' $(AM_INSTALLCHECK_STD_OPTIONS_EXEMPT) ' in \
