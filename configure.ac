@@ -86,6 +86,8 @@ AS_IF([test "$use_locks" = yes],
 AH_TEMPLATE([USE_LOCKS], [Defined if libraries should be thread-safe.])
 
 AC_PROG_CC
+AC_PROG_CXX
+AX_CXX_COMPILE_STDCXX(11, noext, optional)
 AC_PROG_RANLIB
 AC_PROG_YACC
 AM_PROG_LEX
@@ -638,6 +640,15 @@ AC_CHECK_PROG(HAVE_BUNZIP2, bunzip2, yes, no)
 if test "$HAVE_BUNZIP2" = "no"; then
   AC_MSG_WARN([No bunzip2, needed to run make check])
 fi
+
+# Look for libmicrohttpd, libcurl, librpm, sqlite for debuginfo server
+# minimum versions as per rhel7
+PKG_CHECK_MODULES([libmicrohttpd],[libmicrohttpd >= 0.9.33])
+PKG_CHECK_MODULES([libcurl],[libcurl >= 7.29.0])
+PKG_CHECK_MODULES([sqlite3],[sqlite3 >= 3.7.17])
+# optional
+PKG_CHECK_MODULES([rpm],[rpm >= 4.11.3])
+
 
 AC_OUTPUT
 
