@@ -108,7 +108,7 @@ am_libdw_pic_a_OBJECTS = $(libdw_a_SOURCES:.c=.os)
 libdw_so_LIBS = libdw_pic.a ../libdwelf/libdwelf_pic.a \
 	  ../libdwfl/libdwfl_pic.a ../libebl/libebl.a
 libdw_so_DEPS = ../lib/libeu.a ../libelf/libelf.so
-libdw_so_LDLIBS = $(libdw_so_DEPS) -ldl -lz $(argp_LDADD) $(zip_LIBS)
+libdw_so_LDLIBS = $(libdw_so_DEPS) -ldl -lz $(argp_LDADD) $(zip_LIBS) $(libcurl_LIBS)
 libdw_so_SOURCES =
 libdw.so$(EXEEXT): $(srcdir)/libdw.map $(libdw_so_LIBS) $(libdw_so_DEPS)
 # The rpath is necessary for libebl because its $ORIGIN use will

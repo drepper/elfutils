@@ -39,6 +39,7 @@ noinst_LIBRARIES += libdwfl_pic.a
 
 pkginclude_HEADERS = libdwfl.h
 
+
 libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    dwfl_module.c dwfl_report_elf.c relocate.c \
 		    dwfl_module_build_id.c dwfl_module_report_build_id.c \
@@ -46,7 +47,7 @@ libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    dwfl_module_info.c dwfl_getmodules.c dwfl_getdwarf.c \
 		    dwfl_module_getdwarf.c dwfl_module_getelf.c \
 		    dwfl_validate_address.c \
-		    argp-std.c find-debuginfo.c \
+		    argp-std.c debuginfoserver-client.c find-debuginfo.c \
 		    dwfl_build_id_find_elf.c \
 		    dwfl_build_id_find_debuginfo.c \
 		    linux-kernel-modules.c linux-proc-maps.c \
@@ -87,6 +88,6 @@ libeu = ../lib/libeu.a
 libdwfl_pic_a_SOURCES =
 am_libdwfl_pic_a_OBJECTS = $(libdwfl_a_SOURCES:.c=.os)
 
-noinst_HEADERS = libdwflP.h
+noinst_HEADERS = libdwflP.h debuginfoserver-client.h
 
 CLEANFILES += $(am_libdwfl_pic_a_OBJECTS)

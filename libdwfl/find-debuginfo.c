@@ -31,6 +31,7 @@
 #endif
 
 #include "libdwflP.h"
+#include "debuginfoserver-client.h"
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -359,7 +360,8 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
      other than just by finding nothing, that's all we do.  */
   const unsigned char *bits;
   GElf_Addr vaddr;
-  if (INTUSE(dwfl_module_build_id) (mod, &bits, &vaddr) > 0)
+  int bits_len;
+  if ((bits_len = INTUSE(dwfl_module_build_id) (mod, &bits, &vaddr)) > 0)
     {
       /* Dropping most arguments means we cannot rely on them in
 	 dwfl_build_id_find_debuginfo.  But leave it that way since
@@ -396,6 +398,11 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
 				     debuginfo_file_name);
       free (canon);
     }
+
+  /* If all else fails and a build-id is available, query the
+     debuginfo-server if enabled.  */
+  if (fd < 0 && bits_len > 0 && dbgserver_enabled())
+    dbgserver_find_debuginfo(bits, bits_len);
 
   return fd;
 }
