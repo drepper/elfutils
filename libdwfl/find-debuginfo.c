@@ -402,7 +402,7 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
   /* If all else fails and a build-id is available, query the
      debuginfo-server if enabled.  */
   if (fd < 0 && bits_len > 0 && dbgserver_enabled())
-    dbgserver_find_debuginfo(bits, bits_len);
+    fd = dbgserver_find_debuginfo(bits, bits_len);
 
   return fd;
 }
