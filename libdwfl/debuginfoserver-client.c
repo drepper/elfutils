@@ -5,6 +5,8 @@
 #include <sys/syscall.h>
 #include <curl/curl.h>
 
+#define MAX_BUILD_ID_BYTES 64
+
 const char *dbgserver_envvar = "DEBUGINFO_SERVER";
 const char *tmp_filename = "dbgserver_anon";
 
@@ -22,23 +24,21 @@ write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
   ssize_t count = size * nmemb;
 
   res = write(fd, (void*)ptr, count);
-
   if (res < 0)
     return (size_t)0;
 
   return (size_t)res;
 }
 
-/* TODO: handle errors with DWARF_E_*.  */
 int
 dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
 {
   int fd;
   int url_len;
-  long respcode;
+  long resp_code;
   char *url;
   char *url_base;
-  char idbuf[65];
+  char id_buf[MAX_BUILD_ID_BYTES + 1];
   CURL *session;
   CURLcode curl_res;
 
@@ -54,9 +54,9 @@ dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
       return -1;
     }
 
-  /* copy hex representation of buildid into idbuf.  */
+  /* copy hex representation of buildid into id_buf.  */
   for (int i = 0; i < build_id_len; i++)
-    sprintf(idbuf + (i * 2), "%02x", build_id[i]);
+    sprintf(id_buf + (i * 2), "%02x", build_id[i]);
 
   /* url format: $DEBUGINFO_SERVER/buildid/HEXCODE/HEXCODE.debug  */
   url_len = strlen(url_base) + strlen("/buildid/")
@@ -66,7 +66,7 @@ dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
   if (url == NULL)
       return -1;
 
-  sprintf(url, "%s/buildid/%s/%s.debug", url_base, idbuf, idbuf);
+  sprintf(url, "%s/buildid/%s/%s.debug", url_base, id_buf, id_buf);
 
   fd = syscall(__NR_memfd_create, tmp_filename, 0);
   curl_easy_setopt(session, CURLOPT_URL, url);
@@ -74,12 +74,16 @@ dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
   curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)&fd);
 
   curl_res = curl_easy_perform(session);
-  curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &respcode);
+  curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &resp_code);
   curl_easy_cleanup(session);
   curl_global_cleanup();
+
+  printf("url: %s\n", url);
   free(url);
 
-  if (curl_res == CURLE_OK && respcode == 200)
+  printf("resp_code: %ld\n", resp_code);
+
+  if (curl_res == CURLE_OK && resp_code == 200)
     return fd;
 
   close(fd);

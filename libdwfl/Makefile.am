@@ -37,7 +37,7 @@ VERSION = 1
 noinst_LIBRARIES = libdwfl.a
 noinst_LIBRARIES += libdwfl_pic.a
 
-pkginclude_HEADERS = libdwfl.h
+pkginclude_HEADERS = libdwfl.h debuginfoserver-client.h
 
 
 libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
@@ -88,6 +88,6 @@ libeu = ../lib/libeu.a
 libdwfl_pic_a_SOURCES =
 am_libdwfl_pic_a_OBJECTS = $(libdwfl_a_SOURCES:.c=.os)
 
-noinst_HEADERS = libdwflP.h debuginfoserver-client.h
+noinst_HEADERS = libdwflP.h
 
 CLEANFILES += $(am_libdwfl_pic_a_OBJECTS)
