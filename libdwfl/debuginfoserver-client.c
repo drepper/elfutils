@@ -7,13 +7,20 @@
 
 #define MAX_BUILD_ID_BYTES 64
 
-const char *dbgserver_envvar = "DEBUGINFO_SERVER";
+const char *envvar_urlbase = "DEBUGINFO_SERVER";
+const char *envvar_local_server = "DEBUGINFO_SERVER_LOCAL";
 const char *tmp_filename = "dbgserver_anon";
 
 int
 dbgserver_enabled (void)
 {
-  return getenv(dbgserver_envvar) != NULL;
+  return getenv(envvar_urlbase) != NULL;
+}
+
+int
+dbgserver_local_enabled (void)
+{
+  return getenv(envvar_local_server) != NULL;
 }
 
 size_t
@@ -42,7 +49,7 @@ dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
   CURL *session;
   CURLcode curl_res;
 
-  url_base = getenv(dbgserver_envvar);
+  url_base = getenv(envvar_urlbase);
   if (url_base == NULL
       || curl_global_init(CURL_GLOBAL_DEFAULT) != 0)
     return -1;
@@ -77,11 +84,7 @@ dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
   curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &resp_code);
   curl_easy_cleanup(session);
   curl_global_cleanup();
-
-  printf("url: %s\n", url);
   free(url);
-
-  printf("resp_code: %ld\n", resp_code);
 
   if (curl_res == CURLE_OK && resp_code == 200)
     return fd;

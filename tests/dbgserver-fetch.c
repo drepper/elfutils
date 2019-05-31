@@ -57,8 +57,7 @@ main (int argc, char *argv[])
   Dwfl *dwfl;
   error_t res;
 
-  if (! dbgserver_enabled())
-    return 0;
+  assert(dbgserver_enabled());
 
   res = argp_parse (dwfl_standard_argp (), argc, argv, 0, &remaining, &dwfl);
   assert (res == 0 && dwfl != NULL);
