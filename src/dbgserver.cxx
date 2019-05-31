@@ -1,0 +1,533 @@
+/* Debuginfo file server.
+   Copyright (C) 2019 Red Hat, Inc.
+   This file is part of elfutils.
+
+   This file is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3 of the License, or
+   (at your option) any later version.
+
+   elfutils is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+#include "printversion.h"
+
+#include <argp.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <error.h>
+#include <libintl.h>
+#include <locale.h>
+#include <regex.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#include <cstring>
+
+#include <vector>
+#include <string>
+#include <iostream>
+#include <ostream>
+using namespace std;
+
+#include <microhttpd.h>
+#include <curl/curl.h>
+#include <rpm/rpmtypes.h>
+#include <rpm/rpmarchive.h>
+#include <sqlite3.h>
+
+#ifndef _
+# define _(str) gettext (str)
+#endif
+
+
+
+/*
+  ISSUES:
+  - delegated server: recursion/loop; Via: header processing
+  https://blog.cloudflare.com/preventing-malicious-request-loops/
+  - cache control for downloaded data ===>> no problem, we don't download & store
+  - access control ===>> delegate to reverse proxy
+  - running test server on fedorainfra, scanning koji rpms
+  - running real server for rhel/rhsm probably unnecessary
+  (use subscription-delegation)
+  - upstream: support http proxy for relay mode ===> $env(http_proxy) in libcurl
+  - expose main executable elf, not just dwarf ===> ok
+
+  see also:
+  https://github.com/NixOS/nixos-channel-scripts/blob/master/index-debuginfo.cc
+  https://github.com/edolstra/dwarffs
+*/
+
+
+/* Name and version of program.  */
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
+
+/* Bug report address.  */
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
+
+/* Definitions of arguments for argp functions.  */
+static const struct argp_option options[] =
+  {
+   { NULL, 0, NULL, 0, N_("Sources:"), 1 },
+   { "source-files", 'F', "PATH", 0, N_("Scan ELF/DWARF files under given directory."), 0 },
+   { "source-rpms", 'R', "PATH", 0, N_("Scan RPM files under given directory."), 0 },
+   { "source-rpms-yum", 0, "SECONDS", 0, N_("Try fetching missing RPMs from yum."), 0 },
+   // "source-rpms-koji"      ... no can do, not buildid-addressable
+   // "source-imageregistry"  ... 
+   // "source-debs"           ... future
+   { "source-redirect", 'U', "URL", 0, N_("Redirect to upstream dbgserver."), 0 },
+   { "source-relay", 'u', "URL", 0, N_("Relay from upstream dbgserver."), 0 },
+  
+   { NULL, 0, NULL, 0, N_("Options:"), 2 },
+   { "port", 'p', "NUM", 0, N_("HTTP port to listen on."), 0 },
+   { "database", 'd', "FILE", 0, N_("Path to sqlite database."), 0 },
+   { "verbose", 'v', NULL, 0, N_("Increase verbosity."), 0 },
+    
+   { NULL, 0, NULL, 0, NULL, 0 }
+  };
+
+/* Short description of program.  */
+static const char doc[] = N_("Serve debuginfo-related content across HTTP.");
+
+/* Strings for arguments in help texts.  */
+static const char args_doc[] = N_("[--source-TYPE...]");
+
+/* Prototype for option handler.  */
+static error_t parse_opt (int key, char *arg, struct argp_state *state);
+
+/* Data structure to communicate with argp functions.  */
+static struct argp argp =
+  {
+   options, parse_opt, args_doc, doc, NULL, NULL, NULL
+  };
+
+
+static string db_path;
+static sqlite3 *db;
+static unsigned verbose;
+static volatile sig_atomic_t interrupted = 0;
+static unsigned http_port;
+static vector<string> source_file_paths;
+static vector<pthread_t> source_file_scanner_threads;
+static vector<string> source_rpm_paths;
+static vector<pthread_t> source_rpm_scanner_threads;
+static unsigned source_file_rescan_time = 300; /* XXX: parametrize */
+
+
+
+/* Handle program arguments.  */
+static error_t
+parse_opt (int key, char *arg,
+	   struct argp_state *state __attribute__ ((unused)))
+{
+  switch (key)
+    {
+    case 'v': verbose ++; break;
+    case 'd': db_path = string(arg); break;
+    case 'p': http_port = atoi(arg); break;
+    default: return ARGP_ERR_UNKNOWN;
+    }
+  
+  return 0;
+}
+
+
+
+struct http_exception
+{
+  int code;
+  string message;
+
+  http_exception(int code, const string& message): code(code), message(message) {}
+  http_exception(const string& message): code(503), message(message) {}
+  http_exception(): code(503), message() {}
+  
+  int mhd_send_response(MHD_Connection* c) const {
+    MHD_Response* r = MHD_create_response_from_buffer (message.size(), (void*) message.c_str(), MHD_RESPMEM_MUST_COPY);
+    int rc = MHD_queue_response (c, code, r);
+    MHD_destroy_response (r);
+    return rc;
+  }
+};
+
+
+struct sqlite_exception: public http_exception
+{
+  sqlite_exception(int rc, const string& msg):
+    http_exception(503, string("sqlite3 error: ") + msg + ":" + string(sqlite3_errstr(rc) ?: "?")) {}
+};
+  
+
+
+
+static struct MHD_Response*
+handle_buildid_match (int64_t b_mtime,
+                      const string& b_stype,
+                      const string& b_source0,
+                      const string& b_source1)
+{
+  if (b_stype != "F")
+    {
+      if (verbose > 2)
+        clog << "unimplemented stype " << b_stype << endl;
+      return 0;
+    }
+  
+  int fd = open(b_source0.c_str(), O_RDONLY);
+  if (fd < 0)
+    {
+      if (verbose > 2)
+        clog << "cannot open " << b_source0 << endl;
+      return 0;
+    }
+  struct stat s;
+  int rc = fstat(fd, &s);
+  if (rc < 0)
+    {
+      if (verbose > 2)
+        clog << "cannot fstat " << b_source0 << endl;
+      close(fd);
+      return 0;
+    }
+
+  if ((int64_t) s.st_mtime != b_mtime)
+    {
+      if (verbose > 2)
+        clog << "mtime mismatch for " << b_source0 << endl;
+      close(fd);
+      return 0;
+    }
+  
+  struct MHD_Response* r = MHD_create_response_from_fd ((uint64_t) s.st_size, fd);
+  if (r == 0)
+    {
+      if (verbose > 2)
+        clog << "cannot create fd-response for " << b_source0 << endl;
+      close(fd);
+    }
+  else
+    if (verbose)
+        clog << "serving file " << b_source0 << endl;
+    /* libmicrohttpd will close it. */
+    ;
+
+  return r;
+}
+
+
+static struct MHD_Response*
+handle_buildid (struct MHD_Connection *connection,
+                const string& buildid /* unsafe */,
+                const string& artifacttype /* unsafe */,
+                const string& suffix /* unsafe */)
+{
+  string atype_code;
+  if (artifacttype == "debuginfo") atype_code = "D";
+  else if (artifacttype == "executable") atype_code = "E";
+  else if (artifacttype == "source-file") atype_code = "S";
+  else throw http_exception("invalid artifacttype");
+
+  if (verbose > 0)
+    clog << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
+         << " suffix=" << suffix << endl;
+  
+  string SQL_SELECT =
+    "select strftime('%s',mtime), sourcetype, source0, source1 " // NB: 4 columns
+    "from buildids where buildid = ? and artifacttype = ?;";
+  sqlite3_stmt *pp;
+  int rc = sqlite3_prepare_v2 (db, SQL_SELECT.c_str(), -1 /* to \0 */, &pp, NULL);
+  if (rc != SQLITE_OK)
+    throw sqlite_exception(rc, "prepare " + SQL_SELECT);
+
+  // XXX: wrap the following into a try / catch block, to finalize the pp even if
+  // subfunctions throw
+  
+  rc = sqlite3_bind_text (pp, 1, buildid.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_finalize (pp);
+      throw sqlite_exception(rc, "bind 1");
+    }
+  rc = sqlite3_bind_text (pp, 2, atype_code.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
+  if (rc != SQLITE_OK)
+    {
+      sqlite3_finalize (pp);
+      throw sqlite_exception(rc, "bind 2");
+    }
+
+  // consume all the rows
+  while (1)
+    {
+      rc = sqlite3_step (pp);
+      if (rc == SQLITE_DONE) break;
+      if (rc != SQLITE_ROW)
+        {
+          sqlite3_finalize(pp);
+          throw sqlite_exception(rc, "step");
+        }
+      
+      int64_t b_mtime = sqlite3_column_int64 (pp, 0);
+      string b_stype = string((const char*) sqlite3_column_text (pp, 1) ?: ""); /* by DDL may not be NULL */
+      string b_source0 = string((const char*) sqlite3_column_text (pp, 2) ?: ""); /* may be NULL */
+      string b_source1 = string((const char*) sqlite3_column_text (pp, 3) ?: ""); /* may be NULL */
+
+      if (verbose > 1)
+        clog << "found mtime=" << b_mtime << " stype=" << b_stype
+             << " source0=" << b_source0 << " source1=" << b_source1 << endl;
+
+      // Try accessing the located match.
+      // XXX: validate the mtime against that in the column
+      // XXX: in case of multiple matches, attempt them in parallel?
+      auto r = handle_buildid_match (b_mtime, b_stype, b_source0, b_source1);
+      if (r)
+        {
+          sqlite3_finalize(pp);
+          return r;
+        }
+    }
+
+  sqlite3_finalize(pp);
+  throw http_exception(403, "not found");
+}
+
+
+static struct MHD_Response*
+handle_metrics (struct MHD_Connection *connection)
+{
+  throw http_exception("not yet implemented 2");
+}
+
+
+
+
+/* libmicrohttpd callback */
+static int
+handler_cb (void *cls  __attribute__ ((unused)),
+            struct MHD_Connection *connection,
+            const char *url,
+            const char *method,
+            const char *version  __attribute__ ((unused)),
+            const char *upload_data  __attribute__ ((unused)),
+            size_t * upload_data_size __attribute__ ((unused)),
+            void ** con_cls __attribute__ ((unused)))
+{
+  char errmsg[100] = "";
+  int code = 503;
+  struct MHD_Response *r = NULL;
+  string url_copy = url;
+  char *tok = NULL;
+  char *tok_save = NULL;
+  
+  if (verbose)
+    {
+      /* trace peer-address & url */
+    }
+
+  try
+    {
+      if (string(method) != "GET")
+        throw http_exception(400, _("we support GET only"));
+
+      /* Start decoding the URL. */
+      size_t slash1 = url_copy.find('/', 1);
+      string url1 = url_copy.substr(0, slash1); // ok even if slash1 not found
+      
+      if (slash1 != string::npos && url1 == "/buildid")
+        {
+          size_t slash2 = url_copy.find('/', slash1+1);
+          if (slash2 == string::npos)
+            throw http_exception(503, _("/buildid/ webapi error, need buildid"));
+          
+          string buildid = url_copy.substr(slash1+1, slash2-slash1-1);
+
+          size_t slash3 = url_copy.find('/', slash2+1);
+          string artifacttype, suffix;
+          if (slash3 == string::npos)
+            {
+              artifacttype = url_copy.substr(slash2+1);
+              suffix = "";
+            }
+          else
+            {
+              artifacttype = url_copy.substr(slash2+1, slash3-slash2-1);
+              suffix = url_copy.substr(slash3+1);
+            }
+          
+          r = handle_buildid(connection, buildid, artifacttype, suffix);
+        }
+      else if (url1 == "/metrics")
+        r = handle_metrics(connection);
+      else
+        throw http_exception(503, _("webapi error, unrecognized /operation"));
+      
+      if (r == 0)
+        throw http_exception(503, _("internal error, missing response"));
+      
+      int rc = MHD_queue_response (connection, MHD_HTTP_OK, r);
+      MHD_destroy_response (r);
+      return rc;
+    }
+  catch (const http_exception& e)
+    {
+      return e.mhd_send_response (connection);
+    }
+}
+
+
+static void*
+thread_main_scan_source_file_path (void* arg)
+{
+  while(! interrupted) pause();
+  return 0;
+}
+
+
+
+static void*
+thread_main_scan_source_rpm_path (void* arg)
+{
+  while(! interrupted) pause();
+  return 0;
+}
+
+
+
+
+
+static void
+signal_handler (int /* sig */)
+{
+  interrupted ++;
+}
+
+
+
+int
+main (int argc, char *argv[])
+{
+  (void) setlocale (LC_ALL, "");
+  (void) bindtextdomain (PACKAGE_TARNAME, LOCALEDIR);
+  (void) textdomain (PACKAGE_TARNAME);
+
+  /* Set default values. */
+  http_port = 8002;
+  db_path = string(getenv("HOME") ?: "/") + string("/.dbgserver.sqlite"); /* XDG? */
+  
+  /* Parse and process arguments.  */
+  int remaining;
+  (void) argp_parse (&argp, argc, argv, ARGP_IN_ORDER, &remaining, NULL);
+
+  /* Block SIGPIPE, as libmicrohttpd operations can trigger it, and we don't care. */
+  (void) signal (SIGPIPE, SIG_IGN);
+  (void) signal (SIGINT, signal_handler);
+  (void) signal (SIGHUP, signal_handler);
+  
+  /* Get database ready. */
+  int rc;
+  rc = sqlite3_open_v2 (db_path.c_str(), &db, (SQLITE_OPEN_READWRITE
+                                       |SQLITE_OPEN_CREATE
+                                       |SQLITE_OPEN_FULLMUTEX), /* thread-safe */
+                        NULL);
+  if (rc)
+    {
+      error (EXIT_FAILURE, 0,
+             _("cannot open database: %s"), sqlite3_errmsg(db));
+    }
+
+  /* Future: migrate between versions. */
+  const char DBGSERVER_SQLITE_DDL[] =
+    "create table if not exists\n"
+    "    buildids (\n"
+    "        buildid text not null,                          -- the buildid\n"
+    "        artifacttype text(1) not null\n"
+    "            check (artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)\n"
+    "        mtime integer not null,                         -- epoch timestamp when we last found this\n"
+    "        sourcetype text(1) not null\n"
+    "            check (sourcetype IN ('F', 'R', 'R', 'L')), -- as per --source-TYPE single-char code\n"
+    "        source0 text,                                   -- more sourcetype-specific location data\n"
+    "        source1 text);                                  -- more sourcetype-specific location data\n"
+    "create index if not exists buildids_idx1 on buildids (buildid, artifacttype);\n"
+    "create unique index if not exists buildids_idx2 on buildids (buildid, artifacttype, sourcetype, source0, source1);\n"
+    ;
+  
+  rc = sqlite3_exec (db, DBGSERVER_SQLITE_DDL, NULL, NULL, NULL);
+  if (rc != SQLITE_OK)
+    {
+      error (EXIT_FAILURE, 0,
+             _("cannot run database schema ddl: %s"), sqlite3_errmsg(db));
+    }
+
+  for (auto&& it : source_file_paths)
+    {
+      pthread_t pt;
+      int rc = pthread_create (& pt, NULL, thread_main_scan_source_file_path, (void*) it.c_str());
+      if (rc < 0)
+        error (0, 0, "Warning: cannot spawn thread (%d) to scan source files %s\n", rc, it.c_str());
+      else
+        source_file_scanner_threads.push_back(pt);
+    }
+
+  for (auto&& it : source_rpm_paths)
+    {
+      pthread_t pt;
+      int rc = pthread_create (& pt, NULL, thread_main_scan_source_rpm_path, (void*) it.c_str());
+      if (rc < 0)
+        error (0, 0, "Warning: cannot spawn thread (%d) to scan source rpms %s\n", rc, it.c_str());
+      else
+        source_rpm_scanner_threads.push_back(pt);
+    }
+
+  
+  /* Start httpd server threads. */
+  /* XXX: suppress SIGPIPE */
+  MHD_Daemon *daemon = MHD_start_daemon (MHD_USE_THREAD_PER_CONNECTION
+                                         | MHD_USE_INTERNAL_POLLING_THREAD
+                                         | MHD_USE_DUAL_STACK /* ipv4 + ipv6 */
+                                         | MHD_USE_DEBUG, /* report errors to stderr */
+                             http_port,
+                             NULL, NULL, /* default accept policy */
+                             handler_cb, NULL, /* handler callback */
+                             MHD_OPTION_END);
+  if (daemon == NULL)
+    {
+      sqlite3_close (db);
+      error (EXIT_FAILURE, 0, _("cannot start http server at port %p"), http_port);
+    }
+
+  if (verbose)
+    clog << "Started http server on port " << http_port << ", database path " << db_path << endl;
+  
+  /* Trivial main loop! */
+  while (! interrupted)
+    pause ();
+
+  if (verbose)
+    clog << "Stopping" << endl;
+  
+  /* Stop all the web service threads. */
+  /* MHD_quiesce_daemon (daemon); */
+  MHD_stop_daemon (daemon);
+
+  /* Join any source scanning threads. */
+  for (auto&& it : source_file_scanner_threads)
+    pthread_join (it, NULL);
+  for (auto&& it : source_rpm_scanner_threads)
+    pthread_join (it, NULL);
+  
+  /* With all threads known dead, we can close the db handle. */
+  sqlite3_close (db);
+  
+  return 0;
+}
