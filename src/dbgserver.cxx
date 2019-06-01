@@ -32,13 +32,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-
+#include <netdb.h>
 #include <cstring>
-
 #include <vector>
 #include <string>
 #include <iostream>
 #include <ostream>
+#include <sstream>
 using namespace std;
 
 #include <microhttpd.h>
@@ -46,6 +46,10 @@ using namespace std;
 #include <rpm/rpmtypes.h>
 #include <rpm/rpmarchive.h>
 #include <sqlite3.h>
+
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 
 #ifndef _
 # define _(str) gettext (str)
@@ -144,6 +148,7 @@ parse_opt (int key, char *arg,
 }
 
 
+////////////////////////////////////////////////////////////////////////
 
 struct http_exception
 {
@@ -168,8 +173,124 @@ struct sqlite_exception: public http_exception
   sqlite_exception(int rc, const string& msg):
     http_exception(503, string("sqlite3 error: ") + msg + ":" + string(sqlite3_errstr(rc) ?: "?")) {}
 };
-  
 
+
+////////////////////////////////////////////////////////////////////////
+
+// Lightweight wrapper for pthread_mutex_t
+struct my_lock_t
+{
+private:
+  pthread_mutex_t _lock;
+public:
+  my_lock_t() { pthread_mutex_init(& this->_lock, NULL); }
+  ~my_lock_t() { pthread_mutex_destroy (& this->_lock); }
+  void lock() { pthread_mutex_lock (& this->_lock); }
+  void unlock() { pthread_mutex_unlock (& this->_lock); }
+private:
+  my_lock_t(const my_lock_t&); // make uncopyable
+  my_lock_t& operator=(my_lock_t const&); // make unassignable
+};
+
+
+// RAII style mutex holder that matches { } block lifetime
+struct locker
+{
+public:
+  locker(my_lock_t *_m): m(_m) { m->lock(); }
+  ~locker() { m->unlock(); }
+private:
+  my_lock_t* m;
+};
+
+
+////////////////////////////////////////////////////////////////////////
+
+
+// Print a standard timestamp.
+static ostream&
+timestamp (ostream &o)
+{
+  time_t now;
+  time (&now);
+  char *now2 = ctime (&now);
+  if (now2) {
+    now2[19] = '\0';                // overwrite \n
+  }
+
+  return o << "[" << (now2 ? now2 : "") << "] "
+           << "(" << getpid ()
+#ifdef __linux__
+           << "/" << syscall(SYS_gettid)
+#else
+           << "/" << pthread_self()
+#endif
+           << "): ";
+  // XXX: tid() too
+}
+
+
+// A little class that impersonates an ostream to the extent that it can
+// take << streaming operations.  It batches up the bits into an internal
+// stringstream until it is destroyed; then flushes to the original ostream.
+// It adds a timestamp
+class obatched
+{
+private:
+  ostream& o;
+  stringstream stro;
+  static my_lock_t lock;
+public:
+  obatched(ostream& oo, bool timestamp_p = true): o(oo)
+  {
+    if (timestamp_p)
+      timestamp(stro);
+  }
+  ~obatched()
+  {
+    locker do_not_cross_the_streams(& obatched::lock);
+    o << stro.str();
+    o.flush();
+  }
+  operator ostream& () { return stro; }
+  template <typename T> ostream& operator << (const T& t) { stro << t; return stro; }
+};
+my_lock_t obatched::lock; // just the one, since cout/cerr iostreams are not thread-safe
+
+
+static string
+conninfo (struct MHD_Connection * conn)
+{
+  char hostname[128];
+  char servname[128];
+  int sts = -1;
+
+  if (conn == 0)
+    return "internal";
+
+  /* Look up client address data. */
+  const union MHD_ConnectionInfo *u = MHD_get_connection_info (conn,
+                                                               MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+  struct sockaddr *so = u ? u->client_addr : 0;
+
+  if (so && so->sa_family == AF_INET) {
+    sts = getnameinfo (so, sizeof (struct sockaddr_in), hostname, sizeof (hostname), servname,
+                       sizeof (servname), NI_NUMERICHOST | NI_NUMERICSERV);
+  } else if (so && so->sa_family == AF_INET6) {
+    sts = getnameinfo (so, sizeof (struct sockaddr_in6), hostname, sizeof (hostname),
+                       servname, sizeof (servname), NI_NUMERICHOST | NI_NUMERICSERV);
+  }
+  if (sts != 0) {
+    hostname[0] = servname[0] = '\0';
+  }
+
+  return string(hostname) + string(":") + string(servname);
+}
+
+
+
+
+////////////////////////////////////////////////////////////////////////
 
 
 static struct MHD_Response*
@@ -181,7 +302,7 @@ handle_buildid_match (int64_t b_mtime,
   if (b_stype != "F")
     {
       if (verbose > 2)
-        clog << "unimplemented stype " << b_stype << endl;
+        obatched(clog) << "unimplemented stype " << b_stype << endl;
       return 0;
     }
   
@@ -189,7 +310,7 @@ handle_buildid_match (int64_t b_mtime,
   if (fd < 0)
     {
       if (verbose > 2)
-        clog << "cannot open " << b_source0 << endl;
+        obatched(clog) << "cannot open " << b_source0 << endl;
       return 0;
     }
   struct stat s;
@@ -205,7 +326,7 @@ handle_buildid_match (int64_t b_mtime,
   if ((int64_t) s.st_mtime != b_mtime)
     {
       if (verbose > 2)
-        clog << "mtime mismatch for " << b_source0 << endl;
+        obatched(clog) << "mtime mismatch for " << b_source0 << endl;
       close(fd);
       return 0;
     }
@@ -219,7 +340,7 @@ handle_buildid_match (int64_t b_mtime,
     }
   else
     if (verbose)
-        clog << "serving file " << b_source0 << endl;
+      obatched(clog) << "serving file " << b_source0 << endl;
     /* libmicrohttpd will close it. */
     ;
 
@@ -240,7 +361,7 @@ handle_buildid (struct MHD_Connection *connection,
   else throw http_exception("invalid artifacttype");
 
   if (verbose > 0)
-    clog << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
+    obatched(clog) << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
          << " suffix=" << suffix << endl;
   
   string SQL_SELECT =
@@ -284,7 +405,7 @@ handle_buildid (struct MHD_Connection *connection,
       string b_source1 = string((const char*) sqlite3_column_text (pp, 3) ?: ""); /* may be NULL */
 
       if (verbose > 1)
-        clog << "found mtime=" << b_mtime << " stype=" << b_stype
+        obatched(clog) << "found mtime=" << b_mtime << " stype=" << b_stype
              << " source0=" << b_source0 << " source1=" << b_source1 << endl;
 
       // Try accessing the located match.
@@ -303,6 +424,8 @@ handle_buildid (struct MHD_Connection *connection,
 }
 
 
+////////////////////////////////////////////////////////////////////////
+
 static struct MHD_Response*
 handle_metrics (struct MHD_Connection *connection)
 {
@@ -310,6 +433,7 @@ handle_metrics (struct MHD_Connection *connection)
 }
 
 
+////////////////////////////////////////////////////////////////////////
 
 
 /* libmicrohttpd callback */
@@ -331,9 +455,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
   char *tok_save = NULL;
   
   if (verbose)
-    {
-      /* trace peer-address & url */
-    }
+    obatched(clog) << conninfo(connection) << " " << method << " " << url << endl;
 
   try
     {
@@ -386,6 +508,9 @@ handler_cb (void *cls  __attribute__ ((unused)),
 }
 
 
+////////////////////////////////////////////////////////////////////////
+
+
 static void*
 thread_main_scan_source_file_path (void* arg)
 {
@@ -403,7 +528,7 @@ thread_main_scan_source_rpm_path (void* arg)
 }
 
 
-
+////////////////////////////////////////////////////////////////////////
 
 
 static void
@@ -507,14 +632,14 @@ main (int argc, char *argv[])
     }
 
   if (verbose)
-    clog << "Started http server on port " << http_port << ", database path " << db_path << endl;
+    obatched(clog) << "Started http server on port " << http_port << ", database path " << db_path << endl;
   
   /* Trivial main loop! */
   while (! interrupted)
     pause ();
 
   if (verbose)
-    clog << "Stopping" << endl;
+    obatched(clog) << "Stopping" << endl;
   
   /* Stop all the web service threads. */
   /* MHD_quiesce_daemon (daemon); */
