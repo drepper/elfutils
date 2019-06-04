@@ -65,15 +65,15 @@ dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
   for (int i = 0; i < build_id_len; i++)
     sprintf(id_buf + (i * 2), "%02x", build_id[i]);
 
-  /* url format: $DEBUGINFO_SERVER/buildid/HEXCODE/HEXCODE.debug  */
+  /* url format: $DEBUGINFO_SERVER/buildid/HEXCODE/debuginfo  */
   url_len = strlen(url_base) + strlen("/buildid/")
-            + build_id_len * 4 + strlen("/.debug") + 1;
+            + build_id_len * 2 + strlen("/debuginfo") + 1;
 
   url = (char*)malloc(url_len);
   if (url == NULL)
       return -1;
 
-  sprintf(url, "%s/buildid/%s/%s.debug", url_base, id_buf, id_buf);
+  sprintf(url, "%s/buildid/%s/debuginfo", url_base, id_buf);
 
   fd = syscall(__NR_memfd_create, tmp_filename, 0);
   curl_easy_setopt(session, CURLOPT_URL, url);

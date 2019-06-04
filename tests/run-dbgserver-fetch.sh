@@ -16,40 +16,49 @@
 
 . $srcdir/test-subr.sh
 
-testfiles testfile-dbgserver.debug
-
-if [ -z $DEBUGINFO_SERVER_LOCAL ]; then
-  echo "unknown local server directory"
-  exit 77
-fi
 
 if [ -z "$DEBUGINFO_SERVER" ]; then
   echo "unknown server url"
   exit 77
 fi
 
-if [ ! -w "${DEBUGINFO_SERVER_LOCAL}/buildid/" ]; then
-  echo "unable to modify local server directory"
-  exit 77
-fi
+testfiles testfile-dbgserver.debug
 
-# Build-id of testfile-dbgserver.debug
+# init db if needed and add testfile entry
+DB=${HOME}/.dbgserver.sqlite
 BUILD_ID="0a0cd15e690a378ec77359bb2eeb76ea0f8d67f8"
-TEST_DIR="${DEBUGINFO_SERVER_LOCAL}/buildid/${BUILD_ID}"
-TEST_FILE="${TEST_DIR}/${BUILD_ID}.debug"
+ARTIFACT="D"
+MTIME=`stat -c %Y testfile-dbgserver.debug`
+SOURCETYPE="F"
+SOURCE_0=`realpath testfile-dbgserver.debug`
 
-if [ -f $TEST_DIR ]; then
-  echo "Test files already exists"
-  exit 77
-fi
+sqlite3 $DB << EOF
+create table if not exists
+    buildids (
+        buildid text not null,                          -- the buildid
+        artifacttype text(1) not null
+            check (artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)
+        mtime integer not null,                         -- epoch timestamp when we last found this
+        sourcetype text(1) not null
+            check (sourcetype IN ('F', 'R', 'R', 'L')), -- as per --source-TYPE single-char code
+        source0 text,                                   -- more sourcetype-specific location data
+        source1 text);                                  -- more sourcetype-specific location data
+create index if not exists buildids_idx1 on buildids (buildid, artifacttype);
+create unique index if not exists buildids_idx2 on buildids (buildid, artifacttype, sourcetype, source0, source1);
+insert into buildids values ('${BUILD_ID}', '${ARTIFACT}', ${MTIME}, '${SOURCETYPE}', '${SOURCE_0}', NULL)
+EOF
 
-mkdir $TEST_DIR
-cp testfile-dbgserver.debug $TEST_FILE
+../../src/dbgserver -vv &
+PID=$!
+sleep 2
 
-# Test whether the server is able to fetch the file from
-# the local server directory.
+# Test whether the server is able to fetch the file from the local dbgserver.
 testrun ${abs_builddir}/dbgserver-fetch -e testfile-dbgserver.debug
 
-rm -rf $TEST_DIR
+kill $PID
+sqlite3 $DB << EOF
+delete from buildids where buildid='${BUILD_ID}' AND artifacttype='${ARTIFACT}'
+    AND mtime=${MTIME} and sourcetype='${SOURCETYPE}' and source0='${SOURCE_0}'
+EOF
 
 exit 0

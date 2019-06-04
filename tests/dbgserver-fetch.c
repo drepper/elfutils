@@ -23,9 +23,9 @@
 #include ELFUTILS_HEADER(dwfl)
 #include <elf.h>
 #include <dwarf.h>
-#include "../libdwfl/debuginfoserver-client.c"
 #include <argp.h>
 #include <assert.h>
+#include "../libdwfl/debuginfoserver-client.c"
 
 #define MAX_BUILD_ID_BYTES 64
 

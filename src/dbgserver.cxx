@@ -365,7 +365,7 @@ handle_buildid (struct MHD_Connection *connection,
          << " suffix=" << suffix << endl;
   
   string SQL_SELECT =
-    "select strftime('%s',mtime), sourcetype, source0, source1 " // NB: 4 columns
+    "select mtime, sourcetype, source0, source1 " // NB: 4 columns
     "from buildids where buildid = ? and artifacttype = ?;";
   sqlite3_stmt *pp;
   int rc = sqlite3_prepare_v2 (db, SQL_SELECT.c_str(), -1 /* to \0 */, &pp, NULL);
