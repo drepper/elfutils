@@ -15,9 +15,22 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
+
+/* cargo-cult from libdwfl linux-kernel-modules.c */
+/* In case we have a bad fts we include this before config.h because it
+   can't handle _FILE_OFFSET_BITS.
+   Everything we need here is fine if its declarations just come first.
+   Also, include sys/types.h before fts. On some systems fts.h is not self
+   contained. */
+#ifdef BAD_FTS
+  #include <sys/types.h>
+  #include <fts.h>
 #endif
+
+#ifdef HAVE_CONFIG_H
+  #include "config.h"
+#endif
+
 #include "printversion.h"
 
 #include <argp.h>
@@ -33,6 +46,19 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <netdb.h>
+
+/* If fts.h is included before config.h, its indirect inclusions may not
+   give us the right LFS aliases of these functions, so map them manually.  */
+#ifdef BAD_FTS
+  #ifdef _FILE_OFFSET_BITS
+    #define open open64
+    #define fopen fopen64
+  #endif
+#else
+  #include <sys/types.h>
+  #include <fts.h>
+#endif
+
 #include <cstring>
 #include <vector>
 #include <string>
@@ -40,6 +66,9 @@
 #include <ostream>
 #include <sstream>
 using namespace std;
+
+#include <gelf.h>
+#include <libdwelf.h>
 
 #include <microhttpd.h>
 #include <curl/curl.h>
@@ -68,6 +97,8 @@ using namespace std;
   (use subscription-delegation)
   - upstream: support http proxy for relay mode ===> $env(http_proxy) in libcurl
   - expose main executable elf, not just dwarf ===> ok
+  - need a thread to garbage-collect old buildid entries?
+
 
   see also:
   https://github.com/NixOS/nixos-channel-scripts/blob/master/index-debuginfo.cc
@@ -141,6 +172,7 @@ parse_opt (int key, char *arg,
     case 'v': verbose ++; break;
     case 'd': db_path = string(arg); break;
     case 'p': http_port = atoi(arg); break;
+    case 'F': source_file_paths.push_back(string(arg)); break;
     default: return ARGP_ERR_UNKNOWN;
     }
   
@@ -175,7 +207,30 @@ struct sqlite_exception: public http_exception
 };
 
 
+// RAII style sqlite prepared-statement holder that matches { } block lifetime
+
+struct sqlite_ps
+{
+private:
+  sqlite3_stmt *pp;
+  
+  sqlite_ps(const sqlite_ps&); // make uncopyable
+  sqlite_ps& operator=(const sqlite_ps &); // make unassignable
+
+public:
+  sqlite_ps (sqlite3* db, const string& sql) {
+    int rc = sqlite3_prepare_v2 (db, sql.c_str(), -1 /* to \0 */, & this->pp, NULL);
+    if (rc != SQLITE_OK)
+      throw sqlite_exception(rc, "prepare " + sql);
+  }
+  ~sqlite_ps () { sqlite3_finalize (this->pp); }
+  operator sqlite3_stmt* () { return this->pp; }
+};
+
+
+
 ////////////////////////////////////////////////////////////////////////
+
 
 // Lightweight wrapper for pthread_mutex_t
 struct my_lock_t
@@ -289,7 +344,6 @@ conninfo (struct MHD_Connection * conn)
 
 
 
-
 ////////////////////////////////////////////////////////////////////////
 
 
@@ -311,6 +365,8 @@ handle_buildid_match (int64_t b_mtime,
     {
       if (verbose > 2)
         obatched(clog) << "cannot open " << b_source0 << endl;
+      // XXX: delete the buildid record?
+      // NB: it is safe to delete while a select loop is under way
       return 0;
     }
   struct stat s;
@@ -320,6 +376,8 @@ handle_buildid_match (int64_t b_mtime,
       if (verbose > 2)
         clog << "cannot fstat " << b_source0 << endl;
       close(fd);
+      // XXX: delete the buildid record?
+      // NB: it is safe to delete while a select loop is under way
       return 0;
     }
 
@@ -348,8 +406,7 @@ handle_buildid_match (int64_t b_mtime,
 }
 
 
-static struct MHD_Response*
-handle_buildid (struct MHD_Connection *connection,
+static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
                 const string& buildid /* unsafe */,
                 const string& artifacttype /* unsafe */,
                 const string& suffix /* unsafe */)
@@ -364,29 +421,16 @@ handle_buildid (struct MHD_Connection *connection,
     obatched(clog) << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
          << " suffix=" << suffix << endl;
   
-  string SQL_SELECT =
-    "select mtime, sourcetype, source0, source1 " // NB: 4 columns
-    "from buildids where buildid = ? and artifacttype = ?;";
-  sqlite3_stmt *pp;
-  int rc = sqlite3_prepare_v2 (db, SQL_SELECT.c_str(), -1 /* to \0 */, &pp, NULL);
-  if (rc != SQLITE_OK)
-    throw sqlite_exception(rc, "prepare " + SQL_SELECT);
+  sqlite_ps pp (db, 
+                "select mtime, sourcetype, source0, source1 " // NB: 4 columns
+                "from buildids where buildid = ? and artifacttype = ?;");
 
-  // XXX: wrap the following into a try / catch block, to finalize the pp even if
-  // subfunctions throw
-  
-  rc = sqlite3_bind_text (pp, 1, buildid.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
+  int rc = sqlite3_bind_text (pp, 1, buildid.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK)
-    {
-      sqlite3_finalize (pp);
-      throw sqlite_exception(rc, "bind 1");
-    }
+    throw sqlite_exception(rc, "bind 1");
   rc = sqlite3_bind_text (pp, 2, atype_code.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK)
-    {
-      sqlite3_finalize (pp);
       throw sqlite_exception(rc, "bind 2");
-    }
 
   // consume all the rows
   while (1)
@@ -394,10 +438,7 @@ handle_buildid (struct MHD_Connection *connection,
       rc = sqlite3_step (pp);
       if (rc == SQLITE_DONE) break;
       if (rc != SQLITE_ROW)
-        {
-          sqlite3_finalize(pp);
-          throw sqlite_exception(rc, "step");
-        }
+        throw sqlite_exception(rc, "step");
       
       int64_t b_mtime = sqlite3_column_int64 (pp, 0);
       string b_stype = string((const char*) sqlite3_column_text (pp, 1) ?: ""); /* by DDL may not be NULL */
@@ -413,18 +454,15 @@ handle_buildid (struct MHD_Connection *connection,
       // XXX: in case of multiple matches, attempt them in parallel?
       auto r = handle_buildid_match (b_mtime, b_stype, b_source0, b_source1);
       if (r)
-        {
-          sqlite3_finalize(pp);
-          return r;
-        }
+        return r;
     }
 
-  sqlite3_finalize(pp);
   throw http_exception(403, "not found");
 }
 
 
 ////////////////////////////////////////////////////////////////////////
+
 
 static struct MHD_Response*
 handle_metrics (struct MHD_Connection *connection)
@@ -511,13 +549,199 @@ handler_cb (void *cls  __attribute__ ((unused)),
 ////////////////////////////////////////////////////////////////////////
 
 
+static void
+elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
+{
+  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP, NULL);
+  if (elf == NULL)
+    return;
+
+  if (elf_kind (elf) != ELF_K_ELF)
+    {
+      elf_end (elf);
+      return;
+    }
+
+ GElf_Ehdr ehdr_storage;
+ GElf_Ehdr *ehdr = gelf_getehdr (elf, &ehdr_storage);
+ if (ehdr == NULL)
+    {
+      elf_end (elf);
+      return;
+    }
+ auto elf_type = ehdr->e_type;
+  
+  const void *build_id; // elfutils-owned memory
+  ssize_t sz = dwelf_elf_gnu_build_id (elf, & build_id);
+  if (sz <= 0)
+    {
+      elf_end (elf);
+      return;
+    }
+  buildid = string((const char*) build_id, (size_t) sz);
+
+  // now decide whether it's an executable
+  if (elf_type == ET_EXEC || elf_type == ET_DYN)
+    executable_p = true;
+
+  // now decide whether it's a debuginfo - namely, if it has any .debug* or .zdebug* sections
+  // logic mostly stolen from fweimer@redhat.com's elfclassify drafts
+  size_t shstrndx;
+  if (elf_getshdrstrndx (elf, &shstrndx) < 0)
+    {
+      elf_end (elf);
+      return;
+    }
+  
+  Elf_Scn *scn = NULL;
+  while (true)
+    {
+      scn = elf_nextscn (elf, scn);
+      if (scn == NULL)
+        break;
+      GElf_Shdr shdr_storage;
+      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_storage);
+      if (shdr == NULL)
+        break;
+      const char *section_name = elf_strptr (elf, shstrndx, shdr->sh_name);
+      if (section_name == NULL)
+        break;
+      if (strncmp(section_name, ".debug_", 7) == 0 ||
+          strncmp(section_name, ".zdebug_", 8) == 0)
+        {
+          debuginfo_p = true;
+          break;
+        }
+    }
+
+ elfend:  
+  elf_end (elf);
+}
+
+
+
+static void
+scan_source_file_path (const string& dir)
+{
+  sqlite_ps ps_upsert (db,
+                       "insert or ignore into buildids (buildid, artifacttype, mtime,"
+                       "sourcetype, source0) values (?, ?, ?, 'F', ?);");
+  sqlite_ps ps_query (db,
+                      "select strftime('%s',mtime) from buildids where sourcetype = 'F' and source0 = ?;");
+
+  char * const dirs[] = { (char*) dir.c_str(), NULL };
+  FTS *fts = fts_open (dirs, FTS_LOGICAL | FTS_NOCHDIR /* multithreaded */, NULL);
+  if (fts == NULL)
+    {
+      obatched(cerr) << "cannot fts_open " << dir << endl;
+      return;
+    }
+
+  FTSENT *f;
+  while ((f = fts_read (fts)) != NULL)
+    {
+      if (interrupted)
+        break;
+
+      if (verbose > 2)
+        obatched(clog) << "fts traversing " << f->fts_path << endl;
+          
+      switch (f->fts_info)  // NB: continue jumps out to the loop
+        {
+        case FTS_F:
+        case FTS_SL:
+          {
+          /* Found a file.  See if we know of it already. */
+          int rc = sqlite3_bind_text (ps_query, 0, f->fts_path, -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+              continue;
+          rc = sqlite3_step (ps_query);
+          if (rc == SQLITE_OK) // but not DONE (no results)
+            {
+              int64_t b_mtime = sqlite3_column_int64 (ps_query, 0);
+              if (b_mtime == (int64_t) f->fts_statp->st_mtime)
+                continue; // no need to recheck a file/version we already know
+            }
+
+          int fd = open (f->fts_path, O_RDONLY);
+          if (fd < 0)
+            {
+              obatched(cerr) << "cannot open " << f->fts_path << endl;
+              continue;
+            }
+          bool executable_p = false, debuginfo_p = false; // E and/or D
+          string buildid;
+          elf_classify (fd, executable_p, debuginfo_p, buildid);
+          close (fd);
+          
+          if (! (executable_p || debuginfo_p))
+            continue;
+          
+          rc = sqlite3_bind_text (ps_upsert, 0, buildid.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK) continue;
+          rc = sqlite3_bind_int64 (ps_upsert, 2, (int64_t) f->fts_statp->st_mtime);
+          if (rc != SQLITE_OK) continue;
+          rc = sqlite3_bind_text (ps_upsert, 3, f->fts_path, -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK) continue;
+          
+          if (executable_p)
+            {
+              rc = sqlite3_bind_text (ps_upsert, 1, "E", -1, SQLITE_STATIC);
+              if (rc != SQLITE_OK) continue;
+              rc = sqlite3_step (ps_query);
+              if (rc != SQLITE_OK) continue;
+            }
+          
+          if (debuginfo_p)
+            {
+              rc = sqlite3_bind_text (ps_upsert, 1, "D", -1, SQLITE_STATIC);
+              if (rc != SQLITE_OK) continue;
+              rc = sqlite3_step (ps_query);
+              if (rc != SQLITE_OK) continue;
+            }
+
+          if (verbose > 2)
+            obatched(clog) << "recorded buildid=" << buildid << " file=" << f->fts_path
+                           << " mtime=" << f->fts_statp->st_mtime << " as "
+                           << (executable_p ? "executable" : "not executable") << " and "
+                           << (debuginfo_p ? "debuginfo" : "not debuginfo") << endl;
+          }
+          break;
+          
+    case FTS_DNR:
+    case FTS_ERR:
+    case FTS_NS:
+        default:
+          /* ignore */
+          ;
+        }
+    }
+  fts_close (fts);
+}
+
+
 static void*
 thread_main_scan_source_file_path (void* arg)
 {
-  while(! interrupted) pause();
+  string dir = string((const char*) arg);
+  if (verbose > 2)
+    obatched(clog) << "file-path scanning " << dir << endl;
+
+  while (! interrupted)
+    {
+      try
+        {
+          scan_source_file_path (dir);
+          sleep (10); // parametrize
+        }
+      catch (const sqlite_exception& e)
+        {
+          obatched(cerr) << e.message << endl;
+        }
+    }
+  
   return 0;
 }
-
 
 
 static void*
@@ -585,6 +809,7 @@ main (int argc, char *argv[])
     "        source1 text);                                  -- more sourcetype-specific location data\n"
     "create index if not exists buildids_idx1 on buildids (buildid, artifacttype);\n"
     "create unique index if not exists buildids_idx2 on buildids (buildid, artifacttype, sourcetype, source0, source1);\n"
+    "create index if not exists buildids_idx3 on buildids (sourcetype, source0);\n"
     ;
   
   rc = sqlite3_exec (db, DBGSERVER_SQLITE_DDL, NULL, NULL, NULL);
