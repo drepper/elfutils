@@ -32,33 +32,28 @@ MTIME=`stat -c %Y testfile-dbgserver.debug`
 SOURCETYPE="F"
 SOURCE_0=`realpath testfile-dbgserver.debug`
 
+if [ -f $DB ]; then
+  rm $DB
+fi  
+
+# init the DB
+../../src/dbgserver -vv &
+PID=$!
+sleep 5
+kill $PID
+
 sqlite3 $DB << EOF
-create table if not exists
-    buildids (
-        buildid text not null,                          -- the buildid
-        artifacttype text(1) not null
-            check (artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)
-        mtime integer not null,                         -- epoch timestamp when we last found this
-        sourcetype text(1) not null
-            check (sourcetype IN ('F', 'R', 'R', 'L')), -- as per --source-TYPE single-char code
-        source0 text,                                   -- more sourcetype-specific location data
-        source1 text);                                  -- more sourcetype-specific location data
-create index if not exists buildids_idx1 on buildids (buildid, artifacttype);
-create unique index if not exists buildids_idx2 on buildids (buildid, artifacttype, sourcetype, source0, source1);
-insert into buildids values ('${BUILD_ID}', '${ARTIFACT}', ${MTIME}, '${SOURCETYPE}', '${SOURCE_0}', NULL)
+insert into buildids values (
+    '${BUILD_ID}', '${ARTIFACT}', ${MTIME}, '${SOURCETYPE}', '${SOURCE_0}', NULL)
 EOF
 
 ../../src/dbgserver -vv &
 PID=$!
-sleep 2
+sleep 5
 
 # Test whether the server is able to fetch the file from the local dbgserver.
 testrun ${abs_builddir}/dbgserver-fetch -e testfile-dbgserver.debug
 
 kill $PID
-sqlite3 $DB << EOF
-delete from buildids where buildid='${BUILD_ID}' AND artifacttype='${ARTIFACT}'
-    AND mtime=${MTIME} and sourcetype='${SOURCETYPE}' and source0='${SOURCE_0}'
-EOF
 
 exit 0
