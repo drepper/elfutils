@@ -31,7 +31,7 @@
 #endif
 
 #include "libdwflP.h"
-#include "debuginfoserver-client.h"
+#include "dbgserver-client.h"
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
