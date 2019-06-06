@@ -99,6 +99,9 @@ using namespace std;
   - expose main executable elf, not just dwarf ===> ok
   - need a thread to garbage-collect old buildid entries?
 
+  - cache eperm file opens ("cannot open FOO" -> F NULL-buildid ?)
+  - print proper sqlite3 / elfutils errors
+
 
   see also:
   https://github.com/NixOS/nixos-channel-scripts/blob/master/index-debuginfo.cc
@@ -107,7 +110,7 @@ using namespace std;
 
 
 /* Name and version of program.  */
-ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
+/* ARGP_PROGRAM_VERSION_HOOK_DEF = print_version; */
 
 /* Bug report address.  */
 ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
@@ -423,7 +426,8 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   
   sqlite_ps pp (db, 
                 "select mtime, sourcetype, source0, source1 " // NB: 4 columns
-                "from buildids where buildid = ? and artifacttype = ?;");
+                "from buildids where buildid = ? and artifacttype = ? "
+                "order by mtime desc;");
 
   int rc = sqlite3_bind_text (pp, 1, buildid.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK)
@@ -552,7 +556,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
 static void
 elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
 {
-  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP, NULL);
+  Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
   if (elf == NULL)
     return;
 
@@ -578,7 +582,13 @@ elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
       elf_end (elf);
       return;
     }
-  buildid = string((const char*) build_id, (size_t) sz);
+  // build_id is a raw byte array; convert to hexadecimal
+  unsigned char* build_id_bytes = (unsigned char*) build_id;
+  for (ssize_t idx=0; idx<sz; idx++)
+    {
+      buildid += "0123456789abcdef"[build_id_bytes[idx] >> 4];
+      buildid += "0123456789abcdef"[build_id_bytes[idx] & 0xf];
+    }
 
   // now decide whether it's an executable
   if (elf_type == ET_EXEC || elf_type == ET_DYN)
@@ -627,7 +637,7 @@ scan_source_file_path (const string& dir)
                        "insert or ignore into buildids (buildid, artifacttype, mtime,"
                        "sourcetype, source0) values (?, ?, ?, 'F', ?);");
   sqlite_ps ps_query (db,
-                      "select strftime('%s',mtime) from buildids where sourcetype = 'F' and source0 = ?;");
+                      "select 1 from buildids where sourcetype = 'F' and source0 = ? and mtime = ?;");
 
   char * const dirs[] = { (char*) dir.c_str(), NULL };
   FTS *fts = fts_open (dirs, FTS_LOGICAL | FTS_NOCHDIR /* multithreaded */, NULL);
@@ -652,16 +662,16 @@ scan_source_file_path (const string& dir)
         case FTS_SL:
           {
           /* Found a file.  See if we know of it already. */
-          int rc = sqlite3_bind_text (ps_query, 0, f->fts_path, -1, SQLITE_TRANSIENT);
+            sqlite3_reset (ps_query); // to allow rebinding / reexecution
+          int rc = sqlite3_bind_text (ps_query, 1, f->fts_path, -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+              continue;
+          rc = sqlite3_bind_int64 (ps_query, 2, (int64_t) f->fts_statp->st_mtime);
           if (rc != SQLITE_OK)
               continue;
           rc = sqlite3_step (ps_query);
-          if (rc == SQLITE_OK) // but not DONE (no results)
-            {
-              int64_t b_mtime = sqlite3_column_int64 (ps_query, 0);
-              if (b_mtime == (int64_t) f->fts_statp->st_mtime)
-                continue; // no need to recheck a file/version we already know
-            }
+          if (rc == SQLITE_ROW) // i.e., a result, as opposed to DONE (no results)
+            continue; // no need to recheck a file/version we already know
 
           int fd = open (f->fts_path, O_RDONLY);
           if (fd < 0)
@@ -676,28 +686,30 @@ scan_source_file_path (const string& dir)
           
           if (! (executable_p || debuginfo_p))
             continue;
-          
-          rc = sqlite3_bind_text (ps_upsert, 0, buildid.c_str(), -1, SQLITE_TRANSIENT);
+
+          sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
+          rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK) continue;
-          rc = sqlite3_bind_int64 (ps_upsert, 2, (int64_t) f->fts_statp->st_mtime);
+          rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime);
           if (rc != SQLITE_OK) continue;
-          rc = sqlite3_bind_text (ps_upsert, 3, f->fts_path, -1, SQLITE_TRANSIENT);
+          rc = sqlite3_bind_text (ps_upsert, 4, f->fts_path, -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK) continue;
           
           if (executable_p)
             {
-              rc = sqlite3_bind_text (ps_upsert, 1, "E", -1, SQLITE_STATIC);
+              rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK) continue;
-              rc = sqlite3_step (ps_query);
-              if (rc != SQLITE_OK) continue;
+              rc = sqlite3_step (ps_upsert);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE) continue;
             }
           
           if (debuginfo_p)
             {
-              rc = sqlite3_bind_text (ps_upsert, 1, "D", -1, SQLITE_STATIC);
+              sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
+              rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK) continue;
-              rc = sqlite3_step (ps_query);
-              if (rc != SQLITE_OK) continue;
+              rc = sqlite3_step (ps_upsert);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE) continue;
             }
 
           if (verbose > 2)
@@ -770,6 +782,9 @@ main (int argc, char *argv[])
   (void) bindtextdomain (PACKAGE_TARNAME, LOCALEDIR);
   (void) textdomain (PACKAGE_TARNAME);
 
+  /* Tell the library which version we are expecting.  */
+  elf_version (EV_CURRENT);
+  
   /* Set default values. */
   http_port = 8002;
   db_path = string(getenv("HOME") ?: "/") + string("/.dbgserver.sqlite"); /* XDG? */
@@ -808,7 +823,7 @@ main (int argc, char *argv[])
     "        source0 text,                                   -- more sourcetype-specific location data\n"
     "        source1 text);                                  -- more sourcetype-specific location data\n"
     "create index if not exists buildids_idx1 on buildids (buildid, artifacttype);\n"
-    "create unique index if not exists buildids_idx2 on buildids (buildid, artifacttype, sourcetype, source0, source1);\n"
+    "create unique index if not exists buildids_idx2 on buildids (buildid, artifacttype, sourcetype, source0);\n"
     "create index if not exists buildids_idx3 on buildids (sourcetype, source0);\n"
     ;
   
