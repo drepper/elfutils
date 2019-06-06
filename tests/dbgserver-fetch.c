@@ -25,7 +25,7 @@
 #include <dwarf.h>
 #include <argp.h>
 #include <assert.h>
-#include "../libdwfl/debuginfoserver-client.c"
+#include "../libdwfl/dbgserver-client.c"
 
 #define MAX_BUILD_ID_BYTES 64
 
