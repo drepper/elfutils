@@ -24,30 +24,9 @@ fi
 
 testfiles testfile-dbgserver.debug
 
-# init db if needed and add testfile entry
-DB=${HOME}/.dbgserver.sqlite
-BUILD_ID="0a0cd15e690a378ec77359bb2eeb76ea0f8d67f8"
-ARTIFACT="D"
-MTIME=`stat -c %Y testfile-dbgserver.debug`
-SOURCETYPE="F"
-SOURCE_0=`realpath testfile-dbgserver.debug`
+DB="$PWD/.dbgserver_tmp.sqlite"
 
-if [ -f $DB ]; then
-  rm $DB
-fi  
-
-# init the DB
-../../src/dbgserver -vv &
-PID=$!
-sleep 5
-kill $PID
-
-sqlite3 $DB << EOF
-insert into buildids values (
-    '${BUILD_ID}', '${ARTIFACT}', ${MTIME}, '${SOURCETYPE}', '${SOURCE_0}', NULL)
-EOF
-
-../../src/dbgserver -vv &
+../../src/dbgserver -vv -d $DB -F `realpath testfile-dbgserver.debug` &
 PID=$!
 sleep 5
 
@@ -55,5 +34,6 @@ sleep 5
 testrun ${abs_builddir}/dbgserver-fetch -e testfile-dbgserver.debug
 
 kill $PID
+rm $DB
 
 exit 0
