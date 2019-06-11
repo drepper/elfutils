@@ -35,6 +35,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "system.h"
+#include "dbgserver-client.h"
 
 
 int
@@ -187,7 +188,10 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
       free (*file_name);
       *file_name = NULL;
     }
-  else if (errno == 0 && mod->build_id_len > 0)
+  else if (dbgserver_enabled() && mod->build_id_len > 0)
+    fd = dbgserver_find_elf (mod->build_id_bits, mod->build_id_len);
+
+  if (fd < 0 && errno == 0 && mod->build_id_len > 0)
     /* Setting this with no file yet loaded is a marker that
        the build ID is authoritative even if we also know a
        putative *FILE_NAME.  */

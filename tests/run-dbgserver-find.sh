@@ -26,12 +26,13 @@ testfiles testfile-dbgserver.debug
 
 DB="$PWD/.dbgserver_tmp.sqlite"
 
-../../src/dbgserver -vv -d $DB -F `realpath testfile-dbgserver.debug` &
+../../src/dbgserver -vvv -d $DB -F $PWD &
 PID=$!
 sleep 5
 
 # Test whether the server is able to fetch the file from the local dbgserver.
-testrun ${abs_builddir}/dbgserver-fetch -e testfile-dbgserver.debug
+testrun ${abs_builddir}/dbgserver-find-debuginfo -e testfile-dbgserver.debug
+testrun ${abs_builddir}/dbgserver-find-elf -e testfile-dbgserver.debug
 
 kill $PID
 rm $DB

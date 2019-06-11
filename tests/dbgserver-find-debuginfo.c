@@ -32,11 +32,11 @@
 static int debuginfo_fd;
 
 static int
-get_build_id_local (Dwfl_Module *mod,
-                    void **user __attribute__ ((unused)), 
-                    const char *mod_name __attribute__ ((unused)),
-                    Dwarf_Addr low_addr __attribute__ ((unused)),
-                    void *arg __attribute__ ((unused)))
+fetch_debuginfo (Dwfl_Module *mod,
+                 void **user __attribute__ ((unused)), 
+                 const char *mod_name __attribute__ ((unused)),
+                 Dwarf_Addr low_addr __attribute__ ((unused)),
+                 void *arg __attribute__ ((unused)))
 {
   size_t len;
   const unsigned char *bits;
@@ -64,7 +64,7 @@ main (int argc, char *argv[])
 
   ptrdiff_t off = 0;
   do
-    off = dwfl_getmodules (dwfl, get_build_id_local, NULL, off); 
+    off = dwfl_getmodules (dwfl, fetch_debuginfo, NULL, off); 
   while (off > 0);
 
   /* TODO: ensure build-ids match.  */
