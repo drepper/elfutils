@@ -99,9 +99,12 @@ using namespace std;
   - expose main executable elf, not just dwarf ===> ok
   - need a thread to garbage-collect old buildid entries?
 
-  - cache eperm file opens ("cannot open FOO" -> F NULL-buildid ?)
+  - cache eperm file opens ("cannot open FOO" -> F NULL-buildid ?); age/retry by mtime
   - print proper sqlite3 / elfutils errors
-
+  - when passing compressed .ko.xz's by content (not by name!), will elfutils client know to decompress?
+  - cmdline single-char -X parsing
+  - database schema migration - suffix buildid table name with seq#, select * at startup to migrate?
+  - inotify based file scanning
 
   see also:
   https://github.com/NixOS/nixos-channel-scripts/blob/master/index-debuginfo.cc
