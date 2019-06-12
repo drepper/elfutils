@@ -1,3 +1,5 @@
+#include "dbgserver-client.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -113,21 +115,38 @@ query_server (char *target)
   return fd;
 }
 
-
 int
-dbgserver_find_elf (const unsigned char *build_id, int build_id_len)
+dbgserver_build_id_find (enum dbgserver_file_type file_type,
+                         const unsigned char *build_id,
+                         int build_id_len)
 {
-  int fd ;
+  int fd;
   int url_len;
   char *url;
+  char *type;
   char id_buf[MAX_BUILD_ID_BYTES + 1];
 
   /* copy hex representation of buildid into id_buf.  */
   for (int i = 0; i < build_id_len; i++)
     sprintf(id_buf + (i * 2), "%02x", build_id[i]);
 
+  switch (file_type)
+  {
+  case dbgserver_file_type_debuginfo:
+    type = "debuginfo";
+    break;
+  case dbgserver_file_type_executable:
+    type = "executable";
+    break;
+  case dbgserver_file_type_source:
+    type = "source";
+    break;
+  default:
+    assert(0);
+  }
+
   /* url format: $DEBUGINFO_SERVER/buildid/HEXCODE/debuginfo  */
-  url_len = strlen("buildid/") + build_id_len * 2 + strlen("/executable") + 1;
+  url_len = strlen("buildid/") + build_id_len * 2 + strlen(type) + 2;
 
   url = (char*)malloc(url_len);
   if (url == NULL)
@@ -136,36 +155,7 @@ dbgserver_find_elf (const unsigned char *build_id, int build_id_len)
       return -1;
     }
 
-  sprintf(url, "buildid/%s/executable", id_buf);
-  fd = query_server(url);
-  free(url);
-
-  return fd;
-}
-
-int
-dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len)
-{
-  int fd ;
-  int url_len;
-  char *url;
-  char id_buf[MAX_BUILD_ID_BYTES + 1];
-
-  /* copy hex representation of buildid into id_buf.  */
-  for (int i = 0; i < build_id_len; i++)
-    sprintf(id_buf + (i * 2), "%02x", build_id[i]);
-
-  /* url format: $DEBUGINFO_SERVER/buildid/HEXCODE/debuginfo  */
-  url_len = strlen("buildid/") + build_id_len * 2 + strlen("/debuginfo") + 1;
-
-  url = (char*)malloc(url_len);
-  if (url == NULL)
-    {
-      fprintf(stderr, _("out of memory"));
-      return -1;
-    }
-
-  sprintf(url, "buildid/%s/debuginfo", id_buf);
+  sprintf(url, "buildid/%s/%s", id_buf, type);
   fd = query_server(url);
   free(url);
 

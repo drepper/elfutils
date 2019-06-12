@@ -189,7 +189,9 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
       *file_name = NULL;
     }
   else if (dbgserver_enabled() && mod->build_id_len > 0)
-    fd = dbgserver_find_elf (mod->build_id_bits, mod->build_id_len);
+    fd = dbgserver_build_id_find (dbgserver_file_type_executable,
+                                  mod->build_id_bits,
+                                  mod->build_id_len);
 
   if (fd < 0 && errno == 0 && mod->build_id_len > 0)
     /* Setting this with no file yet loaded is a marker that

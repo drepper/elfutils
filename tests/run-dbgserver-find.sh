@@ -31,8 +31,7 @@ PID=$!
 sleep 5
 
 # Test whether the server is able to fetch the file from the local dbgserver.
-testrun ${abs_builddir}/dbgserver-find-debuginfo -e testfile-dbgserver.debug
-testrun ${abs_builddir}/dbgserver-find-elf -e testfile-dbgserver.debug
+testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.debug
 
 kill $PID
 rm $DB

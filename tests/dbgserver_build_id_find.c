@@ -30,6 +30,7 @@
 #define MAX_BUILD_ID_BYTES 64
 
 static int debuginfo_fd;
+static int executable_fd;
 
 static int
 fetch_debuginfo (Dwfl_Module *mod,
@@ -45,8 +46,10 @@ fetch_debuginfo (Dwfl_Module *mod,
   len = dwfl_module_build_id(mod, &bits, &vaddr);
   assert(len > 0);
 
-  debuginfo_fd = dbgserver_find_debuginfo(bits, len);
-
+  debuginfo_fd = dbgserver_build_id_find(dbgserver_file_type_debuginfo,
+                                         bits, len);
+  executable_fd = dbgserver_build_id_find(dbgserver_file_type_executable,
+                                          bits, len);
   return DWARF_CB_OK;
 }
 
@@ -68,7 +71,7 @@ main (int argc, char *argv[])
   while (off > 0);
 
   /* TODO: ensure build-ids match.  */
-  if (debuginfo_fd < 0)
+  if (debuginfo_fd < 0 || executable_fd < 0)
     return 1;
 
   return 0;
