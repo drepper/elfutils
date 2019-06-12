@@ -27,6 +27,10 @@ BuildRequires: zlib-devel
 BuildRequires: bzip2-devel
 BuildRequires: xz-devel
 BuildRequires: gcc-c++
+BuildRequires: pkgconfig(libmicrohttpd) >= 0.9.33
+BuildRequires: pkgconfig(libcurl) >= 7.29.0
+BuildRequires: pkgconfig(sqlite3) >= 3.7.17
+BuildRequires: pkgconfig(rpm) >= 4.11.3
 
 %define _gnu %{nil}
 %define _programprefix eu-
@@ -117,6 +121,17 @@ interprocess services, communication and introspection
 (like synchronisation, signaling, debugging, tracing and
 profiling) of processes.
 
+%package dbgserver
+Summary: HTTP ELF/DWARF file server addressed by build-id.
+License: GPLv2+
+
+%description dbgserver
+The elfutils-dbgserver package contains the dbgserver binary
+and control files for a service that can provide ELF/DWARF
+files to remote clients, based on build-id identification.
+The ELF/DWARF file searching functions in libdwfl can query
+such servers to download those files on demand.
+
 %prep
 %setup -q
 
@@ -134,11 +149,11 @@ chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/lib*.so*
 chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/elfutils/lib*.so*
 
 # XXX Nuke unpackaged files
-{ cd ${RPM_BUILD_ROOT}
+( cd ${RPM_BUILD_ROOT}
   rm -f .%{_includedir}/elfutils/libasm.h
   rm -f .%{_libdir}/libasm.so
   rm -f .%{_libdir}/libasm.a
-}
+)
 
 install -Dm0644 config/10-default-yama-scope.conf ${RPM_BUILD_ROOT}%{_sysctldir}/10-default-yama-scope.conf
 
@@ -225,6 +240,12 @@ rm -rf ${RPM_BUILD_ROOT}
 
 %files default-yama-scope
 %{_sysctldir}/10-default-yama-scope.conf
+
+%files dbgserver
+%defattr(-,root,root)
+%{_bindir}/eu-dbgserver
+# dbgserver.service
+# %{_etcdir}/sysconfig/dbgserver
 
 %changelog
 * Thu Feb 14 2019 Mark Wielaard <mark@klomp.org> 0.176-1
