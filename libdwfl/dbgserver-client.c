@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/syscall.h>
 #include <curl/curl.h>
 
@@ -39,7 +40,9 @@ int
 query_server (char *target)
 {
   int fd = -1;
+  bool success = false;
   long resp_code = -1;
+  long timeout = 5;
   char *envvar;
   char *server_url;
   char *server_urls;
@@ -76,8 +79,9 @@ query_server (char *target)
 
   fd = syscall(__NR_memfd_create, tmp_filename, 0);
 
+  /* query servers until we find the target or run out of urls to try.  */
   server_url = strtok(server_urls, url_delim);
-  while (server_url != NULL)
+  while (! success && server_url != NULL)
     {
       char *url = malloc(strlen(target) + strlen(server_url) + 1);
 
@@ -92,12 +96,18 @@ query_server (char *target)
       curl_easy_setopt(session, CURLOPT_URL, url);
       curl_easy_setopt(session, CURLOPT_WRITEFUNCTION, write_callback);
       curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)&fd);
+      curl_easy_setopt(session, CURLOPT_TIMEOUT, timeout);
       curl_res = curl_easy_perform(session);
       curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &resp_code);
 
       free(url);
       if (curl_res == CURLE_OK && resp_code == 200)
-        break;
+        success = 1;
+      // these kinds of diagnostic messages can cause unrelated elfutils
+      // tests to fail.
+      //
+      //else if (curl_res == CURLE_OPERATION_TIMEDOUT)
+      //  fprintf(stderr, _("GET request timed out, url=%s"), url);
 
       server_url = strtok(NULL, url_delim);
     }
