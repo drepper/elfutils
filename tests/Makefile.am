@@ -431,7 +431,8 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     run-xlate-note.sh \
 	     run-readelf-discr.sh \
 	     testfile-rng.debug.bz2 testfile-urng.debug.bz2 \
-	     run-dbgserver-find.sh testfile-dbgserver.debug.bz2
+	     run-dbgserver-find.sh testfile-dbgserver.debug.bz2 \
+             testfile-dbgserver.exec.bz2
 
 if USE_VALGRIND
 valgrind_cmd='valgrind -q --leak-check=full --error-exitcode=1'

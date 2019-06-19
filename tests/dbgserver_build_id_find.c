@@ -25,54 +25,28 @@
 #include <dwarf.h>
 #include <argp.h>
 #include <assert.h>
-#include "../libdwfl/dbgserver-client.c"
 
-#define MAX_BUILD_ID_BYTES 64
-
-static int debuginfo_fd;
-static int executable_fd;
-
-static int
-fetch_debuginfo (Dwfl_Module *mod,
-                 void **user __attribute__ ((unused)), 
-                 const char *mod_name __attribute__ ((unused)),
-                 Dwarf_Addr low_addr __attribute__ ((unused)),
-                 void *arg __attribute__ ((unused)))
-{
-  size_t len;
-  const unsigned char *bits;
-  GElf_Addr vaddr; 
-
-  len = dwfl_module_build_id(mod, &bits, &vaddr);
-  assert(len > 0);
-
-  debuginfo_fd = dbgserver_build_id_find(dbgserver_file_type_debuginfo,
-                                         bits, len);
-  executable_fd = dbgserver_build_id_find(dbgserver_file_type_executable,
-                                          bits, len);
-  return DWARF_CB_OK;
-}
+static const char *debuginfo_path = "";
+static const Dwfl_Callbacks cb  =
+  {
+    NULL,
+    dwfl_standard_find_debuginfo,
+    NULL,
+    (char **)&debuginfo_path,
+  };
 
 int
-main (int argc, char *argv[])
+main (int argc __attribute__ ((unused)), char **argv)
 {
-  int remaining;
-  Dwfl *dwfl;
-  error_t res;
+  Dwarf_Addr bias = 0;
+  Dwfl *dwfl = dwfl_begin(&cb);
+  dwfl_report_begin(dwfl);
 
-  assert(dbgserver_enabled());
+  /* Open an executable.  */
+  Dwfl_Module *mod = dwfl_report_offline(dwfl, argv[2], argv[2], -1);
 
-  res = argp_parse (dwfl_standard_argp (), argc, argv, 0, &remaining, &dwfl);
-  assert (res == 0 && dwfl != NULL);
-
-  ptrdiff_t off = 0;
-  do
-    off = dwfl_getmodules (dwfl, fetch_debuginfo, NULL, off); 
-  while (off > 0);
-
-  /* TODO: ensure build-ids match.  */
-  if (debuginfo_fd < 0 || executable_fd < 0)
-    return 1;
-
+  /* The corresponding debuginfo will not be found in debuginfo_path
+     (since it's empty), causing the server to be queried.  */
+  assert(dwfl_module_getdwarf(mod, &bias));
   return 0;
 }

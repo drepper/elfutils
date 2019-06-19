@@ -22,16 +22,17 @@ if [ -z "$DEBUGINFO_SERVER" ]; then
   exit 77
 fi
 
+testfiles testfile-dbgserver.exec
 testfiles testfile-dbgserver.debug
 
 DB="$PWD/.dbgserver_tmp.sqlite"
 
-../../src/dbgserver -vvv -d $DB -F $PWD &
+../../src/dbgserver -vvv -d $DB -F testfile-dbgserver.debug &
 PID=$!
 sleep 5
 
 # Test whether the server is able to fetch the file from the local dbgserver.
-testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.debug
+testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec
 
 kill $PID
 rm $DB
