@@ -17,7 +17,7 @@
 . $srcdir/test-subr.sh
 
 
-if [ -z "$DEBUGINFO_SERVER" ]; then
+if [ -z $DEBUGINFO_SERVER ]; then
   echo "unknown server url"
   exit 77
 fi
@@ -26,6 +26,18 @@ testfiles testfile-dbgserver.exec
 testfiles testfile-dbgserver.debug
 
 DB="$PWD/.dbgserver_tmp.sqlite"
+
+if [ -z $HOME ]; then
+  CACHE_DIR="/.dbgserver_client_cache"
+else
+  CACHE_DIR="$HOME/.dbgserver_client_cache"
+fi
+
+# Clear the cache
+if [ -d $CACHE_DIR ]; then
+  echo "t"
+  rm -rf $CACHE_DIR
+fi
 
 ../../src/dbgserver -vvv -d $DB -F testfile-dbgserver.debug &
 PID=$!
@@ -36,5 +48,11 @@ testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec
 
 kill $PID
 rm $DB
+
+# Run the test again without the server running. The target file should
+# be found in the cache.
+testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec
+
+rm -rf $CACHE_DIR
 
 exit 0
