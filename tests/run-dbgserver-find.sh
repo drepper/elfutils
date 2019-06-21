@@ -39,7 +39,7 @@ if [ -d $CACHE_DIR ]; then
   rm -rf $CACHE_DIR
 fi
 
-../../src/dbgserver -vvv -d $DB -F testfile-dbgserver.debug &
+../../src/dbgserver -vvv -d $DB -F $PWD &
 PID=$!
 sleep 5
 
