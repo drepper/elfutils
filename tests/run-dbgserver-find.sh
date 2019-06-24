@@ -17,7 +17,7 @@
 . $srcdir/test-subr.sh
 
 
-if [ -z $DEBUGINFO_SERVER ]; then
+if [ -z $DBGSERVER_URLS ]; then
   echo "unknown server url"
   exit 77
 fi

@@ -15,8 +15,10 @@
 #define _(Str) "dbgserver-client: "Str"\n"
 
 const char *url_delim = " ";
-const char *server_urls_envvar = "DEBUGINFO_SERVER";
-char *cache_name = ".dbgserver_client_cache";
+const char *server_urls_envvar = "DBGSERVER_URLS";
+const char *cache_path_envvar = "DBGSERVER_CACHE_PATH";
+const char *cache_clean_interval_envvar = "DBGSERVER_CACHE_CLEAN_INTERVAL";
+const char *cache_name = ".dbgserver_client_cache";
 
 int
 dbgserver_enabled (void)
