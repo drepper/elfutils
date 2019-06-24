@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdbool.h>
+#include <linux/limits.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -18,7 +19,7 @@ const char *url_delim = " ";
 const char *server_urls_envvar = "DBGSERVER_URLS";
 const char *cache_path_envvar = "DBGSERVER_CACHE_PATH";
 const char *cache_clean_interval_envvar = "DBGSERVER_CACHE_CLEAN_INTERVAL";
-const char *cache_name = ".dbgserver_client_cache";
+const char *cache_default_name = ".dbgserver_client_cache";
 
 int
 dbgserver_enabled (void)
@@ -38,70 +39,6 @@ write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
     return (size_t)0;
 
   return (size_t)res;
-}
-
-/* Assign all of the paths needed for querying and caching.
-   cache_path, target_cache_dir and target_cache_path
-   must be manually free'd.
-
-   example format
-   cache_path:        $HOME/.dbgserver_cache
-   target_cache_dir:  $HOME/.dbgserver_cache/0123abcd
-   target_cache_path: $HOME/.dbgserver_cache/0123abcd/debuginfo
-*/
-void
-assign_paths (char *build_id,
-              char *type,
-              char **cache_path_ptr,
-              char **target_cache_dir_ptr,
-              char **target_cache_path_ptr)
-{
-  char *cache_parent = getenv("HOME") ?: "/";
-  char *cache_path;
-  char *target_cache_dir;
-  char *target_cache_path;
-
-  cache_path = malloc(strlen(cache_parent)
-                      + strlen("/")
-                      + strlen(cache_name)
-                      + 1);
-
-  if (cache_path == NULL)
-    {
-      fprintf(stderr, _("out of memory"));
-      return;
-    }
-  sprintf(cache_path, "%s/%s", cache_parent, cache_name);
-
-  target_cache_dir = malloc(strlen(cache_path)
-                            + strlen("/")
-                            + strlen(build_id)
-                            + 1);
-
-  if (target_cache_dir == NULL)
-    {
-      fprintf(stderr, _("out of memory"));
-      return;
-    }
-  sprintf(target_cache_dir, "%s/%s", cache_path, build_id);
-
-  target_cache_path = malloc(strlen(target_cache_dir)
-                             + strlen("/")
-                             + strlen(type)
-                             + 1);
-
-  if (target_cache_path == NULL)
-    {
-      fprintf(stderr, _("out of memory"));
-      return;
-    }
-  sprintf(target_cache_path, "%s/%s", target_cache_dir, type);
-
-  *cache_path_ptr = cache_path;
-  *target_cache_dir_ptr = target_cache_dir;
-  *target_cache_path_ptr = target_cache_path;
-
-  return;
 }
 
 int
@@ -161,9 +98,9 @@ query_server (char *build_id, char *type)
   char *envvar;
   char *server_url;
   char *server_urls;
-  char *cache_path;
-  char *target_cache_dir;
-  char *target_cache_path;
+  char cache_path[PATH_MAX];
+  char target_cache_dir[PATH_MAX];
+  char target_cache_path[PATH_MAX];
   CURL *session;
   CURLcode curl_res;
 
@@ -196,20 +133,39 @@ query_server (char *build_id, char *type)
       return -1;
     }
 
-  assign_paths(build_id,
-               type,
-               &cache_path,
-               &target_cache_dir,
-               &target_cache_path);
+  /* set paths needed to perform query
+
+     example format
+     cache_path:        $HOME/.dbgserver_cache
+     target_cache_dir:  $HOME/.dbgserver_cache/0123abcd
+     target_cache_path: $HOME/.dbgserver_cache/0123abcd/debuginfo  */
+  if (getenv(cache_path_envvar))
+    strcpy(cache_path, getenv(cache_path_envvar));
+  else
+    {
+      if (getenv("HOME"))
+        sprintf(cache_path, "%s/%s", getenv("HOME"), cache_default_name);
+      else
+        sprintf(cache_path, "/%s", cache_default_name);
+    }
+
+  /* avoid using snprintf here due to compiler warning.  */
+  strncpy(target_cache_dir, cache_path, PATH_MAX);
+  strncat(target_cache_dir, "/", PATH_MAX - strlen(target_cache_dir));
+  strncat(target_cache_dir, build_id, PATH_MAX - strlen(target_cache_dir));
+
+  strncpy(target_cache_path, target_cache_dir, PATH_MAX);
+  strncat(target_cache_path, "/", PATH_MAX - strlen(target_cache_dir));
+  strncat(target_cache_path, type, PATH_MAX - strlen(target_cache_dir));
 
   fd = get_file_from_cache(target_cache_path);
   if (fd >= 0)
-    goto cleanup;
+    return fd;
 
   fd = add_file_to_cache(cache_path, target_cache_dir, target_cache_path);
   if (fd < 0)
     /* encountered an error adding file to cache.  */
-    goto cleanup;
+    return -1;
 
   /* query servers until we find the target or run out of urls to try.  */
   server_url = strtok(server_urls, url_delim);
@@ -225,8 +181,7 @@ query_server (char *build_id, char *type)
         {
           fprintf(stderr, _("out of memory"));
           close(fd);
-          fd = -1;
-          goto cleanup;
+          return -1;
         }
 
       sprintf(url, "%s/buildid/%s/%s", server_url, build_id, type);
@@ -260,15 +215,10 @@ query_server (char *build_id, char *type)
     {
       close(fd);
       remove(target_cache_path);
-      fd = -1;
+      return -1;
     }
 
-cleanup:
   clean_cache(cache_path);
-  free(cache_path);
-  free(target_cache_dir);
-  free(target_cache_path);
-
   return fd;
 }
 
