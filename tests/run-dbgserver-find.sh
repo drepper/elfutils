@@ -16,8 +16,7 @@
 
 . $srcdir/test-subr.sh
 
-
-if [ -z $DBGSERVER_URLS ]; then
+if [ -z "$DBGSERVER_URLS" ]; then
   echo "unknown server url"
   exit 77
 fi
@@ -25,34 +24,29 @@ fi
 testfiles testfile-dbgserver.exec
 testfiles testfile-dbgserver.debug
 
-DB="$PWD/.dbgserver_tmp.sqlite"
-
-if [ -z $HOME ]; then
-  CACHE_DIR="/.dbgserver_client_cache"
-else
-  CACHE_DIR="$HOME/.dbgserver_client_cache"
-fi
-
-# Clear the cache
-if [ -d $CACHE_DIR ]; then
-  echo "t"
-  rm -rf $CACHE_DIR
-fi
+EXPECT_FAIL=0
+EXPECT_PASS=1
+DB=${PWD}/.dbgserver_tmp.sqlite
+export DBGSERVER_CACHE_PATH=${PWD}/.client_cache
+export DBGSERVER_CACHE_CLEAN_INTERVAL_S=100
 
 ../../src/dbgserver -vvv -d $DB -F $PWD &
 PID=$!
 sleep 5
 
 # Test whether the server is able to fetch the file from the local dbgserver.
-testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec
+testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec $EXPECT_PASS
 
 kill $PID
 rm $DB
 
 # Run the test again without the server running. The target file should
 # be found in the cache.
-testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec
+testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec $EXPECT_PASS
 
-rm -rf $CACHE_DIR
+# Trigger a cache clean and run the test again. The client should be unable to
+# find the target.
+export DBGSERVER_CACHE_CLEAN_INTERVAL_S=0
+testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec $EXPECT_FAIL
 
 exit 0

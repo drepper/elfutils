@@ -25,6 +25,7 @@
 #include <dwarf.h>
 #include <argp.h>
 #include <assert.h>
+#include <string.h>
 
 static const char *debuginfo_path = "";
 static const Dwfl_Callbacks cb  =
@@ -38,6 +39,7 @@ static const Dwfl_Callbacks cb  =
 int
 main (int argc __attribute__ ((unused)), char **argv)
 {
+  int expect_pass = strcmp(argv[3], "0");
   Dwarf_Addr bias = 0;
   Dwfl *dwfl = dwfl_begin(&cb);
   dwfl_report_begin(dwfl);
@@ -47,6 +49,12 @@ main (int argc __attribute__ ((unused)), char **argv)
 
   /* The corresponding debuginfo will not be found in debuginfo_path
      (since it's empty), causing the server to be queried.  */
-  assert(dwfl_module_getdwarf(mod, &bias));
+
+  Dwarf *res = dwfl_module_getdwarf(mod, &bias);
+  if (expect_pass)
+    assert(res);
+  else
+    assert(!res);
+
   return 0;
 }
