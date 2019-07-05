@@ -248,13 +248,13 @@ struct reportable_exception
 struct sqlite_exception: public reportable_exception
 {
   sqlite_exception(int rc, const string& msg):
-    reportable_exception(string("sqlite3 error: ") + msg + ":" + string(sqlite3_errstr(rc) ?: "?")) {}
+    reportable_exception(string("sqlite3 error: ") + msg + ": " + string(sqlite3_errstr(rc) ?: "?")) {}
 };
 
 struct libc_exception: public reportable_exception
 {
   libc_exception(int rc, const string& msg):
-    reportable_exception(string("libc error: ") + msg + ":" + string(strerror(rc) ?: "?")) {}
+    reportable_exception(string("libc error: ") + msg + ": " + string(strerror(rc) ?: "?")) {}
 };
 
 
@@ -550,7 +550,6 @@ handler_cb (void *cls  __attribute__ ((unused)),
             void ** con_cls __attribute__ ((unused)))
 {
   char errmsg[100] = "";
-  int code = 503;
   struct MHD_Response *r = NULL;
   string url_copy = url;
   char *tok = NULL;
@@ -572,7 +571,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
         {
           size_t slash2 = url_copy.find('/', slash1+1);
           if (slash2 == string::npos)
-            throw reportable_exception(503, _("/buildid/ webapi error, need buildid"));
+            throw reportable_exception(_("/buildid/ webapi error, need buildid"));
           
           string buildid = url_copy.substr(slash1+1, slash2-slash1-1);
 
@@ -594,10 +593,10 @@ handler_cb (void *cls  __attribute__ ((unused)),
       else if (url1 == "/metrics")
         r = handle_metrics(connection);
       else
-        throw reportable_exception(503, _("webapi error, unrecognized /operation"));
+        throw reportable_exception(_("webapi error, unrecognized /operation"));
       
       if (r == 0)
-        throw reportable_exception(503, _("internal error, missing response"));
+        throw reportable_exception(_("internal error, missing response"));
       
       int rc = MHD_queue_response (connection, MHD_HTTP_OK, r);
       MHD_destroy_response (r);
