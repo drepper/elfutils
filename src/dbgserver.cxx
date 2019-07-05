@@ -161,6 +161,7 @@ static const struct argp_option options[] =
    { "source-relay", 'u', "URL", 0, N_("Relay from upstream dbgserver."), 0 },
   
    { NULL, 0, NULL, 0, N_("Options:"), 2 },
+   { "rescan-time", 't', "SECONDS", 0, N_("Number of seconds to wait between rescans."), 0 },
    { "port", 'p', "NUM", 0, N_("HTTP port to listen on."), 0 },
    { "database", 'd', "FILE", 0, N_("Path to sqlite database."), 0 },
    { "verbose", 'v', NULL, 0, N_("Increase verbosity."), 0 },
@@ -189,6 +190,7 @@ static sqlite3 *db;
 static unsigned verbose;
 static volatile sig_atomic_t interrupted = 0;
 static unsigned http_port;
+static unsigned rescan_s = 300;
 static vector<string> source_file_paths;
 static vector<pthread_t> source_file_scanner_threads;
 static vector<string> source_rpm_paths;
@@ -208,6 +210,7 @@ parse_opt (int key, char *arg,
     case 'd': db_path = string(arg); break;
     case 'p': http_port = atoi(arg); break;
     case 'F': source_file_paths.push_back(string(arg)); break;
+    case 't': rescan_s = atoi(arg); break;
     default: return ARGP_ERR_UNKNOWN;
     }
   
@@ -859,25 +862,24 @@ thread_main_scan_source_file_path (void* arg)
   if (verbose > 2)
     obatched(clog) << "file-path scanning " << dir << endl;
 
+  unsigned rescan_timer = 0;
   while (! interrupted)
     {
       try
         {
-          scan_source_file_path (dir);
-          sleep (10); // parametrize
+          if (rescan_timer == 0)
+            scan_source_file_path (dir);
         }
       catch (const sqlite_exception& e)
         {
           obatched(cerr) << e.message << endl;
         }
+      sleep (1);
+      rescan_timer = (rescan_timer + 1) % rescan_s;
     }
   
   return 0;
 }
-
-
-
-
 
 
 static void*
@@ -995,7 +997,10 @@ main (int argc, char *argv[])
     }
 
   if (verbose)
-    obatched(clog) << "Started http server on port " << http_port << ", database path " << db_path << endl;
+    obatched(clog) << "Started http server on port=" << http_port
+                   << ", database path=" << db_path
+                   << ", rescan time=" << rescan_s
+                   << endl;
   
   /* Trivial main loop! */
   while (! interrupted)
