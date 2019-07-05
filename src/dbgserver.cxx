@@ -85,6 +85,26 @@ using namespace std;
 #endif
 
 
+// Roll this identifier for every sqlite schema incompatiblity
+// XXX: garbage collect and/or migrate from previous-version tables
+#define BUILDIDS "buildids"
+
+static const char DBGSERVER_SQLITE_DDL[] =
+  "create table if not exists\n"
+  "    " BUILDIDS "(\n"
+  "        buildid text not null,                          -- the buildid\n"
+  "        artifacttype text(1) not null\n"
+  "            check (artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)\n"
+  "        mtime integer not null,                         -- epoch timestamp when we last found this\n"
+  "        sourcetype text(1) not null\n"
+  "            check (sourcetype IN ('F', 'R', 'L')),      -- as per --source-TYPE single-char code\n"
+  "        source0 text,                                   -- more sourcetype-specific location data\n"
+  "        source1 text);                                  -- more sourcetype-specific location data\n"
+  "create index if not exists " BUILDIDS "_idx1 on " BUILDIDS " (buildid, artifacttype);\n"
+  "create unique index if not exists " BUILDIDS "_idx2 on " BUILDIDS " (buildid, artifacttype, sourcetype, source0);\n"
+  "create index if not exists " BUILDIDS "_idx3 on " BUILDIDS " (sourcetype, source0);\n";
+
+
 
 /*
   ISSUES:
@@ -188,17 +208,24 @@ parse_opt (int key, char *arg,
 
 ////////////////////////////////////////////////////////////////////////
 
-struct http_exception
+
+// represent errors that may get reported to an ostream and/or a libmicrohttpd connection
+
+struct reportable_exception
 {
   int code;
   string message;
 
-  http_exception(int code, const string& message): code(code), message(message) {}
-  http_exception(const string& message): code(503), message(message) {}
-  http_exception(): code(503), message() {}
+  reportable_exception(int code, const string& message): code(code), message(message) {}
+  reportable_exception(const string& message): code(503), message(message) {}
+  reportable_exception(): code(503), message() {}
+  
+  void report(ostream& o) const; // defined under obatched() class below
   
   int mhd_send_response(MHD_Connection* c) const {
-    MHD_Response* r = MHD_create_response_from_buffer (message.size(), (void*) message.c_str(), MHD_RESPMEM_MUST_COPY);
+    MHD_Response* r = MHD_create_response_from_buffer (message.size(),
+                                                       (void*) message.c_str(),
+                                                       MHD_RESPMEM_MUST_COPY);
     int rc = MHD_queue_response (c, code, r);
     MHD_destroy_response (r);
     return rc;
@@ -206,11 +233,20 @@ struct http_exception
 };
 
 
-struct sqlite_exception: public http_exception
+struct sqlite_exception: public reportable_exception
 {
   sqlite_exception(int rc, const string& msg):
-    http_exception(503, string("sqlite3 error: ") + msg + ":" + string(sqlite3_errstr(rc) ?: "?")) {}
+    reportable_exception(string("sqlite3 error: ") + msg + ":" + string(sqlite3_errstr(rc) ?: "?")) {}
 };
+
+struct libc_exception: public reportable_exception
+{
+  libc_exception(int rc, const string& msg):
+    reportable_exception(string("libc error: ") + msg + ":" + string(strerror(rc) ?: "?")) {}
+};
+
+
+////////////////////////////////////////////////////////////////////////
 
 
 // RAII style sqlite prepared-statement holder that matches { } block lifetime
@@ -319,6 +355,15 @@ public:
 my_lock_t obatched::lock; // just the one, since cout/cerr iostreams are not thread-safe
 
 
+void reportable_exception::report(ostream& o) const {
+  obatched(o) << message << endl;
+}
+
+
+////////////////////////////////////////////////////////////////////////
+
+
+
 static string
 conninfo (struct MHD_Connection * conn)
 {
@@ -421,7 +466,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   if (artifacttype == "debuginfo") atype_code = "D";
   else if (artifacttype == "executable") atype_code = "E";
   else if (artifacttype == "source-file") atype_code = "S";
-  else throw http_exception("invalid artifacttype");
+  else throw reportable_exception("invalid artifacttype");
 
   if (verbose > 0)
     obatched(clog) << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
@@ -429,7 +474,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   
   sqlite_ps pp (db, 
                 "select mtime, sourcetype, source0, source1 " // NB: 4 columns
-                "from buildids where buildid = ? and artifacttype = ? "
+                "from " BUILDIDS " where buildid = ? and artifacttype = ? "
                 "order by mtime desc;");
 
   int rc = sqlite3_bind_text (pp, 1, buildid.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
@@ -464,7 +509,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
         return r;
     }
 
-  throw http_exception(403, "not found");
+  throw reportable_exception(403, "not found");
 }
 
 
@@ -474,7 +519,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
 static struct MHD_Response*
 handle_metrics (struct MHD_Connection *connection)
 {
-  throw http_exception("not yet implemented 2");
+  throw reportable_exception("not yet implemented 2");
 }
 
 
@@ -505,7 +550,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
   try
     {
       if (string(method) != "GET")
-        throw http_exception(400, _("we support GET only"));
+        throw reportable_exception(400, _("we support GET only"));
 
       /* Start decoding the URL. */
       size_t slash1 = url_copy.find('/', 1);
@@ -515,7 +560,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
         {
           size_t slash2 = url_copy.find('/', slash1+1);
           if (slash2 == string::npos)
-            throw http_exception(503, _("/buildid/ webapi error, need buildid"));
+            throw reportable_exception(503, _("/buildid/ webapi error, need buildid"));
           
           string buildid = url_copy.substr(slash1+1, slash2-slash1-1);
 
@@ -537,16 +582,16 @@ handler_cb (void *cls  __attribute__ ((unused)),
       else if (url1 == "/metrics")
         r = handle_metrics(connection);
       else
-        throw http_exception(503, _("webapi error, unrecognized /operation"));
+        throw reportable_exception(503, _("webapi error, unrecognized /operation"));
       
       if (r == 0)
-        throw http_exception(503, _("internal error, missing response"));
+        throw reportable_exception(503, _("internal error, missing response"));
       
       int rc = MHD_queue_response (connection, MHD_HTTP_OK, r);
       MHD_destroy_response (r);
       return rc;
     }
-  catch (const http_exception& e)
+  catch (const reportable_exception& e)
     {
       return e.mhd_send_response (connection);
     }
@@ -637,10 +682,10 @@ static void
 scan_source_file_path (const string& dir)
 {
   sqlite_ps ps_upsert (db,
-                       "insert or ignore into buildids (buildid, artifacttype, mtime,"
+                       "insert or ignore into " BUILDIDS " (buildid, artifacttype, mtime,"
                        "sourcetype, source0) values (?, ?, ?, 'F', ?);");
   sqlite_ps ps_query (db,
-                      "select 1 from buildids where sourcetype = 'F' and source0 = ? and mtime = ?;");
+                      "select 1 from " BUILDIDS " where sourcetype = 'F' and source0 = ? and mtime = ?;");
 
   char * const dirs[] = { (char*) dir.c_str(), NULL };
   FTS *fts = fts_open (dirs, FTS_LOGICAL | FTS_NOCHDIR /* multithreaded */, NULL);
@@ -656,80 +701,93 @@ scan_source_file_path (const string& dir)
       if (interrupted)
         break;
 
-      if (verbose > 2)
+      if (verbose > 3)
         obatched(clog) << "fts traversing " << f->fts_path << endl;
-          
-      switch (f->fts_info)  // NB: continue jumps out to the loop
+
+      try
         {
-        case FTS_F:
-        case FTS_SL:
-          {
-          /* Found a file.  See if we know of it already. */
-            sqlite3_reset (ps_query); // to allow rebinding / reexecution
-          int rc = sqlite3_bind_text (ps_query, 1, f->fts_path, -1, SQLITE_TRANSIENT);
-          if (rc != SQLITE_OK)
-              continue;
-          rc = sqlite3_bind_int64 (ps_query, 2, (int64_t) f->fts_statp->st_mtime);
-          if (rc != SQLITE_OK)
-              continue;
-          rc = sqlite3_step (ps_query);
-          if (rc == SQLITE_ROW) // i.e., a result, as opposed to DONE (no results)
-            continue; // no need to recheck a file/version we already know
-
-          int fd = open (f->fts_path, O_RDONLY);
-          if (fd < 0)
+          switch (f->fts_info)
             {
-              obatched(cerr) << "cannot open " << f->fts_path << endl;
-              continue;
-            }
-          bool executable_p = false, debuginfo_p = false; // E and/or D
-          string buildid;
-          elf_classify (fd, executable_p, debuginfo_p, buildid);
-          close (fd);
-          
-          if (! (executable_p || debuginfo_p))
-            continue;
+            case FTS_F:
+            case FTS_SL:
+              {
+                /* Found a file.  See if we know of it already. */
+                sqlite3_reset (ps_query); // to allow rebinding / reexecution
+                int rc = sqlite3_bind_text (ps_query, 1, f->fts_path, -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 file query bind1");
+                rc = sqlite3_bind_int64 (ps_query, 2, (int64_t) f->fts_statp->st_mtime);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 file query bind2");
+                rc = sqlite3_step (ps_query);
+                if (rc == SQLITE_ROW) // i.e., a result, as opposed to DONE (no results)
+                  continue; // no need to recheck a file/version we already know
 
-          sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
-          rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
-          if (rc != SQLITE_OK) continue;
-          rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime);
-          if (rc != SQLITE_OK) continue;
-          rc = sqlite3_bind_text (ps_upsert, 4, f->fts_path, -1, SQLITE_TRANSIENT);
-          if (rc != SQLITE_OK) continue;
-          
-          if (executable_p)
-            {
-              rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
-              if (rc != SQLITE_OK) continue;
-              rc = sqlite3_step (ps_upsert);
-              if (rc != SQLITE_OK && rc != SQLITE_DONE) continue;
-            }
-          
-          if (debuginfo_p)
-            {
-              sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
-              rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
-              if (rc != SQLITE_OK) continue;
-              rc = sqlite3_step (ps_upsert);
-              if (rc != SQLITE_OK && rc != SQLITE_DONE) continue;
-            }
+                int fd = open (f->fts_path, O_RDONLY);
+                if (fd < 0)
+                  throw libc_exception(errno, string("opening ") + string(f->fts_path));
 
-          if (verbose > 2)
-            obatched(clog) << "recorded buildid=" << buildid << " file=" << f->fts_path
-                           << " mtime=" << f->fts_statp->st_mtime << " as "
-                           << (executable_p ? "executable" : "not executable") << " and "
-                           << (debuginfo_p ? "debuginfo" : "not debuginfo") << endl;
-          }
-          break;
+                bool executable_p = false, debuginfo_p = false; // E and/or D
+                string buildid;
+                elf_classify (fd, executable_p, debuginfo_p, buildid);
+                close (fd);
           
-    case FTS_DNR:
-    case FTS_ERR:
-    case FTS_NS:
-        default:
-          /* ignore */
-          ;
+                if (! (executable_p || debuginfo_p))
+                  continue;
+
+                sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
+                rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 upsert bind1");           
+                rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 upsert bind3");           
+                rc = sqlite3_bind_text (ps_upsert, 4, f->fts_path, -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 upsert bind4");           
+          
+                if (executable_p)
+                  {
+                    rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert-E bind2");           
+                    rc = sqlite3_step (ps_upsert);
+                    if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                      throw sqlite_exception(rc, "sqlite3 upsert-E execute");           
+                  }
+          
+                if (debuginfo_p)
+                  {
+                    sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
+                    rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert-D bind2");           
+                    rc = sqlite3_step (ps_upsert);
+                    if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                      throw sqlite_exception(rc, "sqlite3 upsert-D execute");
+                  }
+
+                if (verbose > 2)
+                  obatched(clog) << "recorded buildid=" << buildid << " file=" << f->fts_path
+                                 << " mtime=" << f->fts_statp->st_mtime << " as "
+                                 << (executable_p ? "executable" : "not executable") << " and "
+                                 << (debuginfo_p ? "debuginfo" : "not debuginfo") << endl;
+              }
+              break;
+
+            case FTS_ERR:
+            case FTS_NS:
+              throw libc_exception(f->fts_errno, string("fts traversal ") + string(f->fts_path));
+
+            default:
+              break;
+            }
         }
+      catch (const reportable_exception& e)
+        {
+          e.report(clog);
+        }
+
     }
   fts_close (fts);
 }
@@ -759,10 +817,30 @@ thread_main_scan_source_file_path (void* arg)
 }
 
 
+
+
+
+
 static void*
 thread_main_scan_source_rpm_path (void* arg)
 {
-  while(! interrupted) pause();
+  string dir = string((const char*) arg);
+  if (verbose > 2)
+    obatched(clog) << "rpm-path scanning " << dir << endl;
+
+  while (! interrupted)
+    {
+      try
+        {
+          // XXX scan_source_rpm_path (dir);
+          sleep (10); // parametrize
+        }
+      catch (const sqlite_exception& e)
+        {
+          obatched(cerr) << e.message << endl;
+        }
+    }
+  
   return 0;
 }
 
@@ -804,8 +882,8 @@ main (int argc, char *argv[])
   /* Get database ready. */
   int rc;
   rc = sqlite3_open_v2 (db_path.c_str(), &db, (SQLITE_OPEN_READWRITE
-                                       |SQLITE_OPEN_CREATE
-                                       |SQLITE_OPEN_FULLMUTEX), /* thread-safe */
+                                               |SQLITE_OPEN_CREATE
+                                               |SQLITE_OPEN_FULLMUTEX), /* thread-safe */
                         NULL);
   if (rc)
     {
@@ -813,23 +891,6 @@ main (int argc, char *argv[])
              _("cannot open database: %s"), sqlite3_errmsg(db));
     }
 
-  /* Future: migrate between versions. */
-  const char DBGSERVER_SQLITE_DDL[] =
-    "create table if not exists\n"
-    "    buildids (\n"
-    "        buildid text not null,                          -- the buildid\n"
-    "        artifacttype text(1) not null\n"
-    "            check (artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)\n"
-    "        mtime integer not null,                         -- epoch timestamp when we last found this\n"
-    "        sourcetype text(1) not null\n"
-    "            check (sourcetype IN ('F', 'R', 'R', 'L')), -- as per --source-TYPE single-char code\n"
-    "        source0 text,                                   -- more sourcetype-specific location data\n"
-    "        source1 text);                                  -- more sourcetype-specific location data\n"
-    "create index if not exists buildids_idx1 on buildids (buildid, artifacttype);\n"
-    "create unique index if not exists buildids_idx2 on buildids (buildid, artifacttype, sourcetype, source0);\n"
-    "create index if not exists buildids_idx3 on buildids (sourcetype, source0);\n"
-    ;
-  
   rc = sqlite3_exec (db, DBGSERVER_SQLITE_DDL, NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     {
