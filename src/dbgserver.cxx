@@ -87,14 +87,14 @@ using namespace std;
 
 // Roll this identifier for every sqlite schema incompatiblity
 // XXX: garbage collect and/or migrate from previous-version tables
-#define BUILDIDS "buildids"
+#define BUILDIDS "buildids1"
 
 static const char DBGSERVER_SQLITE_DDL[] =
   "create table if not exists\n"
   "    " BUILDIDS "(\n"
-  "        buildid text not null,                          -- the buildid\n"
-  "        artifacttype text(1) not null\n"
-  "            check (artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)\n"
+  "        buildid text,                                   -- the buildid; null=negative-cache\n"
+  "        artifacttype text(1)\n"
+  "            check (artifacttype IS NULL OR artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)\n"
   "        mtime integer not null,                         -- epoch timestamp when we last found this\n"
   "        sourcetype text(1) not null\n"
   "            check (sourcetype IN ('F', 'R', 'L')),      -- as per --source-TYPE single-char code\n"
@@ -103,6 +103,14 @@ static const char DBGSERVER_SQLITE_DDL[] =
   "create index if not exists " BUILDIDS "_idx1 on " BUILDIDS " (buildid, artifacttype);\n"
   "create unique index if not exists " BUILDIDS "_idx2 on " BUILDIDS " (buildid, artifacttype, sourcetype, source0);\n"
   "create index if not exists " BUILDIDS "_idx3 on " BUILDIDS " (sourcetype, source0);\n";
+
+// schema change history
+//
+// buildid1: make buildid and artifacttype NULLable, to represent cached-negative
+//           lookups from sources, e.g. files or rpms that contain no buildid-indexable content
+//
+// buildid: original
+
 
 
 
@@ -711,9 +719,19 @@ scan_source_file_path (const string& dir)
             case FTS_F:
             case FTS_SL:
               {
-                /* Found a file.  See if we know of it already. */
+                /* Found a file.  Convert it to an absolute path, so
+                   the buildid database does not have relative path
+                   names that are unresolvable from a subsequent run
+                   in a different cwd. */
+                char *rp = realpath(f->fts_path, NULL);
+                if (rp == NULL)
+                  throw libc_exception(errno, "fts realpath");
+                string rps = string(rp);
+                free (rp);
+                
+                /* See if we know of it already. */
                 sqlite3_reset (ps_query); // to allow rebinding / reexecution
-                int rc = sqlite3_bind_text (ps_query, 1, f->fts_path, -1, SQLITE_TRANSIENT);
+                int rc = sqlite3_bind_text (ps_query, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 file query bind1");
                 rc = sqlite3_bind_int64 (ps_query, 2, (int64_t) f->fts_statp->st_mtime);
@@ -721,28 +739,39 @@ scan_source_file_path (const string& dir)
                   throw sqlite_exception(rc, "sqlite3 file query bind2");
                 rc = sqlite3_step (ps_query);
                 if (rc == SQLITE_ROW) // i.e., a result, as opposed to DONE (no results)
-                  continue; // no need to recheck a file/version we already know
+                  // no need to recheck a file/version we already know
+                  // specifically, no need to elf-begin a file we already determined is non-elf
+                  // (so is stored with buildid=NULL)
+                  continue;
 
-                int fd = open (f->fts_path, O_RDONLY);
+                int fd = open (rps.c_str(), O_RDONLY);
                 if (fd < 0)
-                  throw libc_exception(errno, string("opening ") + string(f->fts_path));
+                  // XXX: cache this as a negative-hit null-build case too?
+                  throw libc_exception(errno, string("opening ") + rps);
+                 
 
                 bool executable_p = false, debuginfo_p = false; // E and/or D
                 string buildid;
                 elf_classify (fd, executable_p, debuginfo_p, buildid);
                 close (fd);
-          
-                if (! (executable_p || debuginfo_p))
-                  continue;
-
+                
                 sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
-                rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+
+                if (buildid == "")
+                  {
+                    rc = sqlite3_bind_null (ps_upsert, 1);
+                    // no point storing an elf file without buildid
+                    executable_p = false;
+                    debuginfo_p = false;
+                  }
+                else
+                  rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 upsert bind1");           
                 rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 upsert bind3");           
-                rc = sqlite3_bind_text (ps_upsert, 4, f->fts_path, -1, SQLITE_TRANSIENT);
+                rc = sqlite3_bind_text (ps_upsert, 4, rps.c_str(), -1, SQLITE_TRANSIENT);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 upsert bind4");           
           
@@ -767,8 +796,18 @@ scan_source_file_path (const string& dir)
                       throw sqlite_exception(rc, "sqlite3 upsert-D execute");
                   }
 
+                if (! (executable_p || debuginfo_p))
+                  {
+                    rc = sqlite3_bind_null (ps_upsert, 2);
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert-NULL bind2");
+                    rc = sqlite3_step (ps_upsert);
+                    if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                      throw sqlite_exception(rc, "sqlite3 upsert-NULL execute");
+                  }
+                
                 if (verbose > 2)
-                  obatched(clog) << "recorded buildid=" << buildid << " file=" << f->fts_path
+                  obatched(clog) << "recorded buildid=" << buildid << " file=" << rps
                                  << " mtime=" << f->fts_statp->st_mtime << " as "
                                  << (executable_p ? "executable" : "not executable") << " and "
                                  << (debuginfo_p ? "debuginfo" : "not debuginfo") << endl;
