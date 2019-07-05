@@ -43,6 +43,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -696,7 +697,12 @@ scan_source_file_path (const string& dir)
                       "select 1 from " BUILDIDS " where sourcetype = 'F' and source0 = ? and mtime = ?;");
 
   char * const dirs[] = { (char*) dir.c_str(), NULL };
-  FTS *fts = fts_open (dirs, FTS_LOGICAL | FTS_NOCHDIR /* multithreaded */, NULL);
+
+  struct timeval tv_start, tv_end;
+  unsigned fts_scanned=0, fts_cached=0, fts_debuginfo=0, fts_executable=0;
+  gettimeofday (&tv_start, NULL);
+  
+  FTS *fts = fts_open (dirs, FTS_PHYSICAL | FTS_NOCHDIR /* multithreaded */, NULL);
   if (fts == NULL)
     {
       obatched(cerr) << "cannot fts_open " << dir << endl;
@@ -706,6 +712,7 @@ scan_source_file_path (const string& dir)
   FTSENT *f;
   while ((f = fts_read (fts)) != NULL)
     {
+      fts_scanned ++;
       if (interrupted)
         break;
 
@@ -742,7 +749,10 @@ scan_source_file_path (const string& dir)
                   // no need to recheck a file/version we already know
                   // specifically, no need to elf-begin a file we already determined is non-elf
                   // (so is stored with buildid=NULL)
-                  continue;
+                  {
+                    fts_cached ++;
+                    continue;
+                  }
 
                 int fd = open (rps.c_str(), O_RDONLY);
                 if (fd < 0)
@@ -777,6 +787,7 @@ scan_source_file_path (const string& dir)
           
                 if (executable_p)
                   {
+                    fts_executable ++;
                     rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
                     if (rc != SQLITE_OK)
                       throw sqlite_exception(rc, "sqlite3 upsert-E bind2");           
@@ -787,6 +798,7 @@ scan_source_file_path (const string& dir)
           
                 if (debuginfo_p)
                   {
+                    fts_debuginfo ++;
                     sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
                     rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
                     if (rc != SQLITE_OK)
@@ -829,6 +841,14 @@ scan_source_file_path (const string& dir)
 
     }
   fts_close (fts);
+
+  gettimeofday (&tv_end, NULL);
+  double deltas = (tv_end.tv_sec - tv_start.tv_sec) + (tv_end.tv_usec - tv_start.tv_usec)*0.000001;
+  
+  if (verbose > 1)
+    obatched(clog) << "fts traversed " << dir << " in " << deltas << "s, scanned=" << fts_scanned
+                   << ", cached=" << fts_cached << ", debuginfo=" << fts_debuginfo
+                   << ", executable=" << fts_executable << endl;
 }
 
 
