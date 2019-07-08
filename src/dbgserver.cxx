@@ -257,6 +257,14 @@ struct libc_exception: public reportable_exception
     reportable_exception(string("libc error: ") + msg + ": " + string(strerror(rc) ?: "?")) {}
 };
 
+struct elfutils_exception: public reportable_exception
+{
+  elfutils_exception(int rc, const string& msg):
+    reportable_exception(string("elfutils error: ") + msg + ": " + string(elf_errmsg(rc) ?: "?")) {}
+};
+
+
+
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -480,7 +488,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   else if (artifacttype == "source-file") atype_code = "S";
   else throw reportable_exception("invalid artifacttype");
 
-  if (verbose > 0)
+  if (verbose)
     obatched(clog) << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
          << " suffix=" << suffix << endl;
   
@@ -618,72 +626,139 @@ elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
   Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
   if (elf == NULL)
     return;
-
-  if (elf_kind (elf) != ELF_K_ELF)
-    {
-      elf_end (elf);
-      return;
-    }
-
- GElf_Ehdr ehdr_storage;
- GElf_Ehdr *ehdr = gelf_getehdr (elf, &ehdr_storage);
- if (ehdr == NULL)
-    {
-      elf_end (elf);
-      return;
-    }
- auto elf_type = ehdr->e_type;
   
-  const void *build_id; // elfutils-owned memory
-  ssize_t sz = dwelf_elf_gnu_build_id (elf, & build_id);
-  if (sz <= 0)
+  try // catch our types of errors and clean up the Elf* object
     {
-      elf_end (elf);
-      return;
-    }
-  // build_id is a raw byte array; convert to hexadecimal
-  unsigned char* build_id_bytes = (unsigned char*) build_id;
-  for (ssize_t idx=0; idx<sz; idx++)
-    {
-      buildid += "0123456789abcdef"[build_id_bytes[idx] >> 4];
-      buildid += "0123456789abcdef"[build_id_bytes[idx] & 0xf];
-    }
-
-  // now decide whether it's an executable
-  if (elf_type == ET_EXEC || elf_type == ET_DYN)
-    executable_p = true;
-
-  // now decide whether it's a debuginfo - namely, if it has any .debug* or .zdebug* sections
-  // logic mostly stolen from fweimer@redhat.com's elfclassify drafts
-  size_t shstrndx;
-  if (elf_getshdrstrndx (elf, &shstrndx) < 0)
-    {
-      elf_end (elf);
-      return;
-    }
-  
-  Elf_Scn *scn = NULL;
-  while (true)
-    {
-      scn = elf_nextscn (elf, scn);
-      if (scn == NULL)
-        break;
-      GElf_Shdr shdr_storage;
-      GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_storage);
-      if (shdr == NULL)
-        break;
-      const char *section_name = elf_strptr (elf, shstrndx, shdr->sh_name);
-      if (section_name == NULL)
-        break;
-      if (strncmp(section_name, ".debug_", 7) == 0 ||
-          strncmp(section_name, ".zdebug_", 8) == 0)
+      if (elf_kind (elf) != ELF_K_ELF)
         {
-          debuginfo_p = true;
-          break;
+          elf_end (elf);
+          return;
+        }
+
+      GElf_Ehdr ehdr_storage;
+      GElf_Ehdr *ehdr = gelf_getehdr (elf, &ehdr_storage);
+      if (ehdr == NULL)
+        {
+          elf_end (elf);
+          return;
+        }
+      auto elf_type = ehdr->e_type;
+  
+      const void *build_id; // elfutils-owned memory
+      ssize_t sz = dwelf_elf_gnu_build_id (elf, & build_id);
+      if (sz <= 0)
+        {
+          // It's not a diagnostic-worthy error for an elf file to lack build-id.
+          // It might just be very old.
+          elf_end (elf);
+          return;
+        }
+  
+      // build_id is a raw byte array; convert to hexadecimal *lowercase*
+      unsigned char* build_id_bytes = (unsigned char*) build_id;
+      for (ssize_t idx=0; idx<sz; idx++)
+        {
+          buildid += "0123456789abcdef"[build_id_bytes[idx] >> 4];
+          buildid += "0123456789abcdef"[build_id_bytes[idx] & 0xf];
+        }
+
+      // now decide whether it's an executable - namely, if it has no PT_LOAD phdr segments that
+      // link to NOBITS sections; assume non-executable in case of any decoding errors
+      // logic mostly stolen from readelf's PT_INTERP handling
+      if (elf_type == ET_EXEC || elf_type == ET_DYN)
+        {
+          size_t phnum;
+          int rc = elf_getphdrnum (elf, &phnum);
+          if (rc < 0)
+            throw elfutils_exception(rc, "getphdrnum");
+          
+          size_t shnum;
+          rc = elf_getshdrnum (elf, &shnum);
+          if (rc < 0)
+            throw elfutils_exception(rc, "getshdrnum");
+
+          // iterate across physical (segment) headers
+          executable_p = true; // with hair-trigger rebutting
+          size_t ph = 0;
+          for (ph = 0; ph < phnum; ph++)
+            {
+              GElf_Phdr mem;
+              GElf_Phdr *phdr = gelf_getphdr (elf, ph, &mem);
+              if (phdr == NULL)
+                {
+                  executable_p = false;
+                  continue;
+                }
+
+              if (phdr->p_type != PT_LOAD) // ignore non-loadable sections
+                continue;
+
+              for (size_t sc = 0; sc < shnum; sc++)
+                {
+                  Elf_Scn *scn = elf_getscn (elf, sc);
+                  if (scn == NULL)
+                    {
+                      executable_p = false;
+                      continue;
+                    }
+
+                  GElf_Shdr shdr_mem;
+                  GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
+                  if (shdr == NULL)
+                    {
+                      executable_p = false;
+                      continue;
+                    }
+
+                  // does this section deal with this segment?
+                  if (shdr->sh_size > 0 &&
+                      // overlaps segment vma?
+                      (shdr->sh_flags & SHF_ALLOC) &&
+                      (shdr->sh_addr >= phdr->p_vaddr
+                       && (shdr->sh_addr + shdr->sh_size < phdr->p_vaddr + phdr->p_memsz)) && // NB: upper bound exclusive
+                      // absent?
+                      (shdr->sh_type == SHT_NOBITS))
+                    {
+                      if (verbose > 5)
+                        obatched(clog) << "non-executable due to NOBITS ph=" << ph << " sc=" << sc << endl;
+                      executable_p = false;
+                    }
+                } // iterate over sections
+            } // iterate over segments
+        } // executable_p classification
+
+      // now decide whether it's a debuginfo - namely, if it has any .debug* or .zdebug* sections
+      // logic mostly stolen from fweimer@redhat.com's elfclassify drafts
+      size_t shstrndx;
+      int rc = elf_getshdrstrndx (elf, &shstrndx);
+      if (rc < 0)
+        throw elfutils_exception(rc, "getshdrstrndx");
+    
+      Elf_Scn *scn = NULL;
+      while (true)
+        {
+          scn = elf_nextscn (elf, scn);
+          if (scn == NULL)
+            break;
+          GElf_Shdr shdr_storage;
+          GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_storage);
+          if (shdr == NULL)
+            break;
+          const char *section_name = elf_strptr (elf, shstrndx, shdr->sh_name);
+          if (section_name == NULL)
+            break;
+          if (strncmp(section_name, ".debug_", 7) == 0 ||
+              strncmp(section_name, ".zdebug_", 8) == 0)
+            {
+              debuginfo_p = true;
+              break;
+            }
         }
     }
-
- elfend:  
+  catch (const reportable_exception& e)
+    {
+      e.report(clog);
+    }
   elf_end (elf);
 }
 
@@ -844,7 +919,6 @@ scan_source_file_path (const string& dir)
         {
           e.report(clog);
         }
-
     }
   fts_close (fts);
 
@@ -962,6 +1036,35 @@ main (int argc, char *argv[])
              _("cannot run database schema ddl: %s"), sqlite3_errmsg(db));
     }
 
+  if (verbose) // report database stats
+    try
+      {
+        sqlite_ps ps_query (db, 
+                            "select sourcetype, artifacttype, count(*) from " BUILDIDS
+                            " group by sourcetype, artifacttype");
+
+        obatched(clog) << "Database " << db_path << " statistics:" << endl;
+        obatched(clog) << "source" << "\t" << "type" << "\t" << "count" << endl;
+        while (1)
+          {
+            rc = sqlite3_step (ps_query);
+            if (rc == SQLITE_DONE) break;
+            if (rc != SQLITE_ROW)
+              throw sqlite_exception(rc, "step");
+
+            obatched(clog) << (sqlite3_column_text(ps_query, 0) ?: (const unsigned char*) "NULL")
+                           << "\t"
+                           << (sqlite3_column_text(ps_query, 1) ?: (const unsigned char*) "NULL")
+                           << "\t"
+                           << (sqlite3_column_text(ps_query, 2) ?: (const unsigned char*) "NULL")
+                           << endl;
+          }
+      }
+    catch (const reportable_exception& e)
+      {
+        e.report(clog);
+      }
+  
   for (auto&& it : source_file_paths)
     {
       pthread_t pt;
@@ -1000,10 +1103,7 @@ main (int argc, char *argv[])
     }
 
   if (verbose)
-    obatched(clog) << "Started http server on port=" << http_port
-                   << ", database path=" << db_path
-                   << ", rescan time=" << rescan_s
-                   << endl;
+    obatched(clog) << "Started http server on port=" << http_port << endl;
   
   /* Trivial main loop! */
   while (! interrupted)
