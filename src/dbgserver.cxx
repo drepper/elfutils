@@ -693,7 +693,7 @@ static void
 scan_source_file_path (const string& dir)
 {
   sqlite_ps ps_upsert (db,
-                       "insert or ignore into " BUILDIDS " (buildid, artifacttype, mtime,"
+                       "insert or replace into " BUILDIDS " (buildid, artifacttype, mtime,"
                        "sourcetype, source0) values (?, ?, ?, 'F', ?);");
   sqlite_ps ps_query (db,
                       "select 1 from " BUILDIDS " where sourcetype = 'F' and source0 = ? and mtime = ?;");
@@ -704,7 +704,11 @@ scan_source_file_path (const string& dir)
   unsigned fts_scanned=0, fts_cached=0, fts_debuginfo=0, fts_executable=0;
   gettimeofday (&tv_start, NULL);
   
-  FTS *fts = fts_open (dirs, FTS_PHYSICAL | FTS_NOCHDIR /* multithreaded */, NULL);
+  FTS *fts = fts_open (dirs,
+                       FTS_PHYSICAL /* don't follow symlinks */
+                       | FTS_XDEV /* don't cross devices/mountpoints */
+                       | FTS_NOCHDIR /* multithreaded */,
+                       NULL);
   if (fts == NULL)
     {
       obatched(cerr) << "cannot fts_open " << dir << endl;
@@ -726,7 +730,6 @@ scan_source_file_path (const string& dir)
           switch (f->fts_info)
             {
             case FTS_F:
-            case FTS_SL:
               {
                 /* Found a file.  Convert it to an absolute path, so
                    the buildid database does not have relative path
@@ -734,7 +737,7 @@ scan_source_file_path (const string& dir)
                    in a different cwd. */
                 char *rp = realpath(f->fts_path, NULL);
                 if (rp == NULL)
-                  throw libc_exception(errno, "fts realpath");
+                  throw libc_exception(errno, "fts realpath " + string(f->fts_path));
                 string rps = string(rp);
                 free (rp);
                 
@@ -833,6 +836,7 @@ scan_source_file_path (const string& dir)
               throw libc_exception(f->fts_errno, string("fts traversal ") + string(f->fts_path));
 
             default:
+            case FTS_SL: /* NB: don't enter symbolic links into the database */
               break;
             }
         }
