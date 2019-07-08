@@ -662,69 +662,36 @@ elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
           buildid += "0123456789abcdef"[build_id_bytes[idx] & 0xf];
         }
 
-      // now decide whether it's an executable - namely, if it has no PT_LOAD phdr segments that
-      // link to NOBITS sections; assume non-executable in case of any decoding errors
-      // logic mostly stolen from readelf's PT_INTERP handling
+      // now decide whether it's an executable - namely, any allocatable section has
+      // PROGBITS;
       if (elf_type == ET_EXEC || elf_type == ET_DYN)
         {
-          size_t phnum;
-          int rc = elf_getphdrnum (elf, &phnum);
-          if (rc < 0)
-            throw elfutils_exception(rc, "getphdrnum");
-          
           size_t shnum;
-          rc = elf_getshdrnum (elf, &shnum);
+          int rc = elf_getshdrnum (elf, &shnum);
           if (rc < 0)
             throw elfutils_exception(rc, "getshdrnum");
 
-          // iterate across physical (segment) headers
-          executable_p = true; // with hair-trigger rebutting
-          size_t ph = 0;
-          for (ph = 0; ph < phnum; ph++)
+          executable_p = false;
+          for (size_t sc = 0; sc < shnum; sc++)
             {
-              GElf_Phdr mem;
-              GElf_Phdr *phdr = gelf_getphdr (elf, ph, &mem);
-              if (phdr == NULL)
-                {
-                  executable_p = false;
-                  continue;
-                }
-
-              if (phdr->p_type != PT_LOAD) // ignore non-loadable sections
+              Elf_Scn *scn = elf_getscn (elf, sc);
+              if (scn == NULL)
                 continue;
 
-              for (size_t sc = 0; sc < shnum; sc++)
+              GElf_Shdr shdr_mem;
+              GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
+              if (shdr == NULL)
+                continue;
+
+              // allocated (loadable / vm-addr-assigned) section with available content?
+              if ((shdr->sh_type == SHT_PROGBITS) && (shdr->sh_flags & SHF_ALLOC))
                 {
-                  Elf_Scn *scn = elf_getscn (elf, sc);
-                  if (scn == NULL)
-                    {
-                      executable_p = false;
-                      continue;
-                    }
-
-                  GElf_Shdr shdr_mem;
-                  GElf_Shdr *shdr = gelf_getshdr (scn, &shdr_mem);
-                  if (shdr == NULL)
-                    {
-                      executable_p = false;
-                      continue;
-                    }
-
-                  // does this section deal with this segment?
-                  if (shdr->sh_size > 0 &&
-                      // overlaps segment vma?
-                      (shdr->sh_flags & SHF_ALLOC) &&
-                      (shdr->sh_addr >= phdr->p_vaddr
-                       && (shdr->sh_addr + shdr->sh_size < phdr->p_vaddr + phdr->p_memsz)) && // NB: upper bound exclusive
-                      // absent?
-                      (shdr->sh_type == SHT_NOBITS))
-                    {
-                      if (verbose > 5)
-                        obatched(clog) << "non-executable due to NOBITS ph=" << ph << " sc=" << sc << endl;
-                      executable_p = false;
-                    }
-                } // iterate over sections
-            } // iterate over segments
+                  if (verbose > 5)
+                    obatched(clog) << "executable due to SHF_ALLOC SHT_PROGBITS sc=" << sc << endl;
+                  executable_p = true;
+                  break; // no need to keep looking for others
+                }
+            } // iterate over sections
         } // executable_p classification
 
       // now decide whether it's a debuginfo - namely, if it has any .debug* or .zdebug* sections
