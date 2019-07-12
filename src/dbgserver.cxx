@@ -1053,7 +1053,9 @@ main (int argc, char *argv[])
   /* Start httpd server threads. */
   /* XXX: suppress SIGPIPE */
   MHD_Daemon *daemon = MHD_start_daemon (MHD_USE_THREAD_PER_CONNECTION
+#ifdef MHD_USE_INTERNAL_POLLING_THREAD
                                          | MHD_USE_INTERNAL_POLLING_THREAD
+#endif
                                          | MHD_USE_DUAL_STACK /* ipv4 + ipv6 */
                                          | MHD_USE_DEBUG, /* report errors to stderr */
                              http_port,
