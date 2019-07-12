@@ -60,6 +60,8 @@ AC_CONFIG_FILES([m4/Makefile])
 dnl The RPM spec file.  We substitute a few values in the file.
 AC_CONFIG_FILES([elfutils.spec:config/elfutils.spec.in])
 
+AC_SUBST([program_prefix])
+AC_CONFIG_FILES([config/dbgserver.service])
 
 AC_CANONICAL_HOST
 

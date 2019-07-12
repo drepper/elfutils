@@ -993,7 +993,7 @@ main (int argc, char *argv[])
   if (rc)
     {
       error (EXIT_FAILURE, 0,
-             _("cannot open database: %s"), sqlite3_errmsg(db));
+             _("cannot open %s, database: %s"), db_path.c_str(), sqlite3_errmsg(db));
     }
 
   rc = sqlite3_exec (db, DBGSERVER_SQLITE_DDL, NULL, NULL, NULL);

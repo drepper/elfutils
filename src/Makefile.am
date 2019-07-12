@@ -26,8 +26,7 @@ AM_CPPFLAGS += -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 
 bin_PROGRAMS = readelf nm size strip elflint findtextrel addr2line \
-	       elfcmp objdump ranlib strings ar unstrip stack elfcompress
-sbin_PROGRAMS = dbgserver
+	       elfcmp objdump ranlib strings ar unstrip stack elfcompress dbgserver
 
 noinst_LIBRARIES = libar.a
 

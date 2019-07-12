@@ -1,0 +1,4 @@
+#
+DBGSERVER_PORT="8002"
+DBGSERVER_VERBOSE="-v"
+DBGSERVER_PATHS="-F /usr/lib/debug -F /usr/bin -F /usr/sbin -F /usr/lib -F /usr/lib64"

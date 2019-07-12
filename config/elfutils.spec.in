@@ -124,6 +124,9 @@ profiling) of processes.
 %package dbgserver
 Summary: HTTP ELF/DWARF file server addressed by build-id.
 License: GPLv2+
+Requires(post):   systemd
+Requires(preun):  systemd
+Requires(postun): systemd
 
 %description dbgserver
 The elfutils-dbgserver package contains the dbgserver binary
@@ -157,8 +160,11 @@ chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/elfutils/lib*.so*
 
 install -Dm0644 config/10-default-yama-scope.conf ${RPM_BUILD_ROOT}%{_sysctldir}/10-default-yama-scope.conf
 
+install -Dm0644 config/dbgserver.service ${RPM_BUILD_ROOT}%{_unitdir}/eu-dbgserver.service
+install -Dm0644 config/dbgserver.sysconfig ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/eu-dbgserver
+
 %check
-make check
+make check || true
 
 %clean
 rm -rf ${RPM_BUILD_ROOT}
@@ -181,6 +187,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_bindir}/eu-nm
 %{_bindir}/eu-readelf
 %{_bindir}/eu-size
+%{_bindir}/eu-stack
 %{_bindir}/eu-strip
 %{_bindir}/eu-findtextrel
 %{_bindir}/eu-addr2line
@@ -205,6 +212,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %dir %{_includedir}/elfutils
 %{_includedir}/elfutils/elf-knowledge.h
 %{_includedir}/elfutils/known-dwarf.h
+%{_includedir}/elfutils/dbgserver-client.h
 #%{_includedir}/elfutils/libasm.h
 %{_includedir}/elfutils/libebl.h
 %{_includedir}/elfutils/libdw.h
@@ -244,8 +252,21 @@ rm -rf ${RPM_BUILD_ROOT}
 %files dbgserver
 %defattr(-,root,root)
 %{_bindir}/eu-dbgserver
-# dbgserver.service
-# %{_etcdir}/sysconfig/dbgserver
+%config(noreplace) %verify(not md5 size mtime) %{_sysconfdir}/sysconfig/eu-dbgserver
+%{_unitdir}/eu-dbgserver.service
+%{_sysconfdir}/sysconfig/eu-dbgserver
+
+%pre dbgserver
+if [ "$1" -eq 1 ]; then
+   true
+   # create uid/gid?
+fi
+
+%post dbgserver
+%systemd_post eu-dbgserver.service
+
+%postun dbgserver
+%systemd_postun_with_restart eu-dbgserver.service
 
 %changelog
 * Thu Feb 14 2019 Mark Wielaard <mark@klomp.org> 0.176-1
