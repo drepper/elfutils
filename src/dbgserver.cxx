@@ -74,7 +74,7 @@ using namespace std;
 #include <microhttpd.h>
 #include <curl/curl.h>
 #include <rpm/rpmtypes.h>
-#include <rpm/rpmarchive.h>
+// #include <rpm/rpmarchive.h>
 #include <sqlite3.h>
 
 #ifdef __linux__
@@ -195,7 +195,6 @@ static vector<string> source_file_paths;
 static vector<pthread_t> source_file_scanner_threads;
 static vector<string> source_rpm_paths;
 static vector<pthread_t> source_rpm_scanner_threads;
-static unsigned source_file_rescan_time = 300; /* XXX: parametrize */
 
 
 
@@ -557,11 +556,8 @@ handler_cb (void *cls  __attribute__ ((unused)),
             size_t * upload_data_size __attribute__ ((unused)),
             void ** con_cls __attribute__ ((unused)))
 {
-  char errmsg[100] = "";
   struct MHD_Response *r = NULL;
   string url_copy = url;
-  char *tok = NULL;
-  char *tok_save = NULL;
   
   if (verbose)
     obatched(clog) << conninfo(connection) << " " << method << " " << url << endl;
@@ -1067,7 +1063,7 @@ main (int argc, char *argv[])
   if (daemon == NULL)
     {
       sqlite3_close (db);
-      error (EXIT_FAILURE, 0, _("cannot start http server at port %p"), http_port);
+      error (EXIT_FAILURE, 0, _("cannot start http server at port %d"), http_port);
     }
 
   if (verbose)

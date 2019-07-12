@@ -85,8 +85,7 @@ ar_LDADD = libar.a $(libelf) $(libeu) $(argp_LDADD)
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD) -ldl
 stack_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD) -ldl $(demanglelib)
 elfcompress_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD)
-
-dbgserver_LDADD = $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(rpm_LIBS) -lpthread -lelf -ldw
+dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(rpm_LIBS) -lpthread -ldl
 
 
 installcheck-binPROGRAMS: $(bin_PROGRAMS)
