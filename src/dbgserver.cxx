@@ -981,8 +981,9 @@ main (int argc, char *argv[])
 
   /* Block SIGPIPE, as libmicrohttpd operations can trigger it, and we don't care. */
   (void) signal (SIGPIPE, SIG_IGN);
-  (void) signal (SIGINT, signal_handler);
-  (void) signal (SIGHUP, signal_handler);
+  (void) signal (SIGINT, signal_handler); // ^C
+  (void) signal (SIGHUP, signal_handler); // EOF
+  (void) signal (SIGTERM, signal_handler); // systemd
   
   /* Get database ready. */
   int rc;
