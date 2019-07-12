@@ -4,10 +4,11 @@ Documentation=http://elfutils.org/
 After=network.target
 
 [Service]
-EnvironmentFile=-@sysconfdir@/sysconfig/@program_prefix@dbgserver
-User=daemon
-CacheDirectory=dbgserver
-ExecStart=/bin/sh -c '@prefix@/bin/@program_prefix@dbgserver -d $CACHE_DIRECTORY/dbgserver.sqlite -p '"$DBGSERVER_PORT $DBGSERVER_VERBOSE $DBGSERVER_PATHS"
+EnvironmentFile=/etc/sysconfig/@program_prefix@dbgserver
+User=eu-dbgserver
+Group=eu-dbgserver
+#CacheDirectory=dbgserver
+ExecStart=/usr/bin/@program_prefix@dbgserver -d /var/cache/@program_prefix@dbgserver/dbgserver.sqlite -p $DBGSERVER_PORT $DBGSERVER_VERBOSE $DBGSERVER_PATHS
 TimeoutStopSec=10
 
 [Install]

@@ -124,6 +124,7 @@ profiling) of processes.
 %package dbgserver
 Summary: HTTP ELF/DWARF file server addressed by build-id.
 License: GPLv2+
+BuildRequires: systemd
 Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
@@ -162,6 +163,8 @@ install -Dm0644 config/10-default-yama-scope.conf ${RPM_BUILD_ROOT}%{_sysctldir}
 
 install -Dm0644 config/dbgserver.service ${RPM_BUILD_ROOT}%{_unitdir}/eu-dbgserver.service
 install -Dm0644 config/dbgserver.sysconfig ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/eu-dbgserver
+mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}/cache/eu-dbgserver
+touch ${RPM_BUILD_ROOT}%{_localstatedir}/cache/eu-dbgserver/dbgserver.sqlite
 
 %check
 make check || true
@@ -255,12 +258,16 @@ rm -rf ${RPM_BUILD_ROOT}
 %config(noreplace) %verify(not md5 size mtime) %{_sysconfdir}/sysconfig/eu-dbgserver
 %{_unitdir}/eu-dbgserver.service
 %{_sysconfdir}/sysconfig/eu-dbgserver
+%dir %attr(0700,eu-dbgserver,eu-dbgserver) %{_localstatedir}/cache/eu-dbgserver
+%verify(not md5 size mtime) %attr(0600,eu-dbgserver,eu-dbgserver) %{_localstatedir}/cache/eu-dbgserver/dbgserver.sqlite
 
 %pre dbgserver
-if [ "$1" -eq 1 ]; then
-   true
-   # create uid/gid?
-fi
+Requires(pre): shadow-utils
+getent group eu-dbgserver >/dev/null || groupadd -r eu-dbgserver
+getent passwd eu-dbgserver >/dev/null || \
+    useradd -r -g eu-dbgserver -d /var/cache/eu-dbgserver -s /sbin/nologin \
+            -c "elfutils debuginfo server" eu-dbgserver
+exit 0
 
 %post dbgserver
 %systemd_post eu-dbgserver.service
