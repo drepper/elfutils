@@ -210,9 +210,10 @@ parse_opt (int key, char *arg,
     case 'p': http_port = atoi(arg); break;
     case 'F': source_file_paths.push_back(string(arg)); break;
     case 't': rescan_s = atoi(arg); break;
+      // case 'h': argp_state_help (state, stderr, ARGP_HELP_LONG|ARGP_HELP_EXIT_OK);
     default: return ARGP_ERR_UNKNOWN;
     }
-  
+
   return 0;
 }
 
@@ -797,16 +798,17 @@ scan_source_file_path (const string& dir)
                     continue;
                   }
 
-                int fd = open (rps.c_str(), O_RDONLY);
-                if (fd < 0)
-                  // XXX: cache this as a negative-hit null-build case too?
-                  throw libc_exception(errno, string("opening ") + rps);
-                 
-
                 bool executable_p = false, debuginfo_p = false; // E and/or D
                 string buildid;
-                elf_classify (fd, executable_p, debuginfo_p, buildid);
-                close (fd);
+                
+                int fd = open (rps.c_str(), O_RDONLY);
+                if (fd >= 0)
+                  {
+                    elf_classify (fd, executable_p, debuginfo_p, buildid);
+                    close (fd);
+                  }
+                // NB: don't bother alert about unreadable (EPERM etc.) files.
+                // Just negative-cache them so we don't putz with them again.
                 
                 sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
 
@@ -1050,26 +1052,43 @@ main (int argc, char *argv[])
     }
 
   
-  /* Start httpd server threads. */
-  /* XXX: suppress SIGPIPE */
-  MHD_Daemon *daemon = MHD_start_daemon (MHD_USE_THREAD_PER_CONNECTION
-#ifdef MHD_USE_INTERNAL_POLLING_THREAD
-                                         | MHD_USE_INTERNAL_POLLING_THREAD
+  // Start httpd server threads.  Separate pool for IPv4 and IPv6, in
+  // case the host only has one protocol stack.
+  MHD_Daemon *d4 = MHD_start_daemon (MHD_USE_THREAD_PER_CONNECTION
+#if MHD_VERSION >= 0x00095300
+                                     | MHD_USE_INTERNAL_POLLING_THREAD
+#else
+                                     | MHD_USE_SELECT_INTERNALLY
 #endif
-                                         | MHD_USE_DUAL_STACK /* ipv4 + ipv6 */
-                                         | MHD_USE_DEBUG, /* report errors to stderr */
-                             http_port,
-                             NULL, NULL, /* default accept policy */
-                             handler_cb, NULL, /* handler callback */
-                             MHD_OPTION_END);
-  if (daemon == NULL)
+                                     | MHD_USE_DEBUG, /* report errors to stderr */
+                                     http_port,
+                                     NULL, NULL, /* default accept policy */
+                                     handler_cb, NULL, /* handler callback */
+                                     MHD_OPTION_END);
+  MHD_Daemon *d6 = MHD_start_daemon (MHD_USE_THREAD_PER_CONNECTION
+#if MHD_VERSION >= 0x00095300
+                                     | MHD_USE_INTERNAL_POLLING_THREAD
+#else
+                                     | MHD_USE_SELECT_INTERNALLY
+#endif
+                                     | MHD_USE_IPv6
+                                     | MHD_USE_DEBUG, /* report errors to stderr */
+                                     http_port,
+                                     NULL, NULL, /* default accept policy */
+                                     handler_cb, NULL, /* handler callback */
+                                     MHD_OPTION_END);
+
+  if (d4 == NULL && d6 == NULL) // neither ipv4 nor ipv6? boo
     {
       sqlite3_close (db);
       error (EXIT_FAILURE, 0, _("cannot start http server at port %d"), http_port);
     }
 
   if (verbose)
-    obatched(clog) << "Started http server on port=" << http_port << endl;
+    obatched(clog) << "Started http server on "
+                   << (d4 != NULL ? "IPv4 " : "")
+                   << (d6 != NULL ? "IPv6 " : "")
+                   << "port=" << http_port << endl;
   
   /* Trivial main loop! */
   while (! interrupted)
@@ -1079,9 +1098,9 @@ main (int argc, char *argv[])
     obatched(clog) << "Stopping" << endl;
   
   /* Stop all the web service threads. */
-  /* MHD_quiesce_daemon (daemon); */
-  MHD_stop_daemon (daemon);
-
+  if (d4) MHD_stop_daemon (d4);
+  if (d6) MHD_stop_daemon (d6);
+  
   /* Join any source scanning threads. */
   for (auto&& it : source_file_scanner_threads)
     pthread_join (it, NULL);
