@@ -103,7 +103,8 @@ static const char DBGSERVER_SQLITE_DDL[] =
   "        source1 text);                                  -- more sourcetype-specific location data\n"
   "create index if not exists " BUILDIDS "_idx1 on " BUILDIDS " (buildid, artifacttype);\n"
   "create unique index if not exists " BUILDIDS "_idx2 on " BUILDIDS " (buildid, artifacttype, sourcetype, source0);\n"
-  "create index if not exists " BUILDIDS "_idx3 on " BUILDIDS " (sourcetype, source0);\n";
+  "create index if not exists " BUILDIDS "_idx3 on " BUILDIDS " (sourcetype, source0);\n"
+  "pragma synchronous = 0;\n"; // disable fsync()s - this cache is disposable across a machine crash
 
 // schema change history
 //
@@ -989,7 +990,13 @@ main (int argc, char *argv[])
                                                |SQLITE_OPEN_CREATE
                                                |SQLITE_OPEN_FULLMUTEX), /* thread-safe */
                         NULL);
-  if (rc)
+  if (rc == SQLITE_CORRUPT)
+    {
+      (void) unlink (db_path.c_str());
+      error (EXIT_FAILURE, 0,
+             _("cannot open %s, deleted database: %s"), db_path.c_str(), sqlite3_errmsg(db));
+    }
+  else if (rc)
     {
       error (EXIT_FAILURE, 0,
              _("cannot open %s, database: %s"), db_path.c_str(), sqlite3_errmsg(db));
