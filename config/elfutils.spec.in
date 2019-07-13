@@ -128,6 +128,7 @@ BuildRequires: systemd
 Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
+Requires: shadow-utils
 
 %description dbgserver
 The elfutils-dbgserver package contains the dbgserver binary
@@ -262,7 +263,6 @@ rm -rf ${RPM_BUILD_ROOT}
 %verify(not md5 size mtime) %attr(0600,eu-dbgserver,eu-dbgserver) %{_localstatedir}/cache/eu-dbgserver/dbgserver.sqlite
 
 %pre dbgserver
-Requires: shadow-utils
 getent group eu-dbgserver >/dev/null || groupadd -r eu-dbgserver
 getent passwd eu-dbgserver >/dev/null || \
     useradd -r -g eu-dbgserver -d /var/cache/eu-dbgserver -s /sbin/nologin \
