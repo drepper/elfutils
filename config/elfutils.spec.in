@@ -30,7 +30,7 @@ BuildRequires: gcc-c++
 BuildRequires: pkgconfig(libmicrohttpd) >= 0.9.33
 BuildRequires: pkgconfig(libcurl) >= 7.29.0
 BuildRequires: pkgconfig(sqlite3) >= 3.7.17
-BuildRequires: pkgconfig(rpm) >= 4.11.3
+BuildRequires: pkgconfig(libarchive) >= 3.1.2
 
 %define _gnu %{nil}
 %define _programprefix eu-
