@@ -74,7 +74,6 @@ using namespace std;
 
 #include <microhttpd.h>
 #include <curl/curl.h>
-#include <rpm/rpmtypes.h>
 #include <archive.h>
 #include <archive_entry.h>
 #include <sqlite3.h>
