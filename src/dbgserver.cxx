@@ -66,6 +66,7 @@
 #include <iostream>
 #include <ostream>
 #include <sstream>
+#include <algorithm>
 using namespace std;
 
 #include <gelf.h>
@@ -74,7 +75,8 @@ using namespace std;
 #include <microhttpd.h>
 #include <curl/curl.h>
 #include <rpm/rpmtypes.h>
-// #include <rpm/rpmarchive.h>
+#include <archive.h>
+#include <archive_entry.h>
 #include <sqlite3.h>
 
 #ifdef __linux__
@@ -105,6 +107,11 @@ static const char DBGSERVER_SQLITE_DDL[] =
   "create unique index if not exists " BUILDIDS "_idx2 on " BUILDIDS " (buildid, artifacttype, sourcetype, source0);\n"
   "create index if not exists " BUILDIDS "_idx3 on " BUILDIDS " (sourcetype, source0);\n"
   "pragma synchronous = 0;\n"; // disable fsync()s - this cache is disposable across a machine crash
+
+// XXX: idea for buildid2: a separate table for file names (source0
+// text) vs. buildid rows, as in the case of RPMs, many buildids may
+// be contained, and we really don't want to represent eveyr copy.
+
 
 // schema change history
 //
@@ -210,6 +217,7 @@ parse_opt (int key, char *arg,
     case 'd': db_path = string(arg); break;
     case 'p': http_port = atoi(arg); break;
     case 'F': source_file_paths.push_back(string(arg)); break;
+    case 'R': source_rpm_paths.push_back(string(arg)); break;
     case 't': rescan_s = atoi(arg); break;
       // case 'h': argp_state_help (state, stderr, ARGP_HELP_LONG|ARGP_HELP_EXIT_OK);
     default: return ARGP_ERR_UNKNOWN;
@@ -258,6 +266,16 @@ struct libc_exception: public reportable_exception
     reportable_exception(string("libc error: ") + msg + ": " + string(strerror(rc) ?: "?")) {}
 };
 
+
+struct archive_exception: public reportable_exception
+{
+  archive_exception(const string& msg):
+    reportable_exception(string("libarchive error: ") + msg) {}
+  archive_exception(struct archive* a, const string& msg):
+    reportable_exception(string("libarchive error: ") + msg + ": " + string(archive_error_string(a) ?: "?")) {}
+};
+
+
 struct elfutils_exception: public reportable_exception
 {
   elfutils_exception(int rc, const string& msg):
@@ -288,6 +306,30 @@ public:
   }
   ~sqlite_ps () { sqlite3_finalize (this->pp); }
   operator sqlite3_stmt* () { return this->pp; }
+};
+
+
+////////////////////////////////////////////////////////////////////////
+
+// RAII style templated autocloser
+
+template <class Payload, class Ignore>
+struct defer_dtor
+{
+public:
+  typedef Ignore (*dtor_fn) (Payload);
+  
+private:
+  Payload p;
+  dtor_fn fn;
+
+public:
+  defer_dtor(Payload _p, dtor_fn _fn): p(_p), fn(_fn) {}
+  ~defer_dtor() { (void) (*fn)(p); }
+
+private:
+  defer_dtor(const defer_dtor<Payload,Ignore>&); // make uncopyable
+  defer_dtor& operator=(const defer_dtor<Payload,Ignore> &); // make unassignable
 };
 
 
@@ -441,6 +483,11 @@ handle_buildid_match (int64_t b_mtime,
       // NB: it is safe to delete while a select loop is under way
       return 0;
     }
+  
+  // NB: use manual close(2) in error case instead of defer_dtor, because
+  // in the normal case, we want to hand the fd over to libmicrohttpd for
+  // file transfer.
+  
   struct stat s;
   int rc = fstat(fd, &s);
   if (rc < 0)
@@ -469,6 +516,7 @@ handle_buildid_match (int64_t b_mtime,
       close(fd);
     }
   else
+    // XXX: add some timestamp/cache-control headers
     if (verbose)
       obatched(clog) << "serving file " << b_source0 << endl;
     /* libmicrohttpd will close it. */
@@ -803,19 +851,33 @@ scan_source_file_path (const string& dir)
                 string buildid;
                 
                 int fd = open (rps.c_str(), O_RDONLY);
-                if (fd >= 0)
+                try
                   {
-                    elf_classify (fd, executable_p, debuginfo_p, buildid);
-                    close (fd);
+                    if (fd >= 0)
+                      elf_classify (fd, executable_p, debuginfo_p, buildid);
+                    else
+                      throw libc_exception(errno, string("open ") + rps);
+
                   }
-                // NB: don't bother alert about unreadable (EPERM etc.) files.
-                // Just negative-cache them so we don't putz with them again.
+                
+                // NB: we catch exceptions from elf_classify here too, so that we can
+                // cache the corrupt-elf case (!executable_p && !debuginfo_p) just below,
+                // just as if we had an EPERM error from open(2).
+                    
+                catch (const reportable_exception& e)
+                  {
+                    e.report(clog);
+                  }
+                    
+                if (fd >= 0)
+                  close (fd);
                 
                 sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
-
                 if (buildid == "")
                   {
                     rc = sqlite3_bind_null (ps_upsert, 1);
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert bind1");
                     // no point storing an elf file without buildid
                     executable_p = false;
                     debuginfo_p = false;
@@ -823,7 +885,8 @@ scan_source_file_path (const string& dir)
                 else
                   rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
                 if (rc != SQLITE_OK)
-                  throw sqlite_exception(rc, "sqlite3 upsert bind1");           
+                  throw sqlite_exception(rc, "sqlite3 upsert bind1");
+                
                 rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 upsert bind3");           
@@ -925,6 +988,279 @@ thread_main_scan_source_file_path (void* arg)
 }
 
 
+////////////////////////////////////////////////////////////////////////
+
+
+
+// Analyze given *.rpm file of given age; record buildids / exec/debuginfo-ness of its
+// constituent files with given upsert statement.
+static void
+rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
+              unsigned& fts_executable, unsigned& fts_debuginfo)
+{
+  string popen_cmd = string("/usr/bin/rpm2cpio " + /* XXX sh-meta-escape */ rps);
+  FILE* fp = popen (popen_cmd.c_str(), "r"); // "e" O_CLOEXEC?
+  if (fp == NULL)
+    throw libc_exception (errno, string("popen ") + popen_cmd);
+  defer_dtor<FILE*,int> fp_closer (fp, pclose);
+
+  struct archive *a;
+  a = archive_read_new();
+  if (a == NULL)
+    throw archive_exception("cannot create archive reader");
+  defer_dtor<struct archive*,int> archive_closer (a, archive_read_free);
+
+  int rc = archive_read_support_format_cpio(a);
+  if (rc != ARCHIVE_OK)
+    throw archive_exception(a, "cannot select cpio format");
+  rc = archive_read_support_filter_all(a); // XXX: or _none()?  are these cpio's compressed at this point?
+  if (rc != ARCHIVE_OK)
+    throw archive_exception(a, "cannot select all filters");
+  
+  rc = archive_read_open_FILE (a, fp);
+  if (rc != ARCHIVE_OK)
+    throw archive_exception(a, "cannot open archive from rpm2cpio pipe");
+
+  if (verbose > 3)
+    obatched(clog) << "rpm2cpio|libarchive scanning " << rps << endl;
+  
+  while(1) // parse cpio archive entries
+    {
+      try
+        {
+          struct archive_entry *e;
+          rc = archive_read_next_header (a, &e);
+          if (rc != ARCHIVE_OK)
+            break;
+
+          if (! S_ISREG(archive_entry_mode (e))) // skip non-files completely
+            continue;
+              
+          string fn = archive_entry_pathname (e);
+          
+          if (verbose > 3)
+            obatched(clog) << "rpm2cpio|libarchive checking " << fn << endl;
+
+          // extract this file to a temporary file
+          char tmppath[PATH_MAX] = "/tmp/dbgserver.XXXXXX"; // XXX: $TMP_DIR etc.
+          int fd = mkstemp (tmppath);
+          if (fd < 0)
+            throw libc_exception (errno, "cannot create temporary file");
+          unlink (tmppath); // unlink now so OS will release the file as soon as we close the fd
+          defer_dtor<int,int> minifd_closer (fd, close);
+  
+          rc = archive_read_data_into_fd (a, fd);
+          if (rc != ARCHIVE_OK)
+            throw archive_exception(a, "cannot extract file");
+
+          // finally ... time to run elf_classify on this bad boy and update the database
+          bool executable_p = false, debuginfo_p = false;
+          string buildid;
+          elf_classify (fd, executable_p, debuginfo_p, buildid);
+          // NB: might throw
+
+          // NB: we record only executable_p || debuginfo_p case here,
+          // not the 'neither' case.
+          
+          sqlite3_reset (ps_upsert); // to allow rebinding / reexecution          
+          rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert bind1");
+          rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) mtime); // XXX: caller could do this for us
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert bind3");           
+          rc = sqlite3_bind_text (ps_upsert, 4, rps.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert bind4");           
+          rc = sqlite3_bind_text (ps_upsert, 5, fn.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert bind5");           
+
+          if (executable_p)
+            {
+              fts_executable ++;
+              rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 upsert-E bind2");           
+              rc = sqlite3_step (ps_upsert);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                throw sqlite_exception(rc, "sqlite3 upsert-E execute");           
+            }
+          
+          if (debuginfo_p)
+            {
+              fts_debuginfo ++;
+              sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
+              rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 upsert-D bind2");           
+              rc = sqlite3_step (ps_upsert);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                throw sqlite_exception(rc, "sqlite3 upsert-D execute");
+            }
+
+          if ((verbose > 2) && (executable_p || debuginfo_p))
+            obatched(clog) << "recorded buildid=" << buildid << " rpm=" << rps << " file=" << fn
+                           << " mtime=" << mtime << " as "
+                           << (executable_p ? "executable" : "not executable") << " and "
+                           << (debuginfo_p ? "debuginfo" : "not debuginfo") << endl;
+          
+        }
+      catch (const reportable_exception& e)
+        {
+          e.report(clog);
+        }
+    }
+}
+
+
+
+// scan for *.rpm files
+static void
+scan_source_rpm_path (const string& dir)
+{
+  sqlite_ps ps_upsert (db,
+                       "insert or replace into " BUILDIDS " (buildid, artifacttype, mtime,"
+                       "sourcetype, source0, source1) values (?, ?, ?, 'R', ?, ?);");
+  sqlite_ps ps_query (db,
+                      "select 1 from " BUILDIDS " where sourcetype = 'R' and source0 = ? and mtime = ?;");
+
+  char * const dirs[] = { (char*) dir.c_str(), NULL };
+
+  struct timeval tv_start, tv_end;
+  unsigned fts_scanned=0, fts_cached=0, fts_debuginfo=0, fts_executable=0, fts_rpm = 0;
+  gettimeofday (&tv_start, NULL);
+  
+  FTS *fts = fts_open (dirs,
+                       FTS_PHYSICAL /* don't follow symlinks */
+                       | FTS_XDEV /* don't cross devices/mountpoints */
+                       | FTS_NOCHDIR /* multithreaded */,
+                       NULL);
+  if (fts == NULL)
+    {
+      obatched(cerr) << "cannot fts_open " << dir << endl;
+      return;
+    }
+
+  FTSENT *f;
+  while ((f = fts_read (fts)) != NULL)
+    {
+      fts_scanned ++;
+      if (interrupted)
+        break;
+
+      if (verbose > 3)
+        obatched(clog) << "fts/rpm traversing " << f->fts_path << endl;
+
+      try
+        {
+          switch (f->fts_info)
+            {
+            case FTS_F:
+              {
+                /* Found a file.  Convert it to an absolute path, so
+                   the buildid database does not have relative path
+                   names that are unresolvable from a subsequent run
+                   in a different cwd. */
+                char *rp = realpath(f->fts_path, NULL);
+                if (rp == NULL)
+                  throw libc_exception(errno, "fts realpath " + string(f->fts_path));
+                string rps = string(rp);
+                free (rp);
+
+                // heuristic: reject if file name does not end with ".rpm"
+                // (alternative: try opening with librpm etc., caching)
+                string suffix = ".rpm";
+                if (rps.size() < suffix.size() ||
+                    !equal(rps.begin()+rps.size()-suffix.size(), rps.end(), suffix.begin()))
+                  continue;
+                fts_rpm ++;
+                
+                /* See if we know of it already. */
+                sqlite3_reset (ps_query); // to allow rebinding / reexecution
+                int rc = sqlite3_bind_text (ps_query, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 file query bind1");
+                rc = sqlite3_bind_int64 (ps_query, 2, (int64_t) f->fts_statp->st_mtime);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 file query bind2");
+                rc = sqlite3_step (ps_query);
+                if (rc == SQLITE_ROW) // i.e., a result, as opposed to DONE (no results)
+                  // no need to recheck a file/version we already know
+                  // specifically, no need to elf-begin a file we already determined is non-elf
+                  // (so is stored with buildid=NULL)
+                  {
+                    fts_cached ++;
+                    continue;
+                  }
+
+                // extract the rpm contents via popen("rpm2cpio") | libarchive | loop-of-elf_classify()
+                unsigned my_fts_executable = 0, my_fts_debuginfo = 0;
+                try
+                  {
+                    rpm_classify (rps, ps_upsert, f->fts_statp->st_mtime, my_fts_executable, my_fts_debuginfo);
+                  }
+                catch (const reportable_exception& e)
+                  {
+                    e.report(clog);
+                  }
+
+                fts_executable += my_fts_executable;
+                fts_debuginfo += my_fts_debuginfo;
+                
+                // unreadable or corrupt or non-ELF-carrying rpm: cache negative
+                if (my_fts_executable == 0 && my_fts_debuginfo == 0)
+                  {
+                    sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
+                    rc = sqlite3_bind_null (ps_upsert, 1); // buildid
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert-NULL bind1");
+                    rc = sqlite3_bind_null (ps_upsert, 2); // artifacttype
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert-NULL bind2");
+                    rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime); // mtime
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert bind3");           
+                    rc = sqlite3_bind_text (ps_upsert, 4, rps.c_str(), -1, SQLITE_TRANSIENT); // source0
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert bind4");           
+                    rc = sqlite3_bind_null (ps_upsert, 5); // source1
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert-NULL bind5");
+                    rc = sqlite3_step (ps_upsert);
+                    if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                      throw sqlite_exception(rc, "sqlite3 upsert-NULL execute");
+                  }
+              }
+              break;
+
+            case FTS_ERR:
+            case FTS_NS:
+              throw libc_exception(f->fts_errno, string("fts traversal ") + string(f->fts_path));
+
+            default:
+            case FTS_SL: /* NB: don't enter symbolic links into the database */
+              break;
+            }
+        }
+      catch (const reportable_exception& e)
+        {
+          e.report(clog);
+        }
+    }
+  fts_close (fts);
+
+  gettimeofday (&tv_end, NULL);
+  double deltas = (tv_end.tv_sec - tv_start.tv_sec) + (tv_end.tv_usec - tv_start.tv_usec)*0.000001;
+  
+  if (verbose > 1)
+    obatched(clog) << "fts/rpm traversed " << dir << " in " << deltas << "s, scanned=" << fts_scanned
+                   << ", cached=" << fts_cached << ", rpm=" << fts_rpm << ", debuginfo=" << fts_debuginfo
+                   << ", executable=" << fts_executable << endl;
+}
+
+
+
 static void*
 thread_main_scan_source_rpm_path (void* arg)
 {
@@ -932,19 +1268,22 @@ thread_main_scan_source_rpm_path (void* arg)
   if (verbose > 2)
     obatched(clog) << "rpm-path scanning " << dir << endl;
 
+  unsigned rescan_timer = 0;
   while (! interrupted)
     {
       try
         {
-          // XXX scan_source_rpm_path (dir);
-          sleep (10); // parametrize
+          if (rescan_timer == 0)
+            scan_source_rpm_path (dir);
         }
       catch (const sqlite_exception& e)
         {
           obatched(cerr) << e.message << endl;
         }
+      sleep (1);
+      rescan_timer = (rescan_timer + 1) % rescan_s;
     }
-  
+
   return 0;
 }
 
