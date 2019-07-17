@@ -66,7 +66,7 @@
 #include <iostream>
 #include <ostream>
 #include <sstream>
-#include <algorithm>
+// #include <algorithm>
 using namespace std;
 
 #include <gelf.h>
@@ -1257,7 +1257,8 @@ scan_source_rpm_path (const string& dir)
                 // (alternative: try opening with librpm etc., caching)
                 string suffix = ".rpm";
                 if (rps.size() < suffix.size() ||
-                    !equal(rps.begin()+rps.size()-suffix.size(), rps.end(), suffix.begin()))
+                    rps.substr(rps.size()-suffix.size()) != suffix)
+                  // !equal(rps.begin()+rps.size()-suffix.size(), rps.end(), suffix.begin()))
                   continue;
                 fts_rpm ++;
                 
