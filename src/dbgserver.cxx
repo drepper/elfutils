@@ -461,18 +461,9 @@ conninfo (struct MHD_Connection * conn)
 
 
 static struct MHD_Response*
-handle_buildid_match (int64_t b_mtime,
-                      const string& b_stype,
-                      const string& b_source0,
-                      const string& b_source1)
+handle_buildid_f_match (int64_t b_mtime,
+                        const string& b_source0)
 {
-  if (b_stype != "F")
-    {
-      if (verbose > 2)
-        obatched(clog) << "unimplemented stype " << b_stype << endl;
-      return 0;
-    }
-  
   int fd = open(b_source0.c_str(), O_RDONLY);
   if (fd < 0)
     {
@@ -523,6 +514,101 @@ handle_buildid_match (int64_t b_mtime,
 
   return r;
 }
+
+
+
+static struct MHD_Response*
+handle_buildid_r_match (int64_t b_mtime,
+                        const string& b_source0,
+                        const string& b_source1)
+{
+  string popen_cmd = string("/usr/bin/rpm2cpio " + /* XXX sh-meta-escape */ b_source0);
+  FILE* fp = popen (popen_cmd.c_str(), "r"); // "e" O_CLOEXEC?
+  if (fp == NULL)
+    throw libc_exception (errno, string("popen ") + popen_cmd);
+  defer_dtor<FILE*,int> fp_closer (fp, pclose);
+
+  struct archive *a;
+  a = archive_read_new();
+  if (a == NULL)
+    throw archive_exception("cannot create archive reader");
+  defer_dtor<struct archive*,int> archive_closer (a, archive_read_free);
+
+  int rc = archive_read_support_format_cpio(a);
+  if (rc != ARCHIVE_OK)
+    throw archive_exception(a, "cannot select cpio format");
+  rc = archive_read_support_filter_all(a); // XXX: or _none()?  are these cpio's compressed at this point?
+  if (rc != ARCHIVE_OK)
+    throw archive_exception(a, "cannot select all filters");
+  
+  rc = archive_read_open_FILE (a, fp);
+  if (rc != ARCHIVE_OK)
+    throw archive_exception(a, "cannot open archive from rpm2cpio pipe");
+
+  while(1) // parse cpio archive entries
+    {
+      struct archive_entry *e;
+      rc = archive_read_next_header (a, &e);
+      if (rc != ARCHIVE_OK)
+        break;
+
+      if (! S_ISREG(archive_entry_mode (e))) // skip non-files completely
+        continue;
+              
+      string fn = archive_entry_pathname (e);
+      if (fn != b_source1)
+        continue;
+
+      // extract this file to a temporary file
+      char tmppath[PATH_MAX] = "/tmp/dbgserver.XXXXXX"; // XXX: $TMP_DIR etc.
+      int fd = mkstemp (tmppath);
+      if (fd < 0)
+        throw libc_exception (errno, "cannot create temporary file");
+      unlink (tmppath); // unlink now so OS will release the file as soon as we close the fd
+  
+      rc = archive_read_data_into_fd (a, fd);
+      if (rc != ARCHIVE_OK)
+        {
+          close (fd);
+          throw archive_exception(a, "cannot extract file");
+        }
+
+      struct MHD_Response* r = MHD_create_response_from_fd (archive_entry_size(e), fd);
+      if (r == 0)
+        {
+          if (verbose > 2)
+            clog << "cannot create fd-response for " << b_source0 << endl;
+          close(fd);
+        }
+      else
+        {
+          // XXX: add some timestamp/cache-control headers
+          if (verbose)
+            obatched(clog) << "serving rpm " << b_source0 << " file " << b_source1 << endl;
+          /* libmicrohttpd will close it. */
+          return r;
+        }
+    }
+
+  // XXX: rpm/file not found: drop this R entry?
+  return 0;
+}
+
+
+static struct MHD_Response*
+handle_buildid_match (int64_t b_mtime,
+                      const string& b_stype,
+                      const string& b_source0,
+                      const string& b_source1)
+{
+  if (b_stype == "F")
+    return handle_buildid_f_match(b_mtime, b_source0);
+  else if (b_stype == "R")
+    return handle_buildid_r_match(b_mtime, b_source0, b_source1);
+  else
+    return 0;
+}
+
 
 
 static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
@@ -1254,7 +1340,7 @@ scan_source_rpm_path (const string& dir)
   
   if (verbose > 1)
     obatched(clog) << "fts/rpm traversed " << dir << " in " << deltas << "s, scanned=" << fts_scanned
-                   << ", cached=" << fts_cached << ", rpm=" << fts_rpm << ", debuginfo=" << fts_debuginfo
+                   << ", rpm=" << fts_rpm << ", cached=" << fts_cached << ", debuginfo=" << fts_debuginfo
                    << ", executable=" << fts_executable << endl;
 }
 
@@ -1294,6 +1380,8 @@ static void
 signal_handler (int /* sig */)
 {
   interrupted ++;
+
+  // NB: don't do anything else in here
 }
 
 
@@ -1314,10 +1402,12 @@ main (int argc, char *argv[])
   
   /* Parse and process arguments.  */
   int remaining;
-  (void) argp_parse (&argp, argc, argv, ARGP_IN_ORDER, &remaining, NULL);
-
-  /* Block SIGPIPE, as libmicrohttpd operations can trigger it, and we don't care. */
-  (void) signal (SIGPIPE, SIG_IGN);
+  (void) argp_parse (&argp, argc, argv, ARGP_IN_ORDER|ARGP_NO_ARGS, &remaining, NULL);
+  if (remaining != argc)
+      error (EXIT_FAILURE, 0,
+             _("unexpected argument: %s"), argv[remaining]);
+    
+  (void) signal (SIGPIPE, SIG_IGN); // microhttpd can generate it incidentally, ignore
   (void) signal (SIGINT, signal_handler); // ^C
   (void) signal (SIGHUP, signal_handler); // EOF
   (void) signal (SIGTERM, signal_handler); // systemd
@@ -1340,6 +1430,8 @@ main (int argc, char *argv[])
              _("cannot open %s, database: %s"), db_path.c_str(), sqlite3_errmsg(db));
     }
 
+  obatched(clog) << "Opened database " << db_path << endl;
+  
   rc = sqlite3_exec (db, DBGSERVER_SQLITE_DDL, NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     {
@@ -1354,7 +1446,7 @@ main (int argc, char *argv[])
                             "select sourcetype, artifacttype, count(*) from " BUILDIDS
                             " group by sourcetype, artifacttype");
 
-        obatched(clog) << "Database " << db_path << " statistics:" << endl;
+        obatched(clog) << "Database statistics:" << endl;
         obatched(clog) << "source" << "\t" << "type" << "\t" << "count" << endl;
         while (1)
           {
@@ -1429,11 +1521,10 @@ main (int argc, char *argv[])
       error (EXIT_FAILURE, 0, _("cannot start http server at port %d"), http_port);
     }
 
-  if (verbose)
-    obatched(clog) << "Started http server on "
-                   << (d4 != NULL ? "IPv4 " : "")
-                   << (d6 != NULL ? "IPv6 " : "")
-                   << "port=" << http_port << endl;
+  obatched(clog) << "Started http server on "
+                 << (d4 != NULL ? "IPv4 " : "")
+                 << (d6 != NULL ? "IPv6 " : "")
+                 << "port=" << http_port << endl;
   
   /* Trivial main loop! */
   while (! interrupted)
