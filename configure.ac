@@ -643,13 +643,12 @@ if test "$HAVE_BUNZIP2" = "no"; then
   AC_MSG_WARN([No bunzip2, needed to run make check])
 fi
 
-# Look for libmicrohttpd, libcurl, librpm, sqlite for debuginfo server
+# Look for libmicrohttpd, libcurl, libarchive, sqlite for debuginfo server
 # minimum versions as per rhel7
 PKG_CHECK_MODULES([libmicrohttpd],[libmicrohttpd >= 0.9.33])
 PKG_CHECK_MODULES([libcurl],[libcurl >= 7.29.0])
 PKG_CHECK_MODULES([sqlite3],[sqlite3 >= 3.7.17])
-# optional
-PKG_CHECK_MODULES([rpm],[rpm >= 4.11.3])
+PKG_CHECK_MODULES([libarchive],[libarchive >= 3.1.2])
 
 
 AC_OUTPUT

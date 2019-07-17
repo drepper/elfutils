@@ -129,6 +129,7 @@ Requires(post):   systemd
 Requires(preun):  systemd
 Requires(postun): systemd
 Requires: shadow-utils
+Requires: /usr/bin/rpm2cpio
 
 %description dbgserver
 The elfutils-dbgserver package contains the dbgserver binary
