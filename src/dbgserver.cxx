@@ -160,12 +160,12 @@ static const struct argp_option options[] =
    { NULL, 0, NULL, 0, N_("Sources:"), 1 },
    { "source-files", 'F', "PATH", 0, N_("Scan ELF/DWARF files under given directory."), 0 },
    { "source-rpms", 'R', "PATH", 0, N_("Scan RPM files under given directory."), 0 },
-   { "source-rpms-yum", 0, "SECONDS", 0, N_("Try fetching missing RPMs from yum."), 0 },
+   //   { "source-rpms-yum", 0, "SECONDS", 0, N_("Try fetching missing RPMs from yum."), 0 },
+   //   { "source-redirect", 'U', "URL", 0, N_("Redirect to upstream dbgserver."), 0 },
+   //   { "source-relay", 'u', "URL", 0, N_("Relay from upstream dbgserver."), 0 },
+   // ???
    // "source-rpms-koji"      ... no can do, not buildid-addressable
    // "source-imageregistry"  ... 
-   // "source-debs"           ... future
-   { "source-redirect", 'U', "URL", 0, N_("Redirect to upstream dbgserver."), 0 },
-   { "source-relay", 'u', "URL", 0, N_("Relay from upstream dbgserver."), 0 },
   
    { NULL, 0, NULL, 0, N_("Options:"), 2 },
    { "rescan-time", 't', "SECONDS", 0, N_("Number of seconds to wait between rescans."), 0 },
