@@ -26,13 +26,11 @@ AM_CPPFLAGS += -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
 
 bin_PROGRAMS = readelf nm size strip elflint findtextrel addr2line \
-	       elfcmp objdump ranlib strings ar unstrip stack elfcompress dbgserver
+	       elfcmp objdump ranlib strings ar unstrip stack elfcompress
 
 noinst_LIBRARIES = libar.a
 
 libar_a_SOURCES = arlib.c arlib2.c arlib-argp.c
-
-dbgserver_SOURCES = dbgserver.cxx
 
 EXTRA_DIST = arlib.h debugpred.h
 
@@ -85,7 +83,6 @@ ar_LDADD = libar.a $(libelf) $(libeu) $(argp_LDADD)
 unstrip_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD) -ldl
 stack_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD) -ldl $(demanglelib)
 elfcompress_LDADD = $(libebl) $(libelf) $(libdw) $(libeu) $(argp_LDADD)
-dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
 
 
 installcheck-binPROGRAMS: $(bin_PROGRAMS)

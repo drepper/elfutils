@@ -34,6 +34,7 @@
 #include <inttypes.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <dlfcn.h>
 #include "system.h"
 #include "dbgserver-client.h"
 
@@ -188,11 +189,34 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
       free (*file_name);
       *file_name = NULL;
     }
-  else if (dbgclient_enabled() && mod->build_id_len > 0)
-    fd = dbgclient_build_id_find (dbgclient_file_type_executable,
+#if ENABLE_DBGSERVER
+  else {
+    static void *dbgclient_so;
+    static __typeof__ (dbgclient_enabled) *fp_dbgclient_enabled;
+    static __typeof__ (dbgclient_build_id_find) *fp_dbgclient_build_id_find;
+
+    if (dbgclient_so == NULL)
+      dbgclient_so = dlopen("libdbgserver-" VERSION ".so", RTLD_LAZY);
+    if (dbgclient_so == NULL)
+      dbgclient_so = dlopen("libdbgserver.so", RTLD_LAZY);
+    if (dbgclient_so != NULL && fp_dbgclient_enabled == NULL)
+      fp_dbgclient_enabled = dlsym (dbgclient_so, "dbgclient_enabled");
+    if (dbgclient_so != NULL && fp_dbgclient_build_id_find == NULL)
+      fp_dbgclient_build_id_find = dlsym (dbgclient_so, "dbgclient_build_id_find");
+
+    if (fp_dbgclient_enabled != NULL && fp_dbgclient_build_id_find != NULL)
+      {
+        /* If all else fails and a build-id is available, query the
+           debuginfo-server if enabled.  */
+        if (fd < 0 && mod->build_id_len > 0 && (*fp_dbgclient_enabled)())
+          fd = (*fp_dbgclient_build_id_find) (dbgclient_file_type_executable,
                                   mod->build_id_bits,
                                   mod->build_id_len);
 
+      }
+  }
+#endif /* ENABLE_DBGSERVER */
+  
   if (fd < 0 && errno == 0 && mod->build_id_len > 0)
     /* Setting this with no file yet loaded is a marker that
        the build ID is authoritative even if we also know a

@@ -466,7 +466,7 @@ TESTS_ENVIRONMENT = LC_ALL=C; LANG=C; VALGRIND_CMD=$(valgrind_cmd); \
 		    export LC_ALL; export LANG; export VALGRIND_CMD; \
 		    NM=$(NM); export NM;
 LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
-	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm
+	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm:$(abs_top_builddir)/dbgserver
 
 installcheck-local:
 	$(MAKE) $(AM_MAKEFLAGS) \
@@ -604,7 +604,7 @@ elfcopy_LDADD = $(libelf)
 addsections_LDADD = $(libelf)
 xlate_notes_LDADD = $(libelf)
 elfrdwrnop_LDADD = $(libelf)
-dbgserver_build_id_find_LDADD = $(libdw) $(libcurl_LIBS)
+dbgserver_build_id_find_LDADD = $(libdw)
 
 # We want to test the libelf header against the system elf.h header.
 # Don't include any -I CPPFLAGS. Except when we install our own elf.h.

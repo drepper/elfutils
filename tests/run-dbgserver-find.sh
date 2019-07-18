@@ -16,11 +16,6 @@
 
 . $srcdir/test-subr.sh
 
-if [ -z "$DBGSERVER_URLS" ]; then
-  echo "unknown server url"
-  exit 77
-fi
-
 testfiles testfile-dbgserver.exec
 testfiles testfile-dbgserver.debug
 
@@ -29,9 +24,18 @@ EXPECT_PASS=1
 DB=${PWD}/.dbgserver_tmp.sqlite
 export DBGSERVER_CACHE_PATH=${PWD}/.client_cache
 
-../../src/dbgserver -vvv -d $DB -F $PWD &
+# find an unused port number
+while true; do
+    PORT=`expr '(' $RANDOM % 1000 ')' + 9000`
+    ss -atn | fgrep ":$PORT" || break
+done    
+
+../../dbgserver/dbgserver -vvv -d $DB -F $PWD -p $PORT &
 PID=$!
+trap 'kill $PID || true; rm -f $DB' 0 1 5 9 15
 sleep 5
+
+export DBGSERVER_URLS=http://localhost:$PORT # XXX: no / at end; dbgserver rejects extra /
 
 # Test whether the server is able to fetch the file from the local dbgserver.
 testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec $EXPECT_PASS

@@ -31,13 +31,13 @@
 ##
 include $(top_srcdir)/config/eu.am
 AM_CPPFLAGS += -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
-	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf
+	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf -I$(srcdir)/../dbgserver
 VERSION = 1
 
 noinst_LIBRARIES = libdwfl.a
 noinst_LIBRARIES += libdwfl_pic.a
 
-pkginclude_HEADERS = libdwfl.h dbgserver-client.h
+pkginclude_HEADERS = libdwfl.h
 
 
 libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
@@ -47,7 +47,7 @@ libdwfl_a_SOURCES = dwfl_begin.c dwfl_end.c dwfl_error.c dwfl_version.c \
 		    dwfl_module_info.c dwfl_getmodules.c dwfl_getdwarf.c \
 		    dwfl_module_getdwarf.c dwfl_module_getelf.c \
 		    dwfl_validate_address.c \
-		    argp-std.c dbgserver-client.c find-debuginfo.c \
+		    argp-std.c find-debuginfo.c \
 		    dwfl_build_id_find_elf.c \
 		    dwfl_build_id_find_debuginfo.c \
 		    linux-kernel-modules.c linux-proc-maps.c \

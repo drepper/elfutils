@@ -121,6 +121,10 @@ interprocess services, communication and introspection
 (like synchronisation, signaling, debugging, tracing and
 profiling) of processes.
 
+%package dbgserver-libs
+Summary: Libraries for HTTP ELF/DWARF file server addressed by build-id.
+License: GPLv2+
+
 %package dbgserver
 Summary: HTTP ELF/DWARF file server addressed by build-id.
 License: GPLv2+
@@ -130,6 +134,11 @@ Requires(preun):  systemd
 Requires(postun): systemd
 Requires: shadow-utils
 Requires: /usr/bin/rpm2cpio
+
+%description dbgserver-libs
+The elfutils-dbgserver-libs package contains shared libraries
+dynamically loaded from -ldw, which use a dbgserver service
+to look up debuginfo and associated data.
 
 %description dbgserver
 The elfutils-dbgserver package contains the dbgserver binary
@@ -142,7 +151,7 @@ such servers to download those files on demand.
 %setup -q
 
 %build
-%configure --program-prefix=%{_programprefix}
+%configure --program-prefix=%{_programprefix} --enable-dbgserver
 make
 
 %install
@@ -227,6 +236,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_libdir}/libebl.a
 #%{_libdir}/libasm.so
 %{_libdir}/libdw.so
+%{_libdir}/libdbgserver.so
 %{_libdir}/pkgconfig/libdw.pc
 
 %files devel-static
@@ -253,6 +263,13 @@ rm -rf ${RPM_BUILD_ROOT}
 
 %files default-yama-scope
 %{_sysctldir}/10-default-yama-scope.conf
+
+
+%files dbgserver-libs
+%defattr(-,root,root)
+%{_libdir}/libdbgserver.so.*
+%{_libdir}/libdbgserver-%{version}.so
+
 
 %files dbgserver
 %defattr(-,root,root)

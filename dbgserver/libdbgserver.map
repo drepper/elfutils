@@ -1,0 +1,6 @@
+ELFUTILS_0 { };
+ELFUTILS_0.177 {
+  global:
+    dbgclient_enabled;
+    dbgclient_build_id_find;
+} ELFUTILS_0;
