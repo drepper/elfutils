@@ -28,7 +28,6 @@ EXPECT_FAIL=0
 EXPECT_PASS=1
 DB=${PWD}/.dbgserver_tmp.sqlite
 export DBGSERVER_CACHE_PATH=${PWD}/.client_cache
-export DBGSERVER_CACHE_CLEAN_INTERVAL_S=100
 
 ../../src/dbgserver -vvv -d $DB -F $PWD &
 PID=$!
@@ -46,7 +45,8 @@ testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec $EXPE
 
 # Trigger a cache clean and run the test again. The client should be unable to
 # find the target.
-export DBGSERVER_CACHE_CLEAN_INTERVAL_S=0
+echo 0 > $DBGSERVER_CACHE_PATH/cache_clean_interval_s
 testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec $EXPECT_FAIL
 
+rm -rf $DBGSERVER_CACHE_PATH
 exit 0

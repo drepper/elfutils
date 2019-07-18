@@ -11,37 +11,39 @@
 #include <stdbool.h>
 #include <linux/limits.h>
 #include <time.h>
+#include <utime.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <curl/curl.h>
 
-#define MAX_BUILD_ID_BYTES 64
-#define _(Str) "dbgserver-client: "Str"\n"
+static const int max_build_id_bytes = 64;
 
-/* URLs of dbgservers, separated by url_delim.
-   This env var must be set for dbgserver-client to run.  */
-const char *server_urls_envvar = "DBGSERVER_URLS";
-const char *url_delim = " ";
+/* The cache_clean_interval_s file within the dbgclient cache specifies
+   how frequently the cache should be cleaned. The file's st_mtime represents
+   the time of last cleaning.  */
+static const char *cache_clean_interval_filename = "cache_clean_interval_s";
+static const time_t cache_clean_default_interval_s = 600;
 
 /* Location of the cache of files downloaded from dbgservers.
    The default parent directory is $HOME, or '/' if $HOME doesn't exist.  */
-const char *cache_path_envvar = "DBGSERVER_CACHE_PATH";
-const char *cache_default_name = ".dbgserver_client_cache";
+static const char *cache_default_name = ".dbgserver_client_cache";
+static const char *cache_path_envvar = "DBGSERVER_CACHE_PATH";
 
-/* Files will be removed from the cache when the number of seconds
-   since their st_mtime is greater than or equal to this env var.  */
-const char *cache_clean_interval_envvar = "DBGSERVER_CACHE_CLEAN_INTERVAL_S";
-const unsigned long cache_clean_interval_default = 86400; /* 1 day  */
+/* URLs of dbgservers, separated by url_delim.
+   This env var must be set for dbgserver-client to run.  */
+static const char *server_urls_envvar = "DBGSERVER_URLS";
+static const char *url_delim =  " ";
+
 
 int
-dbgserver_enabled (void)
+dbgclient_enabled (void)
 {
   return getenv(server_urls_envvar) != NULL;
 }
 
-size_t
-write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
+static size_t
+dbgclient_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
 {
   int fd = *(int*)fdptr;
   ssize_t res;
@@ -54,71 +56,112 @@ write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
   return (size_t)res;
 }
 
-int
-get_file_from_cache (char *target_cache_path)
+
+static int
+dbgclient_get_file_from_cache (char *target_cache_path)
 {
   int fd;
   struct stat st;
 
   if (stat(target_cache_path, &st) == -1)
-    return -1;
+    return DBGCLIENT_E_OK;
 
-  fd = open(target_cache_path, O_RDONLY);
-  if (fd < 0)
-    fprintf(stderr, _("error opening target from cache"));
+  if ((fd = open(target_cache_path, O_RDONLY)) < 0)
+    return DBGCLIENT_E_CACHE_CANT_OPEN;
 
   return fd;
 }
 
-int
-add_file_to_cache (char *cache_path,
-                   char *target_cache_dir,
-                   char *target_cache_path)
+
+/* Create the cache and interval file if they do not already exist.
+   Return DBGCLIENT_E_OK if cache and config file are initialized,
+   otherwise return the appropriate error code.  */
+static int
+dbgclient_init_cache (char *cache_path, char *interval_path)
+{
+  struct stat st;
+
+  /* If the cache and config file already exist then we are done.  */
+  if (stat(cache_path, &st) == 0 && stat(interval_path, &st) == 0)
+    return DBGCLIENT_E_OK;
+
+  /* Create the cache and config file as necessary.  */
+  if (stat(cache_path, &st) != 0 && mkdir(cache_path, 0777) < 0)
+    return DBGCLIENT_E_CACHE_CANT_OPEN;
+
+  int fd;
+  if (stat(interval_path, &st) != 0
+      && (fd = open(interval_path, O_CREAT | O_RDWR, 0666)) < 0)
+    return DBGCLIENT_E_CACHE_CANT_CREATE;
+
+  /* write default interval to config file.  */
+  if (dprintf(fd, "%ld", cache_clean_default_interval_s) < 0)
+    return DBGCLIENT_E_CACHE_CANT_WRITE;
+
+  return DBGCLIENT_E_OK;
+}
+
+
+/* Create a new cache entry. If successful return its file descriptor,
+   otherwise return a dbgclient error code.  */
+static int
+dbgclient_add_file_to_cache (char *target_cache_dir,
+                             char *target_cache_path)
 {
   int fd;
   struct stat st;
 
-  /* create cache if not found.  */
-  if (stat(cache_path, &st) == -1 && mkdir(cache_path, 0777) < 0)
-    fprintf(stderr, _("error finding cache"));
-
   /* create target directory in cache if not found.  */
   if (stat(target_cache_dir, &st) == -1 && mkdir(target_cache_dir, 0777) < 0)
-    fprintf(stderr, _("error finding target cache directory"));
+    return DBGCLIENT_E_CACHE_CANT_CREATE;
 
   /* create target file if not found.  */
-  fd = open(target_cache_path, O_CREAT | O_RDWR, 0666);
-  if (fd < 0)
-    fprintf(stderr, _("error finding target in cache"));
+  if((fd = open(target_cache_path, O_CREAT | O_RDWR, 0666)) < 0)
+    return DBGCLIENT_E_CACHE_CANT_CREATE;
 
   return fd;
 }
 
+
 /* Delete any files that have been unmodied for a period
    longer than $DBGSERVER_CACHE_CLEAN_INTERVAL_S.  */
-void
-clean_cache(char *cache_path)
+static int
+dbgclient_clean_cache(char *cache_path, char *interval_path)
 {
+  struct stat st;
+  FILE *interval_file;
+
+  if (stat(interval_path, &st) == -1)
+    {
+      /* Create new interval file.  */
+      interval_file = fopen(interval_path, "w");
+
+      if (interval_file == NULL)
+        return DBGCLIENT_E_CACHE_CANT_CREATE;
+
+      int rc = fprintf(interval_file, "%ld", cache_clean_default_interval_s);
+      fclose(interval_file);
+
+      if (rc < 0)
+        return DBGCLIENT_E_CACHE_CANT_WRITE;
+    }
+
+  /* Check timestamp of interval file to see whether cleaning is necessary.  */
+  time_t clean_interval;
+  interval_file = fopen(interval_path, "r");
+  if (fscanf(interval_file, "%ld", &clean_interval) != 1)
+    clean_interval = cache_clean_default_interval_s;
+  fclose(interval_file);
+
+  if (time(NULL) - st.st_mtime < clean_interval)
+    /* Interval has not passed, skip cleaning.  */
+    return DBGCLIENT_E_OK;
+
   char * const dirs[] = { cache_path, NULL, };
 
   FTS *fts = fts_open(dirs, 0, NULL);
   if (fts == NULL)
-    {
-      if (errno == ENOENT)
-        {
-          errno = 0;
-          return;
-        }
-
-      fprintf(stderr, _("error cleaning cache, cannot fts_open"));
-      return;
-    }
-
-  time_t clean_interval;
-  const char *interval_str = getenv(cache_clean_interval_envvar);
-  if (interval_str == NULL
-      || sscanf(interval_str, "%ld", &clean_interval) != 1)
-    clean_interval = cache_clean_interval_default;
+    return DBGCLIENT_E_CACHE_CANT_OPEN;
 
   FTSENT *f;
   DIR *d;
@@ -146,47 +189,43 @@ clean_cache(char *cache_path)
           ;
         }
     }
-
   fts_close(fts);
+
+  /* Update timestamp representing when the cache was last cleaned.  */
+  utime(interval_path, NULL);
+  return DBGCLIENT_E_OK;
 }
 
-int
-query_server (char *build_id, char *type)
+
+static int
+dbgclient_query_server (char *build_id, char *type)
 {
   char *urls_envvar;
   char *server_urls;
   char cache_path[PATH_MAX];
+  char interval_path[PATH_MAX];
   char target_cache_dir[PATH_MAX];
   char target_cache_path[PATH_MAX];
 
   urls_envvar = getenv(server_urls_envvar);
   if (urls_envvar == NULL)
-    {
-      fprintf(stderr, _("cannot find server urls environment variable"));
-      return -1;
-    }
+    return DBGCLIENT_E_NOT_ENABLED;
 
   /* make a copy of the envvar so it can be safely modified.  */
   server_urls = malloc(strlen(urls_envvar) + 1);
-  strcpy(server_urls, urls_envvar);
   if (server_urls == NULL)
-    {
-      fprintf(stderr, _("out of memory"));
-      return -1;
-    }
+    return DBGCLIENT_E_OUT_OF_MEMORY;
+
+  strcpy(server_urls, urls_envvar);
 
   if (curl_global_init(CURL_GLOBAL_DEFAULT) != 0)
-    {
-      fprintf(stderr, _("unable to initialize curl"));
-      return -1;
-    }
+    return DBGCLIENT_E_CANT_INIT_CONNECTION;
 
   CURL *session = curl_easy_init();
   if (session == NULL)
     {
-      fprintf(stderr, _("unable to begin curl session"));
       curl_global_cleanup();
-      return -1;
+      return DBGCLIENT_E_CANT_INIT_CONNECTION;
     }
 
   /* set paths needed to perform the query
@@ -214,18 +253,32 @@ query_server (char *build_id, char *type)
   strncat(target_cache_path, "/", PATH_MAX - strlen(target_cache_dir));
   strncat(target_cache_path, type, PATH_MAX - strlen(target_cache_dir));
 
-  clean_cache(cache_path);
+  strncpy(interval_path, cache_path, PATH_MAX);
+  strncat(interval_path, "/", PATH_MAX - strlen(interval_path));
+  strncat(interval_path,
+          cache_clean_interval_filename,
+          PATH_MAX - strlen(interval_path));
 
-  int fd = get_file_from_cache(target_cache_path);
+  int rc = dbgclient_init_cache(cache_path, interval_path);
+  if (rc != DBGCLIENT_E_OK)
+    return rc;
+
+  rc = dbgclient_clean_cache(cache_path, interval_path);
+  if (rc != DBGCLIENT_E_OK)
+    return rc;
+
+  /* If the target is already in the cache then we are done.  */
+  int fd = dbgclient_get_file_from_cache(target_cache_path);
   if (fd >= 0)
     return fd;
 
-  fd = add_file_to_cache(cache_path, target_cache_dir, target_cache_path);
+  fd = dbgclient_add_file_to_cache(target_cache_dir,
+                                   target_cache_path);
   if (fd < 0)
-    /* encountered an error adding file to cache.  */
-    return -1;
+    /* Encountered an error adding file to cache, return error code.  */
+    return fd;
 
-  long timeout = 5; /* XXX grab from env var.  */
+  long timeout = 5; /* XXX do not hardcode.  */
   bool success = false;
   char *server_url = strtok(server_urls, url_delim);
   while (! success && server_url != NULL)
@@ -240,15 +293,16 @@ query_server (char *build_id, char *type)
 
       if (server_url == NULL)
         {
-          fprintf(stderr, _("out of memory"));
           close(fd);
-          return -1;
+          return DBGCLIENT_E_OUT_OF_MEMORY;
         }
 
       sprintf(url, "%s/buildid/%s/%s", server_url, build_id, type);
 
       curl_easy_setopt(session, CURLOPT_URL, url);
-      curl_easy_setopt(session, CURLOPT_WRITEFUNCTION, write_callback);
+      curl_easy_setopt(session,
+                       CURLOPT_WRITEFUNCTION,
+                       dbgclient_write_callback);
       curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)&fd);
       curl_easy_setopt(session, CURLOPT_TIMEOUT, timeout);
 
@@ -273,25 +327,33 @@ query_server (char *build_id, char *type)
   curl_easy_cleanup(session);
   curl_global_cleanup();
 
+
   if (! success)
     {
       close(fd);
       remove(target_cache_path);
-      /* remove any unnecessary directories that were just created.  */
-      clean_cache(cache_path);
-      return -1;
+
+      /* If target_cache_dir is empty, remove it.  */
+      DIR *d = opendir(target_cache_dir);
+      (void) readdir(d);
+      (void) readdir(d);
+      if (readdir(d) == NULL)
+        remove(target_cache_dir);
+      closedir(d);
+      return DBGCLIENT_E_TARGET_NOT_FOUND;
     }
 
   return fd;
 }
 
+
 int
-dbgserver_build_id_find (enum dbgserver_file_type file_type,
+dbgclient_build_id_find (enum dbgclient_file_type file_type,
                          const unsigned char *build_id,
                          int build_id_len)
 {
   char *type;
-  char id_buf[MAX_BUILD_ID_BYTES + 1];
+  char id_buf[max_build_id_bytes + 1];
 
   /* copy hex representation of buildid into id_buf.  */
   for (int i = 0; i < build_id_len; i++)
@@ -299,18 +361,18 @@ dbgserver_build_id_find (enum dbgserver_file_type file_type,
 
   switch (file_type)
   {
-  case dbgserver_file_type_debuginfo:
+  case dbgclient_file_type_debuginfo:
     type = "debuginfo";
     break;
-  case dbgserver_file_type_executable:
+  case dbgclient_file_type_executable:
     type = "executable";
     break;
-  case dbgserver_file_type_source:
+  case dbgclient_file_type_source:
     type = "source";
     break;
   default:
     assert(0);
   }
 
-  return query_server(id_buf, type);
+  return dbgclient_query_server(id_buf, type);
 }

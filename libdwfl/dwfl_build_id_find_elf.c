@@ -188,8 +188,8 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
       free (*file_name);
       *file_name = NULL;
     }
-  else if (dbgserver_enabled() && mod->build_id_len > 0)
-    fd = dbgserver_build_id_find (dbgserver_file_type_executable,
+  else if (dbgclient_enabled() && mod->build_id_len > 0)
+    fd = dbgclient_build_id_find (dbgclient_file_type_executable,
                                   mod->build_id_bits,
                                   mod->build_id_len);
 
