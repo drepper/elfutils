@@ -192,27 +192,22 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
 #if ENABLE_DBGSERVER
   else {
     static void *dbgclient_so;
-    static __typeof__ (dbgclient_enabled) *fp_dbgclient_enabled;
-    static __typeof__ (dbgclient_build_id_find) *fp_dbgclient_build_id_find;
+    static __typeof__ (dbgclient_find_executable) *fp_dbgclient_find_executable;
 
     if (dbgclient_so == NULL)
       dbgclient_so = dlopen("libdbgserver-" VERSION ".so", RTLD_LAZY);
     if (dbgclient_so == NULL)
       dbgclient_so = dlopen("libdbgserver.so", RTLD_LAZY);
-    if (dbgclient_so != NULL && fp_dbgclient_enabled == NULL)
-      fp_dbgclient_enabled = dlsym (dbgclient_so, "dbgclient_enabled");
-    if (dbgclient_so != NULL && fp_dbgclient_build_id_find == NULL)
-      fp_dbgclient_build_id_find = dlsym (dbgclient_so, "dbgclient_build_id_find");
+    if (dbgclient_so != NULL && fp_dbgclient_find_executable == NULL)
+      fp_dbgclient_find_executable = dlsym (dbgclient_so, "dbgclient_find_executable");
 
-    if (fp_dbgclient_enabled != NULL && fp_dbgclient_build_id_find != NULL)
+    if (fp_dbgclient_find_executable != NULL)
       {
         /* If all else fails and a build-id is available, query the
            debuginfo-server if enabled.  */
-        if (fd < 0 && mod->build_id_len > 0 && (*fp_dbgclient_enabled)())
-          fd = (*fp_dbgclient_build_id_find) (dbgclient_file_type_executable,
-                                  mod->build_id_bits,
-                                  mod->build_id_len);
-
+        if (fd < 0 && mod->build_id_len > 0)
+          fd = (*fp_dbgclient_find_executable) (mod->build_id_bits,
+                                                mod->build_id_len);
       }
   }
 #endif /* ENABLE_DBGSERVER */

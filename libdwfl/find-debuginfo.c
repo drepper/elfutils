@@ -405,29 +405,25 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
 #if ENABLE_DBGSERVER
   {
     static void *dbgclient_so;
-    static __typeof__ (dbgclient_enabled) *fp_dbgclient_enabled;
-    static __typeof__ (dbgclient_build_id_find) *fp_dbgclient_build_id_find;
+    static __typeof__ (dbgclient_find_debuginfo) *fp_dbgclient_find_debuginfo;
 
     if (dbgclient_so == NULL)
       dbgclient_so = dlopen("libdbgserver-" VERSION ".so", RTLD_LAZY);
     if (dbgclient_so == NULL)
       dbgclient_so = dlopen("libdbgserver.so", RTLD_LAZY);
-    if (dbgclient_so != NULL && fp_dbgclient_enabled == NULL)
-      fp_dbgclient_enabled = dlsym (dbgclient_so, "dbgclient_enabled");
-    if (dbgclient_so != NULL && fp_dbgclient_build_id_find == NULL)
-      fp_dbgclient_build_id_find = dlsym (dbgclient_so, "dbgclient_build_id_find");
+    if (dbgclient_so != NULL && fp_dbgclient_find_debuginfo == NULL)
+      fp_dbgclient_find_debuginfo = dlsym (dbgclient_so, "dbgclient_find_debuginfo");
 
-    if (fp_dbgclient_enabled != NULL && fp_dbgclient_build_id_find != NULL)
+    if (fp_dbgclient_find_debuginfo != NULL)
       {
         /* If all else fails and a build-id is available, query the
            debuginfo-server if enabled.  */
-        if (fd < 0 && bits_len > 0 && (*fp_dbgclient_enabled)())
-          fd = (*fp_dbgclient_build_id_find) (dbgclient_file_type_debuginfo,
-                                              bits, bits_len);
+        if (fd < 0 && bits_len > 0)
+          fd = (*fp_dbgclient_find_debuginfo) (bits, bits_len);
       }
   }
 #endif /* ENABLE_DBGSERVER */
-    
+
   return fd;
 }
 INTDEF (dwfl_standard_find_debuginfo)
