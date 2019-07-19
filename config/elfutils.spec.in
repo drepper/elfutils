@@ -31,6 +31,10 @@ BuildRequires: pkgconfig(libmicrohttpd) >= 0.9.33
 BuildRequires: pkgconfig(libcurl) >= 7.29.0
 BuildRequires: pkgconfig(sqlite3) >= 3.7.17
 BuildRequires: pkgconfig(libarchive) >= 3.1.2
+%if 0%{?rhel} >= 8 || 0%{?fedora} >= 20
+Recommends: elfutils-dbgserver-libs
+%endif
+
 
 %define _gnu %{nil}
 %define _programprefix eu-
