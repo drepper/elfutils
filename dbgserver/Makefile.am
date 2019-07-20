@@ -34,29 +34,25 @@ AM_CPPFLAGS += -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf
 VERSION = 1
 
-bin_PROGRAMS = dbgserver
-dbgserver_SOURCES = dbgserver.cxx
-dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
-
-
 if BUILD_STATIC
 libasm = ../libasm/libasm.a
 libdw = ../libdw/libdw.a -lz $(zip_LIBS) $(libelf) $(libebl) -ldl
 libelf = ../libelf/libelf.a -lz
+libdbgserver = ./libdbgserver.a
 else
 libasm = ../libasm/libasm.so
 libdw = ../libdw/libdw.so
 libelf = ../libelf/libelf.so
+libdbgserver = ./libdbgserver.so
 endif
 libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
 
-AM_CPPFLAGS += -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
-	    -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf \
-	    -I$(srcdir)/../libdwfl -I$(srcdir)/../libasm
+AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw:.
 
-AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw
-
+bin_PROGRAMS = dbgserver
+dbgserver_SOURCES = dbgserver.cxx
+dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libdbgserver) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
 
 noinst_LIBRARIES = libdbgserver.a
 noinst_LIBRARIES += libdbgserver_pic.a
@@ -93,4 +89,4 @@ uninstall: uninstall-am
 
 EXTRA_DIST = libdbgserver.map
 MOSTLYCLEANFILES = $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so.$(VERSION)
-CLEANFILES += $(am_libdbgserver_pic_a_OBJECTS)
+CLEANFILES += $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so

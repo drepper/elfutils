@@ -19,7 +19,7 @@
 #include <curl/curl.h>
 
 static const int max_build_id_bytes = 64;
-static int DBGCLIENT_OK = 0
+static int DBGCLIENT_OK = 0;
 
 /* The cache_clean_interval_s file within the dbgclient cache specifies
    how frequently the cache should be cleaned. The file's st_mtime represents
@@ -195,7 +195,8 @@ dbgclient_clean_cache(char *cache_path, char *interval_path)
 
 /* Return value must be manually free'd.  */
 static char *
-build_url(char *server_url, char *build_id, char *type, char *filename)
+build_url(const char *server_url, const char *build_id,
+          const char *type, const char *filename)
 {
   char *url;
 
@@ -243,8 +244,8 @@ build_url(char *server_url, char *build_id, char *type, char *filename)
 static int
 dbgclient_query_server (const unsigned char *build_id_bytes,
                         int build_id_len,
-                        char *type,
-                        char *filename)
+                        const char *type,
+                        const char *filename)
 {
   char *urls_envvar;
   char *server_urls;
@@ -255,8 +256,15 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   char build_id[max_build_id_bytes * 2 + 1];
 
   /* Copy lowercase hex representation of build_id into buf.  */
-  for (int i = 0; i < build_id_len; i++)
-    sprintf(build_id + (i * 2), "%02x", build_id_bytes[i]);
+  if ((build_id_len >= max_build_id_bytes) ||
+      (build_id_len == 0 &&
+       strlen((const char*) build_id_bytes) >= max_build_id_bytes*2))
+    return -EINVAL;
+  if (build_id_len == 0) /* expect clean hexadecimal */
+    strcpy (build_id, (const char *) build_id_bytes);
+  else
+    for (int i = 0; i < build_id_len; i++)
+      sprintf(build_id + (i * 2), "%02x", build_id_bytes[i]);
 
   urls_envvar = getenv(server_urls_envvar);
   if (urls_envvar == NULL)
@@ -407,11 +415,10 @@ dbgclient_find_executable(const unsigned char *build_id_bytes, int build_id_len)
                                 "executable", NULL);
 }
 
-
 /* See dbgserver-client.h  */
 int dbgclient_find_source(const unsigned char *build_id_bytes,
                           int build_id_len,
-                          char *filename)
+                          const char *filename)
 {
   return dbgclient_query_server(build_id_bytes, build_id_len,
                                 "source-file", filename);

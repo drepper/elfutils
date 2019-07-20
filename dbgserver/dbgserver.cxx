@@ -32,6 +32,7 @@
 #endif
 
 #include "printversion.h"
+#include "dbgserver-client.h"
 
 #include <argp.h>
 #include <unistd.h>
@@ -47,6 +48,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <netdb.h>
+
 
 /* If fts.h is included before config.h, its indirect inclusions may not
    give us the right LFS aliases of these functions, so map them manually.  */
@@ -616,12 +618,21 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
                 const string& artifacttype /* unsafe */,
                 const string& suffix /* unsafe */)
 {
+  // validate artifacttype
   string atype_code;
   if (artifacttype == "debuginfo") atype_code = "D";
   else if (artifacttype == "executable") atype_code = "E";
   else if (artifacttype == "source-file") atype_code = "S";
   else throw reportable_exception("invalid artifacttype");
 
+  // validate buildid
+  if ((buildid.size() < 2) || // not empty
+      (buildid.size() % 2) || // even number
+      (buildid.find_first_not_of("0123456789abcdef") != string::npos)) // pure tasty lowercase hex
+    throw reportable_exception("invalid buildid");
+
+  // XXX NB: suffix is for source-file
+  
   if (verbose)
     obatched(clog) << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
          << " suffix=" << suffix << endl;
@@ -663,6 +674,34 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
         return r;
     }
 
+  // We couldn't find it in the database.  Last ditch effort
+  // is to defer to other debuginfo servers.
+  int fd = -1;
+  if (artifacttype == "debuginfo")
+    fd = dbgclient_find_debuginfo ((const unsigned char*) buildid.c_str(), 0);
+  else if (artifacttype == "executable")
+    fd = dbgclient_find_executable ((const unsigned char*) buildid.c_str(), 0);
+  else if (artifacttype == "source-file")
+    fd = dbgclient_find_source ((const unsigned char*) buildid.c_str(), 0,
+                                suffix.c_str());
+  // XXX: report bad fd
+  if (fd >= 0)
+    {
+      struct stat s;
+      rc = fstat (fd, &s);
+      if (rc == 0)
+        {
+          auto r = MHD_create_response_from_fd ((uint64_t) s.st_size, fd);
+          if (r)
+            {
+              if (verbose)
+                obatched(clog) << "serving file from upstream dbgserver/cache" << endl;
+              return r; // NB: don't close fd; libmicrohttpd will
+            }
+        }
+      close (fd);
+    }
+  
   throw reportable_exception(403, "not found");
 }
 
