@@ -91,31 +91,64 @@ using namespace std;
 
 // Roll this identifier for every sqlite schema incompatiblity
 // XXX: garbage collect and/or migrate from previous-version tables
-#define BUILDIDS "buildids1"
+#define BUILDIDS "buildids2"
 
 static const char DBGSERVER_SQLITE_DDL[] =
-  "create table if not exists\n"
-  "    " BUILDIDS "(\n"
-  "        buildid text,                                   -- the buildid; null=negative-cache\n"
-  "        artifacttype text(1)\n"
-  "            check (artifacttype IS NULL OR artifacttype IN ('D', 'S', 'E')),    -- d(ebug) or s(sources) or e(xecutable)\n"
-  "        mtime integer not null,                         -- epoch timestamp when we last found this\n"
+  "pragma foreign_keys = on;\n"
+  "create table if not exists " BUILDIDS "_files (\n"
+  "        id integer primary key not null,\n"
+  "        name text unique not null);\n"
+  "create table if not exists " BUILDIDS "_buildids (\n"
+  "        id integer primary key not null,\n"
+  "        hex text unique not null);\n"
+  "create table if not exists " BUILDIDS "_norm (\n"
+  "        buildid integer,\n"
+  "        artifacttype text,\n"                           // -- D(ebug) E(xecutable) /path/to/source
+  "        mtime integer,\n"                               // -- epoch timestamp when we last found this source0
   "        sourcetype text(1) not null\n"
-  "            check (sourcetype IN ('F', 'R', 'L')),      -- as per --source-TYPE single-char code\n"
-  "        source0 text,                                   -- more sourcetype-specific location data\n"
-  "        source1 text);                                  -- more sourcetype-specific location data\n"
-  "create index if not exists " BUILDIDS "_idx1 on " BUILDIDS " (buildid, artifacttype);\n"
-  "create unique index if not exists " BUILDIDS "_idx2 on " BUILDIDS " (buildid, artifacttype, sourcetype, source0);\n"
-  "create index if not exists " BUILDIDS "_idx3 on " BUILDIDS " (sourcetype, source0);\n"
-  "pragma synchronous = 0;\n"; // disable fsync()s - this cache is disposable across a machine crash
+  "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --source-TYPE single-char code\n"
+  "        source0 integer not null,\n"
+  "        source1 integer,\n"
+  "        foreign key (source0) references " BUILDIDS "_files(id) on update cascade on delete cascade,\n"
+  "        foreign key (buildid) references " BUILDIDS "_buildids(id) on update cascade on delete cascade,\n"
+  "        foreign key (source1) references " BUILDIDS "_files(id) on update cascade on delete cascade,\n"
+  "        unique (buildid, artifacttype, sourcetype, source0) on conflict replace);\n"
+  /* and now for a FULL OUTER JOIN emulation */
+  "create view if not exists " BUILDIDS "  as select\n"
+  "        b.hex as buildid, n.artifacttype, n.mtime, n.sourcetype, f1.name as source0, f2.name as source1\n"
+  "        from " BUILDIDS "_buildids b, " BUILDIDS "_norm n, " BUILDIDS "_files f1, " BUILDIDS "_files f2\n"
+  "        where b.id = n.buildid and f1.id = n.source0 and f2.id = n.source1\n"
+  "union all select\n"
+  "        b.hex as buildid, n.artifacttype, n.mtime, n.sourcetype, f1.name as source0, null\n"
+  "        from " BUILDIDS "_buildids b, " BUILDIDS "_norm n, " BUILDIDS "_files f1\n"
+  "        where b.id = n.buildid and f1.id = n.source0 and n.source1 is null\n"
+  "union all select\n"
+  "        null, n.artifacttype, n.mtime, n.sourcetype, f1.name as source0, null\n"
+  "        from " BUILDIDS "_norm n, " BUILDIDS "_files f1\n"
+  "        where n.buildid is null and f1.id = n.source0 and n.source1 is null;\n" // NB: buildid=null implies source1=null
+  
+  /* BUILDIDS semantics:
 
-// XXX: idea for buildid2: a separate table for file names (source0
-// text) vs. buildid rows, as in the case of RPMs, many buildids may
-// be contained, and we really don't want to represent eveyr copy.
+     buildid  atype  mtime  stype  source0  source1 
+     $BUILDID D/E    $TIME  F      $FILE            -- normal hit: executable or debuinfo file
+     $BUILDID $SRC   $TIME  F      $FILE            -- normal hit: source file (FILE actual location, SRC dwarf)
+     $BUILDID D/E    $TIME  R      $RPM     $FILE   -- normal hit: executable or debuinfo file in rpm RPM  file FILE
+     $BUILDID $SRC   $TIME  R      $RPM     $FILE   -- normal hit: source file (RPM rpm, FILE content, SRC dwarf)
+     $BUILDID $SRC          F      $DIR             -- source BOLO: looking for dwarf SRC mentioned under fts-$DIR
+     $BUILDID $SRC          R      $DIR             -- source BOLO: looking for dwarf SRC mentioned under fts-$DIR
+                     $TIME  F/R    $FILE            -- negative hit: bad file known to be unrescanworthy at $TIME
+     \-----------/          \----------/  UNIQUE
+  */
+  
+  "create index if not exists " BUILDIDS "_idx1 on " BUILDIDS "_norm (buildid, artifacttype);\n"
+  "create index if not exists " BUILDIDS "_idx2 on " BUILDIDS "_norm (mtime, sourcetype, source0);\n" 
+  "pragma synchronous = 0;\n"; // disable fsync()s - this cache is disposable across a machine crash
 
 
 // schema change history
 //
+// buildid2*: normalize buildid and filenames into interning tables
+// 
 // buildid1: make buildid and artifacttype NULLable, to represent cached-negative
 //           lookups from sources, e.g. files or rpms that contain no buildid-indexable content
 //
@@ -219,7 +252,7 @@ parse_opt (int key, char *arg,
     case 'p': http_port = atoi(arg); break;
     case 'F': source_file_paths.push_back(string(arg)); break;
     case 'R': source_rpm_paths.push_back(string(arg)); break;
-    case 't': rescan_s = atoi(arg); break;
+    case 't': rescan_s = atoi(arg); if (rescan_s < 1) rescan_s = 1; break;
       // case 'h': argp_state_help (state, stderr, ARGP_HELP_LONG|ARGP_HELP_EXIT_OK);
     default: return ARGP_ERR_UNKNOWN;
     }
@@ -904,12 +937,18 @@ elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
 static void
 scan_source_file_path (const string& dir)
 {
+  sqlite_ps ps_upsert_buildids (db, "insert or ignore into " BUILDIDS "_buildids VALUES (NULL, ?);");
+  sqlite_ps ps_upsert_files (db, "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);");
   sqlite_ps ps_upsert (db,
-                       "insert or replace into " BUILDIDS " (buildid, artifacttype, mtime,"
-                       "sourcetype, source0) values (?, ?, ?, 'F', ?);");
+                       "insert or replace into " BUILDIDS "_norm "
+                       "(buildid, artifacttype, mtime, sourcetype, source0) "
+                       "values ((select id from " BUILDIDS "_buildids where hex = ?),"
+                       "        ?, ?, 'F',"
+                       "        (select id from " BUILDIDS "_files where name = ?));");
   sqlite_ps ps_query (db,
-                      "select 1 from " BUILDIDS " where sourcetype = 'F' and source0 = ? and mtime = ?;");
-
+                      "select 1 from " BUILDIDS "_norm where sourcetype = 'F' and source0 = (select id from " BUILDIDS "_files where name = ?) and mtime = ?;");
+  sqlite_ps ps_cleanup (db, "delete from " BUILDIDS "_norm where mtime < ? and sourcetype = 'F' and source0 = (select id from " BUILDIDS "_files where name = ?);");
+  
   char * const dirs[] = { (char*) dir.c_str(), NULL };
 
   struct timeval tv_start, tv_end;
@@ -981,7 +1020,6 @@ scan_source_file_path (const string& dir)
                       elf_classify (fd, executable_p, debuginfo_p, buildid);
                     else
                       throw libc_exception(errno, string("open ") + rps);
-
                   }
                 
                 // NB: we catch exceptions from elf_classify here too, so that we can
@@ -995,10 +1033,19 @@ scan_source_file_path (const string& dir)
                     
                 if (fd >= 0)
                   close (fd);
+
+                // register this file name in the interning table
+                sqlite3_reset (ps_upsert_files);
+                rc = sqlite3_bind_text (ps_upsert_files, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 upsert-file bind");           
+                rc = sqlite3_step (ps_upsert_files);
+                if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                  throw sqlite_exception(rc, "sqlite3 upsert-file execute");           
                 
-                sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
                 if (buildid == "")
                   {
+                    sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
                     rc = sqlite3_bind_null (ps_upsert, 1);
                     if (rc != SQLITE_OK)
                       throw sqlite_exception(rc, "sqlite3 upsert bind1");
@@ -1007,17 +1054,30 @@ scan_source_file_path (const string& dir)
                     debuginfo_p = false;
                   }
                 else
-                  rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
-                if (rc != SQLITE_OK)
-                  throw sqlite_exception(rc, "sqlite3 upsert bind1");
+                  {
+                    // register this build-id in the interning table
+                    sqlite3_reset (ps_upsert_buildids);
+                    rc = sqlite3_bind_text (ps_upsert_buildids, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert-buildid bind");           
+                    rc = sqlite3_step (ps_upsert_buildids);
+                    if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                      throw sqlite_exception(rc, "sqlite3 upsert-buildid execute");           
+                    
+                    sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
+                    rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+                    if (rc != SQLITE_OK)
+                      throw sqlite_exception(rc, "sqlite3 upsert bind1");
+                  }
                 
+                // artifacttype column 2 set later
                 rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 upsert bind3");           
                 rc = sqlite3_bind_text (ps_upsert, 4, rps.c_str(), -1, SQLITE_TRANSIENT);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 upsert bind4");           
-          
+                
                 if (executable_p)
                   {
                     fts_executable ++;
@@ -1050,12 +1110,28 @@ scan_source_file_path (const string& dir)
                     if (rc != SQLITE_OK && rc != SQLITE_DONE)
                       throw sqlite_exception(rc, "sqlite3 upsert-NULL execute");
                   }
+
+                // clean up any older entries for this file, in case it was replaced/recompiled to new buildid
+                sqlite3_reset (ps_cleanup);
+                rc = sqlite3_bind_int64 (ps_cleanup, 1, (int64_t) f->fts_statp->st_mtime);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 cleanup bind1");           
+                rc = sqlite3_bind_text (ps_cleanup, 2, rps.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 cleanup bind2");           
+                rc = sqlite3_step (ps_cleanup);
+                if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                  throw sqlite_exception(rc, "sqlite3 cleanup exec");           
                 
                 if (verbose > 2)
                   obatched(clog) << "recorded buildid=" << buildid << " file=" << rps
                                  << " mtime=" << f->fts_statp->st_mtime << " as "
                                  << (executable_p ? "executable" : "not executable") << " and "
                                  << (debuginfo_p ? "debuginfo" : "not debuginfo") << endl;
+
+
+                
+                // XXX: delete earlier records for the same file (mtime < this_mtime)
               }
               break;
 
@@ -1190,20 +1266,29 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
           rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind1");
-          rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) mtime); // XXX: caller could do this for us
+          rc = sqlite3_bind_text (ps_upsert, 4, buildid.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert bind1");
+          rc = sqlite3_bind_int64 (ps_upsert, 6, (int64_t) mtime); // XXX: caller could do this for us
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind3");           
-          rc = sqlite3_bind_text (ps_upsert, 4, rps.c_str(), -1, SQLITE_TRANSIENT);
+          rc = sqlite3_bind_text (ps_upsert, 3, rps.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind4");           
-          rc = sqlite3_bind_text (ps_upsert, 5, fn.c_str(), -1, SQLITE_TRANSIENT);
+          rc = sqlite3_bind_text (ps_upsert, 7, rps.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert bind4");           
+          rc = sqlite3_bind_text (ps_upsert, 8, fn.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert bind5");           
+          rc = sqlite3_bind_text (ps_upsert, 2, fn.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind5");           
 
           if (executable_p)
             {
               fts_executable ++;
-              rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
+              rc = sqlite3_bind_text (ps_upsert, 5, "E", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK)
                 throw sqlite_exception(rc, "sqlite3 upsert-E bind2");           
               rc = sqlite3_step (ps_upsert);
@@ -1215,7 +1300,7 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
             {
               fts_debuginfo ++;
               sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
-              rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
+              rc = sqlite3_bind_text (ps_upsert, 5, "D", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK)
                 throw sqlite_exception(rc, "sqlite3 upsert-D bind2");           
               rc = sqlite3_step (ps_upsert);
@@ -1244,8 +1329,13 @@ static void
 scan_source_rpm_path (const string& dir)
 {
   sqlite_ps ps_upsert (db,
-                       "insert or replace into " BUILDIDS " (buildid, artifacttype, mtime,"
-                       "sourcetype, source0, source1) values (?, ?, ?, 'R', ?, ?);");
+                       "insert or ignore into " BUILDIDS "_buildids VALUES (NULL, ?);"
+                       "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);"
+                       "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);"                       
+                       "insert or replace into " BUILDIDS "_norm (buildid, artifacttype, mtime,"
+                       "sourcetype, source0, source1) values ((select id from " BUILDIDS "_buildids where hex = ?), ?, ?, 'F',"
+                                                     "(select id from " BUILDIDS "_files where name = ?),"
+                                                     "(select id from " BUILDIDS "_files where name = ?));");
   sqlite_ps ps_query (db,
                       "select 1 from " BUILDIDS " where sourcetype = 'R' and source0 = ? and mtime = ?;");
 
@@ -1471,6 +1561,9 @@ main (int argc, char *argv[])
     }
 
   obatched(clog) << "Opened database " << db_path << endl;
+
+  if (verbose > 3)
+    obatched(clog) << "DDL:\n" << DBGSERVER_SQLITE_DDL << endl;
   
   rc = sqlite3_exec (db, DBGSERVER_SQLITE_DDL, NULL, NULL, NULL);
   if (rc != SQLITE_OK)
