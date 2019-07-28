@@ -33,6 +33,7 @@
 
 #include "printversion.h"
 #include "dbgserver-client.h"
+#include <dwarf.h>
 
 #include <argp.h>
 #include <unistd.h>
@@ -91,10 +92,13 @@ using namespace std;
 
 // Roll this identifier for every sqlite schema incompatiblity
 // XXX: garbage collect and/or migrate from previous-version tables
-#define BUILDIDS "buildids2"
+#define BUILDIDS "buildids3"
 
 static const char DBGSERVER_SQLITE_DDL[] =
   "pragma foreign_keys = on;\n"
+  "pragma synchronous = 0;\n" // disable fsync()s - this cache is disposable across a machine crash
+
+  /* Normalized tables to represent general buildid-to-file/subfile mapping. */
   "create table if not exists " BUILDIDS "_files (\n"
   "        id integer primary key not null,\n"
   "        name text unique not null);\n"
@@ -103,51 +107,79 @@ static const char DBGSERVER_SQLITE_DDL[] =
   "        hex text unique not null);\n"
   "create table if not exists " BUILDIDS "_norm (\n"
   "        buildid integer,\n"
-  "        artifacttype text,\n"                           // -- D(ebug) E(xecutable) /path/to/source
+  "        artifacttype text\n"                           // -- D(ebug) E(xecutable) S(source)
+  "            check (artifacttype IS NULL or artifacttype IN ('D', 'E', 'S')),\n"
+  "        artifactsrc integer\n"                         //                         DWARF /path/to/source
+  "            check (artifacttype NOT IN ('S') OR artifactsrc is not null),\n"
   "        mtime integer,\n"                               // -- epoch timestamp when we last found this source0
   "        sourcetype text(1) not null\n"
   "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --source-TYPE single-char code\n"
   "        source0 integer not null,\n"
   "        source1 integer,\n"
+  "        foreign key (artifactsrc) references " BUILDIDS "_files(id) on update cascade on delete cascade,\n"
   "        foreign key (source0) references " BUILDIDS "_files(id) on update cascade on delete cascade,\n"
   "        foreign key (buildid) references " BUILDIDS "_buildids(id) on update cascade on delete cascade,\n"
   "        foreign key (source1) references " BUILDIDS "_files(id) on update cascade on delete cascade,\n"
-  "        unique (buildid, artifacttype, sourcetype, source0) on conflict replace);\n"
+  "        unique (buildid, artifacttype, artifactsrc, sourcetype, source0) on conflict replace);\n"
   /* and now for a FULL OUTER JOIN emulation */
   "create view if not exists " BUILDIDS "  as select\n"
-  "        b.hex as buildid, n.artifacttype, n.mtime, n.sourcetype, f1.name as source0, f2.name as source1\n"
+  "        b.hex as buildid, n.artifacttype, f3.name as artifactsrc, n.mtime, n.sourcetype, f1.name as source0, f2.name as source1\n"
+  "        from " BUILDIDS "_buildids b, " BUILDIDS "_norm n, " BUILDIDS "_files f1, " BUILDIDS "_files f2, " BUILDIDS "_files f3\n"
+  "        where b.id = n.buildid and f1.id = n.source0 and f2.id = n.source1 and f3.id = n.artifactsrc\n"
+  "union all select\n"
+  "        b.hex as buildid, n.artifacttype, null, n.mtime, n.sourcetype, f1.name as source0, f2.name as source1\n"
   "        from " BUILDIDS "_buildids b, " BUILDIDS "_norm n, " BUILDIDS "_files f1, " BUILDIDS "_files f2\n"
-  "        where b.id = n.buildid and f1.id = n.source0 and f2.id = n.source1\n"
+  "        where b.id = n.buildid and f1.id = n.source0 and f2.id = n.source1 and n.artifactsrc is null\n"
   "union all select\n"
-  "        b.hex as buildid, n.artifacttype, n.mtime, n.sourcetype, f1.name as source0, null\n"
+  "        b.hex as buildid, n.artifacttype, f3.name, n.mtime, n.sourcetype, f1.name as source0, null\n"
+  "        from " BUILDIDS "_buildids b, " BUILDIDS "_norm n, " BUILDIDS "_files f1, " BUILDIDS "_files f3\n"
+  "        where b.id = n.buildid and f1.id = n.source0 and n.source1 is null and f3.id = n.artifactsrc\n"
+  "union all select\n"
+  "        b.hex as buildid, n.artifacttype, null, n.mtime, n.sourcetype, f1.name as source0, null\n"
   "        from " BUILDIDS "_buildids b, " BUILDIDS "_norm n, " BUILDIDS "_files f1\n"
-  "        where b.id = n.buildid and f1.id = n.source0 and n.source1 is null\n"
-  "union all select\n"
-  "        null, n.artifacttype, n.mtime, n.sourcetype, f1.name as source0, null\n"
+  "        where b.id = n.buildid and f1.id = n.source0 and n.source1 is null and n.artifactsrc is null\n"
+  "union all select\n" // negative hit
+  "        null, null, null, n.mtime, n.sourcetype, f1.name as source0, null\n"
   "        from " BUILDIDS "_norm n, " BUILDIDS "_files f1\n"
-  "        where n.buildid is null and f1.id = n.source0 and n.source1 is null;\n" // NB: buildid=null implies source1=null
+  "        where n.buildid is null and f1.id = n.source0;\n"
+
+  "create index if not exists " BUILDIDS "_idx1 on " BUILDIDS "_norm (buildid, artifacttype);\n"
+  "create index if not exists " BUILDIDS "_idx2 on " BUILDIDS "_norm (mtime, sourcetype, source0);\n" 
   
   /* BUILDIDS semantics:
 
-     buildid  atype  mtime  stype  source0  source1 
-     $BUILDID D/E    $TIME  F      $FILE            -- normal hit: executable or debuinfo file
-     $BUILDID $SRC   $TIME  F      $FILE            -- normal hit: source file (FILE actual location, SRC dwarf)
-     $BUILDID D/E    $TIME  R      $RPM     $FILE   -- normal hit: executable or debuinfo file in rpm RPM  file FILE
-     $BUILDID $SRC   $TIME  R      $RPM     $FILE   -- normal hit: source file (RPM rpm, FILE content, SRC dwarf)
-     $BUILDID $SRC          F      $DIR             -- source BOLO: looking for dwarf SRC mentioned under fts-$DIR
-     $BUILDID $SRC          R      $DIR             -- source BOLO: looking for dwarf SRC mentioned under fts-$DIR
-                     $TIME  F/R    $FILE            -- negative hit: bad file known to be unrescanworthy at $TIME
-     \-----------/          \----------/  UNIQUE
+     buildid  atype/asrc  mtime  stype  source0  source1 
+     $BUILDID D/E         $TIME  F      $FILE            -- normal hit: executable or debuinfo file
+     $BUILDID S $SRC      $TIME  F      $FILE            -- normal hit: source file (FILE actual location, SRC dwarf)
+     $BUILDID D/E         $TIME  R      $RPM     $FILE   -- normal hit: executable or debuinfo file in rpm RPM  file FILE
+     $BUILDID S $SRC      $TIME  R      $RPM     $FILE   -- normal hit: source file (RPM rpm, FILE content, SRC dwarf)
+                          $TIME  F/R    $FILE            -- negative hit: bad file known to be unrescanworthy at $TIME
+     \-----------/               \----------/  UNIQUE
   */
-  
-  "create index if not exists " BUILDIDS "_idx1 on " BUILDIDS "_norm (buildid, artifacttype);\n"
-  "create index if not exists " BUILDIDS "_idx2 on " BUILDIDS "_norm (mtime, sourcetype, source0);\n" 
-  "pragma synchronous = 0;\n"; // disable fsync()s - this cache is disposable across a machine crash
+
+  /* Denormalized table for source be-on-the-lookup mappings.  Denormalized because it's a temporary table:
+     in steady state it's empty. */
+  "create table if not exists " BUILDIDS "_bolo (\n"
+  "        buildid integer not null,\n"
+  "        srcname text not null,\n"
+  "        sourcetype text(1) not null\n"
+  "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --source-TYPE single-char code\n"
+  "        dirname text not null,\n"
+  "        unique (buildid, srcname, sourcetype, dirname) on conflict ignore);\n"
+
+  "create index if not exists " BUILDIDS "_bolo_idx1 on " BUILDIDS "_bolo (sourcetype, dirname);\n"
+  /*
+     BUILDIDS_bolo semantics:
+
+     $BUILDID $SRC          F      $DIR             -- source BOLO: recently looking for dwarf SRC mentioned under fts-$DIR
+     $BUILDID $SRC          R      $DIR             -- source BOLO: recently looking for dwarf SRC mentioned under fts-$DIR
+  */
+;
 
 
 // schema change history
 //
-// buildid2*: normalize buildid and filenames into interning tables
+// buildid2*: normalize buildid and filenames into interning tables; split out srcfile BOLO
 // 
 // buildid1: make buildid and artifacttype NULLable, to represent cached-negative
 //           lookups from sources, e.g. files or rpms that contain no buildid-indexable content
@@ -156,25 +188,14 @@ static const char DBGSERVER_SQLITE_DDL[] =
 
 
 
-
 /*
   ISSUES:
   - delegated server: recursion/loop; Via: header processing
   https://blog.cloudflare.com/preventing-malicious-request-loops/
-  - cache control for downloaded data ===>> no problem, we don't download & store
   - access control ===>> delegate to reverse proxy
-  - running test server on fedorainfra, scanning koji rpms
   - running real server for rhel/rhsm probably unnecessary
   (use subscription-delegation)
-  - upstream: support http proxy for relay mode ===> $env(http_proxy) in libcurl
-  - expose main executable elf, not just dwarf ===> ok
-  - need a thread to garbage-collect old buildid entries?
-
-  - cache eperm file opens ("cannot open FOO" -> F NULL-buildid ?); age/retry by mtime
-  - print proper sqlite3 / elfutils errors
-  - when passing compressed .ko.xz's by content (not by name!), will elfutils client know to decompress?
-  - cmdline single-char -X parsing
-  - database schema migration - suffix buildid table name with seq#, select * at startup to migrate?
+  - need a thread to garbage-collect old buildid_norm / _buildid / _files entries?
   - inotify based file scanning
 
   see also:
@@ -195,12 +216,10 @@ static const struct argp_option options[] =
    { NULL, 0, NULL, 0, N_("Sources:"), 1 },
    { "source-files", 'F', "PATH", 0, N_("Scan ELF/DWARF files under given directory."), 0 },
    { "source-rpms", 'R', "PATH", 0, N_("Scan RPM files under given directory."), 0 },
-   //   { "source-rpms-yum", 0, "SECONDS", 0, N_("Try fetching missing RPMs from yum."), 0 },
-   //   { "source-redirect", 'U', "URL", 0, N_("Redirect to upstream dbgserver."), 0 },
-   //   { "source-relay", 'u', "URL", 0, N_("Relay from upstream dbgserver."), 0 },
-   // ???
+   //  { "source-rpms-yum", 0, "SECONDS", 0, N_("Try fetching missing RPMs from yum."), 0 },
    // "source-rpms-koji"      ... no can do, not buildid-addressable
-   // "source-imageregistry"  ... 
+   // http traversal for rpm downloading?
+   // "source-oci-imageregistry"  ... 
   
    { NULL, 0, NULL, 0, N_("Options:"), 2 },
    { "rescan-time", 't', "SECONDS", 0, N_("Number of seconds to wait between rescans."), 0 },
@@ -658,22 +677,27 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   else if (artifacttype == "source-file") atype_code = "S";
   else throw reportable_exception("invalid artifacttype");
 
+  if (atype_code == "S" && suffix == "")
+     throw reportable_exception("invalid source-file suffix");
+  
   // validate buildid
   if ((buildid.size() < 2) || // not empty
       (buildid.size() % 2) || // even number
       (buildid.find_first_not_of("0123456789abcdef") != string::npos)) // pure tasty lowercase hex
     throw reportable_exception("invalid buildid");
 
-  // XXX NB: suffix is for source-file
-  
   if (verbose)
     obatched(clog) << "searching for buildid=" << buildid << " artifacttype=" << artifacttype
          << " suffix=" << suffix << endl;
   
-  sqlite_ps pp (db, 
-                "select mtime, sourcetype, source0, source1 " // NB: 4 columns
-                "from " BUILDIDS " where buildid = ? and artifacttype = ? "
-                "order by mtime desc;");
+  sqlite_ps pp (db,
+                (atype_code == "S")
+                ? ("select mtime, sourcetype, source0, source1 " // NB: 4 columns
+                   "from " BUILDIDS " where buildid = ? and artifacttype = ? and artifactsrc = ?"
+                   " order by mtime desc;")
+                : ("select mtime, sourcetype, source0, source1 " // NB: 4 columns
+                   "from " BUILDIDS " where buildid = ? and artifacttype = ? and artifactsrc is null"
+                   " order by mtime desc;"));
 
   int rc = sqlite3_bind_text (pp, 1, buildid.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK)
@@ -681,7 +705,11 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   rc = sqlite3_bind_text (pp, 2, atype_code.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK)
       throw sqlite_exception(rc, "bind 2");
-
+  if (atype_code == "S") // source
+    rc = sqlite3_bind_text (pp, 3, suffix.c_str(), -1 /* to \0 */, SQLITE_TRANSIENT);
+  if (rc != SQLITE_OK)
+      throw sqlite_exception(rc, "bind 3");
+  
   // consume all the rows
   while (1)
     {
@@ -823,8 +851,81 @@ handler_cb (void *cls  __attribute__ ((unused)),
 ////////////////////////////////////////////////////////////////////////
 
 
+// borrowed from src/nm.c get_local_names()
+
 static void
-elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
+dwarf_extract_source_paths (Elf *elf, GElf_Ehdr* ehdr, Elf_Scn* scn, GElf_Shdr* shdr, vector<string>& debug_sourcefiles)
+{
+  Dwarf* dbg = dwarf_begin_elf (elf, DWARF_C_READ, NULL);
+  if (dbg == NULL)
+    return;
+
+  Dwarf_Off offset = 0;
+  Dwarf_Off old_offset;
+  size_t hsize;
+
+  while (dwarf_nextcu (dbg, old_offset = offset, &offset, &hsize, NULL, NULL, NULL) == 0)
+    {
+      Dwarf_Die cudie_mem;
+      Dwarf_Die *cudie = dwarf_offdie (dbg, old_offset + hsize, &cudie_mem);
+
+      if (cudie == NULL)
+        continue;
+      if (dwarf_tag (cudie) != DW_TAG_compile_unit)
+        continue;
+
+      const char *cuname = dwarf_diename(cudie) ?: "unknown";
+
+      Dwarf_Files *files;
+      size_t nfiles;
+      if (dwarf_getsrcfiles (cudie, &files, &nfiles) != 0)
+        continue;
+
+      // extract DW_AT_comp_dir to resolve relative file names
+      const char *comp_dir = "";
+      const char *const *dirs;
+      size_t ndirs;
+      if (dwarf_getsrcdirs (files, &dirs, &ndirs) == 0 &&
+          dirs[0] != NULL)
+        comp_dir = dirs[0];
+
+      if (verbose > 3)
+        obatched(clog) << "Searching for sources for cu=" << cuname << " comp_dir=" << comp_dir
+                       << " #files=" << nfiles << " #dirs=" << ndirs << endl;
+      
+      for (size_t f = 1; f < nfiles; f++)
+        {
+          const char *hat = dwarf_filesrc (files, f, NULL, NULL);
+          if (hat == NULL)
+            continue;
+            
+          string waldo;
+          if (hat[0] == '/') // absolute
+            waldo = (string (hat));
+          else // comp_dir relative
+            waldo = (string (comp_dir) + string("/") + string (hat));
+          
+          // NB: this is the 'waldo' that a dbginfo client will have
+          // to supply for us to give them the file The comp_dir
+          // prefixing is a definite complication.  Otherwise we'd
+          // have to return a setof comp_dirs (one per CU!) with
+          // corresponding filesrc[] names, instead of one absolute
+          // resoved set.  Maybe we'll have to do that anyway.  XXX
+          
+          if (verbose > 4)
+            obatched(clog) << waldo << endl;
+          
+          debug_sourcefiles.push_back (waldo);
+        }
+    }
+
+  dwarf_end(dbg);
+}
+
+
+
+static void
+elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid, vector<string>& debug_sourcefiles)
 {
   Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
   if (elf == NULL)
@@ -917,11 +1018,17 @@ elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid)
           const char *section_name = elf_strptr (elf, shstrndx, shdr->sh_name);
           if (section_name == NULL)
             break;
-          if (strncmp(section_name, ".debug_", 7) == 0 ||
-              strncmp(section_name, ".zdebug_", 8) == 0)
+          if (strncmp(section_name, ".debug_line", 11) == 0 ||
+              strncmp(section_name, ".zdebug_line", 12) == 0)
             {
               debuginfo_p = true;
-              break;
+              dwarf_extract_source_paths (elf, ehdr, scn, shdr, debug_sourcefiles);
+            }
+          else if (strncmp(section_name, ".debug_", 7) == 0 ||
+                   strncmp(section_name, ".zdebug_", 8) == 0)
+            {
+              debuginfo_p = true;
+              // NB: don't break; need to parse .debug_line for sources
             }
         }
     }
@@ -941,18 +1048,23 @@ scan_source_file_path (const string& dir)
   sqlite_ps ps_upsert_files (db, "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);");
   sqlite_ps ps_upsert (db,
                        "insert or replace into " BUILDIDS "_norm "
-                       "(buildid, artifacttype, mtime, sourcetype, source0) "
+                       "(buildid, artifacttype, artifactsrc, mtime, sourcetype, source0) "
                        "values ((select id from " BUILDIDS "_buildids where hex = ?),"
-                       "        ?, ?, 'F',"
+                       "        ?,"
+                       "        (select id from " BUILDIDS "_files where name = ?), ?, 'F',"
                        "        (select id from " BUILDIDS "_files where name = ?));");
   sqlite_ps ps_query (db,
                       "select 1 from " BUILDIDS "_norm where sourcetype = 'F' and source0 = (select id from " BUILDIDS "_files where name = ?) and mtime = ?;");
   sqlite_ps ps_cleanup (db, "delete from " BUILDIDS "_norm where mtime < ? and sourcetype = 'F' and source0 = (select id from " BUILDIDS "_files where name = ?);");
+  // find the source BOLOs
+  sqlite_ps ps_bolo_insert (db, "insert or ignore into " BUILDIDS "_bolo values (?, ?, 'F', ?);");
+  sqlite_ps ps_bolo_find (db, "select buildid,srcname from " BUILDIDS "_bolo where sourcetype = 'F' and dirname = ?;");
+  sqlite_ps ps_bolo_nuke (db, "delete from " BUILDIDS "_bolo where sourcetype = 'F' and dirname = ?;");
   
   char * const dirs[] = { (char*) dir.c_str(), NULL };
 
   struct timeval tv_start, tv_end;
-  unsigned fts_scanned=0, fts_cached=0, fts_debuginfo=0, fts_executable=0;
+  unsigned fts_scanned=0, fts_cached=0, fts_debuginfo=0, fts_executable=0, fts_sourcefiles=0;
   gettimeofday (&tv_start, NULL);
   
   FTS *fts = fts_open (dirs,
@@ -966,6 +1078,7 @@ scan_source_file_path (const string& dir)
       return;
     }
 
+  vector<string> directory_stack; // to allow knowledge of fts $DIR
   FTSENT *f;
   while ((f = fts_read (fts)) != NULL)
     {
@@ -978,20 +1091,125 @@ scan_source_file_path (const string& dir)
 
       try
         {
+          /* Found a file.  Convert it to an absolute path, so
+             the buildid database does not have relative path
+             names that are unresolvable from a subsequent run
+             in a different cwd. */
+          char *rp = realpath(f->fts_path, NULL);
+          if (rp == NULL)
+            throw libc_exception(errno, "fts realpath " + string(f->fts_path));
+          string rps = string(rp);
+          free (rp);
+          
+          int rc = 0;
           switch (f->fts_info)
             {
+            case FTS_D:
+              directory_stack.push_back (rps);
+              break;
+
+            case FTS_DP:
+              directory_stack.pop_back ();
+              // Finished traversing this directory (hierarchy).  Check for any source files that can be
+              // reached from here.
+
+              sqlite3_reset (ps_bolo_find);
+              rc = sqlite3_bind_text (ps_bolo_find, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 bolo-find bind1");
+
+              while (1)
+                {
+                  rc = sqlite3_step (ps_bolo_find);
+                  if (rc == SQLITE_DONE)
+                    break;
+                  else if (rc == SQLITE_ROW) // i.e., a result, as opposed to DONE (no results)
+                    {
+                      string buildid = string((const char*) sqlite3_column_text (ps_bolo_find, 0) ?: "NULL"); // NULL can't happen
+                      string dwarfsrc = string((const char*) sqlite3_column_text (ps_bolo_find, 1) ?: "NULL"); // NULL can't happen
+                      
+                      string srcpath;
+                      if (dwarfsrc.size() > 0 && dwarfsrc[0] == '/') // src file name is absolute, use as is
+                        srcpath = dwarfsrc;
+                      else
+                        srcpath = rps + string("/") + dwarfsrc; // XXX: should not happen; elf_classify only gives back /absolute files
+                      
+                      char *srp = realpath(srcpath.c_str(), NULL);
+                      if (srp == NULL)
+                        continue; // unresolvable files are not a serious problem
+                        // throw libc_exception(errno, "fts realpath " + srcpath);
+                      string srps = string(srp);
+                      free (srp);
+
+                      struct stat sfs;
+                      rc = stat(srps.c_str(), &sfs);
+                      if (rc == 0)
+                        {
+                          if (verbose > 2)
+                            obatched(clog) << "recorded buildid=" << buildid << " file=" << srps
+                                           << " mtime=" << sfs.st_mtime
+                                           << " as source " << dwarfsrc << endl;
+
+                          // register this file name in the interning table
+                          sqlite3_reset (ps_upsert_files);
+                          rc = sqlite3_bind_text (ps_upsert_files, 1, srps.c_str(), -1, SQLITE_TRANSIENT);
+                          if (rc != SQLITE_OK)
+                            throw sqlite_exception(rc, "sqlite3 bolo-file bind");           
+                          rc = sqlite3_step (ps_upsert_files);
+                          if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                            throw sqlite_exception(rc, "sqlite3 bolo-file execute");           
+
+                          // register the dwarfsrc name in the interning table too
+                          sqlite3_reset (ps_upsert_files);
+                          rc = sqlite3_bind_text (ps_upsert_files, 1, dwarfsrc.c_str(), -1, SQLITE_TRANSIENT);
+                          if (rc != SQLITE_OK)
+                            throw sqlite_exception(rc, "sqlite3 bolo-file bind");           
+                          rc = sqlite3_step (ps_upsert_files);
+                          if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                            throw sqlite_exception(rc, "sqlite3 bolo-file execute");           
+                          
+                          sqlite3_reset (ps_upsert);
+                          rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+                          if (rc != SQLITE_OK)
+                            throw sqlite_exception(rc, "sqlite3 bolo upsert bind1");
+                          rc = sqlite3_bind_text (ps_upsert, 2, "S", -1, SQLITE_STATIC);
+                          if (rc != SQLITE_OK)
+                            throw sqlite_exception(rc, "sqlite3 bolo upsert bind2");
+                          rc = sqlite3_bind_text (ps_upsert, 3, dwarfsrc.c_str(), -1, SQLITE_TRANSIENT);
+                          if (rc != SQLITE_OK)
+                            throw sqlite_exception(rc, "sqlite3 bolo upsert bind2");
+                          rc = sqlite3_bind_int64 (ps_upsert, 4, (int64_t) sfs.st_mtime);
+                          if (rc != SQLITE_OK)
+                            throw sqlite_exception(rc, "sqlite3 bolo upsert bind3");           
+                          rc = sqlite3_bind_text (ps_upsert, 5, srps.c_str(), -1, SQLITE_TRANSIENT);
+                          if (rc != SQLITE_OK)
+                            throw sqlite_exception(rc, "sqlite3 bolo upsert bind3");           
+
+                          rc = sqlite3_step (ps_upsert);
+                          if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                            throw sqlite_exception(rc, "sqlite3 bolo upsert execute");
+                        }
+                    }
+                  else
+                    throw sqlite_exception(rc, "sqlite3 bolo-find step");
+                } // loop over bolo records
+
+              if (verbose > 2)
+                obatched(clog) << "nuking bolo for directory=" << rps << endl;
+              
+              // ditch matching bolo records so we don't repeat search
+              sqlite3_reset (ps_bolo_nuke);
+              rc = sqlite3_bind_text (ps_bolo_nuke, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 bolo-nuke bind1");
+              rc = sqlite3_step (ps_bolo_nuke);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                throw sqlite_exception(rc, "sqlite3 bolo-nuke execute");           
+                          
+              break;
+
             case FTS_F:
               {
-                /* Found a file.  Convert it to an absolute path, so
-                   the buildid database does not have relative path
-                   names that are unresolvable from a subsequent run
-                   in a different cwd. */
-                char *rp = realpath(f->fts_path, NULL);
-                if (rp == NULL)
-                  throw libc_exception(errno, "fts realpath " + string(f->fts_path));
-                string rps = string(rp);
-                free (rp);
-                
                 /* See if we know of it already. */
                 sqlite3_reset (ps_query); // to allow rebinding / reexecution
                 int rc = sqlite3_bind_text (ps_query, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
@@ -1012,12 +1230,13 @@ scan_source_file_path (const string& dir)
 
                 bool executable_p = false, debuginfo_p = false; // E and/or D
                 string buildid;
+                vector<string> sourcefiles;
                 
                 int fd = open (rps.c_str(), O_RDONLY);
                 try
                   {
                     if (fd >= 0)
-                      elf_classify (fd, executable_p, debuginfo_p, buildid);
+                      elf_classify (fd, executable_p, debuginfo_p, buildid, sourcefiles);
                     else
                       throw libc_exception(errno, string("open ") + rps);
                   }
@@ -1071,12 +1290,15 @@ scan_source_file_path (const string& dir)
                   }
                 
                 // artifacttype column 2 set later
-                rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) f->fts_statp->st_mtime);
+                rc = sqlite3_bind_null (ps_upsert, 3); // no artifactsrc for D/E
                 if (rc != SQLITE_OK)
-                  throw sqlite_exception(rc, "sqlite3 upsert bind3");           
-                rc = sqlite3_bind_text (ps_upsert, 4, rps.c_str(), -1, SQLITE_TRANSIENT);
+                  throw sqlite_exception(rc, "sqlite3 upsert bind3");
+                rc = sqlite3_bind_int64 (ps_upsert, 4, (int64_t) f->fts_statp->st_mtime);
                 if (rc != SQLITE_OK)
                   throw sqlite_exception(rc, "sqlite3 upsert bind4");           
+                rc = sqlite3_bind_text (ps_upsert, 5, rps.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 upsert bind5");           
                 
                 if (executable_p)
                   {
@@ -1101,7 +1323,34 @@ scan_source_file_path (const string& dir)
                       throw sqlite_exception(rc, "sqlite3 upsert-D execute");
                   }
 
-                if (! (executable_p || debuginfo_p))
+                if (sourcefiles.size() && buildid != "")
+                  {
+                    fts_sourcefiles += sourcefiles.size();
+                    string sourcedir = directory_stack.back ();
+                    
+                    for (auto sf : sourcefiles)
+                      {
+                        sqlite3_reset (ps_bolo_insert);
+                        rc = sqlite3_bind_text (ps_bolo_insert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+                        if (rc != SQLITE_OK)
+                          throw sqlite_exception(rc, "sqlite3 upsert-bolo bind1");
+                        rc = sqlite3_bind_text (ps_bolo_insert, 2, sf.c_str(), -1, SQLITE_TRANSIENT);
+                        if (rc != SQLITE_OK)
+                          throw sqlite_exception(rc, "sqlite3 upsert-bolo bind2");
+                        rc = sqlite3_bind_text (ps_bolo_insert, 3, sourcedir.c_str(), -1, SQLITE_TRANSIENT);
+                        if (rc != SQLITE_OK)
+                          throw sqlite_exception(rc, "sqlite3 upsert-bolo bind3");
+                        
+                        rc = sqlite3_step (ps_bolo_insert);
+                        if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                          throw sqlite_exception(rc, "sqlite3 upsert-bolo execute");
+                      }
+
+
+                    
+                  }
+                
+                if (! (executable_p || debuginfo_p))  // negative hit
                   {
                     rc = sqlite3_bind_null (ps_upsert, 2);
                     if (rc != SQLITE_OK)
@@ -1157,7 +1406,7 @@ scan_source_file_path (const string& dir)
   if (verbose > 1)
     obatched(clog) << "fts traversed " << dir << " in " << deltas << "s, scanned=" << fts_scanned
                    << ", cached=" << fts_cached << ", debuginfo=" << fts_debuginfo
-                   << ", executable=" << fts_executable << endl;
+                   << ", executable=" << fts_executable << ", source=" << fts_sourcefiles << endl;
 }
 
 
@@ -1256,7 +1505,8 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
           // finally ... time to run elf_classify on this bad boy and update the database
           bool executable_p = false, debuginfo_p = false;
           string buildid;
-          elf_classify (fd, executable_p, debuginfo_p, buildid);
+          vector<string> sourcefiles;
+          elf_classify (fd, executable_p, debuginfo_p, buildid, sourcefiles);
           // NB: might throw
 
           // NB: we record only executable_p || debuginfo_p case here,
@@ -1332,7 +1582,7 @@ scan_source_rpm_path (const string& dir)
                        "insert or ignore into " BUILDIDS "_buildids VALUES (NULL, ?);"
                        "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);"
                        "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);"                       
-                       "insert or replace into " BUILDIDS "_norm (buildid, artifacttype, mtime,"
+                       "insert or replace into " BUILDIDS "_norm (buildid, artifacttype, mtime," // XXX: artifactsrc
                        "sourcetype, source0, source1) values ((select id from " BUILDIDS "_buildids where hex = ?), ?, ?, 'F',"
                                                      "(select id from " BUILDIDS "_files where name = ?),"
                                                      "(select id from " BUILDIDS "_files where name = ?));");
