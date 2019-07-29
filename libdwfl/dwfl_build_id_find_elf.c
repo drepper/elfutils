@@ -207,7 +207,8 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
            debuginfo-server if enabled.  */
         if (fd < 0 && mod->build_id_len > 0)
           fd = (*fp_dbgclient_find_executable) (mod->build_id_bits,
-                                                mod->build_id_len);
+                                                mod->build_id_len,
+                                                NULL);
       }
   }
 #endif /* ENABLE_DBGSERVER */

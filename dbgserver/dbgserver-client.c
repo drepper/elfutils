@@ -245,7 +245,8 @@ static int
 dbgclient_query_server (const unsigned char *build_id_bytes,
                         int build_id_len,
                         const char *type,
-                        const char *filename)
+                        const char *filename,
+                        char **path)
 {
   char *urls_envvar;
   char *server_urls;
@@ -265,27 +266,6 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   else
     for (int i = 0; i < build_id_len; i++)
       sprintf(build_id + (i * 2), "%02x", build_id_bytes[i]);
-
-  urls_envvar = getenv(server_urls_envvar);
-  if (urls_envvar == NULL)
-    return -ENOENT;
-
-  /* make a copy of the envvar so it can be safely modified.  */
-  server_urls = malloc(strlen(urls_envvar) + 1);
-  if (server_urls == NULL)
-    return -ENOMEM;
-
-  strcpy(server_urls, urls_envvar);
-
-  if (curl_global_init(CURL_GLOBAL_DEFAULT) != 0)
-    return -ENETUNREACH;
-
-  CURL *session = curl_easy_init();
-  if (session == NULL)
-    {
-      curl_global_cleanup();
-      return -ENETUNREACH;
-    }
 
   /* set paths needed to perform the query
 
@@ -329,7 +309,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   /* If the target is already in the cache then we are done.  */
   int fd = dbgclient_get_file_from_cache(target_cache_path);
   if (fd >= 0)
-    return fd;
+    goto found;
 
   fd = dbgclient_add_file_to_cache(target_cache_dir,
                                    target_cache_path);
@@ -337,13 +317,33 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
     /* Encountered an error adding file to cache, return error code.  */
     return fd;
 
+  urls_envvar = getenv(server_urls_envvar);
+  if (urls_envvar == NULL)
+    return -ENOENT;
+
+  /* make a copy of the envvar so it can be safely modified.  */
+  server_urls = malloc(strlen(urls_envvar) + 1);
+  if (server_urls == NULL)
+    return -ENOMEM;
+
+  strcpy(server_urls, urls_envvar);
+
+  if (curl_global_init(CURL_GLOBAL_DEFAULT) != 0)
+    return -ENETUNREACH;
+
+  CURL *session = curl_easy_init();
+  if (session == NULL)
+    {
+      curl_global_cleanup();
+      return -ENETUNREACH;
+    }
+
   long timeout = 5; /* XXX do not hardcode.  */
   bool success = false;
   char *server_url = strtok(server_urls, url_delim);
   while (! success && server_url != NULL)
     {
       /* query servers until we find the target or run out of urls to try.  */
-      long resp_code;
       char *url = build_url(server_url, build_id, type, filename);
 
       if (url == NULL)
@@ -360,16 +360,20 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       curl_easy_setopt(session, CURLOPT_TIMEOUT, timeout);
 
       CURLcode curl_res = curl_easy_perform(session);
-      curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &resp_code);
 
       if (curl_res == CURLE_OK)
-        switch (resp_code)
         {
-        case 200:
-          success = true;
-          break;
-        default:
-          ;
+          long resp_code = 0;
+          curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &resp_code);
+
+          switch (resp_code)
+          {
+          case 200:
+            success = true;
+            break;
+          default:
+            ;
+          }
         }
 
       free(url);
@@ -395,31 +399,38 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       return -ENOENT;
     }
 
+found:
+  if (path != NULL)
+    *path = strdup(target_cache_path);
+
   return fd;
 }
 
 /* See dbgserver-client.h  */
 int
-dbgclient_find_debuginfo (const unsigned char *build_id_bytes, int build_id_len)
+dbgclient_find_debuginfo (const unsigned char *build_id_bytes, int build_id_len,
+                          char **path)
 {
   return dbgclient_query_server(build_id_bytes, build_id_len,
-                                "debuginfo", NULL);
+                                "debuginfo", NULL, path);
 }
 
 
 /* See dbgserver-client.h  */
 int
-dbgclient_find_executable(const unsigned char *build_id_bytes, int build_id_len)
+dbgclient_find_executable(const unsigned char *build_id_bytes, int build_id_len,
+                          char **path)
 {
   return dbgclient_query_server(build_id_bytes, build_id_len,
-                                "executable", NULL);
+                                "executable", NULL, path);
 }
 
 /* See dbgserver-client.h  */
 int dbgclient_find_source(const unsigned char *build_id_bytes,
                           int build_id_len,
-                          const char *filename)
+                          const char *filename,
+                          char **path)
 {
   return dbgclient_query_server(build_id_bytes, build_id_len,
-                                "source-file", filename);
+                                "source-file", filename, path);
 }
