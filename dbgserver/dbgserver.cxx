@@ -272,7 +272,7 @@ parse_opt (int key, char *arg,
     case 'p': http_port = atoi(arg); break;
     case 'F': source_file_paths.push_back(string(arg)); break;
     case 'R': source_rpm_paths.push_back(string(arg)); break;
-    case 't': rescan_s = atoi(arg); if (rescan_s < 1) rescan_s = 1; break;
+    case 't': rescan_s = atoi(arg); break;
       // case 'h': argp_state_help (state, stderr, ARGP_HELP_LONG|ARGP_HELP_EXIT_OK);
     default: return ARGP_ERR_UNKNOWN;
     }
@@ -846,6 +846,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
     }
   catch (const reportable_exception& e)
     {
+      e.report(clog);
       return e.mhd_send_response (connection);
     }
 }
@@ -1433,7 +1434,9 @@ thread_main_scan_source_file_path (void* arg)
           obatched(cerr) << e.message << endl;
         }
       sleep (1);
-      rescan_timer = (rescan_timer + 1) % rescan_s;
+      rescan_timer ++;
+      if (rescan_s)
+        rescan_timer %= rescan_s;
     }
   
   return 0;
@@ -1749,7 +1752,9 @@ thread_main_scan_source_rpm_path (void* arg)
           obatched(cerr) << e.message << endl;
         }
       sleep (1);
-      rescan_timer = (rescan_timer + 1) % rescan_s;
+      rescan_timer ++;
+      if (rescan_s)
+        rescan_timer %= rescan_s;
     }
 
   return 0;
