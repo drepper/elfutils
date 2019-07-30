@@ -37,6 +37,11 @@ static const char *cache_path_envvar = "DBGSERVER_CACHE_PATH";
 static const char *server_urls_envvar = "DBGSERVER_URLS";
 static const char *url_delim =  " ";
 
+/* Timeout for dbgservers, in seconds.
+   This env var must be set for dbgserver-client to run.  */
+static const char *server_timeout_envvar = "DBGSERVER_TIMEOUT";
+static int server_timeout = 5;
+
 
 static size_t
 dbgclient_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
@@ -321,6 +326,9 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   if (urls_envvar == NULL)
     return -ENOENT;
 
+  if (getenv(server_timeout_envvar))
+    server_timeout = atoi (getenv(server_timeout_envvar));
+  
   /* make a copy of the envvar so it can be safely modified.  */
   server_urls = malloc(strlen(urls_envvar) + 1);
   if (server_urls == NULL)
@@ -338,7 +346,6 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       return -ENETUNREACH;
     }
 
-  long timeout = 5; /* XXX do not hardcode.  */
   bool success = false;
   char *server_url = strtok(server_urls, url_delim);
   while (! success && server_url != NULL)
@@ -357,7 +364,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
                        CURLOPT_WRITEFUNCTION,
                        dbgclient_write_callback);
       curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)&fd);
-      curl_easy_setopt(session, CURLOPT_TIMEOUT, timeout);
+      curl_easy_setopt(session, CURLOPT_TIMEOUT, (long) server_timeout);
 
       CURLcode curl_res = curl_easy_perform(session);
 
