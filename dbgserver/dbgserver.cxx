@@ -97,6 +97,7 @@ using namespace std;
 static const char DBGSERVER_SQLITE_DDL[] =
   "pragma foreign_keys = on;\n"
   "pragma synchronous = 0;\n" // disable fsync()s - this cache is disposable across a machine crash
+  "pragma journal_mode = wal;\n" // https://sqlite.org/wal.html
 
   /* Normalized tables to represent general buildid-to-file/subfile mapping. */
   "create table if not exists " BUILDIDS "_files (\n"
