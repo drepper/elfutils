@@ -514,6 +514,22 @@ conninfo (struct MHD_Connection * conn)
 
 ////////////////////////////////////////////////////////////////////////
 
+static void
+add_mhd_last_modified (struct MHD_Response *resp, time_t mtime)
+{
+  struct tm *now = gmtime (&mtime);
+  if (now != NULL)
+    {
+      char datebuf[80];
+      size_t rc = strftime (datebuf, sizeof (datebuf), "%a, %d %b %Y %T GMT", now);
+      if (rc > 0 && rc < sizeof (datebuf))
+        (void) MHD_add_response_header (resp, "Last-Modified", datebuf);
+    }
+  
+  (void) MHD_add_response_header (resp, "Cache-Control", "public");
+}
+
+
 
 static struct MHD_Response*
 handle_buildid_f_match (int64_t b_mtime,
@@ -561,11 +577,12 @@ handle_buildid_f_match (int64_t b_mtime,
       close(fd);
     }
   else
-    // XXX: add some timestamp/cache-control headers
-    if (verbose)
-      obatched(clog) << "serving file " << b_source0 << endl;
-    /* libmicrohttpd will close it. */
-    ;
+    {
+      add_mhd_last_modified (r, s.st_mtime);
+      if (verbose)
+        obatched(clog) << "serving file " << b_source0 << endl;
+      /* libmicrohttpd will close it. */
+    }
 
   return r;
 }
@@ -637,7 +654,7 @@ handle_buildid_r_match (int64_t b_mtime,
         }
       else
         {
-          // XXX: add some timestamp/cache-control headers
+          add_mhd_last_modified (r, archive_entry_mtime(e));
           if (verbose)
             obatched(clog) << "serving rpm " << b_source0 << " file " << b_source1 << endl;
           /* libmicrohttpd will close it. */
@@ -758,6 +775,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
           auto r = MHD_create_response_from_fd ((uint64_t) s.st_size, fd);
           if (r)
             {
+              add_mhd_last_modified (r, s.st_mtime);
               if (verbose)
                 obatched(clog) << "serving file from upstream dbgserver/cache" << endl;
               return r; // NB: don't close fd; libmicrohttpd will
@@ -766,7 +784,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
       close (fd);
     }
   
-  throw reportable_exception(403, "not found");
+  throw reportable_exception(MHD_HTTP_NOT_FOUND, "not found");
 }
 
 
