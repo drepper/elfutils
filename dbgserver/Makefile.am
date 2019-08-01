@@ -31,7 +31,7 @@
 ##
 include $(top_srcdir)/config/eu.am
 AM_CPPFLAGS += -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
-	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf
+	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf -Wno-format-truncation
 VERSION = 1
 
 if BUILD_STATIC
@@ -58,14 +58,14 @@ noinst_LIBRARIES = libdbgserver.a
 noinst_LIBRARIES += libdbgserver_pic.a
 
 libdbgserver_a_SOURCES = dbgserver-client.c
-libdbgserver_pic_a_SOURCES =
+libdbgserver_pic_a_SOURCES = dbgserver-client.c
 am_libdbgserver_pic_a_OBJECTS = $(libdbgserver_a_SOURCES:.c=.os)
 
 pkginclude_HEADERS = dbgserver-client.h
 
 libdbgserver_so_LIBS = libdbgserver_pic.a
 libdbgserver_so_LDLIBS = $(libcurl_LIBS)
-libdbgserver_so_SOURCES =
+libdbgserver_so_SOURCES = dbgserver-client.c
 libdbgserver.so$(EXEEXT): $(srcdir)/libdbgserver.map $(libdbgserver_so_LIBS)
 	$(AM_V_CCLD)$(LINK) $(dso_LDFLAGS) -o $@ \
 		-Wl,--soname,$@.$(VERSION) \
