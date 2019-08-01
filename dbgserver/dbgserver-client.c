@@ -158,6 +158,7 @@ dbgclient_clean_cache(char *cache_path, char *interval_path)
     return -errno;
 
   FTSENT *f;
+  DIR *d;
   while ((f = fts_read(fts)) != NULL)
     {
       switch (f->fts_info)
@@ -167,10 +168,24 @@ dbgclient_clean_cache(char *cache_path, char *interval_path)
           /* XXX: ->st_mtime is the wrong metric.  We'd want to track -usage- not the mtime, which 
              we copy from the http Last-Modified: header, and represents the upstream file's mtime. */
           /* XXX clean_interval should be a separate parameter max_unused_age */
+          /* XXX consider extra effort to clean up old tmp files */
           if (time(NULL) - f->fts_statp->st_mtime >= clean_interval)
             unlink (f->fts_path);
           break;
 
+        case FTS_DP:
+          d = opendir(f->fts_path);
+          if (d)
+            {
+              /* delete directory if it doesn't contain files besides . and ..  */
+              (void) readdir(d);
+              (void) readdir(d);
+              if (readdir(d) == NULL)
+                remove(f->fts_path);
+              closedir(d);
+            }
+          break;
+          
         default:
           ;
         }
