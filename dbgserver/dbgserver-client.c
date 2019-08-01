@@ -267,30 +267,11 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
     }
 
 
-  /* create target directory in cache if not found.  */
-  struct stat st;
-  if (stat(target_cache_dir, &st) == -1 && mkdir(target_cache_dir, 0700) < 0)
-    {
-      rc = -errno;
-      goto out;
-    }
-
-  /* NB: write to a temporary file first, to avoid race condition of
-     multiple clients checking the cache, while a partially-written or empty
-     file is in there, being written from libcurl. */
-  fd = mkstemp (target_cache_tmppath);
-  if (fd < 0)
-    {
-      rc = -errno;
-      goto out;
-    }
-  /* thereafter, goto out0 on error*/
-  
   urls_envvar = getenv(server_urls_envvar);
   if (urls_envvar == NULL)
     {
       rc = -ENOSYS;
-      goto out0;
+      goto out;
     }
 
   if (getenv(server_timeout_envvar))
@@ -301,8 +282,28 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   if (server_urls == NULL)
     {
       rc = -ENOMEM;
+      goto out;
+    }
+  /* thereafter, goto out0 on error*/
+
+  /* create target directory in cache if not found.  */
+  struct stat st;
+  if (stat(target_cache_dir, &st) == -1 && mkdir(target_cache_dir, 0700) < 0)
+    {
+      rc = -errno;
       goto out0;
     }
+
+  /* NB: write to a temporary file first, to avoid race condition of
+     multiple clients checking the cache, while a partially-written or empty
+     file is in there, being written from libcurl. */
+  fd = mkstemp (target_cache_tmppath);
+  if (fd < 0)
+    {
+      rc = -errno;
+      goto out0;
+    }
+
   /* thereafter, goto out1 on error */
   
   CURL *session = curl_easy_init();
@@ -391,11 +392,12 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   curl_easy_cleanup(session);
   
  out1:
-  free (server_urls);
+  unlink (target_cache_tmppath);
+  (void) rmdir (target_cache_dir); /* nop if not empty */
+  close (fd);
 
  out0:
-  unlink (target_cache_tmppath);
-  close (fd);
+  free (server_urls);
   
  out:
   return rc;
