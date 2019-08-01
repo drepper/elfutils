@@ -254,10 +254,10 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   int fd = open (target_cache_path, O_RDONLY);
   if (fd >= 0)
     {
-      rc = fd;
+      /* Success!!!! */
       if (path != NULL)
         *path = strdup(target_cache_path);
-      goto out;
+      return fd;
     }
 
 
@@ -368,20 +368,18 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
         }
 
       /* Success!!!! */
-      rc = fd;
-      break;
+      curl_easy_cleanup(session);
+      free (server_urls);
+      /* don't close fd - we're returning it */
+      /* don't unlink the tmppath; it's already been renamed. */
+      if (path != NULL)
+        *path = strdup(target_cache_path);
+      return fd;
     }
 
-/* normal exit */
- ok:
-  curl_easy_cleanup(session);
-  free (server_urls);
-  /* don't close fd - we're returning it */
-  /* don't unlink the tmppath; it's already been renamed. */
-  if (path != NULL)
-    *path = strdup(target_cache_path);
-  return rc;
-  
+/* fell through - out of alternative servers */
+  rc = -ENOENT;
+
 /* error exits */
  out2:
   curl_easy_cleanup(session);
