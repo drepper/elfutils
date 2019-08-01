@@ -229,7 +229,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       for (q=0; q<sizeof(suffix)-1; q++)
         {
           if (filename[q] == '\0') break;
-          if (filename[q] == '/') suffix[q] = '#';
+          if (filename[q] == '/' || filename[q] == '.') suffix[q] = '#';
           else suffix[q] = filename[q];
         }
     }
