@@ -313,8 +313,9 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       goto out1;
     }
   /* thereafter, goto out2 on error */
-  
-  char *server_url = strtok(server_urls, url_delim);
+
+  char *strtok_saveptr;
+  char *server_url = strtok_r(server_urls, url_delim, &strtok_saveptr);
   /* Try the various servers sequentially.  XXX: in parallel instead. */
   while (server_url != NULL)
     {
@@ -337,23 +338,18 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       CURLcode curl_res = curl_easy_perform(session);
       if (curl_res != CURLE_OK)
         {
-          server_url = strtok(NULL, url_delim);
+          server_url = strtok_r(NULL, url_delim,&strtok_saveptr);
           continue; /* fail over to next server */
         }
 
       long resp_code = 500;
       curl_res = curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &resp_code);
-      if (curl_res != CURLE_OK)
+      if ((curl_res != CURLE_OK) || (resp_code != 200))
         {
-          server_url = strtok(NULL, url_delim);
+          server_url = strtok_r(NULL, url_delim,&strtok_saveptr);
           continue;
         }
-      if (resp_code != 200)
-        {
-          server_url = strtok(NULL, url_delim);
-          continue; /* fail over to next server */
-        }
-      
+
       time_t mtime;
       curl_res = curl_easy_getinfo(session, CURLINFO_FILETIME, (void*) &mtime);
       if (curl_res != CURLE_OK)
