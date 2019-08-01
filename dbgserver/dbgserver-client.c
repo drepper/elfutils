@@ -158,7 +158,6 @@ dbgclient_clean_cache(char *cache_path, char *interval_path)
     return -errno;
 
   FTSENT *f;
-  DIR *d;
   while ((f = fts_read(fts)) != NULL)
     {
       switch (f->fts_info)
@@ -174,16 +173,8 @@ dbgclient_clean_cache(char *cache_path, char *interval_path)
           break;
 
         case FTS_DP:
-          d = opendir(f->fts_path);
-          if (d)
-            {
-              /* delete directory if it doesn't contain files besides . and ..  */
-              (void) readdir(d);
-              (void) readdir(d);
-              if (readdir(d) == NULL)
-                remove(f->fts_path);
-              closedir(d);
-            }
+          /* Remove if empty. */
+          (void) rmdir (f->fts_path);
           break;
           
         default:
@@ -298,7 +289,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   urls_envvar = getenv(server_urls_envvar);
   if (urls_envvar == NULL)
     {
-      fd = -ENOSYS;
+      rc = -ENOSYS;
       goto out0;
     }
 
