@@ -208,6 +208,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   char target_cache_dir[PATH_MAX];
   char target_cache_path[PATH_MAX];
   char target_cache_tmppath[PATH_MAX];
+  char suffix[PATH_MAX];
   char build_id[max_build_id_bytes * 2 + 1];
 
   /* Copy lowercase hex representation of build_id into buf.  */
@@ -221,13 +222,26 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
     for (int i = 0; i < build_id_len; i++)
       sprintf(build_id + (i * 2), "%02x", build_id_bytes[i]);
 
+  unsigned q = 0;
+  if (filename != NULL)
+    {
+      /* copy the filename to suffix, s,/,#,g */
+      for (q=0; q<sizeof(suffix)-1; q++)
+        {
+          if (filename[q] == '\0') break;
+          if (filename[q] == '/') suffix[q] = '#';
+          else suffix[q] = filename[q];
+        }
+    }
+  suffix[q] = '\0';
+  
   /* set paths needed to perform the query
 
      example format
      cache_path:        $HOME/.dbgserver_cache
      target_cache_dir:  $HOME/.dbgserver_cache/0123abcd
      target_cache_path: $HOME/.dbgserver_cache/0123abcd/debuginfo
-     target_cache_path: $HOME/.dbgserver_cache/0123abcd/source-file/PATH/TO/SOURCE ?
+     target_cache_path: $HOME/.dbgserver_cache/0123abcd/source-file#PATH#TO#SOURCE ?
   */
   
   if (getenv(cache_path_envvar))
@@ -242,9 +256,8 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
 
   /* avoid using snprintf here due to compiler warning.  */
   snprintf(target_cache_dir, PATH_MAX, "%s/%s", cache_path, build_id);
-  snprintf(target_cache_path, PATH_MAX, "%s/%s", target_cache_dir, type);
-  snprintf(target_cache_tmppath, PATH_MAX, "%s/%s.XXXXXX", target_cache_dir, type);
-  /* XXX: source-file suffix too! */
+  snprintf(target_cache_path, PATH_MAX, "%s/%s%s", target_cache_dir, type, suffix);
+  snprintf(target_cache_tmppath, PATH_MAX, "%s.XXXXXX", target_cache_path);
 
   /* XXX combine these */
   snprintf(interval_path, PATH_MAX, "%s/%s", cache_path, cache_clean_interval_filename);
