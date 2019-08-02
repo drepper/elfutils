@@ -415,7 +415,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
 
 /* See dbgserver-client.h  */
 int
-dbgclient_find_debuginfo (const unsigned char *build_id_bytes, int build_id_len,
+dbgserver_find_debuginfo (const unsigned char *build_id_bytes, int build_id_len,
                           char **path)
 {
   return dbgclient_query_server(build_id_bytes, build_id_len,
@@ -425,7 +425,7 @@ dbgclient_find_debuginfo (const unsigned char *build_id_bytes, int build_id_len,
 
 /* See dbgserver-client.h  */
 int
-dbgclient_find_executable(const unsigned char *build_id_bytes, int build_id_len,
+dbgserver_find_executable(const unsigned char *build_id_bytes, int build_id_len,
                           char **path)
 {
   return dbgclient_query_server(build_id_bytes, build_id_len,
@@ -433,7 +433,7 @@ dbgclient_find_executable(const unsigned char *build_id_bytes, int build_id_len,
 }
 
 /* See dbgserver-client.h  */
-int dbgclient_find_source(const unsigned char *build_id_bytes,
+int dbgserver_find_source(const unsigned char *build_id_bytes,
                           int build_id_len,
                           const char *filename,
                           char **path)

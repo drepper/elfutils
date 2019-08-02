@@ -9,15 +9,15 @@ extern "C" {
 
    If successful, return a file descriptor to the target, otherwise
    return a posix error code. */
-int dbgclient_find_debuginfo (const unsigned char *build_id_bytes,
+int dbgserver_find_debuginfo (const unsigned char *build_id_bytes,
                              int build_id_len,
                              char **path);
 
-int dbgclient_find_executable (const unsigned char *build_id_bytes,
+int dbgserver_find_executable (const unsigned char *build_id_bytes,
                                int build_id_len,
                                char **path);
 
-int dbgclient_find_source (const unsigned char *build_id_bytes,
+int dbgserver_find_source (const unsigned char *build_id_bytes,
                            int build_id_len,
                            const char *filename,
                            char **path);

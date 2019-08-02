@@ -757,13 +757,13 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   // is to defer to other debuginfo servers.
   int fd = -1;
   if (artifacttype == "debuginfo")
-    fd = dbgclient_find_debuginfo ((const unsigned char*) buildid.c_str(), 0,
+    fd = dbgserver_find_debuginfo ((const unsigned char*) buildid.c_str(), 0,
                                    NULL);
   else if (artifacttype == "executable")
-    fd = dbgclient_find_executable ((const unsigned char*) buildid.c_str(), 0,
+    fd = dbgserver_find_executable ((const unsigned char*) buildid.c_str(), 0,
                                     NULL);
   else if (artifacttype == "source-file")
-    fd = dbgclient_find_source ((const unsigned char*) buildid.c_str(), 0,
+    fd = dbgserver_find_source ((const unsigned char*) buildid.c_str(), 0,
                                 suffix.c_str(), NULL);
   // XXX: report bad fd
   if (fd >= 0)
