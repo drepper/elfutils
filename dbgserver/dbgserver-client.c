@@ -233,6 +233,9 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
           if (filename[q] == '/' || filename[q] == '.') suffix[q] = '#';
           else suffix[q] = filename[q];
         }
+      /* XXX: if we had a CURL* handle at this time, we could
+         curl_easy_escape() to url-escape the filename in a
+         collision-free, reversible manner. */
     }
   suffix[q] = '\0';
   
