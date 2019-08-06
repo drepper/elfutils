@@ -26,6 +26,7 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
+#include "config.h"
 #include "dbgserver-client.h"
 #include <assert.h>
 #include <dirent.h>
@@ -347,6 +348,10 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)&fd);
       curl_easy_setopt(session, CURLOPT_TIMEOUT, (long) server_timeout);
       curl_easy_setopt(session, CURLOPT_FILETIME, (long) 1);
+      curl_easy_setopt(session, CURLOPT_FOLLOWLOCATION, (long) 1);
+      curl_easy_setopt(session, CURLOPT_AUTOREFERER, (long) 1);
+      curl_easy_setopt(session, CURLOPT_ACCEPT_ENCODING, (long) 1);
+      curl_easy_setopt(session, CURLOPT_USERAGENT, (void*) PACKAGE_STRING);
       
       CURLcode curl_res = curl_easy_perform(session);
       if (curl_res != CURLE_OK)
