@@ -353,7 +353,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       curl_easy_setopt(session, CURLOPT_FILETIME, (long) 1);
       curl_easy_setopt(session, CURLOPT_FOLLOWLOCATION, (long) 1);
       curl_easy_setopt(session, CURLOPT_AUTOREFERER, (long) 1);
-      curl_easy_setopt(session, CURLOPT_ACCEPT_ENCODING, (long) 1);
+      curl_easy_setopt(session, CURLOPT_ACCEPT_ENCODING, "");
       curl_easy_setopt(session, CURLOPT_USERAGENT, (void*) PACKAGE_STRING);
       
       CURLcode curl_res = curl_easy_perform(session);
