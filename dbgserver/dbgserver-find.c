@@ -28,13 +28,10 @@
    not, see <http://www.gnu.org/licenses/>.  */
 
 #include "dbgserver-client.h"
-#include <stdlib.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <linux/limits.h>
-#include <errno.h>
 
-#define MAX_BUILD_ID_BYTES 256
 
 /*
    Command-line frontend for dbgserver.
@@ -57,23 +54,6 @@ main(int argc, char** argv)
       return 1;
     }
 
-  int build_id_len;
-  char *build_id_str = argv[2];
-
-  build_id_len = strlen(build_id_str);
-  if (build_id_len % 2)
-    {
-      fprintf(stderr, "Invalid buildid\n");
-      return 1;
-    }
-  build_id_len /= 2;
-
-  unsigned char build_id_bytes[MAX_BUILD_ID_BYTES];
-
-  /* Convert the build-id hex string to bytes.  */
-  for (int i = 0; build_id_str[i] != '\0'; i += 2)
-    sscanf(build_id_str + i, "%2hhx", build_id_bytes + i / 2);
-
   int rc;
   char *cache_name;
 
@@ -81,9 +61,9 @@ main(int argc, char** argv)
      dbgserver_find_* function. If FILETYPE is "source-file"
      then ensure a FILENAME was also supplied as an argument.  */
   if (strcmp(argv[1], "debuginfo") == 0)
-    rc = dbgserver_find_debuginfo(build_id_bytes, build_id_len, &cache_name);
+    rc = dbgserver_find_debuginfo((unsigned char *)argv[2], 0, &cache_name);
   else if (strcmp(argv[1], "executable") == 0)
-    rc = dbgserver_find_executable(build_id_bytes, build_id_len, &cache_name);
+    rc = dbgserver_find_executable((unsigned char *)argv[2], 0, &cache_name);
   else if (strcmp(argv[1], "source-file") == 0)
     {
       if (argc != 4)
@@ -91,7 +71,7 @@ main(int argc, char** argv)
           fprintf(stderr, "If FILETYPE is \"source-file\" then FILENAME must be given\n");
           return 1;
         }
-      rc = dbgserver_find_source(build_id_bytes, build_id_len, argv[3], &cache_name);
+      rc = dbgserver_find_source((unsigned char *)argv[2], 0, argv[3], &cache_name);
     }
   else
     {
