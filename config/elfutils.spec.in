@@ -126,7 +126,7 @@ interprocess services, communication and introspection
 profiling) of processes.
 
 %package dbgserver-libs
-Summary: Libraries for HTTP ELF/DWARF file server addressed by build-id.
+Summary: Libraries and command-line frontend for HTTP ELF/DWARF file server addressed by build-id.
 License: GPLv2+
 
 %package dbgserver
@@ -142,7 +142,8 @@ Requires: /usr/bin/rpm2cpio
 %description dbgserver-libs
 The elfutils-dbgserver-libs package contains shared libraries
 dynamically loaded from -ldw, which use a dbgserver service
-to look up debuginfo and associated data.
+to look up debuginfo and associated data. Also includes a
+command-line frontend.
 
 %description dbgserver
 The elfutils-dbgserver package contains the dbgserver binary
@@ -273,6 +274,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %defattr(-,root,root)
 %{_libdir}/libdbgserver.so.*
 %{_libdir}/libdbgserver-%{version}.so
+%{_bindir}/eu-dbgserver-find
 
 
 %files dbgserver

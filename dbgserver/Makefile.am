@@ -50,9 +50,12 @@ libeu = ../lib/libeu.a
 
 AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw:.
 
-bin_PROGRAMS = dbgserver
+bin_PROGRAMS = dbgserver dbgserver-find
 dbgserver_SOURCES = dbgserver.cxx
 dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libdbgserver) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
+
+dbgserver_find_SOURCES = dbgserver-find.c
+dbgserver_find_LDADD = $(libdbgserver)
 
 noinst_LIBRARIES = libdbgserver.a
 noinst_LIBRARIES += libdbgserver_pic.a
