@@ -91,6 +91,6 @@ uninstall: uninstall-am
 	rm -f $(DESTDIR)$(libdir)/libdbgserver.so
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(includedir)/elfutils
 
-EXTRA_DIST = libdbgserver.map
+EXTRA_DIST = libdbgserver.map dbgserver.8
 MOSTLYCLEANFILES = $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so.$(VERSION)
 CLEANFILES += $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so
