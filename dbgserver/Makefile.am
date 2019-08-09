@@ -53,6 +53,7 @@ AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw:.
 bin_PROGRAMS = dbgserver dbgserver-find
 dbgserver_SOURCES = dbgserver.cxx
 man8_MANS = dbgserver.8
+man1_MANS = dbgserver-find.1
 dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libdbgserver) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
 
 dbgserver_find_SOURCES = dbgserver-find.c
@@ -91,6 +92,6 @@ uninstall: uninstall-am
 	rm -f $(DESTDIR)$(libdir)/libdbgserver.so
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(includedir)/elfutils
 
-EXTRA_DIST = libdbgserver.map dbgserver.8
+EXTRA_DIST = libdbgserver.map dbgserver.8 dbgserver-find.1
 MOSTLYCLEANFILES = $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so.$(VERSION)
 CLEANFILES += $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so

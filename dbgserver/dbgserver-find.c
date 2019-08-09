@@ -27,30 +27,22 @@
    the GNU Lesser General Public License along with this program.  If
    not, see <http://www.gnu.org/licenses/>.  */
 
+#include "config.h"
 #include "dbgserver-client.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
 
-/*
-   Command-line frontend for dbgserver.
-
-   Query dbgserver for the file with the FILETYPE and BUILDID given as
-   command-line arguments. FILETYPE must be one of "debuginfo", "executable"
-   or "source-file". BUILDID must be a hex string with even length. If
-   FILETYPE is "source-file" then a FILENAME must also be supplied as a
-   command-line argument, otherwise FILENAME is ignored and may be omitted.
-
-   If the file is successfully retrieved from the server, print the file's
-   path to stdout, otherwise print an error message describing the failure.
-*/
 int
 main(int argc, char** argv)
 {
   if (argc < 3 || argc > 4)
     {
-      fprintf(stderr, "usage: %s FILETYPE BUILDID FILENAME\n", argv[0]);
+      fprintf(stderr, "%s (%s) %s\n", argv[0], PACKAGE_NAME, PACKAGE_VERSION);
+      fprintf(stderr, "Usage: %s debuginfo BUILDID\n", argv[0]);
+      fprintf(stderr, "       %s executable BUILDID\n", argv[0]);
+      fprintf(stderr, "       %s source BUILDID /FILENAME\n", argv[0]);
       return 1;
     }
 
@@ -64,11 +56,11 @@ main(int argc, char** argv)
     rc = dbgserver_find_debuginfo((unsigned char *)argv[2], 0, &cache_name);
   else if (strcmp(argv[1], "executable") == 0)
     rc = dbgserver_find_executable((unsigned char *)argv[2], 0, &cache_name);
-  else if (strcmp(argv[1], "source-file") == 0)
+  else if (strcmp(argv[1], "source") == 0)
     {
-      if (argc != 4)
+      if (argc != 4 || argv[3][0] != '/')
         {
-          fprintf(stderr, "If FILETYPE is \"source-file\" then FILENAME must be given\n");
+          fprintf(stderr, "If FILETYPE is \"source\" then absolute /FILENAME must be given\n");
           return 1;
         }
       rc = dbgserver_find_source((unsigned char *)argv[2], 0, argv[3], &cache_name);

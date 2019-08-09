@@ -32,7 +32,7 @@ BuildRequires: pkgconfig(libcurl) >= 7.29.0
 BuildRequires: pkgconfig(sqlite3) >= 3.7.17
 BuildRequires: pkgconfig(libarchive) >= 3.1.2
 %if 0%{?rhel} >= 8 || 0%{?fedora} >= 20
-Recommends: elfutils-dbgserver-libs
+Recommends: elfutils-dbgserver-client
 %endif
 
 
@@ -125,7 +125,7 @@ interprocess services, communication and introspection
 (like synchronisation, signaling, debugging, tracing and
 profiling) of processes.
 
-%package dbgserver-libs
+%package dbgserver-client
 Summary: Libraries and command-line frontend for HTTP ELF/DWARF file server addressed by build-id.
 License: GPLv2+
 
@@ -139,8 +139,8 @@ Requires(postun): systemd
 Requires: shadow-utils
 Requires: /usr/bin/rpm2cpio
 
-%description dbgserver-libs
-The elfutils-dbgserver-libs package contains shared libraries
+%description dbgserver-client
+The elfutils-dbgserver-client package contains shared libraries
 dynamically loaded from -ldw, which use a dbgserver service
 to look up debuginfo and associated data. Also includes a
 command-line frontend.
@@ -270,11 +270,12 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_sysctldir}/10-default-yama-scope.conf
 
 
-%files dbgserver-libs
+%files dbgserver-client
 %defattr(-,root,root)
 %{_libdir}/libdbgserver.so.*
 %{_libdir}/libdbgserver-%{version}.so
 %{_bindir}/eu-dbgserver-find
+%{_mandir}/man1/eu-dbgserver-find.1*
 
 
 %files dbgserver
