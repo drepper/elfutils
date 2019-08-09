@@ -283,6 +283,8 @@ rm -rf ${RPM_BUILD_ROOT}
 %config(noreplace) %verify(not md5 size mtime) %{_sysconfdir}/sysconfig/eu-dbgserver
 %{_unitdir}/eu-dbgserver.service
 %{_sysconfdir}/sysconfig/eu-dbgserver
+%{_mandir}/man8/eu-dbgserver.8*
+
 %dir %attr(0700,eu-dbgserver,eu-dbgserver) %{_localstatedir}/cache/eu-dbgserver
 %verify(not md5 size mtime) %attr(0600,eu-dbgserver,eu-dbgserver) %{_localstatedir}/cache/eu-dbgserver/dbgserver.sqlite
 

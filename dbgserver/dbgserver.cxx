@@ -692,11 +692,11 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   string atype_code;
   if (artifacttype == "debuginfo") atype_code = "D";
   else if (artifacttype == "executable") atype_code = "E";
-  else if (artifacttype == "source-file") atype_code = "S";
+  else if (artifacttype == "source") atype_code = "S";
   else throw reportable_exception("invalid artifacttype");
 
   if (atype_code == "S" && suffix == "")
-     throw reportable_exception("invalid source-file suffix");
+     throw reportable_exception("invalid source suffix");
   
   // validate buildid
   if ((buildid.size() < 2) || // not empty
@@ -762,7 +762,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   else if (artifacttype == "executable")
     fd = dbgserver_find_executable ((const unsigned char*) buildid.c_str(), 0,
                                     NULL);
-  else if (artifacttype == "source-file")
+  else if (artifacttype == "source")
     fd = dbgserver_find_source ((const unsigned char*) buildid.c_str(), 0,
                                 suffix.c_str(), NULL);
   // XXX: report bad fd
@@ -845,7 +845,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
           else
             {
               artifacttype = url_copy.substr(slash2+1, slash3-slash2-1);
-              suffix = url_copy.substr(slash3+1);
+              suffix = url_copy.substr(slash3); // include the slash in the suffix
             }
           
           r = handle_buildid(connection, buildid, artifacttype, suffix);

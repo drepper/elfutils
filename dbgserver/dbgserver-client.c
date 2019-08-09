@@ -226,6 +226,9 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
   unsigned q = 0;
   if (filename != NULL)
     {
+      if (filename[0] != '/') // must start with /
+        return -EINVAL;
+
       /* copy the filename to suffix, s,/,#,g */
       for (q=0; q<sizeof(suffix)-1; q++)
         {
@@ -245,7 +248,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
      cache_path:        $HOME/.dbgserver_cache
      target_cache_dir:  $HOME/.dbgserver_cache/0123abcd
      target_cache_path: $HOME/.dbgserver_cache/0123abcd/debuginfo
-     target_cache_path: $HOME/.dbgserver_cache/0123abcd/source-file#PATH#TO#SOURCE ?
+     target_cache_path: $HOME/.dbgserver_cache/0123abcd/source#PATH#TO#SOURCE ?
   */
   
   if (getenv(cache_path_envvar))
@@ -338,8 +341,8 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
     {
       /* query servers until we find the target or run out of urls to try.  */
       char url[PATH_MAX];
-      if (filename)
-        snprintf(url, PATH_MAX, "%s/buildid/%s/%s/%s", server_url, build_id, type, filename);
+      if (filename) // starts with /
+        snprintf(url, PATH_MAX, "%s/buildid/%s/%s%s", server_url, build_id, type, filename);
       else
         snprintf(url, PATH_MAX, "%s/buildid/%s/%s", server_url, build_id, type);
 
@@ -447,7 +450,7 @@ int dbgserver_find_source(const unsigned char *build_id_bytes,
                           char **path)
 {
   return dbgclient_query_server(build_id_bytes, build_id_len,
-                                "source-file", filename, path);
+                                "source", filename, path);
 }
 
 

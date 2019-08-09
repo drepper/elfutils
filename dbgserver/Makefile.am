@@ -52,6 +52,7 @@ AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw:.
 
 bin_PROGRAMS = dbgserver dbgserver-find
 dbgserver_SOURCES = dbgserver.cxx
+man8_MANS = dbgserver.8
 dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libdbgserver) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
 
 dbgserver_find_SOURCES = dbgserver-find.c
