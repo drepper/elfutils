@@ -34,6 +34,11 @@ AM_CPPFLAGS += -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf -Wno-format-truncation
 VERSION = 1
 
+# Disable eu- prefixing for the binaries in this directory, since they
+# do not conflict with binutils tools.
+program_prefix=
+program_transform_name = s,x,x,
+
 if BUILD_STATIC
 libasm = ../libasm/libasm.a
 libdw = ../libdw/libdw.a -lz $(zip_LIBS) $(libelf) $(libebl) -ldl

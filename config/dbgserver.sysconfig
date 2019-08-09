@@ -2,3 +2,8 @@
 DBGSERVER_PORT="8002"
 DBGSERVER_VERBOSE="-v"
 DBGSERVER_PATHS="-F /usr/lib/debug -F /usr/bin -F /usr/sbin -F /usr/lib -F /usr/lib64"
+
+# upstream dbgservers
+#DBGSERVER_URLS="http://secondhost:8002 http://thirdhost:8002"
+#DBGSERVER_TIMEOUT="5"
+#DBGSERVER_CACHE_DIR=""

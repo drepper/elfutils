@@ -61,8 +61,6 @@ dnl The RPM spec file.  We substitute a few values in the file.
 AC_CONFIG_FILES([elfutils.spec:config/elfutils.spec.in])
 
 dnl debuginfo-server client & server parts.
-AC_SUBST([program_prefix])
-AC_CONFIG_FILES([config/dbgserver.service])
 AC_CONFIG_FILES([dbgserver/Makefile])
 
 AC_CANONICAL_HOST
