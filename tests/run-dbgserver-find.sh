@@ -30,18 +30,30 @@ while true; do
     ss -atn | fgrep ":$PORT" || break
 done    
 
-../../dbgserver/dbgserver -vvv -d $DB -F $PWD -p $PORT &
-PID=$!
-trap 'kill $PID || true; rm -f $DB' 0 1 5 9 15
-sleep 5
+set -x
 
-export DBGSERVER_URLS=http://localhost:$PORT # XXX: no / at end; dbgserver rejects extra /
+# We want to run dbgserver in the background.  We also want to start
+# it with the same check/installcheck-sensitive LD_LIBRARY_PATH stuff
+# that the testrun alias sets.  But: we if we just use
+#    testrun .../dbgserver
+# it runs in a subshell, with different pid, so not helpful.
+#
+# So we gather the LD_LIBRARY_PATH with this cunning trick:
+
+ldpath=`testrun sh -c 'echo $LD_LIBRARY_PATH'`
+env LD_LIBRARY_PATH=$ldpath ${abs_builddir}/../dbgserver/dbgserver -vvv -d $DB -F $PWD -p $PORT &
+PID=$!
+sleep 5
+tempfiles .dbgserver_*
+
+export DBGSERVER_URLS=http://localhost:$PORT/   # or without trailing /
 
 # Test whether the server is able to fetch the file from the local dbgserver.
 testrun ${abs_builddir}/dbgserver_build_id_find -e testfile-dbgserver.exec $EXPECT_PASS
 
-kill $PID
-rm $DB
+kill -INT $PID
+sleep 5
+tempfiles .dbgserver_*
 
 # Run the test again without the server running. The target file should
 # be found in the cache.

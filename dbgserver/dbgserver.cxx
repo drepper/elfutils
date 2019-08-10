@@ -31,7 +31,10 @@
   #include "config.h"
 #endif
 
+extern "C" {
 #include "printversion.h"
+}
+
 #include "dbgserver-client.h"
 #include <dwarf.h>
 
@@ -206,7 +209,7 @@ static const char DBGSERVER_SQLITE_DDL[] =
 
 
 /* Name and version of program.  */
-/* ARGP_PROGRAM_VERSION_HOOK_DEF = print_version; */
+/* ARGP_PROGRAM_VERSION_HOOK_DEF = print_version; */ // not this simple for C++
 
 /* Bug report address.  */
 ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
@@ -1808,6 +1811,7 @@ main (int argc, char *argv[])
   
   /* Parse and process arguments.  */
   int remaining;
+  argp_program_version_hook = print_version; // this works
   (void) argp_parse (&argp, argc, argv, ARGP_IN_ORDER|ARGP_NO_ARGS, &remaining, NULL);
   if (remaining != argc)
       error (EXIT_FAILURE, 0,
@@ -1934,6 +1938,10 @@ main (int argc, char *argv[])
                  << (d4 != NULL ? "IPv4 " : "")
                  << (d6 != NULL ? "IPv6 " : "")
                  << "port=" << http_port << endl;
+
+  const char* du = getenv("DBGSERVER_URLS");
+  if (du && du[0] != '\0') // set to non-empty string?
+    obatched(clog) << "Upstream dbgservers: " << du << endl;
   
   /* Trivial main loop! */
   while (! interrupted)

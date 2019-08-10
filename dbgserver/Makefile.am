@@ -62,7 +62,7 @@ man1_MANS = dbgserver-find.1
 dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libdbgserver) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
 
 dbgserver_find_SOURCES = dbgserver-find.c
-dbgserver_find_LDADD = $(libdbgserver)
+dbgserver_find_LDADD = $(libeu) $(libdbgserver)
 
 noinst_LIBRARIES = libdbgserver.a
 noinst_LIBRARIES += libdbgserver_pic.a
@@ -100,3 +100,20 @@ uninstall: uninstall-am
 EXTRA_DIST = libdbgserver.map dbgserver.8 dbgserver-find.1
 MOSTLYCLEANFILES = $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so.$(VERSION)
 CLEANFILES += $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so
+
+# automake std-options override: arrange to pass LD_LIBRARY_PATH
+installcheck-binPROGRAMS: $(bin_PROGRAMS)
+	bad=0; pid=$$$$; list="$(bin_PROGRAMS)"; for p in $$list; do \
+	  case ' $(AM_INSTALLCHECK_STD_OPTIONS_EXEMPT) ' in \
+	   *" $$p "* | *" $(srcdir)/$$p "*) continue;; \
+	  esac; \
+	  f=`echo "$$p" | \
+	     sed 's,^.*/,,;s/$(EXEEXT)$$//;$(transform);s/$$/$(EXEEXT)/'`; \
+	  for opt in --help --version; do \
+	    if LD_LIBRARY_PATH=$(DESTDIR)$(libdir) \
+	       $(DESTDIR)$(bindir)/$$f $$opt > c$${pid}_.out 2> c$${pid}_.err \
+		 && test -n "`cat c$${pid}_.out`" \
+		 && test -z "`cat c$${pid}_.err`"; then :; \
+	    else echo "$$f does not support $$opt" 1>&2; bad=1; fi; \
+	  done; \
+	done; rm -f c$${pid}_.???; exit $$bad
