@@ -28,46 +28,71 @@
    not, see <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
+#include "printversion.h"
 #include "dbgserver-client.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <argp.h>
+
+
+/* Name and version of program.  */
+ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
+
+/* Bug report address.  */
+ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
+
+/* Short description of program.  */
+static const char doc[] = N_("Request debuginfo-related content from dbgservers.");
+
+/* Strings for arguments in help texts.  */
+static const char args_doc[] = N_("debuginfo BUILDID\n"
+                                  "executable BUILDID\n"
+                                  "source BUILDID /FILENAME");
+
+/* Data structure to communicate with argp functions.  */
+static struct argp argp =
+  {
+   NULL, NULL, args_doc, doc, NULL, NULL, NULL
+  };
+
 
 
 int
 main(int argc, char** argv)
 {
-  if (argc < 3 || argc > 4)
+  int remaining;
+  (void) argp_parse (&argp, argc, argv, ARGP_IN_ORDER|ARGP_NO_ARGS, &remaining, NULL);
+
+  if (remaining+1 == argc) /* at least two non-option words */
     {
-      fprintf(stderr, "%s (%s) %s\n", argv[0], PACKAGE_NAME, PACKAGE_VERSION);
-      fprintf(stderr, "Usage: %s debuginfo BUILDID\n", argv[0]);
-      fprintf(stderr, "       %s executable BUILDID\n", argv[0]);
-      fprintf(stderr, "       %s source BUILDID /FILENAME\n", argv[0]);
+      argp_help (&argp, stderr, ARGP_HELP_USAGE, argv[0]);
       return 1;
     }
-
+  
   int rc;
   char *cache_name;
 
   /* Check whether FILETYPE is valid and call the appropriate
      dbgserver_find_* function. If FILETYPE is "source"
      then ensure a FILENAME was also supplied as an argument.  */
-  if (strcmp(argv[1], "debuginfo") == 0)
-    rc = dbgserver_find_debuginfo((unsigned char *)argv[2], 0, &cache_name);
-  else if (strcmp(argv[1], "executable") == 0)
-    rc = dbgserver_find_executable((unsigned char *)argv[2], 0, &cache_name);
-  else if (strcmp(argv[1], "source") == 0)
+  if (strcmp(argv[remaining], "debuginfo") == 0)
+    rc = dbgserver_find_debuginfo((unsigned char *)argv[remaining+1], 0, &cache_name);
+  else if (strcmp(argv[remaining], "executable") == 0)
+    rc = dbgserver_find_executable((unsigned char *)argv[remaining+1], 0, &cache_name);
+  else if (strcmp(argv[remaining], "source") == 0)
     {
-      if (argc != 4 || argv[3][0] != '/')
+      if (remaining+2 == argc || argv[3][0] != '/')
         {
           fprintf(stderr, "If FILETYPE is \"source\" then absolute /FILENAME must be given\n");
           return 1;
         }
-      rc = dbgserver_find_source((unsigned char *)argv[2], 0, argv[3], &cache_name);
+      rc = dbgserver_find_source((unsigned char *)argv[remaining+1], 0,
+                                 argv[remaining+2], &cache_name);
     }
   else
     {
-      fprintf(stderr, "Invalid filetype\n");
+      argp_help (&argp, stderr, ARGP_HELP_USAGE, argv[0]);
       return 1;
     }
 

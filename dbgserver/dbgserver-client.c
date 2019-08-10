@@ -341,10 +341,20 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
     {
       /* query servers until we find the target or run out of urls to try.  */
       char url[PATH_MAX];
-      if (filename) // starts with /
-        snprintf(url, PATH_MAX, "%s/buildid/%s/%s%s", server_url, build_id, type, filename);
+
+      /* Tolerate both   http://foo:999  and http://foo:999/  forms */
+      char *slashbuildid;
+      if (strlen(server_url) > 1 && server_url[strlen(server_url)-1] == '/')
+        slashbuildid = "buildid";
       else
-        snprintf(url, PATH_MAX, "%s/buildid/%s/%s", server_url, build_id, type);
+        slashbuildid = "/buildid";
+      
+      if (filename) /* must start with / */
+        snprintf(url, PATH_MAX, "%s%s/%s/%s%s", server_url,
+                 slashbuildid, build_id, type, filename);
+      else
+        snprintf(url, PATH_MAX, "%s%s/%s/%s", server_url,
+                 slashbuildid, build_id, type);
 
       curl_easy_reset(session);
       curl_easy_setopt(session, CURLOPT_URL, url);
@@ -355,6 +365,7 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
       curl_easy_setopt(session, CURLOPT_TIMEOUT, (long) server_timeout);
       curl_easy_setopt(session, CURLOPT_FILETIME, (long) 1);
       curl_easy_setopt(session, CURLOPT_FOLLOWLOCATION, (long) 1);
+      curl_easy_setopt(session, CURLOPT_FAILONERROR, (long) 1);      
       curl_easy_setopt(session, CURLOPT_AUTOREFERER, (long) 1);
       curl_easy_setopt(session, CURLOPT_ACCEPT_ENCODING, "");
       curl_easy_setopt(session, CURLOPT_USERAGENT, (void*) PACKAGE_STRING);
@@ -362,6 +373,21 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
       CURLcode curl_res = curl_easy_perform(session);
       if (curl_res != CURLE_OK)
         {
+          /* curl_easy_getinfo(session, CURLINFO_OS_ERRNO ...) would be nice if it worked. */
+          switch (curl_res) /* map CURL error numbers to approximate libc errnos */
+            {
+            case CURLE_COULDNT_RESOLVE_HOST: rc = -EHOSTUNREACH; break; // no NXDOMAIN
+            case CURLE_URL_MALFORMAT: rc = -EINVAL; break;
+            case CURLE_COULDNT_CONNECT: rc = -ECONNREFUSED; break;
+            case CURLE_REMOTE_ACCESS_DENIED: rc = -EACCES; break;
+            case CURLE_WRITE_ERROR: rc = -EIO; break;
+            case CURLE_OUT_OF_MEMORY: rc = -ENOMEM; break;
+            case CURLE_TOO_MANY_REDIRECTS: rc = -EMLINK; break;
+            case CURLE_SEND_ERROR: rc = -ECONNRESET; break;
+            case CURLE_RECV_ERROR: rc = -ECONNRESET; break;
+            default: rc = -ENOENT; break;
+            }
+          
           server_url = strtok_r(NULL, url_delim,&strtok_saveptr);
           continue; /* fail over to next server */
         }
@@ -404,8 +430,10 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
       return fd;
     }
 
-/* fell through - out of alternative servers */
-  rc = -ENOENT;
+  /* fell through - out of alternative servers */
+  /* prefer to preserve the last rc set from curl OS_ERRNO */
+  if (rc == 0)
+    rc = -ENOENT;
 
 /* error exits */
  out2:
