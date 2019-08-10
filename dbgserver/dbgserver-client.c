@@ -50,7 +50,7 @@
 static const int max_build_id_bytes = 256; /* typical: 40 for gnu C toolchain */
 
 
-/* The cache_clean_interval_s file within the dbgclient cache specifies
+/* The cache_clean_interval_s file within the dbgserver cache specifies
    how frequently the cache should be cleaned. The file's st_mtime represents
    the time of last cleaning.  */
 static const char *cache_clean_interval_filename = "cache_clean_interval_s";
@@ -73,7 +73,7 @@ static int server_timeout = 5;
 
 
 static size_t
-dbgclient_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
+dbgserver_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
 {
   int fd = *(int*)fdptr;
   ssize_t res;
@@ -90,10 +90,10 @@ dbgclient_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
 
 
 /* Create the cache and interval file if they do not already exist.
-   Return DBGCLIENT_E_OK if cache and config file are initialized,
+   Return DBGSERVER_E_OK if cache and config file are initialized,
    otherwise return the appropriate error code.  */
 static int
-dbgclient_init_cache (char *cache_path, char *interval_path)
+dbgserver_init_cache (char *cache_path, char *interval_path)
 {
   struct stat st;
 
@@ -121,7 +121,7 @@ dbgclient_init_cache (char *cache_path, char *interval_path)
 /* Delete any files that have been unmodied for a period
    longer than $DBGSERVER_CACHE_CLEAN_INTERVAL_S.  */
 static int
-dbgclient_clean_cache(char *cache_path, char *interval_path)
+dbgserver_clean_cache(char *cache_path, char *interval_path)
 {
   struct stat st;
   FILE *interval_file;
@@ -196,7 +196,7 @@ dbgclient_clean_cache(char *cache_path, char *interval_path)
    and filename. filename may be NULL. If found, return a file
    descriptor for the target, otherwise return an error code.  */
 static int
-dbgclient_query_server (const unsigned char *build_id_bytes,
+dbgserver_query_server (const unsigned char *build_id_bytes,
                         int build_id_len,
                         const char *type,
                         const char *filename,
@@ -268,10 +268,10 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
 
   /* XXX combine these */
   snprintf(interval_path, PATH_MAX, "%s/%s", cache_path, cache_clean_interval_filename);
-  int rc = dbgclient_init_cache(cache_path, interval_path);
+  int rc = dbgserver_init_cache(cache_path, interval_path);
   if (rc != 0)
     goto out;
-  rc = dbgclient_clean_cache(cache_path, interval_path);
+  rc = dbgserver_clean_cache(cache_path, interval_path);
   if (rc != 0)
     goto out;
 
@@ -350,7 +350,7 @@ dbgclient_query_server (const unsigned char *build_id_bytes,
       curl_easy_setopt(session, CURLOPT_URL, url);
       curl_easy_setopt(session,
                        CURLOPT_WRITEFUNCTION,
-                       dbgclient_write_callback);
+                       dbgserver_write_callback);
       curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)&fd);
       curl_easy_setopt(session, CURLOPT_TIMEOUT, (long) server_timeout);
       curl_easy_setopt(session, CURLOPT_FILETIME, (long) 1);
@@ -429,7 +429,7 @@ int
 dbgserver_find_debuginfo (const unsigned char *build_id_bytes, int build_id_len,
                           char **path)
 {
-  return dbgclient_query_server(build_id_bytes, build_id_len,
+  return dbgserver_query_server(build_id_bytes, build_id_len,
                                 "debuginfo", NULL, path);
 }
 
@@ -439,7 +439,7 @@ int
 dbgserver_find_executable(const unsigned char *build_id_bytes, int build_id_len,
                           char **path)
 {
-  return dbgclient_query_server(build_id_bytes, build_id_len,
+  return dbgserver_query_server(build_id_bytes, build_id_len,
                                 "executable", NULL, path);
 }
 
@@ -449,20 +449,20 @@ int dbgserver_find_source(const unsigned char *build_id_bytes,
                           const char *filename,
                           char **path)
 {
-  return dbgclient_query_server(build_id_bytes, build_id_len,
+  return dbgserver_query_server(build_id_bytes, build_id_len,
                                 "source", filename, path);
 }
 
 
 
 /* NB: these are thread-unsafe. */
-__attribute__((constructor)) void dbgclient_ctor(void)
+__attribute__((constructor)) attribute_hidden void libdbgserver_ctor(void) 
 {
   curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
 /* NB: this is very thread-unsafe: it breaks other threads that are still in libcurl */
-__attribute__((destructor)) void dbgclient_dtor(void)
+__attribute__((destructor)) attribute_hidden void libdbgserver_dtor(void) 
 {
   /* ... so don't do this: */
   /* curl_global_cleanup(); */
