@@ -128,10 +128,10 @@ to be a type of executable.
 If the given buildid is known to the server, this request will result
 in a binary object that contains the source file mentioned.  The path
 should be absolute.  Relative path names commonly appear in the DWARF
-file's source-file directory, but these paths are relative to
+file's source directory, but these paths are relative to
 individual compilation unit AT_comp_dir paths, and yet an executable
 is made up of multiple CUs.  Therefore, to disambiguate, dbgserver
-expects source-file queries to prefix relative path names with the CU
+expects source queries to prefix relative path names with the CU
 compilation-directory.
 
 Note: contrary to RFC 3986, the client should not elide \fB../\fP or

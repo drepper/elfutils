@@ -50,7 +50,7 @@ main(int argc, char** argv)
   char *cache_name;
 
   /* Check whether FILETYPE is valid and call the appropriate
-     dbgserver_find_* function. If FILETYPE is "source-file"
+     dbgserver_find_* function. If FILETYPE is "source"
      then ensure a FILENAME was also supplied as an argument.  */
   if (strcmp(argv[1], "debuginfo") == 0)
     rc = dbgserver_find_debuginfo((unsigned char *)argv[2], 0, &cache_name);
