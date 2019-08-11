@@ -93,8 +93,7 @@ using namespace std;
 #endif
 
 
-// Roll this identifier for every sqlite schema incompatiblity
-// XXX: garbage collect and/or migrate from previous-version tables
+// Roll this identifier for every sqlite schema incompatiblity.
 #define BUILDIDS "buildids3"
 
 static const char DBGSERVER_SQLITE_DDL[] =
@@ -175,21 +174,25 @@ static const char DBGSERVER_SQLITE_DDL[] =
   /*
      BUILDIDS_bolo semantics:
 
-     $BUILDID $SRC          F      $DIR             -- source BOLO: recently looking for dwarf SRC mentioned under fts-$DIR
-     $BUILDID $SRC          R      $DIR             -- source BOLO: recently looking for dwarf SRC mentioned under fts-$DIR
+     $BUILDID $SRC          F      $DIR     -- source BOLO: recently looking for dwarf SRC mentioned under fts-$DIR
+     $BUILDID $SRC          R      $DIR     -- source BOLO: recently looking for dwarf SRC mentioned in RPM under fts-$DIR
   */
-;
 
 
-// schema change history
+// schema change history & garbage collection
 //
-// buildid2*: normalize buildid and filenames into interning tables; split out srcfile BOLO
-// 
-// buildid1: make buildid and artifacttype NULLable, to represent cached-negative
+// buildids3*: split out srcfile BOLO
+  "" // <<< we are here
+// buildids2: normalized buildid and filenames into interning tables;
+  "drop table if exists buildids2_norm;\n"
+  "drop table if exists buildids2_files;\n"
+  "drop table if exists buildids2_buildids;\n"  
+// buildids1: made buildid and artifacttype NULLable, to represent cached-negative
 //           lookups from sources, e.g. files or rpms that contain no buildid-indexable content
-//
-// buildid: original
-
+  "drop table if exists buildids1;\n"
+// buildids: original
+  "drop table if exists buildids;\n"
+  ;
 
 
 /*
