@@ -42,13 +42,14 @@ to the original requester.
 Add a thread to scan for ELF/DWARF/source files under the given
 directory.  This option may be repeated to scan multiple paths.
 Source files are matched with DWARF files based on the AT_comp_dir
-(compilation directory) attributes inside it.
+(compilation directory) attributes inside it.  Duplicate directories
+are ignored.
 
 .TP
 .BR \-R, \-\-source\-rpms=PATH
 Add a thread to scan for ELF/DWARF/source files contained in RPMs
 under the given directory.  This option may be repeated to scan
-multiple paths.
+multiple paths.  Duplicate directories are ignored.
 
 .TP
 .BR \-d, \-\-database=FILE

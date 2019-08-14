@@ -68,6 +68,7 @@ extern "C" {
 
 #include <cstring>
 #include <vector>
+#include <set>
 #include <string>
 #include <iostream>
 #include <ostream>
@@ -259,9 +260,9 @@ static unsigned verbose;
 static volatile sig_atomic_t interrupted = 0;
 static unsigned http_port;
 static unsigned rescan_s = 300;
-static vector<string> source_file_paths;
+static set<string> source_file_paths;
 static vector<pthread_t> source_file_scanner_threads;
-static vector<string> source_rpm_paths;
+static set<string> source_rpm_paths;
 static vector<pthread_t> source_rpm_scanner_threads;
 
 
@@ -276,8 +277,8 @@ parse_opt (int key, char *arg,
     case 'v': verbose ++; break;
     case 'd': db_path = string(arg); break;
     case 'p': http_port = atoi(arg); break;
-    case 'F': source_file_paths.push_back(string(arg)); break;
-    case 'R': source_rpm_paths.push_back(string(arg)); break;
+    case 'F': source_file_paths.insert(string(arg)); break;
+    case 'R': source_rpm_paths.insert(string(arg)); break;
     case 't': rescan_s = atoi(arg); break;
       // case 'h': argp_state_help (state, stderr, ARGP_HELP_LONG|ARGP_HELP_EXIT_OK);
     default: return ARGP_ERR_UNKNOWN;
