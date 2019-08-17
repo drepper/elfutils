@@ -95,7 +95,7 @@ using namespace std;
 
 
 // Roll this identifier for every sqlite schema incompatiblity.
-#define BUILDIDS "buildids3"
+#define BUILDIDS "buildids4"
 
 static const char DBGSERVER_SQLITE_DDL[] =
   "pragma foreign_keys = on;\n"
@@ -161,10 +161,11 @@ static const char DBGSERVER_SQLITE_DDL[] =
      \-----------/               \----------/  UNIQUE
   */
 
-  /* Denormalized table for source be-on-the-lookup mappings.  Denormalized because it's a temporary table:
+  /* Denormalized table for source be-on-the-lookout mappings.  Denormalized because it's a temporary table:
      in steady state it's empty. */
+  
   "create table if not exists " BUILDIDS "_bolo (\n"
-  "        buildid integer not null,\n"
+  "        buildid text not null,\n"
   "        srcname text not null,\n"
   "        sourcetype text(1) not null\n"
   "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --source-TYPE single-char code\n"
@@ -179,16 +180,35 @@ static const char DBGSERVER_SQLITE_DDL[] =
      $BUILDID $SRC          R      $DIR     -- source BOLO: recently looking for dwarf SRC mentioned in RPM under fts-$DIR
   */
 
+  /* Denormalized table for rpm found-files mappings.  Denormalized because it's a temporary table:
+     in steady state it's empty. */
+  
+  "create table if not exists " BUILDIDS "_rfolo (\n"
+  "        source0 text not null,\n" // rpm file name
+  "        mtime integer not null,\n" // rpm file mtime
+  "        source1 text not null,\n" // rpm content file name
+  "        dirname text not null,\n"
+  "        unique (source0, source1, dirname) on conflict replace);\n"
 
+  "create index if not exists " BUILDIDS "_rfolo_idx1 on " BUILDIDS "_rfolo (source0, dirname);\n"
+
+  
 // schema change history & garbage collection
 //
-// buildids3*: split out srcfile BOLO
+// buildids4: introduce rpmfile SOLO
   "" // <<< we are here
+// buildids3*: split out srcfile BOLO
+  "drop table if exists buildids3_norm;\n"
+  "drop table if exists buildids3_files;\n"
+  "drop table if exists buildids3_buildids;\n"
+  "drop table if exists buildids3_bolo;\n"
+  "drop view if exists buildids3;\n"
 // buildids2: normalized buildid and filenames into interning tables;
   "drop table if exists buildids2_norm;\n"
   "drop table if exists buildids2_files;\n"
   "drop table if exists buildids2_buildids;\n"  
-// buildids1: made buildid and artifacttype NULLable, to represent cached-negative
+  "drop view if exists buildids2;\n"
+  // buildids1: made buildid and artifacttype NULLable, to represent cached-negative
 //           lookups from sources, e.g. files or rpms that contain no buildid-indexable content
   "drop table if exists buildids1;\n"
 // buildids: original
@@ -883,7 +903,7 @@ handler_cb (void *cls  __attribute__ ((unused)),
 // borrowed from src/nm.c get_local_names()
 
 static void
-dwarf_extract_source_paths (Elf *elf, GElf_Ehdr* ehdr, Elf_Scn* scn, GElf_Shdr* shdr, vector<string>& debug_sourcefiles)
+dwarf_extract_source_paths (Elf *elf, GElf_Ehdr* ehdr, Elf_Scn* scn, GElf_Shdr* shdr, set<string>& debug_sourcefiles)
 {
   Dwarf* dbg = dwarf_begin_elf (elf, DWARF_C_READ, NULL);
   if (dbg == NULL)
@@ -940,11 +960,12 @@ dwarf_extract_source_paths (Elf *elf, GElf_Ehdr* ehdr, Elf_Scn* scn, GElf_Shdr* 
           // have to return a setof comp_dirs (one per CU!) with
           // corresponding filesrc[] names, instead of one absolute
           // resoved set.  Maybe we'll have to do that anyway.  XXX
-          
+
           if (verbose > 4)
-            obatched(clog) << waldo << endl;
+            obatched(clog) << waldo
+                           << (debug_sourcefiles.find(waldo)==debug_sourcefiles.end() ? " new" : " dup") <<  endl;
           
-          debug_sourcefiles.push_back (waldo);
+          debug_sourcefiles.insert (waldo);
         }
     }
 
@@ -954,7 +975,7 @@ dwarf_extract_source_paths (Elf *elf, GElf_Ehdr* ehdr, Elf_Scn* scn, GElf_Shdr* 
 
 
 static void
-elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid, vector<string>& debug_sourcefiles)
+elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid, set<string>& debug_sourcefiles)
 {
   Elf *elf = elf_begin (fd, ELF_C_READ_MMAP_PRIVATE, NULL);
   if (elf == NULL)
@@ -1052,6 +1073,7 @@ elf_classify (int fd, bool &executable_p, bool &debuginfo_p, string &buildid, ve
             {
               debuginfo_p = true;
               dwarf_extract_source_paths (elf, ehdr, scn, shdr, debug_sourcefiles);
+              break; // expecting only one .*debug_line, so no need to look for others
             }
           else if (strncmp(section_name, ".debug_", 7) == 0 ||
                    strncmp(section_name, ".zdebug_", 8) == 0)
@@ -1083,7 +1105,7 @@ scan_source_file_path (const string& dir)
                        "        (select id from " BUILDIDS "_files where name = ?), ?, 'F',"
                        "        (select id from " BUILDIDS "_files where name = ?));");
   sqlite_ps ps_query (db,
-                      "select 1 from " BUILDIDS "_norm where sourcetype = 'F' and source0 = (select id from " BUILDIDS "_files where name = ?) and mtime = ?;");
+                      "select 1 from " BUILDIDS "_norm where sourcetype = 'F' and source0 = (select id from " BUILDIDS "_files where name = ?) and mtime = ? limit 1;");
   sqlite_ps ps_cleanup (db, "delete from " BUILDIDS "_norm where mtime < ? and sourcetype = 'F' and source0 = (select id from " BUILDIDS "_files where name = ?);");
   // find the source BOLOs
   sqlite_ps ps_bolo_insert (db, "insert or ignore into " BUILDIDS "_bolo values (?, ?, 'F', ?);");
@@ -1138,7 +1160,8 @@ scan_source_file_path (const string& dir)
               break;
 
             case FTS_DP:
-              directory_stack.pop_back ();
+              if (directory_stack.size() > 0) // in case FTS_D and FTS_DP don't quite line up
+                directory_stack.pop_back ();
               // Finished traversing this directory (hierarchy).  Check for any source files that can be
               // reached from here.
 
@@ -1259,7 +1282,7 @@ scan_source_file_path (const string& dir)
 
                 bool executable_p = false, debuginfo_p = false; // E and/or D
                 string buildid;
-                vector<string> sourcefiles;
+                set<string> sourcefiles;
                 
                 int fd = open (rps.c_str(), O_RDONLY);
                 try
@@ -1355,9 +1378,13 @@ scan_source_file_path (const string& dir)
                 if (sourcefiles.size() && buildid != "")
                   {
                     fts_sourcefiles += sourcefiles.size();
-                    string sourcedir = directory_stack.back ();
+                    string sourcedir;
+                    if (directory_stack.size() == 0) // in case -F /path/to/file or FTS_D didn't line up with FTS_DP
+                      sourcedir = ".";
+                    else
+                      sourcedir = directory_stack.back ();
                     
-                    for (auto sf : sourcefiles)
+                    for (auto&& sf : sourcefiles)
                       {
                         sqlite3_reset (ps_bolo_insert);
                         rc = sqlite3_bind_text (ps_bolo_insert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
@@ -1475,8 +1502,10 @@ thread_main_scan_source_file_path (void* arg)
 // Analyze given *.rpm file of given age; record buildids / exec/debuginfo-ness of its
 // constituent files with given upsert statement.
 static void
-rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
-              unsigned& fts_executable, unsigned& fts_debuginfo)
+rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_upsert_files,
+              sqlite_ps& ps_upsert, sqlite_ps& ps_bolo_upsert, sqlite_ps& ps_rfolo_upsert,
+              time_t mtime, const string& dirname,
+              unsigned& fts_executable, unsigned& fts_debuginfo, unsigned& fts_sourcefiles)
 {
   string popen_cmd = string("/usr/bin/rpm2cpio " + /* XXX sh-meta-escape */ rps);
   FILE* fp = popen (popen_cmd.c_str(), "r"); // "e" O_CLOEXEC?
@@ -1517,6 +1546,24 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
             continue;
               
           string fn = archive_entry_pathname (e);
+
+          // add the rfolo record for this pathname
+          sqlite3_reset (ps_rfolo_upsert);
+          rc = sqlite3_bind_text (ps_rfolo_upsert, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert-rfolo bind1");
+          rc = sqlite3_bind_int64 (ps_rfolo_upsert, 2, (int64_t) mtime);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert-rfolo bind2");
+          rc = sqlite3_bind_text (ps_rfolo_upsert, 3, fn.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert-rfolo bind3");
+          rc = sqlite3_bind_text (ps_rfolo_upsert, 4, dirname.c_str(), -1, SQLITE_TRANSIENT);
+          if (rc != SQLITE_OK)
+            throw sqlite_exception(rc, "sqlite3 upsert-rfolo bind4");
+          rc = sqlite3_step (ps_rfolo_upsert);
+          if (rc != SQLITE_OK && rc != SQLITE_DONE)
+            throw sqlite_exception(rc, "sqlite3 upsert-rfolo execute");
           
           if (verbose > 3)
             obatched(clog) << "rpm2cpio|libarchive checking " << fn << endl;
@@ -1536,40 +1583,111 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
           // finally ... time to run elf_classify on this bad boy and update the database
           bool executable_p = false, debuginfo_p = false;
           string buildid;
-          vector<string> sourcefiles;
+          set<string> sourcefiles;
           elf_classify (fd, executable_p, debuginfo_p, buildid, sourcefiles);
           // NB: might throw
 
           // NB: we record only executable_p || debuginfo_p case here,
           // not the 'neither' case.
+
+          if (buildid != "") // intern file name
+            {
+              sqlite3_reset (ps_upsert_buildids);
+              rc = sqlite3_bind_text (ps_upsert_buildids, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 upsert-bid bind1");
+              rc = sqlite3_step (ps_upsert_buildids);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                throw sqlite_exception(rc, "sqlite3 upsert-bid execute");
+            }
+
+          if (executable_p || debuginfo_p) // intern file name
+            {
+              sqlite3_reset (ps_upsert_files);
+              rc = sqlite3_bind_text (ps_upsert_files, 1, fn.c_str(), -1, SQLITE_TRANSIENT);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 upsert-rpm1 bind1");
+              rc = sqlite3_step (ps_upsert_buildids);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                throw sqlite_exception(rc, "sqlite3 upsert-rpm1 execute");
+            }
+
+          if (sourcefiles.size() > 0) // intern all the source files
+            {
+              // NB: we intern each source file -twice-.  Once raw, as
+              // it appears in the DWARF file list coming back from
+              // elf_classify() - because it'll end up in the
+              // _norm.artifactsrc column.  Plus: once with a "." at
+              // the front, because that's how we'll expect it'll show
+              // up in one of the -debuginfo|source rpms and therefore
+              // in the _norm.source1 and _rfolo.source1 fields.  (We
+              // don't want to preemptively intern ALL file names we
+              // get from scanning RPMs, because most of them are not
+              // going to be debuginfo-related, thus would needlessly
+              // bloat the interning table.)
+
+              for (auto&& s : sourcefiles)
+                {
+                  if (s.size() == 0) continue;
+                  
+                  sqlite3_reset (ps_upsert_files);
+                  rc = sqlite3_bind_text (ps_upsert_files, 1, s.c_str(), -1, SQLITE_TRANSIENT);
+                  if (rc != SQLITE_OK)
+                    throw sqlite_exception(rc, "sqlite3 upsert-sf1 bind1");
+                  rc = sqlite3_step (ps_upsert_buildids);
+                  if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                    throw sqlite_exception(rc, "sqlite3 upsert-sf1 execute");
+
+                  if (s[0] == '/') // the normal case
+                    {
+                      string sdot = string(".") + s;
+                      sqlite3_reset (ps_upsert_files);
+                      rc = sqlite3_bind_text (ps_upsert_files, 1, sdot.c_str(), -1, SQLITE_TRANSIENT);
+                      if (rc != SQLITE_OK)
+                        throw sqlite_exception(rc, "sqlite3 upsert-sf2 bind1");
+                      rc = sqlite3_step (ps_upsert_buildids);
+                      if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                        throw sqlite_exception(rc, "sqlite3 upsert-sf2 execute");
+                    }
+
+                  // now add the bolo record
+                  if (buildid != "")
+                    {
+                      sqlite3_reset (ps_bolo_upsert);
+                      rc = sqlite3_bind_text (ps_bolo_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
+                      if (rc != SQLITE_OK)
+                        throw sqlite_exception(rc, "sqlite3 upsert-bolo bind1");
+                      rc = sqlite3_bind_text (ps_bolo_upsert, 2, s.c_str(), -1, SQLITE_TRANSIENT);
+                      if (rc != SQLITE_OK)
+                        throw sqlite_exception(rc, "sqlite3 upsert-bolo bind2");
+                      rc = sqlite3_bind_text (ps_bolo_upsert, 3, dirname.c_str(), -1, SQLITE_TRANSIENT);
+                      if (rc != SQLITE_OK)
+                        throw sqlite_exception(rc, "sqlite3 upsert-bolo bind3");
+                      rc = sqlite3_step (ps_bolo_upsert);
+                      if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                        throw sqlite_exception(rc, "sqlite3 upsert-bolo execute");
+                    }
+                }
+            }
           
           sqlite3_reset (ps_upsert); // to allow rebinding / reexecution          
           rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind1");
-          rc = sqlite3_bind_text (ps_upsert, 4, buildid.c_str(), -1, SQLITE_TRANSIENT);
-          if (rc != SQLITE_OK)
-            throw sqlite_exception(rc, "sqlite3 upsert bind1");
-          rc = sqlite3_bind_int64 (ps_upsert, 6, (int64_t) mtime); // XXX: caller could do this for us
+          rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) mtime);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind3");           
-          rc = sqlite3_bind_text (ps_upsert, 3, rps.c_str(), -1, SQLITE_TRANSIENT);
+          rc = sqlite3_bind_text (ps_upsert, 4, fn.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind4");           
-          rc = sqlite3_bind_text (ps_upsert, 7, rps.c_str(), -1, SQLITE_TRANSIENT);
-          if (rc != SQLITE_OK)
-            throw sqlite_exception(rc, "sqlite3 upsert bind4");           
-          rc = sqlite3_bind_text (ps_upsert, 8, fn.c_str(), -1, SQLITE_TRANSIENT);
-          if (rc != SQLITE_OK)
-            throw sqlite_exception(rc, "sqlite3 upsert bind5");           
-          rc = sqlite3_bind_text (ps_upsert, 2, fn.c_str(), -1, SQLITE_TRANSIENT);
+          rc = sqlite3_bind_text (ps_upsert, 5, rps.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind5");           
 
           if (executable_p)
             {
               fts_executable ++;
-              rc = sqlite3_bind_text (ps_upsert, 5, "E", -1, SQLITE_STATIC);
+              rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK)
                 throw sqlite_exception(rc, "sqlite3 upsert-E bind2");           
               rc = sqlite3_step (ps_upsert);
@@ -1581,7 +1699,7 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
             {
               fts_debuginfo ++;
               sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
-              rc = sqlite3_bind_text (ps_upsert, 5, "D", -1, SQLITE_STATIC);
+              rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK)
                 throw sqlite_exception(rc, "sqlite3 upsert-D bind2");           
               rc = sqlite3_step (ps_upsert);
@@ -1593,7 +1711,8 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
             obatched(clog) << "recorded buildid=" << buildid << " rpm=" << rps << " file=" << fn
                            << " mtime=" << mtime << " as "
                            << (executable_p ? "executable" : "not executable") << " and "
-                           << (debuginfo_p ? "debuginfo" : "not debuginfo") << endl;
+                           << (debuginfo_p ? "debuginfo" : "not debuginfo")
+                           << " sourcefiles=" << sourcefiles.size() << endl;
           
         }
       catch (const reportable_exception& e)
@@ -1609,21 +1728,42 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert, time_t mtime,
 static void
 scan_source_rpm_path (const string& dir)
 {
+  sqlite_ps ps_upsert_buildids (db, "insert or ignore into " BUILDIDS "_buildids VALUES (NULL, ?);");
+  sqlite_ps ps_upsert_files (db, "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);");
   sqlite_ps ps_upsert (db,
-                       "insert or ignore into " BUILDIDS "_buildids VALUES (NULL, ?);"
-                       "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);"
-                       "insert or ignore into " BUILDIDS "_files VALUES (NULL, ?);"                       
-                       "insert or replace into " BUILDIDS "_norm (buildid, artifacttype, mtime," // XXX: artifactsrc
-                       "sourcetype, source0, source1) values ((select id from " BUILDIDS "_buildids where hex = ?), ?, ?, 'F',"
-                                                     "(select id from " BUILDIDS "_files where name = ?),"
-                                                     "(select id from " BUILDIDS "_files where name = ?));");
+                       "insert or replace into " BUILDIDS "_norm (buildid, artifacttype, artifactsrc, mtime,"
+                       "sourcetype, source0, source1) values ("
+                       "(select id from " BUILDIDS "_buildids where hex = ?), ?, NULL, ?, 'R',"
+                       "(select id from " BUILDIDS "_files where name = ?),"
+                       "(select id from " BUILDIDS "_files where name = ?));");
   sqlite_ps ps_query (db,
-                      "select 1 from " BUILDIDS " where sourcetype = 'R' and source0 = ? and mtime = ?;");
+                      "select 1 from " BUILDIDS " where sourcetype = 'R' and source0 = ? and mtime = ? limit 1;");
+  sqlite_ps ps_upsert_bolo_rfolo_join (db,
+                                       "insert or replace into " BUILDIDS "_norm (buildid, artifacttype, artifactsrc, mtime,"
+                                       "sourcetype, source0, source1) "
+                                       "select b.id, 'S', bolo.srcname, rfolo.mtime, bolo.sourcetype, f0.id, f1.id "
+                                       "from " BUILDIDS "_buildids b, " BUILDIDS "_bolo bolo, " BUILDIDS "_rfolo rfolo, "
+                                       BUILDIDS "_files f0, " BUILDIDS "_files f1 "
+                                       "where b.hex = bolo.buildid and "
+                                       "bolo.srcname = '.'||rfolo.source1 and " // RPMs have . name prefix for cpio contents
+                                       "bolo.sourcetype = 'R' and bolo.dirname = ? and rfolo.dirname = bolo.dirname and "
+                                       "f0.name = rfolo.source0 and f1.name = rfolo.source1"
+                                       /// XXXXXX add  NULL ... entries for rfolo rpms that have no bolo-sought content, so we don't have to open it again
+                                       );
+
+  sqlite_ps ps_bolo_nuke (db,
+                          "-- delete from " BUILDIDS "_bolo where sourcetype = 'R' and dirname = ?;");
+  sqlite_ps ps_bolo_upsert (db,
+                             "insert or replace into " BUILDIDS "_bolo (buildid, srcname, sourcetype, dirname) values (?, ?, 'R', ?);");
+  sqlite_ps ps_rfolo_nuke (db,
+                            "-- delete from " BUILDIDS "_rfolo where dirname = ?;");
+  sqlite_ps ps_rfolo_upsert (db,
+                             "insert or replace into " BUILDIDS "_rfolo (source0, mtime, source1, dirname) values (?, ?, ?, ?);");
 
   char * const dirs[] = { (char*) dir.c_str(), NULL };
 
   struct timeval tv_start, tv_end;
-  unsigned fts_scanned=0, fts_cached=0, fts_debuginfo=0, fts_executable=0, fts_rpm = 0;
+  unsigned fts_scanned=0, fts_cached=0, fts_debuginfo=0, fts_executable=0, fts_rpm = 0, fts_sourcefiles=0;
   gettimeofday (&tv_start, NULL);
   
   FTS *fts = fts_open (dirs,
@@ -1637,6 +1777,7 @@ scan_source_rpm_path (const string& dir)
       return;
     }
 
+  vector<string> directory_stack; // to allow knowledge of fts $DIR
   FTSENT *f;
   while ((f = fts_read (fts)) != NULL)
     {
@@ -1649,20 +1790,73 @@ scan_source_rpm_path (const string& dir)
 
       try
         {
+          /* Found a file.  Convert it to an absolute path, so
+             the buildid database does not have relative path
+             names that are unresolvable from a subsequent run
+             in a different cwd. */
+          char *rp = realpath(f->fts_path, NULL);
+          if (rp == NULL)
+            throw libc_exception(errno, "fts realpath " + string(f->fts_path));
+          string rps = string(rp);
+          free (rp);
+
           switch (f->fts_info)
             {
+            case FTS_D:
+              directory_stack.push_back (rps);
+              break;
+
+            case FTS_DP:
+              {
+                string sourcedir;
+                if (directory_stack.size() == 0) // in case -R /path/to/file or FTS_D didn't line up with FTS_DP
+                  sourcedir = ".";
+                else
+                  {
+                    sourcedir = directory_stack.back ();
+                    directory_stack.pop_back ();
+                  }
+
+                // join all the rfolo + bolo bits for this source directory
+                sqlite3_reset (ps_upsert_bolo_rfolo_join); // to allow rebinding / reexecution
+                int rc = sqlite3_bind_text (ps_upsert_bolo_rfolo_join, 1, sourcedir.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 brfjoin bind");
+                rc = sqlite3_step (ps_upsert_bolo_rfolo_join);
+                if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                  throw sqlite_exception(rc, "sqlite3 brfjoin execute");           
+
+                // rollin', rollin', rollin'
+                // keep those records joining'
+                // ....
+                // clean them up, rawhide
+
+                sqlite3_reset (ps_bolo_nuke); // to allow rebinding / reexecution
+                rc = sqlite3_bind_text (ps_bolo_nuke, 1, sourcedir.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 bolo-nuke bind");
+                rc = sqlite3_step (ps_bolo_nuke);
+                if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                  throw sqlite_exception(rc, "sqlite3 bolo-nuke execute");           
+
+                sqlite3_reset (ps_rfolo_nuke); // to allow rebinding / reexecution
+                rc = sqlite3_bind_text (ps_rfolo_nuke, 1, sourcedir.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 rfolo-nuke bind");
+                rc = sqlite3_step (ps_rfolo_nuke);
+                if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                  throw sqlite_exception(rc, "sqlite3 rfolo-nuke execute");
+              }
+              break;
+
             case FTS_F:
               {
-                /* Found a file.  Convert it to an absolute path, so
-                   the buildid database does not have relative path
-                   names that are unresolvable from a subsequent run
-                   in a different cwd. */
-                char *rp = realpath(f->fts_path, NULL);
-                if (rp == NULL)
-                  throw libc_exception(errno, "fts realpath " + string(f->fts_path));
-                string rps = string(rp);
-                free (rp);
-
+                string sourcedir;
+                if (directory_stack.size() == 0) // in case -F /path/to/file or FTS_D didn't line up with FTS_DP
+                  sourcedir = ".";
+                else
+                  sourcedir = directory_stack.back ();
+                
                 // heuristic: reject if file name does not end with ".rpm"
                 // (alternative: try opening with librpm etc., caching)
                 string suffix = ".rpm";
@@ -1691,10 +1885,13 @@ scan_source_rpm_path (const string& dir)
                   }
 
                 // extract the rpm contents via popen("rpm2cpio") | libarchive | loop-of-elf_classify()
-                unsigned my_fts_executable = 0, my_fts_debuginfo = 0;
+                unsigned my_fts_executable = 0, my_fts_debuginfo = 0, my_fts_sourcefiles = 0;
                 try
                   {
-                    rpm_classify (rps, ps_upsert, f->fts_statp->st_mtime, my_fts_executable, my_fts_debuginfo);
+                    rpm_classify (rps,
+                                  ps_upsert_buildids, ps_upsert_files, ps_upsert, ps_bolo_upsert, ps_rfolo_upsert,
+                                  f->fts_statp->st_mtime, sourcedir,
+                                  my_fts_executable, my_fts_debuginfo, my_fts_sourcefiles);
                   }
                 catch (const reportable_exception& e)
                   {
@@ -1703,6 +1900,7 @@ scan_source_rpm_path (const string& dir)
 
                 fts_executable += my_fts_executable;
                 fts_debuginfo += my_fts_debuginfo;
+                fts_sourcefiles += my_fts_sourcefiles;
                 
                 // unreadable or corrupt or non-ELF-carrying rpm: cache negative
                 if (my_fts_executable == 0 && my_fts_debuginfo == 0)
@@ -1752,7 +1950,7 @@ scan_source_rpm_path (const string& dir)
   if (verbose > 1)
     obatched(clog) << "fts/rpm traversed " << dir << " in " << deltas << "s, scanned=" << fts_scanned
                    << ", rpm=" << fts_rpm << ", cached=" << fts_cached << ", debuginfo=" << fts_debuginfo
-                   << ", executable=" << fts_executable << endl;
+                   << ", executable=" << fts_executable << ", sourcefiles=" << fts_sourcefiles << endl;
 }
 
 
