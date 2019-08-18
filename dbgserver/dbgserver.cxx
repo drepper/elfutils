@@ -2172,7 +2172,7 @@ main (int argc, char *argv[])
                  << (d6 != NULL ? "IPv6 " : "")
                  << "port=" << http_port << endl;
 
-  const char* du = getenv("DBGSERVER_URLS");
+  const char* du = getenv(DBGSERVER_URLS_ENV_VAR);
   if (du && du[0] != '\0') // set to non-empty string?
     obatched(clog) << "Upstream dbgservers: " << du << endl;
   
