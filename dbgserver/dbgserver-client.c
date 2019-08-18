@@ -59,16 +59,16 @@ static const time_t cache_clean_default_interval_s = 600;
 /* Location of the cache of files downloaded from dbgservers.
    The default parent directory is $HOME, or '/' if $HOME doesn't exist.  */
 static const char *cache_default_name = ".dbgserver_client_cache";
-static const char *cache_path_envvar = "DBGSERVER_CACHE_PATH";
+static const char *cache_path_envvar = DBGSERVER_CACHE_PATH_ENV_VAR;
 
 /* URLs of dbgservers, separated by url_delim.
    This env var must be set for dbgserver-client to run.  */
-static const char *server_urls_envvar = "DBGSERVER_URLS";
+static const char *server_urls_envvar = DBGSERVER_URLS_ENV_VAR;
 static const char *url_delim =  " ";
 
 /* Timeout for dbgservers, in seconds.
    This env var must be set for dbgserver-client to run.  */
-static const char *server_timeout_envvar = "DBGSERVER_TIMEOUT";
+static const char *server_timeout_envvar = DBGSERVER_TIMEOUT_ENV_VAR;
 static int server_timeout = 5;
 
 

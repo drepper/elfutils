@@ -43,7 +43,8 @@ ARGP_PROGRAM_VERSION_HOOK_DEF = print_version;
 ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 /* Short description of program.  */
-static const char doc[] = N_("Request debuginfo-related content from dbgservers listed in $DBGSERVER_URLS.");
+static const char doc[] = N_("Request debuginfo-related content "
+                             "from dbgservers listed in $" DBGSERVER_URLS_ENV_VAR ".");
 
 /* Strings for arguments in help texts.  */
 static const char args_doc[] = N_("debuginfo BUILDID\n"
