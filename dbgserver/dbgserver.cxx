@@ -366,58 +366,6 @@ struct elfutils_exception: public reportable_exception
 
 
 
-////////////////////////////////////////////////////////////////////////
-
-
-// RAII style sqlite prepared-statement holder that matches { } block lifetime
-
-struct sqlite_ps
-{
-private:
-  sqlite3_stmt *pp;
-  
-  sqlite_ps(const sqlite_ps&); // make uncopyable
-  sqlite_ps& operator=(const sqlite_ps &); // make unassignable
-
-public:
-  sqlite_ps (sqlite3* db, const string& sql) {
-    int rc = sqlite3_prepare_v2 (db, sql.c_str(), -1 /* to \0 */, & this->pp, NULL);
-    if (rc != SQLITE_OK)
-      throw sqlite_exception(rc, "prepare " + sql);
-  }
-  ~sqlite_ps () { sqlite3_finalize (this->pp); }
-  operator sqlite3_stmt* () { return this->pp; }
-};
-
-
-////////////////////////////////////////////////////////////////////////
-
-// RAII style templated autocloser
-
-template <class Payload, class Ignore>
-struct defer_dtor
-{
-public:
-  typedef Ignore (*dtor_fn) (Payload);
-  
-private:
-  Payload p;
-  dtor_fn fn;
-
-public:
-  defer_dtor(Payload _p, dtor_fn _fn): p(_p), fn(_fn) {}
-  ~defer_dtor() { (void) (*fn)(p); }
-
-private:
-  defer_dtor(const defer_dtor<Payload,Ignore>&); // make uncopyable
-  defer_dtor& operator=(const defer_dtor<Payload,Ignore> &); // make unassignable
-};
-
-
-
-////////////////////////////////////////////////////////////////////////
-
-
 // Lightweight wrapper for pthread_mutex_t
 struct my_lock_t
 {
@@ -505,6 +453,59 @@ void reportable_exception::report(ostream& o) const {
 
 
 ////////////////////////////////////////////////////////////////////////
+
+
+// RAII style sqlite prepared-statement holder that matches { } block lifetime
+
+struct sqlite_ps
+{
+private:
+  sqlite3_stmt *pp;
+  
+  sqlite_ps(const sqlite_ps&); // make uncopyable
+  sqlite_ps& operator=(const sqlite_ps &); // make unassignable
+
+public:
+  sqlite_ps (sqlite3* db, const string& sql) {
+    if (verbose > 4)
+      obatched(clog) << "prep " << sql << endl;
+    int rc = sqlite3_prepare_v2 (db, sql.c_str(), -1 /* to \0 */, & this->pp, NULL);
+    if (rc != SQLITE_OK)
+      throw sqlite_exception(rc, "prepare " + sql);
+  }
+  ~sqlite_ps () { sqlite3_finalize (this->pp); }
+  operator sqlite3_stmt* () { return this->pp; }
+};
+
+
+////////////////////////////////////////////////////////////////////////
+
+// RAII style templated autocloser
+
+template <class Payload, class Ignore>
+struct defer_dtor
+{
+public:
+  typedef Ignore (*dtor_fn) (Payload);
+  
+private:
+  Payload p;
+  dtor_fn fn;
+
+public:
+  defer_dtor(Payload _p, dtor_fn _fn): p(_p), fn(_fn) {}
+  ~defer_dtor() { (void) (*fn)(p); }
+
+private:
+  defer_dtor(const defer_dtor<Payload,Ignore>&); // make uncopyable
+  defer_dtor& operator=(const defer_dtor<Payload,Ignore> &); // make unassignable
+};
+
+
+
+////////////////////////////////////////////////////////////////////////
+
+
 
 
 
@@ -1634,7 +1635,7 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
                   rc = sqlite3_bind_text (ps_upsert_files, 1, s.c_str(), -1, SQLITE_TRANSIENT);
                   if (rc != SQLITE_OK)
                     throw sqlite_exception(rc, "sqlite3 upsert-sf1 bind1");
-                  rc = sqlite3_step (ps_upsert_buildids);
+                  rc = sqlite3_step (ps_upsert_files);
                   if (rc != SQLITE_OK && rc != SQLITE_DONE)
                     throw sqlite_exception(rc, "sqlite3 upsert-sf1 execute");
 
@@ -1645,7 +1646,7 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
                       rc = sqlite3_bind_text (ps_upsert_files, 1, sdot.c_str(), -1, SQLITE_TRANSIENT);
                       if (rc != SQLITE_OK)
                         throw sqlite_exception(rc, "sqlite3 upsert-sf2 bind1");
-                      rc = sqlite3_step (ps_upsert_buildids);
+                      rc = sqlite3_step (ps_upsert_files);
                       if (rc != SQLITE_OK && rc != SQLITE_DONE)
                         throw sqlite_exception(rc, "sqlite3 upsert-sf2 execute");
                     }
@@ -1667,9 +1668,11 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
                       if (rc != SQLITE_OK && rc != SQLITE_DONE)
                         throw sqlite_exception(rc, "sqlite3 upsert-bolo execute");
                     }
+
+                  fts_sourcefiles ++;
                 }
             }
-          
+
           sqlite3_reset (ps_upsert); // to allow rebinding / reexecution          
           rc = sqlite3_bind_text (ps_upsert, 1, buildid.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
@@ -1687,6 +1690,16 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
           if (executable_p)
             {
               fts_executable ++;
+
+              // register this rpm-subfile name in the interning table
+              sqlite3_reset (ps_upsert_files);
+              rc = sqlite3_bind_text (ps_upsert_files, 1, fn.c_str(), -1, SQLITE_TRANSIENT);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 upsert-file bind");           
+              rc = sqlite3_step (ps_upsert_files);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                throw sqlite_exception(rc, "sqlite3 upsert-file execute");           
+          
               rc = sqlite3_bind_text (ps_upsert, 2, "E", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK)
                 throw sqlite_exception(rc, "sqlite3 upsert-E bind2");           
@@ -1698,6 +1711,16 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
           if (debuginfo_p)
             {
               fts_debuginfo ++;
+              
+              // register this rpm-subfile name in the interning table
+              sqlite3_reset (ps_upsert_files);
+              rc = sqlite3_bind_text (ps_upsert_files, 1, fn.c_str(), -1, SQLITE_TRANSIENT);
+              if (rc != SQLITE_OK)
+                throw sqlite_exception(rc, "sqlite3 upsert-file bind");           
+              rc = sqlite3_step (ps_upsert_files);
+              if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                throw sqlite_exception(rc, "sqlite3 upsert-file execute");           
+          
               sqlite3_reset (ps_upsert); // to allow rebinding / reexecution
               rc = sqlite3_bind_text (ps_upsert, 2, "D", -1, SQLITE_STATIC);
               if (rc != SQLITE_OK)
@@ -1741,22 +1764,21 @@ scan_source_rpm_path (const string& dir)
   sqlite_ps ps_upsert_bolo_rfolo_join (db,
                                        "insert or replace into " BUILDIDS "_norm (buildid, artifacttype, artifactsrc, mtime,"
                                        "sourcetype, source0, source1) "
-                                       "select b.id, 'S', bolo.srcname, rfolo.mtime, bolo.sourcetype, f0.id, f1.id "
+                                       "select b.id, 'S', fb.id, rfolo.mtime, bolo.sourcetype, f0.id, f1.id "
                                        "from " BUILDIDS "_buildids b, " BUILDIDS "_bolo bolo, " BUILDIDS "_rfolo rfolo, "
-                                       BUILDIDS "_files f0, " BUILDIDS "_files f1 "
+                                       BUILDIDS "_files f0, " BUILDIDS "_files f1, " BUILDIDS "_files fb "
                                        "where b.hex = bolo.buildid and "
-                                       "bolo.srcname = '.'||rfolo.source1 and " // RPMs have . name prefix for cpio contents
+                                       "'.'||bolo.srcname = rfolo.source1 and " // RPMs have . name prefix for cpio contents
                                        "bolo.sourcetype = 'R' and bolo.dirname = ? and rfolo.dirname = bolo.dirname and "
-                                       "f0.name = rfolo.source0 and f1.name = rfolo.source1"
+                                       "f0.name = rfolo.source0 and f1.name = rfolo.source1 and fb.name = bolo.srcname"
                                        /// XXXXXX add  NULL ... entries for rfolo rpms that have no bolo-sought content, so we don't have to open it again
                                        );
-
   sqlite_ps ps_bolo_nuke (db,
-                          "-- delete from " BUILDIDS "_bolo where sourcetype = 'R' and dirname = ?;");
+                          "delete from " BUILDIDS "_bolo where sourcetype = 'R' and dirname = ?;");
   sqlite_ps ps_bolo_upsert (db,
                              "insert or replace into " BUILDIDS "_bolo (buildid, srcname, sourcetype, dirname) values (?, ?, 'R', ?);");
   sqlite_ps ps_rfolo_nuke (db,
-                            "-- delete from " BUILDIDS "_rfolo where dirname = ?;");
+                            "delete from " BUILDIDS "_rfolo where dirname = ?;");
   sqlite_ps ps_rfolo_upsert (db,
                              "insert or replace into " BUILDIDS "_rfolo (source0, mtime, source1, dirname) values (?, ?, ?, ?);");
 
@@ -1884,6 +1906,15 @@ scan_source_rpm_path (const string& dir)
                     continue;
                   }
 
+                // register this file name in the interning table
+                sqlite3_reset (ps_upsert_files);
+                rc = sqlite3_bind_text (ps_upsert_files, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
+                if (rc != SQLITE_OK)
+                  throw sqlite_exception(rc, "sqlite3 upsert-file bind");           
+                rc = sqlite3_step (ps_upsert_files);
+                if (rc != SQLITE_OK && rc != SQLITE_DONE)
+                  throw sqlite_exception(rc, "sqlite3 upsert-file execute");           
+                
                 // extract the rpm contents via popen("rpm2cpio") | libarchive | loop-of-elf_classify()
                 unsigned my_fts_executable = 0, my_fts_debuginfo = 0, my_fts_sourcefiles = 0;
                 try
