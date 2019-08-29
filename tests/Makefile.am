@@ -436,9 +436,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     testfile-debug-rel-ppc64.o.bz2 \
 	     run-strip-version.sh testfile-version.bz2 \
 	     run-xlate-note.sh \
-	     run-dbgserver-find.sh testfile-dbgserver.debug.bz2 \
-             testfile-dbgserver.exec.bz2 \
-	     run-readelf-discr.sh \
+	     run-dbgserver-find.sh run-readelf-discr.sh \
 	     testfile-rng.debug.bz2 testfile-urng.debug.bz2 \
 	     run-dwelf_elf_e_machine_string.sh \
 	     run-elfclassify.sh run-elfclassify-self.sh

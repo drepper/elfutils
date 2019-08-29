@@ -65,7 +65,7 @@ main(int argc, char** argv)
   int remaining;
   (void) argp_parse (&argp, argc, argv, ARGP_IN_ORDER|ARGP_NO_ARGS, &remaining, NULL);
 
-  if (remaining+1 == argc) /* at least two non-option words */
+  if (argc < 2 || remaining+1 == argc) /* no arguments or at least two non-option words */
     {
       argp_help (&argp, stderr, ARGP_HELP_USAGE, argv[0]);
       return 1;
