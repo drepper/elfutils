@@ -59,11 +59,20 @@ export DBGSERVER_URLS=http://localhost:$PORT/   # or without trailing /
 # Test whether the server is able to fetch the file from the local dbgserver.
 testrun ${abs_builddir}/dbgserver_build_id_find -e prog $EXPECT_PASS
 
-# Test whether dbgserver-find is able to fetch the file from the local dbgserver.
+# Test whether dbgserver-find is able to fetch files from the local dbgserver.
 rm -rf $DBGSERVER_CACHE_PATH
 testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find debuginfo $BUILD_ID <<EOF
 ${DBGSERVER_CACHE_PATH}/${BUILD_ID}/debuginfo
 EOF
+
+testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find executable $BUILD_ID <<EOF
+${DBGSERVER_CACHE_PATH}/${BUILD_ID}/executable
+EOF
+
+testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find source $BUILD_ID ${PWD}/prog.c <<EOF
+${DBGSERVER_CACHE_PATH}/${BUILD_ID}/$(echo source${PWD}/prog.c | sed -e 's\[/.]\#\g')
+EOF
+
 
 kill -INT $PID
 sleep 5
@@ -77,12 +86,29 @@ testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find debuginfo $BUILD_ID
 ${DBGSERVER_CACHE_PATH}/${BUILD_ID}/debuginfo
 EOF
 
+testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find executable $BUILD_ID <<EOF
+${DBGSERVER_CACHE_PATH}/${BUILD_ID}/executable
+EOF
+
+testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find source $BUILD_ID ${PWD}/prog.c <<EOF
+${DBGSERVER_CACHE_PATH}/${BUILD_ID}/$(echo source${PWD}/prog.c | sed -e 's\[/.]\#\g')
+EOF
+
+
 # Trigger a cache clean and run the tests again. The clients should be unable to
 # find the target.
 echo 0 > $DBGSERVER_CACHE_PATH/cache_clean_interval_s
 testrun ${abs_builddir}/dbgserver_build_id_find -e prog $EXPECT_FAIL
 
 testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find debuginfo $BUILD_ID <<EOF
+Server query failed: Connection refused
+EOF
+
+testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find executable $BUILD_ID <<EOF
+Server query failed: Connection refused
+EOF
+
+testrun_compare ${abs_top_builddir}/dbgserver/dbgserver-find source $BUILD_ID ${PWD}/prog.c <<EOF
 Server query failed: Connection refused
 EOF
 
