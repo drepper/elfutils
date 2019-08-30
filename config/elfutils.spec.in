@@ -280,6 +280,9 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_libdir}/libdbgserver-%{version}.so
 %{_bindir}/dbgserver-find
 %{_mandir}/man1/dbgserver-find.1*
+%{_mandir}/man3/dbgserver_find_debuginfo.3*
+%{_mandir}/man3/dbgserver_find_executable.3*
+%{_mandir}/man3/dbgserver_find_source.3*
 
 
 %files dbgserver
