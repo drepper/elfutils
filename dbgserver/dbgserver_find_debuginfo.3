@@ -1,0 +1,72 @@
+'\"! tbl | nroff \-man
+'\" t macro stdmacro
+
+.de SAMPLE
+.br
+.RS 0
+.nf
+.nh
+..
+.de ESAMPLE
+.hy
+.fi
+.RE
+..
+
+.TH DBGSERVER_FIND_DEBUGINFO 3
+.SH NAME
+dbgserver_find_debuginfo \- request debuginfo from debuginfo server
+
+.SH SYNOPSIS
+.nf
+.B #include <elfutils/dbgserver-client.h>
+.PP
+.BI "dbgserver_find_debuginfo(const unsigned char *" build_id_bytes ", int " build_id_len ", char ** " path ");"
+.BI "dbgserver_find_executable(const unsigned char *" build_id_bytes ", int " build_id_len ", char ** " path ");"
+.BI "dbgserver_find_source(const unsigned char *" build_id_bytes ", int " build_id_len ", const char *" filename ", char ** " path ");"
+
+.SH DESCRIPTION
+TODO
+
+.SH "SECURITY"
+.BR dbgserver_find_debuginfo (),
+.BR dbgserver_find_executable (),
+and
+.BR dbgserver_find_source ()
+\fBdo not\fP include any particular security
+features.  They trust that the binaries returned by the dbgserver(s)
+are accurate.  Therefore, the list of servers should include only
+trustworthy ones.  If accessed across HTTP rather than HTTPS, the
+network should be trustworthy.
+
+.SH "ENVIRONMENT VARIABLES"
+
+.TP 21
+.B DBGSERVER_URLS
+This environment variable contains a list of URL prefixes for trusted
+dbgserver instances.  Alternate URL prefixes are separated by space.
+
+.TP 21
+.B DBGSERVER_TIMEOUT
+This environment variable governs the timeout for each dbgserver HTTP
+connection.  A server that fails to respond within this many seconds
+is skipped.  The default is 5.
+
+.TP 21
+.B DBGSERVER_CACHE_PATH
+This environment variable governs the location of the cache where
+downloaded files are kept.  It is cleaned periodically as this
+program is reexecuted.  The default is $HOME/.dbgserver_client_cache.
+
+.\" XXX describe cache eviction policy
+
+.SH "FILES"
+.LP
+.PD .1v
+.TP 20
+.B $HOME/.dbgserver_client_cache
+Default cache directory.
+.PD
+
+.SH "SEE ALSO"
+.I "dbgserver(8)"
