@@ -196,7 +196,7 @@ dbgserver_clean_cache(char *cache_path, char *interval_path)
    and filename. filename may be NULL. If found, return a file
    descriptor for the target, otherwise return an error code.  */
 static int
-dbgserver_query_server (const unsigned char *build_id_bytes,
+dbgserver_query_server (const unsigned char *build_id,
                         int build_id_len,
                         const char *type,
                         const char *filename,
@@ -210,7 +210,7 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
   char target_cache_path[PATH_MAX];
   char target_cache_tmppath[PATH_MAX];
   char suffix[PATH_MAX];
-  char build_id[max_build_id_bytes * 2 + 1];
+  char build_id_bytes[max_build_id_bytes * 2 + 1];
 
   /* Copy lowercase hex representation of build_id into buf.  */
   if ((build_id_len >= max_build_id_bytes) ||
@@ -218,10 +218,10 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
        strlen((const char*) build_id_bytes) >= max_build_id_bytes*2))
     return -EINVAL;
   if (build_id_len == 0) /* expect clean hexadecimal */
-    strcpy (build_id, (const char *) build_id_bytes);
+    strcpy (build_id_bytes, (const char *) build_id);
   else
     for (int i = 0; i < build_id_len; i++)
-      sprintf(build_id + (i * 2), "%02x", build_id_bytes[i]);
+      sprintf(build_id_bytes + (i * 2), "%02x", build_id[i]);
 
   unsigned q = 0;
   if (filename != NULL)
@@ -262,7 +262,7 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
     }
 
   /* avoid using snprintf here due to compiler warning.  */
-  snprintf(target_cache_dir, PATH_MAX, "%s/%s", cache_path, build_id);
+  snprintf(target_cache_dir, PATH_MAX, "%s/%s", cache_path, build_id_bytes);
   snprintf(target_cache_path, PATH_MAX, "%s/%s%s", target_cache_dir, type, suffix);
   snprintf(target_cache_tmppath, PATH_MAX, "%s.XXXXXX", target_cache_path);
 
@@ -351,10 +351,10 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
       
       if (filename) /* must start with / */
         snprintf(url, PATH_MAX, "%s%s/%s/%s%s", server_url,
-                 slashbuildid, build_id, type, filename);
+                 slashbuildid, build_id_bytes, type, filename);
       else
         snprintf(url, PATH_MAX, "%s%s/%s/%s", server_url,
-                 slashbuildid, build_id, type);
+                 slashbuildid, build_id_bytes, type);
 
       curl_easy_reset(session);
       curl_easy_setopt(session, CURLOPT_URL, url);
@@ -454,30 +454,30 @@ dbgserver_query_server (const unsigned char *build_id_bytes,
 
 /* See dbgserver-client.h  */
 int
-dbgserver_find_debuginfo (const unsigned char *build_id_bytes, int build_id_len,
+dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len,
                           char **path)
 {
-  return dbgserver_query_server(build_id_bytes, build_id_len,
+  return dbgserver_query_server(build_id, build_id_len,
                                 "debuginfo", NULL, path);
 }
 
 
 /* See dbgserver-client.h  */
 int
-dbgserver_find_executable(const unsigned char *build_id_bytes, int build_id_len,
+dbgserver_find_executable(const unsigned char *build_id, int build_id_len,
                           char **path)
 {
-  return dbgserver_query_server(build_id_bytes, build_id_len,
+  return dbgserver_query_server(build_id, build_id_len,
                                 "executable", NULL, path);
 }
 
 /* See dbgserver-client.h  */
-int dbgserver_find_source(const unsigned char *build_id_bytes,
+int dbgserver_find_source(const unsigned char *build_id,
                           int build_id_len,
                           const char *filename,
                           char **path)
 {
-  return dbgserver_query_server(build_id_bytes, build_id_len,
+  return dbgserver_query_server(build_id, build_id_len,
                                 "source", filename, path);
 }
 
