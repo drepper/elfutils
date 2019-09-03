@@ -48,15 +48,15 @@ extern "C" {
    strdup'd copy of the name of the same file in the cache.
    Caller must free() it later. */
   
-int dbgserver_find_debuginfo (const unsigned char *build_id_bytes,
+int dbgserver_find_debuginfo (const unsigned char *build_id,
                              int build_id_len,
                              char **path);
 
-int dbgserver_find_executable (const unsigned char *build_id_bytes,
+int dbgserver_find_executable (const unsigned char *build_id,
                                int build_id_len,
                                char **path);
 
-int dbgserver_find_source (const unsigned char *build_id_bytes,
+int dbgserver_find_source (const unsigned char *build_id,
                            int build_id_len,
                            const char *filename,
                            char **path);
