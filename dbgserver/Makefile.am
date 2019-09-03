@@ -34,8 +34,8 @@ AM_CPPFLAGS += -I$(srcdir) -I$(srcdir)/../libelf -I$(srcdir)/../libebl \
 	   -I$(srcdir)/../libdw -I$(srcdir)/../libdwelf -Wno-format-truncation
 VERSION = 1
 
-# Disable eu- prefixing for the binaries in this directory, since they
-# do not conflict with binutils tools.
+# Disable eu- prefixing for artifacts (binaries & man pages) in this
+# directory, since they do not conflict with binutils tools.
 program_prefix=
 program_transform_name = s,x,x,
 
@@ -57,9 +57,9 @@ AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw:.
 
 bin_PROGRAMS = dbgserver dbgserver-find
 dbgserver_SOURCES = dbgserver.cxx
-man8_MANS = dbgserver.8
-man3_MANS = dbgserver_find_debuginfo.3 dbgserver_find_source.3 dbgserver_find_executable.3
-man1_MANS = dbgserver-find.1
+dist_man8_MANS = dbgserver.8
+dist_man3_MANS = dbgserver_find_debuginfo.3 dbgserver_find_source.3 dbgserver_find_executable.3
+dist_man1_MANS = dbgserver-find.1
 dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libdbgserver) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
 
 dbgserver_find_SOURCES = dbgserver-find.c
@@ -98,7 +98,7 @@ uninstall: uninstall-am
 	rm -f $(DESTDIR)$(libdir)/libdbgserver.so
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(includedir)/elfutils
 
-EXTRA_DIST = libdbgserver.map dbgserver.8 dbgserver-find.1 dbgserver_find_debuginfo.3 dbgserver_find_source.3 dbgserver_find_executable.3
+EXTRA_DIST = libdbgserver.map
 MOSTLYCLEANFILES = $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so.$(VERSION)
 CLEANFILES += $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so
 
