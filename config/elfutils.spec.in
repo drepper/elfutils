@@ -163,10 +163,9 @@ make
 rm -rf ${RPM_BUILD_ROOT}
 mkdir -p ${RPM_BUILD_ROOT}%{_prefix}
 
-%makeinstall
+%make_install
 
 chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/lib*.so*
-chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/elfutils/lib*.so*
 
 # XXX Nuke unpackaged files
 ( cd ${RPM_BUILD_ROOT}
