@@ -607,6 +607,18 @@ handle_buildid_r_match (int64_t b_mtime,
                         const string& b_source0,
                         const string& b_source1)
 {
+  struct stat fs;
+  int rc = stat (b_source0.c_str(), &fs);
+  if (rc != 0)
+    throw libc_exception (errno, string("stat ") + b_source0);
+
+  if ((int64_t) fs.st_mtime != b_mtime)
+    {
+      if (verbose > 2)
+        obatched(clog) << "mtime mismatch for " << b_source0 << endl;
+      return 0;
+    }
+  
   string popen_cmd = string("/usr/bin/rpm2cpio " + /* XXX sh-meta-escape */ b_source0);
   FILE* fp = popen (popen_cmd.c_str(), "r"); // "e" O_CLOEXEC?
   if (fp == NULL)
@@ -619,7 +631,7 @@ handle_buildid_r_match (int64_t b_mtime,
     throw archive_exception("cannot create archive reader");
   defer_dtor<struct archive*,int> archive_closer (a, archive_read_free);
 
-  int rc = archive_read_support_format_cpio(a);
+  rc = archive_read_support_format_cpio(a);
   if (rc != ARCHIVE_OK)
     throw archive_exception(a, "cannot select cpio format");
   rc = archive_read_support_filter_all(a); // XXX: or _none()?  are these cpio's compressed at this point?
