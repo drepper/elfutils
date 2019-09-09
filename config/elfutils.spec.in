@@ -2,7 +2,7 @@
 Summary: A collection of utilities and DSOs to handle ELF files and DWARF data
 Name: elfutils
 Version: @PACKAGE_VERSION@
-Release: 1
+Release: 100.dbgserver
 URL: http://elfutils.org/
 License: GPLv3+ and (GPLv2+ or LGPLv3+) and GFDL
 Group: Development/Tools
