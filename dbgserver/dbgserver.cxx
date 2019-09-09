@@ -1665,10 +1665,10 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
           rc = sqlite3_bind_int64 (ps_upsert, 3, (int64_t) mtime);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind3");           
-          rc = sqlite3_bind_text (ps_upsert, 4, fn.c_str(), -1, SQLITE_TRANSIENT);
+          rc = sqlite3_bind_text (ps_upsert, 4, rps.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind4");           
-          rc = sqlite3_bind_text (ps_upsert, 5, rps.c_str(), -1, SQLITE_TRANSIENT);
+          rc = sqlite3_bind_text (ps_upsert, 5, fn.c_str(), -1, SQLITE_TRANSIENT);
           if (rc != SQLITE_OK)
             throw sqlite_exception(rc, "sqlite3 upsert bind5");           
 
