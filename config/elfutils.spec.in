@@ -223,8 +223,6 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_libdir}/libdw-%{version}.so
 %{_libdir}/libasm.so.*
 %{_libdir}/libdw.so.*
-%dir %{_libdir}/elfutils
-%{_libdir}/elfutils/lib*.so
 %{_mandir}/man1/eu-*.1*
 
 %files devel
