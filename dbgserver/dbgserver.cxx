@@ -216,22 +216,6 @@ static const char DBGSERVER_SQLITE_DDL[] =
   ;
 
 
-/*
-  ISSUES:
-  - delegated server: recursion/loop; Via: header processing
-  https://blog.cloudflare.com/preventing-malicious-request-loops/
-  - access control ===>> delegate to reverse proxy
-  - running real server for rhel/rhsm probably unnecessary
-  (use subscription-delegation)
-  - need a thread to garbage-collect old buildid_norm / _buildid / _files entries?
-  - inotify based file scanning
-
-  see also:
-  https://github.com/NixOS/nixos-channel-scripts/blob/master/index-debuginfo.cc
-  https://github.com/edolstra/dwarffs
-*/
-
-
 /* Name and version of program.  */
 /* ARGP_PROGRAM_VERSION_HOOK_DEF = print_version; */ // not this simple for C++
 
@@ -2085,37 +2069,37 @@ main (int argc, char *argv[])
              _("cannot run database schema ddl: %s"), sqlite3_errmsg(db));
     }
 
-  if (verbose) // report database stats
-    try
-      {
-        sqlite_ps ps_query (db, 
-                            "select sourcetype, artifacttype, count(*) from " BUILDIDS
-                            " group by sourcetype, artifacttype");
+  try
+    {
+      sqlite_ps ps_query (db, 
+                          "select sourcetype, artifacttype, count(*) from " BUILDIDS
+                          " group by sourcetype, artifacttype");
 
-        obatched(clog) << "Database statistics:" << endl;
-        obatched(clog) << "source" << "\t" << "type" << "\t" << "count" << endl;
-        while (1)
-          {
-            rc = sqlite3_step (ps_query);
-            if (rc == SQLITE_DONE) break;
-            if (rc != SQLITE_ROW)
-              throw sqlite_exception(rc, "step");
+      obatched(clog) << "Database statistics:" << endl;
+      obatched(clog) << "source/type" << "\t" << "count" << endl;
+      while (1)
+        {
+          rc = sqlite3_step (ps_query);
+          if (rc == SQLITE_DONE) break;
+          if (rc != SQLITE_ROW)
+            throw sqlite_exception(rc, "step");
 
-            obatched(clog) << (sqlite3_column_text(ps_query, 0) ?: (const unsigned char*) "NULL")
-                           << "\t"
-                           << (sqlite3_column_text(ps_query, 1) ?: (const unsigned char*) "NULL")
-                           << "\t"
-                           << (sqlite3_column_text(ps_query, 2) ?: (const unsigned char*) "NULL")
-                           << endl;
-          }
-      }
-    catch (const reportable_exception& e)
-      {
-        e.report(clog);
-      }
+          obatched(clog) << (sqlite3_column_text(ps_query, 0) ?: (const unsigned char*) "NULL")
+                         << "/"
+                         << (sqlite3_column_text(ps_query, 1) ?: (const unsigned char*) "NULL")
+                         << "     \t"
+                         << (sqlite3_column_text(ps_query, 2) ?: (const unsigned char*) "NULL")
+                         << endl;
+        }
+    }
+  catch (const reportable_exception& e)
+    {
+      e.report(clog);
+    }
   
   for (auto&& it : source_file_paths)
     {
+      obatched(clog) << "Searching for ELF/DWARF files under " << it << endl;
       pthread_t pt;
       int rc = pthread_create (& pt, NULL, thread_main_scan_source_file_path, (void*) it.c_str());
       if (rc < 0)
@@ -2126,6 +2110,7 @@ main (int argc, char *argv[])
 
   for (auto&& it : source_rpm_paths)
     {
+      obatched(clog) << "Searching for RPMs under " << it << endl;
       pthread_t pt;
       int rc = pthread_create (& pt, NULL, thread_main_scan_source_rpm_path, (void*) it.c_str());
       if (rc < 0)
