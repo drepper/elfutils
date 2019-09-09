@@ -71,6 +71,7 @@ extern "C" {
 #include <set>
 #include <string>
 #include <iostream>
+#include <iomanip>
 #include <ostream>
 #include <sstream>
 // #include <algorithm>
@@ -2076,7 +2077,8 @@ main (int argc, char *argv[])
                           " group by sourcetype, artifacttype");
 
       obatched(clog) << "Database statistics:" << endl;
-      obatched(clog) << "source/type" << "\t" << "count" << endl;
+      obatched(clog) << setw(6) << "source" << "/" << left << setw(6) << "type"
+                     << " " << right << setw(7) << "count" << endl;
       while (1)
         {
           rc = sqlite3_step (ps_query);
@@ -2084,12 +2086,13 @@ main (int argc, char *argv[])
           if (rc != SQLITE_ROW)
             throw sqlite_exception(rc, "step");
 
-          obatched(clog) << (sqlite3_column_text(ps_query, 0) ?: (const unsigned char*) "NULL")
-                         << "/"
-                         << (sqlite3_column_text(ps_query, 1) ?: (const unsigned char*) "NULL")
-                         << "     \t"
-                         << (sqlite3_column_text(ps_query, 2) ?: (const unsigned char*) "NULL")
-                         << endl;
+          obatched(clog)
+            << setw(6) << ((const char*) sqlite3_column_text(ps_query, 0) ?: (const char*) "NULL")
+            << "/"
+            << left << setw(6) << ((const char*) sqlite3_column_text(ps_query, 1) ?: (const char*) "NULL")
+            << " "
+            << right << setw(7) << (sqlite3_column_text(ps_query, 2) ?: (const unsigned char*) "NULL")
+            << endl;
         }
     }
   catch (const reportable_exception& e)
