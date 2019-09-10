@@ -118,7 +118,7 @@ static const char DBGSERVER_SQLITE_DDL[] =
   "            check (artifacttype NOT IN ('S') OR artifactsrc is not null),\n"
   "        mtime integer,\n"                               // -- epoch timestamp when we last found this source0
   "        sourcetype text(1) not null\n"
-  "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --source-TYPE single-char code\n"
+  "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --scan-TYPE-dir single-char code\n"
   "        source0 integer not null,\n"
   "        source1 integer,\n"
   "        foreign key (artifactsrc) references " BUILDIDS "_files(id) on update cascade on delete cascade,\n"
@@ -169,7 +169,7 @@ static const char DBGSERVER_SQLITE_DDL[] =
   "        buildid text not null,\n"
   "        srcname text not null,\n"
   "        sourcetype text(1) not null\n"
-  "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --source-TYPE single-char code\n"
+  "            check (sourcetype IN ('F', 'R')),\n"        // -- as per --scan-TYPE-dir single-char code\n"
   "        dirname text not null,\n"
   "        unique (buildid, srcname, sourcetype, dirname) on conflict ignore);\n"
 
@@ -227,10 +227,9 @@ ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 static const struct argp_option options[] =
   {
    { NULL, 0, NULL, 0, N_("Sources:"), 1 },
-   { "source-files", 'F', "PATH", 0, N_("Scan ELF/DWARF files under given directory."), 0 },
-   { "source-rpms", 'R', "PATH", 0, N_("Scan RPM files under given directory."), 0 },
-   //  { "source-rpms-yum", 0, "SECONDS", 0, N_("Try fetching missing RPMs from yum."), 0 },
-   // "source-rpms-koji"      ... no can do, not buildid-addressable
+   { "scan-file-dir", 'F', "PATH", 0, N_("Scan ELF/DWARF files under given directory."), 0 },
+   { "scan-rpm-dir", 'R', "PATH", 0, N_("Scan RPM files under given directory."), 0 },
+   //  { "scan-rpms-yum", 0, "SECONDS", 0, N_("Try fetching missing RPMs from yum."), 0 },
    // http traversal for rpm downloading?
    // "source-oci-imageregistry"  ... 
   
@@ -247,7 +246,7 @@ static const struct argp_option options[] =
 static const char doc[] = N_("Serve debuginfo-related content across HTTP.");
 
 /* Strings for arguments in help texts.  */
-static const char args_doc[] = N_("[--source-TYPE...]");
+static const char args_doc[] = N_("[--scan-TYPE...]");
 
 /* Prototype for option handler.  */
 static error_t parse_opt (int key, char *arg, struct argp_state *state);

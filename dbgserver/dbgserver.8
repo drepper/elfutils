@@ -38,18 +38,23 @@ to the original requester.
 
 .SH OPTIONS
 .TP
-.BR \-F, \-\-source\-files=PATH
+.BR \-F, \-\-scan\-file\-dir=PATH
 Add a thread to scan for ELF/DWARF/source files under the given
 directory.  This option may be repeated to scan multiple paths.
 Source files are matched with DWARF files based on the AT_comp_dir
 (compilation directory) attributes inside it.  Duplicate directories
-are ignored.
+are ignored.  You may use a file name for a PATH, but source code
+indexing may be incomplete; prefer using a directory that contains
+the binaries.
 
 .TP
-.BR \-R, \-\-source\-rpms=PATH
+.BR \-R, \-\-scan\-rpm\-dir=PATH
 Add a thread to scan for ELF/DWARF/source files contained in RPMs
 under the given directory.  This option may be repeated to scan
-multiple paths.  Duplicate directories are ignored.
+multiple paths.  Duplicate directories are ignored.  You may use a
+file name for a PATH, but source code indexing may be incomplete;
+prefer using a directory that contains normal RPMs alongside
+debuginfo/debugsource RPMs.
 
 .TP
 .BR \-d, \-\-database=FILE
