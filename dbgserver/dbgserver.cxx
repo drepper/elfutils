@@ -237,6 +237,7 @@ static const struct argp_option options[] =
    { "rescan-time", 't', "SECONDS", 0, N_("Number of seconds to wait between rescans."), 0 },
    { "port", 'p', "NUM", 0, N_("HTTP port to listen on."), 0 },
    { "database", 'd', "FILE", 0, N_("Path to sqlite database."), 0 },
+   { "ddl", 'D', "SQL", 0, N_("Apply extra sqlite ddl/pragma to connection."), 0 },
    { "verbose", 'v', NULL, 0, N_("Increase verbosity."), 0 },
     
    { NULL, 0, NULL, 0, NULL, 0 }
@@ -268,7 +269,7 @@ static set<string> source_file_paths;
 static vector<pthread_t> source_file_scanner_threads;
 static set<string> source_rpm_paths;
 static vector<pthread_t> source_rpm_scanner_threads;
-
+static vector<string> extra_ddl;
 
 
 /* Handle program arguments.  */
@@ -283,6 +284,7 @@ parse_opt (int key, char *arg,
     case 'p': http_port = atoi(arg); break;
     case 'F': source_file_paths.insert(string(arg)); break;
     case 'R': source_rpm_paths.insert(string(arg)); break;
+    case 'D': extra_ddl.push_back(string(arg)); break;
     case 't': rescan_s = atoi(arg); break;
       // case 'h': argp_state_help (state, stderr, ARGP_HELP_LONG|ARGP_HELP_EXIT_OK);
     default: return ARGP_ERR_UNKNOWN;
@@ -2081,6 +2083,18 @@ main (int argc, char *argv[])
              _("cannot run database schema ddl: %s"), sqlite3_errmsg(db));
     }
 
+  // run extra -D sql if given
+  for (auto&& i: extra_ddl)
+    {
+      if (verbose > 3)
+        obatched(clog) << "extra DDL:\n" << i << endl;
+      rc = sqlite3_exec (db, i.c_str(), NULL, NULL, NULL);
+      if (rc != SQLITE_OK)
+        error (EXIT_FAILURE, 0,
+               _("cannot run database extra ddl %s: %s"), i.c_str(), sqlite3_errmsg(db));
+    }
+
+  
   try
     {
       sqlite_ps ps_query (db, 

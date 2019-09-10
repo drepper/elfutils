@@ -67,6 +67,13 @@ to SQLITE locking performance.  The default database file is
 $HOME/.dbgserver.sqlite.
 
 .TP
+.BR \-D, \-\-ddl=SQL
+Execute given SQLITE statement after the database is opened and
+initialized as extra DDL.  This may be useful to tune
+performance-related pragmas or indexes.  May be repeated.  The default
+is nothing extra.
+
+.TP
 .BR \-p, \-\-port=NUM
 Set the TCP port number on which dbgserver should listen, to service
 HTTP requests.  Both IPv4 and IPV6 sockets are opened, if possible.
