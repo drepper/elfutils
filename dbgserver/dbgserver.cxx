@@ -96,12 +96,13 @@ using namespace std;
 
 
 // Roll this identifier for every sqlite schema incompatiblity.
-#define BUILDIDS "buildids4"
+#define BUILDIDS "buildids5"
 
 static const char DBGSERVER_SQLITE_DDL[] =
   "pragma foreign_keys = on;\n"
   "pragma synchronous = 0;\n" // disable fsync()s - this cache is disposable across a machine crash
   "pragma journal_mode = wal;\n" // https://sqlite.org/wal.html
+  // overridable with -D option
 
   /* Normalized tables to represent general buildid-to-file/subfile mapping. */
   "create table if not exists " BUILDIDS "_files (\n"
@@ -196,8 +197,15 @@ static const char DBGSERVER_SQLITE_DDL[] =
   
 // schema change history & garbage collection
 //
-// buildids4: introduce rpmfile SOLO
+// buildids5: redefine srcfile1 column to be '.'-less (for rpms)
   "" // <<< we are here
+// buildids4: introduce rpmfile RFOLO
+  "drop table if exists buildids4_norm;\n"
+  "drop table if exists buildids4_files;\n"
+  "drop table if exists buildids4_buildids;\n"
+  "drop table if exists buildids4_bolo;\n"
+  "drop table if exists buildids4_rfolo;\n"  
+  "drop view if exists buildids4;\n"
 // buildids3*: split out srcfile BOLO
   "drop table if exists buildids3_norm;\n"
   "drop table if exists buildids3_files;\n"
@@ -654,7 +662,7 @@ handle_buildid_r_match (int64_t b_mtime,
         continue;
               
       string fn = archive_entry_pathname (e);
-      if (fn != b_source1)
+      if (fn != string(".")+b_source1)
         continue;
 
       // extract this file to a temporary file
@@ -1545,7 +1553,9 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
             continue;
               
           string fn = archive_entry_pathname (e);
-
+          if (fn.size() > 1 && fn[0] == '.')
+            fn = fn.substr(1); // trim off the leading '.'
+          
           // add the rfolo record for this pathname
           sqlite3_reset (ps_rfolo_upsert);
           rc = sqlite3_bind_text (ps_rfolo_upsert, 1, rps.c_str(), -1, SQLITE_TRANSIENT);
@@ -1613,17 +1623,17 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
 
           if (sourcefiles.size() > 0) // intern all the source files
             {
-              // NB: we intern each source file -twice-.  Once raw, as
-              // it appears in the DWARF file list coming back from
+              // NB: we intern each source file once.  Once raw, as it
+              // appears in the DWARF file list coming back from
               // elf_classify() - because it'll end up in the
-              // _norm.artifactsrc column.  Plus: once with a "." at
-              // the front, because that's how we'll expect it'll show
-              // up in one of the -debuginfo|source rpms and therefore
-              // in the _norm.source1 and _rfolo.source1 fields.  (We
-              // don't want to preemptively intern ALL file names we
-              // get from scanning RPMs, because most of them are not
-              // going to be debuginfo-related, thus would needlessly
-              // bloat the interning table.)
+              // _norm.artifactsrc column.  We don't also put another
+              // version with a '.' at the front, even though that's
+              // how rpm/cpio packs names, because we hide that from
+              // the database for storage efficiency.  (We don't want
+              // to preemptively intern ALL file names we get from
+              // scanning RPMs, because most of them are not going to
+              // be debuginfo-related, thus would needlessly bloat the
+              // interning table.)
 
               for (auto&& s : sourcefiles)
                 {
@@ -1636,18 +1646,6 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
                   rc = sqlite3_step (ps_upsert_files);
                   if (rc != SQLITE_OK && rc != SQLITE_DONE)
                     throw sqlite_exception(rc, "sqlite3 upsert-sf1 execute");
-
-                  if (s[0] == '/') // the normal case
-                    {
-                      string sdot = string(".") + s;
-                      sqlite3_reset (ps_upsert_files);
-                      rc = sqlite3_bind_text (ps_upsert_files, 1, sdot.c_str(), -1, SQLITE_TRANSIENT);
-                      if (rc != SQLITE_OK)
-                        throw sqlite_exception(rc, "sqlite3 upsert-sf2 bind1");
-                      rc = sqlite3_step (ps_upsert_files);
-                      if (rc != SQLITE_OK && rc != SQLITE_DONE)
-                        throw sqlite_exception(rc, "sqlite3 upsert-sf2 execute");
-                    }
 
                   // now add the bolo record
                   if (buildid != "")
@@ -1766,7 +1764,7 @@ scan_source_rpm_path (const string& dir)
                                        "from " BUILDIDS "_buildids b, " BUILDIDS "_bolo bolo, " BUILDIDS "_rfolo rfolo, "
                                        BUILDIDS "_files f0, " BUILDIDS "_files f1, " BUILDIDS "_files fb "
                                        "where b.hex = bolo.buildid and "
-                                       "'.'||bolo.srcname = rfolo.source1 and " // RPMs have . name prefix for cpio contents
+                                       "bolo.srcname = rfolo.source1 and "
                                        "bolo.sourcetype = 'R' and bolo.dirname = ? and rfolo.dirname = bolo.dirname and "
                                        "f0.name = rfolo.source0 and f1.name = rfolo.source1 and fb.name = bolo.srcname"
                                        /// XXXXXX add  NULL ... entries for rfolo rpms that have no bolo-sought content, so we don't have to open it again
