@@ -2019,6 +2019,9 @@ signal_handler (int /* sig */)
 {
   interrupted ++;
 
+  if (db)
+    sqlite3_interrupt (db);
+  
   // NB: don't do anything else in here
 }
 
