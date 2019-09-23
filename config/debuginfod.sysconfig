@@ -1,0 +1,9 @@
+#
+DEBUGINFOD_PORT="8002"
+DEBUGINFOD_VERBOSE="-v"
+DEBUGINFOD_PATHS="-F /usr/lib/debug -F /usr/bin -F /usr/sbin -F /usr/lib -F /usr/lib64"
+
+# upstream debuginfods
+#DEBUGINFOD_URLS="http://secondhost:8002 http://thirdhost:8002"
+#DEBUGINFOD_TIMEOUT="5"
+#DEBUGINFOD_CACHE_DIR=""

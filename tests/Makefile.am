@@ -60,7 +60,7 @@ check_PROGRAMS = arextract arsymtest newfile saridx scnnames sectiondump \
 		  fillfile dwarf_default_lower_bound dwarf-die-addr-die \
 		  get-units-invalid get-units-split attr-integrate-skel \
 		  all-dwarf-ranges unit-info next_cfi \
-                  dbgserver_build_id_find \
+                  debuginfod_build_id_find \
 		  elfcopy addsections xlate_notes elfrdwrnop \
 		  dwelf_elf_e_machine_string
 
@@ -163,7 +163,7 @@ TESTS = run-arextract.sh run-arsymtest.sh run-ar.sh newfile test-nlist \
 	run-reverse-sections.sh run-reverse-sections-self.sh \
 	run-copyadd-sections.sh run-copymany-sections.sh \
 	run-typeiter-many.sh run-strip-test-many.sh \
-	run-dbgserver-find.sh \
+	run-debuginfod-find.sh \
 	run-strip-version.sh run-xlate-note.sh \
 	run-readelf-discr.sh \
 	run-dwelf_elf_e_machine_string.sh \
@@ -436,7 +436,7 @@ EXTRA_DIST = run-arextract.sh run-arsymtest.sh run-ar.sh \
 	     testfile-debug-rel-ppc64.o.bz2 \
 	     run-strip-version.sh testfile-version.bz2 \
 	     run-xlate-note.sh \
-	     run-dbgserver-find.sh run-readelf-discr.sh \
+	     run-debuginfod-find.sh run-readelf-discr.sh \
 	     testfile-rng.debug.bz2 testfile-urng.debug.bz2 \
 	     run-dwelf_elf_e_machine_string.sh \
 	     run-elfclassify.sh run-elfclassify-self.sh
@@ -473,7 +473,7 @@ TESTS_ENVIRONMENT = LC_ALL=C; LANG=C; VALGRIND_CMD=$(valgrind_cmd); \
 		    export LC_ALL; export LANG; export VALGRIND_CMD; \
 		    NM=$(NM); export NM;
 LOG_COMPILER = $(abs_srcdir)/test-wrapper.sh \
-	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm:$(abs_top_builddir)/dbgserver
+	       $(abs_top_builddir)/libdw:$(abs_top_builddir)/backends:$(abs_top_builddir)/libelf:$(abs_top_builddir)/libasm:$(abs_top_builddir)/debuginfod
 
 installcheck-local:
 	$(MAKE) $(AM_MAKEFLAGS) \
@@ -609,7 +609,7 @@ unit_info_LDADD = $(libdw)
 next_cfi_LDADD = $(libelf) $(libdw)
 elfcopy_LDADD = $(libelf)
 addsections_LDADD = $(libelf)
-dbgserver_build_id_find_LDADD = $(libdw)
+debuginfod_build_id_find_LDADD = $(libdw)
 xlate_notes_LDADD = $(libelf)
 elfrdwrnop_LDADD = $(libelf)
 dwelf_elf_e_machine_string_LDADD = $(libelf) $(libdw)

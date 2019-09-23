@@ -1,5 +1,5 @@
 /* Command-line frontend for retrieving ELF / DWARF / source files
-   from the dbgserver.
+   from the debuginfod.
    Copyright (C) 2019 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -29,7 +29,7 @@
 
 #include "config.h"
 #include "printversion.h"
-#include "dbgserver-client.h"
+#include "debuginfod.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -44,7 +44,7 @@ ARGP_PROGRAM_BUG_ADDRESS_DEF = PACKAGE_BUGREPORT;
 
 /* Short description of program.  */
 static const char doc[] = N_("Request debuginfo-related content "
-                             "from dbgservers listed in $" DBGSERVER_URLS_ENV_VAR ".");
+                             "from debuginfods listed in $" DEBUGINFOD_URLS_ENV_VAR ".");
 
 /* Strings for arguments in help texts.  */
 static const char args_doc[] = N_("debuginfo BUILDID\n"
@@ -75,12 +75,12 @@ main(int argc, char** argv)
   char *cache_name;
 
   /* Check whether FILETYPE is valid and call the appropriate
-     dbgserver_find_* function. If FILETYPE is "source"
+     debuginfod_find_* function. If FILETYPE is "source"
      then ensure a FILENAME was also supplied as an argument.  */
   if (strcmp(argv[remaining], "debuginfo") == 0)
-    rc = dbgserver_find_debuginfo((unsigned char *)argv[remaining+1], 0, &cache_name);
+    rc = debuginfod_find_debuginfo((unsigned char *)argv[remaining+1], 0, &cache_name);
   else if (strcmp(argv[remaining], "executable") == 0)
-    rc = dbgserver_find_executable((unsigned char *)argv[remaining+1], 0, &cache_name);
+    rc = debuginfod_find_executable((unsigned char *)argv[remaining+1], 0, &cache_name);
   else if (strcmp(argv[remaining], "source") == 0)
     {
       if (remaining+2 == argc || argv[3][0] != '/')
@@ -88,7 +88,7 @@ main(int argc, char** argv)
           fprintf(stderr, "If FILETYPE is \"source\" then absolute /FILENAME must be given\n");
           return 1;
         }
-      rc = dbgserver_find_source((unsigned char *)argv[remaining+1], 0,
+      rc = debuginfod_find_source((unsigned char *)argv[remaining+1], 0,
                                  argv[remaining+2], &cache_name);
     }
   else

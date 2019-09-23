@@ -1,4 +1,4 @@
-/* External declarations for the libdbgserver client library.
+/* External declarations for the libdebuginfod client library.
    Copyright (C) 2019 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -30,15 +30,15 @@
 #define _LIBBGSERVER_CLIENT_H 1
 
 /* Names of environment variables that control the client logic. */
-#define DBGSERVER_URLS_ENV_VAR "DBGSERVER_URLS"
-#define DBGSERVER_CACHE_PATH_ENV_VAR "DBGSERVER_CACHE_PATH"
-#define DBGSERVER_TIMEOUT_ENV_VAR "DBGSERVER_TIMEOUT"
+#define DEBUGINFOD_URLS_ENV_VAR "DEBUGINFOD_URLS"
+#define DEBUGINFOD_CACHE_PATH_ENV_VAR "DEBUGINFOD_CACHE_PATH"
+#define DEBUGINFOD_TIMEOUT_ENV_VAR "DEBUGINFOD_TIMEOUT"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Query the urls contained in $DBGSERVER_URLS for a file with
+/* Query the urls contained in $DEBUGINFOD_URLS for a file with
    the specified type and build id.  If build_id_len == 0, the
    build_id is supplied as a lowercase hexadecimal string; otherwise
    it is a binary blob of given legnth.
@@ -48,15 +48,15 @@ extern "C" {
    strdup'd copy of the name of the same file in the cache.
    Caller must free() it later. */
   
-int dbgserver_find_debuginfo (const unsigned char *build_id,
+int debuginfod_find_debuginfo (const unsigned char *build_id,
                              int build_id_len,
                              char **path);
 
-int dbgserver_find_executable (const unsigned char *build_id,
+int debuginfod_find_executable (const unsigned char *build_id,
                                int build_id_len,
                                char **path);
 
-int dbgserver_find_source (const unsigned char *build_id,
+int debuginfod_find_source (const unsigned char *build_id,
                            int build_id_len,
                            const char *filename,
                            char **path);

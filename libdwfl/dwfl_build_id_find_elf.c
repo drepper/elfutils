@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include "system.h"
-#include "dbgserver-client.h"
+#include "debuginfod.h"
 
 
 int
@@ -189,29 +189,29 @@ dwfl_build_id_find_elf (Dwfl_Module *mod,
       free (*file_name);
       *file_name = NULL;
     }
-#if ENABLE_DBGSERVER
+#if ENABLE_DEBUGINFOD
   else {
-    static void *dbgserver_so;
-    static __typeof__ (dbgserver_find_executable) *fp_dbgserver_find_executable;
+    static void *debuginfod_so;
+    static __typeof__ (debuginfod_find_executable) *fp_debuginfod_find_executable;
 
-    if (dbgserver_so == NULL)
-      dbgserver_so = dlopen("libdbgserver-" VERSION ".so", RTLD_LAZY);
-    if (dbgserver_so == NULL)
-      dbgserver_so = dlopen("libdbgserver.so", RTLD_LAZY);
-    if (dbgserver_so != NULL && fp_dbgserver_find_executable == NULL)
-      fp_dbgserver_find_executable = dlsym (dbgserver_so, "dbgserver_find_executable");
+    if (debuginfod_so == NULL)
+      debuginfod_so = dlopen("libdebuginfod-" VERSION ".so", RTLD_LAZY);
+    if (debuginfod_so == NULL)
+      debuginfod_so = dlopen("libdebuginfod.so", RTLD_LAZY);
+    if (debuginfod_so != NULL && fp_debuginfod_find_executable == NULL)
+      fp_debuginfod_find_executable = dlsym (debuginfod_so, "debuginfod_find_executable");
 
-    if (fp_dbgserver_find_executable != NULL)
+    if (fp_debuginfod_find_executable != NULL)
       {
         /* If all else fails and a build-id is available, query the
            debuginfo-server if enabled.  */
         if (fd < 0 && mod->build_id_len > 0)
-          fd = (*fp_dbgserver_find_executable) (mod->build_id_bits,
+          fd = (*fp_debuginfod_find_executable) (mod->build_id_bits,
                                                 mod->build_id_len,
                                                 NULL);
       }
   }
-#endif /* ENABLE_DBGSERVER */
+#endif /* ENABLE_DEBUGINFOD */
   
   if (fd < 0 && errno == 0 && mod->build_id_len > 0)
     /* Setting this with no file yet loaded is a marker that

@@ -1,4 +1,4 @@
-## Makefile.am for libdbgserver library subdirectory in elfutils.
+## Makefile.am for libdebuginfod library subdirectory in elfutils.
 ##
 ## Process this file with automake to create Makefile.in
 ##
@@ -43,64 +43,64 @@ if BUILD_STATIC
 libasm = ../libasm/libasm.a
 libdw = ../libdw/libdw.a -lz $(zip_LIBS) $(libelf) $(libebl) -ldl
 libelf = ../libelf/libelf.a -lz
-libdbgserver = ./libdbgserver.a
+libdebuginfod = ./libdebuginfod.a
 else
 libasm = ../libasm/libasm.so
 libdw = ../libdw/libdw.so
 libelf = ../libelf/libelf.so
-libdbgserver = ./libdbgserver.so
+libdebuginfod = ./libdebuginfod.so
 endif
 libebl = ../libebl/libebl.a
 libeu = ../lib/libeu.a
 
 AM_LDFLAGS = -Wl,-rpath-link,../libelf:../libdw:.
 
-bin_PROGRAMS = dbgserver dbgserver-find
-dbgserver_SOURCES = dbgserver.cxx
-dist_man8_MANS = dbgserver.8
-dist_man3_MANS = dbgserver_find_debuginfo.3 dbgserver_find_source.3 dbgserver_find_executable.3
-dist_man1_MANS = dbgserver-find.1
-dbgserver_LDADD = $(libdw) $(libelf) $(libeu) $(libdbgserver) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
+bin_PROGRAMS = debuginfod debuginfod-find
+debuginfod_SOURCES = debuginfod.cxx
+dist_man8_MANS = debuginfod.8
+dist_man3_MANS = debuginfod_find_debuginfo.3 debuginfod_find_source.3 debuginfod_find_executable.3
+dist_man1_MANS = debuginfod-find.1
+debuginfod_LDADD = $(libdw) $(libelf) $(libeu) $(libdebuginfod) $(libmicrohttpd_LIBS) $(libcurl_LIBS) $(sqlite3_LIBS) $(libarchive_LIBS) -lpthread -ldl
 
-dbgserver_find_SOURCES = dbgserver-find.c
-dbgserver_find_LDADD = $(libeu) $(libdbgserver)
+debuginfod_find_SOURCES = debuginfod-find.c
+debuginfod_find_LDADD = $(libeu) $(libdebuginfod)
 
-noinst_LIBRARIES = libdbgserver.a
-noinst_LIBRARIES += libdbgserver_pic.a
+noinst_LIBRARIES = libdebuginfod.a
+noinst_LIBRARIES += libdebuginfod_pic.a
 
-libdbgserver_a_SOURCES = dbgserver-client.c
-libdbgserver_pic_a_SOURCES = dbgserver-client.c
-am_libdbgserver_pic_a_OBJECTS = $(libdbgserver_a_SOURCES:.c=.os)
+libdebuginfod_a_SOURCES = debuginfod-client.c
+libdebuginfod_pic_a_SOURCES = debuginfod-client.c
+am_libdebuginfod_pic_a_OBJECTS = $(libdebuginfod_a_SOURCES:.c=.os)
 
-pkginclude_HEADERS = dbgserver-client.h
+pkginclude_HEADERS = debuginfod.h
 
-libdbgserver_so_LIBS = libdbgserver_pic.a
-libdbgserver_so_LDLIBS = $(libcurl_LIBS)
-libdbgserver_so_SOURCES = dbgserver-client.c
-libdbgserver.so$(EXEEXT): $(srcdir)/libdbgserver.map $(libdbgserver_so_LIBS)
+libdebuginfod_so_LIBS = libdebuginfod_pic.a
+libdebuginfod_so_LDLIBS = $(libcurl_LIBS)
+libdebuginfod_so_SOURCES = debuginfod-client.c
+libdebuginfod.so$(EXEEXT): $(srcdir)/libdebuginfod.map $(libdebuginfod_so_LIBS)
 	$(AM_V_CCLD)$(LINK) $(dso_LDFLAGS) -o $@ \
 		-Wl,--soname,$@.$(VERSION) \
 		-Wl,--version-script,$<,--no-undefined \
-		-Wl,--whole-archive $(libdbgserver_so_LIBS) -Wl,--no-whole-archive \
-		$(libdbgserver_so_LDLIBS)
+		-Wl,--whole-archive $(libdebuginfod_so_LIBS) -Wl,--no-whole-archive \
+		$(libdebuginfod_so_LDLIBS)
 	@$(textrel_check)
 	$(AM_V_at)ln -fs $@ $@.$(VERSION)
 
-install: install-am libdbgserver.so
+install: install-am libdebuginfod.so
 	$(mkinstalldirs) $(DESTDIR)$(libdir)
-	$(INSTALL_PROGRAM) libdbgserver.so $(DESTDIR)$(libdir)/libdbgserver-$(PACKAGE_VERSION).so
-	ln -fs libdbgserver-$(PACKAGE_VERSION).so $(DESTDIR)$(libdir)/libdbgserver.so.$(VERSION)
-	ln -fs libdbgserver.so.$(VERSION) $(DESTDIR)$(libdir)/libdbgserver.so
+	$(INSTALL_PROGRAM) libdebuginfod.so $(DESTDIR)$(libdir)/libdebuginfod-$(PACKAGE_VERSION).so
+	ln -fs libdebuginfod-$(PACKAGE_VERSION).so $(DESTDIR)$(libdir)/libdebuginfod.so.$(VERSION)
+	ln -fs libdebuginfod.so.$(VERSION) $(DESTDIR)$(libdir)/libdebuginfod.so
 
 uninstall: uninstall-am
-	rm -f $(DESTDIR)$(libdir)/libdbgserver-$(PACKAGE_VERSION).so
-	rm -f $(DESTDIR)$(libdir)/libdbgserver.so.$(VERSION)
-	rm -f $(DESTDIR)$(libdir)/libdbgserver.so
+	rm -f $(DESTDIR)$(libdir)/libdebuginfod-$(PACKAGE_VERSION).so
+	rm -f $(DESTDIR)$(libdir)/libdebuginfod.so.$(VERSION)
+	rm -f $(DESTDIR)$(libdir)/libdebuginfod.so
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(includedir)/elfutils
 
-EXTRA_DIST = libdbgserver.map
-MOSTLYCLEANFILES = $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so.$(VERSION)
-CLEANFILES += $(am_libdbgserver_pic_a_OBJECTS) libdbgserver.so
+EXTRA_DIST = libdebuginfod.map
+MOSTLYCLEANFILES = $(am_libdebuginfod_pic_a_OBJECTS) libdebuginfod.so.$(VERSION)
+CLEANFILES += $(am_libdebuginfod_pic_a_OBJECTS) libdebuginfod.so
 
 # automake std-options override: arrange to pass LD_LIBRARY_PATH
 installcheck-binPROGRAMS: $(bin_PROGRAMS)

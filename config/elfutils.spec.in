@@ -2,7 +2,7 @@
 Summary: A collection of utilities and DSOs to handle ELF files and DWARF data
 Name: elfutils
 Version: @PACKAGE_VERSION@
-Release: 100.dbgserver
+Release: 100.debuginfod
 URL: http://elfutils.org/
 License: GPLv3+ and (GPLv2+ or LGPLv3+) and GFDL
 Group: Development/Tools
@@ -32,7 +32,7 @@ BuildRequires: pkgconfig(libcurl) >= 7.29.0
 BuildRequires: pkgconfig(sqlite3) >= 3.7.17
 BuildRequires: pkgconfig(libarchive) >= 3.1.2
 %if 0%{?rhel} >= 8 || 0%{?fedora} >= 20
-Recommends: elfutils-dbgserver-client
+Recommends: elfutils-debuginfod-client
 %endif
 
 
@@ -125,11 +125,11 @@ interprocess services, communication and introspection
 (like synchronisation, signaling, debugging, tracing and
 profiling) of processes.
 
-%package dbgserver-client
+%package debuginfod-client
 Summary: Libraries and command-line frontend for HTTP ELF/DWARF file server addressed by build-id.
 License: GPLv2+
 
-%package dbgserver
+%package debuginfod
 Summary: HTTP ELF/DWARF file server addressed by build-id.
 License: GPLv2+
 BuildRequires: systemd
@@ -139,14 +139,14 @@ Requires(postun): systemd
 Requires: shadow-utils
 Requires: /usr/bin/rpm2cpio
 
-%description dbgserver-client
-The elfutils-dbgserver-client package contains shared libraries
-dynamically loaded from -ldw, which use a dbgserver service
+%description debuginfod-client
+The elfutils-debuginfod-client package contains shared libraries
+dynamically loaded from -ldw, which use a debuginfod service
 to look up debuginfo and associated data. Also includes a
 command-line frontend.
 
-%description dbgserver
-The elfutils-dbgserver package contains the dbgserver binary
+%description debuginfod
+The elfutils-debuginfod package contains the debuginfod binary
 and control files for a service that can provide ELF/DWARF
 files to remote clients, based on build-id identification.
 The ELF/DWARF file searching functions in libdwfl can query
@@ -156,7 +156,7 @@ such servers to download those files on demand.
 %setup -q
 
 %build
-%configure --program-prefix=%{_programprefix} --enable-dbgserver
+%configure --program-prefix=%{_programprefix} --enable-debuginfod
 make
 
 %install
@@ -176,10 +176,10 @@ chmod +x ${RPM_BUILD_ROOT}%{_prefix}/%{_lib}/lib*.so*
 
 install -Dm0644 config/10-default-yama-scope.conf ${RPM_BUILD_ROOT}%{_sysctldir}/10-default-yama-scope.conf
 
-install -Dm0644 config/dbgserver.service ${RPM_BUILD_ROOT}%{_unitdir}/dbgserver.service
-install -Dm0644 config/dbgserver.sysconfig ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/dbgserver
-mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}/cache/dbgserver
-touch ${RPM_BUILD_ROOT}%{_localstatedir}/cache/dbgserver/dbgserver.sqlite
+install -Dm0644 config/debuginfod.service ${RPM_BUILD_ROOT}%{_unitdir}/debuginfod.service
+install -Dm0644 config/debuginfod.sysconfig ${RPM_BUILD_ROOT}%{_sysconfdir}/sysconfig/debuginfod
+mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}/cache/debuginfod
+touch ${RPM_BUILD_ROOT}%{_localstatedir}/cache/debuginfod/debuginfod.sqlite
 
 %check
 make check || true
@@ -231,7 +231,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %dir %{_includedir}/elfutils
 %{_includedir}/elfutils/elf-knowledge.h
 %{_includedir}/elfutils/known-dwarf.h
-%{_includedir}/elfutils/dbgserver-client.h
+%{_includedir}/elfutils/debuginfod.h
 #%{_includedir}/elfutils/libasm.h
 %{_includedir}/elfutils/libebl.h
 %{_includedir}/elfutils/libdw.h
@@ -241,7 +241,7 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_libdir}/libebl.a
 #%{_libdir}/libasm.so
 %{_libdir}/libdw.so
-%{_libdir}/libdbgserver.so
+%{_libdir}/libdebuginfod.so
 %{_libdir}/pkgconfig/libdw.pc
 
 %files devel-static
@@ -271,40 +271,40 @@ rm -rf ${RPM_BUILD_ROOT}
 %{_sysctldir}/10-default-yama-scope.conf
 
 
-%files dbgserver-client
+%files debuginfod-client
 %defattr(-,root,root)
-%{_libdir}/libdbgserver.so.*
-%{_libdir}/libdbgserver-%{version}.so
-%{_bindir}/dbgserver-find
-%{_mandir}/man1/dbgserver-find.1*
-%{_mandir}/man3/dbgserver_find_debuginfo.3*
-%{_mandir}/man3/dbgserver_find_executable.3*
-%{_mandir}/man3/dbgserver_find_source.3*
+%{_libdir}/libdebuginfod.so.*
+%{_libdir}/libdebuginfod-%{version}.so
+%{_bindir}/debuginfod-find
+%{_mandir}/man1/debuginfod-find.1*
+%{_mandir}/man3/debuginfod_find_debuginfo.3*
+%{_mandir}/man3/debuginfod_find_executable.3*
+%{_mandir}/man3/debuginfod_find_source.3*
 
 
-%files dbgserver
+%files debuginfod
 %defattr(-,root,root)
-%{_bindir}/dbgserver
-%config(noreplace) %verify(not md5 size mtime) %{_sysconfdir}/sysconfig/dbgserver
-%{_unitdir}/dbgserver.service
-%{_sysconfdir}/sysconfig/dbgserver
-%{_mandir}/man8/dbgserver.8*
+%{_bindir}/debuginfod
+%config(noreplace) %verify(not md5 size mtime) %{_sysconfdir}/sysconfig/debuginfod
+%{_unitdir}/debuginfod.service
+%{_sysconfdir}/sysconfig/debuginfod
+%{_mandir}/man8/debuginfod.8*
 
-%dir %attr(0700,dbgserver,dbgserver) %{_localstatedir}/cache/dbgserver
-%verify(not md5 size mtime) %attr(0600,dbgserver,dbgserver) %{_localstatedir}/cache/dbgserver/dbgserver.sqlite
+%dir %attr(0700,debuginfod,debuginfod) %{_localstatedir}/cache/debuginfod
+%verify(not md5 size mtime) %attr(0600,debuginfod,debuginfod) %{_localstatedir}/cache/debuginfod/debuginfod.sqlite
 
-%pre dbgserver
-getent group dbgserver >/dev/null || groupadd -r dbgserver
-getent passwd dbgserver >/dev/null || \
-    useradd -r -g dbgserver -d /var/cache/dbgserver -s /sbin/nologin \
-            -c "elfutils debuginfo server" dbgserver
+%pre debuginfod
+getent group debuginfod >/dev/null || groupadd -r debuginfod
+getent passwd debuginfod >/dev/null || \
+    useradd -r -g debuginfod -d /var/cache/debuginfod -s /sbin/nologin \
+            -c "elfutils debuginfo server" debuginfod
 exit 0
 
-%post dbgserver
-%systemd_post dbgserver.service
+%post debuginfod
+%systemd_post debuginfod.service
 
-%postun dbgserver
-%systemd_postun_with_restart dbgserver.service
+%postun debuginfod
+%systemd_postun_with_restart debuginfod.service
 
 %changelog
 * Tue Aug 13 2019 Mark Wielaard <mark@klomp.org> 0.177-1

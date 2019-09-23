@@ -35,7 +35,7 @@ extern "C" {
 #include "printversion.h"
 }
 
-#include "dbgserver-client.h"
+#include "debuginfod.h"
 #include <dwarf.h>
 
 #include <argp.h>
@@ -98,7 +98,7 @@ using namespace std;
 // Roll this identifier for every sqlite schema incompatiblity.
 #define BUILDIDS "buildids5"
 
-static const char DBGSERVER_SQLITE_DDL[] =
+static const char DEBUGINFOD_SQLITE_DDL[] =
   "pragma foreign_keys = on;\n"
   "pragma synchronous = 0;\n" // disable fsync()s - this cache is disposable across a machine crash
   "pragma journal_mode = wal;\n" // https://sqlite.org/wal.html
@@ -667,7 +667,7 @@ handle_buildid_r_match (int64_t b_mtime,
         continue;
 
       // extract this file to a temporary file
-      char tmppath[PATH_MAX] = "/tmp/dbgserver.XXXXXX"; // XXX: $TMP_DIR etc.
+      char tmppath[PATH_MAX] = "/tmp/debuginfod.XXXXXX"; // XXX: $TMP_DIR etc.
       int fd = mkstemp (tmppath);
       if (fd < 0)
         throw libc_exception (errno, "cannot create temporary file");
@@ -792,13 +792,13 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
   // is to defer to other debuginfo servers.
   int fd = -1;
   if (artifacttype == "debuginfo")
-    fd = dbgserver_find_debuginfo ((const unsigned char*) buildid.c_str(), 0,
+    fd = debuginfod_find_debuginfo ((const unsigned char*) buildid.c_str(), 0,
                                    NULL);
   else if (artifacttype == "executable")
-    fd = dbgserver_find_executable ((const unsigned char*) buildid.c_str(), 0,
+    fd = debuginfod_find_executable ((const unsigned char*) buildid.c_str(), 0,
                                     NULL);
   else if (artifacttype == "source")
-    fd = dbgserver_find_source ((const unsigned char*) buildid.c_str(), 0,
+    fd = debuginfod_find_source ((const unsigned char*) buildid.c_str(), 0,
                                 suffix.c_str(), NULL);
   // XXX: report bad fd
   if (fd >= 0)
@@ -812,7 +812,7 @@ static struct MHD_Response* handle_buildid (struct MHD_Connection *connection,
             {
               add_mhd_last_modified (r, s.st_mtime);
               if (verbose)
-                obatched(clog) << "serving file from upstream dbgserver/cache" << endl;
+                obatched(clog) << "serving file from upstream debuginfod/cache" << endl;
               return r; // NB: don't close fd; libmicrohttpd will
             }
         }
@@ -1579,7 +1579,7 @@ rpm_classify (const string& rps, sqlite_ps& ps_upsert_buildids, sqlite_ps& ps_up
             obatched(clog) << "rpm2cpio|libarchive checking " << fn << endl;
 
           // extract this file to a temporary file
-          char tmppath[PATH_MAX] = "/tmp/dbgserver.XXXXXX"; // XXX: $TMP_DIR etc.
+          char tmppath[PATH_MAX] = "/tmp/debuginfod.XXXXXX"; // XXX: $TMP_DIR etc.
           int fd = mkstemp (tmppath);
           if (fd < 0)
             throw libc_exception (errno, "cannot create temporary file");
@@ -2040,7 +2040,7 @@ main (int argc, char *argv[])
   
   /* Set default values. */
   http_port = 8002;
-  db_path = string(getenv("HOME") ?: "/") + string("/.dbgserver.sqlite"); /* XDG? */
+  db_path = string(getenv("HOME") ?: "/") + string("/.debuginfod.sqlite"); /* XDG? */
   
   /* Parse and process arguments.  */
   int remaining;
@@ -2076,9 +2076,9 @@ main (int argc, char *argv[])
   obatched(clog) << "Opened database " << db_path << endl;
 
   if (verbose > 3)
-    obatched(clog) << "DDL:\n" << DBGSERVER_SQLITE_DDL << endl;
+    obatched(clog) << "DDL:\n" << DEBUGINFOD_SQLITE_DDL << endl;
   
-  rc = sqlite3_exec (db, DBGSERVER_SQLITE_DDL, NULL, NULL, NULL);
+  rc = sqlite3_exec (db, DEBUGINFOD_SQLITE_DDL, NULL, NULL, NULL);
   if (rc != SQLITE_OK)
     {
       error (EXIT_FAILURE, 0,
@@ -2187,9 +2187,9 @@ main (int argc, char *argv[])
                  << (d6 != NULL ? "IPv6 " : "")
                  << "port=" << http_port << endl;
 
-  const char* du = getenv(DBGSERVER_URLS_ENV_VAR);
+  const char* du = getenv(DEBUGINFOD_URLS_ENV_VAR);
   if (du && du[0] != '\0') // set to non-empty string?
-    obatched(clog) << "Upstream dbgservers: " << du << endl;
+    obatched(clog) << "Upstream debuginfods: " << du << endl;
   
   /* Trivial main loop! */
   while (! interrupted)

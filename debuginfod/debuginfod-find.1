@@ -13,27 +13,27 @@
 .RE
 ..
 
-.TH DBGSERVER-FIND 1
+.TH DEBUGINFOD-FIND 1
 .SH NAME
-dbgserver-find \- request debuginfo-related data
+debuginfod-find \- request debuginfo-related data
 
 .SH SYNOPSIS
-.B dbgserver-find debuginfo \fIBUILDID\fP
+.B debuginfod-find debuginfo \fIBUILDID\fP
 
-.B dbgserver-find executable \fIBUILDID\fP
+.B debuginfod-find executable \fIBUILDID\fP
 
-.B dbgserver-find source \fIBUILDID\fP \fI/FILENAME\fP
+.B debuginfod-find source \fIBUILDID\fP \fI/FILENAME\fP
 
 .SH DESCRIPTION
-\fBdbgserver-find\fP queries one or more \fBdbgserver\fP servers for
+\fBdebuginfod-find\fP queries one or more \fBdebuginfod\fP servers for
 debuginfo-related data.  In case of a match, it saves the the
 requested file into a local cache, prints the file name to standard
 output, and exits with a success status of 0.  In case of any error,
 it exits with a failure status and an error message to standard error.
 
-.\" Much of the following text is duplicated with dbgserver.8
+.\" Much of the following text is duplicated with debuginfod.8
 
-The dbgserver system uses buildids to identify debuginfo-related data.
+The debuginfod system uses buildids to identify debuginfo-related data.
 These are stored as binary notes in ELF/DWARF files, and are
 represented as lowercase hexadecimal.  For example, for a program
 /bin/ls, look at the ELF note GNU_BUILD_ID:
@@ -74,13 +74,13 @@ in a binary object that contains the source file mentioned.  The path
 should be absolute.  Relative path names commonly appear in the DWARF
 file's source directory, but these paths are relative to
 individual compilation unit AT_comp_dir paths, and yet an executable
-is made up of multiple CUs.  Therefore, to disambiguate, dbgserver
+is made up of multiple CUs.  Therefore, to disambiguate, debuginfod
 expects source queries to prefix relative path names with the CU
 compilation-directory.
 
 Note: you should not elide \fB../\fP or \fB/./\fP sorts of relative
 path components in the directory names, because if this is how those
-names appear in the DWARF files, that is what dbgserver needs to see
+names appear in the DWARF files, that is what debuginfod needs to see
 too.
 
 For example:
@@ -93,8 +93,8 @@ l l.
 
 .SH "SECURITY"
 
-dbgserver-find \fBdoes not\fP include any particular security
-features.  It trusts that the binaries returned by the dbgserver(s)
+debuginfod-find \fBdoes not\fP include any particular security
+features.  It trusts that the binaries returned by the debuginfod(s)
 are accurate.  Therefore, the list of servers should include only
 trustworthy ones.  If accessed across HTTP rather than HTTPS, the
 network should be trustworthy.
@@ -102,30 +102,30 @@ network should be trustworthy.
 .SH "ENVIRONMENT VARIABLES"
 
 .TP 21
-.B DBGSERVER_URLS
+.B DEBUGINFOD_URLS
 This environment variable contains a list of URL prefixes for trusted
-dbgserver instances.  Alternate URL prefixes are separated by space.
+debuginfod instances.  Alternate URL prefixes are separated by space.
 
 .TP 21
-.B DBGSERVER_TIMEOUT
-This environment variable governs the timeout for each dbgserver HTTP
+.B DEBUGINFOD_TIMEOUT
+This environment variable governs the timeout for each debuginfod HTTP
 connection.  A server that fails to respond within this many seconds
 is skipped.  The default is 5.
 
 .TP 21
-.B DBGSERVER_CACHE_PATH
+.B DEBUGINFOD_CACHE_PATH
 This environment variable governs the location of the cache where
 downloaded files are kept.  It is cleaned periodically as this
-program is reexecuted.  The default is $HOME/.dbgserver_client_cache.
+program is reexecuted.  The default is $HOME/.debuginfod_client_cache.
 .\" XXX describe cache eviction policy
 
 .SH "FILES"
 .LP
 .PD .1v
 .TP 20
-.B $HOME/.dbgserver_client_cache
+.B $HOME/.debuginfod_client_cache
 Default cache directory.
 .PD
 
 .SH "SEE ALSO"
-.I "dbgserver(8)"
+.I "debuginfod(8)"

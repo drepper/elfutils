@@ -1,4 +1,4 @@
-/* Retrieve ELF / DWARF / source files from the dbgserver.
+/* Retrieve ELF / DWARF / source files from the debuginfod.
    Copyright (C) 2019 Red Hat, Inc.
    This file is part of elfutils.
 
@@ -27,7 +27,7 @@
    not, see <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#include "dbgserver-client.h"
+#include "debuginfod.h"
 #include <assert.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -50,30 +50,30 @@
 static const int max_build_id_bytes = 256; /* typical: 40 for gnu C toolchain */
 
 
-/* The cache_clean_interval_s file within the dbgserver cache specifies
+/* The cache_clean_interval_s file within the debuginfod cache specifies
    how frequently the cache should be cleaned. The file's st_mtime represents
    the time of last cleaning.  */
 static const char *cache_clean_interval_filename = "cache_clean_interval_s";
 static const time_t cache_clean_default_interval_s = 600;
 
-/* Location of the cache of files downloaded from dbgservers.
+/* Location of the cache of files downloaded from debuginfods.
    The default parent directory is $HOME, or '/' if $HOME doesn't exist.  */
-static const char *cache_default_name = ".dbgserver_client_cache";
-static const char *cache_path_envvar = DBGSERVER_CACHE_PATH_ENV_VAR;
+static const char *cache_default_name = ".debuginfod_client_cache";
+static const char *cache_path_envvar = DEBUGINFOD_CACHE_PATH_ENV_VAR;
 
-/* URLs of dbgservers, separated by url_delim.
-   This env var must be set for dbgserver-client to run.  */
-static const char *server_urls_envvar = DBGSERVER_URLS_ENV_VAR;
+/* URLs of debuginfods, separated by url_delim.
+   This env var must be set for debuginfod-client to run.  */
+static const char *server_urls_envvar = DEBUGINFOD_URLS_ENV_VAR;
 static const char *url_delim =  " ";
 
-/* Timeout for dbgservers, in seconds.
-   This env var must be set for dbgserver-client to run.  */
-static const char *server_timeout_envvar = DBGSERVER_TIMEOUT_ENV_VAR;
+/* Timeout for debuginfods, in seconds.
+   This env var must be set for debuginfod-client to run.  */
+static const char *server_timeout_envvar = DEBUGINFOD_TIMEOUT_ENV_VAR;
 static int server_timeout = 5;
 
 
 static size_t
-dbgserver_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
+debuginfod_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
 {
   int fd = *(int*)fdptr;
   ssize_t res;
@@ -90,10 +90,10 @@ dbgserver_write_callback (char *ptr, size_t size, size_t nmemb, void *fdptr)
 
 
 /* Create the cache and interval file if they do not already exist.
-   Return DBGSERVER_E_OK if cache and config file are initialized,
+   Return DEBUGINFOD_E_OK if cache and config file are initialized,
    otherwise return the appropriate error code.  */
 static int
-dbgserver_init_cache (char *cache_path, char *interval_path)
+debuginfod_init_cache (char *cache_path, char *interval_path)
 {
   struct stat st;
 
@@ -119,9 +119,9 @@ dbgserver_init_cache (char *cache_path, char *interval_path)
 
 
 /* Delete any files that have been unmodied for a period
-   longer than $DBGSERVER_CACHE_CLEAN_INTERVAL_S.  */
+   longer than $DEBUGINFOD_CACHE_CLEAN_INTERVAL_S.  */
 static int
-dbgserver_clean_cache(char *cache_path, char *interval_path)
+debuginfod_clean_cache(char *cache_path, char *interval_path)
 {
   struct stat st;
   FILE *interval_file;
@@ -191,12 +191,12 @@ dbgserver_clean_cache(char *cache_path, char *interval_path)
 
 
 
-/* Query each of the server URLs found in $DBGSERVER_URLS for the file
+/* Query each of the server URLs found in $DEBUGINFOD_URLS for the file
    with the specified build-id, type (debuginfo, executable or source)
    and filename. filename may be NULL. If found, return a file
    descriptor for the target, otherwise return an error code.  */
 static int
-dbgserver_query_server (const unsigned char *build_id,
+debuginfod_query_server (const unsigned char *build_id,
                         int build_id_len,
                         const char *type,
                         const char *filename,
@@ -245,10 +245,10 @@ dbgserver_query_server (const unsigned char *build_id,
   /* set paths needed to perform the query
 
      example format
-     cache_path:        $HOME/.dbgserver_cache
-     target_cache_dir:  $HOME/.dbgserver_cache/0123abcd
-     target_cache_path: $HOME/.dbgserver_cache/0123abcd/debuginfo
-     target_cache_path: $HOME/.dbgserver_cache/0123abcd/source#PATH#TO#SOURCE ?
+     cache_path:        $HOME/.debuginfod_cache
+     target_cache_dir:  $HOME/.debuginfod_cache/0123abcd
+     target_cache_path: $HOME/.debuginfod_cache/0123abcd/debuginfo
+     target_cache_path: $HOME/.debuginfod_cache/0123abcd/source#PATH#TO#SOURCE ?
   */
   
   if (getenv(cache_path_envvar))
@@ -268,10 +268,10 @@ dbgserver_query_server (const unsigned char *build_id,
 
   /* XXX combine these */
   snprintf(interval_path, PATH_MAX, "%s/%s", cache_path, cache_clean_interval_filename);
-  int rc = dbgserver_init_cache(cache_path, interval_path);
+  int rc = debuginfod_init_cache(cache_path, interval_path);
   if (rc != 0)
     goto out;
-  rc = dbgserver_clean_cache(cache_path, interval_path);
+  rc = debuginfod_clean_cache(cache_path, interval_path);
   if (rc != 0)
     goto out;
 
@@ -360,7 +360,7 @@ dbgserver_query_server (const unsigned char *build_id,
       curl_easy_setopt(session, CURLOPT_URL, url);
       curl_easy_setopt(session,
                        CURLOPT_WRITEFUNCTION,
-                       dbgserver_write_callback);
+                       debuginfod_write_callback);
       curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)&fd);
       curl_easy_setopt(session, CURLOPT_TIMEOUT, (long) server_timeout);
       curl_easy_setopt(session, CURLOPT_FILETIME, (long) 1);
@@ -452,45 +452,45 @@ dbgserver_query_server (const unsigned char *build_id,
 }
 
 
-/* See dbgserver-client.h  */
+/* See debuginfod.h  */
 int
-dbgserver_find_debuginfo (const unsigned char *build_id, int build_id_len,
+debuginfod_find_debuginfo (const unsigned char *build_id, int build_id_len,
                           char **path)
 {
-  return dbgserver_query_server(build_id, build_id_len,
+  return debuginfod_query_server(build_id, build_id_len,
                                 "debuginfo", NULL, path);
 }
 
 
-/* See dbgserver-client.h  */
+/* See debuginfod.h  */
 int
-dbgserver_find_executable(const unsigned char *build_id, int build_id_len,
+debuginfod_find_executable(const unsigned char *build_id, int build_id_len,
                           char **path)
 {
-  return dbgserver_query_server(build_id, build_id_len,
+  return debuginfod_query_server(build_id, build_id_len,
                                 "executable", NULL, path);
 }
 
-/* See dbgserver-client.h  */
-int dbgserver_find_source(const unsigned char *build_id,
+/* See debuginfod.h  */
+int debuginfod_find_source(const unsigned char *build_id,
                           int build_id_len,
                           const char *filename,
                           char **path)
 {
-  return dbgserver_query_server(build_id, build_id_len,
+  return debuginfod_query_server(build_id, build_id_len,
                                 "source", filename, path);
 }
 
 
 
 /* NB: these are thread-unsafe. */
-__attribute__((constructor)) attribute_hidden void libdbgserver_ctor(void) 
+__attribute__((constructor)) attribute_hidden void libdebuginfod_ctor(void) 
 {
   curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
 /* NB: this is very thread-unsafe: it breaks other threads that are still in libcurl */
-__attribute__((destructor)) attribute_hidden void libdbgserver_dtor(void) 
+__attribute__((destructor)) attribute_hidden void libdebuginfod_dtor(void) 
 {
   /* ... so don't do this: */
   /* curl_global_cleanup(); */

@@ -31,8 +31,8 @@
 #endif
 
 #include "libdwflP.h"
-#ifdef ENABLE_DBGSERVER
-#include "dbgserver-client.h"
+#ifdef ENABLE_DEBUGINFOD
+#include "debuginfod.h"
 #endif
 #include <stdio.h>
 #include <fcntl.h>
@@ -402,27 +402,27 @@ dwfl_standard_find_debuginfo (Dwfl_Module *mod,
       free (canon);
     }
 
-#if ENABLE_DBGSERVER
+#if ENABLE_DEBUGINFOD
   {
-    static void *dbgserver_so;
-    static __typeof__ (dbgserver_find_debuginfo) *fp_dbgserver_find_debuginfo;
+    static void *debuginfod_so;
+    static __typeof__ (debuginfod_find_debuginfo) *fp_debuginfod_find_debuginfo;
 
-    if (dbgserver_so == NULL)
-      dbgserver_so = dlopen("libdbgserver-" VERSION ".so", RTLD_LAZY);
-    if (dbgserver_so == NULL)
-      dbgserver_so = dlopen("libdbgserver.so", RTLD_LAZY);
-    if (dbgserver_so != NULL && fp_dbgserver_find_debuginfo == NULL)
-      fp_dbgserver_find_debuginfo = dlsym (dbgserver_so, "dbgserver_find_debuginfo");
+    if (debuginfod_so == NULL)
+      debuginfod_so = dlopen("libdebuginfod-" VERSION ".so", RTLD_LAZY);
+    if (debuginfod_so == NULL)
+      debuginfod_so = dlopen("libdebuginfod.so", RTLD_LAZY);
+    if (debuginfod_so != NULL && fp_debuginfod_find_debuginfo == NULL)
+      fp_debuginfod_find_debuginfo = dlsym (debuginfod_so, "debuginfod_find_debuginfo");
 
-    if (fp_dbgserver_find_debuginfo != NULL)
+    if (fp_debuginfod_find_debuginfo != NULL)
       {
         /* If all else fails and a build-id is available, query the
            debuginfo-server if enabled.  */
         if (fd < 0 && bits_len > 0)
-          fd = (*fp_dbgserver_find_debuginfo) (bits, bits_len, NULL);
+          fd = (*fp_debuginfod_find_debuginfo) (bits, bits_len, NULL);
       }
   }
-#endif /* ENABLE_DBGSERVER */
+#endif /* ENABLE_DEBUGINFOD */
 
   return fd;
 }

@@ -1,7 +1,0 @@
-ELFUTILS_0 { };
-ELFUTILS_0.177 {
-  global:
-  dbgserver_find_debuginfo;
-  dbgserver_find_executable;
-  dbgserver_find_source;
-} ELFUTILS_0;
